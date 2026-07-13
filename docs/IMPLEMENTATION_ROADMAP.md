@@ -1,0 +1,189 @@
+# IMPLEMENTATION_ROADMAP.md — Build Order
+
+**Status:** Approved plan. Execute phases strictly in order — each depends on the last.
+**Timeline:** ~7–10 weeks part-time (Phases D and S, added 2026-07-12 per ADR-013/014, add roughly 1.5 weeks). Estimates assume a developer learning as they go (that's the point).
+**Phase order:** 0 → P0 fixes → 1 → **D (data layer)** → **S (systems layer)** → 2 → 3 → 4 → 5 → 6.
+**Ground rules for every phase:**
+1. The app must still run at the end of every phase (`npm run dev`, graph visible).
+2. `npx tsc --noEmit` and `npm run lint` pass before a phase is "done".
+3. Do not start the next phase until the current phase's acceptance criteria all pass.
+4. No UI redesign — the visual design is complete (per CLAUDE.md).
+
+---
+
+## Phase 0 — Foundations (one evening)
+
+**Goal:** the seams every later phase plugs into.
+
+- ~~Create `lib/contracts.ts`~~ **Done 2026-07-12** — `lib/contracts.ts` was authored by the architect and typechecks. Phase 0 work is now just: read it, and verify it matches `API_CONTRACTS.md` if either has changed since.
+- Add `.nebulosity/` to `.gitignore`.
+- Create `.env.local` with `ANTHROPIC_API_KEY=` (empty is fine until Phase 5) and confirm `.env*` is gitignored.
+- Install nothing yet — each phase installs its own deps so failures are attributable.
+
+**Acceptance:** typecheck passes with the new contracts file; `git status` shows no `.nebulosity` or `.env.local`.
+**You learn:** contract-first design — writing the types before the code that fulfills them.
+
+---
+
+## Phase 1 — Finish graph visualization (~1 week)
+
+**Goal:** the graph becomes a controllable instrument (which the agent will play in Phase 6).
+
+> Also absorb the **P0 fixes (F1–F4)** from `GRAPH_IMPLEMENTATION_REVIEW.md` at the start of this phase: test harness, per-file scan error tolerance, edge arrowheads, deterministic ordering. F5/F6 (hardened extractor, tsconfig-driven resolution) slot between Phase 1 and 2.
+
+Tasks:
+1. **`GET /api/graph`** route handler wrapping `scanProject()` + `toFlowGraph()` + degree-centrality stats. Move the `server-only` guard concern into the adapter; core stays plain Node (see `ARCHITECTURE.md` §3.1).
+2. **Refactor `app/page.tsx`** to a lightweight shell; a client component fetches `/api/graph` on mount and owns graph state (nodes/edges move from `defaultNodes` to controlled state — required for highlighting).
+3. **Selection:** clicking a node shows a small details strip (path, kind, dependencies in/out) — reuse data already in the response; no new endpoints.
+4. **Highlight mechanism:** a `highlightedNodeIds: Set<string>` state; highlighted `FileNode`s get the brighter treatment (existing amethyst border at full opacity), non-highlighted dim slightly. Implemented as a prop threading through `GraphCanvas`, exposed via a `useGraphControls()` hook.
+5. **Focus mechanism:** `focusNode(id)` using React Flow's `useReactFlow().fitView({ nodes: [{id}], duration: 600 })`.
+6. **`GET /api/health`** (index fields hardcoded to `exists: false` until Phase 2) wired into the status bar.
+
+**Acceptance:**
+- Graph loads via the API (network tab shows `/api/graph`), renders identically to today.
+- Clicking a node selects + shows details; a temporary dev button can highlight and focus an arbitrary node (this button is deleted in Phase 6 when the agent takes over).
+**You learn:** controlled vs. uncontrolled React Flow, lifting state, designing UI affordances for a *machine* user (the agent) as well as a human.
+
+---
+
+## Phase D — Data layer (~1–1.5 weeks) *(added 2026-07-12, ADR-013)*
+
+**Goal:** build the SQLite/Drizzle data layer by hand and wire it in. **Deliberately hand-written, not generated** — the schema design and transaction logic are the learning target. See `docs/DATABASE_DESIGN.md` for the full design (tables, indexes, invalidation rules) to translate into code yourself; don't skip straight to the acceptance criteria.
+
+Tasks:
+1. **`lib/db/schema.ts`** — write the Drizzle table definitions from `DATABASE_DESIGN.md` §2 yourself: `repositories`, `files`, `imports` (get the unique/foreign-key/index choices right on your own first, then compare against the doc's reasoning).
+2. **`lib/db/client.ts`** — `getDb()`: open the SQLite file, enable WAL mode and foreign keys, cache the connection so Next.js hot reload doesn't pile up handles.
+3. **`lib/db/graph-store.ts`** — `saveScan` (one transaction: upsert repo, delete-then-insert files/edges) and `loadGraph`. Note for the synchronous `better-sqlite3` driver: Drizzle builders execute via `.get()`/`.all()`/`.run()`, not `await` — you will likely hit this the same way the architect draft did; that's expected, not a sign you did something wrong.
+4. **Write your own smoke test** before wiring anything into the app: save a small graph, reload it, verify duplicate edges collapse and an edge to an unscanned path doesn't crash. Don't trust it until you've watched it fail once and fixed it.
+5. **Extract edge resolution from `toFlowGraph`** into an exported `resolveEdges(files: ScannedFile[]): ResolvedEdge[]` in `lib/graph.ts`, and make `toFlowGraph` consume `(files, edges)`.
+6. **Rewire `GET /api/graph`** as read-through: scan → `resolveEdges` → `saveScan` → build `GraphResponse` from the transaction result. `stats.centralFiles` via a SQL GROUP BY on `imports`.
+7. **`GET /api/health`**: report repo `lastScanAt` and DB-backed index fields (still zero until Phase 2).
+
+**Acceptance:** graph renders identically to Phase 1; `.nebulosity/nebulosity.db` contains real rows (verify with `npx drizzle-kit studio` or your own select script); repeated requests neither duplicate rows nor grow the DB; your smoke test passes; deleting the DB file self-heals on next request.
+**You learn:** transactions, upserts, unique-index dedupe, read-through caching, and why "derived data" changes how you think about recovery.
+
+## Phase S — Systems layer: native scanner (~1.5–2 weeks) *(added 2026-07-12, ADR-014)*
+
+**Goal:** hand-write a C++17 scanner with a real thread pool, compile it, prove it matches the Node scanner byte-for-byte, and benchmark it honestly. **This is the flagship learning phase of the whole project** — build it incrementally, don't write it in one sitting.
+
+Suggested build order (each step should run and be understood before the next):
+1. **Toolchain first:** `winget install Microsoft.VisualStudio.2022.BuildTools` (workload: "Desktop development with C++"), verify with a "hello world" `cmake` build before touching the real scanner.
+2. **Single-threaded traversal:** walk a directory recursively with `std::filesystem`, print every source file path. Get this fully working and understood before adding any concurrency.
+3. **Single-threaded import extraction:** port the Node regex's *behavior* (not its syntax — C++ doesn't have JS regex semantics) to plain string scanning. Verify against a handful of the golden vectors in `GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4 before moving on.
+4. **Add the thread pool last:** an atomic counter for work-claiming, one worker per hardware core, each worker writing into its own preallocated result slot (no shared mutable state, no locks needed on the hot path — understand *why* that design avoids a mutex before you write it). This is where the real systems-programming learning is.
+5. **JSON output over stdout** — the IPC half. `lib/scanner-bridge.ts` (also to be hand-written): spawn the binary, read stdout, parse JSON, and fall back to `lib/scan.ts` on any failure so the app never depends on the binary existing.
+6. **Parity harness** (`scripts/parity-scan.ts`): run both engines over this repo, normalize order, diff — byte-identical `ScannedFile[]` or the phase isn't done.
+7. **Benchmark harness** (`scripts/bench-scan.ts`): N warm iterations of each engine on this repo and one large repo, report medians, and write down the honest interpretation (I/O-bound vs CPU-bound) in `native/scanner/README.md` and `LEARNING_NOTES.md`.
+8. Confirm `/api/health` flips `scannerEngine` native↔node when the binary is added/removed.
+
+**Acceptance:** parity diff empty; benchmark table recorded with your own interpretation; fallback verified in both directions; `npx tsc --noEmit && npm run lint && npx vitest run` clean.
+**You learn:** thread pools, atomic work-claiming, IPC over pipes, cross-engine contract testing, and how to benchmark honestly — the interview centerpiece of the systems layer.
+
+## Phase 2 — Repository indexing (~1–1.5 weeks)
+
+**Goal:** the `chunks` table fills with real, correctly-bounded chunks.
+
+Tasks:
+1. **`lib/chunk.ts`:** AST chunker using the **TypeScript Compiler API** (`import ts from "typescript"` — already a dependency). Walk top-level statements of each source file; map declaration kinds to `CodeChunk.kind`; capture line ranges via `sourceFile.getLineAndCharacterOfPosition`; build the file-summary chunk; split oversized declarations (`RAG_PIPELINE.md` §2–3).
+2. **Index pipeline** (`lib/index-repo.ts`): per file — sha256 → compare `files.contentHash` → skip if unchanged, else delete that file's chunks (cascade clears vectors), re-chunk, insert, update the hash. One transaction per file batch; a `meta` row (`indexing = <startedAt>`) serves as the in-progress flag instead of a lock file. Embedding is stubbed as a no-op until Phase 3.
+3. **`POST /api/index`** with SSE progress events per `API_CONTRACTS.md` §4.
+
+**Acceptance:**
+- `curl -N -X POST localhost:3000/api/index` streams progress and ends with `done`.
+- The `chunks` table is populated; spot-check 5 rows: line ranges open in the editor to exactly the declarations named.
+- Immediate second run reports all files `skippedUnchanged` (hashes match).
+- Edit one file, re-run: only that file's chunks are replaced.
+**You learn:** AST parsing (the single most transferable skill in this project), content-hash invalidation, incremental pipelines over a relational store.
+
+---
+
+## Phase 3 — Embeddings (~0.5–1 week)
+
+**Goal:** every chunk has a vector.
+
+Tasks:
+1. `npm install @huggingface/transformers`.
+2. **`lib/embed.ts`:** load `Xenova/all-MiniLM-L6-v2` as a lazily-initialized singleton pipeline; `embedTexts(texts: string[]): Promise<Float32Array[]>` with batching (batch 16) and unit-normalization. Build the enriched *embedding text* per `RAG_PIPELINE.md` §4.
+3. **Vector persistence:** store each embedding in the `vectors` table as the `Float32Array`'s bytes (`Buffer.from(vec.buffer)`); load-all into an in-memory `Map` cached against `repositories.lastIndexAt`; record `embeddingModel`/`embeddingDim` in `meta` (mismatch → wipe derived data and rebuild, `DATABASE_DESIGN.md` §2).
+4. Un-stub the pipeline: index now chunks **and** embeds; progress events include the `embedding` phase.
+
+**Acceptance:**
+- After indexing: `SELECT COUNT(*)` of `vectors` === count of `chunks`; every decoded vector has length 384 and magnitude ≈ 1.0.
+- Warm re-index of an unchanged repo does zero embedding work.
+- Note first-run model download (~25 MB) in the console output so it doesn't look like a hang.
+**You learn:** what embeddings actually are, running an ML model in Node, batching, lazy singletons, binary serialization of typed arrays.
+
+---
+
+## Phase 4 — Retrieval (~0.5 week)
+
+**Goal:** semantic search works and is measurably sane — *before* any agent exists.
+
+Tasks:
+1. **`lib/retrieve.ts`:** the exact algorithm in `RAG_PIPELINE.md` §5 (embed query → dot products → top-8 → threshold 0.25 → formatted context).
+2. **`GET /api/search?q=`** debug endpoint (`API_CONTRACTS.md` §6).
+
+**Acceptance — run these five queries against Nebulosity's own code and eyeball the top-3:**
+| query | must appear in top 3 |
+|---|---|
+| "how are imports extracted from files" | `extractImports` (lib/scan.ts) |
+| "circular ring layout positions" | `radialPosition` (lib/graph.ts) |
+| "draw the star background" | StarField chunk(s) |
+| "chat input box" | TerminalPanel chunk(s) |
+| "convert scan output to react flow" | `toFlowGraph` (lib/graph.ts) |
+
+**You learn:** cosine similarity in practice, why top-k + threshold beats "best match", evaluating retrieval quality empirically.
+
+---
+
+## Phase 5 — LangGraph agent (~1.5–2 weeks, the big one)
+
+**Goal:** a conversing agent with tools, streaming over SSE — testable entirely with `curl`, before any UI work.
+
+Tasks:
+1. `npm install @langchain/langgraph @langchain/anthropic @langchain/core zod`. Pin exact versions in package.json (LangChain moves fast; see risk register).
+2. **`lib/agent/tools.ts`:** all nine tools from `AI_AGENT_DESIGN.md` §3, sharing one `safePath()` guard. Knowledge tools wrap `retrieve.ts` / `fs` / graph lookups; UI tools return their `UIAction`.
+3. **`lib/agent/state.ts` + `graph.ts`:** state schema, agent/tools nodes, `shouldContinue`, `MemorySaver`, CONFIG block — exactly per `LANGGRAPH_DESIGN.md`.
+4. **`lib/agent/prompts.ts`:** transcribe the verbatim system prompt from `AI_AGENT_DESIGN.md` **Appendix A** (placeholder table included there) — do not compose a new prompt.
+5. **`POST /api/chat`:** `streamEvents` → SSE translation table (`LANGGRAPH_DESIGN.md` §5).
+
+**Acceptance (scripted `curl -N` conversation against Nebulosity's own repo):**
+- "Where should I start reading this codebase?" → response cites real files, includes ≥1 `ui_action` event, `sources` non-empty.
+- "Which files import lib/graph.ts?" → uses `get_importers` (visible in `tool_start`), answer matches reality.
+- "How does the star background avoid lagging the canvas?" → `search_code` fires; answer cites StarField with line numbers.
+- Same `sessionId`, follow-up "explain that second file in more detail" → memory works (no re-asking which file).
+- With `ANTHROPIC_API_KEY` unset: clean `error` event, no crash.
+**You learn:** the ReAct loop for real, tool schema design, streaming architectures, prompt engineering with policies instead of vibes.
+
+---
+
+## Phase 6 — Connect the UI (~1 week)
+
+**Goal:** the product moment — chat drives the graph.
+
+Tasks:
+1. **api-client module** (`app/lib/api-client.ts`): typed fetch wrappers + the ~30-line SSE reader (`API_CONTRACTS.md` §1 note).
+2. **`TerminalPanel`:** replace the placeholder submit with real `/api/chat` streaming — render `token`s incrementally, `tool_start` as activity lines, `sources` as clickable chips (click → `focus_node`), `error` inline. Generate `sessionId` once per page load (`crypto.randomUUID()`).
+3. **Wire `ui_action` events** into the Phase 1 `useGraphControls()` hook — the agent now highlights and focuses for real. Delete the Phase 1 dev button.
+4. **Index affordance:** if `/api/health` says no index / stale, show a one-line hint in the terminal with an "index now" command that runs `/api/index` and prints progress lines in the terminal.
+
+**Acceptance — the demo script (also your portfolio video):** open app → graph renders → type "give me a tour of this codebase" → agent highlights hub files, focuses each as it explains, cites sources; clicking a source chip focuses that node; follow-up question remembers context.
+**You learn:** consuming streams in React, optimistic UI, the full loop you designed in `ARCHITECTURE.md` §6 Flow C running end to end.
+
+---
+
+## Post-v1 backlog (do not start before Phase 6 ships)
+
+Ordered by value: session persistence (v1.1, schemas already reserved) → graph-aware retrieval boost (`RAG_PIPELINE.md` §5) → quiz mode polish → PageRank centrality (ADR-010) → **layout upgrade + scaling tiers** (dagre in a worker, LOD/culling, directory clustering — the full plan lives in `VISUALIZATION_DESIGN.md` §3–4 / ADR-011/012; activate Tier M knobs only when a target repo exceeds ~300 files) → Electron/Tauri spike (`ARCHITECTURE.md` §7).
+
+## Risk register
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| LangChain/LangGraph API churn | Phase 5 code doesn't match docs | Pin exact versions; read the installed package's own docs/types, not the web, when they disagree |
+| Node/C++ extractor drift | Engines disagree silently → graph differs by engine | Golden vectors (review PART 3) apply to both; the Phase S parity harness gates every extractor change; ADR-014's revisit trigger fires on repeat breakage |
+| better-sqlite3 native ABI vs Node upgrades | `npm run dev` fails after a Node version bump | Reinstall (`npm rebuild better-sqlite3`); avoid casual Node major upgrades mid-phase |
+| Transformers.js first-run download | Looks like a hang | Log download progress; document in README |
+| Windows path separators | Subtle id mismatches (edges/highlights silently missing) | Normalize to forward slashes at every boundary — already the convention in `lib/graph.ts`; `contracts.ts` comments make it law |
+| Anthropic API cost during dev | Money | `maxTokens: 2048`, `recursionLimit: 25`, temperature 0.2; use haiku for side tasks; test tools with mocked model where possible |
+| Scope creep (it's a fun project) | v1 never ships | The backlog above is the only place new ideas go |

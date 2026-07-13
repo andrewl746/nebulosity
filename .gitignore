@@ -43,3 +43,10 @@ next-env.d.ts
 # AI tool config files
 AGENTS.md
 CLAUDE.md
+.claude/
+
+# nebulosity generated data (derived, always rebuildable)
+.nebulosity/
+
+# native scanner build output
+native/scanner/build/
