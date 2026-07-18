@@ -72,8 +72,8 @@ so a client component fetches /api/graph and owns nodes/edges as controlled
 state; node click → details strip; highlightedNodeIds state dims/brightens
 FileNode via props; focusNode(id) via useReactFlow().fitView; migrate
 FileNode.tsx and lib/graph.ts to import FileKind/FileNodeData/GraphFileNode
-from lib/contracts.ts instead of local copies; move the server-only guard
-out of lib/scan.ts into the route handler layer.
+from lib/contracts.ts instead of local copies. (The server-only guard was
+already removed from lib/scan.ts during F1 setup — nothing to do here.)
 
 Constraints: route handlers stay under ~50 lines (logic lives in lib/);
 no visual redesign — highlight/dim uses the existing amethyst palette;
@@ -81,6 +81,35 @@ lib/ never imports app/ or next. Update docs if you deviate from the design.
 Verify: npx tsc --noEmit && npm run lint && npx vitest run; graph renders
 via the API (check the network tab); clicking selects; a temporary dev
 button can highlight and focus a node.
+```
+
+## Prompt — P1 fixes (hardened extractor & resolution)
+
+```text
+Implement the P1 fixes (F5, F6) from docs/GRAPH_IMPLEMENTATION_REVIEW.md in
+the Nebulosity repo, per the "P1 fixes" section of
+docs/IMPLEMENTATION_ROADMAP.md. Read that section and PART 3 §3.4 of the
+review first (the golden vectors, several marked "flips after F5").
+Prerequisite: Phase 1 and the P0 fixes (F1-F4) are done.
+
+Tasks:
+1. F5: replace the single import regex in lib/scan.ts with a small pattern
+   set over comment-stripped source — static imports (multi-line safe),
+   side-effect imports, re-exports, dynamic import/require. Leave
+   string-literal false positives as a documented residual gap (ADR-003
+   schedules the real fix in Phase 2's AST chunker).
+2. F6: in lib/graph.ts, read compilerOptions.paths from tsconfig.json
+   instead of hardcoding the "@/" alias; extend EXTENSION_CANDIDATES with
+   .mjs/.mts/.cts and the NodeNext "./x.js -> x.ts" rewrite.
+3. Update every golden-vector row marked "flips after F5" in
+   GRAPH_IMPLEMENTATION_REVIEW.md PART 3 §3.4 to its new expected value,
+   and update the matching F1 tests in the same commit — they must not
+   drift apart.
+
+Verify: npx vitest run — all tests pass, including rows that previously
+documented bugs on purpose; a manual check that a ".js"-suffixed import
+pointing at a real ".ts" file now resolves; npx tsc --noEmit && npm run
+lint clean.
 ```
 
 ## Phases D and S — intentionally not auto-implement prompts

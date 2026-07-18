@@ -34,7 +34,7 @@ function normalizeSlashes(p: string): string {
  * Pure-string path join + ".." collapsing, so this module stays free of
  * node:path and can be imported from client components too.
  */
-function resolveSegments(baseDir: string, relative: string): string {
+export function resolveSegments(baseDir: string, relative: string): string {
   const segments = normalizeSlashes(baseDir).split("/");
   for (const part of normalizeSlashes(relative).split("/")) {
     if (part === "" || part === ".") continue;
@@ -44,12 +44,31 @@ function resolveSegments(baseDir: string, relative: string): string {
   return segments.join("/");
 }
 
+// Turns a raw import path into a project-relative file id, or null if the import is external (npm package).
+
+export function resolveImport (importerId: string, specifier: string){
+  let base: string;
+  if (specifier.startsWith("./") || specifier.startsWith("../")) {
+    const importerDir = importerId.split("/").slice(0, -1).join("/");
+    base = resolveSegments(importerDir, specifier);
+  } else if (specifier.startsWith("@/")) {
+    // tsconfig alias: "@/*" -> "<root>/*"
+    base = specifier.slice(2);
+  } else {
+    // Bare specifier ("react", "next/image") — an npm package, not a
+    // local file. No node exists for it, so no edge.
+    return null;
+  }
+
+  return base;
+}
+
 /**
  * Deterministic radial layout: node 0 sits at the origin, the rest fill
  * concentric rings whose capacity grows with radius. No overlaps, no
  * dependencies — good enough until you swap in a force/dagre layout.
  */
-function radialPosition(index: number, total: number): { x: number; y: number } {
+export function radialPosition(index: number, total: number): { x: number; y: number } {
   if (index === 0) return { x: 0, y: 0 };
 
   let ring = 1;
@@ -97,29 +116,7 @@ export function toFlowGraph(files: ScannedFile[], rootDir = ""): CodebaseGraph {
     return root && p.startsWith(root + "/") ? p.slice(root.length + 1) : p;
   };
 
-  // Index every scanned file by id so import specifiers can be resolved
-  // against real files instead of guessed.
-  const fileIds = new Set(files.map((f) => toRelativeId(f.id)));
-
-  const resolveImport = (importerId: string, specifier: string): string | null => {
-    let base: string;
-    if (specifier.startsWith("./") || specifier.startsWith("../")) {
-      const importerDir = importerId.split("/").slice(0, -1).join("/");
-      base = resolveSegments(importerDir, specifier);
-    } else if (specifier.startsWith("@/")) {
-      // tsconfig alias: "@/*" -> "<root>/*"
-      base = specifier.slice(2);
-    } else {
-      // Bare specifier ("react", "next/image") — an npm package, not a
-      // local file. No node exists for it, so no edge.
-      return null;
-    }
-
-    for (const ext of EXTENSION_CANDIDATES) {
-      if (fileIds.has(base + ext)) return base + ext;
-    }
-    return null;
-  };
+  const fileIds: Set<string> = new Set(files.map((f) => toRelativeId(f.id)));
 
   const nodes: FileNodeType[] = files.map((file, index) => {
     const id = toRelativeId(file.id);
@@ -142,8 +139,19 @@ export function toFlowGraph(files: ScannedFile[], rootDir = ""): CodebaseGraph {
   for (const file of files) {
     const sourceId = toRelativeId(file.id);
     for (const specifier of file.imports) {
-      const targetId = resolveImport(sourceId, specifier);
-      if (!targetId || targetId === sourceId) continue;
+      const base = resolveImport(sourceId, specifier);
+      if (base === null) continue; // external package, no node to link to
+
+      let targetId: string = "";
+
+      for (const ext of EXTENSION_CANDIDATES) {
+        if (fileIds.has(base + ext)){
+          targetId = base + ext;
+          break;
+        }
+      }
+
+      if (targetId === "" || targetId === sourceId) continue;
 
       const edgeId = `${sourceId}->${targetId}`;
       if (seen.has(edgeId)) continue;

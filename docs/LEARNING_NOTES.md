@@ -57,9 +57,11 @@ Complexity: O(√n) per node (ring count grows like √index — triangular numb
 
 A function that solves a smaller copy of its own problem by calling itself. `walk(folder)` loops a directory; for each subdirectory it calls `walk(subdir)`. The base case is implicit: a folder with no subfolders simply doesn't recurse, and no filesystem is infinitely deep. Whiteboard skill: draw the call stack for a 3-level folder tree by hand.
 
-## 6. Closures (quietly used everywhere in `toFlowGraph`)
+## 6. Closures — and a real example of un-closuring one
 
-`toRelativeId` and `resolveImport` are functions defined *inside* `toFlowGraph` so they can "remember" `root` and `fileIds` without being passed them on every call. A function that captures variables from its surrounding scope is a **closure** — that's the whole concept.
+`toRelativeId` is still a function defined *inside* `toFlowGraph` so it can "remember" `root` without being passed it on every call. A function that captures variables from its surrounding scope is a **closure** — that's the whole concept.
+
+`resolveImport` **used to** be exactly this kind of closure too (capturing `fileIds`), until the 2026-07-13 refactor pulled it out to a standalone top-level function with explicit parameters, specifically so it could be unit-tested outside of `toFlowGraph`. That's the real trade-off closures have: convenient (no parameter plumbing), but untestable in isolation — you can't call a closure without also invoking whatever created it. Explicit parameters cost a bit of plumbing but buy independent testability. `resolveImport` picked testability; `toRelativeId` hasn't needed to yet, since nothing currently needs to unit-test it on its own.
 
 ## 7. React Flow lessons (paid for in real bugs)
 
@@ -92,7 +94,7 @@ Already taught in the design docs (read those, they were written to teach): embe
 
 ## 11. Self-test (if you can answer these cold, you own the codebase)
 
-1. Why does `resolveImport("app/page.tsx", "./components/GraphCanvas")` return a `.tsx` path when the import never mentions an extension?
+1. As of 2026-07-13, `resolveImport("app/page.tsx", "./components/GraphCanvas")` returns `"app/components/GraphCanvas"` — no `.tsx`. Where did the extension get added before, and which function does that job now?
 2. What two bugs does the `seen` Set in the edge loop prevent, and what breaks visibly without it?
 3. Why can't `TerminalPanel` call `scanProject()` directly?
 4. A greedy version of the import regex meets `import a from "./a"; import b from "./b";` — what exactly goes wrong?

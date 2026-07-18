@@ -1,4 +1,3 @@
-import "server-only";
 import fs from "fs";
 import path from "path";
 import type { ScannedFile } from "./graph";
@@ -7,7 +6,7 @@ const IGNORE_LIST = ["node_modules", ".next", ".git", "scripts"];
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
 const importRegex = /import\s+.*?from\s+['"](.+?)['"]/g;
 
-function extractImports(fileContent: string): string[] {
+export function extractImports(fileContent: string): string[] {
   const imports: string[] = [];
   let match;
 

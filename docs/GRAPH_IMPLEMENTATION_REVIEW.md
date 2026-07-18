@@ -88,7 +88,7 @@ All in `lib/graph.ts`:
 ## W9 — Known, already-documented debts (listed for completeness, not re-scoped here)
 
 - **Synchronous full rescan on every request**, no caching — documented as the "Gotcha #3" defense; caching design belongs to Phase 2's hash infrastructure (`DATABASE_DESIGN.md` §2), so building an interim cache now would be duplicate work.
-- **`server-only` import inside core** (`lib/scan.ts:1`) — breaks plain-Node portability; already scheduled (Phase 1, ADR list).
+- ~~`server-only` import inside core~~ **Resolved 2026-07-13** — removed outright during F1 setup once it provably broke Vitest imports; see `ENGINEERING_DECISIONS.md`'s inherited-debt note.
 - **`ScannedFile` type duplicated** in `scripts/scan.ts` vs `lib/graph.ts` — drift risk; trivial dedupe.
 - **`radialPosition` re-walks rings per node** — O(n√n) aggregate where O(n) is possible; micro-optimization, valuable only as an interview talking point.
 - **Symlinked directories are silently skipped** (`Dirent.isDirectory()` is false for symlinks) — acceptable, but should be a documented behavior, not an accident.
@@ -121,7 +121,7 @@ All in `lib/graph.ts`:
 
 ## P0 — Quick wins (≈ one evening total, do before or at the start of Phase 1)
 
-**F1. Stand up Vitest and pin current behavior (W3).** `npm i -D vitest`; test `resolveImport` (relative/alias/bare/extension probing/`..` cases), `resolveSegments`, `radialPosition` (ring boundaries: indices 0, 1, 6, 7, 18, 19), `extractImports` (single-line, multi-line **as a currently-failing/documenting test**, side-effect, comment false-positive). ~15 tests. Every subsequent fix in this list then ships with proof. **Expected values are precomputed in PART 3 below — transcribe those rows; do not derive expectations by running the code** (that would enshrine the very bugs W1/W2/W8 describe).
+**F1. Stand up Vitest and pin current behavior (W3).** `npm i -D vitest`; test `resolveImport` (relative/alias/bare/`..` cases — see 2026-07-13 note in PART 3 §3.3, its contract changed during F1 itself), `resolveSegments`, `radialPosition` (ring boundaries: indices 0, 1, 6, 7, 18, 19), `extractImports` (single-line, multi-line **as a currently-failing/documenting test**, side-effect, comment false-positive). Extension-candidate priority (which extension wins when several could match) is no longer part of `resolveImport` — cover it via the `toFlowGraph` integration vector (§3.6) instead. ~15 tests. Every subsequent fix in this list then ships with proof. **Expected values are precomputed in PART 3 below — transcribe those rows; do not derive expectations by running the code** (that would enshrine the very bugs W1/W2/W8 describe).
 **F2. Per-file error tolerance in `walk()` (W4).** Wrap the read of each file/dir in try/catch; collect `{ path, error }` warnings into the scan result (extend `ScannedFile[]` return to `{ files, warnings }`); surface warning count through `GraphResponse.stats`. One file failing must never cost more than that file.
 **F3. Directional arrowheads; stop animating idle edges (W5).** `markerEnd: { type: MarkerType.ArrowClosed }` via `defaultEdgeOptions` in `GraphCanvas`; drop `animated: true` from the transform. Re-purpose animation as a *state signal*: Phase 6 can animate exactly the edges the agent is currently discussing — motion regains meaning.
 **F4. Determinism + duplicate guard (W6-partial, W8).** Sort scanned files by path before returning; skip already-seen ids in `walk`. Same repo state now always renders the same picture on every OS.
@@ -181,17 +181,18 @@ Boundary intent: index 6 is the **last seat of ring 1**; index 7 is the **first 
 | `("app", "../../x")` | `"x"` | ⚠ W8: second `..` pops an empty stack silently — desired behavior is a warning/clamp; result value stays `"x"` |
 | `("", "./x")` | `"/x"` | ⚠ quirk: `"".split("/")` is `[""]`, so a root-level importer gains a phantom leading slash and the id will never match. Unreachable today (all scanned files live in `app/` or `lib/`) — becomes reachable if root-level files are ever scanned. Fold the fix into F5/F6 |
 
-## 3.3 `resolveImport(importerId, specifier)` — assume scanned files: `app/page.tsx`, `app/components/GraphCanvas.tsx`, `lib/graph.ts`, `lib/utils/index.ts`
+## 3.3 `resolveImport(importerId, specifier)`
+
+**Contract changed 2026-07-13, during F1 itself.** The project owner refactored `resolveImport` to stop doing file-existence/extension checking internally — it now only resolves a specifier down to a **base path** (no extension, no guarantee the file exists). The extension-candidate matching loop (`EXTENSION_CANDIDATES`, deciding e.g. that `.ts` wins over `/index.ts` when both could match) moved out to live inline in `toFlowGraph`'s edge-building loop instead, right next to `fileIds`, rather than being passed into `resolveImport` as a third parameter. Both are legitimate designs (see `ARCHITECTURE.md`'s closures-vs-explicit-params discussion) — this is simply the one that shipped. Consequence: `resolveImport` no longer needs a `fileIds` argument at all, and it can no longer tell you whether a resolved path is real. The rows below are updated for this contract; the extension-priority behavior itself is now covered by the `toFlowGraph` integration vector in §3.6.
 
 | call | expected | note |
 |---|---|---|
-| `("app/page.tsx", "./components/GraphCanvas")` | `"app/components/GraphCanvas.tsx"` | probes `""`, `.ts`, then hits `.tsx` |
-| `("app/components/GraphCanvas.tsx", "@/lib/graph")` | `"lib/graph.ts"` | alias strip + `.ts` probe |
-| `("lib/graph.ts", "../app/page")` | `"app/page.tsx"` | relative up-and-over |
-| `("lib/graph.ts", "./utils")` | `"lib/utils/index.ts"` | falls through to the `/index.ts` candidate |
-| `("app/page.tsx", "react")` | `null` | bare specifier = npm package |
-| `("app/page.tsx", "./missing")` | `null` | no candidate matches |
-| with **both** `lib/a.ts` and `lib/a/index.ts` present: `("lib/b.ts", "./a")` | `"lib/a.ts"` | candidate **order** is the contract: `.ts` wins over `/index.ts` |
+| `("app/page.tsx", "./components/GraphCanvas")` | `"app/components/GraphCanvas"` | no extension appended — that's `toFlowGraph`'s job now |
+| `("app/components/GraphCanvas.tsx", "@/lib/graph")` | `"lib/graph"` | alias strip only |
+| `("lib/graph.ts", "../app/page")` | `"app/page"` | relative up-and-over |
+| `("lib/graph.ts", "./utils")` | `"lib/utils"` | no `/index.ts` fallback anymore — that's also `toFlowGraph`'s job |
+| `("app/page.tsx", "react")` | `null` | bare specifier = npm package — still the only case that returns `null` |
+| `("app/page.tsx", "./missing")` | `"app/missing"` | ⚠ **changed from `null`** — `resolveImport` can no longer detect a nonexistent file; it returns a base path unconditionally for any relative/alias specifier. Whether that path corresponds to a real file is now determined later, in `toFlowGraph`'s `fileIds.has(base + ext)` check |
 
 ## 3.4 `extractImports(fileContent)`
 
@@ -233,3 +234,5 @@ Expected edges — exactly two (the `"react"` import produces none):
 `app/page.tsx->app/components/GraphCanvas.tsx` and `app/components/GraphCanvas.tsx->lib/graph.ts`, each with matching `source`/`target`.
 
 Dedupe vector: a file with `imports: ["./a", "./a"]` (where `a.ts` exists) yields **one** edge. Self-import vector: `{ id: "lib/a.ts", imports: ["./a"] }` yields **zero** edges.
+
+**Extension-priority vector** (moved here 2026-07-13 from §3.3, since extension matching now lives inline in `toFlowGraph`, not in `resolveImport`): given scanned files `lib/b.ts` (`imports: ["./a"]`), `lib/a.ts`, and `lib/a/index.ts` (both present), the resulting edge must target `lib/a.ts` — the loop's `for (const ext of EXTENSION_CANDIDATES)` tries `.ts` before `/index.ts`, so the first one wins. If this ever regresses to matching `lib/a/index.ts` instead, `EXTENSION_CANDIDATES`'s order was changed or the loop stopped breaking on first match.

@@ -2,12 +2,13 @@
 
 **Status:** Approved plan. Execute phases strictly in order — each depends on the last.
 **Timeline:** ~7–10 weeks part-time (Phases D and S, added 2026-07-12 per ADR-013/014, add roughly 1.5 weeks). Estimates assume a developer learning as they go (that's the point).
-**Phase order:** 0 → P0 fixes → 1 → **D (data layer)** → **S (systems layer)** → 2 → 3 → 4 → 5 → 6.
+**Phase order:** 0 → P0 fixes → 1 → **P1 fixes (F5/F6)** → **D (data layer)** → **S (systems layer)** → 2 → 3 → 4 → 5 → 6.
 **Ground rules for every phase:**
 1. The app must still run at the end of every phase (`npm run dev`, graph visible).
 2. `npx tsc --noEmit` and `npm run lint` pass before a phase is "done".
 3. Do not start the next phase until the current phase's acceptance criteria all pass.
 4. No UI redesign — the visual design is complete (per CLAUDE.md).
+5. **F7/F8** (`GRAPH_IMPLEMENTATION_REVIEW.md` P2 — edge style → UI, `resolveSegments` clamp, `ScannedFile` dedupe) are intentionally *not* gated behind any phase's acceptance criteria — batch them into whichever nearby phase happens to touch that file. They're cheap and low-impact; don't let them block anything, but don't forget them either.
 
 ---
 
@@ -29,10 +30,10 @@
 
 **Goal:** the graph becomes a controllable instrument (which the agent will play in Phase 6).
 
-> Also absorb the **P0 fixes (F1–F4)** from `GRAPH_IMPLEMENTATION_REVIEW.md` at the start of this phase: test harness, per-file scan error tolerance, edge arrowheads, deterministic ordering. F5/F6 (hardened extractor, tsconfig-driven resolution) slot between Phase 1 and 2.
+> Also absorb the **P0 fixes (F1–F4)** from `GRAPH_IMPLEMENTATION_REVIEW.md` at the start of this phase: test harness, per-file scan error tolerance, edge arrowheads, deterministic ordering. F5/F6 (hardened extractor, tsconfig-driven resolution) get their own step next — see **P1 fixes** below, right after this phase.
 
 Tasks:
-1. **`GET /api/graph`** route handler wrapping `scanProject()` + `toFlowGraph()` + degree-centrality stats. Move the `server-only` guard concern into the adapter; core stays plain Node (see `ARCHITECTURE.md` §3.1).
+1. **`GET /api/graph`** route handler wrapping `scanProject()` + `toFlowGraph()` + degree-centrality stats. (The `server-only` guard was already removed from `lib/scan.ts` during F1 setup — see `ARCHITECTURE.md` §3 rule 1 — nothing left to do here.)
 2. **Refactor `app/page.tsx`** to a lightweight shell; a client component fetches `/api/graph` on mount and owns graph state (nodes/edges move from `defaultNodes` to controlled state — required for highlighting).
 3. **Selection:** clicking a node shows a small details strip (path, kind, dependencies in/out) — reuse data already in the response; no new endpoints.
 4. **Highlight mechanism:** a `highlightedNodeIds: Set<string>` state; highlighted `FileNode`s get the brighter treatment (existing amethyst border at full opacity), non-highlighted dim slightly. Implemented as a prop threading through `GraphCanvas`, exposed via a `useGraphControls()` hook.
@@ -45,6 +46,18 @@ Tasks:
 **You learn:** controlled vs. uncontrolled React Flow, lifting state, designing UI affordances for a *machine* user (the agent) as well as a human.
 
 ---
+
+## P1 fixes — hardened extractor & resolution (~2–4 hours) *(added 2026-07-13, closes F5/F6)*
+
+**Goal:** close the two P1 gaps from `GRAPH_IMPLEMENTATION_REVIEW.md` before either downstream layer builds on top of today's `extractImports`/`resolveImport` behavior. **Ordering is load-bearing, not arbitrary:** Phase S's native scanner is bound by the golden test vectors, several of which are marked "flips after F5" in `GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4 — building the C++ port before F5 lands means faithfully porting bugs you're about to fix anyway, then redoing the C++ side. Do this now, once, before Phase S exists.
+
+Tasks:
+1. **F5 — hardened import extractor** (`lib/scan.ts`): replace the single regex with a small pattern set over comment-stripped source — static imports (bounded, safe across multiple lines), side-effect imports (`import "./x"`), re-exports (`export { x } from "./y"`), dynamic import / `require`. Residual known gap stays documented: string-literal false positives (an import mentioned inside a comment) remain until the AST unification ADR-003 already schedules for Phase 2 — don't try to fix that here.
+2. **F6 — honest module resolution** (`lib/graph.ts`): read `compilerOptions.paths` from `tsconfig.json` instead of hardcoding the `@/` alias; extend `EXTENSION_CANDIDATES` with `.mjs`/`.mts`/`.cts` and the NodeNext `./x.js → x.ts` rewrite.
+3. **Update the golden vectors and your F1 tests together**: every ⚠-marked row in `GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4 that says "flips after F5" gets its expected value updated in both the doc and the test file — they must never drift apart.
+
+**Acceptance:** all F1 tests pass, including the rows that previously documented bugs on purpose; a manual check confirms an import using a `.js` extension pointing at a real `.ts` file still resolves (NodeNext case); `npx tsc --noEmit && npm run lint && npx vitest run` clean.
+**You learn:** the real gap between "pattern-matching text" and "understanding structure" — this is your best first-hand evidence for why the AST chunker in Phase 2 is worth building, not just a bullet point in a design doc. Also: why sequencing matters the moment you have two independently-maintained implementations of the same logic (Node + the C++ scanner coming in Phase S).
 
 ## Phase D — Data layer (~1–1.5 weeks) *(added 2026-07-12, ADR-013)*
 
@@ -65,6 +78,8 @@ Tasks:
 ## Phase S — Systems layer: native scanner (~1.5–2 weeks) *(added 2026-07-12, ADR-014)*
 
 **Goal:** hand-write a C++17 scanner with a real thread pool, compile it, prove it matches the Node scanner byte-for-byte, and benchmark it honestly. **This is the flagship learning phase of the whole project** — build it incrementally, don't write it in one sitting.
+
+**Prerequisite:** the P1 fixes (F5/F6) above must already be done. The parity harness in step 6 below diffs the C++ extractor against `lib/scan.ts`'s *current* behavior — if F5 hasn't landed yet, "parity" just means faithfully cloning bugs you'll fix later, and you'd have to redo the C++ side.
 
 Suggested build order (each step should run and be understood before the next):
 1. **Toolchain first:** `winget install Microsoft.VisualStudio.2022.BuildTools` (workload: "Desktop development with C++"), verify with a "hello world" `cmake` build before touching the real scanner.

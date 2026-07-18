@@ -125,5 +125,5 @@
 
 - **Radial ring layout is a placeholder** — deterministic, overlap-free, edge-blind. Replacement path is now formalized in ADR-011 and `VISUALIZATION_DESIGN.md`; the swap surface is one pure function (`radialPosition`).
 - **Node id = project-relative file path** — the quiet keystone: graph nodes, chunks, tool args, sources, and highlights all join on this key. Preserve it in every future subsystem.
-- **`server-only` marker currently sits inside `lib/scan.ts`** — violates the core/adapter rule (plain-Node CLI would crash on import); scheduled fix in Phase 1 (move guard to adapters).
+- ~~`server-only` marker inside `lib/scan.ts`~~ **Resolved 2026-07-13.** Removed outright (not relocated) once F1's test setup proved it throws in any non-Next.js Node context, including Vitest — which would have equally broken the future CLI and Electron adapters if "moved to the adapter layer" as originally planned. See `ARCHITECTURE.md` §3 rule 1 for the full reasoning.
 - **Visual design is frozen** per the brief — functionality only from here.
