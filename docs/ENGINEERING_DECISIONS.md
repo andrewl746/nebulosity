@@ -119,6 +119,14 @@
 **Consequences:** Two implementations must stay semantically identical — any extractor bug fix (e.g. review items W1/W2 via F5) must land in both engines and the shared vectors. The toolchain (MSVC Build Tools + CMake) is optional: no compiler, no binary, app runs on Node engine forever.
 **Revisit when:** parity between engines breaks twice in one phase — that's the signal maintaining two extractors costs more than the story earns, and the C++ scanner should either own extraction outright or be retired to a benchmark artifact.
 
+## ADR-015 — Phase S (native scanner) resequenced to run last (2026-07-20)
+
+**Context:** The original roadmap ran Phase S (C++ scanner) immediately after Phase D, before the indexing/embeddings/retrieval/agent/UI phases (2–6). That ordering optimized for building the two extractor implementations close together (F5 → Node hardening → C++ port). But the project owner is an incoming Waterloo CS student whose first co-op application cycle (~Jan 2027) sets a real deadline: the highest-value outcome is a *demoable end-to-end product* before then. Phase S is the one remaining phase that is both learning-heavy (its bottleneck is concepts clicking, not hours, so it resists a faster summer pace) and **not on the critical path to a working product** — `lib/scanner-bridge.ts` falls back to `lib/scan.ts` (ADR-014), so nothing in Phases 2–6 depends on the binary existing.
+**Decision:** Move Phase S to the end of the roadmap: 0 → P0 → 1 → P1 → D → 2 → 3 → 4 → 5 → 6 → **S**. Phase D stays before Phase 2 (the data layer *is* on the critical path). Phase S's only hard prerequisite is unchanged — the P1 fixes (F5/F6) must land first so the parity harness diffs against the hardened extractor, not against bugs slated for removal.
+**Alternatives:** (a) Keep S right after D — clean "build both extractors together" narrative, but it parks a wall-hitting, non-demo-critical phase directly in front of the product work, risking a stalled path to demo exactly when coursework slows the pace. (b) Drop S entirely — loses the flagship systems-programming interview piece for a marginal schedule gain; the fallback design means deferring costs nothing, so cutting is strictly worse.
+**Consequences:** The window in which two extractors (Node + C++) are maintained in parallel opens later and is shorter — strictly safer for drift (ADR-014's revisit trigger). The interview story is unchanged: S is deferred, not dropped. `IMPLEMENTATION_ROADMAP.md`, `CLAUDE.md`, and `EXECUTION_PROMPTS.md` were updated in the same change set per the maintenance rule.
+**Revisit when:** Phase 6 ships demoable well ahead of schedule and there's appetite to start the systems layer sooner — pulling S earlier is always safe, since it depends only on F5/F6.
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

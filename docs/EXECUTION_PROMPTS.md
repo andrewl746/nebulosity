@@ -120,6 +120,11 @@ chose to hand-write both — the schema design, the transaction logic, the
 thread pool, the IPC bridge — as the core learning content of this
 re-architecture, coached step by step rather than generated.
 
+**Sequencing note (2026-07-20, ADR-015):** Phase D still runs before Phase 2,
+but Phase S is now scheduled **last**, after Phase 6 — see the reordered
+`IMPLEMENTATION_ROADMAP.md`. It stays hand-written whenever you reach it; only
+its position in the order changed.
+
 If you are a future model session picking this up: do not write
 `lib/db/*`, `lib/scanner-bridge.ts`, or `native/scanner/main.cpp` on the
 project owner's behalf. Follow the incremental build order in

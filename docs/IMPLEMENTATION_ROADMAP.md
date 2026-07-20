@@ -2,7 +2,7 @@
 
 **Status:** Approved plan. Execute phases strictly in order — each depends on the last.
 **Timeline:** ~7–10 weeks part-time (Phases D and S, added 2026-07-12 per ADR-013/014, add roughly 1.5 weeks). Estimates assume a developer learning as they go (that's the point).
-**Phase order:** 0 → P0 fixes → 1 → **P1 fixes (F5/F6)** → **D (data layer)** → **S (systems layer)** → 2 → 3 → 4 → 5 → 6.
+**Phase order:** 0 → P0 fixes → 1 → **P1 fixes (F5/F6)** → **D (data layer)** → 2 → 3 → 4 → 5 → 6 → **S (systems layer)**. *(S resequenced from between D and 2 to run last, 2026-07-20 — ADR-015. Its only hard prerequisite is F5/F6, and nothing in Phases 2–6 depends on it because the Node scanner is the always-available fallback — so deferring it protects the path to a demoable product.)*
 **Ground rules for every phase:**
 1. The app must still run at the end of every phase (`npm run dev`, graph visible).
 2. `npx tsc --noEmit` and `npm run lint` pass before a phase is "done".
@@ -76,25 +76,6 @@ Tasks:
 
 **Acceptance:** graph renders identically to Phase 1; `.nebulosity/nebulosity.db` contains real rows (verify with `npx drizzle-kit studio` or your own select script); repeated requests neither duplicate rows nor grow the DB; your smoke test passes; deleting the DB file self-heals on next request.
 **You learn:** transactions, upserts, unique-index dedupe, read-through caching, and why "derived data" changes how you think about recovery.
-
-## Phase S — Systems layer: native scanner (~1.5–2 weeks) *(added 2026-07-12, ADR-014)*
-
-**Goal:** hand-write a C++17 scanner with a real thread pool, compile it, prove it matches the Node scanner byte-for-byte, and benchmark it honestly. **This is the flagship learning phase of the whole project** — build it incrementally, don't write it in one sitting.
-
-**Prerequisite:** the P1 fixes (F5/F6) above must already be done. The parity harness in step 6 below diffs the C++ extractor against `lib/scan.ts`'s *current* behavior — if F5 hasn't landed yet, "parity" just means faithfully cloning bugs you'll fix later, and you'd have to redo the C++ side.
-
-Suggested build order (each step should run and be understood before the next):
-1. **Toolchain first:** `winget install Microsoft.VisualStudio.2022.BuildTools` (workload: "Desktop development with C++"), verify with a "hello world" `cmake` build before touching the real scanner.
-2. **Single-threaded traversal:** walk a directory recursively with `std::filesystem`, print every source file path. Get this fully working and understood before adding any concurrency.
-3. **Single-threaded import extraction:** port the Node regex's *behavior* (not its syntax — C++ doesn't have JS regex semantics) to plain string scanning. Verify against a handful of the golden vectors in `GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4 before moving on.
-4. **Add the thread pool last:** an atomic counter for work-claiming, one worker per hardware core, each worker writing into its own preallocated result slot (no shared mutable state, no locks needed on the hot path — understand *why* that design avoids a mutex before you write it). This is where the real systems-programming learning is.
-5. **JSON output over stdout** — the IPC half. `lib/scanner-bridge.ts` (also to be hand-written): spawn the binary, read stdout, parse JSON, and fall back to `lib/scan.ts` on any failure so the app never depends on the binary existing.
-6. **Parity harness** (`scripts/parity-scan.ts`): run both engines over this repo, normalize order, diff — byte-identical `ScannedFile[]` or the phase isn't done.
-7. **Benchmark harness** (`scripts/bench-scan.ts`): N warm iterations of each engine on this repo and one large repo, report medians, and write down the honest interpretation (I/O-bound vs CPU-bound) in `native/scanner/README.md` and `LEARNING_NOTES.md`.
-8. Confirm `/api/health` flips `scannerEngine` native↔node when the binary is added/removed.
-
-**Acceptance:** parity diff empty; benchmark table recorded with your own interpretation; fallback verified in both directions; `npx tsc --noEmit && npm run lint && npx vitest run` clean.
-**You learn:** thread pools, atomic work-claiming, IPC over pipes, cross-engine contract testing, and how to benchmark honestly — the interview centerpiece of the systems layer.
 
 ## Phase 2 — Repository indexing (~1–1.5 weeks)
 
@@ -186,6 +167,29 @@ Tasks:
 
 **Acceptance — the demo script (also your portfolio video):** open app → graph renders → type "give me a tour of this codebase" → agent highlights hub files, focuses each as it explains, cites sources; clicking a source chip focuses that node; follow-up question remembers context.
 **You learn:** consuming streams in React, optimistic UI, the full loop you designed in `ARCHITECTURE.md` §6 Flow C running end to end.
+
+---
+
+## Phase S — Systems layer: native scanner (~1.5–2 weeks) *(added 2026-07-12, ADR-014; resequenced to run last 2026-07-20, ADR-015)*
+
+> **Why this phase is last (ADR-015):** it is the one remaining phase that is both learning-heavy and *not* on the critical path to a working product — `lib/scanner-bridge.ts` falls back to `lib/scan.ts`, so Phases 2–6 never depend on the binary existing. Building a demoable product first (through Phase 6) and treating the C++ scanner as the deferred systems-programming showcase is the deliberate order. Its only hard prerequisite remains the P1 fixes (F5/F6).
+
+**Goal:** hand-write a C++17 scanner with a real thread pool, compile it, prove it matches the Node scanner byte-for-byte, and benchmark it honestly. **This is the flagship learning phase of the whole project** — build it incrementally, don't write it in one sitting.
+
+**Prerequisite:** the P1 fixes (F5/F6) must already be done. The parity harness in step 6 below diffs the C++ extractor against `lib/scan.ts`'s *current* behavior — if F5 hasn't landed yet, "parity" just means faithfully cloning bugs you'll fix later, and you'd have to redo the C++ side.
+
+Suggested build order (each step should run and be understood before the next):
+1. **Toolchain first:** `winget install Microsoft.VisualStudio.2022.BuildTools` (workload: "Desktop development with C++"), verify with a "hello world" `cmake` build before touching the real scanner.
+2. **Single-threaded traversal:** walk a directory recursively with `std::filesystem`, print every source file path. Get this fully working and understood before adding any concurrency.
+3. **Single-threaded import extraction:** port the Node regex's *behavior* (not its syntax — C++ doesn't have JS regex semantics) to plain string scanning. Verify against a handful of the golden vectors in `GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4 before moving on.
+4. **Add the thread pool last:** an atomic counter for work-claiming, one worker per hardware core, each worker writing into its own preallocated result slot (no shared mutable state, no locks needed on the hot path — understand *why* that design avoids a mutex before you write it). This is where the real systems-programming learning is.
+5. **JSON output over stdout** — the IPC half. `lib/scanner-bridge.ts` (also to be hand-written): spawn the binary, read stdout, parse JSON, and fall back to `lib/scan.ts` on any failure so the app never depends on the binary existing.
+6. **Parity harness** (`scripts/parity-scan.ts`): run both engines over this repo, normalize order, diff — byte-identical `ScannedFile[]` or the phase isn't done.
+7. **Benchmark harness** (`scripts/bench-scan.ts`): N warm iterations of each engine on this repo and one large repo, report medians, and write down the honest interpretation (I/O-bound vs CPU-bound) in `native/scanner/README.md` and `LEARNING_NOTES.md`.
+8. Confirm `/api/health` flips `scannerEngine` native↔node when the binary is added/removed.
+
+**Acceptance:** parity diff empty; benchmark table recorded with your own interpretation; fallback verified in both directions; `npx tsc --noEmit && npm run lint && npx vitest run` clean.
+**You learn:** thread pools, atomic work-claiming, IPC over pipes, cross-engine contract testing, and how to benchmark honestly — the interview centerpiece of the systems layer.
 
 ---
 
