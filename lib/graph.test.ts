@@ -1,0 +1,151 @@
+import { describe, it, expect } from "vitest";
+import { resolveSegments, radialPosition, resolveImport, classifyFile, toFlowGraph } from "./graph";
+import { extractImports } from "./scan"
+
+describe("resolveSegments", () => {
+    it("resolves a single relative path", () => {
+        expect(resolveSegments("app", "./components/GraphCanvas")).toBe("app/components/GraphCanvas");
+    });
+
+    it("handles multiple .. segments (pop, pop, push, push)", () => {
+        expect(resolveSegments("app/components", "../../lib/graph")).toBe("lib/graph");
+    });
+
+    it("climbs up and back down into a sibling folder", () => {
+        expect(resolveSegments("lib", "../app/page")).toBe("app/page");
+    });
+
+    it("silently drops any extra .. past the root", () => {
+        expect(resolveSegments("app", "../../../x")).toBe("x");
+    });
+
+    it("produces a phantom leading slash for a root-level importer", () => {
+        expect(resolveSegments("", "./x")).toBe("/x");
+    });
+});
+
+describe("radialPosition", () => {
+    it("0, 10", () => {
+        expect(radialPosition(0, 10)).toEqual({x: 0, y: 0});
+    });
+
+    it("1, 10", () => {
+        expect(radialPosition(1, 10)).toEqual({x: 208, y: 120});
+    });
+
+    it("2, 10", () => {
+        expect(radialPosition(2, 10)).toEqual({x: 0, y: 240});
+    });
+
+    it("4, 10", () => {
+        expect(radialPosition(4, 10)).toEqual({x: -208, y: -120});
+    });
+
+    it("6, 10", () => {
+        expect(radialPosition(6, 10)).toEqual({x: 208, y: -120});
+    });
+
+    it("7, 10", () => {
+        expect(radialPosition(7, 10)).toEqual({x: 480, y: 0});
+    });
+
+    it("9, 10", () => {
+        expect(radialPosition(9, 10)).toEqual({x: -240, y: -416});
+    });
+
+    it("19, 30", () => {
+        expect(radialPosition(19, 30)).toEqual({x: 691, y: 203});
+    });
+});
+
+describe("resolveImport", () => {
+    it("no extension appended (toFlowGraph's job now)", () => {
+        expect(resolveImport("app/page.tsx", "./components/GraphCanvas")).toBe("app/components/GraphCanvas");
+    });
+
+    it("alias strip only", () => {
+        expect(resolveImport("app/components/GraphCanvas.tsx", "@/lib/graph")).toBe("lib/graph");
+    });
+
+    it("no /index.ts fallback anymore (toFlowGraph's job now)", () => {
+        expect(resolveImport("lib/graph.ts", "./utils")).toBe("lib/utils");
+    });
+
+    it("bare specifier (npm package)", () => {
+        expect(resolveImport("app/page.tsx", "react")).toBe(null);
+    });
+
+    it("returns a base path unconditionally and no longer detects a nonexistent file (toFlowGraph's job now)", () => {
+        expect(resolveImport("lib/graph.ts", "./missing")).toBe("lib/missing");
+    });
+});
+
+describe("extractImports", () => {
+    it("checks if a basic import can be extracted", () => {
+        expect(extractImports(`import x from "./a"`)).toEqual(["./a"]);
+    });
+
+    it("checks if it can handle more than one import", () => {
+        expect(extractImports(`import x from "./a"; import b from "./b"`)).toEqual(["./a", "./b"]);
+    });
+
+    it("multi-line import weakness (W1)", () => {
+        expect(extractImports(`import {\n  A,\n  B,\n} from "./multi"`)).toEqual([]);
+    });
+
+    it("side-effect import weakness (W2)", () => {
+        expect(extractImports(`import "./globals.css"`)).toEqual([]);
+    });
+
+    it("re-export weakness (W2)", () => {
+        expect(extractImports(`export {x} from "./y"`)).toEqual([]);
+    });
+
+    it("dynamic import weakness (W2)", () => {
+        expect(extractImports(`const m = await import("./dyn")`)).toEqual([]);
+    });
+
+    it("false positive (W2)", () => {
+        expect(extractImports(`import ghost from "./ghost"`)).toEqual(["./ghost"]);
+    });
+});
+
+describe("classifyFile", () => {
+    it("checks if it's a component", () => {
+        expect(classifyFile("a.tsx")).toBe("component");
+    });
+
+    it("checks if it's a component", () => {
+        expect(classifyFile("a.jsx")).toBe("component");
+    });
+
+    it("checks if it's a component", () => {
+        expect(classifyFile("a.ts")).toBe("module");
+    });
+
+    it("checks if it's a component", () => {
+        expect(classifyFile("a.js")).toBe("module");
+    });
+});
+
+describe("toFlowGraph", () => {
+    it("builds nodes and edges from a small file list", () => {
+        const result = toFlowGraph([
+            { id: "app/page.tsx", imports: ["./components/GraphCanvas", "react"] },
+            { id: "app/components/GraphCanvas.tsx", imports: ["@/lib/graph"] },
+            { id: "lib/graph.ts", imports: [] }
+        ]);
+
+        expect(result.nodes).toEqual([
+            { id: "app/page.tsx", type: "file", position: { x: 0, y: 0 }, data: { fileName: "page.tsx", dir: "app", kind: "component" } },
+            { id: "app/components/GraphCanvas.tsx", type: "file", position: { x: 0, y: 240 }, data: { fileName: "GraphCanvas.tsx", dir: "app/components", kind: "component" } },
+            { id: "lib/graph.ts", type: "file", position: { x: 0, y: -240 }, data: { fileName: "graph.ts", dir: "lib", kind: "module" } }
+        ]);
+        
+        // only look at source and target by stripping away the rest
+        expect(result.edges.map((e) => ({ source: e.source, target: e.target}))).toEqual([
+            { source: "app/page.tsx", target: "app/components/GraphCanvas.tsx" },
+            { source: "app/components/GraphCanvas.tsx", target: "lib/graph.ts" }
+        ]);
+    });
+});

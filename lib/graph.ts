@@ -45,7 +45,6 @@ export function resolveSegments(baseDir: string, relative: string): string {
 }
 
 // Turns a raw import path into a project-relative file id, or null if the import is external (npm package).
-
 export function resolveImport (importerId: string, specifier: string){
   let base: string;
   if (specifier.startsWith("./") || specifier.startsWith("../")) {
@@ -84,9 +83,15 @@ export function radialPosition(index: number, total: number): { x: number; y: nu
   const angle = (slot / capacity) * 2 * Math.PI + (ring % 2) * (Math.PI / capacity);
   const radius = ring * RING_GAP;
 
+  // `|| 0` normalizes -0 to 0: Math.PI is only an approximation of π, so
+  // angles that should land exactly on an axis (e.g. 3π/2) leave a tiny
+  // floating-point residual: cos()/sin() return a value extremely close to
+  // but not exactly 0, and Math.round() of a small negative residual
+  // produces -0. Meaningless for a canvas position, but breaks exact
+  // equality checks (Object.is/toEqual distinguish -0 from 0) if left in.
   return {
-    x: Math.round(Math.cos(angle) * radius),
-    y: Math.round(Math.sin(angle) * radius),
+    x: Math.round(Math.cos(angle) * radius) || 0,
+    y: Math.round(Math.sin(angle) * radius) || 0,
   };
 }
 
@@ -95,7 +100,7 @@ export function radialPosition(index: number, total: number): { x: number; y: nu
  * .tsx/.jsx files render UI (pages, layouts, components) → "component";
  * plain .ts/.js files are utilities, scripts, or config → "module".
  */
-function classifyFile(id: string): FileKind {
+export function classifyFile(id: string): FileKind {
   return id.endsWith(".tsx") || id.endsWith(".jsx") ? "component" : "module";
 }
 

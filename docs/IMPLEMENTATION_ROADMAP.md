@@ -31,6 +31,8 @@
 **Goal:** the graph becomes a controllable instrument (which the agent will play in Phase 6).
 
 > Also absorb the **P0 fixes (F1–F4)** from `GRAPH_IMPLEMENTATION_REVIEW.md` at the start of this phase: test harness, per-file scan error tolerance, edge arrowheads, deterministic ordering. F5/F6 (hardened extractor, tsconfig-driven resolution) get their own step next — see **P1 fixes** below, right after this phase.
+>
+> **F1 status: done (2026-07-13).** `lib/graph.test.ts` covers `resolveSegments`, `radialPosition`, `resolveImport`, `classifyFile`, and a `toFlowGraph` integration case; 30 tests, all passing, hand-written by the project owner (not generated). Caught and fixed two real bugs along the way — `fileIds` was being rebuilt every loop iteration instead of once, and `radialPosition` could emit `-0` instead of `0` on axis-aligned angles (see the `-0` note in PART 3 §3.1). F2–F4 are still open.
 
 Tasks:
 1. **`GET /api/graph`** route handler wrapping `scanProject()` + `toFlowGraph()` + degree-centrality stats. (The `server-only` guard was already removed from `lib/scan.ts` during F1 setup — see `ARCHITECTURE.md` §3 rule 1 — nothing left to do here.)
