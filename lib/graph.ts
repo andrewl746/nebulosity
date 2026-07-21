@@ -166,8 +166,7 @@ export function toFlowGraph(files: ScannedFile[], rootDir = ""): CodebaseGraph {
         id: edgeId,
         source: sourceId,
         target: targetId,
-        animated: true,
-        style: { stroke: "rgba(168, 85, 247, 0.45)", strokeWidth: 1 },
+        style: { stroke: "rgba(168, 85, 247, 0.5)", strokeWidth: 1 },
       });
     }
   }

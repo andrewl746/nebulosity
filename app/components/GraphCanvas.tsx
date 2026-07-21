@@ -2,6 +2,7 @@
 
 import {
   ReactFlow,
+  MarkerType,
   Background,
   BackgroundVariant,
   Controls,
@@ -27,6 +28,14 @@ export default function GraphCanvas({ nodes, edges }: GraphCanvasProps) {
       defaultNodes={nodes}
       defaultEdges={edges}
       nodeTypes={nodeTypes}
+      defaultEdgeOptions={{
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 23,
+          height: 23,
+          color: "rgba(168, 85, 247, 0.75)"
+        }
+      }}
       colorMode="dark"
       fitView
       // Extra left/top padding keeps the fitted graph clear of the flush
