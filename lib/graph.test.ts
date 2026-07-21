@@ -5,23 +5,23 @@ import fs from "fs";
 
 // P0 F1 testing
 describe("resolveSegments (F1)", () => {
-    it("resolves a single relative path", () => {
+    it("resolve a single relative path", () => {
         expect(resolveSegments("app", "./components/GraphCanvas")).toBe("app/components/GraphCanvas");
     });
 
-    it("handles multiple .. segments (pop, pop, push, push)", () => {
+    it("handle multiple .. segments (pop, pop, push, push)", () => {
         expect(resolveSegments("app/components", "../../lib/graph")).toBe("lib/graph");
     });
 
-    it("climbs up and back down into a sibling folder", () => {
+    it("climb up and back down into a sibling folder", () => {
         expect(resolveSegments("lib", "../app/page")).toBe("app/page");
     });
 
-    it("silently drops any extra .. past the root", () => {
+    it("silently drop any extra .. past the root", () => {
         expect(resolveSegments("app", "../../../x")).toBe("x");
     });
 
-    it("produces a phantom leading slash for a root-level importer", () => {
+    it("produce a phantom leading slash for a root-level importer", () => {
         expect(resolveSegments("", "./x")).toBe("/x");
     });
 });
@@ -77,17 +77,17 @@ describe("resolveImport", () => {
         expect(resolveImport("app/page.tsx", "react")).toBe(null);
     });
 
-    it("returns a base path unconditionally and no longer detects a nonexistent file (toFlowGraph's job now)", () => {
+    it("return a base path unconditionally and no longer detects a nonexistent file (toFlowGraph's job now)", () => {
         expect(resolveImport("lib/graph.ts", "./missing")).toBe("lib/missing");
     });
 });
 
 describe("extractImports", () => {
-    it("checks if a basic import can be extracted", () => {
+    it("check if a basic import can be extracted", () => {
         expect(extractImports(`import x from "./a"`)).toEqual(["./a"]);
     });
 
-    it("checks if it can handle more than one import", () => {
+    it("check if it can handle more than one import", () => {
         expect(extractImports(`import x from "./a"; import b from "./b"`)).toEqual(["./a", "./b"]);
     });
 
@@ -113,25 +113,25 @@ describe("extractImports", () => {
 });
 
 describe("classifyFile", () => {
-    it("checks if it's a component", () => {
+    it("check if it's a component", () => {
         expect(classifyFile("a.tsx")).toBe("component");
     });
 
-    it("checks if it's a component", () => {
+    it("check if it's a component", () => {
         expect(classifyFile("a.jsx")).toBe("component");
     });
 
-    it("checks if it's a module", () => {
+    it("check if it's a module", () => {
         expect(classifyFile("a.ts")).toBe("module");
     });
 
-    it("checks if it's a module", () => {
+    it("check if it's a module", () => {
         expect(classifyFile("a.js")).toBe("module");
     });
 });
 
 describe("toFlowGraph", () => {
-    it("builds nodes and edges from a small file list", () => {
+    it("build nodes and edges from a small file list", () => {
         const result = toFlowGraph([
             { id: "app/page.tsx", imports: ["./components/GraphCanvas", "react"] },
             { id: "app/components/GraphCanvas.tsx", imports: ["@/lib/graph"] },
@@ -177,4 +177,21 @@ describe("scanProject (F2)", () => {
     afterEach(() => {
         vi.restoreAllMocks();
     })
+});
+
+// P0 F4 testing
+describe("scanProject (F4)", () => {
+    it("check if deduping works", () => {
+        const { files } = scanProject(process.cwd(), ["app", "app/components"]);
+        const fileSet: Set<string> = new Set(files.map((f) => f.id));
+        
+        expect(files.length).toBe(fileSet.size);
+    });
+
+    it("check if files are sorted by id", () => {
+        const { files } = scanProject(process.cwd(), ["app", "app/components"]);
+        const filesSorted = [...files].sort((a, b) => a.id.localeCompare(b.id)); // spread operator vital for copying "files"
+        
+        expect(files).toEqual(filesSorted);
+    });
 });

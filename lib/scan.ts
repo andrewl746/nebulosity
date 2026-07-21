@@ -37,6 +37,7 @@ export function scanProject(
 ): result {
   const found: ScannedFile[] = []; // a ScannedFile object includes a file's id and its imports
   const warnings: warning[] = [];
+  const duplicateGuard: Set<string> = new Set();
 
   function walk(folderPath: string): void {
     let items: fs.Dirent[];
@@ -56,7 +57,15 @@ export function scanProject(
       if (item.isDirectory()){
         walk(fullPath);
       } else if (SOURCE_EXTENSIONS.some((ext) => fullPath.endsWith(ext))){
+        const id = path.relative(rootDir, fullPath);
         let content: string;
+
+        if (duplicateGuard.has(id)){
+          continue;
+        } else{
+          duplicateGuard.add(id);
+        }
+
         try{
           content = fs.readFileSync(fullPath, "utf-8");
         } catch (err){
@@ -65,7 +74,7 @@ export function scanProject(
         }
 
         found.push({
-          id: path.relative(rootDir, fullPath),
+          id,
           imports: extractImports(content),
         });
       }
@@ -80,5 +89,5 @@ export function scanProject(
     }
   }
 
-  return { files: found, warnings };
+  return { files: found.sort((a, b) => a.id.localeCompare(b.id)), warnings };
 }
