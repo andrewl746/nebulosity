@@ -8,7 +8,7 @@ import { scanProject } from "@/lib/scan";
 export default function Home() {
   // Server component: scan the codebase on the server at render time and
   // hand the finished graph to the client canvas as plain props.
-  const files = scanProject();
+  const { files }  = scanProject();
   const { nodes, edges } = toFlowGraph(files);
   const rootName = path.basename(process.cwd());
 

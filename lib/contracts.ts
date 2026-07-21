@@ -49,6 +49,7 @@ export type GraphResponse = {
     fileCount: number;
     edgeCount: number;
     rootName: string;
+    warningCount: number;
     /** Top 5 by degree centrality (ADR-010). */
     centralFiles: { path: string; inDegree: number; outDegree: number }[];
   };

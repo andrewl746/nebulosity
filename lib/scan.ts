@@ -6,6 +6,16 @@ const IGNORE_LIST = ["node_modules", ".next", ".git", "scripts"];
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
 const importRegex = /import\s+.*?from\s+['"](.+?)['"]/g;
 
+type warning = {
+  path: string; 
+  error: string;
+}
+
+type result = {
+  files: ScannedFile[];
+  warnings: warning[];
+}
+
 export function extractImports(fileContent: string): string[] {
   const imports: string[] = [];
   let match;
@@ -24,11 +34,19 @@ export function extractImports(fileContent: string): string[] {
 export function scanProject(
   rootDir: string = process.cwd(),
   dirs: string[] = ["app", "lib"],
-): ScannedFile[] {
-  const found: ScannedFile[] = [];
+): result {
+  const found: ScannedFile[] = []; // a ScannedFile object includes a file's id and its imports
+  const warnings: warning[] = [];
 
   function walk(folderPath: string): void {
-    const items = fs.readdirSync(folderPath, { withFileTypes: true });
+    let items: fs.Dirent[];
+
+    try{
+      items = fs.readdirSync(folderPath, { withFileTypes: true });
+    } catch (err){
+      warnings.push({ path: folderPath, error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
 
     for (const item of items) {
       if (IGNORE_LIST.includes(item.name)) continue;
@@ -38,7 +56,13 @@ export function scanProject(
       if (item.isDirectory()){
         walk(fullPath);
       } else if (SOURCE_EXTENSIONS.some((ext) => fullPath.endsWith(ext))){
-        const content = fs.readFileSync(fullPath, "utf-8");
+        let content: string;
+        try{
+          content = fs.readFileSync(fullPath, "utf-8");
+        } catch (err){
+          warnings.push({ path: fullPath, error: err instanceof Error ? err.message : String(err) });
+          continue;
+        }
 
         found.push({
           id: path.relative(rootDir, fullPath),
@@ -56,5 +80,5 @@ export function scanProject(
     }
   }
 
-  return found;
+  return { files: found, warnings };
 }

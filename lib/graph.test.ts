@@ -1,8 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { resolveSegments, radialPosition, resolveImport, classifyFile, toFlowGraph } from "./graph";
-import { extractImports } from "./scan"
+import { extractImports, scanProject } from "./scan"
+import fs from "fs";
 
-describe("resolveSegments", () => {
+// P0 F1 testing
+describe("resolveSegments (F1)", () => {
     it("resolves a single relative path", () => {
         expect(resolveSegments("app", "./components/GraphCanvas")).toBe("app/components/GraphCanvas");
     });
@@ -119,11 +121,11 @@ describe("classifyFile", () => {
         expect(classifyFile("a.jsx")).toBe("component");
     });
 
-    it("checks if it's a component", () => {
+    it("checks if it's a module", () => {
         expect(classifyFile("a.ts")).toBe("module");
     });
 
-    it("checks if it's a component", () => {
+    it("checks if it's a module", () => {
         expect(classifyFile("a.js")).toBe("module");
     });
 });
@@ -148,4 +150,31 @@ describe("toFlowGraph", () => {
             { source: "app/components/GraphCanvas.tsx", target: "lib/graph.ts" }
         ]);
     });
+});
+
+// P0 F2 testing
+describe("scanProject (F2)", () => {
+    it("save the real function", () => {
+        const realReadFileSync = fs.readFileSync;
+
+        vi.spyOn(fs, "readFileSync").mockImplementation((path) => { // the fake function
+            if (String(path).includes("graph.ts")){
+                throw new Error("simulated unreadable file");
+            }
+
+            return realReadFileSync(path, "utf-8");
+        });
+        
+        // local variables made during the test
+        const { files, warnings } = scanProject();
+
+        // if you don't include the return statement then it'll always return false
+        expect(files.some((x) => { return x.id.includes("graph.ts") })).toBe(false);
+        expect(warnings.some((x) => { return x.path.includes("graph.ts")})).toBe(true);
+        expect(files.some((x) => { return x.id.includes("scan.ts")})).toBe(true);
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    })
 });

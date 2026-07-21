@@ -31,6 +31,7 @@ type GraphResponse = {
     fileCount: number;
     edgeCount: number;
     rootName: string;                       // "Nebulosity"
+    warningCount: number;                   // per-file scan warnings (F2); 0 = clean scan
     centralFiles: { path: string; inDegree: number; outDegree: number }[]; // top 5
   };
 };

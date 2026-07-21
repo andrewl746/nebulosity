@@ -195,7 +195,7 @@ Suggested build order (each step should run and be understood before the next):
 
 ## Post-v1 backlog (do not start before Phase 6 ships)
 
-Ordered by value: session persistence (v1.1, schemas already reserved) → graph-aware retrieval boost (`RAG_PIPELINE.md` §5) → quiz mode polish → PageRank centrality (ADR-010) → **layout upgrade + scaling tiers** (dagre in a worker, LOD/culling, directory clustering — the full plan lives in `VISUALIZATION_DESIGN.md` §3–4 / ADR-011/012; activate Tier M knobs only when a target repo exceeds ~300 files) → Electron/Tauri spike (`ARCHITECTURE.md` §7).
+Ordered by value: session persistence (v1.1, schemas already reserved) → **file read-state tracking** (mark files read/unread as you explore — a progress overlay on the graph for onboarding; builds directly on session persistence, so it comes right after it. Open design question: what counts as "read" — auto-mark on visit vs. explicit "mark as understood" vs. a hybrid where visits auto-track and the user promotes to understood; both states user-reversible. Could feed the agent's "what to read next" so it skips already-read files) → graph-aware retrieval boost (`RAG_PIPELINE.md` §5) → quiz mode polish → PageRank centrality (ADR-010) → **layout upgrade + scaling tiers** (dagre in a worker, LOD/culling, directory clustering — the full plan lives in `VISUALIZATION_DESIGN.md` §3–4 / ADR-011/012; activate Tier M knobs only when a target repo exceeds ~300 files) → Electron/Tauri spike (`ARCHITECTURE.md` §7).
 
 ## Risk register
 
