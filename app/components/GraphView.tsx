@@ -6,6 +6,7 @@ import type { GraphResponse } from "@/lib/contracts";
 
 export default function GraphView(){
     const [graph, setGraph] = useState<GraphResponse | null>(null);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
 
     useEffect(() => {
         fetch("/api/graph")
@@ -17,24 +18,41 @@ export default function GraphView(){
         return <div>Loading...</div>
     }
 
+    const selectedNode = graph.nodes.find(n => n.id === selectedId);
+    const outDegree = graph.edges.filter(e => e.source === selectedId).length;
+    const inDegree = graph.edges.filter(e => e.target === selectedId).length;
+
     return (
         <>
             <main className="absolute inset-0">
-                <GraphCanvas nodes={graph.nodes} edges={graph.edges} />
+                <GraphCanvas nodes={graph.nodes} edges={graph.edges} onNodeSelect={setSelectedId} onDeselect={() => setSelectedId(null)}/>
             </main>
 
             {/* Observed-sector status bar */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 flex h-9 items-center justify-center border-b border-purple-500/15 bg-[#06070B]/40 backdrop-blur-xl">
+            <div className="pointer-events-auto absolute inset-x-0 top-0 flex h-9 items-center justify-center border-b border-purple-500/15 bg-[#06070B]/40 backdrop-blur-xl">
                 <div className="flex items-center gap-2">
                 <span className="h-1 w-1 rounded-full bg-cyan-300/80" />
-                <span className="font-mono text-[10px] font-extralight uppercase tracking-[0.3em] text-zinc-400">
+                <span className="font-mono text-[10px] font-light uppercase tracking-[0.3em] text-zinc-400">
                     observing <span className="text-zinc-200">~/{graph.stats.rootName}</span>
                 </span>
-                <span className="font-mono text-[10px] font-extralight text-zinc-600">
+                <span className="font-mono text-xs text-zinc-300">
                     {graph.nodes.length} Files · {graph.edges.length} Links
                 </span>
                 </div>
             </div>
+
+            {selectedNode && (
+                <div className="pointer-events-auto absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 border border-purple-500/20 bg-[#0c0716]/80 px-4 py-2 backdrop-blur-xl">
+                    <span
+                        className={`h-1 w-1 rounded-full ${
+                            selectedNode.data.kind === "component" ? "bg-cyan-300/80" : "bg-purple-400/80"
+                        }`}
+                    />
+                    <span className="font-mono text-xs text-zinc-200">{selectedNode.id}</span>
+                    <span className="font-mono text-[10px] font-light uppercase tracking-[0.3em] text-zinc-400">{selectedNode.data.kind}</span> {/*kind: component/module*/}
+                    <span className="font-mono text-xs text-zinc-300">Imports {outDegree} · Imported by {inDegree}</span>
+                </div>
+            )}
         </>
     );
 }

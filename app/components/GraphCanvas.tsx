@@ -20,9 +20,11 @@ const nodeTypes: NodeTypes = { file: FileNode };
 type GraphCanvasProps = {
   nodes: FileNodeType[];
   edges: Edge[];
+  onNodeSelect: (id: string) => void
+  onDeselect: () => void;
 };
 
-export default function GraphCanvas({ nodes, edges }: GraphCanvasProps) {
+export default function GraphCanvas({ nodes, edges, onNodeSelect, onDeselect }: GraphCanvasProps) {
   return (
     <ReactFlow
       defaultNodes={nodes}
@@ -36,6 +38,8 @@ export default function GraphCanvas({ nodes, edges }: GraphCanvasProps) {
           color: "rgba(168, 85, 247, 0.75)"
         }
       }}
+      onNodeClick={(_, node) => onNodeSelect(node.id)}
+      onPaneClick={() => onDeselect()}
       colorMode="dark"
       fitView
       // Extra left/top padding keeps the fitted graph clear of the flush

@@ -76,7 +76,7 @@ export default function TerminalPanel() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="issue command…"
             spellCheck={false}
-            className="w-full bg-transparent font-mono text-xs font-light text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+            className="w-full bg-transparent font-mono text-xs font-light text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
           />
         </div>
       </form>
