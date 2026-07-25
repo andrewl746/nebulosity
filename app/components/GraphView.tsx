@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import GraphCanvas from "./GraphCanvas";
+import { useGraphControls } from "@/app/hooks/useGraphControls";
 import type { GraphResponse } from "@/lib/contracts";
 
 export default function GraphView(){
     const [graph, setGraph] = useState<GraphResponse | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const { highlightedNodeIds, highlight, clearHighlights } = useGraphControls();
 
     useEffect(() => {
         fetch("/api/graph")
@@ -25,7 +27,7 @@ export default function GraphView(){
     return (
         <>
             <main className="absolute inset-0">
-                <GraphCanvas nodes={graph.nodes} edges={graph.edges} onNodeSelect={setSelectedId} onDeselect={() => setSelectedId(null)}/>
+                <GraphCanvas nodes={graph.nodes} edges={graph.edges} onNodeSelect={setSelectedId} onDeselect={() => setSelectedId(null)} highlightedNodeIds={highlightedNodeIds}/>
             </main>
 
             {/* Observed-sector status bar */}
@@ -40,6 +42,13 @@ export default function GraphView(){
                 </span>
                 </div>
             </div>
+
+            <button onClick={() => highlight(["lib/graph.ts"])} className="pointer-events-auto absolute top-12 right-4 z-50 bg-purple-600 px-2 py-1 text-xs text-white">
+                Highlight graph.ts
+            </button>
+
+            <button onClick={() => clearHighlights()} className="pointer-events-auto absolute top-20 right-4 z-50 bg-purple-600 px-2 py-1 text-xs text-white">Clear</button>
+
 
             {selectedNode && (
                 <div className="pointer-events-auto absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 border border-purple-500/20 bg-[#0c0716]/80 px-4 py-2 backdrop-blur-xl">

@@ -2,14 +2,17 @@
 
 import {
   ReactFlow,
+  useNodesState,
+  useEdgesState,
   MarkerType,
   Background,
   BackgroundVariant,
   Controls,
   MiniMap,
   type Edge,
-  type NodeTypes,
+  type NodeTypes
 } from "@xyflow/react";
+import { useEffect } from "react";
 import "@xyflow/react/dist/style.css";
 import FileNode, { type FileNodeType } from "./FileNode";
 
@@ -20,15 +23,32 @@ const nodeTypes: NodeTypes = { file: FileNode };
 type GraphCanvasProps = {
   nodes: FileNodeType[];
   edges: Edge[];
-  onNodeSelect: (id: string) => void
+  onNodeSelect: (id: string) => void;
   onDeselect: () => void;
+  highlightedNodeIds: Set<string>;
 };
 
-export default function GraphCanvas({ nodes, edges, onNodeSelect, onDeselect }: GraphCanvasProps) {
+export default function GraphCanvas({ nodes: initialNodes, edges: initialEdges, onNodeSelect, onDeselect, highlightedNodeIds }: GraphCanvasProps){
+  const [nodes, setNodes, onNodeChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  useEffect(() => {
+    setNodes(nds => nds.map(n => ({
+      ...n,
+      data: {
+        ...n.data,
+        highlighted: highlightedNodeIds.has(n.id),
+        dimmed: highlightedNodeIds.size > 0 && !highlightedNodeIds.has(n.id)
+      }
+    })));
+  }, [highlightedNodeIds, setNodes]);
+
   return (
     <ReactFlow
-      defaultNodes={nodes}
-      defaultEdges={edges}
+      nodes={nodes}
+      onNodesChange={onNodeChange}
+      edges={edges}
+      onEdgesChange={onEdgesChange}
       nodeTypes={nodeTypes}
       defaultEdgeOptions={{
         markerEnd: {

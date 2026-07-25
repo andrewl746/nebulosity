@@ -10,6 +10,8 @@ export type FileNodeType = Node<
     fileName: string;
     dir: string;
     kind: FileKind;
+    highlighted?: boolean;
+    dimmed?: boolean;
   },
   "file"
 >;
@@ -29,7 +31,11 @@ function FileNode({ data }: NodeProps<FileNodeType>) {
   return (
     <div
       title={data.dir ? `${data.dir}/${data.fileName}` : data.fileName}
-      className="max-w-56 rounded-sm border border-purple-400/20 bg-black/60 px-3 py-1.5 font-mono shadow-sm backdrop-blur-md"
+      className={`max-w-56 rounded-sm border bg-black/60 px-3 py-1.5 font-mono shadow-sm backdrop-blur-md transition ${
+        data.highlighted
+          ? "border-purple-400 shadow-[0_0_14px_rgba(168,85,247,0.45)]" // bright glow border
+          : "border-purple-400/20" // normal border
+      } ${data.dimmed ? "opacity-50" : ""}`} // dimmed node
     >
       <div className="flex items-center gap-2">
         <span
