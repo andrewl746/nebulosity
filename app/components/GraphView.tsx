@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import GraphCanvas from "./GraphCanvas";
 import { useGraphControls } from "@/app/hooks/useGraphControls";
+import { ReactFlowProvider } from "@xyflow/react";
 import type { GraphResponse } from "@/lib/contracts";
 
-export default function GraphView(){
+function GraphViewInner(){
     const [graph, setGraph] = useState<GraphResponse | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const { highlightedNodeIds, highlight, clearHighlights } = useGraphControls();
+    const { highlightedNodeIds, highlight, clearHighlights, focusNode } = useGraphControls();
 
     useEffect(() => {
         fetch("/api/graph")
@@ -49,6 +50,8 @@ export default function GraphView(){
 
             <button onClick={() => clearHighlights()} className="pointer-events-auto absolute top-20 right-4 z-50 bg-purple-600 px-2 py-1 text-xs text-white">Clear</button>
 
+            <button onClick={() => focusNode("lib/graph.ts")} className="pointer-events-auto absolute top-28 right-4 z-50 bg-purple-600 px-2 py-1 text-xs text-white">Focus Node</button>
+
 
             {selectedNode && (
                 <div className="pointer-events-auto absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 border border-purple-500/20 bg-[#0c0716]/80 px-4 py-2 backdrop-blur-xl">
@@ -63,5 +66,13 @@ export default function GraphView(){
                 </div>
             )}
         </>
+    );
+}
+
+export default function GraphView(){
+    return(
+        <ReactFlowProvider>
+            <GraphViewInner />
+        </ReactFlowProvider>
     );
 }
