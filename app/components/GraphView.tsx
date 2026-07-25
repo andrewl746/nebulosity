@@ -4,17 +4,24 @@ import { useState, useEffect } from "react";
 import GraphCanvas from "./GraphCanvas";
 import { useGraphControls } from "@/app/hooks/useGraphControls";
 import { ReactFlowProvider } from "@xyflow/react";
-import type { GraphResponse } from "@/lib/contracts";
+import type { GraphResponse, HealthResponse } from "@/lib/contracts";
 
 function GraphViewInner(){
     const [graph, setGraph] = useState<GraphResponse | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [health, setHealth] = useState<HealthResponse | null>(null);
     const { highlightedNodeIds, highlight, clearHighlights, focusNode } = useGraphControls();
 
     useEffect(() => {
         fetch("/api/graph")
             .then(res => res.json())
             .then(data => setGraph(data));
+    }, []);
+
+    useEffect(() => {
+        fetch("/api/health")
+            .then(res => res.json())
+            .then(data => setHealth(data));
     }, []);
 
     if (!graph){
@@ -33,14 +40,24 @@ function GraphViewInner(){
 
             {/* Observed-sector status bar */}
             <div className="pointer-events-auto absolute inset-x-0 top-0 flex h-9 items-center justify-center border-b border-purple-500/15 bg-[#06070B]/40 backdrop-blur-xl">
-                <div className="flex items-center gap-2">
-                <span className="h-1 w-1 rounded-full bg-cyan-300/80" />
-                <span className="font-mono text-[10px] font-light uppercase tracking-[0.3em] text-zinc-400">
-                    observing <span className="text-zinc-200">~/{graph.stats.rootName}</span>
-                </span>
-                <span className="font-mono text-xs text-zinc-300">
-                    {graph.nodes.length} Files · {graph.edges.length} Links
-                </span>
+                <div className="flex items-center gap-3">
+                    <span className="h-1 w-1 rounded-full bg-cyan-300/80" />
+                    <span className="font-mono text-[10px] font-light uppercase tracking-[0.3em] text-zinc-400">
+                        Observing <span className="text-zinc-200">~/{graph.stats.rootName}</span>
+                    </span>
+                    <span className="h-3 w-px bg-purple-500/35" />
+                    <span className="font-mono text-xs text-zinc-300">
+                        {graph.nodes.length} Files · {graph.edges.length} Links
+                    </span>
+                    <span className="h-3 w-px bg-purple-500/35" />
+                    {health &&
+                        <>
+                            <span className={`h-1 w-1 rounded-full ${health.index.exists ? "bg-green-300/80" : "bg-red-400/80"}`} />
+                            <span className="font-mono text-[10px] font-light uppercase tracking-[0.3em] text-zinc-400">
+                                {health.index.exists ? "Indexed" : "Unindexed"}
+                            </span>
+                        </>
+                    }
                 </div>
             </div>
 
