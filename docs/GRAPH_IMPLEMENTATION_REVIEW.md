@@ -128,8 +128,8 @@ All in `lib/graph.ts`:
 
 ## P1 — High impact, planned cost
 
-**F5. Hardened import extractor (W1, W2) — interim, tested, honest.** Replace the single regex with a small pattern set over comment-stripped source: static (`[\s\S]*?` bounded form), side-effect, re-export, dynamic/`require`. Documented residual risk: string-literal false positives remain until the AST unification that ADR-003 already schedules for post-Phase-2 (~20 lines in `chunk.ts` at that point). The F1 test suite is what makes this refactor safe and the later AST swap verifiable — same tests, two implementations.
-**F6. Honest module resolution (W8).** Read `compilerOptions.paths` from tsconfig at scan time instead of hardcoding `@/`; extend candidates with `.mjs/.mts/.cts` and the NodeNext `./x.js → x.ts` rewrite. Kill the entire "silently vanishing edges" class.
+**F5. Hardened import extractor (W1, W2) — interim, tested, honest. (DONE 2026-07-26, ADR-016.)** Replaced the single regex with a small pattern set over comment-stripped source: static (`[\s\S]*?` bounded form), side-effect, re-export, dynamic/`require`. Comment-stripping also removed the comment false-positive class (§3.4 row 209 flipped to `[]`). Documented residual risk narrowed to *string-literal* false positives, which remain until the AST unification ADR-003 schedules for post-Phase-2. The F1 test suite is what made this refactor safe and the later AST swap verifiable — same tests, two implementations.
+**F6. Honest module resolution (W8). (DONE 2026-07-26, ADR-016.)** Reads `compilerOptions.paths` from tsconfig at scan time (`readTsconfigAliases`, server-side) and injects the alias map into the pure `resolveImport`/`toFlowGraph` instead of hardcoding `@/` — `graph.ts` stays filesystem-free. Extended candidates with `.mjs/.mts/.cts` and added the NodeNext `./x.js → x.ts` rewrite. Killed the "silently vanishing edges" class (verified live: `app → lib` `@/`-imports now produce edges).
 
 ## P2 — Cheap polish (batch into any nearby PR)
 
@@ -187,10 +187,12 @@ Boundary intent: index 6 is the **last seat of ring 1**; index 7 is the **first 
 
 **Contract changed 2026-07-13, during F1 itself.** The project owner refactored `resolveImport` to stop doing file-existence/extension checking internally — it now only resolves a specifier down to a **base path** (no extension, no guarantee the file exists). The extension-candidate matching loop (`EXTENSION_CANDIDATES`, deciding e.g. that `.ts` wins over `/index.ts` when both could match) moved out to live inline in `toFlowGraph`'s edge-building loop instead, right next to `fileIds`, rather than being passed into `resolveImport` as a third parameter. Both are legitimate designs (see `ARCHITECTURE.md`'s closures-vs-explicit-params discussion) — this is simply the one that shipped. Consequence: `resolveImport` no longer needs a `fileIds` argument at all, and it can no longer tell you whether a resolved path is real. The rows below are updated for this contract; the extension-priority behavior itself is now covered by the `toFlowGraph` integration vector in §3.6.
 
+**Contract changed again 2026-07-26 (F6, ADR-016).** `resolveImport` gained a third parameter `aliases: Record<string, string> = {}` and no longer hardcodes `@/`. It applies whatever prefix→replacement map is injected (read from `tsconfig.compilerOptions.paths` server-side by `readTsconfigAliases`), keeping `graph.ts` filesystem-free. With the default empty map, an aliased specifier like `@/lib/graph` returns `null` — callers must pass the map (as `toFlowGraph(files, rootDir, aliases)` does).
+
 | call | expected | note |
 |---|---|---|
 | `("app/page.tsx", "./components/GraphCanvas")` | `"app/components/GraphCanvas"` | no extension appended — that's `toFlowGraph`'s job now |
-| `("app/components/GraphCanvas.tsx", "@/lib/graph")` | `"lib/graph"` | alias strip only |
+| `("app/components/GraphCanvas.tsx", "@/lib/graph", { "@/": "" })` | `"lib/graph"` | **F6 (2026-07-26):** alias resolved via the injected `aliases` map (3rd arg), not a hardcoded `@/`. With no `aliases` arg this now returns `null` (see the §3.3 contract note) |
 | `("lib/graph.ts", "../app/page")` | `"app/page"` | relative up-and-over |
 | `("lib/graph.ts", "./utils")` | `"lib/utils"` | no `/index.ts` fallback anymore — that's also `toFlowGraph`'s job |
 | `("app/page.tsx", "react")` | `null` | bare specifier = npm package — still the only case that returns `null` |
@@ -202,11 +204,12 @@ Boundary intent: index 6 is the **last seat of ring 1**; index 7 is the **first 
 |---|---|---|
 | `import x from "./a";` | `["./a"]` | |
 | `import a from "./a"; import b from "./b";` | `["./a", "./b"]` | lazy-quantifier test: greedy would merge into one garbage match |
-| `import {\n  A,\n  B,\n} from "./multi";` | `[]` | ⚠ **W1** — multi-line import invisible; after F5 this row's expectation flips to `["./multi"]` |
-| `import "./globals.css";` | `[]` | ⚠ **W2** side-effect import; F5 flips to `["./globals.css"]` |
-| `export { x } from "./y";` | `[]` | ⚠ **W2** re-export; F5 flips to `["./y"]` |
-| `const m = await import("./dyn");` | `[]` | ⚠ **W2** dynamic import (regex requires whitespace after `import`); F5 flips to `["./dyn"]` |
-| `// import ghost from "./ghost"` | `["./ghost"]` | ⚠ **W2 false positive** — comment text matches; stays wrong until AST (ADR-003), F5 does *not* fix this row |
+| `import {\n  A,\n  B,\n} from "./multi";` | `["./multi"]` | ✅ **F5 (landed 2026-07-26)** — multi-line caught via the `[\s\S]*?` bounded form |
+| `import "./globals.css";` | `["./globals.css"]` | ✅ **F5** — side-effect import pattern |
+| `export { x } from "./y";` | `["./y"]` | ✅ **F5** — re-export pattern |
+| `const m = await import("./dyn");` | `["./dyn"]` | ✅ **F5** — dynamic import / `require` pattern |
+| `// import ghost from "./ghost"` | `[]` | ✅ **F5 strips comments (ADR-016)** — this **overrides** the prior "F5 does not fix this row" note: the comment is removed before matching |
+| `const s = "import x from './fake'";` | `["./fake"]` | ⚠ **residual** — string-literal false positive: import-looking text inside a string. F5 does *not* fix this; only the AST (ADR-003) can. This is the honest replacement for the old comment-false-positive row |
 
 ## 3.5 `classifyFile(id)`
 

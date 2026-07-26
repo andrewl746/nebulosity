@@ -3,8 +3,7 @@ import path from "path";
 import type { ScannedFile } from "./graph";
 
 const IGNORE_LIST = ["node_modules", ".next", ".git", "scripts"];
-const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
-const importRegex = /import\s+.*?from\s+['"](.+?)['"]/g;
+const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs"]
 
 type warning = {
   path: string; 
@@ -16,20 +15,57 @@ type result = {
   warnings: warning[];
 }
 
+const IMPORT_PATTERNS = [
+  /(?:import|export)\b[\s\S]*?\bfrom\s*['"]([^'"]+)['"]/g,
+  /\bimport\s+['"]([^'"]+)['"]/g,
+  /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+];
+
+export function readTsconfigAliases(rootDir: string = process.cwd()): Record<string, string> {
+  const aliases: Record<string, string> = {};
+
+  try{
+    const raw = fs.readFileSync(path.join(rootDir, "tsconfig.json"), "utf-8");
+    const paths = JSON.parse(raw)?.compilerOptions?.paths ?? {};
+
+    for (const [pattern, targets] of Object.entries(paths)){
+      const target = Array.isArray(targets) ? targets[0] : undefined;
+      if (typeof target !== "string") continue;
+
+      const prefix = pattern.replace(/\*$/, ""); // "@/*" → "@/"
+      const replacement = target.replace(/^\.\//, "").replace(/\*$/, ""); // "./*" → ""
+      aliases[prefix] = replacement;
+    }
+  } catch{
+
+  }
+
+  return aliases;
+}
+
+function stripComments(src: string): string{
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, "")  // remove block comments  /* ... */
+    .replace(/\/\/.*/g, "");           // remove line comments   // ...
+}
+
 export function extractImports(fileContent: string): string[] {
+  const source = stripComments(fileContent);
   const imports: string[] = [];
   let match;
 
-  while ((match = importRegex.exec(fileContent)) !== null){
-    imports.push(match[1]);
+  for (const pattern of IMPORT_PATTERNS){
+    while ((match = pattern.exec(source)) !== null){
+      imports.push(match[1]);
+    }
   }
 
   return imports;
 }
 
 /**
- * Reusable version of scripts/scan.ts — walks the given directories and
- * returns one ScannedFile per source file, with ids relative to rootDir.
+ * Walks the given directories and returns one ScannedFile per source file,
+ * with ids relative to rootDir.
  */
 export function scanProject(
   rootDir: string = process.cwd(),

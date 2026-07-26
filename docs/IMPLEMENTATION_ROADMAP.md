@@ -8,7 +8,7 @@
 2. `npx tsc --noEmit` and `npm run lint` pass before a phase is "done".
 3. Do not start the next phase until the current phase's acceptance criteria all pass.
 4. No UI redesign — the visual design is complete (per CLAUDE.md).
-5. **F7/F8** (`GRAPH_IMPLEMENTATION_REVIEW.md` P2 — edge style → UI, `resolveSegments` clamp, `ScannedFile` dedupe) are intentionally *not* gated behind any phase's acceptance criteria — batch them into whichever nearby phase happens to touch that file. They're cheap and low-impact; don't let them block anything, but don't forget them either.
+5. **F7/F8** (`GRAPH_IMPLEMENTATION_REVIEW.md` P2 — edge style → UI, `resolveSegments` clamp, `ScannedFile` dedupe) are intentionally *not* gated behind any phase's acceptance criteria — batch them into whichever nearby phase happens to touch that file. They're cheap and low-impact; don't let them block anything, but don't forget them either. *(F8's `ScannedFile`/scripts dedupe is now closed — `scripts/scan.ts` was deleted during the P1 fixes, 2026-07-26. Still open: F7 edge-style move to `GraphCanvas` `defaultEdgeOptions`; F8's `resolveSegments` root clamp + symlink comment.)*
 
 ---
 
@@ -49,7 +49,9 @@ Tasks:
 
 ---
 
-## P1 fixes — hardened extractor & resolution (~2–4 hours) *(added 2026-07-13, closes F5/F6)*
+## P1 fixes — hardened extractor & resolution (~2–4 hours) *(added 2026-07-13, closes F5/F6)* — **DONE 2026-07-26 (ADR-016)**
+
+**Status:** F5 + F6 both landed and verified (35/35 F1 tests, `tsc`/lint clean, live `/api/graph` shows `@/`-alias edges). F5 strips comments (overriding golden-vector §3.4 row 209 — see ADR-016); residual is now string-literal false positives only. F6 reads `tsconfig.paths` server-side and injects the alias map into the pure resolver, keeping `graph.ts` filesystem-free. The duplicate `scripts/scan.ts` was deleted (closes F8's scripts-dedupe by removal). Next: **Phase D**.
 
 **Goal:** close the two P1 gaps from `GRAPH_IMPLEMENTATION_REVIEW.md` before either downstream layer builds on top of today's `extractImports`/`resolveImport` behavior. **Ordering is load-bearing, not arbitrary:** Phase S's native scanner is bound by the golden test vectors, several of which are marked "flips after F5" in `GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4 — building the C++ port before F5 lands means faithfully porting bugs you're about to fix anyway, then redoing the C++ side. Do this now, once, before Phase S exists.
 

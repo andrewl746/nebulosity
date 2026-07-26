@@ -66,7 +66,7 @@ describe("resolveImport", () => {
     });
 
     it("alias strip only", () => {
-        expect(resolveImport("app/components/GraphCanvas.tsx", "@/lib/graph")).toBe("lib/graph");
+        expect(resolveImport("app/components/GraphCanvas.tsx", "@/lib/graph", { "@/": "" })).toBe("lib/graph");
     });
 
     it("no /index.ts fallback anymore (toFlowGraph's job now)", () => {
@@ -91,24 +91,28 @@ describe("extractImports", () => {
         expect(extractImports(`import x from "./a"; import b from "./b"`)).toEqual(["./a", "./b"]);
     });
 
-    it("multi-line import weakness (W1)", () => {
-        expect(extractImports(`import {\n  A,\n  B,\n} from "./multi"`)).toEqual([]);
+    it("multi-line import (W1)", () => {
+        expect(extractImports(`import {\n  A,\n  B,\n} from "./multi"`)).toEqual(["./multi"]);
     });
 
-    it("side-effect import weakness (W2)", () => {
-        expect(extractImports(`import "./globals.css"`)).toEqual([]);
+    it("side-effect import (W2)", () => {
+        expect(extractImports(`import "./globals.css"`)).toEqual(["./globals.css"]);
     });
 
-    it("re-export weakness (W2)", () => {
-        expect(extractImports(`export {x} from "./y"`)).toEqual([]);
+    it("re-export (W2)", () => {
+        expect(extractImports(`export {x} from "./y"`)).toEqual(["./y"]);
     });
 
-    it("dynamic import weakness (W2)", () => {
-        expect(extractImports(`const m = await import("./dyn")`)).toEqual([]);
+    it("dynamic import (W2)", () => {
+        expect(extractImports(`const m = await import("./dyn")`)).toEqual(["./dyn"]);
     });
 
-    it("false positive (W2)", () => {
-        expect(extractImports(`import ghost from "./ghost"`)).toEqual(["./ghost"]);
+    it("comment stripped", () => {
+        expect(extractImports(`// import ghost from "./ghost"`)).toEqual([]);
+    });
+
+    it("string-literal false positive - known gap until AST (ADR-003)", () => { // import string that doesn't actually import anything
+        expect(extractImports(`const s = "import x from './fake'";`)).toEqual(["./fake"]);
     });
 });
 
@@ -136,7 +140,7 @@ describe("toFlowGraph", () => {
             { id: "app/page.tsx", imports: ["./components/GraphCanvas", "react"] },
             { id: "app/components/GraphCanvas.tsx", imports: ["@/lib/graph"] },
             { id: "lib/graph.ts", imports: [] }
-        ]);
+        ], "", { "@/": "" });
 
         expect(result.nodes).toEqual([
             { id: "app/page.tsx", type: "file", position: { x: 0, y: 0 }, data: { fileName: "page.tsx", dir: "app", kind: "component" } },
@@ -148,6 +152,17 @@ describe("toFlowGraph", () => {
         expect(result.edges.map((e) => ({ source: e.source, target: e.target}))).toEqual([
             { source: "app/page.tsx", target: "app/components/GraphCanvas.tsx" },
             { source: "app/components/GraphCanvas.tsx", target: "lib/graph.ts" }
+        ]);
+    });
+
+    it("NodeNext: a .js specifier resolves to the .ts source (F6)", () => {
+        const result = toFlowGraph([
+            { id: "app/a.ts", imports: ["./b.js"] },
+            { id: "app/b.ts", imports: [] }
+        ]);
+
+        expect(result.edges.map((e) => ({ source: e.source, target: e.target }))).toEqual([
+            { source: "app/a.ts", target: "app/b.ts" }
         ]);
     });
 });

@@ -1,7 +1,7 @@
 import type { Edge } from "@xyflow/react";
 import type { FileKind, FileNodeType } from "@/app/components/FileNode";
 
-/** Shape emitted by scripts/scan.ts — one entry per scanned source file. */
+/** One entry per scanned source file, produced by scanProject (lib/scan.ts). */
 export type ScannedFile = {
   /** File path (absolute or project-relative, either slash style). */
   id: string;
@@ -14,11 +14,21 @@ const EXTENSION_CANDIDATES = [
   "",
   ".ts",
   ".tsx",
+  ".mts",
+  ".cts",
   ".js",
   ".jsx",
+  ".mjs",
   "/index.ts",
   "/index.tsx",
 ];
+
+const JS_TO_TS_REWRITE: Record<string, string> = {
+  ".js": ".ts",
+  ".jsx": ".tsx",
+  ".mjs": ".mts",
+  ".cjs": ".cts"
+}
 
 /** Distance between concentric rings, in React Flow canvas units (px at zoom 1). */
 const RING_GAP = 240;
@@ -45,21 +55,19 @@ export function resolveSegments(baseDir: string, relative: string): string {
 }
 
 // Turns a raw import path into a project-relative file id, or null if the import is external (npm package).
-export function resolveImport (importerId: string, specifier: string){
-  let base: string;
-  if (specifier.startsWith("./") || specifier.startsWith("../")) {
+export function resolveImport (importerId: string, specifier: string, aliases: Record<string, string> = {}){
+  if (specifier.startsWith("./") || specifier.startsWith("../")){
     const importerDir = importerId.split("/").slice(0, -1).join("/");
-    base = resolveSegments(importerDir, specifier);
-  } else if (specifier.startsWith("@/")) {
-    // tsconfig alias: "@/*" -> "<root>/*"
-    base = specifier.slice(2);
-  } else {
-    // Bare specifier ("react", "next/image") — an npm package, not a
-    // local file. No node exists for it, so no edge.
-    return null;
+    return resolveSegments(importerDir, specifier);
   }
 
-  return base;
+  for (const [prefix, replacement] of Object.entries(aliases)){
+    if (specifier.startsWith(prefix)){
+      return replacement + specifier.slice(prefix.length);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -109,11 +117,11 @@ export type CodebaseGraph = { nodes: FileNodeType[]; edges: Edge[] };
 /**
  * Transform the scanner's raw output into React Flow's Node[] / Edge[].
  *
- * @param files   Output of scripts/scan.ts.
+ * @param files   Output of scanProject (lib/scan.ts).
  * @param rootDir Project root to strip from absolute ids (e.g. process.cwd()).
  *                Pass "" if ids are already project-relative.
  */
-export function toFlowGraph(files: ScannedFile[], rootDir = ""): CodebaseGraph {
+export function toFlowGraph(files: ScannedFile[], rootDir = "", aliases: Record<string, string> = {}): CodebaseGraph {
   const root = normalizeSlashes(rootDir).replace(/\/+$/, "");
 
   const toRelativeId = (rawPath: string): string => {
@@ -144,14 +152,21 @@ export function toFlowGraph(files: ScannedFile[], rootDir = ""): CodebaseGraph {
   for (const file of files) {
     const sourceId = toRelativeId(file.id);
     for (const specifier of file.imports) {
-      const base = resolveImport(sourceId, specifier);
+      const base = resolveImport(sourceId, specifier, aliases);
       if (base === null) continue; // external package, no node to link to
+      
+      const baseCandidates = [base];
+      for (const [js, ts] of Object.entries(JS_TO_TS_REWRITE)){
+        if (base.endsWith(js)){
+          baseCandidates.push(base.slice(0, -js.length) + ts);
+        }
+      }
 
-      let targetId: string = "";
-
-      for (const ext of EXTENSION_CANDIDATES) {
-        if (fileIds.has(base + ext)){
-          targetId = base + ext;
+      let targetId = "";
+      for (const candidate of baseCandidates) {
+        const ext = EXTENSION_CANDIDATES.find((e) => fileIds.has(candidate + e));
+        if (ext !== undefined){
+          targetId = candidate + ext;
           break;
         }
       }
