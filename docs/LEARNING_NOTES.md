@@ -1,6 +1,6 @@
 # LEARNING_NOTES.md — Study Guide & Interview Prep
 
-**Status:** Study artifact, distilled 2026-07-12 from the architect sessions
+**Status:** Study artifact, distilled 2026-07-12 from the architect sessions; §2/§6/§11 updated 2026-07-26 for F5/F6 (ADR-016)
 **Audience:** the project owner. This is the *teaching* that would otherwise be lost when the chat ends — the explanations that made things click, the debugging stories, and the interview answers. The design docs say what to build; this says what you should *understand*.
 
 ---
@@ -24,12 +24,13 @@ The sentence to be able to say cold: **"A server component scans the filesystem 
 
 ## 2. Regex, properly understood
 
-The scanner's pattern: `/import\s+.*?from\s+['"](.+?)['"]/g`
+**F5 (2026-07-26) replaced the single scanner regex with a small pattern set over comment-stripped source.** The original was `/import\s+.*?from\s+['"](.+?)['"]/g`; it's now three patterns — static+re-export, side-effect (`import "./x"`), dynamic+`require` — run over source that's had its comments removed first. The lessons below outlive that change; they're *why* the new patterns look the way they do.
 
-- **Greedy vs lazy:** `.+` grabs as much as possible; `.+?` grabs as little as possible. On a line with two imports, a greedy group would swallow from the first quote to the *last* quote in the line, merging both statements into garbage. Lazy stops at the nearest quote that lets the rest of the pattern succeed. Mnemonic: greedy grabs the whole rope; lazy takes the smallest bite that still finishes the sentence.
-- **`/g` is stateful:** the regex object carries a `lastIndex` cursor. `exec()` resumes from it each call and returns `null` at the end (which resets it). Forget the `/g` and the `while (exec())` loop never advances — infinite loop. Share one regex object across async code and the cursor gets corrupted.
-- **`.` does not match `\n`:** which is exactly why multi-line imports are invisible to the scanner (bug W1 in the review). One character class (`[\s\S]`) fixes it; the honest fix is an AST.
-- The categorical answer: regex *pattern-matches text*; a parser *understands structure*. Regex has both false negatives (multi-line, re-exports, dynamic imports) and false positives (imports inside comments/strings). An AST has neither.
+- **Greedy vs lazy:** `.+`/`[\s\S]*` grab as much as possible; `.+?`/`[\s\S]*?` grab as little as possible. On a line with two imports, a greedy group swallows from the first quote to the *last* quote, merging both statements into garbage. Lazy stops at the nearest quote that lets the rest of the pattern succeed. Mnemonic: greedy grabs the whole rope; lazy takes the smallest bite that still finishes the sentence.
+- **`/g` is stateful:** the regex object carries a `lastIndex` cursor. `exec()` resumes from it each call and returns `null` at the end (which resets it). Forget the `/g` and the `while (exec())` loop never advances — infinite loop. Share one regex object across async code and the cursor gets corrupted. (This is why each F5 pattern's `exec` loop runs fully to `null` before the next pattern starts.)
+- **`.` does not match `\n`:** this is why the *old* single-line regex missed multi-line imports (bug W1). The F5 static pattern uses `[\s\S]*?` — "any char *including* newlines, lazily" — precisely to span the lines between `import` and `from`. **W1 is now fixed.**
+- **Comment-stripping (F5):** comments (`//` and `/* */`) are deleted from the source *before* matching, which killed the comment false-positive class — a commented-out import no longer counts (this overrode a golden vector; see ADR-016).
+- **The categorical answer (still the headline):** regex *pattern-matches text*; a parser *understands structure*. Even after F5, **one** false-positive class survives — an import mentioned inside a **string literal** (`const s = "import x from './fake'"`), because a string's contents are byte-identical to real code to a text matcher. Only an AST (ADR-003, Phase 2) can tell code from code-shaped text. That surviving residual is the concrete, point-at-able argument for building the AST.
 
 ## 3. `resolveSegments` — the stack machine (the `..` breakdown)
 
@@ -61,7 +62,7 @@ A function that solves a smaller copy of its own problem by calling itself. `wal
 
 `toRelativeId` is still a function defined *inside* `toFlowGraph` so it can "remember" `root` without being passed it on every call. A function that captures variables from its surrounding scope is a **closure** — that's the whole concept.
 
-`resolveImport` **used to** be exactly this kind of closure too (capturing `fileIds`), until the 2026-07-13 refactor pulled it out to a standalone top-level function with explicit parameters, specifically so it could be unit-tested outside of `toFlowGraph`. That's the real trade-off closures have: convenient (no parameter plumbing), but untestable in isolation — you can't call a closure without also invoking whatever created it. Explicit parameters cost a bit of plumbing but buy independent testability. `resolveImport` picked testability; `toRelativeId` hasn't needed to yet, since nothing currently needs to unit-test it on its own.
+`resolveImport` **used to** be exactly this kind of closure too (capturing `fileIds`), until the 2026-07-13 refactor pulled it out to a standalone top-level function with explicit parameters, specifically so it could be unit-tested outside of `toFlowGraph`. That's the real trade-off closures have: convenient (no parameter plumbing), but untestable in isolation — you can't call a closure without also invoking whatever created it. Explicit parameters cost a bit of plumbing but buy independent testability. `resolveImport` picked testability; `toRelativeId` hasn't needed to yet, since nothing currently needs to unit-test it on its own. **F6 (2026-07-26) doubled down on this:** `resolveImport` gained a third explicit param, an injected `aliases` map read from `tsconfig` *server-side* rather than read inside the function — same principle (dependency injection), and it's *why* the function can be unit-tested by handing it a fake alias map with no filesystem at all.
 
 ## 7. React Flow lessons (paid for in real bugs)
 
@@ -94,11 +95,13 @@ Already taught in the design docs (read those, they were written to teach): embe
 
 ## 11. Self-test (if you can answer these cold, you own the codebase)
 
-1. As of 2026-07-13, `resolveImport("app/page.tsx", "./components/GraphCanvas")` returns `"app/components/GraphCanvas"` — no `.tsx`. Where did the extension get added before, and which function does that job now?
+1. `resolveImport("app/page.tsx", "./components/GraphCanvas")` returns `"app/components/GraphCanvas"` — no `.tsx`. Where did the extension get added before, and which function does that job now? And since F6, what third argument does `resolveImport` take, why is it *passed in* instead of read from disk inside the function, and what does it return for `@/lib/graph` if you *don't* pass it?
 2. What two bugs does the `seen` Set in the edge loop prevent, and what breaks visibly without it?
 3. Why can't `TerminalPanel` call `scanProject()` directly?
 4. A greedy version of the import regex meets `import a from "./a"; import b from "./b";` — what exactly goes wrong?
 5. Trace `resolveSegments("app/components", "../../lib/graph")` — list and queue at every step.
 6. Why is index 7 the first node of ring 2, and where does its `(480, 0)` come from?
-7. Your graph shows no edges at all after a refactor that moved files into `src/`. Name the two most likely culprits. *(Hint: alias mapping; extension candidates.)*
+7. Your graph shows no edges after a refactor that moved files into `src/` under a new `@app/*` tsconfig alias. Name the two most likely culprits. *(Hint: is the alias being read? are the extension candidates right?)* Since F6, which function reads the alias map, and what happens if that repo's `tsconfig.json` contains comments?
 8. Why do we embed an enriched text instead of the raw chunk source?
+9. After F5, `extractImports` still reports a phantom `./fake` for `const s = "import x from './fake'"`. Why is comment-stripping powerless here, and what's the only thing that fixes it?
+10. F6 reads `tsconfig` in `lib/scan.ts` (server-side) but applies the aliases in `lib/graph.ts`. Why not just read the file directly inside `graph.ts`? *(Answer names a specific architectural constraint.)*
