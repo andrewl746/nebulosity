@@ -1,6 +1,6 @@
 # LEARNING_NOTES.md — Study Guide & Interview Prep
 
-**Status:** Study artifact, distilled 2026-07-12 from the architect sessions; §2/§6/§11 updated 2026-07-26 for F5/F6 (ADR-016)
+**Status:** Study artifact, distilled 2026-07-12 from the architect sessions; §2/§6/old-§11 updated 2026-07-26 for F5/F6 (ADR-016); §11 added 2026-07-29 for Phase D (`saveScan`), self-test renumbered to §12
 **Audience:** the project owner. This is the *teaching* that would otherwise be lost when the chat ends — the explanations that made things click, the debugging stories, and the interview answers. The design docs say what to build; this says what you should *understand*.
 
 ---
@@ -93,7 +93,13 @@ And the meta-answer that outranks all three: **the risky pieces (extraction, lay
 
 Already taught in the design docs (read those, they were written to teach): embeddings and cosine-as-dot-product (`RAG_PIPELINE.md` §4–5), why chunk boundaries follow syntax (§2), the ReAct loop and why LangGraph makes it an explicit state machine (`LANGGRAPH_DESIGN.md` §1), UI-actions-as-tools (ADR-008), SSE vs WebSockets (ADR-002).
 
-## 11. Self-test (if you can answer these cold, you own the codebase)
+## 11. Transactions, upsert, delete-then-insert (`lib/db/graph-store.ts`, Phase D)
+
+- **Transaction** — group several writes into one all-or-nothing unit. If any write inside throws, the database rolls back *everything* done so far in that transaction, leaving prior data untouched. Motivating failure case: without one, a crash between "delete old files" and "insert new files" would leave the graph with **zero files** — worse than not scanning at all. `saveScan` wraps its whole write sequence (upsert repo → delete files → insert files → insert edges) in one `db.transaction((tx) => {...})`. Interview framing: this is the "atomicity" part of ACID, made concrete with a real failure mode instead of the textbook definition.
+- **Upsert** — insert a row, or update it instead if a unique column would otherwise conflict. `saveScan` needs this *only* for the `repositories` row: the first scan of a repo inserts it; every scan after that would collide with the already-unique `rootPath`, so `.onConflictDoUpdate({ target: repositories.rootPath, set: { lastScanAt: ... } })` handles both cases in one call. Only the columns in `set` change (here, `lastScanAt`) — the unique column and the id are never touched, which is *why* a repo keeps a stable id across every rescan.
+- **Delete-then-insert (over diffing)** — instead of computing exactly which files/edges changed, delete everything the repo currently owns and reinsert the fresh scan. `DELETE FROM files WHERE repo_id = X` (scoped to *one* repo — never the whole table, which is what makes multi-repo safe: other repos' rows are untouched by the `WHERE`). Because `imports` rows reference `files.id` with `onDelete: cascade`, deleting a repo's files auto-deletes any edges pointing at them — no separate edge cleanup. Consequence worth knowing cold: file ids **change on every rescan** (old rows are deleted, not updated), so any path→id mapping has to be rebuilt fresh each save, never cached across scans. Deliberately simple over diffing — correct at v1 scale, revisit only if scans get slow on huge repos.
+
+## 12. Self-test (if you can answer these cold, you own the codebase)
 
 1. `resolveImport("app/page.tsx", "./components/GraphCanvas")` returns `"app/components/GraphCanvas"` — no `.tsx`. Where did the extension get added before, and which function does that job now? And since F6, what third argument does `resolveImport` take, why is it *passed in* instead of read from disk inside the function, and what does it return for `@/lib/graph` if you *don't* pass it?
 2. What two bugs does the `seen` Set in the edge loop prevent, and what breaks visibly without it?

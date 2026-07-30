@@ -21,6 +21,3 @@ export function getDb(){
 
     return globalForDb.db;
 }
-
-
-
