@@ -1,11 +1,12 @@
 import { scanProject, readTsconfigAliases } from "@/lib/scan";
-import { toFlowGraph } from "@/lib/graph";
+import { resolveEdges, toFlowGraph } from "@/lib/graph";
 import path from "path";
 
 export function GET(){
     const { files, warnings } = scanProject();
     const aliases = readTsconfigAliases();
-    const { nodes, edges } = toFlowGraph(files, "", aliases);
+    const resEdges = resolveEdges(files, "", aliases);
+    const { nodes, edges } = toFlowGraph(files, resEdges);
 
     const degrees = new Map<string, { inDegree: number, outDegree: number }>();
 

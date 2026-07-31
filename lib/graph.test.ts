@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { resolveSegments, radialPosition, resolveImport, classifyFile, toFlowGraph } from "./graph";
+import { resolveSegments, radialPosition, resolveImport, classifyFile, resolveEdges, toFlowGraph } from "./graph";
 import { extractImports, scanProject } from "./scan"
 import fs from "fs";
 
@@ -136,11 +136,17 @@ describe("classifyFile", () => {
 
 describe("toFlowGraph", () => {
     it("build nodes and edges from a small file list", () => {
-        const result = toFlowGraph([
+        const edges = resolveEdges([
             { id: "app/page.tsx", imports: ["./components/GraphCanvas", "react"] },
             { id: "app/components/GraphCanvas.tsx", imports: ["@/lib/graph"] },
             { id: "lib/graph.ts", imports: [] }
         ], "", { "@/": "" });
+
+        const result = toFlowGraph([
+            { id: "app/page.tsx", imports: ["./components/GraphCanvas", "react"] },
+            { id: "app/components/GraphCanvas.tsx", imports: ["@/lib/graph"] },
+            { id: "lib/graph.ts", imports: [] }
+        ], edges);
 
         expect(result.nodes).toEqual([
             { id: "app/page.tsx", type: "file", position: { x: 0, y: 0 }, data: { fileName: "page.tsx", dir: "app", kind: "component" } },
@@ -156,10 +162,15 @@ describe("toFlowGraph", () => {
     });
 
     it("NodeNext: a .js specifier resolves to the .ts source (F6)", () => {
-        const result = toFlowGraph([
+        const edges = resolveEdges([
             { id: "app/a.ts", imports: ["./b.js"] },
             { id: "app/b.ts", imports: [] }
         ]);
+
+        const result = toFlowGraph([
+            { id: "app/a.ts", imports: ["./b.js"] },
+            { id: "app/b.ts", imports: [] }
+        ], edges);
 
         expect(result.edges.map((e) => ({ source: e.source, target: e.target }))).toEqual([
             { source: "app/a.ts", target: "app/b.ts" }

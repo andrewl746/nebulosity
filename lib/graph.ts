@@ -121,7 +121,10 @@ export type CodebaseGraph = { nodes: FileNodeType[]; edges: Edge[] };
  * @param rootDir Project root to strip from absolute ids (e.g. process.cwd()).
  *                Pass "" if ids are already project-relative.
  */
-export function toFlowGraph(files: ScannedFile[], rootDir = "", aliases: Record<string, string> = {}): CodebaseGraph {
+
+export type ResolvedEdge = { source: string, target: string, specifier: string };
+
+export function resolveEdges(files: ScannedFile[], rootDir = "", aliases: Record<string, string> = {}): ResolvedEdge[] {
   const root = normalizeSlashes(rootDir).replace(/\/+$/, "");
 
   const toRelativeId = (rawPath: string): string => {
@@ -130,23 +133,7 @@ export function toFlowGraph(files: ScannedFile[], rootDir = "", aliases: Record<
   };
 
   const fileIds: Set<string> = new Set(files.map((f) => toRelativeId(f.id)));
-
-  const nodes: FileNodeType[] = files.map((file, index) => {
-    const id = toRelativeId(file.id);
-    const segments = id.split("/");
-    return {
-      id,
-      type: "file",
-      position: radialPosition(index, files.length),
-      data: {
-        fileName: segments[segments.length - 1],
-        dir: segments.slice(0, -1).join("/"),
-        kind: classifyFile(id),
-      },
-    };
-  });
-
-  const edges: Edge[] = [];
+  const edges: ResolvedEdge[] = [];
   const seen = new Set<string>();
 
   for (const file of files) {
@@ -177,14 +164,42 @@ export function toFlowGraph(files: ScannedFile[], rootDir = "", aliases: Record<
       if (seen.has(edgeId)) continue;
       seen.add(edgeId);
 
-      edges.push({
-        id: edgeId,
-        source: sourceId,
-        target: targetId,
-        style: { stroke: "rgba(168, 85, 247, 0.5)", strokeWidth: 1 },
-      });
+      edges.push({ source: sourceId, target: targetId, specifier });
     }
   }
 
-  return { nodes, edges };
+  return edges;
+}
+
+export function toFlowGraph(files: ScannedFile[], edges: ResolvedEdge[], rootDir = ""): CodebaseGraph {
+  const root = normalizeSlashes(rootDir).replace(/\/+$/, "");
+
+  const toRelativeId = (rawPath: string): string => {
+    const p = normalizeSlashes(rawPath);
+    return root && p.startsWith(root + "/") ? p.slice(root.length + 1) : p;
+  };
+
+  const nodes: FileNodeType[] = files.map((file, index) => {
+    const id = toRelativeId(file.id);
+    const segments = id.split("/");
+    return {
+      id,
+      type: "file",
+      position: radialPosition(index, files.length),
+      data: {
+        fileName: segments[segments.length - 1],
+        dir: segments.slice(0, -1).join("/"),
+        kind: classifyFile(id),
+      },
+    };
+  });
+
+  const flowEdges: Edge[] = edges.map((e) => ({
+    id: `${e.source}->${e.target}`,
+    source: e.source,
+    target: e.target,
+    style: { stroke: "rgba(168, 85, 247, 0.5)", strokeWidth: 1 }
+  }));
+
+  return { nodes, edges: flowEdges };
 }
