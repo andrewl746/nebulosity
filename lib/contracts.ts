@@ -60,6 +60,8 @@ export type GraphResponse = {
 /** GET /api/health — docs/API_CONTRACTS.md §3 */
 export type HealthResponse = {
   ok: true;
+  /** ISO timestamp of the repo's last dependency-graph scan (DB-backed, Phase D); null if never scanned. */
+  lastScanAt: string | null;
   index: {
     exists: boolean;
     indexedAt: string | null; // ISO timestamp

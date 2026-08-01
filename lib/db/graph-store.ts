@@ -1,6 +1,54 @@
 import { repositories, files, imports } from "./schema";
 import { getDb } from "./client";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, count } from "drizzle-orm";
+
+export function getLastScanAt(rootPath: string): Date | null {
+    const db = getDb();
+    const repo = db.select().from(repositories).where(eq(repositories.rootPath, rootPath)).get();
+    
+    return repo?.lastScanAt ?? null;
+}
+
+export function getCentralFiles(rootPath: string): { path: string; inDegree: number; outDegree: number }[] {
+    const db = getDb();
+
+    const repo = db.select().from(repositories).where(eq(repositories.rootPath, rootPath)).get();
+    if (!repo) return[];
+
+    const repoFiles = db.select().from(files).where(eq(files.repoId, repo.id)).all();
+    const fileIds = repoFiles.map((f) => f.id);
+    if (fileIds.length === 0) return [];
+
+    const pathById = new Map(repoFiles.map((f) => [f.id, f.path]));
+
+    const outCounts = db.select({ fileId: imports.sourceFileId, total: count() })
+        .from(imports).where(inArray(imports.sourceFileId, fileIds)).groupBy(imports.sourceFileId).all();
+
+    const inCounts = db.select({ fileId: imports.targetFileId, total: count() })
+        .from(imports).where(inArray(imports.targetFileId, fileIds)).groupBy(imports.targetFileId).all();
+
+    const degreeByFileId = new Map<number, { inDegree: number; outDegree: number }>();
+
+    for (const id of fileIds){
+        degreeByFileId.set(id, { inDegree: 0, outDegree: 0 });
+    }
+
+    for (const row of outCounts){
+        degreeByFileId.get(row.fileId)!.outDegree = row.total;
+    }
+
+    for (const row of inCounts){
+        degreeByFileId.get(row.fileId)!.inDegree = row.total;
+    }
+
+    const result = Array.from(degreeByFileId, ([fileId, d]) => ({
+        path: pathById.get(fileId)!,
+        inDegree: d.inDegree,
+        outDegree: d.outDegree
+    }));
+
+    return result.sort((a, b) => (b.inDegree + b.outDegree) - (a.inDegree + a.outDegree)).slice(0, 5);
+}
 
 type ScanFileInput = { path: string; kind: "component" | "module"; contentHash: string };
 type ScanEdgeInput = { source: string; target: string; specifier: string };

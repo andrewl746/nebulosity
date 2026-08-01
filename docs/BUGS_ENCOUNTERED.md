@@ -31,7 +31,15 @@ Takeaway (the transferable lesson).
 - **Fix:** hoist the `new Set(files.map(...))` above the loops so it's built exactly once (now `lib/graph.ts:124`), then just `.has()` inside the loop.
 - **Takeaway:** the whole point of a lookup `Set`/`Map` is to build once and query many times. Watch for loop-invariant computation — a "correct" function can still be quietly quadratic. Tests catch wrong answers; *reading* the code catches wrong performance.
 
-## 3. Component defined inside another component → remounts every render
+## 3. Silent slash-direction mismatch dropped every edge on Windows (Phase D, Task 6)
+
+- **Where:** `lib/scan.ts` (`scanProject`'s `id` computation) → surfaced in `app/api/graph/route.ts` (`scanFileInputs`) → `lib/db/graph-store.ts` (`saveScan`'s path→id map).
+- **Caught:** live-verifying the first full read-through pipeline (scan → resolveEdges → saveScan → loadGraph → response) against the running dev server, 2026-07-30 — `stats.edgeCount` came back `0` despite the repo obviously having real imports between files, and node ids in the response used backslashes (`"app\\api\\graph\\route.ts"`) instead of the project's forward-slash convention.
+- **Root cause:** `scanProject`'s `id` came straight from `path.relative(rootDir, fullPath)`, which returns **OS-native separators** — backslashes on Windows, never normalized. This had been harmless for years because every existing consumer (`resolveEdges`, `toFlowGraph`) defensively normalizes on the way in via their own internal `toRelativeId`. `saveScan`'s edge-resolution path was the **first** consumer to use a raw scanned id directly (`scanFileInputs`'s `path: f.id`) without going through that normalization — so file rows got inserted with backslash paths while `resolveEdges`'s already-normalized forward-slash edges could never match a key in the path→id map. Every edge silently tripped the (correct, by-design) "edge to an unscanned path" guard and got dropped — no crash, no warning, just a quietly wrong `edgeCount: 0`.
+- **Fix:** normalized at the true source instead of patching the one call site — exported the existing `normalizeSlashes` from `lib/graph.ts` and applied it in `scanProject` itself, right where `id` is computed, so every current and future consumer gets a consistently forward-slash id from the start.
+- **Takeaway:** a defensive normalization step at every *consumer* can mask an inconsistency at the *source* for a long time — it only breaks once a new consumer forgets to defend itself the same way. Fix path/format inconsistencies at the one place data is produced, not at every place it's read. Also a good example of a bug with zero error output: nothing crashed, a "silent drop" safety guard just did exactly what it was designed to do, on data that should never have needed dropping in the first place.
+
+## 4. Component defined inside another component → remounts every render
 
 - **Where:** `app/components/GraphView.tsx`
 - **Caught:** during review in the Task 5 session (2026-07-25), before it shipped — flagged while splitting `GraphView` to add the `ReactFlowProvider`.

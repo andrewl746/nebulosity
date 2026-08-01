@@ -7,6 +7,7 @@ export type ScannedFile = {
   id: string;
   /** Raw import specifiers, e.g. "./utils", "@/lib/graph", "react". */
   imports: string[];
+  contentHash?: string; // optional, only used for saving to the db and P2 indexing
 };
 
 /** Extensions the scanner picks up, in the order Node/Next would resolve them. */
@@ -36,7 +37,7 @@ const RING_GAP = 240;
 const FIRST_RING_CAPACITY = 6;
 
 /** Windows backslashes → forward slashes so ids compare consistently. */
-function normalizeSlashes(p: string): string {
+export function normalizeSlashes(p: string): string {
   return p.replace(/\\/g, "/");
 }
 

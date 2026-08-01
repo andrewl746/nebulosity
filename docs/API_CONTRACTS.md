@@ -45,6 +45,7 @@ Powers the status bar and "do I need to reindex?" hints.
 ```ts
 type HealthResponse = {
   ok: true;
+  lastScanAt: string | null; // ISO timestamp of the repo's last dependency-graph scan (DB-backed, Phase D); null if never scanned
   index: {
     exists: boolean;
     indexedAt: string | null;

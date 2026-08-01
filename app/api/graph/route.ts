@@ -1,37 +1,35 @@
 import { scanProject, readTsconfigAliases } from "@/lib/scan";
-import { resolveEdges, toFlowGraph } from "@/lib/graph";
+import { resolveEdges, toFlowGraph, classifyFile } from "@/lib/graph";
+import { saveScan, loadGraph, getCentralFiles } from "@/lib/db/graph-store";
 import path from "path";
 
 export function GET(){
+    const rootPath = process.cwd();
     const { files, warnings } = scanProject();
     const aliases = readTsconfigAliases();
     const resEdges = resolveEdges(files, "", aliases);
-    const { nodes, edges } = toFlowGraph(files, resEdges);
 
-    const degrees = new Map<string, { inDegree: number, outDegree: number }>();
+    const scanFileInputs = files.map((f) => ({
+        path: f.id,
+        kind: classifyFile(f.id),
+        contentHash: f.contentHash!
+    }));
 
-    for (const node of nodes){
-        degrees.set(node.id, { inDegree: 0, outDegree: 0 });
-    }
+    saveScan(rootPath, scanFileInputs, resEdges);
 
-    for (const edge of edges){
-        const source = degrees.get(edge.source);
-        const target = degrees.get(edge.target);
+    const loaded = loadGraph(rootPath)!;
 
-        if (source) source.outDegree++; // checks if source is a real value and not undefined
-        if (target) target.inDegree++;
-    }
+    const nodeInputFiles = loaded.files.map((f) => ({ id: f.path, imports: [] as string[]}));
 
-    const mapToArray = Array.from(degrees, ([path, d]) => ({ path, inDegree: d.inDegree, outDegree: d.outDegree}));
-
-    const topFive = mapToArray.sort((a, b) => (b.inDegree + b.outDegree - (a.inDegree + a.outDegree))).slice(0, 5);
+    const { nodes, edges } = toFlowGraph(nodeInputFiles, loaded.edges);
+    const centralFiles = getCentralFiles(rootPath);
 
     const stats = {
-        fileCount: nodes.length,
+        fileCount: nodeInputFiles.length,
         edgeCount: edges.length,
         rootName: path.basename(process.cwd()),
         warningCount: warnings.length,
-        centralFiles: topFive
+        centralFiles
     }
 
     return Response.json({ nodes, edges, stats });

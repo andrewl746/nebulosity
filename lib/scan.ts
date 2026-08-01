@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import { normalizeSlashes } from "./graph"
 import type { ScannedFile } from "./graph";
 
 const IGNORE_LIST = ["node_modules", ".next", ".git", "scripts"];
@@ -93,7 +95,7 @@ export function scanProject(
       if (item.isDirectory()){
         walk(fullPath);
       } else if (SOURCE_EXTENSIONS.some((ext) => fullPath.endsWith(ext))){
-        const id = path.relative(rootDir, fullPath);
+        const id = normalizeSlashes(path.relative(rootDir, fullPath));
         let content: string;
 
         if (duplicateGuard.has(id)){
@@ -109,9 +111,12 @@ export function scanProject(
           continue;
         }
 
+        const contentHash = crypto.createHash("sha256").update(content).digest("hex");
+
         found.push({
           id,
           imports: extractImports(content),
+          contentHash
         });
       }
     }
