@@ -63,7 +63,9 @@ Tasks:
 **Acceptance:** all F1 tests pass, including the rows that previously documented bugs on purpose; a manual check confirms an import using a `.js` extension pointing at a real `.ts` file still resolves (NodeNext case); `npx tsc --noEmit && npm run lint && npx vitest run` clean.
 **You learn:** the real gap between "pattern-matching text" and "understanding structure" — this is your best first-hand evidence for why the AST chunker in Phase 2 is worth building, not just a bullet point in a design doc. Also: why sequencing matters the moment you have two independently-maintained implementations of the same logic (Node + the C++ scanner coming in Phase S).
 
-## Phase D — Data layer (~1–1.5 weeks) *(added 2026-07-12, ADR-013)*
+## Phase D — Data layer (~1–1.5 weeks) *(added 2026-07-12, ADR-013)* — **DONE 2026-08-01**
+
+**Status:** All 7 tasks complete, hand-written, live-verified end to end. `.nebulosity/nebulosity.db` holds real rows via a transactional `saveScan`/`loadGraph`; `/api/graph` is a full read-through (scan → resolveEdges → saveScan → loadGraph → toFlowGraph → getCentralFiles, the last via a real SQL `GROUP BY`); `/api/health` reports a real DB-backed `lastScanAt` (contract extended in the same change set, see `API_CONTRACTS.md` §3). Caught and fixed a real bug along the way: `scanProject`'s unnormalized Windows path separators silently dropped every edge on first live integration — see `BUGS_ENCOUNTERED.md` #3. `tsc`/lint/vitest (36/36) all clean. Next: **Phase 2**.
 
 **Goal:** build the SQLite/Drizzle data layer by hand and wire it in. **Deliberately hand-written, not generated** — the schema design and transaction logic are the learning target. See `docs/DATABASE_DESIGN.md` for the full design (tables, indexes, invalidation rules) to translate into code yourself; don't skip straight to the acceptance criteria.
 

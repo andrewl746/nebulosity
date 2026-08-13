@@ -26,3 +26,27 @@ export const imports = sqliteTable("imports", {
     uniqueIndex("imports_source_target_unique").on(t.sourceFileId, t.targetFileId),
     index("imports_target_idx").on(t.targetFileId)
 ]);
+
+export const chunks = sqliteTable("chunks", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    chunkId: text("chunk_id").notNull().unique(),
+    kind: text("kind", {
+        enum: ["function", "class", "component", "interface", "type", "const", "file-summary"]
+    }).notNull(),
+    name: text("name").notNull(),
+    startLine: integer("start_line").notNull(),
+    endLine: integer("end_line").notNull(),
+    exported: integer("exported", { mode: "boolean" }).notNull().default(false),
+    partIndex: integer("part_index").notNull().default(0), // if the function is HUGE (e.g., 500 lines), split it into parts (0 for normal chunks, 1 for second part, 2 for third, etc.)
+    text: text("text").notNull(), // the actual source code of this chunk (what the AI will read)
+    fileHash: text("file_hash").notNull(), // sha256 of the whole source file at index time
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date())
+});
+
+export const meta = sqliteTable("meta", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    key: text("key").notNull().unique(),   // "embeddingModel"
+    value: text("value").notNull(),        // "Xenova/all-MiniLM-L6-v2"
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()).$onUpdateFn(() => new Date())
+});
