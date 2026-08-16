@@ -6,6 +6,7 @@ import { extractChunksFromFile } from "./chunks";
 // if u think these test cases dont encompass everything you want, feel free to add more
 // i just wanted to make sure the basics are covered and that the splitting of oversized chunks is working as expected
 // i added stuff in BUGS_ENCOUNTERED.md so check that to see if everythings correct (also just check everything in chunks.ts to see if its correct)
+// 2026 08 16 finished P2 T1
 
 describe("chunk extraction", () => {
     it("extracts a function declaration", () => {

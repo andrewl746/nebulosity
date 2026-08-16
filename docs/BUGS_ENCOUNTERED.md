@@ -64,18 +64,17 @@ Takeaway (the transferable lesson).
 - **Symptom:** `export default function() { ... }` didn't produce any chunk. The test expected a chunk named `"default"` but got `undefined`.
 - **Root cause:** TypeScript parses `export default function() { ... }` as a `FunctionDeclaration` with a `DefaultKeyword` modifier, **not** as an `ExportAssignment` node. The function's parent is the `SourceFile`, not an `ExportAssignment`. The initial logic only checked for `ExportAssignment` parents and missed default exports entirely.
 - **Fix:** Added a check for the `DefaultKeyword` modifier on the function declaration itself:
-```typescript
-const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
-const hasDefault = modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword) || false;
-```
+    ```typescript
+    const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
+    const hasDefault = modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword) || false;
+    ```
 
-Also kept the parent check as a fallback:
-```typescript
-const parentIsExport = parent && ts.isExportAssignment(parent);
+    Also kept the parent check as a fallback:
+    ```typescript
+    const parentIsExport = parent && ts.isExportAssignment(parent);
 
-if (hasDefault || parentIsExport) {
-    return processDefaultExportFunction(node, sourceFileAST, filePath, fileHash);
-}
-```
-
+    if (hasDefault || parentIsExport) {
+        return processDefaultExportFunction(node, sourceFileAST, filePath, fileHash);
+    }
+    ```
 - **Takeaway:** Default exports are tricky — they can show up as different node types depending on the syntax. `export default function() {}` is a `FunctionDeclaration` with a modifier, while `export default function() {}` inside a variable assignment is a `FunctionExpression`. The AST structure is the only source of truth — always check with `console.log` before assuming how something is parsed.
