@@ -47,3 +47,35 @@ Takeaway (the transferable lesson).
 - **Root cause:** defining a component inside another component's body creates a **new function identity on every render**. React identifies components by reference, so each render it sees a "different" component type and unmounts the old subtree + mounts a fresh one — wiping all its state.
 - **Fix:** move `GraphViewInner` out to module scope as a top-level sibling; `GraphView` just returns `<ReactFlowProvider><GraphViewInner /></ReactFlowProvider>`.
 - **Takeaway:** never define a component inside another component. Hoist it to module scope (or pass it as a prop/child). React reconciliation keys on component *identity by reference* — a new function each render is a new component to React. Same reasoning is why inline object/array props can defeat memoization.
+
+## 5. Vitest template literal off-by-one errors
+
+- **Where:** `lib/chunks.test.ts` — class and function declaration tests
+- **Caught:** Test assertions for `endLine` kept failing by 1 line
+- **Symptom:** The `endLine` value from `extractChunksFromFile()` was consistently 1 more than the test expected for class declarations
+- **Root cause:** The test content used template literals with indentation (backtick + enter before the actual class content began). The indentation and newlines in the template literal caused the actual source to have more lines than the test author expected. Specifically, the newline after the opening backtick added an empty line at the start. The function declaration test passed by coincidence because its content had fewer lines of indentation.
+- **Fix:** Removed indentation from the test content so the line numbers matched the code.
+- **Takeaway:** When writing tests with template literals, the whitespace and indentation are part of the source text. The opening newline after the backtick adds an empty line. Always check the actual line count of the test content, not what it looks like visually. A test that passes by coincidence is a ticking time bomb.
+
+## 6. Default exports parsed as FunctionDeclaration with modifier
+
+- **Where:** `lib/chunks.ts` → `processStatement()`
+- **Caught:** Vitest test for default exports failed — chunks with name `"default"` were never created
+- **Symptom:** `export default function() { ... }` didn't produce any chunk. The test expected a chunk named `"default"` but got `undefined`.
+- **Root cause:** TypeScript parses `export default function() { ... }` as a `FunctionDeclaration` with a `DefaultKeyword` modifier, **not** as an `ExportAssignment` node. The function's parent is the `SourceFile`, not an `ExportAssignment`. The initial logic only checked for `ExportAssignment` parents and missed default exports entirely.
+- **Fix:** Added a check for the `DefaultKeyword` modifier on the function declaration itself:
+```typescript
+const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
+const hasDefault = modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword) || false;
+```
+
+Also kept the parent check as a fallback:
+```typescript
+const parentIsExport = parent && ts.isExportAssignment(parent);
+
+if (hasDefault || parentIsExport) {
+    return processDefaultExportFunction(node, sourceFileAST, filePath, fileHash);
+}
+```
+
+- **Takeaway:** Default exports are tricky — they can show up as different node types depending on the syntax. `export default function() {}` is a `FunctionDeclaration` with a modifier, while `export default function() {}` inside a variable assignment is a `FunctionExpression`. The AST structure is the only source of truth — always check with `console.log` before assuming how something is parsed.
