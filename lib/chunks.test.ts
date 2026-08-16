@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import { extractChunksFromFile } from "./chunks";
 
 // FOR CLAUDE: lowkey a little sketchy so check if these test cases pass everything you expect
-// i think the endLine is off by 1 for classes, but I don't know if it's a problem or not (make sure all test cases GENIUNELY work and it's not by pure coincidence (edit read BUGS_ENCOUNTERED.md error 5))
+// i think the endLine is off by 1 for classes, but i don't know if it's a problem or not (make sure all test cases GENIUNELY work and it's not by pure coincidence (edit: fixed it, read BUGS_ENCOUNTERED.md 5. for my solution to see if it geniunely works))
 // if u think these test cases dont encompass everything you want, feel free to add more
 // i just wanted to make sure the basics are covered and that the splitting of oversized chunks is working as expected
-// i added stuff in BUGS_ENCOUNTERED.md so check that to see if everythings correct (also just check everything in chunks.ts to see if its correct)
+// i added the bugs that occurred in P2 T1 in BUGS_ENCOUNTERED.md (5 & 6) so check if those are correct (also make sure everything in chunks.ts is correct and if i can write the code simpler and better)
 // 2026 08 16 finished P2 T1
 
 describe("chunk extraction", () => {
