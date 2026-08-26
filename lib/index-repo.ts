@@ -81,6 +81,11 @@ export async function indexRepo(
         warnings: files that have warnings */
         const stats: IndexStats = { changed: 0, skipped: 0, errors: [], warnings: warnings };
         const seenPaths = new Set<string>();
+        let processedCount = 0;
+        const totalFiles = scannedFiles.length;
+
+        options?.onProgress?.("scanning", 0, totalFiles);
+        
 
         for (const scanned of scannedFiles){
             seenPaths.add(scanned.id);
@@ -97,6 +102,8 @@ export async function indexRepo(
                     error: err instanceof Error ? err.message : String(err)
                 });
 
+                processedCount++;
+                options?.onProgress?.("chunking", processedCount, totalFiles);
                 continue;
             }
 
@@ -104,6 +111,8 @@ export async function indexRepo(
 
             if (existing && existing.contentHash === hash){
                 stats.skipped++;
+                processedCount++;
+                options?.onProgress?.("chunking", processedCount, totalFiles);
                 continue;
             }
 
@@ -170,6 +179,9 @@ export async function indexRepo(
                     error: err instanceof Error ? err.message : String(err)
                 })
             }
+
+            processedCount++;
+            options?.onProgress?.("chunking", processedCount, totalFiles);
         }
 
         // delete files that are no longer present on disk (exist in DB but not in the newly scanned files)
