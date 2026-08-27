@@ -1,3 +1,6 @@
+// FOR CLAUDE: didnt use ChunkKind type from contracts.ts so idk if we need to fix that and incorporate all of the chunk kinds
+// from there
+
 import ts from "typescript";
 import crypto from "crypto";
 import type { CodeChunk } from "./contracts";

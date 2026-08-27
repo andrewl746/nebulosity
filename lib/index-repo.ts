@@ -2,19 +2,20 @@
 // i think it might be useful to have a list of warnings that were generated during the scan process,
 // so that we can display them to the user or log them for debugging purposes. 
 // but for now, i'll just keep it in the stats object and see if we need it later.
+// none of the indexing stuff is connected to the ui btw so look into that later.
 
-// also i need to connect it to the indexing symbol
+// also i need to connect it to the indexing symbol on the ui near the top bar
 
 import { createHash } from "crypto";
 import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
-import { repositories, files, chunks, meta } from "@/lib/db/schema";
+import { repositories, files, chunks, meta, vectors, META_KEYS } from "@/lib/db/schema";
 import { scanProject } from "@/lib/scan";
 import { extractChunksFromFile } from "@/lib/chunks";
 import { readFileSync } from "fs";
-import path from "path";
 import { classifyFile } from "@/lib/graph";
-import type { ScannedFile } from "./graph";
+import { embedChunks } from "@/lib/embed";
+import path from "path";
 import type { CodeChunk } from "@/lib/contracts";
 
 export type IndexStats = {
@@ -24,7 +25,7 @@ export type IndexStats = {
     warnings: Array<{ path: string; error: string }>;
 };
 
-const INDEXING_LOCK_KEY = "indexing";
+const INDEXING_LOCK_KEY = META_KEYS.INDEXING_LOCK;
 
 export async function indexRepo(
     repoRoot: string,
@@ -169,6 +170,40 @@ export async function indexRepo(
                                 fileHash: hash
                             }))
                         )
+                        .run();
+                }
+
+                // --- embed the chunks ---
+                // get the inserted chunks' db ids
+                const insertedChunkRows = await db
+                    .select()
+                    .from(chunks)
+                    .where(eq(chunks.fileId, fileId))
+                    .all();
+
+                // map CodeChunk.id (string) to db id (number)
+                const chunkIdToDbId = new Map<string, number>();
+
+                for (const row of insertedChunkRows){
+                    chunkIdToDbId.set(row.chunkId, row.id);
+                }
+
+                // only embed chunks that were actually inserted (new/changed)
+                const chunksToEmbed = fileChunks.filter(chunk => 
+                    chunkIdToDbId.has(chunk.id)
+                );
+
+                if (chunksToEmbed.length > 0){
+                    const embedded = await embedChunks(chunksToEmbed);
+                    
+                    // build the vector insert values
+                    const vectorValues = embedded.map(({ chunk, vector }) => ({
+                        chunkId: chunkIdToDbId.get(chunk.id)!, // the db id, not the chunkId string
+                        embedding: Buffer.from(vector.buffer)
+                    }));
+                    
+                    await db.insert(vectors)
+                        .values(vectorValues)
                         .run();
                 }
 

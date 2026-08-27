@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@xyflow/react": "^12.11.2",
     "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.2",

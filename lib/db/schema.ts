@@ -1,4 +1,11 @@
-import { sqliteTable, integer, text, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, uniqueIndex, index, blob } from "drizzle-orm/sqlite-core";
+
+export const META_KEYS = {
+    EMBEDDING_MODEL: "embeddingModel",
+    EMBEDDING_DIM: "embeddingDim",
+    SCHEMA_VERSION: "schemaVersion",
+    INDEXING_LOCK: "indexing"
+} as const;
 
 export const repositories = sqliteTable("repositories", {
     id: integer().primaryKey({ autoIncrement: true }),
@@ -49,4 +56,12 @@ export const meta = sqliteTable("meta", {
     key: text("key").notNull().unique(),   // "embeddingModel"
     value: text("value").notNull(),        // "Xenova/all-MiniLM-L6-v2"
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()).$onUpdateFn(() => new Date())
+});
+
+export const vectors = sqliteTable("vectors", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    chunkId: integer("chunk_id")
+        .notNull()
+        .references(() => chunks.id, { onDelete: "cascade" }),
+    embedding: blob("embedding", { mode: "buffer" }).notNull()
 });
