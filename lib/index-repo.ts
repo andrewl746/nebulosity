@@ -87,7 +87,6 @@ export async function indexRepo(
 
         options?.onProgress?.("scanning", 0, totalFiles);
         
-
         for (const scanned of scannedFiles){
             seenPaths.add(scanned.id);
             const existing = existingFileMap.get(scanned.id);
@@ -194,7 +193,11 @@ export async function indexRepo(
                 );
 
                 if (chunksToEmbed.length > 0){
-                    const embedded = await embedChunks(chunksToEmbed);
+                    options?.onProgress?.("embedding", 0, chunksToEmbed.length);
+
+                    const embedded = await embedChunks(chunksToEmbed, (done, total) => {
+                        options?.onProgress?.("embedding", done, total);
+                    });
                     
                     // build the vector insert values
                     const vectorValues = embedded.map(({ chunk, vector }) => ({
@@ -237,6 +240,50 @@ export async function indexRepo(
             .set({ lastIndexAt: new Date() })
             .where(eq(repositories.id, repoId))
             .run();
+
+        // --- store embedding model info in meta table ---
+        const modelName = "Xenova/all-MiniLM-L6-v2";
+        const dim = 384;
+
+        // check if meta exists, update or insert
+        const existingModel = await db
+            .select()
+            .from(meta)
+            .where(eq(meta.key, META_KEYS.EMBEDDING_MODEL))
+            .get();
+
+        if (existingModel){
+            await db
+                .update(meta)
+                .set({ value: modelName, updatedAt: new Date() })
+                .where(eq(meta.key, META_KEYS.EMBEDDING_MODEL))
+                .run();
+        } else{
+            await db
+                .insert(meta)
+                .values({ key: META_KEYS.EMBEDDING_MODEL, value: modelName })
+                .run();
+        }
+
+        // same for embeddingDim
+        const existingDim = await db
+            .select()
+            .from(meta)
+            .where(eq(meta.key, META_KEYS.EMBEDDING_DIM))
+            .get();
+
+        if (existingDim){
+            await db
+                .update(meta)
+                .set({ value: String(dim), updatedAt: new Date() })
+                .where(eq(meta.key, META_KEYS.EMBEDDING_DIM))
+                .run();
+        } else{
+            await db
+                .insert(meta)
+                .values({ key: META_KEYS.EMBEDDING_DIM, value: String(dim) })
+                .run();
+        }
 
         return stats;
     } finally{

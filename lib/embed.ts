@@ -25,7 +25,9 @@ async function getPipeline(){
  * why? the model has a ~256 token limit
  * we front-load the most identifying information (path, kind/name, doc comment, signature)
  */
-function buildEmbeddingText(chunk: CodeChunk): string {
+
+// export only for testing
+export function buildEmbeddingText(chunk: CodeChunk): string {
     const parts: string[] = [];
     
     // 1. file path (tells the model where this code lives)
@@ -198,7 +200,8 @@ export async function embedTexts(
 
 // embed an array of code chunks
 export async function embedChunks(
-    chunks: CodeChunk[]
+    chunks: CodeChunk[],
+    onProgress?: (done: number, total: number) => void
 ): Promise<Array<{ chunk: CodeChunk; vector: Float32Array }>> {
     if (chunks.length === 0){
         return [];
@@ -208,7 +211,7 @@ export async function embedChunks(
     const embeddingTexts = chunks.map(chunk => buildEmbeddingText(chunk));
     
     // get embeddings
-    const vectors = await embedTexts(embeddingTexts);
+    const vectors = await embedTexts(embeddingTexts, onProgress);
     
     // pair them back up
     return chunks.map((chunk, i) => ({
@@ -218,8 +221,8 @@ export async function embedChunks(
 }
 
 // validates that a vector has length 384 and is normalized (unit vector of magnitude 1)
-// used in tests only
-export function validateVector(vector: Float32Array): { valid: boolean; length: number } {
+// used in testing
+export function validateVector(vector: Float32Array): { valid: boolean; magnitude: number } {
     const length = vector.length;
 
     // pythagoran theorem (a^2 + b^2 + c^2 + ... so on till the square of all 384 numbers are summed,
@@ -234,7 +237,14 @@ export function validateVector(vector: Float32Array): { valid: boolean; length: 
 
     return {
         valid: length === 384 && Math.abs(magnitude - 1) < 0.001, // makes sure it's a unit vector
-        length: magnitude
+        magnitude: magnitude
     };
 }
 
+// used in testing
+export function getEmbeddingModelInfo() {
+    return {
+        name: "Xenova/all-MiniLM-L6-v2",
+        dimension: 384,
+    };
+}

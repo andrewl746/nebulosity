@@ -2,12 +2,16 @@
 
 import { NextResponse } from "next/server";
 import { indexRepo } from "@/lib/index-repo";
+import { getDb } from "@/lib/db/client";
+import { chunks } from "@/lib/db/schema";
+import { sql } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
 export async function POST(){
     const encoder = new TextEncoder();
     const repoRoot = process.cwd();
+    const startTime = Date.now();
 
     // helper to send SSE events
     function sendEvent(event: string, data: unknown){
@@ -29,14 +33,27 @@ export async function POST(){
                     }
                 });
 
+                const db = getDb();
+
+                const chunkCountResult = await db
+                    .select({ count: sql<number>`count(*)` })
+                    .from(chunks)
+                    .get();
+
+                const chunkCount = chunkCountResult?.count ?? 0;
+
                 // event that streams when the indexing is done (including stats)
                 controller.enqueue(
                     encoder.encode(
                         sendEvent("done", {
+                            fileCount: stats.changed + stats.skipped,
+                            chunkCount: chunkCount, 
                             changed: stats.changed,
                             skipped: stats.skipped,
+                            skippedUnchanged: stats.skipped, // same as skipped
                             errors: stats.errors,
                             warnings: stats.warnings,
+                            tookMs: Date.now() - startTime  
                         })
                     )
                 );
