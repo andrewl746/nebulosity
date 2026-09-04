@@ -11,8 +11,7 @@ export function GET(){
 
     const scanFileInputs = files.map((f) => ({
         path: f.id,
-        kind: classifyFile(f.id),
-        contentHash: f.contentHash!
+        kind: classifyFile(f.id)
     }));
 
     saveScan(rootPath, scanFileInputs, resEdges);

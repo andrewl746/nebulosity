@@ -1,6 +1,6 @@
 # LEARNING_NOTES.md — Study Guide & Interview Prep
 
-**Status:** Study artifact, distilled 2026-07-12 from the architect sessions; §2/§6/old-§11 updated 2026-07-26 for F5/F6 (ADR-016); §11 added 2026-07-29 for Phase D (`saveScan`), self-test renumbered to §12
+**Status:** Study artifact, distilled 2026-07-12 from the architect sessions; §2/§6/old-§11 updated 2026-07-26 for F5/F6 (ADR-016); §11 added 2026-07-29 for Phase D (`saveScan`); §§12–16 added 2026-09-04 for Phases 2–4 (typed arrays, tensors, comments-as-index, hash ordering, cascades), self-test renumbered to §17
 **Audience:** the project owner. This is the *teaching* that would otherwise be lost when the chat ends — the explanations that made things click, the debugging stories, and the interview answers. The design docs say what to build; this says what you should *understand*.
 
 ---
@@ -99,7 +99,60 @@ Already taught in the design docs (read those, they were written to teach): embe
 - **Upsert** — insert a row, or update it instead if a unique column would otherwise conflict. `saveScan` needs this *only* for the `repositories` row: the first scan of a repo inserts it; every scan after that would collide with the already-unique `rootPath`, so `.onConflictDoUpdate({ target: repositories.rootPath, set: { lastScanAt: ... } })` handles both cases in one call. Only the columns in `set` change (here, `lastScanAt`) — the unique column and the id are never touched, which is *why* a repo keeps a stable id across every rescan.
 - **Delete-then-insert (over diffing)** — instead of computing exactly which files/edges changed, delete everything the repo currently owns and reinsert the fresh scan. `DELETE FROM files WHERE repo_id = X` (scoped to *one* repo — never the whole table, which is what makes multi-repo safe: other repos' rows are untouched by the `WHERE`). Because `imports` rows reference `files.id` with `onDelete: cascade`, deleting a repo's files auto-deletes any edges pointing at them — no separate edge cleanup. Consequence worth knowing cold: file ids **change on every rescan** (old rows are deleted, not updated), so any path→id mapping has to be rebuilt fresh each save, never cached across scans. Deliberately simple over diffing — correct at v1 scale, revisit only if scans get slow on huge repos.
 
-## 12. Self-test (if you can answer these cold, you own the codebase)
+## 12. Typed arrays are views, not buffers (Phases 3–4)
+
+A `Float32Array` is three things: a backing `ArrayBuffer`, a **byteOffset** into it, and a **length**. Almost every bug in the vector storage path came from forgetting one of the three.
+
+- `vector.buffer` is the *whole* backing buffer, not your slice of it. `Buffer.from(vector.buffer)` on a view over a 16×384 batch tensor serializes all 6144 floats, so every vector in the batch stores identically. You want `Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength)`.
+- `new Float32Array(buffer, byteOffset, length)` — that third argument counts **elements, not bytes**. Passing `byteLength` asks for 4× too many and throws `RangeError`.
+- `.slice()` **copies**; `.subarray()` returns a **view** sharing the buffer. Choosing between them decides whether downstream code has to think about offsets at all.
+- Node hands out small `Buffer`s from a shared pool, so `buf.byteOffset` is often *not* 4-byte aligned — and the typed-array constructor rejects unaligned offsets. Aliasing a pooled Buffer gives you a failure that depends on allocation history. Allocating and copying makes it impossible.
+
+**The pattern worth generalizing:** two functions that are exact inverses belong in the same file, next to each other. Split across `index-repo.ts` and `retrieve.ts`, these drifted immediately — and in *opposite* directions, so neither could catch the other.
+
+## 13. A tensor is a flat buffer plus a shape
+
+`pipeline("feature-extraction")(["a","b","c"])` does **not** return three vectors. It returns one `Tensor`:
+
+```
+dims: [3, 384]      data: Float32Array(1152)     // row-major, rows end to end
+```
+
+Row `r` lives at `data[r*384 … (r+1)*384)`. Nothing in the object separates the rows — `dims` is the only thing that tells you where the boundaries are. Treating `.data` as a single vector is how a whole batch collapses into one 6144-float row (`BUGS_ENCOUNTERED.md` #7).
+
+The transferable lesson is about *how* that bug was written: four defensive `Array.isArray`/`instanceof` branches guessing at a shape nobody had checked. Defensive branching against an unverified contract doesn't add robustness — it converts a loud crash into a quiet wrong answer. Check the shape once, assert it, and delete the branches.
+
+## 14. Once you embed code, your comments are part of the search index
+
+The best find of the Phase 2–4 audit. Retrieval for *"convert scan output to react flow"* returned `ResolvedEdge` — a three-field type alias — while `toFlowGraph`, the function that literally does that, didn't appear in the top 8.
+
+Nothing was wrong with `retrieve.ts`. During the F5/F6 refactor, `toFlowGraph`'s JSDoc had drifted ~50 lines up the file and come to rest above `export type ResolvedEdge`. The chunker attaches a leading comment to the declaration below it, so the type alias inherited a description of a function it has nothing to do with — and outranked it. Moving the comment back put `toFlowGraph` at rank 1 (0.576).
+
+**Why this matters beyond one bug:** in a RAG system over code, a misplaced or stale comment is no longer a readability nit — it is a *retrieval* bug, and an invisible one, because retrieval quality degrades without anything failing. It also explains why chunk boundaries are a design decision rather than an implementation detail: what a chunk includes decides what it can be found by.
+
+Related: the same reasoning drives ADR-018. `getStart()` drops the doc comment (bad for retrieval); `getFullText()` swallows blank lines and detached comments (bad for line numbers). The fix is one span used for `startLine`, `endLine` *and* `text` — attached comments in, detached comments out.
+
+## 15. A hash is a claim, and claim ordering is the whole game
+
+`files.contentHash` means *"the derived data for this file is up to date."* Two separate bugs came from writing that claim before it was true:
+
+1. **Written before the work** (`BUGS_ENCOUNTERED.md`, R7 in the review): the hash was saved, then chunking and embedding ran. Anything that threw in between left a file marked clean with no chunks — and every later run skipped it, *forever*. The failure erased its own evidence.
+2. **Written by the wrong component** (`BUGS_ENCOUNTERED.md` #8): `saveScan` stamped the current hash at *scan* time, so the indexer concluded every file was already done before it had ever run.
+
+Two rules fall out, both general:
+
+- **Commit the claim in the same transaction as the thing it claims.** better-sqlite3 transactions are synchronous, so no `await` may appear inside one — which forces the slow async work (embedding) to finish *before* the commit. That constraint is a feature: it keeps network and CPU work out of a held write lock.
+- **One writer per field.** A column with two writers and two meanings will eventually be written by the one that means something else.
+
+## 16. Cascades change the blast radius of deletes you already wrote
+
+`saveScan`'s `DELETE FROM files` was correct when Phase D shipped. Phase 2 added `chunks` as a child of `files` with `ON DELETE CASCADE`, and `vectors` as a child of `chunks`. Neither change was wrong on its own; together, a plain page load destroyed the entire search index.
+
+Adding a foreign key with `ON DELETE CASCADE` retroactively changes what every *existing* `DELETE` against the parent table does. Nothing in the old code changes, nothing fails to compile, no test breaks — the semantics move underneath it. When you add a cascade, the review question is "what already deletes from this table, and does it still mean what it meant?"
+
+Interview framing: the strongest version of this story isn't "I fixed a delete." It's *"the bug existed in neither change — it was created by their interaction, weeks apart, and was masked by an unrelated bug that stopped anyone reaching it."*
+
+## 17. Self-test (if you can answer these cold, you own the codebase)
 
 1. `resolveImport("app/page.tsx", "./components/GraphCanvas")` returns `"app/components/GraphCanvas"` — no `.tsx`. Where did the extension get added before, and which function does that job now? And since F6, what third argument does `resolveImport` take, why is it *passed in* instead of read from disk inside the function, and what does it return for `@/lib/graph` if you *don't* pass it?
 2. What two bugs does the `seen` Set in the edge loop prevent, and what breaks visibly without it?

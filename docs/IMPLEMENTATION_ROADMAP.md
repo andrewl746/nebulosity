@@ -2,7 +2,7 @@
 
 **Status:** Approved plan. Execute phases strictly in order — each depends on the last.
 **Timeline:** ~7–10 weeks part-time (Phases D and S, added 2026-07-12 per ADR-013/014, add roughly 1.5 weeks). Estimates assume a developer learning as they go (that's the point).
-**Phase order:** 0 → P0 fixes → 1 → **P1 fixes (F5/F6)** → **D (data layer)** → 2 → 3 → 4 → 5 → 6 → **S (systems layer)**. *(S resequenced from between D and 2 to run last, 2026-07-20 — ADR-015. Its only hard prerequisite is F5/F6, and nothing in Phases 2–6 depends on it because the Node scanner is the always-available fallback — so deferring it protects the path to a demoable product.)*
+**Phase order:** 0 → P0 fixes → 1 → **P1 fixes (F5/F6)** → **D (data layer)** → **2** → **3** → **4** → 5 → 6 → **S (systems layer)**. *(0 through 4 are all complete as of 2026-09-04; **Phase 5, the LangGraph agent, is next**.)* *(S resequenced from between D and 2 to run last, 2026-07-20 — ADR-015. Its only hard prerequisite is F5/F6, and nothing in Phases 2–6 depends on it because the Node scanner is the always-available fallback — so deferring it protects the path to a demoable product.)*
 **Ground rules for every phase:**
 1. The app must still run at the end of every phase (`npm run dev`, graph visible).
 2. `npx tsc --noEmit` and `npm run lint` pass before a phase is "done".
@@ -65,7 +65,7 @@ Tasks:
 
 ## Phase D — Data layer (~1–1.5 weeks) *(added 2026-07-12, ADR-013)* — **DONE 2026-08-01**
 
-**Status:** All 7 tasks complete, hand-written, live-verified end to end. `.nebulosity/nebulosity.db` holds real rows via a transactional `saveScan`/`loadGraph`; `/api/graph` is a full read-through (scan → resolveEdges → saveScan → loadGraph → toFlowGraph → getCentralFiles, the last via a real SQL `GROUP BY`); `/api/health` reports a real DB-backed `lastScanAt` (contract extended in the same change set, see `API_CONTRACTS.md` §3). Caught and fixed a real bug along the way: `scanProject`'s unnormalized Windows path separators silently dropped every edge on first live integration — see `BUGS_ENCOUNTERED.md` #3. `tsc`/lint/vitest (36/36) all clean. Next: **Phase 2**.
+**Status:** All 7 tasks complete, hand-written, live-verified end to end. `.nebulosity/nebulosity.db` holds real rows via a transactional `saveScan`/`loadGraph`; `/api/graph` is a full read-through (scan → resolveEdges → saveScan → loadGraph → toFlowGraph → getCentralFiles, the last via a real SQL `GROUP BY`); `/api/health` reports a real DB-backed `lastScanAt` (contract extended in the same change set, see `API_CONTRACTS.md` §3). Caught and fixed a real bug along the way: `scanProject`'s unnormalized Windows path separators silently dropped every edge on first live integration — see `BUGS_ENCOUNTERED.md` #3. `tsc`/lint/vitest (36/36) all clean. Next: **Phase 2**. *(Post-note, 2026-09-04: `saveScan`'s delete-and-reinsert was correct in isolation but became destructive once Phase 2 added `chunks` as a cascading child of `files` — every page load wiped the index. Rewritten as an upsert; see ADR-022 and `BUGS_ENCOUNTERED.md` #8.)*
 
 **Goal:** build the SQLite/Drizzle data layer by hand and wire it in. **Deliberately hand-written, not generated** — the schema design and transaction logic are the learning target. See `docs/DATABASE_DESIGN.md` for the full design (tables, indexes, invalidation rules) to translate into code yourself; don't skip straight to the acceptance criteria.
 
@@ -81,7 +81,11 @@ Tasks:
 **Acceptance:** graph renders identically to Phase 1; `.nebulosity/nebulosity.db` contains real rows (verify with `npx drizzle-kit studio` or your own select script); repeated requests neither duplicate rows nor grow the DB; your smoke test passes; deleting the DB file self-heals on next request.
 **You learn:** transactions, upserts, unique-index dedupe, read-through caching, and why "derived data" changes how you think about recovery.
 
-## Phase 2 — Repository indexing (~1–1.5 weeks)
+## Phase 2 — Repository indexing (~1–1.5 weeks) — **DONE 2026-09-04**
+
+**Status:** All 3 tasks complete and live-verified. `lib/chunks.ts` (AST chunker), `lib/index-repo.ts` (incremental pipeline) and `POST /api/index` (SSE) produce **161 chunks over 27 files** with zero errors. Every acceptance criterion checked against the running server: the stream ends with `done`; six randomly-sampled chunks open to exactly the declarations they name; an immediate second run reports all 27 `skippedUnchanged` in 16 ms with no embedding phase; editing one file re-chunked and re-embedded only that file (`changed: 1, skipped: 26`, 2 chunks embedded, only that file's rows replaced).
+
+**Caveat on provenance:** Phases 2–4 were first implemented with a different model while the project owner was without Claude access, and none of it had ever run — the embedding model could not be downloaded from inside China. The audit on return found 18 defects including four blockers, plus two more found while fixing (`saveScan` destroying the index, migrations never running for the file DB). See `RAG_IMPLEMENTATION_REVIEW.md` for the full record and ADR-017 through ADR-023 for the decisions. Concepts were learned during the original build; the repair pass was assistant-written by explicit request.
 
 **Goal:** the `chunks` table fills with real, correctly-bounded chunks.
 
@@ -99,7 +103,9 @@ Tasks:
 
 ---
 
-## Phase 3 — Embeddings (~0.5–1 week)
+## Phase 3 — Embeddings (~0.5–1 week) — **DONE 2026-09-04**
+
+**Status:** All 4 tasks complete and live-verified. `COUNT(vectors) === COUNT(chunks) === 161`; every decoded vector is length 384 with magnitude in `0.999999596 – 1.000000312`; all 161 embeddings are **distinct** (the check that proves vectors are serialized per-row rather than each carrying its whole batch); a warm re-index emits no `embedding` events. Model load now logs the ~25 MB first-run download so a cold start doesn't look like a hang. See ADR-017 for the tensor-decode and BLOB serialization contract.
 
 **Goal:** every chunk has a vector.
 
@@ -117,7 +123,19 @@ Tasks:
 
 ---
 
-## Phase 4 — Retrieval (~0.5 week)
+## Phase 4 — Retrieval (~0.5 week) — **DONE 2026-09-04**
+
+**Status:** Both tasks complete. **All five acceptance queries pass at rank 1** against the live `GET /api/search`:
+
+| query | rank 1 | score |
+|---|---|---|
+| "how are imports extracted from files" | `lib/scan.ts#extractImports` | 0.532 |
+| "circular ring layout positions" | `lib/graph.ts#radialPosition` | 0.460 |
+| "draw the star background" | `StarField.tsx#Star` (top 3 all StarField) | 0.468 |
+| "chat input box" | `TerminalPanel.tsx#default` | 0.326 |
+| "convert scan output to react flow" | `lib/graph.ts#toFlowGraph` | 0.564 |
+
+`lib/retrieve.ts`'s algorithm needed no changes — dot products, the 0.25 threshold, top-k and the `lastIndexAt`-keyed cache were all correct; only the BLOB decode was wrong (ADR-017). The last query originally failed for a reason worth remembering: `toFlowGraph`'s JSDoc had drifted 50 lines up the file during the F5/F6 refactor and was sitting above `export type ResolvedEdge`, so a three-field type alias inherited the description of a function it had nothing to do with and outranked it. **Once code is embedded, a misplaced comment is a retrieval bug** — see `LEARNING_NOTES.md`.
 
 **Goal:** semantic search works and is measurably sane — *before* any agent exists.
 

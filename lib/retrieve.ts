@@ -1,7 +1,7 @@
 import { getDb } from "./db/client";
 import { eq } from "drizzle-orm";
 import { repositories, files, chunks, vectors } from "./db/schema";
-import { embedTexts } from "./embed";
+import { embedTexts, decodeVector } from "./embed";
 import type { RetrievedChunk, CodeChunk } from "./contracts";
 
 // --------------------------------------------------------------------------------------
@@ -70,14 +70,7 @@ export async function getVectorCache(): Promise<VectorCache> {
 
             for (const row of rows){
                 // convert BLOB (Buffer) back to Float32Array
-                const buf = row.embedding as Buffer;
-                const embedding = new Float32Array(
-                    buf.buffer,
-                    buf.byteOffset,
-                    buf.byteLength
-                );
-
-                newCache.vectors.set(row.chunkId, embedding);
+                newCache.vectors.set(row.chunkId, decodeVector(row.embedding as Buffer));
 
                 // get chunk data
                 const chunkData: Omit<CodeChunk, "id"> = {

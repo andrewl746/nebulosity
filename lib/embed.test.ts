@@ -1,23 +1,22 @@
 // ================================================================
-// 🚨 IMPORTANT: Embedding Model Setup (Read Before Running Tests)
+// Embedding model notes
 // ================================================================
-// 
-// WHAT HAPPENED:
-// - In China, the Hugging Face model download is blocked/firewalled.
-// - The model cannot be downloaded directly from huggingface.co.
-// - Manual download to cache didn't work because the library expected
-//   a specific hash-named subfolder inside snapshots/, not "main/".
-// - Network is fine in Canada, so the test should work there.
 //
-// WHAT CLAUDE CODE NEEDS TO DO:
-// 1. In Canada, run: npx vitest run lib/embed.test.ts
-//    → Model will download automatically from huggingface.co
-//    → Should pass all tests (expect ~10-20s first run)
+// FIRST RUN downloads Xenova/all-MiniLM-L6-v2 (~25 MB) from huggingface.co and
+// caches it under node_modules/.cache. Expect ~10-20s on a cold run, well under
+// a second afterwards. lib/embed.ts logs the download so it doesn't look like a
+// hang.
 //
-// 2. If it passes, re-index to generate embeddings:
-//    curl.exe -N -X POST localhost:3000/api/index
-//    → Should show "event: progress" with "phase":"embedding"
-//    → Done event should have no "fetch failed" errors
+// HISTORICAL NOTE (2026-08, resolved 2026-09-04): huggingface.co is unreachable
+// from inside China, so this suite could not run at all while it was written —
+// which is why "should batch multiple texts" shipped failing and stayed that way
+// for weeks. It caught a real bug the moment it could execute: transformers.js
+// returns ONE tensor per batch, and the code was pushing the whole flat buffer as
+// a single vector, so 20 texts produced 2 "vectors" of 6144 floats.
+// See BUGS_ENCOUNTERED.md #7 and ADR-017.
+//
+// The lesson worth keeping: a test you cannot run is not a passing test, and an
+// environment that silently prevents verification is itself a project risk.
 // ================================================================
 
 import { describe, it, expect } from "vitest";

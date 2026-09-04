@@ -7,7 +7,9 @@ export type ScannedFile = {
   id: string;
   /** Raw import specifiers, e.g. "./utils", "@/lib/graph", "react". */
   imports: string[];
-  contentHash?: string; // optional, only used for saving to the db and P2 indexing
+  // NOTE: scanning no longer produces a content hash. `files.contentHash` is owned
+  // solely by the indexer and means "the hash the indexer last processed" (ADR-022);
+  // computing a second hash here was dead work on every /api/graph request.
 };
 
 /** Extensions the scanner picks up, in the order Node/Next would resolve them. */
@@ -115,14 +117,6 @@ export function classifyFile(id: string): FileKind {
 
 export type CodebaseGraph = { nodes: FileNodeType[]; edges: Edge[] };
 
-/**
- * Transform the scanner's raw output into React Flow's Node[] / Edge[].
- *
- * @param files   Output of scanProject (lib/scan.ts).
- * @param rootDir Project root to strip from absolute ids (e.g. process.cwd()).
- *                Pass "" if ids are already project-relative.
- */
-
 export type ResolvedEdge = { source: string, target: string, specifier: string };
 
 export function resolveEdges(files: ScannedFile[], rootDir = "", aliases: Record<string, string> = {}): ResolvedEdge[] {
@@ -172,6 +166,14 @@ export function resolveEdges(files: ScannedFile[], rootDir = "", aliases: Record
   return edges;
 }
 
+/**
+ * Transform the scanner's raw output into React Flow's Node[] / Edge[].
+ *
+ * @param files   Output of scanProject (lib/scan.ts).
+ * @param edges   Output of resolveEdges.
+ * @param rootDir Project root to strip from absolute ids (e.g. process.cwd()).
+ *                Pass "" if ids are already project-relative.
+ */
 export function toFlowGraph(files: ScannedFile[], edges: ResolvedEdge[], rootDir = ""): CodebaseGraph {
   const root = normalizeSlashes(rootDir).replace(/\/+$/, "");
 

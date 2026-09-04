@@ -1,6 +1,12 @@
 import type { CodeChunk } from "@/lib/contracts";
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 
+export const EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
+export const EMBEDDING_DIM = 384;
+
+const BATCH_SIZE = 16;
+const MAX_BODY_LINES = 200;
+
 // lazy loaded embedding pipeline (model loads on first call, not at module import time)
 let pipelineInstance: FeatureExtractionPipeline | null = null;
 
@@ -9,10 +15,12 @@ async function getPipeline(){
         // dynamic import so the module can be imported without loading the model
         const { pipeline } = await import("@huggingface/transformers");
 
-        pipelineInstance = await pipeline(
-            "feature-extraction",
-            "Xenova/all-MiniLM-L6-v2"
-        );
+        // the model is ~25 MB and is fetched from huggingface.co the first time
+        // it is used, then cached under node_modules/.cache. Without this line a
+        // cold first index looks like a hang.
+        console.log(`[embed] loading ${EMBEDDING_MODEL} (first run downloads ~25 MB)…`);
+
+        pipelineInstance = await pipeline("feature-extraction", EMBEDDING_MODEL);
     }
 
     return pipelineInstance;
@@ -42,22 +50,36 @@ export function buildEmbeddingText(chunk: CodeChunk): string {
         parts.push(`Description: ${docComment}`);
     }
     
-    // 4. signature (first line usually contains the function/class signature)
-    const firstLine = chunk.text.split("\n")[0];
-    if (firstLine){
-        parts.push(`Signature: ${firstLine}`);
-    }
-    
-    // 5. body (up to ~200 lines, truncated to fit token budget)
-    const bodyLines = chunk.text.split("\n");
-    const bodyStart = bodyLines.length > 1 ? 1 : 0; // skip the first line if it was the signature
-    const body = bodyLines.slice(bodyStart, 201).join("\n");
+    // 4. signature — the first line that is actual code.
+    // chunk.text begins with the declaration's attached comment block (ADR-018),
+    // so line 0 is usually "/**". Taking it blindly, as this used to, threw away
+    // the single most identifying line in the chunk for every documented
+    // declaration (RAG_IMPLEMENTATION_REVIEW.md R9).
+    const lines = chunk.text.split("\n");
+    const signatureIndex = lines.findIndex(isCodeLine);
 
-    if (body){
+    if (signatureIndex !== -1){
+        parts.push(`Signature: ${lines[signatureIndex].trim()}`);
+    }
+
+    // 5. body (capped to fit the model's ~256 token budget)
+    const bodyStart = signatureIndex === -1 ? 0 : signatureIndex + 1;
+    const body = lines.slice(bodyStart, bodyStart + MAX_BODY_LINES).join("\n");
+
+    if (body.trim()){
         parts.push(body);
     }
-    
+
     return parts.join("\n");
+}
+
+// a line carrying code rather than whitespace or a comment
+function isCodeLine(line: string): boolean {
+    const trimmed = line.trim();
+
+    if (trimmed === "") return false;
+
+    return !trimmed.startsWith("//") && !trimmed.startsWith("/*") && !trimmed.startsWith("*");
 }
 
 /**
@@ -138,60 +160,39 @@ export async function embedTexts(
     }
 
     const pipe = await getPipeline();
-    const batchSize = 16;
     const results: Float32Array[] = [];
 
-    for (let i = 0; i < texts.length; i += batchSize){
-        const batch = texts.slice(i, i + batchSize);
+    for (let i = 0; i < texts.length; i += BATCH_SIZE){
+        const batch = texts.slice(i, i + BATCH_SIZE);
 
-        // uses the model to turn the embedded text into vector arrays
-        const output = await pipe(batch, {
-            pooling: "mean",
-            normalize: true,
-        });
+        // Transformers.js returns ONE Tensor for the whole batch, not one per
+        // text: a flat, row-major Float32Array plus a `dims` shape of
+        // [rows, EMBEDDING_DIM]. Nothing in the object separates the rows — we
+        // cut them apart ourselves using dims. (Reading `.data` as if it were a
+        // single vector is what made every batch collapse into one 6144-float
+        // "vector"; see RAG_IMPLEMENTATION_REVIEW.md R2.)
+        const output = await pipe(batch, { pooling: "mean", normalize: true });
+        const [rows, dim] = output.dims;
 
-        // Transformers.js returns either:
-        // - a single Float32Array (if input was a string)
-        // - an array of Float32Array (if input was an array of strings)
-        if (Array.isArray(output)){
-            for (const item of output){
-                if (item instanceof Float32Array){
-                    results.push(item);
-                } else if (Array.isArray(item)) {
-                    results.push(new Float32Array(item));
-                } else if (item && typeof item === 'object'){
-                    // try to extract data from tensor object
-                    const tensor = item as { data?: Float32Array | number[] };
-                    if (tensor.data instanceof Float32Array){
-                        results.push(tensor.data);
-                    } else if (Array.isArray(tensor.data)){
-                        results.push(new Float32Array(tensor.data));
-                    } else{
-                        throw new Error(`Unexpected item type: ${typeof item}`);
-                    }
-                } else{
-                    throw new Error(`Unexpected item type: ${typeof item}`);
-                }
-            }
-        } else if (output instanceof Float32Array){
-            results.push(output);
-        } else if (output && typeof output === 'object'){
-            // single input, tensor object
-            const tensor = output as { data?: Float32Array | number[] };
-            if (tensor.data instanceof Float32Array){
-                results.push(tensor.data);
-            } else if (Array.isArray(tensor.data)){
-                results.push(new Float32Array(tensor.data));
-            } else{
-                throw new Error(`Unexpected output format: ${typeof output}`);
-            }
-        } else{
-            throw new Error(`Unexpected output format: ${typeof output}`);
+        if (rows !== batch.length || dim !== EMBEDDING_DIM){
+            throw new Error(
+                `Unexpected embedding shape [${output.dims.join(", ")}] for a batch of ` +
+                `${batch.length}; expected [${batch.length}, ${EMBEDDING_DIM}]`
+            );
+        }
+
+        const data = output.data as Float32Array;
+
+        for (let row = 0; row < rows; row++){
+            // .slice() COPIES. .subarray() would return a view that keeps every
+            // vector pointing into the shared batch buffer, which then has to be
+            // accounted for at every serialization site downstream. Owning the
+            // memory here makes each vector independently storable.
+            results.push(data.slice(row * dim, (row + 1) * dim));
         }
 
         if (onProgress){
-            const done = Math.min(i + batchSize, texts.length);
-            onProgress(done, texts.length);
+            onProgress(Math.min(i + BATCH_SIZE, texts.length), texts.length);
         }
     }
 
@@ -220,6 +221,42 @@ export async function embedChunks(
     }));
 }
 
+/**
+ * Vectors are persisted as raw host-order float32 bytes in a BLOB column.
+ *
+ * encode/decode are exact inverses and live together deliberately: both of the
+ * bugs they replace (RAG_IMPLEMENTATION_REVIEW.md R3 and R4) came from doing
+ * this conversion inline at the call site, in two different files, wrong in two
+ * different ways.
+ */
+export function encodeVector(vector: Float32Array): Buffer {
+    // `vector.buffer` is the WHOLE backing ArrayBuffer, which may be much larger
+    // than this particular view. The offset/length arguments are what keep us to
+    // our own window instead of serializing the entire batch.
+    return Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength);
+}
+
+export function decodeVector(buf: Buffer): Float32Array {
+    const bytesPerFloat = Float32Array.BYTES_PER_ELEMENT;
+
+    if (buf.byteLength % bytesPerFloat !== 0){
+        throw new Error(
+            `Vector blob of ${buf.byteLength} bytes is not a whole number of float32s`
+        );
+    }
+
+    // Allocate first, then copy the bytes in. Constructing a Float32Array as a
+    // *view* over the Buffer would be faster but is unsafe twice over: the third
+    // constructor argument counts elements, not bytes, and Node serves small
+    // Buffers from a shared pool whose byteOffset is often not 4-byte aligned —
+    // which that constructor rejects. `new Float32Array(n)` always owns an
+    // aligned buffer starting at offset 0.
+    const vector = new Float32Array(buf.byteLength / bytesPerFloat);
+    new Uint8Array(vector.buffer).set(buf);
+
+    return vector;
+}
+
 // validates that a vector has length 384 and is normalized (unit vector of magnitude 1)
 // used in testing
 export function validateVector(vector: Float32Array): { valid: boolean; magnitude: number } {
@@ -236,7 +273,7 @@ export function validateVector(vector: Float32Array): { valid: boolean; magnitud
     const magnitude = Math.sqrt(sum);
 
     return {
-        valid: length === 384 && Math.abs(magnitude - 1) < 0.001, // makes sure it's a unit vector
+        valid: length === EMBEDDING_DIM && Math.abs(magnitude - 1) < 0.001, // makes sure it's a unit vector
         magnitude: magnitude
     };
 }
@@ -244,7 +281,7 @@ export function validateVector(vector: Float32Array): { valid: boolean; magnitud
 // used in testing
 export function getEmbeddingModelInfo() {
     return {
-        name: "Xenova/all-MiniLM-L6-v2",
-        dimension: 384,
+        name: EMBEDDING_MODEL,
+        dimension: EMBEDDING_DIM,
     };
 }

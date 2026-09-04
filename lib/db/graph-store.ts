@@ -1,6 +1,6 @@
 import { repositories, files, imports } from "./schema";
 import { getDb } from "./client";
-import { eq, inArray, count } from "drizzle-orm";
+import { eq, inArray, count, sql } from "drizzle-orm";
 
 export function getLastScanAt(rootPath: string): Date | null {
     const db = getDb();
@@ -50,9 +50,23 @@ export function getCentralFiles(rootPath: string): { path: string; inDegree: num
     return result.sort((a, b) => (b.inDegree + b.outDegree) - (a.inDegree + a.outDegree)).slice(0, 5);
 }
 
-type ScanFileInput = { path: string; kind: "component" | "module"; contentHash: string };
+type ScanFileInput = { path: string; kind: "component" | "module" };
 type ScanEdgeInput = { source: string; target: string; specifier: string };
 
+/**
+ * Persists one scan.
+ *
+ * Two rules make this safe to run on every page load (ADR-022):
+ *
+ *  1. **Upsert, never delete-and-reinsert.** File rows are the parent of
+ *     `chunks`, which cascades to `vectors`. Clearing them wholesale meant a
+ *     plain `GET /api/graph` destroyed the entire search index, and churned
+ *     every file id in the process.
+ *  2. **`contentHash` is not written here.** It belongs to the indexer and
+ *     means "the hash the indexer last processed". Stamping the current hash at
+ *     *scan* time told the indexer every file was already up to date, so the
+ *     chunks table could never fill.
+ */
 export function saveScan(rootPath: string, scannedFiles: ScanFileInput[], scannedEdges: ScanEdgeInput[]){
     const db = getDb();
 
@@ -64,24 +78,52 @@ export function saveScan(rootPath: string, scannedFiles: ScanFileInput[], scanne
             .returning()
             .get();
 
-        // delete all files under that repo
-        tx.delete(files).where(eq(files.repoId, repo.id)).run();
-        
-        // insert the fresh files
-        const insertedFiles = scannedFiles.length > 0
-            ? tx.insert(files)
+        if (scannedFiles.length > 0){
+            tx.insert(files)
                 .values(scannedFiles.map((f) => ({
                     repoId: repo.id,
                     path: f.path,
                     kind: f.kind,
-                    contentHash: f.contentHash
+                    contentHash: "" // sentinel: seen by the scanner, never indexed
                 })))
-                .returning()
-                .all()
-            : [];
+                .onConflictDoUpdate({
+                    target: [files.repoId, files.path],
+                    // only the classification can change for a file that already
+                    // exists — contentHash is deliberately left alone
+                    set: { kind: sql`excluded.kind` }
+                })
+                .run();
+        }
+
+        const fileRows = tx
+            .select({ id: files.id, path: files.path })
+            .from(files)
+            .where(eq(files.repoId, repo.id))
+            .all();
+
+        // files that vanished from disk (this cascade IS wanted — their chunks
+        // describe code that no longer exists)
+        const scannedPaths = new Set(scannedFiles.map((f) => f.path));
+        const goneIds = fileRows.filter((f) => !scannedPaths.has(f.path)).map((f) => f.id);
+
+        if (goneIds.length > 0){
+            tx.delete(files).where(inArray(files.id, goneIds)).run();
+        }
 
         // translate path pairs to id pairs for db connections
-        const idByPath = new Map(insertedFiles.map((f) => [f.path, f.id]));
+        const idByPath = new Map(
+            fileRows.filter((f) => scannedPaths.has(f.path)).map((f) => [f.path, f.id])
+        );
+
+        // Edges are pure derived data with no dependents, so they are rebuilt
+        // wholesale. They used to be cleared as a side effect of the file delete
+        // above; now that files survive, stale edges have to be removed here or
+        // a deleted import would linger on the graph forever.
+        const liveFileIds = [...idByPath.values()];
+
+        if (liveFileIds.length > 0){
+            tx.delete(imports).where(inArray(imports.sourceFileId, liveFileIds)).run();
+        }
 
         const resolvedEdges: { sourceFileId: number; targetFileId: number; specifier: string }[] = [];
 
@@ -89,7 +131,7 @@ export function saveScan(rootPath: string, scannedFiles: ScanFileInput[], scanne
         for (const edge of scannedEdges){
             const sourceFileId = idByPath.get(edge.source);
             const targetFileId = idByPath.get(edge.target);
-            
+
             if (sourceFileId === undefined || targetFileId === undefined){
                 continue;
             }

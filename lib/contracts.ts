@@ -146,6 +146,16 @@ export type IndexEventMap = {
     chunkCount: number;
     skippedUnchanged: number;
     tookMs: number;
+    /** Files re-chunked and re-embedded this run. */
+    changed: number;
+    /**
+     * Per-file failures. Indexing is per-file error-tolerant, so a run can
+     * succeed overall while individual files failed — without this the caller
+     * cannot tell the difference (ADR-021).
+     */
+    errors: Array<{ path: string; error: string }>;
+    /** Unreadable files/directories reported by the scanner (F2). */
+    warnings: Array<{ path: string; error: string }>;
   };
   error: { code: ErrorCode; message: string };
 };
@@ -163,19 +173,34 @@ export type ChunkKind =
   | "interface"
   | "type"
   | "const"
+  | "enum"
+  | "namespace"
   | "file-summary";
 
 /** One retrievable unit of code — docs/RAG_PIPELINE.md §3 */
 export type CodeChunk = {
-  /** `${filePath}#${name}#${partIndex}` — stable across runs for unchanged files. */
+  /**
+   * `${filePath}#${name}#${partIndex}` — stable across runs for unchanged files.
+   *
+   * When one file declares the same name more than once (overload signatures,
+   * declaration merging), the second and later occurrences get a `~n`
+   * disambiguator on the name segment — `lib/x.ts#foo~2#0` — so ids stay
+   * unique without the display `name` changing. See ADR-019.
+   */
   id: string;
   filePath: string; // project-relative, forward slashes
   kind: ChunkKind;
   name: string;     // "toFlowGraph", or "(file)" for file-summary chunks
-  startLine: number; // 1-based, inclusive
+  /**
+   * 1-based, inclusive. The span covers the declaration *and* its attached
+   * leading comment block — `startLine`, `endLine` and `text` always describe
+   * exactly the same region (ADR-018).
+   */
+  startLine: number;
   endLine: number;   // 1-based, inclusive
   exported: boolean;
-  partIndex: number; // 0 unless a large declaration was split
+  /** 0-based index of this part; 0 when the declaration was not split. */
+  partIndex: number;
   text: string;      // exact source text of the chunk
   fileHash: string;  // sha256 of the whole source file at index time
 };

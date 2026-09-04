@@ -5,7 +5,7 @@
 **Audience:** The project owner (learning-focused) and any LLM or developer implementing phases of `IMPLEMENTATION_ROADMAP.md`
 **Reading order for the doc set:** this file → `RAG_PIPELINE.md` → `AI_AGENT_DESIGN.md` → `LANGGRAPH_DESIGN.md` → `DATABASE_DESIGN.md` → `API_CONTRACTS.md` → `VISUALIZATION_DESIGN.md` → `IMPLEMENTATION_ROADMAP.md` → `ENGINEERING_DECISIONS.md`
 **Maintenance rule:** these documents are living. Any change to the design — a new decision, a renamed contract, a re-scoped phase — MUST update the affected doc(s) in the same commit as the change. Code reviews and audits live beside them (see `GRAPH_IMPLEMENTATION_REVIEW.md`).
-**Auxiliary docs:** `GRAPH_IMPLEMENTATION_REVIEW.md` (dated audits + golden test vectors) · `EXECUTION_PROMPTS.md` (paste-able per-phase kickoff prompts for implementing models) · `LEARNING_NOTES.md` (study guide / interview prep). The compiler-enforced contracts live in `lib/contracts.ts` (authored 2026-07-12).
+**Auxiliary docs:** `GRAPH_IMPLEMENTATION_REVIEW.md` (dated audits + golden test vectors) · `RAG_IMPLEMENTATION_REVIEW.md` (dated audit of the Phase 2–4 chunk → embed → retrieve pipeline) · `EXECUTION_PROMPTS.md` (paste-able per-phase kickoff prompts for implementing models) · `LEARNING_NOTES.md` (study guide / interview prep). The compiler-enforced contracts live in `lib/contracts.ts` (authored 2026-07-12).
 
 ---
 

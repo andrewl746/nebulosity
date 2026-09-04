@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { extractChunksFromFile } from "./chunks";
 
-// FOR CLAUDE: lowkey a little sketchy so check if these test cases pass everything you expect
-// i think the endLine is off by 1 for classes, but i don't know if it's a problem or not (make sure all test cases GENIUNELY work and it's not by pure coincidence (edit: fixed it, read BUGS_ENCOUNTERED.md 5. for my solution to see if it geniunely works))
-// if u think these test cases dont encompass everything you want, feel free to add more
-// i just wanted to make sure the basics are covered and that the splitting of oversized chunks is working as expected
-// i added the bugs that occurred in P2 T1 in BUGS_ENCOUNTERED.md (5 & 6) so check if those are correct (also make sure everything in chunks.ts is correct and if i can write the code simpler and better)
 // 2026 08 16 finished P2 T1
+// 2026 09 04 hardened after RAG Review #1 — every fixture below that exercises a
+// *span* (default exports, comment attachment, splitting) now deliberately
+// includes surrounding declarations. The original default-export fixture held
+// nothing but the function under test, so "the whole file" and "the function"
+// were byte-identical and the test passed while the chunker was swallowing
+// entire files. A fixture with only one thing in it cannot detect over-capture.
 
 describe("chunk extraction", () => {
     it("extracts a function declaration", () => {
@@ -170,44 +171,95 @@ describe("chunk extraction", () => {
         expect(component?.exported).toBe(true);
     });
 
-    it("handles default exports", () => {
-        const content = `
-            export default function() {
-                return "hello";
-            }`;
+    it("handles default exports without swallowing the rest of the file", () => {
+        // NOTE: the surrounding declarations are the point of this fixture.
+        // `export default function` is a FunctionDeclaration with a DefaultKeyword
+        // modifier whose parent is the SourceFile — reading the parent's span
+        // returns the entire file, which a single-declaration fixture cannot
+        // distinguish from the correct answer.
+        const content = `import { thing } from "./thing";
+
+export const before = 1;
+
+export default function() {
+    return "hello";
+}
+
+export const after = 2;`;
 
         const chunks = extractChunksFromFile("test.ts", content);
-        
+
         const defaultExport = chunks.find(c => c.name === "default");
         expect(defaultExport).toBeDefined();
         expect(defaultExport?.kind).toBe("function");
         expect(defaultExport?.exported).toBe(true);
+
+        // the function occupies lines 5-7 and nothing else
+        expect(defaultExport?.startLine).toBe(5);
+        expect(defaultExport?.endLine).toBe(7);
+        expect(defaultExport?.text).not.toContain("import");
+        expect(defaultExport?.text).not.toContain("before");
+        expect(defaultExport?.text).not.toContain("after");
+
+        // and the neighbours still get their own chunks
+        expect(chunks.find(c => c.name === "before")).toBeDefined();
+        expect(chunks.find(c => c.name === "after")).toBeDefined();
     });
 
-    it("splits oversized chunks with overlap", () => {
-        // create a large function (250 lines)
-        let content = `export function largeFunction() {\n`;
+    it("classifies a named default export in a .tsx file as a component", () => {
+        const content = `export default function StarField() {
+    return <div />;
+}`;
 
-        for (let i = 0; i < 248; i++) {
-            content += `  console.log("line ${i}");\n`;
+        const chunks = extractChunksFromFile("app/components/StarField.tsx", content);
+        const defaultExport = chunks.find(c => c.name === "default");
+
+        expect(defaultExport?.kind).toBe("component");
+    });
+
+    it("splits oversized chunks with overlap at every boundary, losing no lines", () => {
+        // 599 lines total: the declaration line, 597 body lines, the closing brace
+        const body = Array.from({ length: 597 }, (_, i) => `  console.log("line ${i}");`).join("\n");
+        const content = `export function largeFunction() {\n${body}\n}`;
+        const totalLines = content.split("\n").length;
+
+        const parts = extractChunksFromFile("test.ts", content)
+            .filter(c => c.name === "largeFunction");
+
+        expect(parts.length).toBeGreaterThan(1);
+
+        // part indices are 0-based and contiguous
+        expect(parts.map(p => p.partIndex)).toEqual(parts.map((_, i) => i));
+
+        // the first part starts at line 1 and the last part reaches the final
+        // line — deriving a part count from ceil(lines / MAX) assumes windows
+        // that don't overlap, and silently drops the tail
+        expect(parts[0].startLine).toBe(1);
+        expect(parts[parts.length - 1].endLine).toBe(totalLines);
+
+        // every consecutive pair overlaps by exactly OVERLAP_LINES (3), not just
+        // the first pair
+        for (let i = 1; i < parts.length; i++) {
+            const overlap = parts[i - 1].endLine - parts[i].startLine + 1;
+            expect(overlap).toBe(3);
         }
 
-        content += `}\n`;
-    
-        const chunks = extractChunksFromFile("test.ts", content);
-        
-        // should be split into multiple parts
-        const funcChunks = chunks.filter(c => c.name === "largeFunction");
-        expect(funcChunks.length).toBeGreaterThan(1);
-        
-        // check overlap (if part 1 ends at line 201, part 2 starts around 199)
-        const part1 = funcChunks[0];
-        const part2 = funcChunks[1];
-
-        if (part1 && part2) {
-            // The start of part2 should overlap with the end of part1
-            expect(part2.startLine).toBeLessThanOrEqual(part1.endLine);
+        // no gaps anywhere in the coverage
+        for (let i = 1; i < parts.length; i++) {
+            expect(parts[i].startLine).toBeLessThanOrEqual(parts[i - 1].endLine + 1);
         }
+    });
+
+    it("never splits the file-summary chunk", () => {
+        // a file long enough that its summary's *line range* exceeds the limit,
+        // even though the summary text itself is a handful of generated lines
+        const content = Array.from({ length: 400 }, (_, i) => `export const v${i} = ${i};`).join("\n");
+
+        const summaries = extractChunksFromFile("test.ts", content)
+            .filter(c => c.kind === "file-summary");
+
+        expect(summaries).toHaveLength(1);
+        expect(summaries[0].partIndex).toBe(0);
     });
 
     it("handles empty files", () => {
@@ -225,11 +277,104 @@ describe("chunk extraction", () => {
             import { another } from "./another";`;
 
         const chunks = extractChunksFromFile("test.ts", content);
-    
+
         // should only have the file-summary chunk
         expect(chunks.length).toBe(1);
         const summary = chunks[0];
         expect(summary?.text).toContain("Imports:");
         expect(summary?.text).toContain("import { something }");
+    });
+
+    /* ─── span consistency (ADR-018) ─── */
+
+    it("covers the declaration and its attached doc comment as one region", () => {
+        const content = `import x from "y";
+
+/**
+ * does a thing
+ */
+export function documented() {
+    return 1;
+}`;
+
+        const chunk = extractChunksFromFile("lib/d.ts", content)
+            .find(c => c.name === "documented");
+
+        // the doc comment is included, so retrieval can see it...
+        expect(chunk?.text.startsWith("/**")).toBe(true);
+        expect(chunk?.startLine).toBe(3);
+        expect(chunk?.endLine).toBe(8);
+
+        // ...and startLine/endLine describe exactly the text we kept
+        expect(chunk!.text.split("\n")).toHaveLength(chunk!.endLine - chunk!.startLine + 1);
+    });
+
+    it("does not absorb a comment separated by a blank line", () => {
+        const content = `// file header, belongs to nobody
+
+export const a = 1;`;
+
+        const chunk = extractChunksFromFile("lib/e.ts", content).find(c => c.name === "a");
+
+        expect(chunk?.startLine).toBe(3);
+        expect(chunk?.text).toBe("export const a = 1;");
+    });
+
+    /* ─── declaration kinds (ADR-020) ─── */
+
+    it("extracts enums, namespaces and default-export expressions", () => {
+        const content = `export enum Color { Red, Blue }
+export namespace Utils { export const x = 1; }
+const Thing = 1;
+export default Thing;`;
+
+        const chunks = extractChunksFromFile("lib/x.ts", content);
+
+        expect(chunks.find(c => c.name === "Color")?.kind).toBe("enum");
+        expect(chunks.find(c => c.name === "Utils")?.kind).toBe("namespace");
+        expect(chunks.find(c => c.name === "default")).toBeDefined();
+    });
+
+    it("names a chunk after every declarator in the statement", () => {
+        const chunk = extractChunksFromFile("lib/f.ts", `export const a = 1, b = 2;`)
+            .find(c => c.kind === "const");
+
+        expect(chunk?.name).toBe("a, b");
+    });
+
+    it("does not classify CONSTANT_CASE as a React component", () => {
+        const chunk = extractChunksFromFile("app/c.tsx", `const STAR_COUNT = 100;`)
+            .find(c => c.name === "STAR_COUNT");
+
+        expect(chunk?.kind).toBe("const");
+    });
+
+    /* ─── id uniqueness (ADR-019) ─── */
+
+    it("gives repeated names unique ids without changing the display name", () => {
+        const content = `export function foo(a: string): void;
+export function foo(a: number): void;
+export function foo(a: unknown): void {}`;
+
+        const chunks = extractChunksFromFile("lib/o.ts", content).filter(c => c.name === "foo");
+
+        expect(chunks).toHaveLength(3);
+        expect(chunks.map(c => c.id)).toEqual([
+            "lib/o.ts#foo#0",
+            "lib/o.ts#foo~2#0",
+            "lib/o.ts#foo~3#0"
+        ]);
+        // the display name is untouched — only the id disambiguates
+        expect(chunks.every(c => c.name === "foo")).toBe(true);
+    });
+
+    it("produces globally unique ids for every chunk in a file", () => {
+        const content = `export interface Box { x: number }
+export namespace Box { export const zero = 0; }
+export function Box() {}`;
+
+        const ids = extractChunksFromFile("lib/merged.ts", content).map(c => c.id);
+
+        expect(new Set(ids).size).toBe(ids.length);
     });
 });

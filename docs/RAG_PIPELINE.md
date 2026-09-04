@@ -12,10 +12,10 @@
 Code file (raw text)
       │
       ▼
-AST parser (TypeScript Compiler API)          lib/chunk.ts
+AST parser (TypeScript Compiler API)          lib/chunks.ts
       │   finds real declaration boundaries
       ▼
-Chunks (one per function/class/component)     lib/chunk.ts
+Chunks (one per function/class/component)     lib/chunks.ts
       │   + metadata: path, name, kind, lines
       ▼
 Embeddings (384-dim vectors, local model)     lib/embed.ts
@@ -52,7 +52,11 @@ You cannot hand an entire repository to an LLM: context windows are finite, cost
 - exported top-level `const` objects
 - **plus one "file summary" chunk per file**: the import list + top-of-file comments + the list of declaration names. This chunk answers "what is this file for?" queries that no single function answers.
 
-Declarations longer than the size cap (below) are split at statement boundaries with a 3-line overlap between pieces, and each piece keeps the parent declaration's metadata with a `partIndex`.
+Declarations longer than the size cap (below) are split with a 3-line overlap between pieces, and each piece keeps the parent declaration's metadata with a `partIndex`.
+
+**As implemented (2026-09-04):** the cap is 200 lines and the window slides by `200 − 3 = 197`, so **every** consecutive pair of parts overlaps by exactly 3 lines and the loop runs until the final line has been emitted. Deriving a part count up front instead (`ceil(lines / 200)`) assumes non-overlapping windows and silently drops the tail. `partIndex` is **0-based**. The file-summary chunk is never split: its text is a generated listing while its line range deliberately spans the whole file, so the two measures aren't comparable. Splitting is by line, not yet at statement boundaries — the AST is available to do better, and that refinement is open.
+
+**Chunk span (ADR-018).** A chunk covers its declaration *plus its attached leading comment block* — `startLine`, `endLine` and `text` always describe the same region. Comments separated from the declaration by a blank line are treated as detached and excluded. This is what puts doc comments into the embedding text (§4) while keeping line ranges accurate enough to open in an editor.
 
 ## 3. Chunk schema
 
@@ -61,14 +65,15 @@ Defined in `lib/contracts.ts` (single source of truth). Reproduced here:
 ```ts
 type CodeChunk = {
   id: string;            // `${filePath}#${name}#${partIndex}` — stable across runs
+                         // repeated names get a `~n` marker: "lib/x.ts#foo~2#0" (ADR-019)
   filePath: string;      // project-relative, forward slashes: "lib/graph.ts"
   kind: "function" | "class" | "component" | "interface" | "type"
-      | "const" | "file-summary";
+      | "const" | "enum" | "namespace" | "file-summary";   // enum/namespace added 2026-09-04, ADR-020
   name: string;          // "toFlowGraph", "GraphCanvas", or "(file)" for summaries
-  startLine: number;     // 1-based, inclusive
+  startLine: number;     // 1-based, inclusive — spans the attached doc comment too (ADR-018)
   endLine: number;       // 1-based, inclusive
   exported: boolean;
-  partIndex: number;     // 0 unless a large declaration was split
+  partIndex: number;     // 0-based; 0 when the declaration was not split
   text: string;          // the exact source text of the chunk
   fileHash: string;      // sha256 of the whole file — used for invalidation
 };

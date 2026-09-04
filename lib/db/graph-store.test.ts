@@ -4,9 +4,9 @@ import { saveScan, loadGraph } from "./graph-store";
 describe("test database", () => {
     it("store a small graph and check if duplicate edges collapse and an edge to an unscanned path doesn't crash", () => {
         saveScan("random-repo", [
-            { path: "a", kind: "component", contentHash: "xxx" }, 
-            { path: "b", kind: "component", contentHash: "xxx" },
-            { path: "c", kind: "component", contentHash: "xxx" }
+            { path: "a", kind: "component" }, 
+            { path: "b", kind: "component" },
+            { path: "c", kind: "component" }
         ], [
             { source: "a", target: "b", specifier: "zzz" },
             { source: "a", target: "b", specifier: "yyy" }, 

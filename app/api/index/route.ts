@@ -1,81 +1,63 @@
-// i made console display the events and the data (im not sure if we have to implement it into the ui later, lmk)
-
 import { NextResponse } from "next/server";
-import { indexRepo } from "@/lib/index-repo";
-import { getDb } from "@/lib/db/client";
-import { chunks } from "@/lib/db/schema";
-import { sql } from "drizzle-orm";
+import { indexRepo, IndexLockedError } from "@/lib/index-repo";
+import { getIndexStatus } from "@/lib/index-status";
+import type { ErrorCode, IndexEventMap } from "@/lib/contracts";
 
 export const runtime = "nodejs";
+
+// helper to send SSE events — see docs/API_CONTRACTS.md §4
+function sendEvent<K extends keyof IndexEventMap>(event: K, data: IndexEventMap[K]){
+    return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
 
 export async function POST(){
     const encoder = new TextEncoder();
     const repoRoot = process.cwd();
     const startTime = Date.now();
 
-    // helper to send SSE events
-    function sendEvent(event: string, data: unknown){
-        return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-    }
-
     const stream = new ReadableStream({
         async start(controller){
+            const send = <K extends keyof IndexEventMap>(event: K, data: IndexEventMap[K]) => {
+                controller.enqueue(encoder.encode(sendEvent(event, data)));
+            };
+
             try{
-                // start indexing
                 const stats = await indexRepo(repoRoot, {
-                    onProgress: (phase, done, total) => {
-                        // event that streams progress to the client
-                        controller.enqueue(
-                            encoder.encode(
-                                sendEvent("progress", { phase, done, total })
-                            )
-                        );
+                    onProgress: (phase, done, total, currentFile) => {
+                        send("progress", { phase, done, total, currentFile });
                     }
                 });
 
-                const db = getDb();
+                const status = getIndexStatus(repoRoot);
 
-                const chunkCountResult = await db
-                    .select({ count: sql<number>`count(*)` })
-                    .from(chunks)
-                    .get();
-
-                const chunkCount = chunkCountResult?.count ?? 0;
-
-                // event that streams when the indexing is done (including stats)
-                controller.enqueue(
-                    encoder.encode(
-                        sendEvent("done", {
-                            fileCount: stats.changed + stats.skipped,
-                            chunkCount: chunkCount, 
-                            changed: stats.changed,
-                            skipped: stats.skipped,
-                            skippedUnchanged: stats.skipped, // same as skipped
-                            errors: stats.errors,
-                            warnings: stats.warnings,
-                            tookMs: Date.now() - startTime  
-                        })
-                    )
-                );
+                send("done", {
+                    fileCount: stats.changed + stats.skipped,
+                    chunkCount: status.chunkCount,
+                    skippedUnchanged: stats.skipped,
+                    tookMs: Date.now() - startTime,
+                    // beyond API_CONTRACTS.md §4's four required fields: per-file
+                    // failures that would otherwise be invisible, since one bad
+                    // file no longer sinks the run
+                    changed: stats.changed,
+                    errors: stats.errors,
+                    warnings: stats.warnings
+                });
 
                 controller.close();
             } catch (err){
-                // handle errors
                 const error = err instanceof Error ? err : new Error(String(err));
-                let code = "INTERNAL";
 
-                if (error.message.includes("INDEX_LOCKED")) {
+                // classify on the error's TYPE, not on its message text — a
+                // reworded sentence must not silently change the error code
+                let code: ErrorCode = "INTERNAL";
+
+                if (err instanceof IndexLockedError){
                     code = "INDEX_LOCKED";
-                } else if (error.message.includes("Repository not found")) {
+                } else if (error.message.includes("Repository not found")){
                     code = "NOT_FOUND";
                 }
 
-                controller.enqueue(
-                    encoder.encode(
-                        sendEvent("error", { code, message: error.message })
-                    )
-                );
-
+                send("error", { code, message: error.message });
                 controller.close();
             }
         }

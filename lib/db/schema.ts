@@ -39,7 +39,7 @@ export const chunks = sqliteTable("chunks", {
     fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
     chunkId: text("chunk_id").notNull().unique(),
     kind: text("kind", {
-        enum: ["function", "class", "component", "interface", "type", "const", "file-summary"]
+        enum: ["function", "class", "component", "interface", "type", "const", "enum", "namespace", "file-summary"]
     }).notNull(),
     name: text("name").notNull(),
     startLine: integer("start_line").notNull(),

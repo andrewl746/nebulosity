@@ -57,6 +57,11 @@ type HealthResponse = {
 };
 ```
 
+**Implemented for real as of Phase 2/3 (2026-09-04).** The `index` block was hardcoded to zeros through Phase D; it is now served by `getIndexStatus` (`lib/index-status.ts`), shared with `POST /api/index` so the two endpoints cannot disagree about what "indexed" means.
+
+- `exists` is **`chunkCount > 0`**, not "a run happened" — a run that failed every file still stamps `lastIndexAt`, and the status pip must not call that indexed.
+- `staleFiles` re-hashes every indexed file on each request. That is affordable because the status bar fetches health once on mount for one local repo; if health ever becomes polled, or targets a large repo, it needs an mtime fast-path first.
+
 ## 4. POST /api/index — SSE
 
 Runs the indexing pipeline (`RAG_PIPELINE.md`). Body: `{}` (repo root is the server's project root in v1).
@@ -65,9 +70,15 @@ Runs the indexing pipeline (`RAG_PIPELINE.md`). Body: `{}` (repo root is the ser
 
 | event | data | notes |
 |---|---|---|
-| `progress` | `{ phase: "scanning" \| "chunking" \| "embedding", done: number, total: number, currentFile?: string }` | emitted at least once per phase; embedding emits per ~10 files |
-| `done` | `{ fileCount, chunkCount, skippedUnchanged, tookMs }` | terminal event on success |
+| `progress` | `{ phase: "scanning" \| "chunking" \| "embedding", done: number, total: number, currentFile?: string }` | emitted at least once per phase; `done`/`total` are **run-scoped** in every phase |
+| `done` | `{ fileCount, chunkCount, skippedUnchanged, tookMs, changed, errors[], warnings[] }` | terminal event on success |
 | `error` | `{ code, message }` | terminal on failure; `INDEX_LOCKED` if another run holds the lock |
+
+**Phase semantics (Phase 2/3, 2026-09-04).** The pipeline runs `scanning` → `chunking` → `embedding` → commit, and embedding is a **single batched pass over the whole run**, not per file — so `done`/`total` count chunks across the entire job and rise monotonically. An earlier per-file loop reset the counters on every file, which no client can render as a progress bar. A warm re-index emits no `embedding` events at all.
+
+**`done` carries per-file failures (ADR-021):** `errors[]` and `warnings[]` are `{ path, error }[]`, and `changed` is the number of files re-chunked. Indexing is per-file error-tolerant, so without these a run where every file failed looks identical to a clean one.
+
+**`INDEX_LOCKED`** is raised from a typed `IndexLockedError`, not matched on message text. The lock is a `meta` row holding the run's ISO start time and is treated as stale after 30 minutes, so a crashed run cannot block indexing forever.
 
 ## 5. POST /api/chat — SSE (the main event)
 

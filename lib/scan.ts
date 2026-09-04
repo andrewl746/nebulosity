@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 import { normalizeSlashes } from "./graph"
 import type { ScannedFile } from "./graph";
 
@@ -111,12 +110,9 @@ export function scanProject(
           continue;
         }
 
-        const contentHash = crypto.createHash("sha256").update(content).digest("hex");
-
         found.push({
           id,
-          imports: extractImports(content),
-          contentHash
+          imports: extractImports(content)
         });
       }
     }

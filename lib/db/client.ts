@@ -12,10 +12,15 @@ function createDb(){
 
     const db = drizzle(sqlite, {schema});
 
-    if (dbPath === ":memory:"){
-        migrate(db, { migrationsFolder: "./lib/db/migrations" })
-    }
-    
+    // Migrate every database, not just the in-memory test one. Drizzle records
+    // applied migrations in its own table, so this is idempotent and cheap on an
+    // already-current file — and it is what makes "delete the .db file and it
+    // self-heals on the next request" (Phase D's acceptance criterion) actually
+    // true. Migrating only :memory: also meant schema drift could never be
+    // caught by the test suite, because the tests were the only thing running
+    // the migrations at all.
+    migrate(db, { migrationsFolder: "./lib/db/migrations" });
+
     return db;
 }
 
