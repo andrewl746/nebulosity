@@ -3,7 +3,7 @@ import path from "path";
 import { normalizeSlashes } from "./graph"
 import type { ScannedFile } from "./graph";
 
-const IGNORE_LIST = ["node_modules", ".next", ".git", "scripts"];
+export const IGNORE_LIST = ["node_modules", ".next", ".git", "scripts"];
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs"]
 
 type warning = {
