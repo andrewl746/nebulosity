@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
-import { files, folders, levelEdges, repositories, symbols } from "../db/schema";
+import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { indexRepository, repoKey, RepoNotFoundError } from "./pipeline";
 
@@ -66,6 +66,20 @@ describe("indexRepository — first run on the fixture", () => {
             .where(eq(files.repoId, repoId)).orderBy(files.path).all();
         expect(rows.filter((r) => r.language === "javascript").map((r) => r.path)).toEqual(["scripts/build.js"]);
         expect(rows.filter((r) => r.language === "typescript")).toHaveLength(7);
+    });
+
+    it("makes the fixture's code searchable, with each chunk's name split into words", () => {
+        const { repoId } = indexRepository(copyFixture());
+        const db = getDb();
+        const found = db.all<{ name: string }>(sql`
+            select c.name as name from code_fts
+            join chunks c on c.id = code_fts.rowid join files f on f.id = c.file_id
+            where code_fts match '"logger"' and f.repo_id = ${repoId} order by code_fts.rank`);
+        expect(found.map((r) => r.name)).toEqual(["Logger", "(file)"]);   // both in src/core/log.ts; the name match ranks first
+
+        const logger = db.select({ nameSplit: chunks.nameSplit }).from(chunks).innerJoin(files, eq(files.id, chunks.fileId))
+            .where(and(eq(files.repoId, repoId), eq(chunks.name, "Logger"))).get();
+        expect(logger).toEqual({ nameSplit: "logger" });
     });
 });
 

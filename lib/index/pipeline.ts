@@ -9,6 +9,7 @@ import {
 } from "../db/store/structure";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
+import { splitIdentifier } from "./identifiers";
 import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
 import { normalizeSlashes } from "./paths";
 import { createResolver } from "./resolve";
@@ -126,7 +127,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                         lineCount: parsed.lineCount,
                         isTest: isTestPath(file.path),
                         importSpecifiers: parsed.imports,
-                        chunks: parsed.chunks,
+                        chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
                         symbols: parsed.symbols,
                     });
                 } catch (err){

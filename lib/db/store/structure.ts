@@ -15,6 +15,9 @@ export type FileError = { path: string; error: string };
 /** One resolved import: `source` imports `target`, written as `specifier` in the source. */
 export type ImportEdge = { source: string; target: string; specifier: string };
 
+/** A chunk plus its name split into words for code search (lib/index/identifiers.ts). */
+export type ChunkRecord = CodeChunk & { nameSplit: string };
+
 /** Everything one structure run knows about one changed file. */
 export type FileRecord = {
     path: string;
@@ -25,7 +28,7 @@ export type FileRecord = {
     lineCount: number;
     isTest: boolean;
     importSpecifiers: string[];
-    chunks: CodeChunk[];
+    chunks: ChunkRecord[];
     symbols: SymbolRow[];
 };
 
@@ -105,6 +108,7 @@ function writeOne(tx: Tx, repoId: number, r: FileRecord): void {
         chunkId: c.id,
         kind: c.kind,
         name: c.name,
+        nameSplit: c.nameSplit,
         startLine: c.startLine,
         endLine: c.endLine,
         exported: c.exported,
