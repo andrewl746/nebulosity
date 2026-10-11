@@ -51,7 +51,7 @@ export type SummaryRunResult = {
     failed: number;
     /** Out-of-date folders left for later (refreshStaleFolders: false). */
     lazy: number;
-    /** Requests still at Anthropic (wait: false). */
+    /** Requests still at Anthropic when the run ended: after wait: false, or when the circuit breaker stopped it. */
     inFlight: number;
     /** Targets that need a model and had none to go to (no API key). */
     needModel: number;
