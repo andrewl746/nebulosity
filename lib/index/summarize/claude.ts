@@ -125,6 +125,7 @@ export function outcomeFromBatchItem(item: Anthropic.Messages.MessageBatchIndivi
  * The real Summarizer. Pass a client made with `new Anthropic({ maxRetries: 3 })`: the
  * SDK then retries connection errors, 408/409/429 and 5xx three times with backoff,
  * honouring retry-after (PIVOT_SPEC.md §5.7), before a request counts as failed.
+ * Creating a batch is the exception: it's never retried (see submitBatch).
  */
 export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMARY_EFFORT): Summarizer {
     return {
@@ -141,9 +142,11 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
         },
 
         async submitBatch(requests){
-            const batch = await client.messages.batches.create({
-                requests: requests.map((r) => ({ custom_id: r.customId, params: requestParams(r, effort) })),
-            });
+            const batch = await client.messages.batches.create(
+                { requests: requests.map((r) => ({ custom_id: r.customId, params: requestParams(r, effort) })) },
+                // never retried: after a lost reply, a retry would create a second batch that's billed and never collected
+                { maxRetries: 0 },
+            );
             return batch.id;
         },
 

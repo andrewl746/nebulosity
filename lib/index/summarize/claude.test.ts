@@ -94,7 +94,7 @@ describe("outcomeFromReply", () => {
 
 describe("createClaudeSummarizer", () => {
     function fakeClient(){
-        const calls: { endpoint: string; params: Record<string, unknown> }[] = [];
+        const calls: { endpoint: string; params: Record<string, unknown>; options?: Record<string, unknown> }[] = [];
         const state = { ended: false, fail: false, gone: false, denied: null as 401 | 403 | null, offline: false };
         const client = {
             messages: {
@@ -104,7 +104,10 @@ describe("createClaudeSummarizer", () => {
                     return reply(GOOD, { model: params.model });
                 },
                 batches: {
-                    create: async (params: Record<string, unknown>) => { calls.push({ endpoint: "batches", params }); return { id: "msgbatch_1" }; },
+                    create: async (params: Record<string, unknown>, options?: Record<string, unknown>) => {
+                        calls.push({ endpoint: "batches", params, options });
+                        return { id: "msgbatch_1" };
+                    },
                     retrieve: async () => {
                         if (state.gone) throw new Anthropic.NotFoundError(404, { type: "error", error: { type: "not_found_error", message: "batch not found" } }, "batch not found", new Headers());
                         if (state.denied === 401) throw new Anthropic.AuthenticationError(401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, "invalid x-api-key", new Headers());
@@ -155,6 +158,13 @@ describe("createClaudeSummarizer", () => {
         expect(await summarizer.batchResults("msgbatch_1")).toBeNull();
         state.ended = true;
         expect((await summarizer.batchResults("msgbatch_1"))?.map((o) => [o.customId, o.ok])).toEqual([["s1", true], ["s2", false]]);
+    });
+
+    it("creates a batch with no automatic retry, so a lost reply can't leave a second batch nobody collects", async () => {
+        const { client, calls } = fakeClient();
+        await createClaudeSummarizer(client).submitBatch([request("claude-haiku-5-5")]);
+        expect(calls).toHaveLength(1);
+        expect(calls[0].options).toEqual({ maxRetries: 0 });
     });
 
     it("reports a batch Anthropic no longer has (404) as BatchGoneError", async () => {
