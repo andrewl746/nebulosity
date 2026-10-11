@@ -173,7 +173,7 @@ describe("runSummaries — the Batch API", () => {
 
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
             .toMatchObject({ summarized: 13, batches: 3, waves: 3, inFlight: 0 });
-        expect(stub.requests).toHaveLength(13);   // the 7 files were sent once, in batch-1
+        expect(stub.requests).toHaveLength(13);   // the 7 files were sent once, in the first batch
     });
 
     it("marks a batch Anthropic no longer has as failed, releases its rows, and carries on above them", async () => {
@@ -182,7 +182,9 @@ describe("runSummaries — the Batch API", () => {
         const gone: Summarizer = {
             ...stub.summarizer,
             async batchResults(id){
-                if (id === "batch-1") throw new BatchGoneError(id, "404 not found");
+                // the first batch this stub made (the 7 files) is the one Anthropic no longer has
+                const [first] = stub.batches.keys();
+                if (id === first) throw new BatchGoneError(id, "404 not found");
                 return stub.summarizer.batchResults(id);
             },
         };
@@ -196,6 +198,24 @@ describe("runSummaries — the Batch API", () => {
         expect(rows(root).filter((r) => r.status === "failed")).toHaveLength(7);
         expect(stub.requests.find((r) => r.prompt.startsWith("Folder: src/core"))?.prompt).toContain("- log.ts (9 lines): (no summary yet)");
         expect(row(root, "")).toMatchObject({ status: "fresh" });
+    });
+
+    it("keeps two repos' batches apart: collecting one repo's batch never touches the other's rows", async () => {
+        const first = indexedFixture();
+        const second = indexedFixture();
+        const firstStub = stubSummarizer({ pollsBeforeDone: 1 });
+
+        // the first repo's 7 files stay at Anthropic (its one look finds that batch still processing)
+        await runSummaries(first, { summarizer: firstStub.summarizer, transport: "batch", wait: false });
+        // a second repo with its own stub: its batches mustn't be mistaken for the first repo's
+        expect(await runSummaries(second, { summarizer: stubSummarizer().summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 13, failed: 0, upToDate: 14 });
+        expect(rows(first).filter((r) => r.batchId !== null)).toHaveLength(7);
+        expect(rows(first).filter((r) => r.status === "failed")).toHaveLength(0);
+
+        // and the first repo's batch is still there to collect
+        expect(await runSummaries(first, { summarizer: firstStub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 13, failed: 0, upToDate: 14 });
     });
 
     it("with wait: false collects batches that have already ended, so repeated runs work up the tree", async () => {

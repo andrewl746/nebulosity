@@ -13,6 +13,13 @@ export type StubOptions = {
 };
 
 /**
+ * Batches are numbered across every stub in a test file, not per stub: like Anthropic's, a
+ * batch id must name one batch only. Two stubs both handing out "batch-1" would let one
+ * repo's run collect another repo's rows (batch rows are looked up by id alone).
+ */
+let batchesMade = 0;
+
+/**
  * Stands in for Claude in tests (PIVOT_SPEC.md §11: tests make no network calls). It
  * answers from the prompt's first line ("File: src/a.ts", "Folder: src", "Repository:
  * mini-repo") and numbers each summary, so a redone summary always reads differently.
@@ -42,7 +49,8 @@ export function stubSummarizer(options: StubOptions = {}){
             return answer(request);
         },
         async submitBatch(batch){
-            const id = `batch-${batches.size + 1}`;
+            batchesMade++;
+            const id = `stub-batch-${batchesMade}`;
             requests.push(...batch);
             batches.set(id, { requests: [...batch], polls: 0 });
             return id;
