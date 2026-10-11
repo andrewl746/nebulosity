@@ -185,7 +185,9 @@ export function loadBatchRows(db: Db, batchId: string): { id: number; kind: Summ
  * Writes answers back and returns how many rows changed.
  * - A summary lands as "fresh" with its text and inputHash. Its old vector is deleted, so
  *   the embeddings stage redoes it.
- * - A failure becomes "failed" and keeps any older text on show.
+ * - A failure becomes "failed" and keeps any older text on show. A failure from the regular API
+ *   leaves a batch's claim on the row in place: that request is already paid for, and its
+ *   answer can still land.
  * - An answer from a batch that no longer owns the row (the row was redone some other way
  *   meanwhile) is dropped.
  */
@@ -200,7 +202,12 @@ export function writeResults(db: Db, results: readonly SummaryResult[]): number 
                 ? { tagline: r.outcome.text.tagline, summary: r.outcome.text.summary, model: r.outcome.model, inputHash: r.inputHash, status: "fresh" as const, error: null }
                 : { status: "failed" as const, error: r.outcome.error };
 
-            const changed = tx.update(summaries).set({ ...answer, batchId: null, pendingHash: null, updatedAt: now }).where(owner).run().changes;
+            // Only a regular-API failure keeps the row's claim: a regular-API success supersedes the batch,
+            // and a batch's own answer, either way, is the end of that batch's request.
+            const releasesClaim = r.outcome.ok || r.batchId !== null;
+            const changed = tx.update(summaries)
+                .set({ ...answer, ...(releasesClaim ? { batchId: null, pendingHash: null } : {}), updatedAt: now })
+                .where(owner).run().changes;
             if (changed > 0 && r.outcome.ok) tx.delete(summaryVectors).where(eq(summaryVectors.summaryId, r.id)).run();
             written += changed;
         }

@@ -98,6 +98,20 @@ describe("summary store — rows", () => {
         expect(inFlightBatches(db, repoId)).toEqual([]);
     });
 
+    it("a failed regular-API answer leaves the batch's claim on the row, so the batch's answer can still land", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/summaries/direct-failure");
+        const id = applyTargetUpdates(db, repoId, [{ kind: "file", path: "a.ts", inputHash: "ha", status: "pending" }]).get("file:a.ts")!;
+        markInFlight(db, "batch-1", [{ id, inputHash: "ha" }]);
+
+        // the regular API fails for this row while its batch request is out; that request is already paid for
+        expect(writeResults(db, [{ id, batchId: null, inputHash: "ha", outcome: { ok: false, error: "boom" } }])).toBe(1);
+        expect(inFlightBatches(db, repoId)).toEqual(["batch-1"]);
+
+        expect(writeResults(db, [{ id, batchId: "batch-1", inputHash: "ha", outcome: ok("From batch") }])).toBe(1);
+        expect(loadSummaries(db, repoId)[0]).toMatchObject({ status: "fresh", tagline: "From batch", error: null, batchId: null });
+    });
+
     it("a failure keeps the old text; a new summary drops the old vector", () => {
         const db = getDb();
         const repoId = upsertRepository(db, "/summaries/results");
