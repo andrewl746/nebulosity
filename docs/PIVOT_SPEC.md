@@ -115,14 +115,14 @@ Persistence shapes live in `lib/db/schema.ts` (ADR-013). The spec fixes their me
 | Table | Status | Purpose |
 |---|---|---|
 | `repositories` | kept | one row per indexed repo; gains `indexedHead` (git commit at last index) |
-| `files` | extended | adds `language`, `sizeBytes`, `lineCount`, `isTest`, `folderId`. `contentHash` keeps its single owner and meaning (ADR-022) |
+| `files` | extended | adds `language`, `sizeBytes`, `lineCount`, `isTest`, `importSpecifiers` (raw specifiers as JSON, so unchanged files are re-resolved without re-parsing). `contentHash` keeps its single owner and meaning (ADR-022) |
 | `imports` | kept | file → file edges; now produced from the AST |
-| `chunks` | kept | retrieval units (existing chunker); feeds the code FTS index |
+| `chunks` | kept | retrieval units (existing chunker); feeds the code FTS index; `chunkId` is now unique per file |
 | `vectors` | **retired** | chunk embeddings; replaced by `summary_vectors` (§5.4) |
 | `meta` | kept | lock, model ids, schema version, per-stage status (§5.7) |
-| `folders` | new | `path` (unique per repo), `parentId`, `depth`, `name`, `fileCount` (recursive), `directFileCount` |
+| `folders` | new | `path` (unique per repo), `parentPath`, `depth`, `name`, `fileCount` (recursive), `directFileCount` |
 | `level_edges` | new | aggregated edges per level (§4.2): `levelPath`, `sourceNode`, `targetNode`, `count` |
-| `symbols` | new | top-level declarations **and class members**: `name`, `qualifiedName` (`Class.method`), `kind`, `startLine`, `endLine`, `exported`, `parentSymbolId` |
+| `symbols` | new | top-level declarations **and class members**: `name`, `qualifiedName` (`Class.method`), `kind`, `startLine`, `endLine`, `exported`, `parentQualifiedName` (a string, so whole batches insert without needing ids first) |
 | `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (≤ 6 words), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped, off) |
 | `summary_vectors` | new | one embedding per fresh summary (encode/decode pair, ADR-017) |
 | `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks |
