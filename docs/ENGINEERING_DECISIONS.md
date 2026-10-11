@@ -273,7 +273,7 @@
 - The camelCase split of a chunk's name needs JavaScript, so it is computed once at write time and stored on the chunk (`chunks.name_split`), where the insert trigger can read it.
 - Both tables use the `porter unicode61` tokenizer and keep their bm25 column weights as the `rank` setting.
 **Alternatives:** (a) Explicit writes in the structure store: misses cascades and the old pipeline, so deleted code would keep turning up in search. (b) External-content tables: no duplicate text, but deleting a row needs its old values, which a cascade has already removed. (c) Contentless tables (`contentless_delete=1`): smaller, but `snippet()` stops working and snippets would need their own code.
-**Consequences:** The search indexes can't drift from the data, whichever path changes it. The text is stored twice (the pivot spike measured 211 MB for VS Code's chunks), and every chunk insert also writes an FTS row (the spike measured 4.8 s for all of VS Code). Migration 0004 clears every content hash once, so existing chunks get indexed on the next run.
+**Consequences:** The search indexes can't drift from the data, whichever path changes it. The text is stored twice (the pivot spike measured 211 MB for VS Code's chunks), and every chunk insert also writes an FTS row: measured on VS Code, the cold write stage went from 13.1 s to 27.4 s, and the structure stage still passed S1 at 56.4 s (BENCHMARKS.md, Index Benchmark #2). Migration 0004 clears every content hash once, so existing chunks get indexed on the next run.
 **Revisit when:** database size starts to matter, or the FTS writes push S1 past 60 s.
 
 ---
