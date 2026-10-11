@@ -50,7 +50,8 @@ export function parseSummary(reply: Pick<Reply, "stop_reason" | "content">): Sum
     if (reply.stop_reason === "refusal") throw new Error("the model declined to summarize this");
     if (reply.stop_reason === "max_tokens") throw new Error(`the reply ran past ${MAX_OUTPUT_TOKENS} output tokens`);
 
-    const text = reply.content.find((block) => block.type === "text")?.text;
+    // the last text block is the answer that stood: a Sonnet fallback leaves the declined partial before its marker
+    const text = reply.content.findLast((block) => block.type === "text")?.text;
     if (!text) throw new Error("the reply had no text");
 
     let json: unknown;
@@ -65,6 +66,7 @@ export function parseSummary(reply: Pick<Reply, "stop_reason" | "content">): Sum
 
     // "≤ 6 words" (PIVOT_SPEC.md §4.1) is a promise to the UI, so it's enforced here, not just asked for
     const tagline = parsed.data.tagline.split(/\s+/).slice(0, 6).join(" ").replace(/\.+$/, "");
+    if (!tagline) throw new Error("the reply didn't have a tagline and a summary");
     return { tagline, summary: parsed.data.summary };
 }
 

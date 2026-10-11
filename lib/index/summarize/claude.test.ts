@@ -35,6 +35,12 @@ describe("parseSummary", () => {
         expect(() => parseSummary(reply(GOOD, { content: [{ type: "thinking" }] }))).toThrow("the reply had no text");
         expect(() => parseSummary(reply("{not json"))).toThrow("the reply wasn't valid JSON");
         expect(() => parseSummary(reply(JSON.stringify({ tagline: "x" })))).toThrow("the reply didn't have a tagline and a summary");
+        expect(() => parseSummary(reply(JSON.stringify({ tagline: "...", summary: "Writes log lines." })))).toThrow("the reply didn't have a tagline and a summary");
+    });
+
+    it("reads the answer that stood when a fallback model took over partway", () => {
+        expect(parseSummary(reply(GOOD, { content: [{ type: "text", text: '{"tagl' }, { type: "fallback" }, { type: "text", text: GOOD }] })))
+            .toEqual({ tagline: "Logging helpers", summary: "Writes log lines." });
     });
 });
 
