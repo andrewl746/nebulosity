@@ -7,8 +7,10 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
+import { readStages, type StoredStage } from "../db/store/stages";
+import { findRepository } from "../db/store/structure";
 import { repoKey } from "./paths";
-import { indexRepository, RepoNotFoundError } from "./pipeline";
+import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
 
 function levelRows(repoId: number, levelPath: string) {
     return getDb()
@@ -159,5 +161,43 @@ describe("indexRepository — progress", () => {
             "resolve 8/8",
             "aggregate 6/6",
         ]);
+    });
+});
+
+describe("indexRepository — stage status", () => {
+    it("marks the structure stage failed when a run dies mid-way, rethrows the error, and releases the lock", () => {
+        const db = getDb();
+        const root = copyFixture();
+        const boom = new Error("boom");
+        const structureRow = () => readStages(db, findRepository(db, repoKey(root))!).structure;   // what GET /api/status would read right now
+
+        // the stage row that the first event of each stage finds
+        const seen: Partial<Record<IndexStage, StoredStage>> = {};
+        let thrown: unknown;
+        try{
+            indexRepository(root, {
+                batchSize: 3,   // 8 files in three batches, as in the progress test
+                onProgress: (stage) => {
+                    if (!(stage in seen)) seen[stage] = structureRow();
+                    if (stage === "resolve") throw boom;   // every file is written by now; die before any import is resolved
+                },
+            });
+        } catch (err){
+            thrown = err;
+        }
+
+        expect(thrown).toBe(boom);   // the very same error, not a copy or a wrapper
+        expect(seen.discover).toMatchObject({ state: "running" });   // running from the first moment, not idle until the first batch
+        expect(seen.parse).toMatchObject({ state: "running", total: 8 });   // the total is known before the first file is parsed
+        expect(seen.resolve).toMatchObject({ state: "running", done: 8, total: 8 });   // every batch had been recorded by then
+
+        const repoId = findRepository(db, repoKey(root))!;
+        expect(readStages(db, repoId).structure).toMatchObject({ state: "failed", done: 0, total: 0, note: "boom" });
+
+        // the lock was released, so the next run goes through and replaces the failure
+        expect(() => indexRepository(root)).not.toThrow();
+        const recovered = readStages(db, repoId).structure;
+        expect(recovered).toMatchObject({ state: "ready", done: 8, total: 8 });
+        expect(recovered?.note).toBeUndefined();   // nothing of the failure lingers
     });
 });

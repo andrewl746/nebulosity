@@ -27,10 +27,15 @@ describe("readIndexStatus", () => {
         const { repoId } = indexRepository(root);
         writeStage(getDb(), repoId, "summaries", { state: "running", done: 2, total: 14 });
 
+        const fourMinutesLater = new Date(Date.now() + 4 * 60 * 1000);
         const sixMinutesLater = new Date(Date.now() + 6 * 60 * 1000);
         const later = readIndexStatus(root, sixMinutesLater)?.stages.summaries;
         expect(later).toMatchObject({ state: "failed", done: 2, total: 14 });
         expect(later?.note).toMatch(/^interrupted: no progress since \d{4}-/);
         expect(readIndexStatus(root)?.stages.summaries.state).toBe("running");   // right now it's still fine
+        expect(readIndexStatus(root, fourMinutesLater)?.stages.summaries.state).toBe("running");   // and so is 4 minutes on: the limit is 5
+
+        // only a "running" row can be interrupted: the finished structure stage just gets old
+        expect(readIndexStatus(root, sixMinutesLater)?.stages.structure).toEqual({ state: "ready", done: 8, total: 8 });
     });
 });
