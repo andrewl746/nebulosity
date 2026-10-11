@@ -59,6 +59,14 @@ describe("indexRepository — first run on the fixture", () => {
             .from(files).where(and(eq(files.repoId, result.repoId), eq(files.path, "src/util/strings.test.ts"))).get();
         expect(testFile).toEqual({ isTest: true });
     });
+
+    it("records scripts/build.js as javascript and the seven .ts/.tsx files as typescript", () => {
+        const { repoId } = indexRepository(copyFixture());
+        const rows = getDb().select({ path: files.path, language: files.language }).from(files)
+            .where(eq(files.repoId, repoId)).orderBy(files.path).all();
+        expect(rows.filter((r) => r.language === "javascript").map((r) => r.path)).toEqual(["scripts/build.js"]);
+        expect(rows.filter((r) => r.language === "typescript")).toHaveLength(7);
+    });
 });
 
 describe("indexRepository — incremental runs", () => {

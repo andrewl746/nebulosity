@@ -6,6 +6,11 @@ import type { SymbolKind, SymbolRow } from "../../db/schema";
 /** Every extension this adapter claims (TypeScript parses JavaScript too). */
 export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
+/** files.language for a path this adapter claims. TypeScript's parser reads both languages. */
+export function languageOf(filePath: string): "typescript" | "javascript" {
+    return /\.(js|jsx|mjs|cjs)$/.test(filePath) ? "javascript" : "typescript";
+}
+
 export type ParsedFile = {
     chunks: CodeChunk[];
     symbols: SymbolRow[];

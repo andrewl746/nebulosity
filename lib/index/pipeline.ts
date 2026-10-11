@@ -9,7 +9,7 @@ import {
 } from "../db/store/structure";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
-import { TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
+import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
 import { normalizeSlashes } from "./paths";
 import { createResolver } from "./resolve";
 
@@ -121,7 +121,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                         path: file.path,
                         kind: /\.(tsx|jsx)$/.test(file.path) ? "component" : "module",
                         contentHash,
-                        language: "typescript",
+                        language: languageOf(file.path),
                         sizeBytes: file.sizeBytes,
                         lineCount: parsed.lineCount,
                         isTest: isTestPath(file.path),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countLines, parseTypeScriptFile } from "./typescript";
+import { countLines, languageOf, parseTypeScriptFile } from "./typescript";
 
 const LOG_TS = [
     "/** Writes a message. */",
@@ -93,5 +93,12 @@ describe("parseTypeScriptFile — chunks and lines", () => {
         expect(countLines(LOG_TS)).toBe(9);
         expect(countLines("a\nb")).toBe(2);
         expect(countLines("")).toBe(0);
+    });
+});
+
+describe("languageOf", () => {
+    it("calls .js, .jsx, .mjs and .cjs files javascript and the rest typescript", () => {
+        expect(["a.js", "a.jsx", "a.mjs", "a.cjs"].map(languageOf)).toEqual(["javascript", "javascript", "javascript", "javascript"]);
+        expect(["a.ts", "a.tsx", "a.mts", "a.cts"].map(languageOf)).toEqual(["typescript", "typescript", "typescript", "typescript"]);
     });
 });
