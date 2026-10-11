@@ -35,3 +35,15 @@ export class BatchGoneError extends Error {
         this.name = "BatchGoneError";
     }
 }
+
+/**
+ * Thrown by batchResults when Anthropic rejects the API key (401) or what it may do (403).
+ * Polling again can't fix that, so the runner stops at once instead of counting it as a
+ * missed poll. The batches stay at Anthropic; a run with a working key collects them.
+ */
+export class SummarizerAuthError extends Error {
+    constructor(readonly reason: string){
+        super(`Anthropic rejected the API key: ${reason}`);
+        this.name = "SummarizerAuthError";
+    }
+}

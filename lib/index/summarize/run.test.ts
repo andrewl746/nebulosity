@@ -13,7 +13,7 @@ import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
 import { runSummaries, summarizeNow, TargetNotFoundError } from "./run";
-import { BatchGoneError, type Summarizer } from "./types";
+import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 function indexedFixture(): string {
     const root = copyFixture();
@@ -173,6 +173,61 @@ describe("runSummaries — the Batch API", () => {
         expect(rows(root).filter((r) => r.status === "failed")).toHaveLength(7);
         expect(stub.requests.find((r) => r.prompt.startsWith("Folder: src/core"))?.prompt).toContain("- log.ts (9 lines): (no summary yet)");
         expect(row(root, "")).toMatchObject({ status: "fresh" });
+    });
+
+    it("rides out a poll that errors: it says so, and polls that batch again on the next pass", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer({ failPolls: 1 });
+        const said: string[] = [];
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0, onProgress: (m) => said.push(m) }))
+            .toMatchObject({ summarized: 13, failed: 0, batches: 4, waves: 4, inFlight: 0 });
+        // the first batch's first poll failed, so it was polled once more than the other three
+        expect([...stub.batches.values()].map((b) => b.polls)).toEqual([2, 1, 1, 1]);
+        const [first] = stub.batches.keys();
+        expect(said).toContain(`couldn't check ${first} (Connection error.); will retry`);
+    });
+
+    it("gives up after 5 missed polls in a row, and the stage stays running: the batch is still at Anthropic", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        let polls = 0;
+        const offline: Summarizer = {
+            ...stub.summarizer,
+            async batchResults(){
+                polls++;
+                throw new Error("Connection error.");
+            },
+        };
+
+        await expect(runSummaries(root, { summarizer: offline, transport: "batch", pollIntervalMs: 0 })).rejects.toThrow("Connection error.");
+        expect(polls).toBe(5);   // MAX_MISSED_POLLS
+
+        // the 7 files' batch is still at Anthropic: running, not failed, long after this process is gone
+        const muchLater = new Date(Date.now() + 6 * 60 * 1000);
+        expect(readIndexStatus(root, muchLater)?.stages.summaries).toEqual({
+            state: "running", done: 1, total: 14, note: "Connection error.; 7 requests still at Anthropic; run npm run summarize to collect them",
+        });
+    });
+
+    it("stops at the first poll when Anthropic rejects the key, without retrying", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        let polls = 0;
+        const revoked: Summarizer = {
+            ...stub.summarizer,
+            async batchResults(){
+                polls++;
+                throw new SummarizerAuthError("API error 401: invalid x-api-key");
+            },
+        };
+
+        await expect(runSummaries(root, { summarizer: revoked, transport: "batch", pollIntervalMs: 0 })).rejects.toThrow(SummarizerAuthError);
+        expect(polls).toBe(1);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "running", done: 1, total: 14,
+            note: "Anthropic rejected the API key: API error 401: invalid x-api-key; 7 requests still at Anthropic; run npm run summarize to collect them",
+        });
     });
 });
 

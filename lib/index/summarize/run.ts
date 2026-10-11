@@ -15,7 +15,7 @@ import { repoKey } from "../paths";
 import { mapLimit } from "./concurrency";
 import { planSummaries, type PlannedTarget, type TargetState } from "./plan";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, plural, REPO_SYSTEM_PROMPT, renderFilePrompt, SUMMARY_MODELS } from "./prompts";
-import { BatchGoneError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
+import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** auto: the Batch API for waves of BATCH_THRESHOLD requests or more, the regular API below that. */
 export type Transport = "auto" | "direct" | "batch";
@@ -60,6 +60,12 @@ export type SummaryRunResult = {
 export const BATCH_THRESHOLD = 100;
 /** Requests per Message Batch (PIVOT_SPEC.md §5.3), so one failed upload loses little. */
 export const MAX_BATCH_REQUESTS = 5_000;
+/**
+ * A poll that errors (a dropped connection, a laptop waking from sleep) is a missed poll: the run says so and asks
+ * again on its next pass. This many misses in a row, across every batch, means the problem isn't passing, so the
+ * run stops. Its batches are still at Anthropic, and the next run collects them.
+ */
+export const MAX_MISSED_POLLS = 5;
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_POLL_MS = 60_000;
 const DEFAULT_HEARTBEAT_MS = 30_000;
@@ -89,8 +95,19 @@ type RunContext = {
     root: string;
     failedThisRun: Set<string>;
     tally: Tally;
+    /** Polls that errored since the last one that got an answer (MAX_MISSED_POLLS). */
+    missedPolls: number;
     say: (message: string) => void;
 };
+
+function newContext(db: Db, repoId: number, root: string, say: (message: string) => void): RunContext {
+    return {
+        db, repoId, root, say,
+        failedThisRun: new Set(),
+        tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
+        missedPolls: 0,
+    };
+}
 
 /** Where an answer goes: its row, and the input it answers. */
 type Destination = { id: number; kind: SummaryTargetKind; path: string; inputHash: string; batchId: string | null };
@@ -106,12 +123,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     const summarizer = options.summarizer;
-    const ctx: RunContext = {
-        db, repoId, root,
-        failedThisRun: new Set(),
-        tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
-        say: options.onProgress ?? (() => {}),
-    };
+    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}));
     let last: PlannedTarget[] = [];
 
     acquireSummaryLock(db);
@@ -150,7 +162,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             return finish(ctx, snap.targets, summarizer !== null);
         }
     } catch (err){
-        writeStage(db, repoId, "summaries", { state: "failed", done: upToDate(last), total: last.length, note: messageOf(err) });
+        reportRunError(db, repoId, last, err);
         throw err;
     } finally{
         releaseSummaryLock(db);
@@ -173,7 +185,7 @@ export async function summarizeNow(repoRoot: string, targetPath: string, summari
     const ids = applyTargetUpdates(db, repoId, [target]);
 
     if (target.state !== "current" && target.state !== "template"){
-        const ctx: RunContext = { db, repoId, root, failedThisRun: new Set(), tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 }, say: () => {} };
+        const ctx = newContext(db, repoId, root, () => {});
         const built = buildRequest(ctx, snap, target, ids);
         const outcome = "failure" in built ? built.failure : await summarizer.summarize(built.request);
         const destinations = destinationsFor([target], ids);
@@ -305,41 +317,15 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
 }
 
 /**
- * Polls the batches still at Anthropic until one has ended, then writes its answers. A batch
- * Anthropic no longer has (BatchGoneError) has its rows marked failed, which releases them:
- * the next run resends them instead of failing at the same batch forever.
+ * Polls the batches still at Anthropic until one has ended, then writes its answers.
+ * It can't wait forever: each pass either collects a batch, hears that one is still
+ * processing (Anthropic ends every batch within 24 hours), or misses its polls, and
+ * MAX_MISSED_POLLS misses in a row end the run.
  */
 async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollIntervalMs: number, heartbeat: () => void): Promise<void> {
     for (;;){
         for (const batchId of inFlightBatches(ctx.db, ctx.repoId)){
-            let outcomes: SummaryOutcome[] | null;
-            try{
-                outcomes = await summarizer.batchResults(batchId);
-            } catch (err){
-                if (!(err instanceof BatchGoneError)) throw err;
-
-                const rows = loadBatchRows(ctx.db, batchId);
-                const destinations = new Map(rows.map((r) => [`s${r.id}`, { ...r, batchId }]));
-                const error = `the batch is no longer available at Anthropic (${err.reason})`;
-                ingest(ctx, [...destinations.keys()].map((customId) => ({ customId, ok: false, error, model: null, usage: null })),
-                    "batch", (customId) => destinations.get(customId));
-                ctx.say(`${batchId} is gone at Anthropic: ${plural(rows.length, "request")} failed (resent next run)`);
-                return;
-            }
-            if (outcomes === null) continue;
-
-            const destinations = new Map(loadBatchRows(ctx.db, batchId).map((r) => [`s${r.id}`, { ...r, batchId }]));
-            ingest(ctx, outcomes, "batch", (customId) => destinations.get(customId));
-
-            // a row the results never mention would otherwise stay "in flight" forever
-            const answered = new Set(outcomes.map((o) => o.customId));
-            const missing = [...destinations.keys()].filter((customId) => !answered.has(customId));
-            ingest(ctx, missing.map((customId) => ({ customId, ok: false, error: "missing from the batch's results", model: null, usage: null })),
-                "batch", (customId) => destinations.get(customId));
-
-            const ok = outcomes.filter((o) => o.ok).length;
-            ctx.say(`collected ${batchId}: ${ok} summarized, ${outcomes.length - ok + missing.length} failed`);
-            return;
+            if (await pollBatch(ctx, summarizer, batchId)) return;
         }
 
         touchSummaryLock(ctx.db);
@@ -347,6 +333,65 @@ async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollInt
         ctx.say(`waiting on Anthropic (next check in ${Math.round(pollIntervalMs / 1000)} s)`);
         await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
+}
+
+/**
+ * Asks Anthropic about one batch. Returns true when the batch is done with: its answers
+ * were written, or Anthropic no longer has it (BatchGoneError), in which case its rows
+ * are marked failed, which releases them: the next run resends them instead of failing at
+ * the same batch forever. Returns false while the batch is still processing, and after a
+ * missed poll.
+ */
+async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: string): Promise<boolean> {
+    let outcomes: SummaryOutcome[] | null;
+    try{
+        outcomes = await summarizer.batchResults(batchId);
+    } catch (err){
+        if (err instanceof SummarizerAuthError) throw err;   // asking again with the same key can't help
+        if (!(err instanceof BatchGoneError)){
+            missedPoll(ctx, batchId, err);
+            return false;
+        }
+
+        ctx.missedPolls = 0;   // a 404 is still an answer: the connection works
+        const rows = loadBatchRows(ctx.db, batchId);
+        const destinations = new Map(rows.map((r) => [`s${r.id}`, { ...r, batchId }]));
+        const error = `the batch is no longer available at Anthropic (${err.reason})`;
+        ingest(ctx, [...destinations.keys()].map((customId) => ({ customId, ok: false, error, model: null, usage: null })),
+            "batch", (customId) => destinations.get(customId));
+        ctx.say(`${batchId} is gone at Anthropic: ${plural(rows.length, "request")} failed (resent next run)`);
+        return true;
+    }
+
+    ctx.missedPolls = 0;
+    if (outcomes === null) return false;
+
+    const destinations = new Map(loadBatchRows(ctx.db, batchId).map((r) => [`s${r.id}`, { ...r, batchId }]));
+    ingest(ctx, outcomes, "batch", (customId) => destinations.get(customId));
+
+    // a row the results never mention would otherwise stay "in flight" forever
+    const answered = new Set(outcomes.map((o) => o.customId));
+    const missing = [...destinations.keys()].filter((customId) => !answered.has(customId));
+    ingest(ctx, missing.map((customId) => ({ customId, ok: false, error: "missing from the batch's results", model: null, usage: null })),
+        "batch", (customId) => destinations.get(customId));
+
+    const ok = outcomes.filter((o) => o.ok).length;
+    ctx.say(`collected ${batchId}: ${ok} summarized, ${outcomes.length - ok + missing.length} failed`);
+    return true;
+}
+
+/**
+ * A poll that errored. The SDK has already retried it (maxRetries: 3), so this is more than a
+ * blip, but a connection that drops for a few minutes still comes back: the batch is asked
+ * about again on the next pass. MAX_MISSED_POLLS misses in a row rethrow the error.
+ */
+function missedPoll(ctx: RunContext, batchId: string, err: unknown): void {
+    ctx.missedPolls++;
+    if (ctx.missedPolls >= MAX_MISSED_POLLS){
+        ctx.say(`couldn't check ${batchId} (${messageOf(err)}); giving up after ${MAX_MISSED_POLLS} missed polls in a row`);
+        throw err;
+    }
+    ctx.say(`couldn't check ${batchId} (${messageOf(err)}); will retry`);
 }
 
 /** Writes outcomes to their rows and adds their tokens to the repo's spend. */
@@ -417,6 +462,28 @@ function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarize
         ...(notes.length > 0 ? { note: notes.join("; ") } : {}),
     });
     return result;
+}
+
+/**
+ * The stage after a run stopped on an error. Requests still at Anthropic go on without this
+ * process, and the next run collects them, so the stage stays "running" (ADR-032's exception)
+ * instead of calling paid-for work failed.
+ */
+function reportRunError(db: Db, repoId: number, targets: readonly PlannedTarget[], err: unknown): void {
+    try{
+        const inFlight = countInFlight(db, repoId);
+        const progress = { done: upToDate(targets), total: targets.length };
+        writeStage(db, repoId, "summaries", inFlight > 0
+            ? { state: "running", ...progress, note: `${messageOf(err)}; ${stillAtAnthropic(inFlight)}` }
+            : { state: "failed", ...progress, note: messageOf(err) });
+    } catch{
+        // the database itself may be what failed (SQLITE_BUSY, say); the original error matters more
+    }
+}
+
+/** The note for requests a stopped run leaves at Anthropic: they're paid for, and the next run collects them. */
+function stillAtAnthropic(inFlight: number): string {
+    return `${plural(inFlight, "request")} still at Anthropic; run npm run summarize to collect them`;
 }
 
 function upToDate(targets: readonly PlannedTarget[]): number {

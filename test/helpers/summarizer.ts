@@ -8,6 +8,8 @@ export type StubOptions = {
     failPaths?: string[];
     /** How many polls a batch answers null before its results are ready. */
     pollsBeforeDone?: number;
+    /** How many polls, counting every batch, throw "Connection error." before polling works normally. A failed poll still counts as a poll. */
+    failPolls?: number;
 };
 
 /**
@@ -19,6 +21,7 @@ export function stubSummarizer(options: StubOptions = {}){
     const requests: SummaryRequest[] = [];
     const batches = new Map<string, { requests: SummaryRequest[]; polls: number }>();
     let written = 0;
+    let failedPolls = 0;
 
     const answer = (request: SummaryRequest): SummaryOutcome => {
         const subject = request.prompt.split("\n")[0];
@@ -48,6 +51,10 @@ export function stubSummarizer(options: StubOptions = {}){
             const batch = batches.get(id);
             if (!batch) throw new Error(`no batch ${id}`);
             batch.polls++;
+            if (failedPolls < (options.failPolls ?? 0)){
+                failedPolls++;
+                throw new Error("Connection error.");
+            }
             return batch.polls > (options.pollsBeforeDone ?? 0) ? batch.requests.map(answer) : null;
         },
     };

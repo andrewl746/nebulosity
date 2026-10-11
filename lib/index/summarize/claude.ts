@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { SummaryText } from "../../db/store/summaries";
 import { MAX_OUTPUT_TOKENS, SUMMARY_EFFORT } from "./prompts";
-import { BatchGoneError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
+import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** The reply we ask for, enforced by structured outputs (output_config.format). */
 export const SUMMARY_SCHEMA = {
@@ -133,8 +133,12 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
                 }
                 return outcomes;
             } catch (err){
-                // a 404 is permanent (results past retention, or another workspace's key); anything else may heal
+                // A 404 is permanent (results past retention, or another workspace's key), and so is a rejected key.
+                // Anything else (a dropped connection, a 5xx) may heal: the runner counts it as a missed poll.
                 if (err instanceof Anthropic.NotFoundError) throw new BatchGoneError(batchId, messageOf(err));
+                if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError){
+                    throw new SummarizerAuthError(messageOf(err));
+                }
                 throw err;
             }
         },

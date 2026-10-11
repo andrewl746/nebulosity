@@ -162,6 +162,7 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 |---|---|---|
 | No API key | No summaries | Stage `off` with the reason; templates, structure and code search still work |
 | Batch takes hours | Summaries arrive late | Keyword search works meanwhile; `--no-wait` and resume; `summarizeNow` for what someone opens |
+| The network drops while waiting on a batch | Polls fail | A failed poll is asked again on the next pass. After 5 in a row, or a rejected key, the run stops; the stage stays `running`, and the next run collects the batch |
 | File edited after indexing | Summary would describe bytes the index never saw | That target fails with "changed after it was indexed" and is retried after `npm run index` |
 | Model refusal | A summary fails | Sonnet's regular-API requests fall back server-side; batch refusals are retried next run, in a small wave that goes direct |
 | Embedding model can't load | No meaning search | Keyword lists still answer, and the `note` says so |

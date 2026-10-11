@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClaudeSummarizer, outcomeFromBatchItem, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
 import { FILE_SYSTEM_PROMPT } from "./prompts";
-import { BatchGoneError, type SummaryRequest } from "./types";
+import { BatchGoneError, SummarizerAuthError, type SummaryRequest } from "./types";
 
 const GOOD = JSON.stringify({ tagline: "Logging helpers", summary: "Writes log lines." });
 const reply = (text: string, overrides: Record<string, unknown> = {}) => ({
@@ -68,7 +68,7 @@ describe("outcomeFromBatchItem", () => {
 describe("createClaudeSummarizer", () => {
     function fakeClient(){
         const calls: { endpoint: string; params: Record<string, unknown> }[] = [];
-        const state = { ended: false, fail: false, gone: false };
+        const state = { ended: false, fail: false, gone: false, denied: null as 401 | 403 | null, offline: false };
         const client = {
             messages: {
                 create: async (params: Record<string, unknown>) => {
@@ -80,6 +80,9 @@ describe("createClaudeSummarizer", () => {
                     create: async (params: Record<string, unknown>) => { calls.push({ endpoint: "batches", params }); return { id: "msgbatch_1" }; },
                     retrieve: async () => {
                         if (state.gone) throw new Anthropic.NotFoundError(404, { type: "error", error: { type: "not_found_error", message: "batch not found" } }, "batch not found", new Headers());
+                        if (state.denied === 401) throw new Anthropic.AuthenticationError(401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, "invalid x-api-key", new Headers());
+                        if (state.denied === 403) throw new Anthropic.PermissionDeniedError(403, { type: "error", error: { type: "permission_error", message: "not allowed" } }, "not allowed", new Headers());
+                        if (state.offline) throw new Error("Connection error.");
                         return { processing_status: state.ended ? "ended" : "in_progress" };
                     },
                     results: async () => (async function* (){
@@ -131,5 +134,20 @@ describe("createClaudeSummarizer", () => {
         const { client, state } = fakeClient();
         state.gone = true;
         await expect(createClaudeSummarizer(client).batchResults("msgbatch_1")).rejects.toThrow(BatchGoneError);
+    });
+
+    it("reports a rejected key (401, 403) as SummarizerAuthError, and passes a network error through unchanged", async () => {
+        const { client, state } = fakeClient();
+        const summarizer = createClaudeSummarizer(client);
+
+        state.denied = 401;
+        await expect(summarizer.batchResults("msgbatch_1")).rejects.toThrow(SummarizerAuthError);
+        state.denied = 403;
+        await expect(summarizer.batchResults("msgbatch_1")).rejects.toThrow(SummarizerAuthError);
+
+        // the runner counts this one as a missed poll and asks again
+        state.denied = null;
+        state.offline = true;
+        await expect(summarizer.batchResults("msgbatch_1")).rejects.toThrow(/^Connection error\.$/);
     });
 });
