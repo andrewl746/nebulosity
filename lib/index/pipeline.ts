@@ -5,10 +5,10 @@ import { getDb } from "../db/client";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
 import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
-    type FileRecord,
+    type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
 import { buildFolders, buildLevelEdges } from "./aggregate";
-import { discoverFiles, isTestPath, readGitHead } from "./discover";
+import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
 import { TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
 import { normalizeSlashes } from "./paths";
 import { createResolver } from "./resolve";
@@ -32,8 +32,8 @@ export type IndexResult = {
     edges: number;
     folders: number;
     levelEdges: number;
-    errors: { path: string; error: string }[];
-    skipped: { path: string; reason: string }[];
+    errors: FileError[];
+    skipped: SkippedFile[];
     timingsMs: Record<IndexStage, number>;
     totalMs: number;
     usedGit: boolean;
@@ -86,7 +86,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         timingsMs.discover = performance.now() - t;
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
-        const errors: { path: string; error: string }[] = [];
+        const errors: FileError[] = [];
         let changed = 0;
         let unchanged = 0;
 
@@ -148,7 +148,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const current = loadStoredFiles(db, repoId);
         const fileSet = new Set(current.keys());
         const resolve = createResolver(root, fileSet);
-        const edges: { source: string; target: string; specifier: string }[] = [];
+        const edges: ImportEdge[] = [];
 
         for (const [source, file] of current){
             const targets = new Set<string>();

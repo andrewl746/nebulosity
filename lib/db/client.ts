@@ -49,3 +49,6 @@ export function getDb(){
 
     return globalForDb.db;
 }
+
+/** The database handle every store function takes. */
+export type Db = ReturnType<typeof getDb>;

@@ -1,8 +1,6 @@
 import { eq } from "drizzle-orm";
-import type { getDb } from "../client";
+import type { Db } from "../client";
 import { META_KEYS, meta } from "../schema";
-
-type Db = ReturnType<typeof getDb>;
 
 /**
  * Thrown when another run holds the indexing lock. A distinct type rather than a

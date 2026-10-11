@@ -134,3 +134,10 @@ export const levelEdges = sqliteTable("level_edges", {
 }, (t) => [
     uniqueIndex("level_edges_unique").on(t.repoId, t.levelPath, t.sourceNode, t.targetNode)
 ]);
+
+/** A symbol as the language adapter produces it and the store writes it: every column but the ids. */
+export type SymbolRow = Omit<typeof symbols.$inferSelect, "id" | "fileId">;
+/** A folder as the aggregator builds it and the store writes it. */
+export type FolderRow = Omit<typeof folders.$inferSelect, "id" | "repoId">;
+/** A level edge as the aggregator builds it and the store writes it. */
+export type LevelEdgeRow = Omit<typeof levelEdges.$inferSelect, "id" | "repoId">;

@@ -1,24 +1,14 @@
 import ts from "typescript";
 import { extractChunksFromSourceFile, parseSourceFile } from "../../chunks";
 import type { CodeChunk } from "../../contracts";
-import type { SymbolKind } from "../../db/schema";
+import type { SymbolKind, SymbolRow } from "../../db/schema";
 
 /** Every extension this adapter claims (TypeScript parses JavaScript too). */
 export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
-export type ParsedSymbol = {
-    name: string;
-    qualifiedName: string;
-    kind: SymbolKind;
-    startLine: number;
-    endLine: number;
-    exported: boolean;
-    parentQualifiedName: string | null;
-};
-
 export type ParsedFile = {
     chunks: CodeChunk[];
-    symbols: ParsedSymbol[];
+    symbols: SymbolRow[];
     /** Raw specifiers in source order, each once: "./a", "@core/log", "react". */
     imports: string[];
     lineCount: number;
@@ -77,8 +67,8 @@ function collectImports(sourceFile: ts.SourceFile): string[] {
     return [...new Set(found)];
 }
 
-function collectSymbols(sourceFile: ts.SourceFile): ParsedSymbol[] {
-    const symbols: ParsedSymbol[] = [];
+function collectSymbols(sourceFile: ts.SourceFile): SymbolRow[] {
+    const symbols: SymbolRow[] = [];
     const lineOf = (pos: number) => sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
 
     const add = (node: ts.Node, name: string, kind: SymbolKind, exported: boolean, parent: string | null): void => {

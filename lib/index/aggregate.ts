@@ -1,15 +1,5 @@
+import type { FolderRow, LevelEdgeRow } from "../db/schema";
 import { dirOf } from "./paths";
-
-export type FolderRow = {
-    path: string;
-    parentPath: string | null;
-    depth: number;
-    name: string;
-    fileCount: number;
-    directFileCount: number;
-};
-
-export type LevelEdgeRow = { levelPath: string; sourceNode: string; targetNode: string; count: number };
 
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const depthOf = (folder: string): number => (folder === "" ? 0 : folder.split("/").length);
