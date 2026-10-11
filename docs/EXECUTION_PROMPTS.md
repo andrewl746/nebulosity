@@ -1,5 +1,7 @@
 # EXECUTION_PROMPTS.md — Paste-able Kickoff Prompts per Phase
 
+> **2026-10-11 — pivot:** the Phase 5 and 6 prompts are superseded and the Phase S material is dropped (ADR-025). The pivot is driven by `PIVOT_SPEC.md` and its implementation plans instead.
+
 **Status:** Utility doc, written 2026-07-12
 **Purpose:** each block below is a complete prompt to paste into a fresh model session to start that phase. They front-load the reading list, the constraints models most often violate, and the exact verification commands — so a weaker model starts pointed the right way instead of rediscovering (or misremembering) the design.
 

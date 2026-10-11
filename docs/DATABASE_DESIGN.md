@@ -1,5 +1,7 @@
 # DATABASE_DESIGN.md — Embedded Relational Storage (SQLite + Drizzle)
 
+> **2026-10-11 — pivot:** the schema is extended (folders, level_edges, symbols, summaries, summary_vectors, FTS5), the chunk `vectors` table retires, and every write is batched under SQLite's 32,766-parameter cap. See `PIVOT_SPEC.md` §4; this doc is rewritten in slice V1.1.
+
 **Status:** Approved design, implemented 2026-07-12 (schema live, wired to the app in Phase D)
 **Supersedes:** the JSON file store (see ADR-006 → ADR-013 in `ENGINEERING_DECISIONS.md`)
 **Source of truth in code:** `lib/db/schema.ts`. This doc explains the design; the schema file *is* the schema. Keep both in sync per the maintenance rule.

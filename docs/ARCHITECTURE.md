@@ -1,5 +1,7 @@
 # ARCHITECTURE.md — Nebulosity System Architecture
 
+> **2026-10-11 — pivot:** `PIVOT_SPEC.md` is now the entry point. It supersedes §2's diagram (no native scanner; the MCP server and static exporter are new adapters), §5's layout and §6 Flow A. §3's layering rules still hold, and rule 4 now also requires a renderer-agnostic `contracts.ts`. Sections are rewritten as each pivot slice lands.
+
 **Status:** Approved design, not yet fully implemented
 **Date:** 2026-07-10
 **Audience:** The project owner (learning-focused) and any LLM or developer implementing phases of `IMPLEMENTATION_ROADMAP.md`

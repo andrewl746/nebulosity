@@ -1,5 +1,7 @@
 # nebulosity-scanner (native systems layer)
 
+> **Retired 2026-10-11 (ADR-025).** The C++ scanner was never built, and this directory is removed in pivot slice V1.1.
+
 A standalone C++17 executable that walks a repository, extracts import
 dependencies with a physical thread pool (one worker per hardware core), and
 streams the structural data back to the Node.js host as JSON over stdout.

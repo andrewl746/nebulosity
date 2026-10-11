@@ -1,5 +1,28 @@
 # IMPLEMENTATION_ROADMAP.md — Build Order
 
+> **2026-10-11 — the pivot (ADR-024, `PIVOT_SPEC.md`) replaces everything after Phase 4.** The current plan is the "Pivot roadmap" section directly below. Phases 0–4 and the P0/P1/D work stay here as history, and their acceptance criteria held. **Phase 5** is folded into extra E1 (the Guide). Its tool work in `lib/agent/tools.ts` seeds the new tool registry. **Phase 6** is superseded by the new Map (V1.3). **Phase S** is dropped (ADR-025). Ground rule 4 below ("no UI redesign") is lifted for the Map revamp (ADR-029).
+
+## Pivot roadmap (current, 2026-10-11)
+
+**Goal:** ship v1 by **2026-10-18**, with a slip budget of 2–4 days, then the extras in order. Every slice ends demoable. "Done" means `PIVOT_SPEC.md` §2's success criteria are measured on VS Code at `cc3fec88`, plus `npx tsc --noEmit && npm run lint && npx vitest run` passing clean. **Working mode:** build-first (`PIVOT_SPEC.md` §13).
+
+| Slice | Contents | Acceptance (spec §2) |
+|---|---|---|
+| **V1.1 Engine foundation** | `NEBULOSITY_HOME` paths; repo config; `git ls-files` discovery; TS adapter (AST imports + class members); resolver (nearest tsconfig); batched store; `folders` + `level_edges`; `npm run index`; benchmark | S1 ≤ 60 s on VS Code; batching regression test passes |
+| **V1.2 Understanding** | tiered summaries (Batch for the first pass, regular API on demand); summary embeddings; code and summary FTS; hybrid search with RRF; `/api/status` | S2 ≤ $15; day-1 Haiku vs Sonnet side-by-side reviewed by the owner |
+| **V1.3 Map** | level/describe/search APIs; new Map UI (levels, 50-box cap, panel, ⌘K, status pill); live channel | S3, S4, S6 measured |
+| **V1.4 MCP** | tool registry; `mcp/server.ts` (read-only DB); `claude mcp add` instructions; smoke test | S5; every tool exercised through `claude -p` |
+| **V1.5 Ship** | static export + hosted demo; eval vs Claude Code alone; README; demo-video script | S7, S8 |
+| **E1 Guide** | LangGraph agent per `LANGGRAPH_DESIGN.md`, using registry tools and map tools; owner picks the model at kickoff | own plan |
+| **E2 Call graph** | type-checker resolution (typed vs heuristic), call-flow view, `callers`/`callees`/`call_flow` | own plan; measure memory first |
+| **E3 Git overlays** | needs `git fetch --unshallow` (owner approval); History lens, hidden coupling, ownership | own plan |
+| **E4 tree-sitter** | `web-tree-sitter` adapters for Python + Go | own plan |
+| **E5 Clustering** | Louvain + cluster summaries + Clusters lens; PageRank importance | own plan |
+
+---
+
+## Original phases (history)
+
 **Status:** Approved plan. Execute phases strictly in order — each depends on the last.
 **Timeline:** ~7–10 weeks part-time (Phases D and S, added 2026-07-12 per ADR-013/014, add roughly 1.5 weeks). Estimates assume a developer learning as they go (that's the point).
 **Phase order:** 0 → P0 fixes → 1 → **P1 fixes (F5/F6)** → **D (data layer)** → **2** → **3** → **4** → 5 → 6 → **S (systems layer)**. *(0 through 4 are all complete as of 2026-09-04; **Phase 5, the LangGraph agent, is next**.)* *(S resequenced from between D and 2 to run last, 2026-07-20 — ADR-015. Its only hard prerequisite is F5/F6, and nothing in Phases 2–6 depends on it because the Node scanner is the always-available fallback — so deferring it protects the path to a demoable product.)*

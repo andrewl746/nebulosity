@@ -1,5 +1,7 @@
 # RAG_PIPELINE.md — Retrieval-Augmented Generation Design
 
+> **2026-10-11 — pivot:** search becomes hybrid (code FTS + summary FTS + summary embeddings, merged with RRF), and chunk-level embeddings are dropped (ADR-027). See `PIVOT_SPEC.md` §5–6; this doc is rewritten in slice V1.2. §2's chunking principles still hold.
+
 **Status:** Approved design
 **Implements:** Phases 2–4 of `IMPLEMENTATION_ROADMAP.md`
 **Depends on:** `DATABASE_DESIGN.md` (storage formats), `ENGINEERING_DECISIONS.md` ADR-004/005/006
