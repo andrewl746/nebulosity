@@ -85,7 +85,7 @@ type CodeChunk = {
 
 **Runs (ADR-033).** A run plans, sends whatever is ready, and repeats. Folders become ready as their children's summaries land, bottom-up.
 - **Transport.** A wave of 100+ requests goes through the Message Batches API at half price, in batches of up to 5,000. Smaller waves use the regular API, 4 at a time.
-- **Resuming.** Batch ids are stored on the rows, so an interrupted run resumes. Answers are matched by `custom_id` (the row id), never by position.
+- **Resuming.** Batch ids are stored on the rows, so an interrupted run resumes. Answers are matched by `custom_id` (the row id), never by position. `--no-wait` never sleeps: it collects the batches that have already ended, submits what that makes ready, and exits, so repeated runs (by hand, or from cron) work up the tree.
 - **Failures.** A failure doesn't block its folder ("no summary yet" stands in), and the next run retries it.
 - **The circuit breaker.** When at least 10 requests fail and they are more than half of a wave or batch, the cause is shared (a rejected key, an outage, files edited since indexing). The run then stops before planning another wave, so no folder is summarized over those placeholders and paid for again; the stage note starts with `stopped:`.
 - **Submitting.** A batch that can't be submitted stops the run. Its rows stay pending, and batches submitted before it are collected by the next run. A batch Anthropic accepted but the run couldn't record has its id printed and put in the error.

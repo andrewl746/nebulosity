@@ -159,7 +159,8 @@ describe("runSummaries — the Batch API", () => {
 
     it("with wait: false submits and returns; a later run collects that batch instead of resending it", async () => {
         const root = indexedFixture();
-        const stub = stubSummarizer();
+        // wait: false looks at its batches once, without sleeping: the batch must still be processing then
+        const stub = stubSummarizer({ pollsBeforeDone: 1 });
 
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", wait: false }))
             .toMatchObject({ batches: 1, waves: 1, inFlight: 7, summarized: 0, upToDate: 1 });
@@ -195,6 +196,25 @@ describe("runSummaries — the Batch API", () => {
         expect(rows(root).filter((r) => r.status === "failed")).toHaveLength(7);
         expect(stub.requests.find((r) => r.prompt.startsWith("Folder: src/core"))?.prompt).toContain("- log.ts (9 lines): (no summary yet)");
         expect(row(root, "")).toMatchObject({ status: "fresh" });
+    });
+
+    it("with wait: false collects batches that have already ended, so repeated runs work up the tree", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer({ pollsBeforeDone: 1 });
+        const noWait = { summarizer: stub.summarizer, transport: "batch" as const, wait: false };
+
+        // run 1 submits the 7 files; its one look finds that batch still processing
+        expect(await runSummaries(root, noWait)).toMatchObject({ summarized: 0, batches: 1, waves: 1, inFlight: 7, upToDate: 1 });
+        // run 2 collects the 7, submits the 4 leaf folders, and finds that batch still processing
+        expect(await runSummaries(root, noWait)).toMatchObject({ summarized: 7, batches: 1, waves: 1, inFlight: 4, upToDate: 8 });
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "running", done: 8, total: 14, note: "4 requests at Anthropic in batches; run npm run summarize to collect them",
+        });
+        // one level per run from here: src, then the repo, then there's nothing left to do
+        expect(await runSummaries(root, noWait)).toMatchObject({ summarized: 4, batches: 1, inFlight: 1, upToDate: 12 });
+        expect(await runSummaries(root, noWait)).toMatchObject({ summarized: 1, batches: 1, inFlight: 1, upToDate: 13 });
+        expect(await runSummaries(root, noWait)).toMatchObject({ summarized: 1, batches: 0, waves: 0, inFlight: 0, upToDate: 14 });
+        expect(stub.requests).toHaveLength(13);   // nothing was sent twice
     });
 
     it("counts the tokens of a batch answer whose row was redone meanwhile: that answer was paid for too", async () => {

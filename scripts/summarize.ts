@@ -3,8 +3,9 @@
  *
  * Writes summaries for an indexed repository (PIVOT_SPEC.md §5.3), then embeds them for search (§5.4).
  * - A big first pass goes through the Message Batches API at half price and can take hours.
- *   --no-wait submits and exits; running the command again collects what finished and
- *   carries on.
+ *   --no-wait never sleeps: it collects the batches that have already ended, submits what
+ *   that makes ready, and exits. Running the command again (by hand, or from cron) carries
+ *   on from there.
  * - --path summarizes one file or folder right now through the regular API (an empty path
  *   means the repo itself).
  */

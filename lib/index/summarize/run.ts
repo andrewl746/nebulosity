@@ -24,7 +24,10 @@ export type SummaryRunOptions = {
     /** null without an API key: test-file templates are still written; everything else waits for a key. */
     summarizer: Summarizer | null;
     transport?: Transport;
-    /** false: submit batches and return at once; running again collects them. */
+    /**
+     * false: never sleep. Batches that have already ended are collected (which may make a new wave ready, sent at
+     * once); the ones still processing are left for a later run.
+     */
     wait?: boolean;
     /** Redo out-of-date folders now (default). Incremental runs pass false: those wait until someone opens them. */
     refreshStaleFolders?: boolean;
@@ -179,10 +182,16 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             }
 
             const batches = inFlightBatches(db, repoId);
-            if (summarizer && batches.length > 0 && (options.wait ?? true)){
-                await collectNextBatch(ctx, summarizer, options.pollIntervalMs ?? DEFAULT_POLL_MS,
-                    () => progress(`waiting on ${plural(batches.length, "batch")} at Anthropic`));
-                continue;
+            if (summarizer && batches.length > 0){
+                if (options.wait ?? true){
+                    await collectNextBatch(ctx, summarizer, options.pollIntervalMs ?? DEFAULT_POLL_MS,
+                        () => progress(`waiting on ${plural(batches.length, "batch")} at Anthropic`));
+                    continue;
+                }
+
+                // wait: false looks once, without sleeping. Collecting a batch may make a new wave ready, so go round
+                // again; each collection takes a batch out of flight, and each target goes out once a run, so this ends.
+                if (await collectEndedBatches(ctx, summarizer) > 0) continue;
             }
 
             return finish(ctx, snap.targets, summarizer !== null);
@@ -391,6 +400,18 @@ async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollInt
         ctx.say(`waiting on Anthropic (next check in ${Math.round(pollIntervalMs / 1000)} s)`);
         await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
+}
+
+/**
+ * wait: false's single pass: asks about every batch at Anthropic once, with no sleeping,
+ * and collects each one that has ended. Returns how many it collected.
+ */
+async function collectEndedBatches(ctx: RunContext, summarizer: Summarizer): Promise<number> {
+    let collected = 0;
+    for (const batchId of inFlightBatches(ctx.db, ctx.repoId)){
+        if (await pollBatch(ctx, summarizer, batchId)) collected++;
+    }
+    return collected;
 }
 
 /**
