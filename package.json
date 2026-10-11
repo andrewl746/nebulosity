@@ -10,7 +10,8 @@
     "test": "vitest run",
     "index": "tsx scripts/index.ts",
     "summarize": "tsx scripts/summarize.ts",
-    "search": "tsx scripts/search.ts"
+    "search": "tsx scripts/search.ts",
+    "compare-summaries": "tsx scripts/compare-summaries.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
