@@ -11,6 +11,7 @@
     "index": "tsx scripts/index.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@huggingface/transformers": "^4.2.0",
     "@langchain/anthropic": "^1.5.9",
     "@langchain/core": "^1.2.9",
