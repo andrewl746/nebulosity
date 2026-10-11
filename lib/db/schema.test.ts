@@ -79,9 +79,11 @@ describe("schema (V1.2)", () => {
         const repo = db.insert(repositories).values({ rootPath: "/schema-test/fts-rank" }).returning().get();
         const file = db.insert(files).values({ repoId: repo.id, path: "fts-rank/x.ts", kind: "module", contentHash: "" }).returning().get();
         const chunk = { fileId: file.id, kind: "function" as const, startLine: 1, endLine: 1, fileHash: "h" };
+        // The bodies are sized so this fails if the stored bm25 weights are missing: plain bm25 would pick the short body.
+        const longBody = Array.from({ length: 40 }, (_, i) => `step${i}();`).join(" ");
         db.insert(chunks).values([
-            { ...chunk, chunkId: "a", name: "helper", nameSplit: "helper", text: "function helper() { // switch tabs\n}" },
-            { ...chunk, chunkId: "b", name: "renderTabs", nameSplit: "render tabs", text: "function renderTabs() {}" },
+            { ...chunk, chunkId: "a", name: "helper", nameSplit: "helper", text: "function helper() { tabs }" },
+            { ...chunk, chunkId: "b", name: "renderTabs", nameSplit: "render tabs", text: `function renderTabs() { ${longBody} }` },
         ]).run();
         const ranked = db.all<{ name: string }>(sql`
             select c.name as name from code_fts join chunks c on c.id = code_fts.rowid
