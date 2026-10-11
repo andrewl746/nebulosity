@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "child_process";
 import fs from "fs";
-import os from "os";
 import path from "path";
+import { FIXTURE } from "../../test/helpers/fixture";
+import { makeTempDir } from "../../test/helpers/temp";
 import { discoverFiles, isTestPath, readGitHead } from "./discover";
 
-const FIXTURE = path.resolve("test/fixtures/mini-repo");
 const TS_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
-
-function tempDir(prefix: string): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 describe("discoverFiles — walking (no .git)", () => {
     it("finds the fixture's 8 source files, sorted, and nothing else", () => {
@@ -37,7 +33,7 @@ describe("discoverFiles — walking (no .git)", () => {
 
 describe("discoverFiles — git repositories", () => {
     it("respects .gitignore, keeps spaces and non-ASCII names intact, skips oversized files and .env files", () => {
-        const dir = tempDir("neb-discover-git-");
+        const dir = makeTempDir("neb-discover-git-");
         execFileSync("git", ["init", "-q", dir]);
         fs.writeFileSync(path.join(dir, ".gitignore"), "ignored/\n");
         fs.mkdirSync(path.join(dir, "ignored"));
@@ -59,7 +55,7 @@ describe("discoverFiles — git repositories", () => {
     });
 
     it("never returns files under node_modules, even in a git repo whose .gitignore doesn't exclude it", () => {
-        const dir = tempDir("neb-discover-nm-");
+        const dir = makeTempDir("neb-discover-nm-");
         execFileSync("git", ["init", "-q", dir]);
         fs.writeFileSync(path.join(dir, "a.ts"), "export {};\n");
         fs.mkdirSync(path.join(dir, "node_modules", "dep"), { recursive: true });
@@ -74,7 +70,7 @@ describe("discoverFiles — git repositories", () => {
     });
 
     it("readGitHead is null for a repository with no commits and for a non-git folder", () => {
-        const dir = tempDir("neb-head-");
+        const dir = makeTempDir("neb-head-");
         execFileSync("git", ["init", "-q", dir]);
         expect(readGitHead(dir)).toBeNull();
         expect(readGitHead(FIXTURE)).toBeNull();
