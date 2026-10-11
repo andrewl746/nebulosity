@@ -112,6 +112,19 @@ describe("summary store — rows", () => {
         expect(loadSummaries(db, repoId)[0]).toMatchObject({ status: "fresh", tagline: "From batch", error: null, batchId: null });
     });
 
+    it("a failed batch answer releases the row, so nothing keeps waiting on that batch", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/summaries/batch-failure");
+        const id = applyTargetUpdates(db, repoId, [{ kind: "file", path: "a.ts", inputHash: "ha", status: "pending" }]).get("file:a.ts")!;
+        markInFlight(db, "batch-1", [{ id, inputHash: "ha" }]);
+
+        // the batch ended without an answer for this request (it expired, say): the row is free to be retried
+        expect(writeResults(db, [{ id, batchId: "batch-1", inputHash: "ha", outcome: { ok: false, error: "expired" } }])).toBe(1);
+
+        expect(inFlightBatches(db, repoId)).toEqual([]);
+        expect(loadSummaries(db, repoId)[0]).toMatchObject({ status: "failed", error: "expired", batchId: null });
+    });
+
     it("a failure keeps the old text; a new summary drops the old vector", () => {
         const db = getDb();
         const repoId = upsertRepository(db, "/summaries/results");
