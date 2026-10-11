@@ -94,7 +94,7 @@ type CodeChunk = {
 
 **Lazy folders.** When a file's summary changes, its folder's input changes and the folder goes `stale`. Full runs (`npm run summarize`) redo stale folders. Incremental runs leave them `lazy` until someone opens them (`summarizeNow`, the Map's "jump the queue"); V1.3 adds a periodic sweep.
 
-**Cost.** Every answer's tokens go to `summary_usage`, per model and transport. That's how S2 (≤ $15 for VS Code's full pass) is measured. The owner reviewed Haiku against Sonnet on 20 VS Code files before the first full run (`SUMMARY_REVIEW.md`).
+**Cost.** Every answer's tokens go to `summary_usage`, per model and transport, including an answer whose row was redone or deleted meanwhile: it was still paid for. A Sonnet request that a server-side fallback finished counts each attempt under its own model, from `usage.iterations`, because the declined attempt is billed too. That's how S2 (≤ $15 for VS Code's full pass) is measured. The owner reviewed Haiku against Sonnet on 20 VS Code files before the first full run (`SUMMARY_REVIEW.md`).
 
 ---
 

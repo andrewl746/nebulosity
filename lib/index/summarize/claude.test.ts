@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClaudeSummarizer, outcomeFromBatchItem, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
+import { createClaudeSummarizer, outcomeFromBatchItem, outcomeFromReply, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
 import { FILE_SYSTEM_PROMPT } from "./prompts";
 import { BatchGoneError, SummarizerAuthError, type SummaryRequest } from "./types";
 
@@ -50,7 +50,7 @@ describe("outcomeFromBatchItem", () => {
     it("turns each kind of batch result into a summary or a reason", () => {
         expect(outcomeFromBatchItem(item({ type: "succeeded", message: reply(GOOD) }))).toEqual({
             customId: "s1", ok: true, text: { tagline: "Logging helpers", summary: "Writes log lines." }, model: "claude-haiku-5-5",
-            usage: { inputTokens: 120, outputTokens: 30 },
+            usage: [{ model: "claude-haiku-5-5", inputTokens: 120, outputTokens: 30 }],
         });
         expect(outcomeFromBatchItem(item({ type: "errored", error: { type: "error", error: { type: "api_error", message: "overloaded" }, request_id: null } })))
             .toMatchObject({ ok: false, error: "batch request errored: overloaded" });
@@ -60,7 +60,34 @@ describe("outcomeFromBatchItem", () => {
 
     it("keeps the token count of a reply it couldn't use, so spend stays honest", () => {
         expect(outcomeFromBatchItem(item({ type: "succeeded", message: reply("{not json") }))).toEqual({
-            customId: "s1", ok: false, error: "the reply wasn't valid JSON", model: "claude-haiku-5-5", usage: { inputTokens: 120, outputTokens: 30 },
+            customId: "s1", ok: false, error: "the reply wasn't valid JSON", model: "claude-haiku-5-5",
+            usage: [{ model: "claude-haiku-5-5", inputTokens: 120, outputTokens: 30 }],
+        });
+    });
+});
+
+describe("outcomeFromReply", () => {
+    it("counts every attempt under its own model when a fallback model finished a Sonnet request", () => {
+        // Sonnet declined after 12 output tokens; the fallback model then wrote the answer. The top-level usage
+        // covers only that last attempt, so the declined one is only in usage.iterations.
+        const served = reply(GOOD, {
+            model: "claude-opus-5-5",
+            content: [{ type: "text", text: '{"tagl' }, { type: "fallback" }, { type: "text", text: GOOD }],
+            usage: {
+                input_tokens: 800, output_tokens: 40,
+                iterations: [
+                    { type: "message", model: "claude-sonnet-5-5", input_tokens: 800, output_tokens: 12 },
+                    { type: "fallback_message", model: "claude-opus-5-5", input_tokens: 800, output_tokens: 40 },
+                ],
+            },
+        });
+
+        expect(outcomeFromReply("s3", served)).toEqual({
+            customId: "s3", ok: true, text: { tagline: "Logging helpers", summary: "Writes log lines." }, model: "claude-opus-5-5",
+            usage: [
+                { model: "claude-sonnet-5-5", inputTokens: 800, outputTokens: 12 },
+                { model: "claude-opus-5-5", inputTokens: 800, outputTokens: 40 },
+            ],
         });
     });
 });

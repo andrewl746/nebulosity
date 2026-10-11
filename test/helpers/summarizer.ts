@@ -28,12 +28,12 @@ export function stubSummarizer(options: StubOptions = {}){
         const target = subject.startsWith("Repository: ") ? "" : subject.slice(subject.indexOf(": ") + 2);
 
         if (options.failPaths?.includes(target)){
-            return { customId: request.customId, ok: false, error: "stub failure", model: request.model, usage: { inputTokens: 10, outputTokens: 0 } };
+            return { customId: request.customId, ok: false, error: "stub failure", model: request.model, usage: [{ model: request.model, inputTokens: 10, outputTokens: 0 }] };
         }
 
         written++;
         const text = options.texts?.[target] ?? { tagline: `About ${subject}`, summary: `Summary ${written} for ${subject}.` };
-        return { customId: request.customId, ok: true, text, model: request.model, usage: { inputTokens: 100, outputTokens: 20 } };
+        return { customId: request.customId, ok: true, text, model: request.model, usage: [{ model: request.model, inputTokens: 100, outputTokens: 20 }] };
     };
 
     const summarizer: Summarizer = {

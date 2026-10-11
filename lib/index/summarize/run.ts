@@ -474,14 +474,26 @@ function errorsOf(outcomes: readonly SummaryOutcome[]): string[] {
     return outcomes.flatMap((o) => (o.ok ? [] : [o.error]));
 }
 
-/** Writes outcomes to their rows and adds their tokens to the repo's spend. */
+/**
+ * Writes outcomes to their rows and adds their tokens to the repo's spend, per model: a
+ * request a fallback model finished counts once for each model that ran.
+ */
 function ingest(ctx: RunContext, outcomes: readonly SummaryOutcome[], transport: "direct" | "batch", destinationOf: (customId: string) => Destination | undefined): void {
     const results: SummaryResult[] = [];
     const usage = new Map<string, { requests: number; inputTokens: number; outputTokens: number }>();
 
     for (const outcome of outcomes){
+        // counted before anything else: an answer with nowhere to land was still paid for
+        for (const share of outcome.usage ?? []){
+            const sum = usage.get(share.model) ?? { requests: 0, inputTokens: 0, outputTokens: 0 };
+            sum.requests++;
+            sum.inputTokens += share.inputTokens;
+            sum.outputTokens += share.outputTokens;
+            usage.set(share.model, sum);
+        }
+
         const destination = destinationOf(outcome.customId);
-        if (!destination) continue;   // its row is gone: the file or folder was deleted meanwhile
+        if (!destination) continue;   // its row is gone (the file or folder was deleted meanwhile), or was redone another way
 
         results.push({
             id: destination.id,
@@ -495,14 +507,6 @@ function ingest(ctx: RunContext, outcomes: readonly SummaryOutcome[], transport:
         } else{
             ctx.tally.failed++;
             ctx.failedThisRun.add(targetKey(destination.kind, destination.path));
-        }
-
-        if (outcome.model && outcome.usage){
-            const sum = usage.get(outcome.model) ?? { requests: 0, inputTokens: 0, outputTokens: 0 };
-            sum.requests++;
-            sum.inputTokens += outcome.usage.inputTokens;
-            sum.outputTokens += outcome.usage.outputTokens;
-            usage.set(outcome.model, sum);
         }
     }
 

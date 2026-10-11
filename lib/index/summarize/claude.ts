@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { SummaryText } from "../../db/store/summaries";
 import { MAX_OUTPUT_TOKENS, SUMMARY_EFFORT } from "./prompts";
-import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
+import { BatchGoneError, SummarizerAuthError, type ModelUsage, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** The reply we ask for, enforced by structured outputs (output_config.format). */
 export const SUMMARY_SCHEMA = {
@@ -26,12 +26,15 @@ type Effort = "low" | "medium" | "high";
  */
 const SONNET_FALLBACK = { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const };
 
-/** What we read from a reply. Both Message (regular, batch) and BetaMessage fit. */
+/** One attempt in a BetaMessage's usage.iterations (the SDK's BetaIterationsUsage entries). */
+type Attempt = { model?: string | null; input_tokens: number; output_tokens: number };
+
+/** What we read from a reply. Both Message (regular, batch) and BetaMessage fit; only BetaMessage has iterations. */
 type Reply = {
     model: string;
     stop_reason: string | null;
     content: ReadonlyArray<{ type: string; text?: string }>;
-    usage: { input_tokens: number; output_tokens: number };
+    usage: { input_tokens: number; output_tokens: number; iterations?: ReadonlyArray<Attempt> | null };
 };
 
 /** One request's parameters, the same on the regular API and inside a batch. Thinking stays at the model's default (adaptive). */
@@ -70,8 +73,31 @@ export function parseSummary(reply: Pick<Reply, "stop_reason" | "content">): Sum
     return { tagline, summary: parsed.data.summary };
 }
 
+/**
+ * A reply's tokens, per model. The top-level usage covers only the attempt that produced the
+ * message, so a Sonnet request a server-side fallback finished would hide the declined attempt,
+ * which is billed too. usage.iterations lists every attempt with its model; an attempt without
+ * one is counted under the reply's model.
+ */
+export function usageByModel(reply: Pick<Reply, "model" | "usage">): ModelUsage[] {
+    const attempts = reply.usage.iterations ?? [];
+    if (attempts.length === 0){
+        return [{ model: reply.model, inputTokens: reply.usage.input_tokens, outputTokens: reply.usage.output_tokens }];
+    }
+
+    const byModel = new Map<string, ModelUsage>();
+    for (const attempt of attempts){
+        const model = attempt.model ?? reply.model;
+        const sum = byModel.get(model) ?? { model, inputTokens: 0, outputTokens: 0 };
+        sum.inputTokens += attempt.input_tokens;
+        sum.outputTokens += attempt.output_tokens;
+        byModel.set(model, sum);
+    }
+    return [...byModel.values()];
+}
+
 export function outcomeFromReply(customId: string, reply: Reply): SummaryOutcome {
-    const usage = { inputTokens: reply.usage.input_tokens, outputTokens: reply.usage.output_tokens };
+    const usage = usageByModel(reply);
 
     try{
         return { customId, ok: true, text: parseSummary(reply), model: reply.model, usage };

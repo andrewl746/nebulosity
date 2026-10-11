@@ -197,6 +197,25 @@ describe("runSummaries — the Batch API", () => {
         expect(row(root, "")).toMatchObject({ status: "fresh" });
     });
 
+    it("counts the tokens of a batch answer whose row was redone meanwhile: that answer was paid for too", async () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const stub = stubSummarizer({ pollsBeforeDone: 1 });
+
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", wait: false });   // the 7 files go out in a batch
+        await summarizeNow(root, "src/core/log.ts", stub.summarizer);   // redone directly: its row leaves the batch
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 12, inFlight: 0 });
+
+        // the batch's log.ts answer had no row left to land on, but its 100 + 20 tokens were billed: 7 batch requests, not 6
+        expect(loadUsage(db, repoId)).toEqual([
+            { model: "claude-haiku-5-5", transport: "batch", requests: 7, inputTokens: 700, outputTokens: 140 },
+            { model: "claude-haiku-5-5", transport: "direct", requests: 1, inputTokens: 100, outputTokens: 20 },
+            { model: "claude-sonnet-5-5", transport: "batch", requests: 6, inputTokens: 600, outputTokens: 120 },
+        ]);
+    });
+
     it("rides out a poll that errors: it says so, and polls that batch again on the next pass", async () => {
         const root = indexedFixture();
         const stub = stubSummarizer({ failPolls: 1 });

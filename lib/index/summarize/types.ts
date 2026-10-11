@@ -2,13 +2,19 @@ import type { SummaryText } from "../../db/store/summaries";
 
 export type TokenUsage = { inputTokens: number; outputTokens: number };
 
+/** One model's tokens in one request. A Sonnet request that a server-side fallback finished has two: both attempts are billed. */
+export type ModelUsage = TokenUsage & { model: string };
+
 /** One summary request. The custom id ("s<row id>") ties the answer back to its summaries row. */
 export type SummaryRequest = { customId: string; model: string; system: string; prompt: string };
 
-/** A request's answer. A failure keeps the model and tokens when a reply arrived but couldn't be used. */
+/**
+ * A request's answer. `model` wrote the text; `usage` lists the tokens of every model that
+ * ran. A failure keeps the model and tokens when a reply arrived but couldn't be used.
+ */
 export type SummaryOutcome =
-    | { customId: string; ok: true; text: SummaryText; model: string; usage: TokenUsage }
-    | { customId: string; ok: false; error: string; model: string | null; usage: TokenUsage | null };
+    | { customId: string; ok: true; text: SummaryText; model: string; usage: ModelUsage[] }
+    | { customId: string; ok: false; error: string; model: string | null; usage: ModelUsage[] | null };
 
 /**
  * Everything the summary stage needs from Claude. createClaudeSummarizer (claude.ts)
