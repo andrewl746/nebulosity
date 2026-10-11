@@ -234,7 +234,7 @@
 - `inputHash` (model + prompt version + input) stops identical input from being summarized twice.
 - After an edit, a file's summary refreshes once the file has been quiet for 60 s. Its parent folders are marked stale and refresh lazily, when someone views them or during a periodic sweep.
 **Alternatives:** (a) Haiku everywhere (~$3): cheapest, but weaker synthesis exactly where it's most visible. (b) Sonnet or Opus everywhere (~$60 / ~$120): declined by the owner on cost. (c) Refresh folders eagerly: one `git pull` would trigger hundreds of Sonnet calls.
-**Consequences:** The full pass is estimated at ~$8–10 for VS Code. Each edited file costs a fraction of a cent, plus about 1 cent per folder that's actually viewed. Indexing without an API key still produces structure, search and dependencies; summaries just show as `off`.
+**Consequences:** The full pass is estimated at ~$8–10 for VS Code. Each edited file costs a fraction of a cent, plus about 1 cent per folder that's actually viewed. Indexing without an API key still produces structure, search and dependencies; summaries just show as `off`. *(Amended 2026-10-11 in slice V1.2: the run mechanics are ADR-033.)*
 **Revisit when:** the day-1 side-by-side shows Haiku's file summaries are too generic, or Batch turnaround routinely exceeds a few hours.
 
 ## ADR-029 — The Map: levels, lenses, on-demand panels, a 50-box cap and pre-aggregated level edges (2026-10-11) — supersedes ADR-012's tier plan; keeps ADR-011's dagre choice
@@ -279,10 +279,32 @@
 ## ADR-032 — Stage status lives in `meta`, and a silent "running" means a crash (2026-10-11)
 
 **Context:** `PIVOT_SPEC.md` §5.7 asks for `idle | running | ready | off | failed` per stage, with progress, at `GET /api/status`. Stages run in different processes: the CLI now, a server worker from V1.3. A killed process never gets to write "failed".
-**Decision:** Each stage writes `stage:<repoId>:<stage>` in `meta` as it goes, at least once a minute while running. Readers report a `running` row untouched for 5 minutes as `failed`, with the note `interrupted: no progress since <time>`.
+**Decision:** Each stage writes `stage:<repoId>:<stage>` in `meta` as it goes, at least once a minute while running. Readers report a `running` row untouched for 5 minutes as `failed`, with the note `interrupted: no progress since <time>`. The one exception is a summaries stage with requests still at Anthropic: that work goes on without any local process, so it stays running (added with ADR-033).
 **Alternatives:** (a) Derive every state from the data: honest by construction, but it can't show a running stage's progress. (b) Record process ids and check them: breaks across reboots and machines.
 **Consequences:** No state can stick at "running" forever, and the route needs no knowledge of which process runs which stage.
 **Revisit when:** a stage legitimately goes quiet for minutes (it must then write a heartbeat), or V1.3's UI needs pushed updates instead of polling.
+
+## ADR-033 — Summary runs: bottom-up waves, a transport per wave, batch ids on the rows (2026-10-11)
+
+**Context:** ADR-028 fixed the models, the Batch API for the first pass, `inputHash` caching and lazy folder refresh. Implementing it raised three questions:
+- Folders need their children's summaries first, so the first pass can't be a single batch.
+- A batch takes minutes to hours, and the process waiting on it may die.
+- Two runs at once would pay twice.
+
+**Decision:**
+- **Waves.** A run is a loop of waves. Each wave plans every target with a pure function (`planSummaries`), sends whatever is ready, then waits for batches still at Anthropic.
+  - Files are always ready.
+  - A folder is ready when none of its children still waits for a model. A child that failed this run counts as done, shown as "no summary yet".
+  - VS Code's first pass takes about a dozen waves, as many as its folder tree is deep.
+- **A transport per wave.** 100 or more requests go through the Batch API, in batches of up to 5,000. Smaller waves use the regular API with 4 requests in flight and the SDK's own retries (`maxRetries: 3`, honouring `retry-after`). The small waves at the top of the tree then take seconds instead of a batch round-trip each.
+- **Batch ids on the rows.** A submitted request is recorded on its summary row (`batch_id`, `pending_hash`), not in a jobs table. Any later run finds the batches still at Anthropic, collects them and carries on; `--no-wait` exits right after submitting. An answer only lands if its batch still owns the row.
+- **A lock.** A `summarizing` lock (the same race-safe `meta` row as the index lock, refreshed while waiting) stops a second run from paying twice. It doesn't block indexing.
+- **Templates and hashing.** Test files get a template (status `skipped`, model `template`). A file's `inputHash` hashes its content hash instead of its rendered prompt. That's equivalent, because the prompt is a pure function of the bytes and `PROMPT_VERSION`, and it means planning never reads source files.
+- **Request settings.** Effort `low` with adaptive thinking (the models' default), structured outputs for `{ tagline, summary }`, and `max_tokens` 4,096. Sonnet requests on the regular API carry the server-side refusal fallback (`fallbacks: "default"`). The Batches API rejects that parameter, and Haiku 5.5 has no fallback.
+
+**Alternatives:** (a) One batch for everything, with folders summarized from raw file text: no bottom-up synthesis, and much bigger folder inputs. (b) A jobs table: more state to keep consistent with the rows it describes. (c) Batch-only: each of the dozen top waves could wait hours.
+**Consequences:** A crash costs at most the requests in flight on the regular API, and batch requests are collected rather than resent. API spend is recorded per model and transport (`summary_usage`), which is how S2 is measured.
+**Revisit when:** waves cost too much wall time on a deeper repo (then submit folders speculatively), or refusals become common.
 
 ---
 

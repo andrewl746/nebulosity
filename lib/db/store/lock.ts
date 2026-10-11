@@ -68,3 +68,17 @@ function tryInsertLock(db: Db, key: string, startedAt: string): boolean {
 function readLock(db: Db, key: string): string | null {
     return db.select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value ?? null;
 }
+
+/** Summary runs take a lock of their own: indexing may go on meanwhile, but two summary runs would pay twice. */
+export function acquireSummaryLock(db: Db): void {
+    acquireLock(db, META_KEYS.SUMMARIZING_LOCK, "Summarizing");
+}
+
+export function releaseSummaryLock(db: Db): void {
+    db.delete(meta).where(eq(meta.key, META_KEYS.SUMMARIZING_LOCK)).run();
+}
+
+/** A batch wait can last hours. Refreshing the timestamp keeps a live run's lock from ever looking abandoned. */
+export function touchSummaryLock(db: Db): void {
+    db.update(meta).set({ value: new Date().toISOString(), updatedAt: new Date() }).where(eq(meta.key, META_KEYS.SUMMARIZING_LOCK)).run();
+}

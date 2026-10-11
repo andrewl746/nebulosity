@@ -92,7 +92,7 @@ lib/index/discover.ts       ← lib/scan.ts (git ls-files + fallback walk)
 lib/index/languages/        adapter.ts (interface), typescript.ts ← lib/chunks.ts + AST imports
 lib/index/resolve.ts        ← resolveImport & co. from lib/graph.ts, + per-package tsconfig
 lib/index/aggregate.ts      folders + level edges (§4.2)
-lib/index/summarize.ts      tiered summaries, Batch + on-demand
+lib/index/summarize/        tiered summaries: prompts, planner, Claude transport, runner (Batch + on demand)
 lib/index/embed.ts          ← lib/embed.ts (plumbing unchanged; embeds summaries)
 lib/index/pipeline.ts       ← lib/index-repo.ts (stages, lock, progress)
 lib/index/watch.ts          file watcher + debounce
@@ -170,10 +170,10 @@ Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; ot
 
 ### 5.3 Summaries (background)
 - **Order.** Most-imported files first, so central code lands early. When the UI opens a path that has no summary yet, it jumps the queue through the regular API (`POST /api/summarize`).
-- **File summaries** use Claude Haiku 5.5 (`claude-haiku-5-5`). Input: path, the file-summary chunk (imports/exports), and the file text capped at about 6k tokens. Output (structured): `{ tagline, summary }`. **Test files get a templated summary with no API call.**
+- **File summaries** use Claude Haiku 5.5 (`claude-haiku-5-5`). Input: path, the file-summary chunk (imports/exports), and the file text capped at about 6k tokens. Output (structured): `{ tagline, summary }`. **Test files get a templated summary with no API call** (status `skipped`).
 - **Folder summaries** use Claude Sonnet 5.5 (`claude-sonnet-5-5`), built bottom-up once all children are fresh. Input: the folder path plus its children's taglines and summaries, capped at the 50 largest plus "N more". Same output shape.
 - **The repo summary** uses Sonnet 5.5, from the top-level folder summaries.
-- **Transport.** The first full pass uses the Message Batches API (half price), submitted in chunks of up to 5,000 requests, with results keyed by `custom_id`, never by position. Incremental and on-demand work uses the regular Messages API with a concurrency limit and honours `retry-after`.
+- **Transport.** The first full pass uses the Message Batches API (half price), submitted in chunks of up to 5,000 requests, with results keyed by `custom_id`, never by position. Incremental and on-demand work uses the regular Messages API with a concurrency limit and honours `retry-after`. In practice the transport is chosen per wave (ADR-033): a run plans, sends what's ready and repeats as folders become ready bottom-up. Waves of 100+ requests go by batch and smaller ones by the regular API. Batch ids are stored on the summary rows, so an interrupted run resumes instead of resending.
 - **Cache key.** `inputHash = hash(model, promptVersion, input)`, so identical input is never re-summarized. Bumping `promptVersion` invalidates everything deliberately.
 - **Effort.** Low by default, tunable. On day 1, 20 VS Code files go through both models side by side, and the owner checks quality before the full run.
 - **No API key** sets the stage to `off` with a reason. Everything else still works.

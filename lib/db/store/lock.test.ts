@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { getDb } from "../client";
 import { META_KEYS, meta } from "../schema";
-import { IndexLockedError, LOCK_STALE_AFTER_MS, acquireIndexLock, releaseIndexLock } from "./lock";
+import { IndexLockedError, LOCK_STALE_AFTER_MS, acquireIndexLock, acquireSummaryLock, releaseIndexLock, releaseSummaryLock, touchSummaryLock } from "./lock";
 
 afterEach(() => {
     vi.restoreAllMocks();
     releaseIndexLock(getDb());
+    releaseSummaryLock(getDb());
 });
 
 const lockValue = () => getDb().select().from(meta).where(eq(meta.key, META_KEYS.INDEXING_LOCK)).get()?.value;
@@ -53,5 +54,22 @@ describe("index lock", () => {
 
         expect(() => acquireIndexLock(db)).toThrow(IndexLockedError);
         expect(lockValue()).toBe(fresh);
+    });
+});
+
+describe("summary lock", () => {
+    it("is independent of the index lock, but refuses a second summary run", () => {
+        const db = getDb();
+        acquireIndexLock(db);
+        expect(() => acquireSummaryLock(db)).not.toThrow();
+        expect(() => acquireSummaryLock(db)).toThrow(/^Summarizing already in progress/);
+    });
+
+    it("stays fresh while its holder keeps touching it", () => {
+        const db = getDb();
+        const ancient = new Date(Date.now() - LOCK_STALE_AFTER_MS - 1000).toISOString();
+        db.insert(meta).values({ key: META_KEYS.SUMMARIZING_LOCK, value: ancient }).run();
+        touchSummaryLock(db);
+        expect(() => acquireSummaryLock(db)).toThrow(IndexLockedError);
     });
 });

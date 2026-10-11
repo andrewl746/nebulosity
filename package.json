@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "index": "tsx scripts/index.ts"
+    "index": "tsx scripts/index.ts",
+    "summarize": "tsx scripts/summarize.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

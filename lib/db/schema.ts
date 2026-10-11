@@ -4,7 +4,8 @@ export const META_KEYS = {
     EMBEDDING_MODEL: "embeddingModel",
     EMBEDDING_DIM: "embeddingDim",
     SCHEMA_VERSION: "schemaVersion",
-    INDEXING_LOCK: "indexing"
+    INDEXING_LOCK: "indexing",
+    SUMMARIZING_LOCK: "summarizing"
 } as const;
 
 export const repositories = sqliteTable("repositories", {

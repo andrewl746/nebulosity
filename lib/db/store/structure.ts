@@ -47,6 +47,21 @@ export function findRepository(db: Db, rootPath: string): number | null {
     return db.select({ id: repositories.id }).from(repositories).where(eq(repositories.rootPath, rootPath)).get()?.id ?? null;
 }
 
+/** Thrown when a command needs a repo that `npm run index` hasn't indexed yet. */
+export class RepoNotIndexedError extends Error {
+    constructor(rootPath: string){
+        super(`${rootPath} isn't indexed yet. Run npm run index -- ${rootPath} first.`);
+        this.name = "RepoNotIndexedError";
+    }
+}
+
+/** The id of an indexed repo; throws RepoNotIndexedError if it was never indexed. */
+export function requireRepository(db: Db, rootPath: string): number {
+    const id = findRepository(db, rootPath);
+    if (id === null) throw new RepoNotIndexedError(rootPath);
+    return id;
+}
+
 /** path → what the last successful run stored. */
 export function loadStoredFiles(db: Db, repoId: number): Map<string, StoredFile> {
     const rows = db
