@@ -257,11 +257,11 @@
 **Decision:**
 - Each tool is defined once in `lib/tools/registry.ts`: a name, a description written for LLMs, a zod schema, and a handler that calls the engine.
 - The MCP server registers those entries, and the Guide wraps the same entries as LangChain tools.
-- The database, migrations and config resolve from `NEBULOSITY_HOME`, which defaults to the Nebulosity checkout.
+- The database, migrations and config resolve from `NEBULOSITY_HOME`. When it's unset they fall back to `process.cwd()`, which is correct for Next.js, the CLI and Vitest because all three run from the checkout. The MCP launcher (V1.4) always sets it. *(Amended 2026-10-11 in slice V1.1: the original default, the module's own location, breaks under Next.js, which bundles server modules into `.next/`.)*
 - The MCP server opens the database read-only and never migrates.
 - MCP tool calls notify the open Map through a localhost-only live channel, and `show_on_map` reuses the UIAction contract (ADR-008).
 **Alternatives:** (a) Route the Guide through the MCP server too: guaranteed parity, but an extra process and protocol hop for what is an in-process call. (b) A separate tool set per agent: the drift this ADR exists to prevent.
-**Consequences:** Each new capability (call graph, history, clusters) reaches both agents from one definition. The MCP server runs correctly from any working directory, and schema changes have a single owner.
+**Consequences:** Each new capability (call graph, history, clusters) reaches both agents from one definition. The MCP server runs correctly from any working directory because its launcher sets `NEBULOSITY_HOME`, and schema changes have a single owner.
 **Revisit when:** a third interface needs the tools (for example a REST API for another app). It becomes a third adapter over the same registry.
 
 ---
