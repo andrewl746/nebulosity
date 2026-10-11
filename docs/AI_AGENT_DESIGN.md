@@ -1,5 +1,7 @@
 # AI_AGENT_DESIGN.md — The Nebulosity Agent
 
+> **2026-10-11 — pivot:** this becomes the design basis for extra E1, the Guide. §3's tool list is replaced by the shared registry (`PIVOT_SPEC.md` §6, ADR-030), and the system prompt gets a map-first revision when E1 starts.
+
 **Status:** Approved design
 **Implements:** Phase 5 of `IMPLEMENTATION_ROADMAP.md` (behavior layer)
 **Companion doc:** `LANGGRAPH_DESIGN.md` covers the orchestration machinery; this doc covers *what the agent is and does*.

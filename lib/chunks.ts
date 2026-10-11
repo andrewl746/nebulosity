@@ -25,8 +25,8 @@ import type { ChunkKind, CodeChunk } from "./contracts";
 const MAX_CHUNK_LINES = 200;
 const OVERLAP_LINES = 3;
 
-// parse the file into a TypeScript AST
-function parseFile(filePath: string, fileText: string): ts.SourceFile {
+// parse the file into a TypeScript AST (script kind — TS, TSX, JS, JSX — comes from the extension)
+export function parseSourceFile(filePath: string, fileText: string): ts.SourceFile {
     return ts.createSourceFile(
         filePath,
         fileText,
@@ -36,8 +36,16 @@ function parseFile(filePath: string, fileText: string): ts.SourceFile {
 }
 
 export function extractChunksFromFile(filePath: string, fileText: string): CodeChunk[] {
-    const sourceFileAST = parseFile(filePath, fileText);
-    const fileHash = crypto.createHash("sha256").update(fileText).digest("hex");
+    return extractChunksFromSourceFile(filePath, parseSourceFile(filePath, fileText));
+}
+
+/**
+ * The same as extractChunksFromFile, for a caller that has already parsed the file.
+ * The indexer parses each file exactly once and derives chunks, symbols and imports
+ * from that single AST, because parsing is the expensive part (PIVOT_SPEC.md §1).
+ */
+export function extractChunksFromSourceFile(filePath: string, sourceFileAST: ts.SourceFile): CodeChunk[] {
+    const fileHash = crypto.createHash("sha256").update(sourceFileAST.text).digest("hex");
     const chunks: CodeChunk[] = [];
 
     // walk through each top level statement

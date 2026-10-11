@@ -1,5 +1,7 @@
 # DATABASE_DESIGN.md — Embedded Relational Storage (SQLite + Drizzle)
 
+> **2026-10-11 — pivot:** the schema is extended (folders, level_edges, symbols, summaries, summary_vectors, FTS5), the chunk `vectors` table retires, and every write is batched under SQLite's 32,766-parameter cap. See `PIVOT_SPEC.md` §4; §7 documents the V1.1 additions.
+
 **Status:** Approved design, implemented 2026-07-12 (schema live, wired to the app in Phase D)
 **Supersedes:** the JSON file store (see ADR-006 → ADR-013 in `ENGINEERING_DECISIONS.md`)
 **Source of truth in code:** `lib/db/schema.ts`. This doc explains the design; the schema file *is* the schema. Keep both in sync per the maintenance rule.
@@ -8,12 +10,15 @@
 
 ## 1. Shape of the layer
 
-One embedded SQLite database at `.nebulosity/nebulosity.db` (gitignored — derived data, like `node_modules`). Accessed exclusively through three modules:
+One embedded SQLite database at `.nebulosity/nebulosity.db` under `NEBULOSITY_HOME` (gitignored — derived data, like `node_modules`). Accessed exclusively through these modules:
 
 | Module | Job |
 |---|---|
 | `lib/db/schema.ts` | Table definitions (Drizzle). The only place persistence shapes live. |
-| `lib/db/client.ts` | The single connection factory (`getDb()`): WAL mode, foreign keys ON, connection cached on `globalThis` to survive Next.js hot reload. |
+| `lib/db/client.ts` | The single connection factory (`getDb()`): WAL mode with `synchronous = NORMAL` (§7), foreign keys ON, paths resolved from `NEBULOSITY_HOME` (`lib/home.ts`), connection cached on `globalThis` to survive Next.js hot reload. |
+| `lib/db/batch.ts` | Splits every bulk insert under SQLite's 32,766-parameter cap (§7). |
+| `lib/db/store/lock.ts` | The shared indexing lock (one indexer at a time, stale after 30 minutes). |
+| `lib/db/store/structure.ts` | Persistence for one structure run of the V1.1 engine: batched, failure-isolated file writes, the import graph, folders and level edges. |
 | `lib/db/graph-store.ts` | Graph persistence operations: `saveScan` (transactional replace) and `loadGraph`. RAG operations join it in Phases 2–4. |
 
 No other file may open the database or embed SQL. This is the seam the whole layer swaps through.
@@ -68,3 +73,14 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
 - **React Flow node positions for the radial layout** — derived deterministically, same input → same picture. When ADR-011's dagre layout lands, cached positions get a small table here, keyed by graph hash.
 - **API keys or user config** — `.env.local` only. The database stays secret-free, always safe to zip as a debug artifact.
 - **The rendered graph shape** (`GraphResponse`) — assembled per request from `loadGraph` + `lib/graph.ts`; storing it would just add an invalidation problem.
+
+## 7. Pivot additions (slice V1.1, `PIVOT_SPEC.md` §4)
+
+- **`files`** gains `language`, `size_bytes`, `line_count`, `is_test` and `import_specifiers` (a JSON array of the raw specifiers). Storing the specifiers lets an incremental run re-resolve *every* file's imports, because a new or deleted file can change what `"../core"` points at, while re-parsing only the files whose hash changed.
+- **`chunks.chunk_id`** is unique per file (`(file_id, chunk_id)`), not globally. With many repos in one database, two of them can both contain `src/index.ts#start#0`.
+- **`symbols`** has one row per top-level declaration and per class member: `name`, `qualified_name` (`Logger.info`), `kind`, `start_line`/`end_line`, `exported` and `parent_qualified_name`. The line range covers the declaration itself, excluding its doc comment, because it's used for jumping to a definition.
+- **`folders`** is the folder tree of the indexed files: `path` (`""` is the repo root), `parent_path`, `depth`, `name`, `file_count` (recursive) and `direct_file_count`.
+- **`level_edges`** holds the Map's lines, precomputed. Each file→file import is counted exactly once, at the deepest folder containing both files: `level_path`, `source_node`/`target_node` (children of that folder: a subfolder, or the file itself when it sits directly inside) and `count`.
+- **`repositories.indexed_head`** records the git commit the last run saw.
+- **Write discipline.** Every bulk insert goes through `lib/db/batch.ts`, which splits rows so no statement exceeds SQLite's 32,766 bound parameters. Drizzle binds every column, defaults included, so the cost per row is the table's column count. Repo-wide deletes use a subquery, never an `IN (...)` list of every id.
+- **Durability.** `client.ts` pairs WAL with `synchronous = NORMAL`, SQLite's recommended setting for WAL: commits stop waiting for an fsync, which matters for an indexer that commits a batch every 500 files. A power cut or OS crash can roll back the last few commits but never corrupts the file. That trade is safe because everything here is derived: a lost commit means its content hashes were never written either, so the next run re-indexes those files (ADR-022).

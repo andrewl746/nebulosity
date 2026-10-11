@@ -189,7 +189,80 @@
 **Decision:** Call `migrate()` unconditionally in `createDb`. Drizzle records applied migrations in its own table, so this is idempotent and near-free on an already-current database.
 **Alternatives:** (a) A separate `npm run migrate` step — correct for a deployed multi-instance service, but this is a single-user local tool where a forgotten step is the whole failure mode. (b) `drizzle-kit push` in dev — no versioned history, and it is what let the schema drift in the first place.
 **Consequences:** The schema is now self-healing and migrations are exercised on every run, including by the test suite against a real migration file. `drizzle-kit generate` after a schema edit is still required — the guard against forgetting it is that the tests now fail rather than silently passing.
-**Revisit when:** Nebulosity ever runs as more than one process against one database file, where concurrent migration needs a lock.
+**Revisit when:** Nebulosity ever runs as more than one process against one database file, where concurrent migration needs a lock. *(Fired 2026-10-11: the MCP server is a second process. Answered by ADR-030: the MCP server opens read-only and never migrates.)*
+
+## ADR-024 — Pivot to a code-intelligence companion for massive codebases (2026-10-11)
+
+**Context:** On small repos Claude Code already does everything Nebulosity v0 did (chat over retrieved chunks plus a file graph), so only the visualization was distinctive. Claude Code's per-session agentic search is strong on local questions and weak on big-picture, complete-list and repeated questions over massive repos. Measured on VS Code (14,615 TS files): with existing code, structure is ready in ~35 s, and tiered summaries cost about $10 once. `VISUALIZATION_DESIGN.md` §4.3 had declared repos over 50k files a product boundary.
+**Decision:** Nebulosity becomes an engine that precomputes a persistent, hierarchical, exact model of a repo: structure, summaries, search and the dependency graph, with calls, history and clusters later. It's exposed to agents through an MCP server and to people through the Map. It's a companion to Claude Code, not a competitor, and VS Code is the demo repo. Scale is handled by aggregation (ADR-029), not by declining big repos, which reverses the Tier XL boundary. Full design: `PIVOT_SPEC.md`.
+**Alternatives:** (a) A standalone Claude Code replacement: it would compete on the agent loop, where Anthropic's harness and models win, and it's harder to adopt. (b) A map-only explorer: no agent integration and no measurable proof. (c) Continue Phases 5/6: that ships a product strictly weaker than Claude Code on its own repo.
+**Consequences:** Phases 6 and S are superseded. Phase 5's orchestration design survives as extra E1 (the Guide). Most `lib/` implementation files are rewritten (`PIVOT_SPEC.md` §3), while the layering, the contracts discipline, the SQLite store, the incremental-indexing pattern and UI-actions-as-tools carry over. An evaluation against Claude Code alone is part of v1's definition of done.
+**Revisit when:** the eval shows Nebulosity's tools don't improve Claude Code's answers on VS Code. At that point the value proposition itself, not just the tuning, needs rethinking.
+
+## ADR-025 — Drop the native C++ scanner (2026-10-11) — supersedes ADR-014 and ADR-015
+
+**Context:** ADR-014 justified the C++ scanner only as a benchmarked accelerator, and ADR-015 deferred it to last. v1 parses with the TypeScript Compiler API (all of VS Code in 22.3 s, single-threaded), so there's no measured bottleneck for a native scanner to remove. The regex extractor it was meant to port is being retired anyway (ADR-026).
+**Decision:** Drop Phase S. Remove `native/` and the never-built `scanner-bridge` design. If indexing ever becomes CPU-bound, parallelize in Node with worker threads first.
+**Alternatives:** (a) Keep it as a learning showcase. The owner decided it isn't worth the time before applications. (b) Rebuild it on tree-sitter's C API. Possible later, but only if a measurement demands it.
+**Consequences:** The C++ systems-programming talking point is gone; worker threads can bring back a concurrency story. `HealthResponse.scannerEngine` goes away along with `/api/health`, which is replaced by `/api/status`. Docs that mention the bridge are corrected as their slices land.
+**Revisit when:** a profile on a real target repo shows parsing dominates and worker threads aren't enough.
+
+## ADR-026 — TypeScript Compiler API behind a language-adapter seam; imports come from the AST (2026-10-11)
+
+**Context:** Two earlier decisions carried revisit triggers this pivot fires. ADR-003 kept the regex scanner for edges ("revisit once Phase 2 is stable"). ADR-004 chose the TS Compiler API for chunking ("non-TS repos → tree-sitter"). ADR-016 documented the regex extractor's remaining gap: false positives from string literals. The first target, VS Code, is TypeScript.
+**Decision:** v1 parses every file once through a single TypeScript adapter (`ts.createSourceFile`, no type checker), producing chunks, symbols (class members included), imports and metadata. The regex extractor is retired. A `LanguageAdapter` interface (parse → chunks, symbols, imports, and later calls) is where tree-sitter adapters plug in (E4). Import resolution reads the nearest `tsconfig.json` so monorepos work.
+**Alternatives:** (a) tree-sitter for everything now: multi-language from day one, but it adds WASM grammar setup and buys nothing VS Code needs. Deferred to E4. (b) Keep regex imports: known false positives, and a second pass over every file.
+**Consequences:** One parse per file instead of parse plus regex. The regex-extractor golden vectors (`GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4) retire, while the resolver vectors (§3.3) stay relevant. The type checker is reserved for E2's call graph.
+**Revisit when:** E4 starts, or a TS/JS repo turns up that the syntax-only adapter misreads.
+
+## ADR-027 — Search backbone: summaries + FTS5 + graph, embeddings over summaries, merged with RRF (2026-10-11)
+
+**Context:** ADR-005/006/013 built chunk-level vector RAG with brute-force search, with a revisit trigger at about 50k chunks. VS Code has 101,603 chunks. At the measured ~18 chunks/s, embedding them takes about 94 minutes, and the in-memory cache would hold every vector and every chunk's text. Code questions mix exact identifiers, where keyword search wins, with concepts, where embeddings win.
+**Decision:** Search merges three ranked lists with Reciprocal Rank Fusion (k = 60): BM25 over a code FTS5 index (with camelCase-split names), BM25 over a summary FTS5 index, and cosine similarity over embeddings of **summaries, not chunks**. The existing MiniLM pipeline and the ADR-017 encode/decode pair are reused unchanged. The chunk `vectors` table retires.
+**Alternatives:** (a) Chunk embeddings in sqlite-vec: fixes the memory problem but not the 94-minute embedding cost. (b) Keyword search only: misses conceptual questions. (c) A hosted embedding model: adds an API key and a network dependency to indexing.
+**Consequences:** Keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive. About 15–20k summary vectors stay comfortably within brute-force range. RRF combines lists without calibrating their scores against each other.
+**Revisit when:** the eval shows conceptual questions failing. Then try a code-specific embedding model, or chunk embeddings for the most-used areas only.
+
+## ADR-028 — Tiered summaries through the Batch API, with lazy folder refresh (2026-10-11)
+
+**Context:** The Map and the MCP tools are only as useful as their summaries. VS Code is ~199 MB of TypeScript, about 50M tokens if every file were summarized in full. The owner chose the model split: Haiku 5.5 for most of the work, and Sonnet 5.5 for the folder summaries people read first.
+**Decision:**
+- File summaries use `claude-haiku-5-5`. Input is capped at about 6k tokens per file. Test files get a template summary and no API call.
+- Folder and repo summaries use `claude-sonnet-5-5`, built bottom-up from the summaries of their contents.
+- The first full pass goes through the Message Batches API at half price. Incremental and on-demand work uses the regular API.
+- Output is structured as `{ tagline, summary }`.
+- `inputHash` (model + prompt version + input) stops identical input from being summarized twice.
+- After an edit, a file's summary refreshes once the file has been quiet for 60 s. Its parent folders are marked stale and refresh lazily, when someone views them or during a periodic sweep.
+**Alternatives:** (a) Haiku everywhere (~$3): cheapest, but weaker synthesis exactly where it's most visible. (b) Sonnet or Opus everywhere (~$60 / ~$120): declined by the owner on cost. (c) Refresh folders eagerly: one `git pull` would trigger hundreds of Sonnet calls.
+**Consequences:** The full pass is estimated at ~$8–10 for VS Code. Each edited file costs a fraction of a cent, plus about 1 cent per folder that's actually viewed. Indexing without an API key still produces structure, search and dependencies; summaries just show as `off`.
+**Revisit when:** the day-1 side-by-side shows Haiku's file summaries are too generic, or Batch turnaround routinely exceeds a few hours.
+
+## ADR-029 — The Map: levels, lenses, on-demand panels, a 50-box cap and pre-aggregated level edges (2026-10-11) — supersedes ADR-012's tier plan; keeps ADR-011's dagre choice
+
+**Context:** A file-level graph of VS Code is unreadable (`workbench → base` alone is 20,648 import statements) and too large for a DOM-based canvas. ADR-012 proposed directory clustering with a ~400-node budget and ruled Tier XL out of scope. The owner wants a revamped UI that stays uncluttered as features are added.
+**Decision:**
+- The Map shows one level of the folder tree at a time: repo → folders → files, with functions reached through E2's call flow.
+- No more than 50 boxes are ever on screen; the overflow folds into a "+N more" box.
+- Edges between sibling boxes come from a precomputed `level_edges` table. Each import is counted once, at the level of the deepest folder containing both ends, so a click costs one indexed lookup.
+- Only the selected box's edges are drawn at full strength.
+- New features arrive as lenses (Structure, History, Clusters), one active at a time, never as extra panels. Panels open only when needed.
+- The dark amethyst look stays, and React Flow + dagre stay.
+**Alternatives:** (a) Draw the whole graph with WebGL (sigma.js): it would render 100k dots nobody can read. (b) ADR-012's clustering above a 400-node budget: still allows 400 boxes, which is too dense to read. (c) A search-only UI: abandons the map, which is the product's identity.
+**Consequences:** Performance is bounded by design (≤ 50 nodes, ≤ 50 ms level loads), and there's a measured acceptance budget of ≤ 100 ms per interaction. Very large folders depend on the "+N more" behavior being good. The owner lifted the visual-design-frozen rule for this revamp.
+**Revisit when:** users regularly need to compare boxes from different branches of the tree side by side. A pinned multi-level view would be the next step.
+
+## ADR-030 — One tool registry, two adapters, and install-relative paths (2026-10-11)
+
+**Context:** Two agents need the same knowledge. Claude Code connects from outside through MCP, launched from the user's repo; the Guide (E1) runs in-process on LangGraph. `lib/agent/tools.ts` mixes tool logic with LangChain wrappers. `lib/db/client.ts` resolves the database and migrations relative to `process.cwd()`, and when Claude Code launches the MCP server, that directory is the user's repo. ADR-023's multi-process revisit trigger also fires here.
+**Decision:**
+- Each tool is defined once in `lib/tools/registry.ts`: a name, a description written for LLMs, a zod schema, and a handler that calls the engine.
+- The MCP server registers those entries, and the Guide wraps the same entries as LangChain tools.
+- The database, migrations and config resolve from `NEBULOSITY_HOME`. When it's unset they fall back to `process.cwd()`, which is correct for Next.js, the CLI and Vitest because all three run from the checkout. The MCP launcher (V1.4) always sets it. *(Amended 2026-10-11 in slice V1.1: the original default, the module's own location, breaks under Next.js, which bundles server modules into `.next/`.)*
+- The MCP server opens the database read-only and never migrates.
+- MCP tool calls notify the open Map through a localhost-only live channel, and `show_on_map` reuses the UIAction contract (ADR-008).
+**Alternatives:** (a) Route the Guide through the MCP server too: guaranteed parity, but an extra process and protocol hop for what is an in-process call. (b) A separate tool set per agent: the drift this ADR exists to prevent.
+**Consequences:** Each new capability (call graph, history, clusters) reaches both agents from one definition. The MCP server runs correctly from any working directory because its launcher sets `NEBULOSITY_HOME`, and schema changes have a single owner.
+**Revisit when:** a third interface needs the tools (for example a REST API for another app). It becomes a third adapter over the same registry.
 
 ---
 
@@ -199,4 +272,5 @@
 - **Node id = project-relative file path** — the quiet keystone: graph nodes, chunks, tool args, sources, and highlights all join on this key. Preserve it in every future subsystem.
 - **Scan scope is a hardcoded top-level allowlist** (`scanProject`'s `dirs` default `["app", "lib"]`) — an MVP shortcut for scanning Nebulosity's *own* repo, not a design decision. The rest of the doc set assumes **repo-root** scanning (`API_CONTRACTS.md` §4 "repo root is the server's project root"; the agent's `safePath` boundary in `AI_AGENT_DESIGN.md` §6). Exit path: when Nebulosity scans arbitrary repos (~Phase D, or the first external repo), walk from the repo root and filter via the `IGNORE_LIST` blocklist + `SOURCE_EXTENSIONS` instead of an allowlist — arbitrary projects use `src/`, `packages/`, etc. and may have no `app/`/`lib/` at all. The `dirs` parameter is already the seam (a default, so callers can override it). Not to be confused with `?root=<dir>` (ADR-012, Tier L): that scopes a *large* repo to a subtree, a different concern from which files count as source.
 - ~~`server-only` marker inside `lib/scan.ts`~~ **Resolved 2026-07-13.** Removed outright (not relocated) once F1's test setup proved it throws in any non-Next.js Node context, including Vitest — which would have equally broken the future CLI and Electron adapters if "moved to the adapter layer" as originally planned. See `ARCHITECTURE.md` §3 rule 1 for the full reasoning.
-- **Visual design is frozen** per the brief — functionality only from here.
+- ~~**Visual design is frozen** per the brief — functionality only from here.~~ **Lifted 2026-10-11** by the owner for the Map revamp (ADR-029). The dark amethyst identity stays and the layout is new.
+- **Scan scope allowlist (`app/`, `lib/`): resolved by the pivot.** Discovery starts at the repo root via `git ls-files` (`PIVOT_SPEC.md` §5.1).

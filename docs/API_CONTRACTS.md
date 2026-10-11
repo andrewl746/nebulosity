@@ -1,5 +1,7 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
+> **2026-10-11 — pivot:** the v1 endpoints change (`/api/level`, `/api/describe`, `/api/status`, `/api/summarize`, `/api/live*`), and `/api/graph` and `/api/health` retire. See `PIVOT_SPEC.md` §7.1; this doc is rewritten in slice V1.3. §5 (`/api/chat`) still applies to E1.
+
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
 

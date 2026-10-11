@@ -27,6 +27,10 @@ import { classifyFile } from "@/lib/graph";
 import { embedChunks, encodeVector, EMBEDDING_MODEL, EMBEDDING_DIM } from "@/lib/embed";
 import path from "path";
 import type { CodeChunk, IndexPhase } from "@/lib/contracts";
+import { acquireIndexLock, releaseIndexLock } from "@/lib/db/store/lock";
+
+// re-exported so app/api/index/route.ts keeps importing it from here
+export { IndexLockedError } from "@/lib/db/store/lock";
 
 export type IndexStats = {
     changed: number;
@@ -34,28 +38,6 @@ export type IndexStats = {
     errors: Array<{ path: string; error: string }>;
     warnings: Array<{ path: string; error: string }>;
 };
-
-/**
- * Thrown when another run holds the indexing lock.
- *
- * A distinct type rather than a magic string: the route needs to map this to the
- * INDEX_LOCKED error code, and matching on `message` breaks the moment anyone
- * rewords the sentence.
- */
-export class IndexLockedError extends Error {
-    constructor(startedAt: string){
-        super(`Indexing already in progress (started ${startedAt}).`);
-        this.name = "IndexLockedError";
-    }
-}
-
-/**
- * How long a lock row may sit before it is assumed to be debris from a crashed
- * run. The lock is released in a `finally`, which does not run if the process is
- * killed or the dev server restarts mid-index — and indexing is the longest
- * operation in the product, so it is the most likely thing to be interrupted.
- */
-const LOCK_STALE_AFTER_MS = 30 * 60 * 1000;
 
 type PendingFile = {
     relativePath: string;
@@ -70,7 +52,7 @@ export async function indexRepo(
 ): Promise<IndexStats> {
     const db = getDb();
 
-    await acquireLock(db);
+    acquireIndexLock(db);
 
     try{
         const repo = await db
@@ -199,7 +181,7 @@ export async function indexRepo(
 
         return stats;
     } finally{
-        await db.delete(meta).where(eq(meta.key, META_KEYS.INDEXING_LOCK)).run();
+        releaseIndexLock(db);
     }
 }
 
@@ -284,32 +266,6 @@ function commitFile(
 
         tx.insert(vectors).values(vectorRows).run();
     });
-}
-
-async function acquireLock(db: ReturnType<typeof getDb>): Promise<void> {
-    const lockRow = await db
-        .select()
-        .from(meta)
-        .where(eq(meta.key, META_KEYS.INDEXING_LOCK))
-        .get();
-
-    if (lockRow){
-        const startedAt = Date.parse(lockRow.value);
-        const isStale = Number.isNaN(startedAt) || Date.now() - startedAt > LOCK_STALE_AFTER_MS;
-
-        if (!isStale){
-            throw new IndexLockedError(lockRow.value);
-        }
-
-        // debris from a run that was killed before its `finally` could fire
-        console.warn(`[index] clearing stale indexing lock from ${lockRow.value}`);
-        await db.delete(meta).where(eq(meta.key, META_KEYS.INDEXING_LOCK)).run();
-    }
-
-    await db
-        .insert(meta)
-        .values({ key: META_KEYS.INDEXING_LOCK, value: new Date().toISOString() })
-        .run();
 }
 
 async function recordEmbeddingModel(db: ReturnType<typeof getDb>): Promise<void> {

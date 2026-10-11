@@ -1,5 +1,7 @@
 # VISUALIZATION_DESIGN.md — Graph Layout & Scaling Strategy
 
+> **Superseded 2026-10-11** by `PIVOT_SPEC.md` §7 and ADR-029 (levels, lenses, a 50-box cap, pre-aggregated level edges). The "Tier XL is a product boundary" decision is reversed (ADR-024). Kept for history; dagre (ADR-011) still applies.
+
 **Status:** Approved design
 **Scope:** the dependency graph's layout algorithms, their upgrade path, and the plan for keeping Nebulosity fast (and un-crashed) on massive codebases
 **Companions:** `GRAPH_IMPLEMENTATION_REVIEW.md` (current-code weaknesses), ADR-011/ADR-012 in `ENGINEERING_DECISIONS.md` (the decisions this doc explains)

@@ -11,7 +11,9 @@ export const repositories = sqliteTable("repositories", {
     id: integer().primaryKey({ autoIncrement: true }),
     rootPath: text("root_path").notNull().unique(),
     lastScanAt: integer("last_scan_at", { mode: "timestamp" }),
-    lastIndexAt: integer("last_index_at", { mode: "timestamp" })
+    lastIndexAt: integer("last_index_at", { mode: "timestamp" }),
+    // the git commit the last index run saw (null outside git); lets later runs ask git what changed
+    indexedHead: text("indexed_head")
 });
 
 export const files = sqliteTable("files", {
@@ -19,7 +21,15 @@ export const files = sqliteTable("files", {
     repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
     path: text("path").notNull(),
     kind: text("kind", { enum: ["component", "module"] }).notNull(),
-    contentHash: text("content_hash").notNull()
+    contentHash: text("content_hash").notNull(),
+    language: text("language").notNull().default("typescript"),
+    sizeBytes: integer("size_bytes").notNull().default(0),
+    lineCount: integer("line_count").notNull().default(0),
+    isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
+    // Raw import specifiers as a JSON array. Every run re-resolves every file's imports
+    // (a new or deleted file changes what "../core" points at) without re-parsing the
+    // files whose content hash is unchanged.
+    importSpecifiers: text("import_specifiers").notNull().default("[]")
 }, (t) => [
     uniqueIndex("files_repo_path_unique").on(t.repoId, t.path)
 ]);
@@ -37,7 +47,9 @@ export const imports = sqliteTable("imports", {
 export const chunks = sqliteTable("chunks", {
     id: integer().primaryKey({ autoIncrement: true }),
     fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
-    chunkId: text("chunk_id").notNull().unique(),
+    // unique per FILE (index below), not globally: many repos share one database and
+    // two of them can both contain "src/index.ts#start#0"
+    chunkId: text("chunk_id").notNull(),
     kind: text("kind", {
         enum: ["function", "class", "component", "interface", "type", "const", "enum", "namespace", "file-summary"]
     }).notNull(),
@@ -49,7 +61,9 @@ export const chunks = sqliteTable("chunks", {
     text: text("text").notNull(), // the actual source code of this chunk (what the AI will read)
     fileHash: text("file_hash").notNull(), // sha256 of the whole source file at index time
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date())
-});
+}, (t) => [
+    uniqueIndex("chunks_file_chunk_unique").on(t.fileId, t.chunkId)
+]);
 
 export const meta = sqliteTable("meta", {
     id: integer().primaryKey({ autoIncrement: true }),
@@ -65,3 +79,58 @@ export const vectors = sqliteTable("vectors", {
         .references(() => chunks.id, { onDelete: "cascade" }),
     embedding: blob("embedding", { mode: "buffer" }).notNull()
 });
+
+export const SYMBOL_KINDS = [
+    "function", "class", "method", "property", "accessor", "constructor",
+    "interface", "type", "enum", "const", "namespace"
+] as const;
+export type SymbolKind = (typeof SYMBOL_KINDS)[number];
+
+/** One row per top-level declaration and per class member. */
+export const symbols = sqliteTable("symbols", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    qualifiedName: text("qualified_name").notNull(),   // "Logger.info" for members
+    kind: text("kind", { enum: SYMBOL_KINDS }).notNull(),
+    // the declaration itself, excluding its doc comment: these lines are for jumping to a definition
+    startLine: integer("start_line").notNull(),
+    endLine: integer("end_line").notNull(),
+    exported: integer("exported", { mode: "boolean" }).notNull().default(false),
+    parentQualifiedName: text("parent_qualified_name")  // null for top-level declarations
+}, (t) => [
+    index("symbols_file_idx").on(t.fileId),
+    index("symbols_name_idx").on(t.name)
+]);
+
+/** The folder tree of the indexed files. "" is the repo root. */
+export const folders = sqliteTable("folders", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    parentPath: text("parent_path"),                         // null only for the root
+    depth: integer("depth").notNull(),                       // root = 0
+    name: text("name").notNull(),                            // the root uses the repo directory's name
+    fileCount: integer("file_count").notNull(),              // source files anywhere below
+    directFileCount: integer("direct_file_count").notNull()  // source files directly inside
+}, (t) => [
+    uniqueIndex("folders_repo_path_unique").on(t.repoId, t.path),
+    index("folders_repo_parent_idx").on(t.repoId, t.parentPath)
+]);
+
+/**
+ * The Map's lines, precomputed (PIVOT_SPEC.md §4.2). Each file→file import is
+ * counted exactly once, at levelPath = the deepest folder containing both files;
+ * sourceNode/targetNode are children of that folder (a subfolder, or the file
+ * itself when it sits directly inside). Opening a folder is one indexed lookup.
+ */
+export const levelEdges = sqliteTable("level_edges", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    levelPath: text("level_path").notNull(),
+    sourceNode: text("source_node").notNull(),
+    targetNode: text("target_node").notNull(),
+    count: integer("count").notNull()
+}, (t) => [
+    uniqueIndex("level_edges_unique").on(t.repoId, t.levelPath, t.sourceNode, t.targetNode)
+]);

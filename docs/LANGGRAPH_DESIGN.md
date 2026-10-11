@@ -1,5 +1,7 @@
 # LANGGRAPH_DESIGN.md — Agent Orchestration
 
+> **2026-10-11 — pivot:** still valid as the orchestration design for extra E1 (the Guide). Tools now come from the shared registry (ADR-030), and the model choice is revisited when E1 starts.
+
 **Status:** Approved design
 **Implements:** Phase 5 of `IMPLEMENTATION_ROADMAP.md` (machinery layer)
 **Companion doc:** `AI_AGENT_DESIGN.md` (what the agent does); this doc covers *how the loop runs*.

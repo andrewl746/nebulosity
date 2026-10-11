@@ -47,6 +47,3 @@ CLAUDE.md
 
 # nebulosity generated data (derived, always rebuildable)
 .nebulosity/
-
-# native scanner build output
-native/scanner/build/
