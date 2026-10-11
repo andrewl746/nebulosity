@@ -87,6 +87,9 @@ type CodeChunk = {
 - **Transport.** A wave of 100+ requests goes through the Message Batches API at half price, in batches of up to 5,000. Smaller waves use the regular API, 4 at a time.
 - **Resuming.** Batch ids are stored on the rows, so an interrupted run resumes. Answers are matched by `custom_id` (the row id), never by position.
 - **Failures.** A failure doesn't block its folder ("no summary yet" stands in), and the next run retries it.
+- **The circuit breaker.** When at least 10 requests fail and they are more than half of a wave or batch, the cause is shared (a rejected key, an outage, files edited since indexing). The run then stops before planning another wave, so no folder is summarized over those placeholders and paid for again; the stage note starts with `stopped:`.
+- **Submitting.** A batch that can't be submitted stops the run. Its rows stay pending, and batches submitted before it are collected by the next run. A batch Anthropic accepted but the run couldn't record has its id printed and put in the error.
+- **Structure first.** A run refuses to start while the structure stage is running or failed.
 - **Locking.** A `summarizing` lock prevents two paying runs.
 
 **Lazy folders.** When a file's summary changes, its folder's input changes and the folder goes `stale`. Full runs (`npm run summarize`) redo stale folders. Incremental runs leave them `lazy` until someone opens them (`summarizeNow`, the Map's "jump the queue"); V1.3 adds a periodic sweep.
@@ -164,6 +167,9 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 | Batch takes hours | Summaries arrive late | Keyword search works meanwhile; `--no-wait` and resume; `summarizeNow` for what someone opens |
 | The network drops while waiting on a batch | Polls fail | A failed poll is asked again on the next pass. After 5 in a row, or a rejected key, the run stops; the stage stays `running`, and the next run collects the batch |
 | File edited after indexing | Summary would describe bytes the index never saw | That target fails with "changed after it was indexed" and is retried after `npm run index` |
+| Summarizing while `npm run index` runs | Files fail as "changed after it was indexed" | The run refuses to start until the structure stage is `ready` |
+| A batch can't be submitted | Nothing goes out | The run stops with its rows still pending; batches already submitted are collected next run. A batch that was accepted but couldn't be recorded has its id printed and in the error |
+| Most of a wave or batch fails (a rejected key, an outage, a repo edited since indexing) | Folders would be summarized over "(no summary yet)" and paid for again | The circuit breaker (10+ failures, more than half) stops the run; the note starts with `stopped:`, and the failures are retried next run |
 | Model refusal | A summary fails | Sonnet's regular-API requests fall back server-side; batch refusals are retried next run, in a small wave that goes direct |
 | Embedding model can't load | No meaning search | Keyword lists still answer, and the `note` says so |
 | Vocabulary mismatch | A concept finds nothing by keyword | The meaning list, and summaries written in plain words |

@@ -4,22 +4,44 @@ import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../../test/helpers/fixture";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
+import { makeTempDir } from "../../../test/helpers/temp";
 import { getDb } from "../../db/client";
 import { META_KEYS, meta } from "../../db/schema";
-import { readStages } from "../../db/store/stages";
+import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
-import { loadSummaries, loadUsage } from "../../db/store/summaries";
+import { loadSummaries, loadUsage, markInFlight } from "../../db/store/summaries";
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { runSummaries, summarizeNow, TargetNotFoundError } from "./run";
+import { runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
+
+// markInFlight calls straight through to the real one; a single test makes it throw once
+vi.mock("../../db/store/summaries", async (importOriginal) => {
+    const real = await importOriginal<typeof import("../../db/store/summaries")>();
+    return { ...real, markInFlight: vi.fn(real.markInFlight) };
+});
 
 function indexedFixture(): string {
     const root = copyFixture();
     indexRepository(root);
     return root;
 }
+
+/** src/f01.ts … src/f12.ts, one export each: 14 targets (12 files, src, the repo), and a first wave big enough for the circuit breaker. */
+function indexedTwelveFiles(): string {
+    const root = makeTempDir("neb-twelve-");
+    fs.mkdirSync(path.join(root, "src"));
+    for (let i = 1; i <= 12; i++){
+        const n = String(i).padStart(2, "0");
+        fs.writeFileSync(path.join(root, "src", `f${n}.ts`), `export const value${n} = ${i};\n`);
+    }
+    indexRepository(root);
+    return root;
+}
+
+/** src/f01.ts … src/f10.ts: 10 of the 12, at least BREAKER_MIN_FAILURES and more than half. */
+const FIRST_TEN = Array.from({ length: 10 }, (_, i) => `src/f${String(i + 1).padStart(2, "0")}.ts`);
 
 const rows = (root: string) => loadSummaries(getDb(), requireRepository(getDb(), repoKey(root)));
 const row = (root: string, p: string) => rows(root).find((r) => r.path === p);
@@ -30,7 +52,7 @@ describe("runSummaries — the regular API", () => {
         const stub = stubSummarizer();
 
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).toEqual({
-            total: 14, upToDate: 14, summarized: 13, templated: 1, failed: 0, lazy: 0, inFlight: 0, needModel: 0, batches: 0, waves: 4,
+            total: 14, upToDate: 14, summarized: 13, templated: 1, failed: 0, lazy: 0, inFlight: 0, needModel: 0, batches: 0, waves: 4, stopped: false,
         });
         expect(stub.subjects()).toEqual([
             "File: src/app/main.ts", "File: src/core/log.ts", "File: src/util/strings.ts", "File: src/app/view.tsx",
@@ -208,6 +230,11 @@ describe("runSummaries — the Batch API", () => {
         expect(readIndexStatus(root, muchLater)?.stages.summaries).toEqual({
             state: "running", done: 1, total: 14, note: "Connection error.; 7 requests still at Anthropic; run npm run summarize to collect them",
         });
+
+        // ...and, as the note says, the next run collects it: the 7 files were sent once
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 13, failed: 0, inFlight: 0 });
+        expect(stub.requests).toHaveLength(13);
     });
 
     it("stops at the first poll when Anthropic rejects the key, without retrying", async () => {
@@ -228,6 +255,135 @@ describe("runSummaries — the Batch API", () => {
             state: "running", done: 1, total: 14,
             note: "Anthropic rejected the API key: API error 401: invalid x-api-key; 7 requests still at Anthropic; run npm run summarize to collect them",
         });
+
+        // a run with a working key collects the batch instead of resending it
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 13, failed: 0, inFlight: 0 });
+        expect(stub.requests).toHaveLength(13);
+    });
+
+    it("names a batch it submitted but couldn't record, so the paid-for batch isn't lost silently", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        const said: string[] = [];
+        vi.mocked(markInFlight).mockImplementationOnce(() => {
+            throw new Error("SQLITE_BUSY: database is locked");
+        });
+
+        const error = await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0, onProgress: (m) => said.push(m) })
+            .then(() => null, (err: unknown) => err);
+
+        // Anthropic accepted the batch: the stub holds it, and its id is in the error, the progress and the stage
+        expect(stub.batches.size).toBe(1);
+        const [batchId] = stub.batches.keys();
+        const message = `submitted ${batchId} but couldn't record it: SQLITE_BUSY: database is locked`;
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe(message);
+        expect(said).toContain(message);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "failed", done: 1, total: 14, note: message });
+    });
+
+    it("stops when a batch can't be submitted, failing nothing, so no folder is summarized over placeholders", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        let submits = 0;
+        const overloadedOnce: Summarizer = {
+            ...stub.summarizer,
+            async submitBatch(requests){
+                submits++;
+                if (submits === 1) throw new Error("API error 529");
+                return stub.summarizer.submitBatch(requests);
+            },
+        };
+
+        await expect(runSummaries(root, { summarizer: overloadedOnce, transport: "batch", pollIntervalMs: 0 }))
+            .rejects.toThrow("couldn't submit a batch: API error 529");
+        expect(submits).toBe(1);
+        expect(stub.requests).toHaveLength(0);   // no folder or repo request went out (nor anything else)
+        // the 7 files' rows are untouched: pending, unclaimed, not failed
+        expect(rows(root).filter((r) => r.kind === "file" && r.status === "pending" && r.batchId === null)).toHaveLength(7);
+        expect(rows(root).filter((r) => r.status === "failed")).toHaveLength(0);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "failed", done: 1, total: 14, note: "couldn't submit a batch: API error 529" });
+
+        // nothing was failed or claimed, so a healthy run sends each of the 13 exactly once
+        const healthy = stubSummarizer();
+        expect(await runSummaries(root, { summarizer: healthy.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 13, failed: 0, upToDate: 14 });
+        expect(healthy.requests).toHaveLength(13);
+    });
+});
+
+describe("runSummaries — the structure guard and the circuit breaker", () => {
+    it("refuses to start while the structure stage isn't ready", async () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const stub = stubSummarizer();
+        writeStage(db, repoId, "structure", { state: "running", done: 3, total: 8 });
+
+        await expect(runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).rejects.toThrow(StructureNotReadyError);
+        await expect(summarizeNow(root, "src/core/log.ts", stub.summarizer))
+            .rejects.toThrow("the structure stage is running; wait for npm run index to finish (or re-run it) before summarizing");
+        expect(stub.requests).toHaveLength(0);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "idle", done: 0, total: 0 });   // nothing ran
+
+        writeStage(db, repoId, "structure", { state: "ready", done: 8, total: 8 });
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).toMatchObject({ summarized: 13 });
+    });
+
+    it("stops after a direct wave where most requests failed, before any folder is written over placeholders", async () => {
+        const root = indexedTwelveFiles();
+        const stub = stubSummarizer({ failPaths: FIRST_TEN });
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).toEqual({
+            total: 14, upToDate: 2, summarized: 2, templated: 0, failed: 10, lazy: 0, inFlight: 0, needModel: 0, batches: 0, waves: 1, stopped: true,
+        });
+        expect(stub.subjects()).toHaveLength(12);
+        expect(stub.subjects().every((s) => s.startsWith("File: "))).toBe(true);   // no folder, no repo
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "failed", done: 2, total: 14,
+            note: "stopped: 10 of 12 requests failed in the last wave (first error: stub failure); the failures are retried next run",
+        });
+
+        // the next run redoes the 10, then writes src and the repo once, over real summaries
+        const healthy = stubSummarizer();
+        expect(await runSummaries(root, { summarizer: healthy.summarizer, transport: "direct" }))
+            .toMatchObject({ summarized: 12, failed: 0, upToDate: 14, stopped: false });
+        expect(healthy.subjects().filter((s) => !s.startsWith("File: "))).toEqual(["Folder: src", `Repository: ${path.basename(root)}`]);
+    });
+
+    it("stops after a collected batch where most requests failed", async () => {
+        const root = indexedTwelveFiles();
+        const stub = stubSummarizer({ failPaths: FIRST_TEN });
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ upToDate: 2, summarized: 2, failed: 10, batches: 1, waves: 1, inFlight: 0, stopped: true });
+        expect(stub.subjects().every((s) => s.startsWith("File: "))).toBe(true);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "failed", done: 2, total: 14,
+            note: "stopped: 10 of 12 requests failed in the last batch (first error: stub failure); the failures are retried next run",
+        });
+    });
+
+    it("counts files edited since indexing against a batch wave, and stays running for the batch it did send", async () => {
+        const root = indexedTwelveFiles();
+        for (const p of FIRST_TEN) fs.appendFileSync(path.join(root, p), "export const extra = 1;\n");
+        const stub = stubSummarizer();
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ upToDate: 0, summarized: 0, failed: 10, batches: 1, waves: 1, inFlight: 2, stopped: true });
+        expect(stub.subjects()).toEqual(["File: src/f11.ts", "File: src/f12.ts"]);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "running", done: 0, total: 14,
+            note: "stopped: 10 of 12 requests failed in the last wave (first error: src/f01.ts changed after it was indexed; run npm run index first);"
+                + " the failures are retried next run; 2 requests still at Anthropic; run npm run summarize to collect them",
+        });
+
+        // after npm run index, the next run collects the 2 and sends the 10, then src and the repo: every target exactly once
+        indexRepository(root);
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 14, failed: 0, upToDate: 14, inFlight: 0, stopped: false });
+        expect(stub.requests).toHaveLength(14);
     });
 });
 

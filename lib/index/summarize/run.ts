@@ -4,7 +4,7 @@ import path from "path";
 import type { SummaryTargetKind } from "../../db/schema";
 import { getDb, type Db } from "../../db/client";
 import { acquireSummaryLock, releaseSummaryLock, touchSummaryLock } from "../../db/store/lock";
-import { writeStage } from "../../db/store/stages";
+import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import {
     addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
@@ -54,6 +54,8 @@ export type SummaryRunResult = {
     needModel: number;
     batches: number;
     waves: number;
+    /** The circuit breaker ended the run early; the summaries stage's note says why. */
+    stopped: boolean;
 };
 
 /** A wave this big goes through the Batch API at half price. A smaller one answers in seconds through the regular API. */
@@ -66,6 +68,11 @@ export const MAX_BATCH_REQUESTS = 5_000;
  * run stops. Its batches are still at Anthropic, and the next run collects them.
  */
 export const MAX_MISSED_POLLS = 5;
+/**
+ * The circuit breaker trips when at least this many requests failed in one wave or batch, and they
+ * were more than half of it. A few refusals in a small wave are normal and never trip it.
+ */
+export const BREAKER_MIN_FAILURES = 10;
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_POLL_MS = 60_000;
 const DEFAULT_HEARTBEAT_MS = 30_000;
@@ -84,6 +91,18 @@ export class TargetNotFoundError extends Error {
     }
 }
 
+/**
+ * Thrown by runSummaries and summarizeNow while the structure stage is running or failed:
+ * summaries of a half-indexed repo would fail as "changed after it was indexed", or be
+ * written over facts that are about to change, and both cost money.
+ */
+export class StructureNotReadyError extends Error {
+    constructor(readonly state: string){
+        super(`the structure stage is ${state}; wait for npm run index to finish (or re-run it) before summarizing`);
+        this.name = "StructureNotReadyError";
+    }
+}
+
 /** One planning pass: the plan, and the file facts it was made from. */
 type Snapshot = { targets: PlannedTarget[]; files: Map<string, FileFacts> };
 
@@ -97,6 +116,8 @@ type RunContext = {
     tally: Tally;
     /** Polls that errored since the last one that got an answer (MAX_MISSED_POLLS). */
     missedPolls: number;
+    /** Set when the circuit breaker trips: why the run stops before planning another wave. */
+    stopped: string | null;
     say: (message: string) => void;
 };
 
@@ -106,6 +127,7 @@ function newContext(db: Db, repoId: number, root: string, say: (message: string)
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPolls: 0,
+        stopped: null,
     };
 }
 
@@ -122,6 +144,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     const root = path.resolve(repoRoot);
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
+    requireStructureReady(db, repoId);
     const summarizer = options.summarizer;
     const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}));
     let last: PlannedTarget[] = [];
@@ -133,6 +156,9 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             last = snap.targets;
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
+
+            // the circuit breaker tripped on the last wave or batch: report where things stand, and send nothing more
+            if (ctx.stopped !== null) return finish(ctx, snap.targets, summarizer !== null);
 
             const ready = snap.targets.filter((t) => t.state === "ready");
             const progress = (note: string) =>
@@ -178,6 +204,7 @@ export async function summarizeNow(repoRoot: string, targetPath: string, summari
     const root = path.resolve(repoRoot);
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
+    requireStructureReady(db, repoId);
     const snap = snapshot(db, repoId, true, new Set());
     const target = snap.targets.find((t) => t.path === targetPath);
     if (!target) throw new TargetNotFoundError(targetPath);
@@ -212,6 +239,15 @@ export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick
 
     const listing = loadFileSummaryChunk(db, repoId, file.path);
     return listing === null ? null : renderFilePrompt(listing, file.lineCount, source);
+}
+
+/**
+ * Summaries are built on the structure index, so it has to be finished first. A repo indexed
+ * before stage status existed has no structure row at all; that counts as ready.
+ */
+function requireStructureReady(db: Db, repoId: number): void {
+    const structure = readStages(db, repoId).structure;
+    if (structure && structure.state !== "ready") throw new StructureNotReadyError(structure.state);
 }
 
 function snapshot(db: Db, repoId: number, refreshStaleFolders: boolean, failedThisRun: ReadonlySet<string>): Snapshot {
@@ -278,13 +314,19 @@ async function sendDirect(
         return outcome;
     });
 
-    const failed = outcomes.filter((o) => !o.ok).length;
-    ctx.say(`wave ${ctx.tally.waves} done: ${outcomes.length - failed} summarized, ${failed} failed`);
+    const errors = errorsOf(outcomes);
+    ctx.say(`wave ${ctx.tally.waves} done: ${outcomes.length - errors.length} summarized, ${errors.length} failed`);
+    checkFailures(ctx, errors, outcomes.length, "wave");
 }
 
-/** Submits ready targets as Message Batches of up to MAX_BATCH_REQUESTS and records which batch carries each row. */
+/**
+ * Submits ready targets as Message Batches of up to MAX_BATCH_REQUESTS and records which batch carries each row.
+ * A chunk that can't be submitted ends the run (see below); chunks submitted before it stay at Anthropic, and the
+ * next run collects them.
+ */
 async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>): Promise<void> {
     const destinations = destinationsFor(ready, ids);
+    const unsendable: string[] = [];
 
     for (let i = 0; i < ready.length; i += MAX_BATCH_REQUESTS){
         const requests: SummaryRequest[] = [];
@@ -297,23 +339,39 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
             else requests.push(built.request);
         }
         ingest(ctx, failures, "direct", (customId) => destinations.get(customId));
+        unsendable.push(...errorsOf(failures));
         if (requests.length === 0) continue;
 
+        let batchId: string;
         try{
-            const batchId = await summarizer.submitBatch(requests);
+            batchId = await summarizer.submitBatch(requests);
+        } catch (err){
+            // No batch id came back. Usually Anthropic refused the batch and nothing went out; if the reply was lost on
+            // its way back, the batch exists but nothing here can name it (ADR-033). Either way no row can be tied to
+            // it, so these rows stay pending, unclaimed and unfailed, and the next run sends them. The cause (an outage,
+            // a rejected key) would sink the next chunk too, and carrying on would only summarize folders over
+            // "(no summary yet)", so the run ends here.
+            throw new Error(`couldn't submit a batch: ${messageOf(err)}`, { cause: err });
+        }
+
+        try{
             markInFlight(ctx.db, batchId, requests.map((r) => {
                 const destination = destinations.get(r.customId)!;
                 return { id: destination.id, inputHash: destination.inputHash };
             }));
-            ctx.tally.batches++;
-            ctx.say(`submitted ${batchId} with ${plural(requests.length, "request")}`);
         } catch (err){
-            // nothing went out for this chunk: its targets wait for the next run
-            const error = `couldn't submit the batch: ${messageOf(err)}`;
-            ingest(ctx, requests.map((r) => ({ customId: r.customId, ok: false, error, model: null, usage: null })), "batch",
-                (customId) => destinations.get(customId));
+            // The batch is at Anthropic and paid for, but no row knows it (SQLITE_BUSY while npm run index holds the
+            // write lock, say). Name it before anything else can go wrong, so it can still be found and collected.
+            const message = `submitted ${batchId} but couldn't record it: ${messageOf(err)}`;
+            ctx.say(message);
+            throw new Error(message, { cause: err });
         }
+        ctx.tally.batches++;
+        ctx.say(`submitted ${batchId} with ${plural(requests.length, "request")}`);
     }
+
+    // files that couldn't even be sent (edited since indexing) count against the wave
+    checkFailures(ctx, unsendable, ready.length, "wave");
 }
 
 /**
@@ -360,6 +418,7 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
         ingest(ctx, [...destinations.keys()].map((customId) => ({ customId, ok: false, error, model: null, usage: null })),
             "batch", (customId) => destinations.get(customId));
         ctx.say(`${batchId} is gone at Anthropic: ${plural(rows.length, "request")} failed (resent next run)`);
+        checkFailures(ctx, rows.map(() => error), rows.length, "batch");
         return true;
     }
 
@@ -375,8 +434,9 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
     ingest(ctx, missing.map((customId) => ({ customId, ok: false, error: "missing from the batch's results", model: null, usage: null })),
         "batch", (customId) => destinations.get(customId));
 
-    const ok = outcomes.filter((o) => o.ok).length;
-    ctx.say(`collected ${batchId}: ${ok} summarized, ${outcomes.length - ok + missing.length} failed`);
+    const errors = [...errorsOf(outcomes), ...missing.map(() => "missing from the batch's results")];
+    ctx.say(`collected ${batchId}: ${outcomes.length + missing.length - errors.length} summarized, ${errors.length} failed`);
+    checkFailures(ctx, errors, outcomes.length + missing.length, "batch");
     return true;
 }
 
@@ -392,6 +452,26 @@ function missedPoll(ctx: RunContext, batchId: string, err: unknown): void {
         throw err;
     }
     ctx.say(`couldn't check ${batchId} (${messageOf(err)}); will retry`);
+}
+
+/**
+ * The circuit breaker (ADR-033), checked after every wave and every collected batch. When
+ * most of one failed, the cause is almost certainly shared: a rejected key, an outage, a
+ * repo edited since indexing. Failed children count as settled, so carrying on would
+ * summarize their folders over "(no summary yet)" and pay for those folders again next run.
+ * Instead the run stops before planning another wave.
+ */
+function checkFailures(ctx: RunContext, errors: readonly string[], total: number, where: "wave" | "batch"): void {
+    if (ctx.stopped !== null) return;   // already stopping: the first reason stands
+    if (errors.length < BREAKER_MIN_FAILURES || errors.length * 2 <= total) return;
+
+    ctx.stopped = `stopped: ${errors.length} of ${total} requests failed in the last ${where} (first error: ${errors[0]}); the failures are retried next run`;
+    ctx.say(ctx.stopped);
+}
+
+/** The error of every failed outcome, in order. */
+function errorsOf(outcomes: readonly SummaryOutcome[]): string[] {
+    return outcomes.flatMap((o) => (o.ok ? [] : [o.error]));
 }
 
 /** Writes outcomes to their rows and adds their tokens to the repo's spend. */
@@ -439,12 +519,18 @@ function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarize
         lazy: count("lazy"),
         inFlight: countInFlight(ctx.db, ctx.repoId),
         needModel: hasSummarizer ? 0 : count("ready") + count("waiting"),
+        stopped: ctx.stopped !== null,
     };
 
-    let state: "ready" | "running" | "off" = "ready";
+    let state: "ready" | "running" | "failed" | "off" = "ready";
     const notes: string[] = [];
 
-    if (result.needModel > 0){
+    if (ctx.stopped !== null){
+        // the circuit breaker: still running if batches are at Anthropic (as after an error), failed otherwise
+        state = result.inFlight > 0 ? "running" : "failed";
+        notes.push(ctx.stopped);
+        if (result.inFlight > 0) notes.push(stillAtAnthropic(result.inFlight));
+    } else if (result.needModel > 0){
         state = "off";
         notes.push(`ANTHROPIC_API_KEY is not set, so ${result.needModel} of ${result.total} summaries can't be written`);
     } else if (result.inFlight > 0){

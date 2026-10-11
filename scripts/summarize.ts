@@ -18,7 +18,7 @@ import { embedSummaries } from "../lib/index/embed";
 import { repoKey } from "../lib/index/paths";
 import { createClaudeSummarizer } from "../lib/index/summarize/claude";
 import { costUsd } from "../lib/index/summarize/pricing";
-import { runSummaries, summarizeNow, TargetNotFoundError, type Transport } from "../lib/index/summarize/run";
+import { runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, type Transport } from "../lib/index/summarize/run";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
 loadLocalEnv();
@@ -53,6 +53,7 @@ async function main(): Promise<void> {
         say(`up to date ${result.upToDate}/${result.total} · summarized ${result.summarized} · templated ${result.templated}`
             + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
             + ` · waves ${result.waves} · batches ${result.batches}`);
+        if (result.stopped) say("stopped early: most of the last wave or batch failed (the reason is above). Fix the cause and run again; the failures are retried.");
     }
 
     const embedded = await embedSummaries(root, {
@@ -88,7 +89,7 @@ function printSpend(): void {
 }
 
 main().catch((err: unknown) => {
-    if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError){
+    if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError || err instanceof StructureNotReadyError){
         console.error(`[summarize] ${err.message}`);
         process.exit(1);
     }
