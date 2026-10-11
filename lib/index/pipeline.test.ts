@@ -1,0 +1,113 @@
+import { describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { getDb } from "../db/client";
+import { files, folders, levelEdges, symbols } from "../db/schema";
+import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
+import { indexRepository } from "./pipeline";
+
+const FIXTURE = path.resolve("test/fixtures/mini-repo");
+
+function copyFixture(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "neb-pipeline-"));
+    fs.cpSync(FIXTURE, dir, { recursive: true });
+    return dir;
+}
+
+function levelRows(repoId: number, levelPath: string) {
+    return getDb()
+        .select({ s: levelEdges.sourceNode, t: levelEdges.targetNode, c: levelEdges.count })
+        .from(levelEdges)
+        .where(and(eq(levelEdges.repoId, repoId), eq(levelEdges.levelPath, levelPath)))
+        .orderBy(levelEdges.sourceNode, levelEdges.targetNode)
+        .all();
+}
+
+describe("indexRepository — first run on the fixture", () => {
+    it("stores 8 files, 11 edges, 6 folders and 10 level edges, matching the hand-derived ground truth", () => {
+        const root = copyFixture();
+        const result = indexRepository(root);
+
+        expect(result).toMatchObject({ files: 8, changed: 8, unchanged: 0, deleted: [], edges: 11, folders: 6, levelEdges: 10, errors: [], skipped: [], usedGit: false, indexedHead: null });
+
+        expect(levelRows(result.repoId, "")).toEqual([{ s: "scripts", t: "src", c: 2 }]);
+        expect(levelRows(result.repoId, "src")).toEqual([
+            { s: "src/app", t: "src/core", c: 1 },
+            { s: "src/app", t: "src/util", c: 1 },
+            { s: "src/index.ts", t: "src/app", c: 1 },
+            { s: "src/index.ts", t: "src/core", c: 1 },
+            { s: "src/util", t: "src/core", c: 1 },
+        ]);
+
+        const db = getDb();
+        const rootFolder = db.select({ name: folders.name, fileCount: folders.fileCount })
+            .from(folders).where(and(eq(folders.repoId, result.repoId), eq(folders.path, ""))).get();
+        expect(rootFolder).toEqual({ name: path.basename(root), fileCount: 8 });
+
+        const logTs = db.select({ id: files.id, lineCount: files.lineCount, isTest: files.isTest })
+            .from(files).where(and(eq(files.repoId, result.repoId), eq(files.path, "src/core/log.ts"))).get()!;
+        expect(logTs).toMatchObject({ lineCount: 9, isTest: false });
+        expect(db.select({ q: symbols.qualifiedName, k: symbols.kind, s: symbols.startLine, e: symbols.endLine, x: symbols.exported })
+            .from(symbols).where(eq(symbols.fileId, logTs.id)).orderBy(symbols.id).all()).toEqual([
+            { q: "log", k: "function", s: 2, e: 2, x: true },
+            { q: "Logger", k: "class", s: 4, e: 7, x: true },
+            { q: "Logger.info", k: "method", s: 5, e: 5, x: true },
+            { q: "Logger.warn", k: "method", s: 6, e: 6, x: false },
+            { q: "banner", k: "const", s: 9, e: 9, x: true },
+        ]);
+
+        const testFile = db.select({ isTest: files.isTest })
+            .from(files).where(and(eq(files.repoId, result.repoId), eq(files.path, "src/util/strings.test.ts"))).get();
+        expect(testFile).toEqual({ isTest: true });
+    });
+});
+
+describe("indexRepository — incremental runs", () => {
+    it("re-indexing an unchanged repo parses nothing and keeps the graph", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        expect(indexRepository(root)).toMatchObject({ changed: 0, unchanged: 8, edges: 11, levelEdges: 10 });
+    });
+
+    it("an edited file is re-parsed alone, and its new import appears at the right level", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        fs.appendFileSync(path.join(root, "src/util/strings.ts"), "\nimport { render } from \"../app/view\";\nexport const r = render;\n");
+
+        const after = indexRepository(root);
+
+        // new edge src/util/strings.ts → src/app/view.tsx; LCA(src/util, src/app) = src
+        expect(after).toMatchObject({ changed: 1, unchanged: 7, edges: 12, levelEdges: 11 });
+        expect(levelRows(after.repoId, "src")).toContainEqual({ s: "src/util", t: "src/app", c: 1 });
+    });
+
+    it("a deleted file disappears together with its edges", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        fs.rmSync(path.join(root, "src/util/strings.test.ts"));
+
+        expect(indexRepository(root)).toMatchObject({ files: 7, deleted: ["src/util/strings.test.ts"], edges: 10, folders: 6, levelEdges: 9 });
+    });
+});
+
+describe("indexRepository — edges of the world", () => {
+    it("an empty directory yields an empty index with just a root folder, not a crash", () => {
+        const empty = fs.mkdtempSync(path.join(os.tmpdir(), "neb-empty-"));
+        expect(indexRepository(empty)).toMatchObject({ files: 0, edges: 0, folders: 1, levelEdges: 0, errors: [] });
+    });
+
+    it("refuses to run while another run holds the lock, and releases its own lock afterwards", () => {
+        const db = getDb();
+        const root = copyFixture();
+        acquireIndexLock(db);
+        try{
+            expect(() => indexRepository(root)).toThrow(IndexLockedError);
+        } finally{
+            releaseIndexLock(db);
+        }
+        expect(() => indexRepository(root)).not.toThrow();
+        expect(() => indexRepository(root)).not.toThrow(); // the previous run released its lock
+    });
+});
