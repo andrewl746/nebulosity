@@ -1,7 +1,7 @@
 /**
  * npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--path <repo-relative path>]
  *
- * Writes summaries for an indexed repository (PIVOT_SPEC.md §5.3).
+ * Writes summaries for an indexed repository (PIVOT_SPEC.md §5.3), then embeds them for search (§5.4).
  * - A big first pass goes through the Message Batches API at half price and can take hours.
  *   --no-wait submits and exits; running the command again collects what finished and
  *   carries on.
@@ -14,6 +14,7 @@ import { getDb } from "../lib/db/client";
 import { IndexLockedError } from "../lib/db/store/lock";
 import { RepoNotIndexedError, requireRepository } from "../lib/db/store/structure";
 import { loadUsage } from "../lib/db/store/summaries";
+import { embedSummaries } from "../lib/index/embed";
 import { repoKey } from "../lib/index/paths";
 import { createClaudeSummarizer } from "../lib/index/summarize/claude";
 import { costUsd } from "../lib/index/summarize/pricing";
@@ -53,6 +54,12 @@ async function main(): Promise<void> {
             + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
             + ` · waves ${result.waves} · batches ${result.batches}`);
     }
+
+    const embedded = await embedSummaries(root, {
+        onProgress: (done, total) => process.stdout.write(`\r[summarize] embedding ${done}/${total}   `),
+    });
+    if (embedded.embedded > 0) process.stdout.write("\n");
+    say(`embedded ${embedded.embedded} summaries; ${embedded.total} now have vectors`);
 
     printSpend();
 }
