@@ -40,6 +40,14 @@ export type IndexResult = {
     indexedHead: string | null;
 };
 
+/** Thrown when the path to index isn't an existing directory (a typo, or a file). */
+export class RepoNotFoundError extends Error {
+    constructor(root: string){
+        super(`No directory at ${root}`);
+        this.name = "RepoNotFoundError";
+    }
+}
+
 /** One spelling of a repo root everywhere (repositories.rootPath): absolute, forward slashes. */
 export function repoKey(repoRoot: string): string {
     return normalizeSlashes(path.resolve(repoRoot));
@@ -52,8 +60,16 @@ export function repoKey(repoRoot: string): string {
  * the Next server will run this on a worker thread (V1.3).
  */
 export function indexRepository(repoRoot: string, options: IndexOptions = {}): IndexResult {
-    const db = getDb();
     const root = path.resolve(repoRoot);
+
+    // Checked before anything touches the database: a mistyped path must fail loudly,
+    // not "index" zero files, leave a repositories row for a path that never existed,
+    // and become the active repo. An existing but empty folder is still fine.
+    if (!isDirectory(root)){
+        throw new RepoNotFoundError(root);
+    }
+
+    const db = getDb();
     const started = performance.now();
     const timingsMs: Record<IndexStage, number> = { discover: 0, parse: 0, write: 0, resolve: 0, aggregate: 0 };
     const batchSize = options.batchSize ?? 500;
@@ -180,4 +196,12 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
 function message(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
+}
+
+function isDirectory(p: string): boolean {
+    try{
+        return fs.statSync(p).isDirectory();
+    } catch{
+        return false;   // missing, or unreachable through a file (ENOTDIR)
+    }
 }

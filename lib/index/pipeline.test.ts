@@ -4,9 +4,9 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { getDb } from "../db/client";
-import { files, folders, levelEdges, symbols } from "../db/schema";
+import { files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
-import { indexRepository } from "./pipeline";
+import { indexRepository, repoKey, RepoNotFoundError } from "./pipeline";
 
 const FIXTURE = path.resolve("test/fixtures/mini-repo");
 
@@ -23,6 +23,10 @@ function levelRows(repoId: number, levelPath: string) {
         .where(and(eq(levelEdges.repoId, repoId), eq(levelEdges.levelPath, levelPath)))
         .orderBy(levelEdges.sourceNode, levelEdges.targetNode)
         .all();
+}
+
+function storedRoots(): string[] {
+    return getDb().select({ rootPath: repositories.rootPath }).from(repositories).all().map((r) => r.rootPath);
 }
 
 describe("indexRepository — first run on the fixture", () => {
@@ -96,6 +100,18 @@ describe("indexRepository — edges of the world", () => {
     it("an empty directory yields an empty index with just a root folder, not a crash", () => {
         const empty = fs.mkdtempSync(path.join(os.tmpdir(), "neb-empty-"));
         expect(indexRepository(empty)).toMatchObject({ files: 0, edges: 0, folders: 1, levelEdges: 0, errors: [] });
+    });
+
+    it("refuses a path that does not exist, and records no repository for it", () => {
+        const missing = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "neb-missing-")), "no-such-repo");
+        expect(() => indexRepository(missing)).toThrow(RepoNotFoundError);
+        expect(storedRoots()).not.toContain(repoKey(missing));
+    });
+
+    it("refuses a file given as the repo root, and records no repository for it", () => {
+        const file = path.join(copyFixture(), "README.md");
+        expect(() => indexRepository(file)).toThrow(RepoNotFoundError);
+        expect(storedRoots()).not.toContain(repoKey(file));
     });
 
     it("refuses to run while another run holds the lock, and releases its own lock afterwards", () => {

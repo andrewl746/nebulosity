@@ -6,7 +6,7 @@
  * active one for the Map and the MCP server.
  */
 import path from "path";
-import { indexRepository, repoKey } from "../lib/index/pipeline";
+import { indexRepository, repoKey, RepoNotFoundError } from "../lib/index/pipeline";
 import { IndexLockedError } from "../lib/db/store/lock";
 import { writeConfig } from "../lib/config";
 
@@ -44,6 +44,11 @@ try{
     writeConfig({ activeRepo: repoKey(root) });
     console.log(`[index] active repo → ${repoKey(root)}`);
 } catch (err){
+    if (err instanceof RepoNotFoundError){
+        // exits before writeConfig, so a typo never becomes the active repo
+        console.error(`[index] ${err.message}. Pass the path to a repository folder.`);
+        process.exit(1);
+    }
     if (err instanceof IndexLockedError){
         console.error(`[index] ${err.message} If no other run is going, the lock clears itself after 30 minutes.`);
         process.exit(2);
