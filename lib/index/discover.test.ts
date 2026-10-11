@@ -29,6 +29,15 @@ describe("discoverFiles — walking (no .git)", () => {
         const result = discoverFiles(FIXTURE, { extensions: TS_EXTENSIONS });
         expect(result.files.filter((f) => f.path.includes("\\"))).toEqual([]);
     });
+
+    it("skips build output and coverage (dist, out, build, coverage) at any depth", () => {
+        const dir = makeTempDir("neb-discover-walk-");
+        for (const rel of ["dist/a.js", "out/b.js", "build/c.js", "coverage/d.js", "packages/p/dist/e.js", "src/f.ts"]){
+            fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+            fs.writeFileSync(path.join(dir, rel), "export {};\n");
+        }
+        expect(discoverFiles(dir, { extensions: TS_EXTENSIONS }).files.map((f) => f.path)).toEqual(["src/f.ts"]);
+    });
 });
 
 describe("discoverFiles — git repositories", () => {
@@ -67,6 +76,15 @@ describe("discoverFiles — git repositories", () => {
 
         expect(result.usedGit).toBe(true);
         expect(result.files.map((f) => f.path)).toEqual(["a.ts"]);
+    });
+
+    it("keeps a build/ folder in a git repo, where .gitignore decides (VS Code's build scripts live there)", () => {
+        const dir = makeTempDir("neb-discover-build-");
+        execFileSync("git", ["init", "-q", dir]);
+        fs.mkdirSync(path.join(dir, "build"));
+        fs.writeFileSync(path.join(dir, "build", "gulpfile.ts"), "export {};\n");
+        fs.writeFileSync(path.join(dir, "a.ts"), "export {};\n");
+        expect(discoverFiles(dir, { extensions: TS_EXTENSIONS }).files.map((f) => f.path)).toEqual(["a.ts", "build/gulpfile.ts"]);
     });
 
     it("readGitHead is null for a repository with no commits and for a non-git folder", () => {

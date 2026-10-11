@@ -149,7 +149,7 @@ For every import edge `a → b`, take `L = LCA(dir(a), dir(b))`, the deepest fol
 ## 5. Indexing pipeline
 
 ### 5.1 Discover
-Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree with the ignore list. Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. Files larger than 1 MB are recorded as skipped. The scan is no longer limited to `app/` and `lib/`.
+Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree, skipping `node_modules`, `.git`, `.next` and `.nebulosity` (skipped in git mode too), plus `dist`, `out`, `build` and `coverage` (skipped only when walking: in a git repo `.gitignore` decides, and a tracked `build/` can be real source, as in VS Code). Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. Files larger than 1 MB are recorded as skipped. The scan is no longer limited to `app/` and `lib/`.
 
 ### 5.2 Structure (blocking; target S1 ≤ 60 s)
 1. Hash every file and skip unchanged ones (ADR-022's contentHash rule).
