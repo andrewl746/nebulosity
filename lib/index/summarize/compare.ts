@@ -45,12 +45,16 @@ export function renderComparison(report: ComparisonReport): string {
     const [fileStats, folderStats] = stats;
     const central = Math.ceil(report.rows.length / 2);
 
-    const filesTotal = (report.fullPass.files * fileStats.meanCost) / 2;
+    // what one file costs with each model, rounded as the lines below print it (see perRequestPrice)
+    const filePrice = perRequestPrice(fileStats.meanCost);
+    const folderModelFilePrice = perRequestPrice(folderStats.meanCost);
+
+    const filesTotal = (report.fullPass.files * filePrice.value) / 2;
     const folderPrice = pricePerMTok(folderModel) ?? { input: 0, output: 0 };
     const meanFolderOutput = Math.round(folderStats.meanOutputTokens);
     const perFolder = (ASSUMED_FOLDER_INPUT_TOKENS * folderPrice.input + meanFolderOutput * folderPrice.output) / 1_000_000;
     const foldersTotal = (report.fullPass.folders * perFolder) / 2;
-    const allSonnetFiles = (report.fullPass.files * folderStats.meanCost) / 2;
+    const allSonnetFiles = (report.fullPass.files * folderModelFilePrice.value) / 2;
 
     const lines = [
         `## ${report.title}`,
@@ -66,10 +70,10 @@ export function renderComparison(report: ComparisonReport): string {
         "",
         "### Full-pass estimate (Batch API, half price)",
         "",
-        `- **Files:** ${report.fullPass.files.toLocaleString("en-US")} × ${usd(fileStats.meanCost)} (${fileModel}'s mean) × ½ = **${usd(filesTotal)}**`,
+        `- **Files:** ${report.fullPass.files.toLocaleString("en-US")} × ${filePrice.text} (${fileModel}'s mean) × ½ = **${usd(filesTotal)}**`,
         `- **Folders and the repo:** ${report.fullPass.folders.toLocaleString("en-US")} × (${ASSUMED_FOLDER_INPUT_TOKENS.toLocaleString("en-US")} input tokens + ${meanFolderOutput.toLocaleString("en-US")} output tokens at ${folderModel}'s price) × ½ = **${usd(foldersTotal)}**`,
         `- **Total ≈ ${usd(filesTotal + foldersTotal)}** against S2's $15.`,
-        `- If ${folderModel} wrote the file summaries too: ${report.fullPass.files.toLocaleString("en-US")} × ${usd(folderStats.meanCost)} × ½ = **${usd(allSonnetFiles)}**`,
+        `- If ${folderModel} wrote the file summaries too: ${report.fullPass.files.toLocaleString("en-US")} × ${folderModelFilePrice.text} × ½ = **${usd(allSonnetFiles)}**`,
         "",
         `Folder inputs are assumed to be about ${ASSUMED_FOLDER_INPUT_TOKENS.toLocaleString("en-US")} tokens each, since a folder lists its children's taglines and summaries. The full run measures the real number.`,
         "",
@@ -81,7 +85,7 @@ export function renderComparison(report: ComparisonReport): string {
         for (const model of report.models){
             const outcome = row.outcomes[model];
             lines.push(outcome?.ok
-                ? `- **${model}:** *${outcome.text.tagline}* — ${outcome.text.summary}`
+                ? `- ${answerLabel(model, outcome.model)} *${outcome.text.tagline}* — ${outcome.text.summary}`
                 : `- **${model}:** failed: ${outcome ? outcome.error : "no answer"}`);
         }
     });
@@ -122,6 +126,31 @@ function modelStats(model: string, rows: readonly ComparisonRow[]){
     };
 }
 
+/**
+ * "**model:**", or, when a fallback model wrote the answer, "**model** (answered by other):".
+ * That isn't the summary the column's model would have written, and the reader should know.
+ */
+function answerLabel(model: string, answeredBy: string): string {
+    return answeredBy === model ? `**${model}:**` : `**${model}** (answered by ${answeredBy}):`;
+}
+
+/**
+ * A mean price per request, rounded to 3 significant figures, with the text that prints it.
+ * The estimate multiplies the rounded value, not the exact mean, so anyone can redo a line from
+ * what it prints and land on the figure beside it: "10,412 × $0.000588 × ½" is $3.06. Printing
+ * "$0.0006" while multiplying the exact $0.000588225 left a line that works out to $3.12.
+ * Prints at least 4 decimals, and more only while the rounded value needs them ($0.0060, $0.000588).
+ */
+function perRequestPrice(mean: number): { value: number; text: string } {
+    const value = Number(mean.toPrecision(3));
+
+    // the cap is a backstop: NaN never equals itself, and would otherwise add decimals forever
+    let decimals = 4;
+    while (decimals < 12 && Number(value.toFixed(decimals)) !== value) decimals++;
+    return { value, text: `$${value.toFixed(decimals)}` };
+}
+
+/** A dollar amount: 4 decimals below $0.10, so $0.0118 doesn't read as $0.01, and 2 above. */
 function usd(x: number): string {
-    return `$${x < 0.01 ? x.toFixed(4) : x.toFixed(2)}`;
+    return `$${x < 0.1 ? x.toFixed(4) : x.toFixed(2)}`;
 }

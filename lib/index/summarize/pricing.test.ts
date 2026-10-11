@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { costUsd } from "./pricing";
+import { costUsd, pricePerMTok } from "./pricing";
+import { SUMMARY_MODELS } from "./prompts";
+
+describe("pricePerMTok", () => {
+    it("has a price on file for every model the summary stage uses", () => {
+        // an unpriced folder model would make the checkpoint's folder estimate silently $0
+        for (const model of Object.values(SUMMARY_MODELS)){
+            expect(pricePerMTok(model), `no price on file for ${model}`).not.toBeNull();
+        }
+    });
+});
 
 describe("costUsd", () => {
     it("prices tokens at list price, half for batches", () => {

@@ -11,15 +11,15 @@ The owner's checks of model-written summaries before they're generated at scale.
 
 | Model | Requests | Input tokens | Output tokens | Cost |
 |---|---|---|---|---|
-| claude-haiku-5-5 | 20 | 91,515 | 5,226 | $0.01 |
+| claude-haiku-5-5 | 20 | 91,515 | 5,226 | $0.0118 |
 | claude-sonnet-5-5 | 20 | 91,515 | 4,925 | $0.23 |
 
 ### Full-pass estimate (Batch API, half price)
 
-- **Files:** 10,412 × $0.0006 (claude-haiku-5-5's mean) × ½ = **$3.06**
+- **Files:** 10,412 × $0.000588 (claude-haiku-5-5's mean) × ½ = **$3.06**
 - **Folders and the repo:** 3,793 × (1,000 input tokens + 246 output tokens at claude-sonnet-5-5's price) × ½ = **$8.46**
 - **Total ≈ $11.52** against S2's $15.
-- If claude-sonnet-5-5 wrote the file summaries too: 10,412 × $0.01 × ½ = **$60.46**
+- If claude-sonnet-5-5 wrote the file summaries too: 10,412 × $0.0116 × ½ = **$60.39**
 
 Folder inputs are assumed to be about 1,000 tokens each, since a folder lists its children's taglines and summaries. The full run measures the real number.
 
