@@ -23,3 +23,15 @@ export interface Summarizer {
     /** Every outcome once the batch has ended; null while it's still processing. */
     batchResults(batchId: string): Promise<SummaryOutcome[] | null>;
 }
+
+/**
+ * Thrown by batchResults when Anthropic no longer has the batch (404): its results are
+ * past retention, or it belongs to another workspace's key. Unlike a network error this
+ * won't heal by retrying, so the runner gives up on the batch and resends its rows.
+ */
+export class BatchGoneError extends Error {
+    constructor(readonly batchId: string, readonly reason: string){
+        super(`Batch ${batchId} is no longer available at Anthropic: ${reason}`);
+        this.name = "BatchGoneError";
+    }
+}

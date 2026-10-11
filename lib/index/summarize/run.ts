@@ -15,7 +15,7 @@ import { repoKey } from "../paths";
 import { mapLimit } from "./concurrency";
 import { planSummaries, type PlannedTarget, type TargetState } from "./plan";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, plural, REPO_SYSTEM_PROMPT, renderFilePrompt, SUMMARY_MODELS } from "./prompts";
-import type { Summarizer, SummaryOutcome, SummaryRequest } from "./types";
+import { BatchGoneError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** auto: the Batch API for waves of BATCH_THRESHOLD requests or more, the regular API below that. */
 export type Transport = "auto" | "direct" | "batch";
@@ -29,6 +29,8 @@ export type SummaryRunOptions = {
     /** Redo out-of-date folders now (default). Incremental runs pass false: those wait until someone opens them. */
     refreshStaleFolders?: boolean;
     pollIntervalMs?: number;
+    /** How often a long wave refreshes the stage and the lock. */
+    heartbeatMs?: number;
     concurrency?: number;
     onProgress?: (message: string) => void;
 };
@@ -60,6 +62,7 @@ export const BATCH_THRESHOLD = 100;
 export const MAX_BATCH_REQUESTS = 5_000;
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_POLL_MS = 60_000;
+const DEFAULT_HEARTBEAT_MS = 30_000;
 
 const SYSTEM_PROMPTS: Record<SummaryTargetKind, string> = {
     file: FILE_SYSTEM_PROMPT,
@@ -132,7 +135,8 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
                 ctx.say(`wave ${ctx.tally.waves}: ${ready.length} to summarize ${how}`);
 
                 if (useBatch) await submitInBatches(ctx, summarizer, snap, ready, ids);
-                else await sendDirect(ctx, summarizer, snap, ready, ids, options.concurrency ?? DEFAULT_CONCURRENCY);
+                else await sendDirect(ctx, summarizer, snap, ready, ids, options.concurrency ?? DEFAULT_CONCURRENCY,
+                    options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS, progress);
                 continue;
             }
 
@@ -235,14 +239,30 @@ function destinationsFor(targets: readonly PlannedTarget[], ids: ReadonlyMap<str
     }));
 }
 
-/** The regular API, a few at a time; each answer is written as it arrives, so a crash loses at most the ones in flight. */
-async function sendDirect(ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>, concurrency: number): Promise<void> {
+/**
+ * The regular API, a few at a time; each answer is written as it arrives, so a crash loses at most the ones in flight.
+ * A big wave (VS Code's files with --direct) runs for hours, so it heartbeats: without that, readers would call the
+ * live run crashed after 5 minutes (ADR-032), and a second run could take its lock after 30 and pay twice.
+ */
+async function sendDirect(
+    ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>,
+    concurrency: number, heartbeatMs: number, progress: (note: string) => void
+): Promise<void> {
     const destinations = destinationsFor(ready, ids);
+    let answered = 0;
+    let lastBeat: number | null = null;
 
     const outcomes = await mapLimit(ready, concurrency, async (target) => {
         const built = buildRequest(ctx, snap, target, ids);
         const outcome = "failure" in built ? built.failure : await summarizer.summarize(built.request);
         ingest(ctx, [outcome], "direct", (customId) => destinations.get(customId));
+        answered++;
+
+        if (lastBeat === null || Date.now() - lastBeat >= heartbeatMs){
+            lastBeat = Date.now();
+            touchSummaryLock(ctx.db);
+            progress(`wave ${ctx.tally.waves}: ${answered} of ${ready.length} answered`);
+        }
         return outcome;
     });
 
@@ -284,11 +304,28 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
     }
 }
 
-/** Polls the batches still at Anthropic until one has ended, then writes its answers. */
+/**
+ * Polls the batches still at Anthropic until one has ended, then writes its answers. A batch
+ * Anthropic no longer has (BatchGoneError) has its rows marked failed, which releases them:
+ * the next run resends them instead of failing at the same batch forever.
+ */
 async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollIntervalMs: number, heartbeat: () => void): Promise<void> {
     for (;;){
         for (const batchId of inFlightBatches(ctx.db, ctx.repoId)){
-            const outcomes = await summarizer.batchResults(batchId);
+            let outcomes: SummaryOutcome[] | null;
+            try{
+                outcomes = await summarizer.batchResults(batchId);
+            } catch (err){
+                if (!(err instanceof BatchGoneError)) throw err;
+
+                const rows = loadBatchRows(ctx.db, batchId);
+                const destinations = new Map(rows.map((r) => [`s${r.id}`, { ...r, batchId }]));
+                const error = `the batch is no longer available at Anthropic (${err.reason})`;
+                ingest(ctx, [...destinations.keys()].map((customId) => ({ customId, ok: false, error, model: null, usage: null })),
+                    "batch", (customId) => destinations.get(customId));
+                ctx.say(`${batchId} is gone at Anthropic: ${plural(rows.length, "request")} failed (resent next run)`);
+                return;
+            }
             if (outcomes === null) continue;
 
             const destinations = new Map(loadBatchRows(ctx.db, batchId).map((r) => [`s${r.id}`, { ...r, batchId }]));

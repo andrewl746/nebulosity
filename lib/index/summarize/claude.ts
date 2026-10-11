@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { SummaryText } from "../../db/store/summaries";
 import { MAX_OUTPUT_TOKENS, SUMMARY_EFFORT } from "./prompts";
-import type { Summarizer, SummaryOutcome, SummaryRequest } from "./types";
+import { BatchGoneError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** The reply we ask for, enforced by structured outputs (output_config.format). */
 export const SUMMARY_SCHEMA = {
@@ -122,15 +122,21 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
         },
 
         async batchResults(batchId){
-            const batch = await client.messages.batches.retrieve(batchId);
-            if (batch.processing_status !== "ended") return null;
+            try{
+                const batch = await client.messages.batches.retrieve(batchId);
+                if (batch.processing_status !== "ended") return null;
 
-            // results arrive in any order: they're matched by custom_id, never by position
-            const outcomes: SummaryOutcome[] = [];
-            for await (const item of await client.messages.batches.results(batchId)){
-                outcomes.push(outcomeFromBatchItem(item));
+                // results arrive in any order: they're matched by custom_id, never by position
+                const outcomes: SummaryOutcome[] = [];
+                for await (const item of await client.messages.batches.results(batchId)){
+                    outcomes.push(outcomeFromBatchItem(item));
+                }
+                return outcomes;
+            } catch (err){
+                // a 404 is permanent (results past retention, or another workspace's key); anything else may heal
+                if (err instanceof Anthropic.NotFoundError) throw new BatchGoneError(batchId, messageOf(err));
+                throw err;
             }
-            return outcomes;
         },
     };
 }

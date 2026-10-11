@@ -1,15 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../../test/helpers/fixture";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { getDb } from "../../db/client";
+import { META_KEYS, meta } from "../../db/schema";
+import { readStages } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import { loadSummaries, loadUsage } from "../../db/store/summaries";
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
 import { runSummaries, summarizeNow, TargetNotFoundError } from "./run";
+import { BatchGoneError, type Summarizer } from "./types";
 
 function indexedFixture(): string {
     const root = copyFixture();
@@ -85,6 +89,40 @@ describe("runSummaries — the regular API", () => {
             state: "off", done: 1, total: 14, note: "ANTHROPIC_API_KEY is not set, so 13 of 14 summaries can't be written",
         });
     });
+
+    it("keeps the stage and the lock alive while a long direct wave is answered", async () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const stub = stubSummarizer();
+        const notes: (string | undefined)[] = [];
+        const lockValues: (string | undefined)[] = [];
+        // each answer takes "a second", so a refreshed lock reads later than the one before it
+        const slow: Summarizer = {
+            ...stub.summarizer,
+            async summarize(request){
+                notes.push(readStages(db, repoId).summaries?.note);
+                lockValues.push(db.select().from(meta).where(eq(meta.key, META_KEYS.SUMMARIZING_LOCK)).get()?.value);
+                vi.setSystemTime(new Date(Date.now() + 1000));
+                return stub.summarizer.summarize(request);
+            },
+        };
+
+        vi.useFakeTimers({ toFake: ["Date"] });
+        try{
+            await runSummaries(root, { summarizer: slow, transport: "direct", concurrency: 1, heartbeatMs: 0 });
+        } finally{
+            vi.useRealTimers();
+        }
+
+        expect(notes.slice(0, 8)).toEqual([
+            "wave 1: 7 to summarize through the regular API",
+            "wave 1: 1 of 7 answered", "wave 1: 2 of 7 answered", "wave 1: 3 of 7 answered",
+            "wave 1: 4 of 7 answered", "wave 1: 5 of 7 answered", "wave 1: 6 of 7 answered",
+            "wave 2: 4 to summarize through the regular API",
+        ]);
+        for (let i = 1; i < 7; i++) expect(lockValues[i]! > lockValues[i - 1]!).toBe(true);
+    });
 });
 
 describe("runSummaries — the Batch API", () => {
@@ -113,6 +151,28 @@ describe("runSummaries — the Batch API", () => {
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
             .toMatchObject({ summarized: 13, batches: 3, waves: 3, inFlight: 0 });
         expect(stub.requests).toHaveLength(13);   // the 7 files were sent once, in batch-1
+    });
+
+    it("marks a batch Anthropic no longer has as failed, releases its rows, and carries on above them", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        const gone: Summarizer = {
+            ...stub.summarizer,
+            async batchResults(id){
+                if (id === "batch-1") throw new BatchGoneError(id, "404 not found");
+                return stub.summarizer.batchResults(id);
+            },
+        };
+
+        // the 7 files fail; the 4 leaf folders, src and the repo are still written over "(no summary yet)"
+        expect(await runSummaries(root, { summarizer: gone, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 6, failed: 7, batches: 4, waves: 4, inFlight: 0, upToDate: 7 });
+        expect(row(root, "src/core/log.ts")).toMatchObject({
+            status: "failed", batchId: null, error: "the batch is no longer available at Anthropic (404 not found)",
+        });
+        expect(rows(root).filter((r) => r.status === "failed")).toHaveLength(7);
+        expect(stub.requests.find((r) => r.prompt.startsWith("Folder: src/core"))?.prompt).toContain("- log.ts (9 lines): (no summary yet)");
+        expect(row(root, "")).toMatchObject({ status: "fresh" });
     });
 });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { createClaudeSummarizer, outcomeFromBatchItem, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
 import { FILE_SYSTEM_PROMPT } from "./prompts";
-import type { SummaryRequest } from "./types";
+import { BatchGoneError, type SummaryRequest } from "./types";
 
 const GOOD = JSON.stringify({ tagline: "Logging helpers", summary: "Writes log lines." });
 const reply = (text: string, overrides: Record<string, unknown> = {}) => ({
@@ -68,7 +68,7 @@ describe("outcomeFromBatchItem", () => {
 describe("createClaudeSummarizer", () => {
     function fakeClient(){
         const calls: { endpoint: string; params: Record<string, unknown> }[] = [];
-        const state = { ended: false, fail: false };
+        const state = { ended: false, fail: false, gone: false };
         const client = {
             messages: {
                 create: async (params: Record<string, unknown>) => {
@@ -78,7 +78,10 @@ describe("createClaudeSummarizer", () => {
                 },
                 batches: {
                     create: async (params: Record<string, unknown>) => { calls.push({ endpoint: "batches", params }); return { id: "msgbatch_1" }; },
-                    retrieve: async () => ({ processing_status: state.ended ? "ended" : "in_progress" }),
+                    retrieve: async () => {
+                        if (state.gone) throw new Anthropic.NotFoundError(404, { type: "error", error: { type: "not_found_error", message: "batch not found" } }, "batch not found", new Headers());
+                        return { processing_status: state.ended ? "ended" : "in_progress" };
+                    },
                     results: async () => (async function* (){
                         yield { custom_id: "s1", result: { type: "succeeded", message: reply(GOOD) } };
                         yield { custom_id: "s2", result: { type: "expired" } };
@@ -122,5 +125,11 @@ describe("createClaudeSummarizer", () => {
         expect(await summarizer.batchResults("msgbatch_1")).toBeNull();
         state.ended = true;
         expect((await summarizer.batchResults("msgbatch_1"))?.map((o) => [o.customId, o.ok])).toEqual([["s1", true], ["s2", false]]);
+    });
+
+    it("reports a batch Anthropic no longer has (404) as BatchGoneError", async () => {
+        const { client, state } = fakeClient();
+        state.gone = true;
+        await expect(createClaudeSummarizer(client).batchResults("msgbatch_1")).rejects.toThrow(BatchGoneError);
     });
 });
