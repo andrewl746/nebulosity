@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **2026-10-11 — pivot:** the v1 endpoints change (`/api/level`, `/api/describe`, `/api/status`, `/api/summarize`, `/api/live*`), and `/api/graph` and `/api/health` retire. See `PIVOT_SPEC.md` §7.1; this doc is rewritten in slice V1.3. §5 (`/api/chat`) still applies to E1, and §9 (`/api/status`) is live from slice V1.2.
+> **2026-10-11 — pivot:** the v1 endpoints change (`/api/level`, `/api/describe`, `/api/status`, `/api/summarize`, `/api/live*`), and `/api/graph` and `/api/health` retire. See `PIVOT_SPEC.md` §7.1; this doc is rewritten in slice V1.3. §5 (`/api/chat`) still applies to E1, and §9 (`/api/status`) and §10 (search results) are live from slice V1.2.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -177,3 +177,25 @@ type IndexStatus = { repo: string; stages: Record<StageName, StageStatus> };
 - **An honest `running`.** A running stage writes its row at least once a minute. A `running` row untouched for 5 minutes is reported as `failed`, with the note `interrupted: no progress since <time>`, because its process died (ADR-032). The one exception is `summaries` with requests still in a Message Batch at Anthropic: that work is in progress without any local process, so it stays `running`, and its note says how to collect it.
 
 **Error 404 `INDEX_EMPTY`** when no repo has been indexed yet.
+
+## 10. Search results (slice V1.2)
+
+The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. In V1.2 only `npm run search` shows it. `GET /api/search` serves it from V1.3, and the MCP `search` tool formats it as text in V1.4.
+
+```ts
+type SearchList = "code" | "summary" | "vector";
+type SearchHit = {
+  path: string;                 // repo-relative, forward slashes
+  kind: "file" | "folder";
+  score: number;                // RRF: Σ 1 / (60 + rank) over the lists that found it
+  matchedBy: SearchList[];
+  tagline?: string;             // the target's summary, when it has one
+  summary?: string;
+  code?: { symbol: string; startLine: number; endLine: number; snippet: string };  // best-matching chunk
+};
+type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList, number>; note?: string };
+```
+
+- **Hits are files and folders**, never chunks: a file's chunks are grouped before ranking, and `code` is its best one. The repo summary is never a hit.
+- **`lists`** says how many files or folders each list contributed (at most 50 each).
+- **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.

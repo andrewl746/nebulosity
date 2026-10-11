@@ -1,45 +1,29 @@
-# RAG_PIPELINE.md — Retrieval-Augmented Generation Design
+# RAG_PIPELINE.md — Understanding and Search
 
-> **2026-10-11 — pivot:** search becomes hybrid (code FTS + summary FTS + summary embeddings, merged with RRF), and chunk-level embeddings are dropped (ADR-027). See `PIVOT_SPEC.md` §5–6; this doc is rewritten in slice V1.2. §2's chunking principles still hold.
+> **2026-10-11 — rewritten in slice V1.2** for the pivot (`PIVOT_SPEC.md` §5.3–5.4, §6.1; ADR-027, ADR-028, ADR-031, ADR-033). Chunk-level embeddings are gone. Search fuses code keywords, summary keywords and summary meaning. §2–3 (chunking) carry over unchanged from the Phase 2 design.
 
-**Status:** Approved design
-**Implements:** Phases 2–4 of `IMPLEMENTATION_ROADMAP.md`
-**Depends on:** `DATABASE_DESIGN.md` (storage formats), `ENGINEERING_DECISIONS.md` ADR-004/005/006
+**Status:** Implemented (V1.2)
+**Depends on:** `DATABASE_DESIGN.md` §7–8, `ENGINEERING_DECISIONS.md` ADR-004/005/017/027/028/031/033
 
 ---
 
 ## 1. The pipeline
 
 ```
-Code file (raw text)
-      │
-      ▼
-AST parser (TypeScript Compiler API)          lib/chunks.ts
-      │   finds real declaration boundaries
-      ▼
-Chunks (one per function/class/component)     lib/chunks.ts
-      │   + metadata: path, name, kind, lines
-      ▼
-Embeddings (384-dim vectors, local model)     lib/embed.ts
-      │
-      ▼
-Vector store (SQLite `vectors` table,         lib/db/ (ADR-013)
-  Float32Array BLOBs)
-      │
-      ▼
-Similarity search (brute-force cosine,        lib/retrieve.ts
-  in-memory after one load)
-      │   query vector vs. every chunk vector
-      ▼
-Relevant context (top-k chunks, formatted)    lib/retrieve.ts
-      │
-      ▼
-LLM (via the agent's search_code tool)        lib/agent/tools.ts
+repo files
+   │  structure stage: npm run index                         lib/index/pipeline.ts
+   ├─► chunks + symbols + imports ─► code_fts (triggers)     lib/db/store/structure.ts
+   ▼
+summaries: npm run summarize                                 lib/index/summarize/
+   │  files: Haiku 5.5 · folders and the repo: Sonnet 5.5 · test files: a template
+   ├─► summary_fts (triggers)
+   ▼
+summary vectors (MiniLM, local)                              lib/index/embed.ts
+   ▼
+search(query) = RRF(code_fts, summary_fts, cosine)           lib/engine/search.ts
 ```
 
-Every arrow is a plain function call. Every box is one module with one job.
-
----
+Every stage is incremental and records its status in `meta` (`GET /api/status`). Each leaves the earlier stages usable: keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive.
 
 ## 2. Why chunking matters (the core insight of RAG)
 
@@ -85,92 +69,100 @@ type CodeChunk = {
 
 ---
 
-## 4. Embeddings
+## 4. Summaries
+
+**What gets one.** Every file, every folder, and the repo itself (`PIVOT_SPEC.md` §5.3).
+- **Files** go to `claude-haiku-5-5`. The prompt is the file's generated imports/exports listing (the file-summary chunk), its line count, and its source cut to about 6k tokens (20,000 characters, at a line break).
+- **Folders** go to `claude-sonnet-5-5`, written bottom-up from their children's taglines and summaries. The 50 largest children are listed (by lines of code), plus "…and N smaller items".
+- **The repo** goes to `claude-sonnet-5-5`, from its top-level folders and files.
+- **Test files** skip the model and get a template (`Tests for strings`, status `skipped`).
+
+**Settings.** Effort `low` and adaptive thinking (the models' default). Structured outputs force `{ tagline, summary }`, and the tagline is cut to 6 words in code. `max_tokens` is 4,096.
+
+**inputHash = hash(model, PROMPT_VERSION, input).** Identical input is never summarized twice, and bumping `PROMPT_VERSION` redoes everything on purpose. For a file, the content hash stands in for the prompt (the prompt is a pure function of the bytes), so planning never reads source files.
+
+**States** come from a pure planner (`planSummaries`): `current`, `template`, `ready`, `waiting` (a child isn't done yet), `lazy`, `in-flight` and `failed`. Stored statuses: `fresh`, `stale`, `pending`, `failed` and `skipped`; the API adds `off` when there's no key.
+
+**Runs (ADR-033).** A run plans, sends whatever is ready, and repeats. Folders become ready as their children's summaries land, bottom-up.
+- **Transport.** A wave of 100+ requests goes through the Message Batches API at half price, in batches of up to 5,000. Smaller waves use the regular API, 4 at a time.
+- **Resuming.** Batch ids are stored on the rows, so an interrupted run resumes. Answers are matched by `custom_id` (the row id), never by position.
+- **Failures.** A failure doesn't block its folder ("no summary yet" stands in), and the next run retries it.
+- **Locking.** A `summarizing` lock prevents two paying runs.
+
+**Lazy folders.** When a file's summary changes, its folder's input changes and the folder goes `stale`. Full runs (`npm run summarize`) redo stale folders. Incremental runs leave them `lazy` until someone opens them (`summarizeNow`, the Map's "jump the queue"); V1.3 adds a periodic sweep.
+
+**Cost.** Every answer's tokens go to `summary_usage`, per model and transport. That's how S2 (≤ $15 for VS Code's full pass) is measured. The owner reviewed Haiku against Sonnet on 20 VS Code files before the first full run (`SUMMARY_REVIEW.md`).
+
+---
+
+## 5. Embeddings
 
 ### What an embedding is (for the learner)
 
-An embedding model reads text and outputs a fixed-length list of numbers — a point in 384-dimensional space — positioned so that *semantically similar* texts land near each other. "Where do we parse imports?" lands near the `extractImports` function even though they share almost no words. That near-ness is what makes retrieval semantic instead of keyword-based.
+An embedding model reads text and outputs a fixed-length list of numbers, a point in 384-dimensional space, positioned so that *semantically similar* texts land near each other. "Where do we parse imports?" lands near a summary that says "reads import statements from the AST" even though they share almost no words. That near-ness is what makes search semantic instead of keyword-based.
 
 ### Model choice
 
-- **Model:** `Xenova/all-MiniLM-L6-v2` running locally via the `@huggingface/transformers` npm package (Transformers.js). 384 dimensions.
-- **Why local:** zero cost, no API key, works offline, keeps the "local tool" promise. First run downloads ~25 MB of model weights to a cache; subsequent runs are warm. (Alternatives and the switch trigger are in ADR-005.)
-- **Normalization:** every vector is normalized to unit length at embed time and the store records `normalized: true`. Consequence: cosine similarity = plain dot product — cheaper and simpler.
+- **Model:** `Xenova/all-MiniLM-L6-v2`, running locally through `@huggingface/transformers` (ADR-005). 384 dimensions, unit-normalized, so cosine similarity is a plain dot product.
+- **Why local:** zero cost, no key, works offline. The first run downloads about 25 MB of weights.
 
-### What text gets embedded (important subtlety)
+### What gets embedded
 
-MiniLM effectively reads ~256 tokens; longer input is truncated. So we do **not** embed `chunk.text` raw. We embed a constructed **embedding text**:
-
-```
-<filePath> · <kind> <name>
-<leading doc comment, if any>
-<declaration signature line>
-<body, truncated to fit>
-```
-
-Front-loading the path, name, and comment means the most identifying information survives truncation. `chunk.text` (the full source) is what gets *shown* to the LLM after retrieval; the embedding text is only for the vector.
+Model-written summaries only, as `tagline \n summary \n path` (`summaryEmbeddingText`). Code chunks aren't embedded any more (ADR-027): at ~18 chunks/s, VS Code's 101,603 chunks would take 94 minutes, and summaries carry meaning better than raw code. Templates aren't embedded either; they say nothing a keyword can't find. Rewriting a summary deletes its vector, so `embedSummaries` always redoes exactly what changed.
 
 ---
 
-## 5. Retrieval algorithm
+## 6. Search
 
-`lib/retrieve.ts`, exact steps:
+### The three lists
 
-1. Embed the query string with the same model → `q` (normalized).
-2. Load all vectors from the `vectors` table (they stay cached in module memory after first load; invalidate the cache when `repositories.lastIndexAt` changes).
-3. Score every chunk: `score = dot(q, v)` — a single O(n·384) pass. At ≤ ~5,000 chunks this is single-digit milliseconds; see ADR-006 for the ceiling.
-4. Sort descending, take **k = 8**, drop results with `score < 0.25` (below that, matches are noise).
-5. Return `RetrievedChunk[] = (CodeChunk & { score })[]`.
+1. **Code keywords:** bm25 over `code_fts` (path 2, name 10, name_split 6, text 1). The top 200 chunks are grouped by file, and a file's best chunk stands for it.
+2. **Summary keywords:** bm25 over `summary_fts` (path 1, tagline 4, summary 2), over files and folders. The repo summary is never a hit.
+3. **Meaning:** cosine similarity between the query's MiniLM vector and every summary vector, held in memory as one flat matrix and reloaded only when the set of vectors changes. Matches below 0.25 are dropped.
 
-### Context formatting (what the LLM actually sees)
+Each list contributes at most 50 files or folders.
 
-The `search_code` tool formats results as:
+### Building the keyword query
 
-```
-[1] lib/scan.ts:10-17 · function extractImports (score 0.71)
-<full chunk text>
+`toFtsQuery` keeps the query's words and drops stopwords and single letters. Each identifier also contributes its parts (`openEditor` adds `open` and `editor`). Every word is quoted, so nothing the user types is read as FTS5 syntax, and the words are ORed. `"Where are editor tabs rendered?"` becomes `"editor" OR "tabs" OR "rendered"`, and porter stemming lets `rendered` match `render`.
 
-[2] lib/graph.ts:104-122 · function resolveImport (score 0.63)
-<full chunk text>
-...
-```
+### Reciprocal Rank Fusion
 
-File paths + line numbers are mandatory — they are what lets the agent cite sources and drive `highlight_nodes` honestly.
+`score(d) = Σ 1 / (60 + rankᵢ(d))` over every list that ranks `d`, with ranks starting at 1. A worked example: lists code `[a, b, c]`, summary `[b]`, vector `[c, b]` give
+- `b` = 1/62 + 1/61 + 1/62 ≈ 0.0487,
+- `c` = 1/63 + 1/61 ≈ 0.0323,
+- `a` = 1/61 ≈ 0.0164.
 
-### Quality levers (tune in this order if retrieval feels bad)
+Agreement between lists beats a single first place. RRF uses positions only, so bm25 scores and cosines never need to be put on one scale. Ties break by key.
 
-1. **k** (default 8): raise for broad questions, but each chunk costs tokens.
-2. **Score threshold** (default 0.25): raise if irrelevant junk appears.
-3. **Embedding text construction:** usually the highest-impact fix — if a chunk kind retrieves badly, enrich what gets embedded for it.
-4. **Graph-aware boost (stretch, Phase 6+):** multiply scores by 1.1 for chunks in files adjacent (in the dependency graph) to the file currently focused in the UI. This fuses the two halves of Nebulosity — the graph informs retrieval.
+### What a hit looks like
 
----
+`SearchHit` (`API_CONTRACTS.md` §10) carries the path, the kind (file or folder), the score, which lists matched, the summary when there is one, and for code matches the best chunk's symbol, lines and snippet. A `note` says when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or only common words in the query.
 
-## 6. Incremental re-indexing
+### Quality levers (tune in this order)
 
-Full pipeline per file, with the skip check first:
-
-```
-for each source file:
-  hash = sha256(file contents)
-  if files.contentHash == hash:  skip (reuse existing chunks + vectors)
-  else, in one transaction:
-    delete old chunks for the file (cascade clears vectors)
-    chunk → embed → insert
-    update files.contentHash
-finally: delete file rows no longer on disk (cascade clears their chunks/vectors)
-```
-
-This makes re-indexing after a small edit take seconds, not minutes, and it is idempotent: running index twice in a row is a no-op the second time.
+1. **The summaries themselves**: the prompt, the model per tier, the effort. They feed two of the three lists.
+2. **Column weights**: name vs. body in code, tagline vs. summary in summaries (stored as each FTS table's `rank`).
+3. **List depth and the cosine floor** (50 and 0.25).
+4. **Graph-aware boost** (later): weight hits near the Map's current focus.
 
 ---
 
-## 7. Failure modes and honest limitations
+## 7. Incremental updates
+
+- **Structure:** a changed file's chunks are replaced, and the triggers replace its `code_fts` rows. A deleted file or folder takes its summary (and that summary's vector and search row) with it.
+- **Summaries:** a changed file has a new content hash, so a new inputHash, so it's ready again. Its folders follow as described in §4. Nothing whose input is unchanged is ever re-summarized.
+- **Vectors:** deleted when their summary's text changes, refilled by the next embeddings run.
+
+---
+
+## 8. Failure modes and honest limitations
 
 | Failure | Symptom | Mitigation |
 |---|---|---|
-| Query vocabulary mismatch | "auth" finds nothing because code says "session" | Semantic embeddings mostly handle this; agent can retry `search_code` with reworded queries (it is told to in the system prompt) |
-| Truncation of huge functions | Retrieval finds the function but the LLM sees only part | Split-with-overlap chunking; agent can follow up with `read_file` for full context |
-| Stale index | Answers cite code that changed | `GET /api/health` reports files-changed-since-index; UI shows a "reindex" hint (Phase 6) |
-| Empty index | User asks questions before indexing | `search_code` returns a structured "index empty — run indexing" error; agent relays it instead of guessing |
-| Model download blocked (offline first run) | Embedding fails | Clear error surfaced through SSE `error` event; graph features still work (Flow A never touches RAG) |
+| No API key | No summaries | Stage `off` with the reason; templates, structure and code search still work |
+| Batch takes hours | Summaries arrive late | Keyword search works meanwhile; `--no-wait` and resume; `summarizeNow` for what someone opens |
+| File edited after indexing | Summary would describe bytes the index never saw | That target fails with "changed after it was indexed" and is retried after `npm run index` |
+| Model refusal | A summary fails | Sonnet's regular-API requests fall back server-side; batch refusals are retried next run, in a small wave that goes direct |
+| Embedding model can't load | No meaning search | Keyword lists still answer, and the `note` says so |
+| Vocabulary mismatch | A concept finds nothing by keyword | The meaning list, and summaries written in plain words |

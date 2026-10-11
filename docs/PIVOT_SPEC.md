@@ -213,7 +213,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ### 6.1 Queries (pure functions over the store, unit-tested, cached per index version)
 - **`level(path)`**: breadcrumb, at most 50 nodes plus a "+N more" node, that level's edges, and the hidden count.
 - **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
-- **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet.
+- **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance.
 - **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path".
 - **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
