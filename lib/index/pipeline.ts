@@ -16,6 +16,7 @@ import { createResolver } from "./resolve";
 export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
 
 export type IndexOptions = {
+    /** Called at least once per stage, in order. done/total count files (folders for "aggregate"). */
     onProgress?: (stage: IndexStage, done: number, total: number) => void;
     /** Files parsed and committed per transaction. */
     batchSize?: number;
@@ -84,6 +85,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const discovered = discoverFiles(root, { extensions: TYPESCRIPT_EXTENSIONS, maxBytes: options.maxFileBytes });
         const stored = loadStoredFiles(db, repoId);
         timingsMs.discover = performance.now() - t;
+        options.onProgress?.("discover", discovered.files.length, discovered.files.length);
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
@@ -91,6 +93,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         let unchanged = 0;
 
         for (let i = 0; i < discovered.files.length; i += batchSize){
+            const processed = Math.min(i + batchSize, discovered.files.length);
             const slice = discovered.files.slice(i, i + batchSize);
             const records: FileRecord[] = [];
 
@@ -131,14 +134,14 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 }
             }
             timingsMs.parse += performance.now() - t;
+            options.onProgress?.("parse", processed, discovered.files.length);
 
             t = performance.now();
             const writeErrors = writeFileRecords(db, repoId, records);
             errors.push(...writeErrors);
             changed += records.length - writeErrors.length;
             timingsMs.write += performance.now() - t;
-
-            options.onProgress?.("parse", Math.min(i + batchSize, discovered.files.length), discovered.files.length);
+            options.onProgress?.("write", processed, discovered.files.length);
         }
 
         // ---- resolve: the database is the source of truth from here on ---------
@@ -162,6 +165,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         const edgeCount = replaceImports(db, repoId, edges);
         timingsMs.resolve = performance.now() - t;
+        options.onProgress?.("resolve", fileSet.size, fileSet.size);
 
         // ---- aggregate ------------------------------------------------------------
         t = performance.now();
@@ -169,6 +173,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const levelRows = buildLevelEdges(edges);
         replaceAggregates(db, repoId, folderRows, levelRows);
         timingsMs.aggregate = performance.now() - t;
+        options.onProgress?.("aggregate", folderRows.length, folderRows.length);
 
         const indexedHead = readGitHead(root);
         markIndexed(db, repoId, indexedHead);

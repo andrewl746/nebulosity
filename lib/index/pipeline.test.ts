@@ -120,3 +120,21 @@ describe("indexRepository — edges of the world", () => {
         expect(() => indexRepository(root)).not.toThrow(); // the previous run released its lock
     });
 });
+
+describe("indexRepository — progress", () => {
+    it("reports every stage in order, each ending at its total", () => {
+        const root = copyFixture();
+        const events: string[] = [];
+        indexRepository(root, { batchSize: 3, onProgress: (stage, done, total) => events.push(`${stage} ${done}/${total}`) });
+
+        // 8 files in batches of 3 are parsed and written at 3, 6 and 8; then 8 files resolve and 6 folders aggregate
+        expect(events).toEqual([
+            "discover 8/8",
+            "parse 3/8", "write 3/8",
+            "parse 6/8", "write 6/8",
+            "parse 8/8", "write 8/8",
+            "resolve 8/8",
+            "aggregate 6/6",
+        ]);
+    });
+});
