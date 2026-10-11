@@ -73,6 +73,23 @@ export type HealthResponse = {
   agentReady: boolean; // ANTHROPIC_API_KEY present (never echo the key)
 };
 
+/* ─────────────────────────── Index status ────────────────────────── */
+
+/** The stages a repo goes through (PIVOT_SPEC.md §5). E2, E3 and E5 add more. */
+export type StageName = "structure" | "summaries" | "embeddings";
+
+/** idle: never ran · running · ready: done and current · off: can't run (e.g. no API key) · failed */
+export type StageState = "idle" | "running" | "ready" | "off" | "failed";
+
+export type StageStatus = { state: StageState; done: number; total: number; note?: string };
+
+/** GET /api/status — docs/API_CONTRACTS.md §9 */
+export type IndexStatus = {
+  /** The repo's root: absolute, forward slashes (repositories.rootPath). */
+  repo: string;
+  stages: Record<StageName, StageStatus>;
+};
+
 /* ─────────────────────────── Error envelope ──────────────────────── */
 
 export type ErrorCode =

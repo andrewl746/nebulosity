@@ -276,6 +276,14 @@
 **Consequences:** The search indexes can't drift from the data, whichever path changes it. The text is stored twice (the pivot spike measured 211 MB for VS Code's chunks), and every chunk insert also writes an FTS row: measured on VS Code, the cold write stage went from 13.1 s to 27.4 s, and the structure stage still passed S1 at 56.4 s (BENCHMARKS.md, Index Benchmark #2). Migration 0004 clears every content hash once, so existing chunks get indexed on the next run.
 **Revisit when:** database size starts to matter, or the FTS writes push S1 past 60 s.
 
+## ADR-032 — Stage status lives in `meta`, and a silent "running" means a crash (2026-10-11)
+
+**Context:** `PIVOT_SPEC.md` §5.7 asks for `idle | running | ready | off | failed` per stage, with progress, at `GET /api/status`. Stages run in different processes: the CLI now, a server worker from V1.3. A killed process never gets to write "failed".
+**Decision:** Each stage writes `stage:<repoId>:<stage>` in `meta` as it goes, at least once a minute while running. Readers report a `running` row untouched for 5 minutes as `failed`, with the note `interrupted: no progress since <time>`.
+**Alternatives:** (a) Derive every state from the data: honest by construction, but it can't show a running stage's progress. (b) Record process ids and check them: breaks across reboots and machines.
+**Consequences:** No state can stick at "running" forever, and the route needs no knowledge of which process runs which stage.
+**Revisit when:** a stage legitimately goes quiet for minutes (it must then write a heartbeat), or V1.3's UI needs pushed updates instead of polling.
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

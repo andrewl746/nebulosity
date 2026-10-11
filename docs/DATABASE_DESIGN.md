@@ -103,3 +103,4 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
   - A summary is indexed once it has text and re-indexed when the text changes (`AFTER UPDATE OF tagline, summary`), so status-only updates cost nothing.
   - Each table stores its `bm25` column weights as its `rank` (code: path 2, name 10, name_split 6, text 1; summaries: path 1, tagline 4, summary 2), so queries just `ORDER BY rank`.
 - **Migration 0004 clears every `files.content_hash`, once.** Chunks written before it have no `code_fts` rows, so the next `npm run index` re-parses every file and the triggers fill the index.
+- **Stage status** lives in `meta` as `stage:<repoId>:<stage>` → `{ state, done, total, note? }`, written by each stage as it goes (`API_CONTRACTS.md` §9, ADR-032).

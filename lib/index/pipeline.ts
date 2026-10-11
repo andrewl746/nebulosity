@@ -1,8 +1,9 @@
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
-import { getDb } from "../db/client";
+import { getDb, type Db } from "../db/client";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
+import { writeStage } from "../db/store/stages";
 import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
     type FileError, type FileRecord, type ImportEdge,
@@ -11,7 +12,7 @@ import { buildFolders, buildLevelEdges } from "./aggregate";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
 import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
-import { normalizeSlashes } from "./paths";
+import { repoKey } from "./paths";
 import { createResolver } from "./resolve";
 
 export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
@@ -50,11 +51,6 @@ export class RepoNotFoundError extends Error {
     }
 }
 
-/** One spelling of a repo root everywhere (repositories.rootPath): absolute, forward slashes. */
-export function repoKey(repoRoot: string): string {
-    return normalizeSlashes(path.resolve(repoRoot));
-}
-
 /**
  * The structure stage (PIVOT_SPEC.md §5.2): discover → parse changed files → write →
  * resolve every import → aggregate. When it returns, the Map has everything it needs.
@@ -77,9 +73,12 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
     const batchSize = options.batchSize ?? 500;
 
     acquireIndexLock(db);
+    let stageRepoId: number | null = null;   // set once the repo row exists, so a failure can be reported on it
 
     try{
         const repoId = upsertRepository(db, repoKey(root));
+        stageRepoId = repoId;
+        writeStage(db, repoId, "structure", { state: "running", done: 0, total: 0, note: "discovering files" });
 
         // ---- discover ---------------------------------------------------------
         let t = performance.now();
@@ -87,6 +86,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const stored = loadStoredFiles(db, repoId);
         timingsMs.discover = performance.now() - t;
         options.onProgress?.("discover", discovered.files.length, discovered.files.length);
+        writeStage(db, repoId, "structure", { state: "running", done: 0, total: discovered.files.length });
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
@@ -143,6 +143,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             changed += records.length - writeErrors.length;
             timingsMs.write += performance.now() - t;
             options.onProgress?.("write", processed, discovered.files.length);
+            writeStage(db, repoId, "structure", { state: "running", done: processed, total: discovered.files.length });
         }
 
         // ---- resolve: the database is the source of truth from here on ---------
@@ -178,6 +179,12 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         const indexedHead = readGitHead(root);
         markIndexed(db, repoId, indexedHead);
+        writeStage(db, repoId, "structure", {
+            state: "ready",
+            done: fileSet.size,
+            total: fileSet.size,
+            ...(errors.length > 0 ? { note: `${errors.length} files failed to index` } : {}),
+        });
 
         return {
             repoId,
@@ -195,6 +202,9 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             usedGit: discovered.usedGit,
             indexedHead,
         };
+    } catch (err){
+        if (stageRepoId !== null) reportStructureFailure(db, stageRepoId, err);
+        throw err;
     } finally{
         releaseIndexLock(db);
     }
@@ -202,6 +212,14 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
 function message(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
+}
+
+function reportStructureFailure(db: Db, repoId: number, err: unknown): void {
+    try{
+        writeStage(db, repoId, "structure", { state: "failed", done: 0, total: 0, note: message(err) });
+    } catch{
+        // the database itself may be what failed; the original error matters more
+    }
 }
 
 function isDirectory(p: string): boolean {

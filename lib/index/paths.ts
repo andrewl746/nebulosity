@@ -1,3 +1,5 @@
+import path from "path";
+
 /** Windows backslashes → forward slashes, so every path compares equal everywhere. */
 export function normalizeSlashes(p: string): string {
     return p.replace(/\\/g, "/");
@@ -29,4 +31,9 @@ export function joinRepoPath(baseDir: string, relative: string): string | null {
     }
 
     return segments.join("/");
+}
+
+/** One spelling of a repo root everywhere (repositories.rootPath): absolute, forward slashes. */
+export function repoKey(repoRoot: string): string {
+    return normalizeSlashes(path.resolve(repoRoot));
 }

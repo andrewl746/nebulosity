@@ -7,7 +7,8 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
-import { indexRepository, repoKey, RepoNotFoundError } from "./pipeline";
+import { repoKey } from "./paths";
+import { indexRepository, RepoNotFoundError } from "./pipeline";
 
 function levelRows(repoId: number, levelPath: string) {
     return getDb()

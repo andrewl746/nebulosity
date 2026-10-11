@@ -42,6 +42,11 @@ export function upsertRepository(db: Db, rootPath: string): number {
         .get().id;
 }
 
+/** The id of an indexed repo, or null if it was never indexed. */
+export function findRepository(db: Db, rootPath: string): number | null {
+    return db.select({ id: repositories.id }).from(repositories).where(eq(repositories.rootPath, rootPath)).get()?.id ?? null;
+}
+
 /** path → what the last successful run stored. */
 export function loadStoredFiles(db: Db, repoId: number): Map<string, StoredFile> {
     const rows = db

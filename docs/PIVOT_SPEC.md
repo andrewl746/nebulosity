@@ -204,7 +204,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ### 5.7 Errors and status
 - Per-file failures are recorded and reported, and never abort a run (ADR-021).
 - API failures retry three times with backoff, then become `failed` and are retried on the next run.
-- Stage status is `idle | running | ready | off | failed`, with `done/total` and a note. It's exposed at `GET /api/status` and drives the UI's progress pill.
+- Stage status is `idle | running | ready | off | failed`, with `done/total` and a note. It's exposed at `GET /api/status` and drives the UI's progress pill. v1's stages are `structure`, `summaries` and `embeddings` (`API_CONTRACTS.md` §9). A `running` stage that stops writing for 5 minutes reads as failed (ADR-032).
 
 ---
 
