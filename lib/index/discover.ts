@@ -10,8 +10,12 @@ export type DiscoveryResult = { files: DiscoveredFile[]; skipped: SkippedFile[];
 /** Bigger than this is almost always generated or minified code, not something to read. */
 export const DEFAULT_MAX_FILE_BYTES = 1_000_000;
 
-/** Folders never worth walking when there is no .gitignore to consult. */
-const WALK_IGNORE = new Set(["node_modules", ".git", ".next", ".nebulosity"]);
+/**
+ * Folders never indexed, in either mode: dependency trees and tool output. Git mode
+ * needs this too, because a repo whose .gitignore doesn't list node_modules would
+ * otherwise hand over its whole dependency tree as untracked files.
+ */
+const IGNORED_DIRS = new Set(["node_modules", ".git", ".next", ".nebulosity"]);
 
 /**
  * Lists a repository's source files as sorted, repo-relative, forward-slash paths.
@@ -67,7 +71,12 @@ function listWithGit(repoRoot: string): string[] {
         { maxBuffer: 512 * 1024 * 1024 }
     );
 
-    return out.toString("utf8").split("\0").filter(Boolean).map(normalizeSlashes);
+    return out.toString("utf8").split("\0").filter(Boolean).map(normalizeSlashes).filter((rel) => !inIgnoredDir(rel));
+}
+
+/** True when any folder on the path (not the file name itself) is in IGNORED_DIRS. */
+function inIgnoredDir(rel: string): boolean {
+    return rel.split("/").slice(0, -1).some((part) => IGNORED_DIRS.has(part));
 }
 
 function listByWalking(repoRoot: string, skipped: SkippedFile[]): string[] {
@@ -84,7 +93,7 @@ function listByWalking(repoRoot: string, skipped: SkippedFile[]): string[] {
         }
 
         for (const entry of entries){
-            if (WALK_IGNORE.has(entry.name)) continue;
+            if (IGNORED_DIRS.has(entry.name)) continue;
 
             // built with "/" by hand: path.join would put backslashes in on Windows
             const rel = dirRel ? `${dirRel}/${entry.name}` : entry.name;

@@ -58,6 +58,21 @@ describe("discoverFiles — git repositories", () => {
         expect(result.skipped[0].reason).toMatch(/^too large/);
     });
 
+    it("never returns files under node_modules, even in a git repo whose .gitignore doesn't exclude it", () => {
+        const dir = tempDir("neb-discover-nm-");
+        execFileSync("git", ["init", "-q", dir]);
+        fs.writeFileSync(path.join(dir, "a.ts"), "export {};\n");
+        fs.mkdirSync(path.join(dir, "node_modules", "dep"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "node_modules", "dep", "index.js"), "module.exports = {};\n");
+        fs.mkdirSync(path.join(dir, "packages", "p", "node_modules", "x"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "packages", "p", "node_modules", "x", "i.ts"), "export {};\n");
+
+        const result = discoverFiles(dir, { extensions: TS_EXTENSIONS });
+
+        expect(result.usedGit).toBe(true);
+        expect(result.files.map((f) => f.path)).toEqual(["a.ts"]);
+    });
+
     it("readGitHead is null for a repository with no commits and for a non-git folder", () => {
         const dir = tempDir("neb-head-");
         execFileSync("git", ["init", "-q", dir]);
