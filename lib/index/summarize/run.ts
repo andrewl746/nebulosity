@@ -67,7 +67,8 @@ export const BATCH_THRESHOLD = 100;
 export const MAX_BATCH_REQUESTS = 5_000;
 /**
  * A poll that errors (a dropped connection, a laptop waking from sleep) is a missed poll: the run says so and asks
- * again on its next pass. This many misses in a row, across every batch, means the problem isn't passing, so the
+ * again on its next pass. A pass in which no batch could be checked counts as one miss, however many batches are in
+ * flight, and any answer resets the count. This many missed passes in a row means the problem isn't passing, so the
  * run stops. Its batches are still at Anthropic, and the next run collects them.
  */
 export const MAX_MISSED_POLLS = 5;
@@ -117,8 +118,8 @@ type RunContext = {
     root: string;
     failedThisRun: Set<string>;
     tally: Tally;
-    /** Polls that errored since the last one that got an answer (MAX_MISSED_POLLS). */
-    missedPolls: number;
+    /** Passes in a row in which no batch could be checked (MAX_MISSED_POLLS). */
+    missedPasses: number;
     /** Set when the circuit breaker trips: why the run stops before planning another wave. */
     stopped: string | null;
     say: (message: string) => void;
@@ -129,7 +130,7 @@ function newContext(db: Db, repoId: number, root: string, say: (message: string)
         db, repoId, root, say,
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
-        missedPolls: 0,
+        missedPasses: 0,
         stopped: null,
     };
 }
@@ -385,15 +386,44 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
 
 /**
  * Polls the batches still at Anthropic until one has ended, then writes its answers.
- * It can't wait forever: each pass either collects a batch, hears that one is still
- * processing (Anthropic ends every batch within 24 hours), or misses its polls, and
- * MAX_MISSED_POLLS misses in a row end the run.
+ * It can't wait forever:
+ * - a pass returns when it collects a batch, or finds none left in flight (summarizeNow
+ *   can redo every row a batch carried); the caller then plans again;
+ * - a pass that hears a batch is still processing sleeps and asks again (Anthropic ends
+ *   every batch within 24 hours);
+ * - a failed poll was already retried by the SDK (maxRetries: 3), so it's more than a blip,
+ *   but a connection that drops for a few minutes still comes back. MAX_MISSED_POLLS passes
+ *   in a row that couldn't check any batch end the run, rethrowing the last error.
  */
 async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollIntervalMs: number, heartbeat: () => void): Promise<void> {
     for (;;){
-        for (const batchId of inFlightBatches(ctx.db, ctx.repoId)){
-            if (await pollBatch(ctx, summarizer, batchId)) return;
+        const batchIds = inFlightBatches(ctx.db, ctx.repoId);
+        if (batchIds.length === 0) return;
+
+        const misses: { batchId: string; error: unknown }[] = [];
+        let collected = false;
+        for (const batchId of batchIds){
+            const poll = await pollBatch(ctx, summarizer, batchId);
+            if (poll.kind === "missed"){
+                misses.push({ batchId, error: poll.error });
+                continue;
+            }
+
+            ctx.missedPasses = 0;   // Anthropic answered (processing, ended or gone): the connection works
+            if (poll.kind === "collected"){
+                collected = true;
+                break;
+            }
         }
+
+        // A pass in which no batch could be checked is one miss, however many batches are in flight. The misses are
+        // reported once the pass knows what comes next: another pass, or giving up.
+        if (misses.length === batchIds.length) ctx.missedPasses++;
+        const givingUp = ctx.missedPasses >= MAX_MISSED_POLLS;
+        const next = givingUp ? `giving up: no batch could be checked in ${MAX_MISSED_POLLS} passes in a row` : "will retry";
+        for (const miss of misses) ctx.say(`couldn't check ${miss.batchId} (${messageOf(miss.error)}); ${next}`);
+        if (givingUp) throw misses[misses.length - 1].error;
+        if (collected) return;
 
         touchSummaryLock(ctx.db);
         heartbeat();
@@ -404,35 +434,42 @@ async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollInt
 
 /**
  * wait: false's single pass: asks about every batch at Anthropic once, with no sleeping,
- * and collects each one that has ended. Returns how many it collected.
+ * and collects each one that has ended. Returns how many it collected. Nothing here gives
+ * up on missed polls: a pass that collects nothing ends the run.
  */
 async function collectEndedBatches(ctx: RunContext, summarizer: Summarizer): Promise<number> {
     let collected = 0;
+    const unchecked: string[] = [];
+
     for (const batchId of inFlightBatches(ctx.db, ctx.repoId)){
-        if (await pollBatch(ctx, summarizer, batchId)) collected++;
+        const poll = await pollBatch(ctx, summarizer, batchId);
+        if (poll.kind === "collected") collected++;
+        if (poll.kind === "missed") unchecked.push(`couldn't check ${batchId} (${messageOf(poll.error)})`);
     }
+
+    // after a pass that collected something the run goes round again; after one that didn't, it finishes
+    for (const line of unchecked) ctx.say(`${line}; ${collected > 0 ? "will retry" : "the next run retries it"}`);
     return collected;
 }
 
+/** What one poll found: the batch is done with (collected, or gone), it's still processing, or the poll itself failed. */
+type Poll = { kind: "collected" } | { kind: "processing" } | { kind: "missed"; error: unknown };
+
 /**
- * Asks Anthropic about one batch. Returns true when the batch is done with: its answers
- * were written, or Anthropic no longer has it (BatchGoneError), in which case its rows
- * are marked failed, which releases them: the next run resends them instead of failing at
- * the same batch forever. Returns false while the batch is still processing, and after a
- * missed poll.
+ * Asks Anthropic about one batch. "collected": its answers were written, or Anthropic no
+ * longer has it (BatchGoneError), in which case its rows are marked failed, which releases
+ * them: the next run resends them instead of failing at the same batch forever.
+ * "processing": not ended yet. "missed": the poll failed (a dropped connection, a 5xx); the
+ * caller decides what that means. A rejected key is rethrown: asking again can't help.
  */
-async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: string): Promise<boolean> {
+async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: string): Promise<Poll> {
     let outcomes: SummaryOutcome[] | null;
     try{
         outcomes = await summarizer.batchResults(batchId);
     } catch (err){
-        if (err instanceof SummarizerAuthError) throw err;   // asking again with the same key can't help
-        if (!(err instanceof BatchGoneError)){
-            missedPoll(ctx, batchId, err);
-            return false;
-        }
+        if (err instanceof SummarizerAuthError) throw err;
+        if (!(err instanceof BatchGoneError)) return { kind: "missed", error: err };
 
-        ctx.missedPolls = 0;   // a 404 is still an answer: the connection works
         const rows = loadBatchRows(ctx.db, batchId);
         const destinations = new Map(rows.map((r) => [`s${r.id}`, { ...r, batchId }]));
         const error = `the batch is no longer available at Anthropic (${err.reason})`;
@@ -440,11 +477,10 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
             "batch", (customId) => destinations.get(customId));
         ctx.say(`${batchId} is gone at Anthropic: ${plural(rows.length, "request")} failed (resent next run)`);
         checkFailures(ctx, rows.map(() => error), rows.length, "batch");
-        return true;
+        return { kind: "collected" };
     }
 
-    ctx.missedPolls = 0;
-    if (outcomes === null) return false;
+    if (outcomes === null) return { kind: "processing" };
 
     const destinations = new Map(loadBatchRows(ctx.db, batchId).map((r) => [`s${r.id}`, { ...r, batchId }]));
     ingest(ctx, outcomes, "batch", (customId) => destinations.get(customId));
@@ -458,22 +494,9 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
     const errors = [...errorsOf(outcomes), ...missing.map(() => "missing from the batch's results")];
     ctx.say(`collected ${batchId}: ${outcomes.length + missing.length - errors.length} summarized, ${errors.length} failed`);
     checkFailures(ctx, errors, outcomes.length + missing.length, "batch");
-    return true;
+    return { kind: "collected" };
 }
 
-/**
- * A poll that errored. The SDK has already retried it (maxRetries: 3), so this is more than a
- * blip, but a connection that drops for a few minutes still comes back: the batch is asked
- * about again on the next pass. MAX_MISSED_POLLS misses in a row rethrow the error.
- */
-function missedPoll(ctx: RunContext, batchId: string, err: unknown): void {
-    ctx.missedPolls++;
-    if (ctx.missedPolls >= MAX_MISSED_POLLS){
-        ctx.say(`couldn't check ${batchId} (${messageOf(err)}); giving up after ${MAX_MISSED_POLLS} missed polls in a row`);
-        throw err;
-    }
-    ctx.say(`couldn't check ${batchId} (${messageOf(err)}); will retry`);
-}
 
 /**
  * The circuit breaker (ADR-033), checked after every wave and every collected batch. When

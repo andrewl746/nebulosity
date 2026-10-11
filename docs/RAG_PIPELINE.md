@@ -165,7 +165,7 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 |---|---|---|
 | No API key | No summaries | Stage `off` with the reason; templates, structure and code search still work |
 | Batch takes hours | Summaries arrive late | Keyword search works meanwhile; `--no-wait` and resume; `summarizeNow` for what someone opens |
-| The network drops while waiting on a batch | Polls fail | A failed poll is asked again on the next pass. After 5 in a row, or a rejected key, the run stops; the stage stays `running`, and the next run collects the batch |
+| The network drops while waiting on a batch | Polls fail | A failed poll is asked again on the next pass. After 5 passes in a row in which no batch could be checked, or a rejected key, the run stops; the stage stays `running`, and the next run collects the batch |
 | File edited after indexing | Summary would describe bytes the index never saw | That target fails with "changed after it was indexed" and is retried after `npm run index` |
 | Summarizing while `npm run index` runs | Files fail as "changed after it was indexed" | The run refuses to start until the structure stage is `ready` |
 | A batch can't be submitted | Nothing goes out | The run stops with its rows still pending; batches already submitted are collected next run. A batch that was accepted but couldn't be recorded has its id printed and in the error |

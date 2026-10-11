@@ -9,7 +9,7 @@ import { getDb } from "../../db/client";
 import { META_KEYS, meta } from "../../db/schema";
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
-import { loadSummaries, loadUsage, markInFlight } from "../../db/store/summaries";
+import { loadBatchRows, loadSummaries, loadUsage, markInFlight, writeResults } from "../../db/store/summaries";
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
@@ -42,6 +42,26 @@ function indexedTwelveFiles(): string {
 
 /** src/f01.ts … src/f10.ts: 10 of the 12, at least BREAKER_MIN_FAILURES and more than half. */
 const FIRST_TEN = Array.from({ length: 10 }, (_, i) => `src/f${String(i + 1).padStart(2, "0")}.ts`);
+
+/**
+ * Puts indexedTwelveFiles' 12 files at Anthropic in 6 batches of 2 on `stub`, the way a wave too big for one batch is
+ * split (the run itself splits only at 5,000). A throwaway stub's wait: false run sends them as one batch, still
+ * processing; its requests and rows are then regrouped into the 6.
+ */
+async function sixBatchesInFlight(root: string, stub: ReturnType<typeof stubSummarizer>): Promise<void> {
+    const db = getDb();
+    const carrier = stubSummarizer({ pollsBeforeDone: 99 });
+    await runSummaries(root, { summarizer: carrier.summarizer, transport: "batch", wait: false });
+
+    const [carrierId] = carrier.batches.keys();
+    const rowOf = new Map(loadBatchRows(db, carrierId).map((r) => [`s${r.id}`, r]));
+    const requests = carrier.batches.get(carrierId)!.requests;
+    for (let i = 0; i < requests.length; i += 2){
+        const pair = requests.slice(i, i + 2);
+        const batchId = await stub.summarizer.submitBatch(pair);
+        markInFlight(db, batchId, pair.map((r) => rowOf.get(r.customId)!));
+    }
+}
 
 const rows = (root: string) => loadSummaries(getDb(), requireRepository(getDb(), repoKey(root)));
 const row = (root: string, p: string) => rows(root).find((r) => r.path === p);
@@ -269,7 +289,7 @@ describe("runSummaries — the Batch API", () => {
         expect(said).toContain(`couldn't check ${first} (Connection error.); will retry`);
     });
 
-    it("gives up after 5 missed polls in a row, and the stage stays running: the batch is still at Anthropic", async () => {
+    it("gives up after 5 passes in a row that couldn't check any batch, and the stage stays running: the batch is still at Anthropic", async () => {
         const root = indexedFixture();
         const stub = stubSummarizer();
         let polls = 0;
@@ -281,8 +301,16 @@ describe("runSummaries — the Batch API", () => {
             },
         };
 
-        await expect(runSummaries(root, { summarizer: offline, transport: "batch", pollIntervalMs: 0 })).rejects.toThrow("Connection error.");
-        expect(polls).toBe(5);   // MAX_MISSED_POLLS
+        const said: string[] = [];
+        await expect(runSummaries(root, { summarizer: offline, transport: "batch", pollIntervalMs: 0, onProgress: (m) => said.push(m) }))
+            .rejects.toThrow("Connection error.");
+        expect(polls).toBe(5);   // one batch, so one poll per pass: MAX_MISSED_POLLS passes
+        const [first] = stub.batches.keys();
+        const retry = `couldn't check ${first} (Connection error.); will retry`;
+        expect(said.filter((m) => m.startsWith("couldn't check"))).toEqual([
+            retry, retry, retry, retry,
+            `couldn't check ${first} (Connection error.); giving up: no batch could be checked in 5 passes in a row`,
+        ]);
 
         // the 7 files' batch is still at Anthropic: running, not failed, long after this process is gone
         const muchLater = new Date(Date.now() + 6 * 60 * 1000);
@@ -319,6 +347,60 @@ describe("runSummaries — the Batch API", () => {
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
             .toMatchObject({ summarized: 13, failed: 0, inFlight: 0 });
         expect(stub.requests).toHaveLength(13);
+    });
+
+    it("counts a pass that couldn't check any batch as one miss, however many batches are in flight", async () => {
+        const root = indexedTwelveFiles();
+        const stub = stubSummarizer({ failPolls: 6 });
+        await sixBatchesInFlight(root, stub);   // one more batch than MAX_MISSED_POLLS
+
+        // The first pass misses all 6 polls: that's one missed pass. From then on each pass collects a batch; when all
+        // 12 files are in, src goes out, then the repo. The run's own tally holds only those two batches.
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 14, failed: 0, batches: 2, waves: 2, inFlight: 0, upToDate: 14 });
+        // each of the 6 was polled twice (the failed pass, then the pass that collected it); src's and the repo's once
+        expect([...stub.batches.values()].map((b) => b.polls)).toEqual([2, 2, 2, 2, 2, 2, 1, 1]);
+    });
+
+    it("with wait: false, a batch it couldn't check is left for the next run", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer({ failPolls: 1 });
+        const said: string[] = [];
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", wait: false, onProgress: (m) => said.push(m) }))
+            .toMatchObject({ summarized: 0, batches: 1, waves: 1, inFlight: 7 });
+        const [first] = stub.batches.keys();
+        expect(said).toContain(`couldn't check ${first} (Connection error.); the next run retries it`);
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 13, failed: 0, inFlight: 0 });
+    });
+
+    it("stops waiting when no batch is left in flight: every row it carried was redone another way meanwhile", { timeout: 2_000 }, async () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const stub = stubSummarizer();
+        let redone = false;
+        const superseded: Summarizer = {
+            ...stub.summarizer,
+            async batchResults(id){
+                if (!redone){
+                    // While the run waits, every row this batch carries is answered through the regular API (as
+                    // summarizeNow would), which releases the batch's claim. Anthropic still says "processing".
+                    redone = true;
+                    writeResults(db, loadBatchRows(db, id).map((r) => ({
+                        id: r.id, batchId: null, inputHash: r.inputHash,
+                        outcome: { ok: true, text: { tagline: "Redone", summary: `Redone ${r.path}.` }, model: "claude-haiku-5-5" },
+                    })));
+                    return null;
+                }
+                return stub.summarizer.batchResults(id);
+            },
+        };
+
+        // the 7 files were written outside the run, so it summarizes only the 5 folders and the repo above them
+        expect(await runSummaries(root, { summarizer: superseded, transport: "batch", pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 6, failed: 0, batches: 4, waves: 4, inFlight: 0, upToDate: 14 });
     });
 
     it("names a batch it submitted but couldn't record, so the paid-for batch isn't lost silently", async () => {
@@ -388,6 +470,17 @@ describe("runSummaries — the structure guard and the circuit breaker", () => {
 
         writeStage(db, repoId, "structure", { state: "ready", done: 8, total: 8 });
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).toMatchObject({ summarized: 13 });
+    });
+
+    it("treats a repo with no structure stage row (indexed before stage status existed) as ready", async () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        db.delete(meta).where(eq(meta.key, `stage:${repoId}:structure`)).run();
+        expect(readStages(db, repoId).structure).toBeUndefined();   // the row really is gone
+
+        expect(await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" }))
+            .toMatchObject({ summarized: 13, upToDate: 14 });
     });
 
     it("stops after a direct wave where most requests failed, before any folder is written over placeholders", async () => {
