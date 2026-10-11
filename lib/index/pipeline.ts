@@ -8,6 +8,7 @@ import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
     type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
+import { pruneSummaries } from "../db/store/summaries";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
@@ -174,6 +175,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const folderRows = buildFolders([...fileSet], path.basename(root));
         const levelRows = buildLevelEdges(edges);
         replaceAggregates(db, repoId, folderRows, levelRows);
+        pruneSummaries(db, repoId);   // a deleted file or folder takes its summary with it
         timingsMs.aggregate = performance.now() - t;
         options.onProgress?.("aggregate", folderRows.length, folderRows.length);
 
