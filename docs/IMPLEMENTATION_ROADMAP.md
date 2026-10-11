@@ -8,7 +8,7 @@
 
 | Slice | Contents | Acceptance (spec §2) |
 |---|---|---|
-| **V1.1 Engine foundation** | `NEBULOSITY_HOME` paths; repo config; `git ls-files` discovery; TS adapter (AST imports + class members); resolver (nearest tsconfig); batched store; `folders` + `level_edges`; `npm run index`; benchmark | S1 ≤ 60 s on VS Code; batching regression test passes |
+| **V1.1 Engine foundation** — DONE 2026-10-11 (see BENCHMARKS.md) | `NEBULOSITY_HOME` paths; repo config; `git ls-files` discovery; TS adapter (AST imports + class members); resolver (nearest tsconfig); batched store; `folders` + `level_edges`; `npm run index`; benchmark | S1 ≤ 60 s on VS Code; batching regression test passes |
 | **V1.2 Understanding** | tiered summaries (Batch for the first pass, regular API on demand); summary embeddings; code and summary FTS; hybrid search with RRF; `/api/status` | S2 ≤ $15; day-1 Haiku vs Sonnet side-by-side reviewed by the owner |
 | **V1.3 Map** | level/describe/search APIs; new Map UI (levels, 50-box cap, panel, ⌘K, status pill); live channel | S3, S4, S6 measured |
 | **V1.4 MCP** | tool registry; `mcp/server.ts` (read-only DB); `claude mcp add` instructions; smoke test | S5; every tool exercised through `claude -p` |
