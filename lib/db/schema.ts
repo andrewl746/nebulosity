@@ -54,6 +54,8 @@ export const chunks = sqliteTable("chunks", {
         enum: ["function", "class", "component", "interface", "type", "const", "enum", "namespace", "file-summary"]
     }).notNull(),
     name: text("name").notNull(),
+    // the name as separate lowercase words ("openEditor" → "open editor"), so word search finds it (code_fts)
+    nameSplit: text("name_split").notNull().default(""),
     startLine: integer("start_line").notNull(),
     endLine: integer("end_line").notNull(),
     exported: integer("exported", { mode: "boolean" }).notNull().default(false),
@@ -133,6 +135,65 @@ export const levelEdges = sqliteTable("level_edges", {
     count: integer("count").notNull()
 }, (t) => [
     uniqueIndex("level_edges_unique").on(t.repoId, t.levelPath, t.sourceNode, t.targetNode)
+]);
+
+/** What a summary describes. "cluster" arrives with E5. */
+export const SUMMARY_TARGET_KINDS = ["file", "folder", "repo"] as const;
+export type SummaryTargetKind = (typeof SUMMARY_TARGET_KINDS)[number];
+
+/**
+ * fresh: the text matches the target's current input · stale: text from an older input,
+ * kept on show until it's redone · pending: no text yet · failed: the last attempt
+ * failed, retried next run · skipped: no model call on purpose, the text is a template
+ * (test files). The API also reports "off" (no API key); that one is never stored.
+ */
+export const SUMMARY_STATUSES = ["fresh", "stale", "pending", "failed", "skipped"] as const;
+export type StoredSummaryStatus = (typeof SUMMARY_STATUSES)[number];
+
+/**
+ * One summary per file, folder and the repo (PIVOT_SPEC.md §4.1, §5.3). Keyed by path,
+ * never by a file or folder id: folders are rebuilt on every structure run, so their
+ * ids don't last.
+ */
+export const summaries = sqliteTable("summaries", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    targetKind: text("target_kind", { enum: SUMMARY_TARGET_KINDS }).notNull(),
+    targetPath: text("target_path").notNull(),   // "" for the repo itself
+    tagline: text("tagline"),                     // ≤ 6 words; null until a summary exists
+    summary: text("summary"),                     // 2–4 sentences
+    model: text("model"),                         // the model that wrote it, or "template"
+    inputHash: text("input_hash"),                // hash(model, prompt version, input) of the text above
+    status: text("status", { enum: SUMMARY_STATUSES }).notNull(),
+    error: text("error"),                         // why the last attempt failed
+    // A Message Batch can take hours. These two say which batch carries this row's request and
+    // which input it answers, so a later run collects the answer instead of paying for it twice.
+    batchId: text("batch_id"),
+    pendingHash: text("pending_hash"),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date())
+}, (t) => [
+    uniqueIndex("summaries_target_unique").on(t.repoId, t.targetKind, t.targetPath),
+    index("summaries_batch_idx").on(t.batchId)
+]);
+
+/** One MiniLM vector per model-written summary (ADR-027), stored with the ADR-017 encode/decode pair. */
+export const summaryVectors = sqliteTable("summary_vectors", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    summaryId: integer("summary_id").notNull().unique().references(() => summaries.id, { onDelete: "cascade" }),
+    embedding: blob("embedding", { mode: "buffer" }).notNull()
+});
+
+/** API spend per repo, model and transport, added up as answers arrive. Success criterion S2 is read from here. */
+export const summaryUsage = sqliteTable("summary_usage", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    model: text("model").notNull(),
+    transport: text("transport", { enum: ["direct", "batch"] }).notNull(),
+    requests: integer("requests").notNull().default(0),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0)
+}, (t) => [
+    uniqueIndex("summary_usage_unique").on(t.repoId, t.model, t.transport)
 ]);
 
 /** A symbol as the language adapter produces it and the store writes it: every column but the ids. */

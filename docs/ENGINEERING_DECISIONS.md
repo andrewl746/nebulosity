@@ -264,6 +264,18 @@
 **Consequences:** Each new capability (call graph, history, clusters) reaches both agents from one definition. The MCP server runs correctly from any working directory because its launcher sets `NEBULOSITY_HOME`, and schema changes have a single owner.
 **Revisit when:** a third interface needs the tools (for example a REST API for another app). It becomes a third adapter over the same registry.
 
+## ADR-031 — Full-text indexes are kept in sync by triggers (2026-10-11)
+
+**Context:** V1.2 adds two FTS5 indexes: code (`code_fts`, over chunks) and summaries (`summary_fts`). A chunk disappears in four ways: its file is re-parsed, its file is deleted, its repository is deleted, or the Phase 2 pipeline (`lib/index-repo.ts`, retired in V1.3) rewrites it. Only the first passes through the new structure store, and two of the others are `ON DELETE CASCADE` deletes that no application code sees.
+**Decision:**
+- Both indexes are regular FTS5 tables whose rowid is the source row's id.
+- `AFTER INSERT`/`AFTER DELETE` triggers on `chunks` keep `code_fts` in sync. `AFTER INSERT`, `AFTER UPDATE OF tagline, summary` and `AFTER DELETE` triggers on `summaries` keep `summary_fts` in sync.
+- The camelCase split of a chunk's name needs JavaScript, so it is computed once at write time and stored on the chunk (`chunks.name_split`), where the insert trigger can read it.
+- Both tables use the `porter unicode61` tokenizer and keep their bm25 column weights as the `rank` setting.
+**Alternatives:** (a) Explicit writes in the structure store: misses cascades and the old pipeline, so deleted code would keep turning up in search. (b) External-content tables: no duplicate text, but deleting a row needs its old values, which a cascade has already removed. (c) Contentless tables (`contentless_delete=1`): smaller, but `snippet()` stops working and snippets would need their own code.
+**Consequences:** The search indexes can't drift from the data, whichever path changes it. The text is stored twice (the pivot spike measured 211 MB for VS Code's chunks), and every chunk insert also writes an FTS row (the spike measured 4.8 s for all of VS Code). Migration 0004 clears every content hash once, so existing chunks get indexed on the next run.
+**Revisit when:** database size starts to matter, or the FTS writes push S1 past 60 s.
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

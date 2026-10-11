@@ -117,16 +117,17 @@ Persistence shapes live in `lib/db/schema.ts` (ADR-013). The spec fixes their me
 | `repositories` | kept | one row per indexed repo; gains `indexedHead` (git commit at last index) |
 | `files` | extended | adds `language`, `sizeBytes`, `lineCount`, `isTest`, `importSpecifiers` (raw specifiers as JSON, so unchanged files are re-resolved without re-parsing). `contentHash` keeps its single owner and meaning (ADR-022) |
 | `imports` | kept | file → file edges; now produced from the AST |
-| `chunks` | kept | retrieval units (existing chunker); feeds the code FTS index; `chunkId` is now unique per file |
+| `chunks` | kept | retrieval units (existing chunker); feeds the code FTS index; `chunkId` is now unique per file; `nameSplit` is the name as words |
 | `vectors` | **retired** | chunk embeddings; replaced by `summary_vectors` (§5.4) |
 | `meta` | kept | lock, model ids, schema version, per-stage status (§5.7) |
 | `folders` | new | `path` (unique per repo), `parentPath`, `depth`, `name`, `fileCount` (recursive), `directFileCount` |
 | `level_edges` | new | aggregated edges per level (§4.2): `levelPath`, `sourceNode`, `targetNode`, `count` |
 | `symbols` | new | top-level declarations **and class members**: `name`, `qualifiedName` (`Class.method`), `kind`, `startLine`, `endLine`, `exported`, `parentQualifiedName` (a string, so whole batches insert without needing ids first) |
-| `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (≤ 6 words), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped, off) |
-| `summary_vectors` | new | one embedding per fresh summary (encode/decode pair, ADR-017) |
-| `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks |
-| `summary_fts` | new (FTS5) | `path`, `tagline`, `summary` |
+| `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (≤ 6 words), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped; `off` is reported, never stored), `error`, and `batchId`/`pendingHash` so a Batch run can resume (§5.3) |
+| `summary_vectors` | new | one embedding per model-written summary (encode/decode pair, ADR-017) |
+| `summary_usage` | new | API tokens per repo, model and transport (direct, batch); S2 is measured from it |
+| `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks; kept in sync by triggers (ADR-031) |
+| `summary_fts` | new (FTS5) | `path`, `tagline`, `summary`; kept in sync by triggers (ADR-031) |
 | E2 `calls` | later | `callerSymbolId`, `calleeSymbolId`, `count`, `resolution` (typed, heuristic) |
 | E3 `file_history`, `co_changes` | later | churn, last change, first commit, top authors; co-change pairs with confidence |
 | E5 `clusters`, `file_clusters` | later | cluster id, label, size; file → cluster |
