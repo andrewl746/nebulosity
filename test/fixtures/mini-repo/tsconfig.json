@@ -1,0 +1,9 @@
+{
+  // JSONC on purpose: the resolver must read tsconfig the way TypeScript does.
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+    },
+  },
+}

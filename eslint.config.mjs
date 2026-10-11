@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Sample repositories the indexer tests read as data (they use require(), JSX, aliases…)
+    "test/fixtures/**",
   ]),
 ]);
 
