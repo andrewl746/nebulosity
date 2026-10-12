@@ -105,3 +105,7 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
 - **Migration 0004 clears every `files.content_hash`, once.** Chunks written before it have no `code_fts` rows, so the next `npm run index` re-parses every file and the triggers fill the index.
 - **Stage status** lives in `meta` as `stage:<repoId>:<stage>` → `{ state, done, total, note? }`, written by each stage as it goes (`API_CONTRACTS.md` §9, ADR-032).
 - **The `summarizing` lock** is a second `meta` lock row, taken by summary runs (ADR-033). Indexing can go on during a summary run; two summary runs can't, because both would pay for the same summaries. A run waiting on batches refreshes it, so it never looks abandoned.
+
+## 9. V1.3 additions (the Map, incremental updates, `PIVOT_SPEC.md` §5.6, §7)
+
+- **The index version** is a `meta` row per repo, `indexVersion:<repoId>`: a counter bumped by one statement whenever anything the Map shows changes. That covers the end of a structure run, an incremental update, and any summary write that creates, rewrites or prunes a row or changes its status. Level and describe answers carry it, so readers cache per version and the Map refetches when it moves (ADR-036).

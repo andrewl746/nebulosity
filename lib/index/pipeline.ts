@@ -9,6 +9,7 @@ import {
     type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
 import { pruneSummaries } from "../db/store/summaries";
+import { bumpIndexVersion } from "../db/store/version";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
@@ -187,6 +188,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             total: fileSet.size,
             ...(errors.length > 0 ? { note: `${errors.length} files failed to index` } : {}),
         });
+        bumpIndexVersion(db, repoId);   // the Map refetches what it shows (ADR-036)
 
         return {
             repoId,
