@@ -22,7 +22,7 @@ export const IGNORED_DIRS: ReadonlySet<string> = new Set(["node_modules", ".git"
  * already decides, and a tracked folder with one of these names can be real source:
  * VS Code keeps its build scripts in build/.
  */
-const WALK_ONLY_IGNORED_DIRS = new Set(["dist", "out", "build", "coverage"]);
+export const WALK_ONLY_IGNORED_DIRS: ReadonlySet<string> = new Set(["dist", "out", "build", "coverage"]);
 
 /**
  * Lists a repository's source files as sorted, repo-relative, forward-slash paths.
