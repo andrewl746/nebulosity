@@ -211,6 +211,20 @@ export type UIAction =
   | { type: "focus_node"; nodeId: string }
   | { type: "clear_highlights" };
 
+/* ─────────────────────────────── Live ────────────────────────────── */
+
+/**
+ * A tool call to show on the open Maps (PIVOT_SPEC.md §8) — docs/API_CONTRACTS.md §14. The boxes holding `paths`
+ * pulse; an `action` (show_on_map's) also highlights, focuses or clears. Node ids may be folders as well as files.
+ */
+export type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction };
+
+/** GET /api/live/stream's SSE events — docs/API_CONTRACTS.md §14 */
+export type LiveStreamEventMap = {
+  ready: Record<string, never>;
+  tool: LiveEvent;
+};
+
 /* ───────────────────────────── Chat (SSE) ────────────────────────── */
 
 /** POST /api/chat request body — docs/API_CONTRACTS.md §5 */

@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 127.0.0.1",
     "lint": "eslint",
     "test": "vitest run",
     "index": "tsx scripts/index.ts",
     "summarize": "tsx scripts/summarize.ts",
     "search": "tsx scripts/search.ts",
+    "live": "tsx scripts/live.ts",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
     "preview-folders": "tsx scripts/preview-folders.ts"
   },

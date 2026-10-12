@@ -9,7 +9,7 @@ import path from "path";
 import { indexRepository, RepoNotFoundError } from "../lib/index/pipeline";
 import { repoKey } from "../lib/index/paths";
 import { IndexLockedError } from "../lib/db/store/lock";
-import { writeConfig } from "../lib/config";
+import { readConfig, writeConfig } from "../lib/config";
 import { refreshSummaryStatus } from "../lib/index/summarize/status";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
@@ -52,7 +52,7 @@ try{
         console.log(`[index] summaries: ${summaries.state} ${summaries.done}/${summaries.total}${summaries.note ? ` (${summaries.note})` : ""}`);
     }
 
-    writeConfig({ activeRepo: repoKey(root) });
+    writeConfig({ ...readConfig(), activeRepo: repoKey(root) });
     console.log(`[index] active repo → ${repoKey(root)}`);
 } catch (err){
     if (err instanceof RepoNotFoundError){

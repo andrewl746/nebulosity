@@ -448,6 +448,19 @@
 - When more than 50 files change at once, the rest keep stale summaries until opened, swept, or summarized by the CLI.
 **Revisit when:** the desktop app (Electron or Tauri) replaces Next as the host; the worker becomes its background process.
 
+## ADR-039 — The live channel: SSE out, localhost-only POST in, the server on loopback (2026-10-12)
+
+**Context:** PIVOT_SPEC.md §8 has MCP tool handlers notify the open Map, with `show_on_map` reusing ADR-008's UI actions. The routes that spend money (summarize), change the index (re-index, switch repo) or drive the Map (live events) are reachable from any web page the user has open: a page can POST to `localhost:3000`, and DNS rebinding can make a foreign host name resolve to 127.0.0.1. `next dev` listens on every interface, so the GET routes would serve code snippets and summaries to the local network.
+**Decision:**
+- **The event.** A tool call is `{ tool, paths, at, action? }`. The Map pulses the box holding each path at its current level and runs `action` if there is one, so `show_on_map` is just a tool event with an action.
+- **The stream.** `GET /api/live/stream` sends events as SSE (ADR-002), with a keep-alive comment every 15 s. The hub that fans events out lives in the server process (`lib/live/hub.ts`), kept on `globalThis` across hot reloads, and passes on at most 20 events a second.
+- **The guard.** Every state-changing route checks `isLocalRequest`: the Host header must name this machine, and an Origin, if present, too. Programs send no Origin; a foreign page always does.
+- **Loopback.** `npm run dev` and `npm run start` bind to 127.0.0.1.
+- **The poster.** It fires and forgets: a 200 ms timeout, failures ignored, the port from the config.
+**Alternatives:** (a) A shared secret in a header: the MCP server would need to read it from disk, and it guards nothing a loopback bind and the Host/Origin check don't. (b) WebSockets: two-way, which nothing here needs (ADR-002's reasoning holds).
+**Consequences:** No other machine can reach the Map, and no web page can make it spend money or move. Opening the Map from another device (a phone on the same network) would need a deliberate `-H 0.0.0.0` and a token, which is out of scope.
+**Revisit when:** the desktop app hosts the Map: the server then lives inside it and the guard moves to its IPC.
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

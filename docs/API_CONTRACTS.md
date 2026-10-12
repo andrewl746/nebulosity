@@ -250,3 +250,19 @@ type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | 
 - **`stalePaths`** counts files at or under the target whose summary is out of date with their bytes. It's non-zero between a file's edit and the refresh of its summary (`PIVOT_SPEC.md` §5.6).
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo; `404 NOT_FOUND`; `404 INDEX_EMPTY`.
+
+## 14. The live channel (slice V1.3)
+
+`POST /api/live` takes a tool call, and `GET /api/live/stream` sends each one to the open Maps (`PIVOT_SPEC.md` §8, ADR-039).
+
+```ts
+type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction };
+```
+
+- **`POST /api/live`** takes a `LiveEvent` as its body and answers `204`.
+  - `at` and `paths` are optional. `paths` holds at most 50 repo-relative paths; others are dropped. `action` is a `UIAction`, whose node ids may be folders.
+  - **Localhost only.** The `Host` header must be `localhost`, `127.0.0.1` or `[::1]` (any port), and an `Origin`, if present, one of those too. Anything else gets `403 FORBIDDEN`.
+  - A body that isn't a live event gets `400 BAD_REQUEST`.
+  - At most 20 events a second are passed on; the rest are dropped.
+- **`GET /api/live/stream`** is Server-Sent Events: `ready` (`{}`) once, then `tool` (a `LiveEvent`) per call, and a `: keep-alive` comment every 15 s. It's a GET, so the browser's `EventSource` reads it directly.
+- **`postLiveEvent`** (`lib/live/client.ts`) is the poster. It sends one POST to `http://127.0.0.1:<port>/api/live` with a 200 ms timeout and ignores every failure, since no Map being open is the normal case. `port` comes from `.nebulosity/config.json` (default 3000). V1.4's MCP tools call it, and `npm run live -- <tool> [path …] [--highlight | --focus | --clear]` sends one by hand.
