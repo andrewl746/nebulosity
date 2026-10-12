@@ -6,7 +6,8 @@ import type { LevelResponse, LiveEvent } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import Breadcrumb from "./Breadcrumb";
 import DetailPanel from "./DetailPanel";
-import LiveDock from "./LiveDock";
+import ActivityBar from "./ActivityBar";
+import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
 import MapCanvas from "./MapCanvas";
 import { boxFor, parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
@@ -91,11 +92,6 @@ function MapScreen(){
         setSelected(target);
     }, [open, levelPath]);
 
-    // Claude's focus (VISUAL_REFRESH.md §4): show_on_map's highlights, as boxes of the level on screen
-    const agent = useMemo(
-        () => new Set(level === null ? [] : highlights.flatMap((p) => boxFor(level, p) ?? [])),
-        [level, highlights],
-    );
 
     /** A tool call from Claude Code (PIVOT_SPEC.md §8): pulse the boxes it touched, and run its UI action. */
     const onLive = useCallback((event: LiveEvent) => {
@@ -109,6 +105,26 @@ function MapScreen(){
         else if (action?.type === "focus_node") focus(action.nodeId);
     }, [level, focus]);
     const live = useLive(onLive);
+
+    // A clock for Claude's focus: it ticks each second only while the newest tool call is under AGENT_ACTIVE_MS old,
+    // so the orange rings let go on time and an idle Map doesn't re-render. Reading Date.now() during render isn't
+    // allowed, so the time lives in state.
+    const [now, setNow] = useState(0);
+    const newest = live.recent[0]?.at ?? null;
+    useEffect(() => {
+        if (newest === null) return;
+        const timer = setInterval(() => {
+            const t = Date.now();
+            setNow(t);
+            if (t - Date.parse(newest) >= AGENT_ACTIVE_MS) clearInterval(timer);
+        }, 1_000);
+        return () => clearInterval(timer);
+    }, [newest]);
+
+    // Claude's focus (VISUAL_REFRESH.md §4): the boxes its recent tool calls touched, and show_on_map's highlights. Kept
+    // by content, so the canvas only redraws when the set itself changes, not on every tick.
+    const agentKey = level === null ? "" : [...agentFocus(level, live.recent, highlights, now)].sort().join("\0");
+    const agent = useMemo(() => new Set(agentKey === "" ? [] : agentKey.split("\0")), [agentKey]);
 
     const onSwitched = useCallback(() => {
         setLevelPath("");
@@ -170,8 +186,8 @@ function MapScreen(){
                         onClose={() => setSelected(null)}
                     />
                 )}
-                <LiveDock last={live.last} connected={live.connected} />
             </main>
+            <ActivityBar recent={live.recent} connected={live.connected} />
             {paletteOpen && (
                 <SearchPalette
                     onPick={(hit) => {

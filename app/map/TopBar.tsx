@@ -1,49 +1,55 @@
 "use client";
 
 import { useSyncExternalStore, type ReactNode } from "react";
+import Image from "next/image";
+import { IconSearch } from "@tabler/icons-react";
 
 type TopBarProps = {
-    /** The repo's name, or the repo picker (Task 20). */
+    /** The repo as "owner / repo", or the repo picker. */
     repo: ReactNode;
-    /** Opens ⌘K search (Task 19). The button appears once it's passed. */
+    /** Opens ⌘K search. The field appears once it's passed. */
     onSearch?: () => void;
-    /** The index-status pill (Task 20). */
+    /** The index-status dot. */
     status?: ReactNode;
 };
 
 const noSubscription = () => () => {};
 
-/** The top bar (PIVOT_SPEC.md §7): the repo, the search palette's button, and a lens switcher showing the lenses that exist. */
+/**
+ * The top bar (VISUAL_REFRESH.md §6), left to right: the Nebulosity mark and name, the repo as "owner / repo", the
+ * view's title, a wide search field, and the index status on the right. Structure is v1's only lens, so the view title
+ * stands where PIVOT_SPEC.md §7's lens switcher will go when History (E3) and Clusters (E5) arrive.
+ */
 export default function TopBar({ repo, onSearch, status }: TopBarProps){
     // the server renders "Ctrl K"; a Mac shows "⌘K" once hydrated, without a mismatch
     const isMac = useSyncExternalStore(noSubscription, () => /Mac|iPhone|iPad/.test(navigator.platform), () => false);
 
     return (
-        <header className="pointer-events-auto relative z-20 flex h-11 items-center gap-4 border-b border-purple-500/15 bg-[#06070B]/70 px-4 backdrop-blur-xl">
-            <div className="flex min-w-0 items-center gap-2">
-                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-cyan-300/80" />
-                {repo}
+        <header className="pointer-events-auto relative z-20 flex h-12 shrink-0 items-center gap-4 border-b border-hairline bg-canvas px-4">
+            <div className="flex shrink-0 items-center gap-2">
+                <Image src="/icon.svg" alt="" width={18} height={18} unoptimized />
+                <span className="text-[14px] font-medium text-text">Nebulosity</span>
             </div>
-            <div className="flex flex-1 justify-center">
+            <span aria-hidden className="h-4 w-px shrink-0 bg-hairline" />
+            <div className="flex min-w-0 items-center gap-3">
+                {repo}
+                <span className="shrink-0 text-[13px] text-text-2">Dependency map</span>
+            </div>
+            <div className="flex min-w-0 flex-1 justify-center">
                 {onSearch && (
                     <button
                         type="button"
                         onClick={onSearch}
                         data-testid="search-button"
-                        className="flex w-full max-w-md items-center justify-between rounded-sm border border-purple-400/20 bg-black/40 px-3 py-1.5 font-mono text-[11px] text-zinc-500 hover:border-purple-300/40 hover:text-zinc-300"
+                        className="flex w-full max-w-xl items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] text-text-2 hover:border-text-2"
                     >
-                        <span>Search files, symbols and summaries…</span>
-                        <kbd className="text-[10px] text-zinc-600">{isMac ? "⌘K" : "Ctrl K"}</kbd>
+                        <IconSearch aria-hidden size={16} stroke={1.75} className="shrink-0" />
+                        <span className="flex-1 truncate text-left">Search files and concepts</span>
+                        <kbd className="shrink-0 rounded-md border border-border px-1.5 font-sans text-[12px] text-text-2">{isMac ? "⌘K" : "Ctrl K"}</kbd>
                     </button>
                 )}
             </div>
-            <div className="flex items-center gap-3">
-                {status}
-                {/* the lens switcher: Structure is v1's only lens (History arrives with E3, Clusters with E5) */}
-                <span className="rounded-sm border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-purple-200">
-                    Structure
-                </span>
-            </div>
+            <div className="flex shrink-0 items-center">{status}</div>
         </header>
     );
 }

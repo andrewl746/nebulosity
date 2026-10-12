@@ -78,6 +78,21 @@ It's actionable and structured, not a static card. From top to bottom:
 
 - **Top bar, left to right:** a small Nebulosity mark and name, the repo as `owner / repo` (prominent), the view title "Dependency map", then a wide search field ("Search files and concepts", `Ctrl K`). A green status dot sits on the right.
 - **Activity bar:** a slim bar along the bottom that's always visible. It shows Claude Code's **last 3 actions** ("Reading build/gulpfile.js"), each with an `--agent` dot. It stays slim so the Map remains the focus, and it's never hidden: live activity is the demo's differentiator.
+  - *(Added in the V1.3.1 build.)* Each tool call reads as a phrase (`app/map/activity.ts`). A leading `mcp__nebulosity__` is dropped, "+N" counts further paths, and `""` reads "the repo":
+
+    | Tool | Phrase |
+    |---|---|
+    | `describe` | Reading build/gulpfile.js |
+    | `overview` | Reading the repo overview |
+    | `search` | Searching · a.ts +2 |
+    | `dependents` | Finding what uses x.ts |
+    | `dependencies` | Finding what src/vs/editor uses |
+    | `path` | Tracing a.ts → b.ts |
+    | `show_on_map` | Showing src/vs +1 on the map |
+    | anything else | its name · its first path |
+
+  - The boxes holding what those 3 actions touched keep the `--agent` ring while the action is under 30 s old (the old dock's idle window). show_on_map's highlights keep it until they're cleared.
+  - The repo's `owner / repo` comes from its origin remote (`RepoSummary.remote`, API_CONTRACTS.md §15). Without one, it's the folder name.
 
 ## 7. System rules (anti-noise)
 

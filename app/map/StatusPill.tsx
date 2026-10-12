@@ -5,18 +5,20 @@ import type { IndexStatus, StageName } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount, headline, stageLabel, type Tone } from "./format";
 
+/** Green means indexed and nothing else (VISUAL_REFRESH.md §2); a failure, or nothing indexed, is the error color. No motion. */
 const DOTS: Record<Tone, string> = {
-    ok: "bg-green-300/80",
-    busy: "animate-pulse bg-cyan-300/80",
-    warn: "bg-amber-300/80",
-    off: "bg-zinc-500",
+    ok: "bg-ok",
+    busy: "bg-text-2",
+    warn: "bg-danger",
+    off: "bg-text-2",
 };
 
 const STAGES: readonly StageName[] = ["structure", "summaries", "embeddings"];
 
 /**
- * The index-status pill (PIVOT_SPEC.md §7): the stage that most needs attention, in one line. Opening it lists every
- * stage with its counts and note, and offers a re-index (POST /api/index) with its progress.
+ * The index status (VISUAL_REFRESH.md §6: a status dot on the right of the top bar): the stage that most needs
+ * attention, in one line. Opening it lists every stage with its counts and note, and offers a re-index
+ * (POST /api/index) with its progress.
  */
 export default function StatusPill({ status }: { status: IndexStatus | null }){
     const [open, setOpen] = useState(false);
@@ -38,22 +40,22 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                 type="button"
                 data-testid="status-pill"
                 onClick={() => setOpen((o) => !o)}
-                className="flex items-center gap-2 rounded-full border border-purple-400/20 bg-black/40 px-2.5 py-0.5 font-mono text-[10.5px] text-zinc-300 hover:border-purple-300/40"
+                className="flex items-center gap-2 rounded-md px-2 py-1 text-[12px] text-text-2 hover:bg-surface hover:text-text"
             >
-                <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${DOTS[head.tone]}`} />
+                <span aria-hidden className={`h-2 w-2 rounded-full ${DOTS[head.tone]}`} />
                 {head.text}
             </button>
             {open && (
-                <div className="absolute right-0 top-8 z-30 w-[340px] space-y-2 rounded-sm border border-purple-400/25 bg-[#0c0716]/95 p-3 font-mono text-[10.5px] text-zinc-400 shadow-[0_0_30px_rgba(126,58,242,0.2)]">
+                <div className="absolute right-0 top-9 z-30 w-[340px] space-y-3 rounded-lg border border-border bg-panel p-3 text-[12px] text-text-2">
                     {STAGES.map((name) => (
                         <div key={name}>
-                            <div className="text-zinc-200">{stageLabel(name, status.stages[name])}</div>
-                            {status.stages[name].note && <div className="text-zinc-500">{status.stages[name].note}</div>}
+                            <div className="text-[13px] text-text">{stageLabel(name, status.stages[name])}</div>
+                            {status.stages[name].note && <div>{status.stages[name].note}</div>}
                         </div>
                     ))}
-                    <div className="flex items-center justify-between border-t border-purple-400/15 pt-2">
-                        <span className="truncate text-zinc-500">{reindex ?? `index version ${status.indexVersion}`}</span>
-                        <button type="button" onClick={runReindex} className="shrink-0 text-purple-300/80 hover:text-purple-200">Re-index</button>
+                    <div className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
+                        <span className="truncate">{reindex ?? `index version ${status.indexVersion}`}</span>
+                        <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-text underline underline-offset-2 hover:text-text-2">Re-index</button>
                     </div>
                 </div>
             )}

@@ -1,10 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { RepoList } from "@/lib/contracts";
+import { IconChevronDown } from "@tabler/icons-react";
+import type { RepoList, RepoSummary } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 
 type RepoMenuProps = { repo: string; onSwitched: () => void };
+
+/** A repo as the top bar names it: "owner / repo" from its origin, or its folder name (VISUAL_REFRESH.md §6). */
+function RepoName({ entry, fallback }: { entry: RepoSummary | undefined; fallback: string }){
+    if (!entry?.remote) return <span className="truncate text-[15px] font-medium text-text">{fallback}</span>;
+    return (
+        <span className="flex min-w-0 items-baseline gap-1 text-[15px]">
+            <span className="truncate text-text-2">{entry.remote.owner}</span>
+            <span aria-hidden className="text-text-2">/</span>
+            <span className="truncate font-medium text-text">{entry.remote.name}</span>
+        </span>
+    );
+}
 
 /** The repo's name, and a picker when more than one repo is indexed (PIVOT_SPEC.md §7.1). */
 export default function RepoMenu({ repo, onSwitched }: RepoMenuProps){
@@ -17,8 +30,8 @@ export default function RepoMenu({ repo, onSwitched }: RepoMenuProps){
     }, [repo]);
 
     const name = repo.slice(repo.lastIndexOf("/") + 1);
-    const label = <span className="truncate font-mono text-[11px] uppercase tracking-[0.3em] text-zinc-300">{name}</span>;
-    if (list === null || list.repos.length < 2) return label;
+    const label = <RepoName entry={list?.repos.find((r) => r.root === repo)} fallback={name} />;
+    if (list === null || list.repos.length < 2) return <span data-testid="repo-name" className="flex min-w-0">{label}</span>;
 
     const pick = (root: string): void => {
         setOpen(false);
@@ -27,24 +40,24 @@ export default function RepoMenu({ repo, onSwitched }: RepoMenuProps){
     };
 
     return (
-        <div className="relative">
-            <button type="button" data-testid="repo-menu" onClick={() => setOpen((o) => !o)} className="flex items-center gap-1.5 hover:text-purple-200">
+        <div className="relative min-w-0">
+            <button type="button" data-testid="repo-menu" onClick={() => setOpen((o) => !o)} className="flex min-w-0 items-center gap-1 rounded-md px-1 hover:bg-surface">
                 {label}
-                <span aria-hidden className="text-[10px] text-zinc-500">▾</span>
+                <IconChevronDown aria-hidden size={14} stroke={1.75} className="shrink-0 text-text-2" />
             </button>
             {open && (
-                <ul className="absolute left-0 top-8 z-30 w-[320px] rounded-sm border border-purple-400/25 bg-[#0c0716]/95 py-1 font-mono text-[11px] shadow-[0_0_30px_rgba(126,58,242,0.2)]">
+                <ul className="absolute left-0 top-9 z-30 w-[320px] rounded-lg border border-border bg-panel py-1 text-[13px]">
                     {list.repos.map((r) => (
                         <li key={r.root}>
-                            <button type="button" onClick={() => pick(r.root)} className={`block w-full px-3 py-1.5 text-left hover:bg-purple-500/15 ${r.root === repo ? "text-purple-200" : "text-zinc-300"}`}>
-                                {r.name}
-                                <span className="block truncate text-[10px] text-zinc-600">{r.root}</span>
+                            <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-surface">
+                                <span className={r.root === repo ? "font-medium text-text" : "text-text"}>{r.remote ? `${r.remote.owner} / ${r.remote.name}` : r.name}</span>
+                                <span className="block truncate font-mono text-[12px] text-text-2">{r.root}</span>
                             </button>
                         </li>
                     ))}
                 </ul>
             )}
-            {error && <span className="ml-2 text-[10px] text-red-300">{error}</span>}
+            {error && <span className="ml-2 text-[12px] text-danger">{error}</span>}
         </div>
     );
 }
