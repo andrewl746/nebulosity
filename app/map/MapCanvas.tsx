@@ -9,9 +9,10 @@ import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
+import { PANEL_WIDTH } from "./DetailPanel";
 import { formatCount } from "./format";
 import Legend from "./Legend";
-import { BOX_HEIGHT, BOX_WIDTH, layoutLevel } from "./levelLayout";
+import { BOX_HEIGHT, BOX_WIDTH, FIT_PADDING, layoutLevel } from "./levelLayout";
 import MapBox, { type BoxNode } from "./MapBox";
 import type { Pulse } from "./pulses";
 
@@ -19,7 +20,7 @@ import type { Pulse } from "./pulses";
 const nodeTypes: NodeTypes = { box: MapBox };
 
 /** A level fits the screen with room around it, and a small level isn't blown up past 100% (VISUAL_REFRESH.md §4). */
-const FIT = { padding: 0.15, maxZoom: 1 } as const;
+const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
 
 /** Each line's look per tone (VISUAL_REFRESH.md §4): 1 px slate normally, 2 px purple for the selection's links. */
 const EDGE_STYLES: Record<EdgeTone, { stroke: string; width: number; opacity: number; layer: number }> = {
@@ -83,12 +84,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
         const drawn = level.edges.map((edge) => {
             const id = edgeKey(edge);
             const look = EDGE_STYLES[emphasis.edges.get(id) ?? "normal"];
-            return {
+            const drawnEdge: Edge = {
                 id,
                 source: edge.source,
                 target: edge.target,
                 focusable: false,
-                zIndex: look.layer,
                 label: hoveredEdge === id ? `${formatCount(edge.count)} import${edge.count === 1 ? "" : "s"}` : undefined,
                 labelStyle: { fill: "var(--text)", fontSize: 12 },
                 labelBgStyle: { fill: "var(--surface)" },
@@ -98,9 +98,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
                 // userSpaceOnUse: the arrowhead stays the same size whatever the line's width
                 markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: look.stroke, markerUnits: "userSpaceOnUse" },
             };
+            return { layer: look.layer, edge: drawnEdge };
         });
-        // the emphasized lines go last, so they're drawn over the quiet ones they cross
-        setEdges(drawn.sort((a, b) => a.zIndex - b.zIndex));
+        // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
+        // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
+        setEdges(drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge));
     }, [level, emphasis, hoveredEdge, setEdges]);
 
     // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
@@ -157,7 +159,14 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
             colorMode="dark"
         >
             <Legend />
-            <Controls position="bottom-right" showInteractive={false} fitViewOptions={FIT} className="overflow-hidden rounded-lg border border-border">
+            {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
+            <Controls
+                position="bottom-right"
+                showInteractive={false}
+                fitViewOptions={FIT}
+                style={selected !== null ? { right: PANEL_WIDTH } : undefined}
+                className="overflow-hidden rounded-lg border border-border"
+            >
                 <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
                     <IconFocusCentered aria-hidden size={16} stroke={1.75} />
                 </ControlButton>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { IconFile, IconFolder, IconX } from "@tabler/icons-react";
 import type { AreaCount, DescribeResponse, LevelResponse, MapNode, SummarizeResponse, SymbolInfo } from "@/lib/contracts";
 import { api, ApiError } from "./api";
@@ -22,6 +22,9 @@ type DetailPanelProps = {
     onClose: () => void;
 };
 
+/** The panel's width: the canvas's controls move left by this much while it's open, so it never covers them. */
+export const PANEL_WIDTH = 400;
+
 /** Chips and rows shown before "+N more" or "View all": enough to act on without scrolling. */
 const PREVIEW = 8;
 
@@ -34,7 +37,7 @@ const KIND_LABELS: Record<DescribeResponse["kind"], string> = { repo: "Repositor
  * refreshing. Selecting "+N more" lists the boxes it folds. MapView remounts the panel for each selection (key), so
  * nothing leaks from one target to the next.
  */
-export default function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
+function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
     const more = level.nodes.find((n) => n.path === path && n.kind === "more") ?? null;
     const isMore = more !== null;
     const target = isMore ? level.path : path;
@@ -94,7 +97,7 @@ export default function DetailPanel({ path, level, indexVersion, onFocus, onOpen
     const kindLabel = more ? "Folded boxes" : data ? KIND_LABELS[data.kind] : "";
 
     return (
-        <aside data-panel={path} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex w-[400px] flex-col border-l border-hairline bg-panel">
+        <aside data-panel={path} style={{ width: PANEL_WIDTH }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
             <header className="border-b border-hairline px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -127,6 +130,9 @@ export default function DetailPanel({ path, level, indexVersion, onFocus, onOpen
         </aside>
     );
 }
+
+// memo: the Map's clock ticks each second while Claude Code is active, and an expanded list can hold 1,000 rows
+export default memo(DetailPanel);
 
 /** "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. */
 function Stats({ data, onOpen }: { data: DescribeResponse; onOpen: (folder: string) => void }){

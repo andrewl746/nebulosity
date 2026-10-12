@@ -134,6 +134,7 @@ function MapScreen(){
     }, [refresh]);
 
     const onDrawn = useCallback(() => measureAfterPaint("map:level"), []);
+    const closePanel = useCallback(() => setSelected(null), []);
 
     // Escape lets go of the selection, Backspace goes up a level, unless the user is typing
     useEffect(() => {
@@ -183,7 +184,7 @@ function MapScreen(){
                         indexVersion={version ?? 0}
                         onFocus={focus}
                         onOpen={open}
-                        onClose={() => setSelected(null)}
+                        onClose={closePanel}
                     />
                 )}
             </main>

@@ -68,6 +68,32 @@ describe("layoutLevel", () => {
         expect(at.get("c")).toEqual({ x: -116, y: 480 });
     });
 
+    it("puts the loose boxes below a short stack of tiers when that fits the level larger (final review I3)", () => {
+        // a → b and 20 loose boxes. Beside: 2 rows of 10, 2,992 × 200 px, fits a 1440 × 780 canvas at 1440 / (2,992 × 1.15)
+        // ≈ 0.42. Below: ceil(√20) = 5 columns, 4 rows, centred under the tiers: 1,320 × (200 + 80 + 376) = 656 px, fits at
+        // min(1440 / (1,320 × 1.15), 780 / (656 × 1.15)) ≈ 0.95. Below wins.
+        const loose = Array.from({ length: 20 }, (_, i) => `l${i + 1}`);
+        const at = layoutLevel([node("a"), node("b"), ...loose.map(node)], [{ source: "a", target: "b", count: 1 }]);
+        // the grid is 5 × 232 + 4 × 40 = 1,320 wide, centred: from -660; it starts 80 px under b's bottom (200)
+        expect(at.get("l1")).toEqual({ x: -660, y: 280 });
+        expect(at.get("l5")).toEqual({ x: 428, y: 280 });
+        expect(at.get("l6")).toEqual({ x: -660, y: 384 });
+        expect(at.get("l20")).toEqual({ x: 428, y: 592 });
+    });
+
+    it("keeps the loose boxes beside a tall chain, where they fit it larger", () => {
+        // a chain of 6 is 6 × 64 + 5 × 72 = 744 px tall, which holds floor(784 / 104) = 7 rows, so 4 loose boxes make one
+        // column at x = 116 + 80 = 196. Beside: 544 × 744, fits at 780 / (744 × 1.15) ≈ 0.91. Below: 504 × 992, ≈ 0.68
+        const chain = ["c1", "c2", "c3", "c4", "c5", "c6"];
+        const at = layoutLevel(
+            [...chain, "l1", "l2", "l3", "l4"].map(node),
+            chain.slice(1).map((c, i) => ({ source: chain[i], target: c, count: 1 })),
+        );
+        expect(["l1", "l2", "l3", "l4"].map((l) => at.get(l))).toEqual([
+            { x: 196, y: 0 }, { x: 196, y: 104 }, { x: 196, y: 208 }, { x: 196, y: 312 },
+        ]);
+    });
+
     it("lays a level with no lines at all in a square-ish grid", () => {
         const at = layoutLevel(["l1", "l2", "l3", "l4"].map(node), []);
         expect([...at.values()]).toEqual([
