@@ -15,6 +15,7 @@ import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
 import { runSummaries } from "../index/summarize/run";
+import type { Summarizer } from "../index/summarize/types";
 import type { RepoWatcher } from "../index/watch";
 import { createBackgroundService, MAX_AUTO_REFRESH_FILES } from "./service";
 
@@ -79,6 +80,63 @@ describe("background service", () => {
         expect(rowStatus(root, "src/core/log.ts")).toBe("fresh");
         expect(rowStatus(root, "src/core")).toBe("stale");   // its folder waits to be opened or swept
         expect(embedded(root)).toBe(13);                     // the new summary has its vector again
+        await service.stop();
+    });
+
+    it("a save reaches the index while a summary refresh is still waiting on the API (I4)", async () => {
+        const root = await summarizedFixture();
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        let answer!: () => void;
+        const apiAnswers = new Promise<void>((resolve) => { answer = resolve; });
+        const slow: Summarizer = { ...stub.summarizer, async summarize(request){ await apiAnswers; return stub.summarizer.summarize(request); } };
+        const service = createBackgroundService({ summarizer: slow, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await vi.advanceTimersByTimeAsync(60_000);   // log.ts's refresh starts, and waits on Haiku
+
+        fs.appendFileSync(path.join(root, "src/util/strings.ts"), "export const whisper = 1;\n");
+        watcher.changed(["src/util/strings.ts"]);
+        await vi.advanceTimersByTimeAsync(10);
+        expect(stub.requests).toHaveLength(0);   // log.ts's request is still out
+        // S6: within 2 s of the save, whatever the maintenance work is doing
+        expect(describeTarget(root, "src/util/strings.ts").symbols?.map((s) => s.name)).toContain("whisper");
+
+        answer();
+        await service.idle();
+        expect(rowStatus(root, "src/core/log.ts")).toBe("fresh");
+        expect(rowStatus(root, "src/util/strings.ts")).toBe("stale");   // its own minute hasn't passed
+        await service.stop();
+    });
+
+    it("a file saved again while its own refresh is out comes back stale, not fresh with the old text (I4)", async () => {
+        const root = await summarizedFixture();
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        let answer!: () => void;
+        const apiAnswers = new Promise<void>((resolve) => { answer = resolve; });
+        const slow: Summarizer = { ...stub.summarizer, async summarize(request){ await apiAnswers; return stub.summarizer.summarize(request); } };
+        const service = createBackgroundService({ summarizer: slow, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await vi.advanceTimersByTimeAsync(60_000);   // its refresh asks Haiku about the first edit
+
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const more = 2;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await vi.advanceTimersByTimeAsync(10);
+        answer();
+        await vi.advanceTimersByTimeAsync(10);
+        await service.idle();
+
+        // the answer describes the first edit; the file now has the second, and waits its own minute
+        expect(stub.requests).toHaveLength(1);
+        expect(rowStatus(root, "src/core/log.ts")).toBe("stale");
         await service.stop();
     });
 

@@ -8,6 +8,7 @@ import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository, type IndexOptions, type IndexResult } from "../index/pipeline";
 import { runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
+import type { PlannedTarget } from "../index/summarize/plan";
 import { refreshSummaryStatus } from "../index/summarize/status";
 import type { Summarizer } from "../index/summarize/types";
 import { applyFileChanges } from "../index/update";
@@ -38,6 +39,9 @@ export type ServiceTimings = {
 };
 
 export const DEFAULT_TIMINGS: ServiceTimings = { summaryQuietMs: 60_000, sweepEveryMs: 10 * 60_000, retryLockedMs: 30_000 };
+
+/** The background worker's two job queues (createBackgroundService's serial). */
+type Lane = "structure" | "maintenance";
 
 /** Files that changed together, waiting out their quiet minute on one timer. */
 type WaitGroup = { timer: ReturnType<typeof setTimeout>; paths: Set<string> };
@@ -72,7 +76,7 @@ export type BackgroundService = {
  * - each changed file's summary is redone 60 quiet seconds later, at most 50 at once;
  * - out-of-date folders are swept every 10 minutes;
  * - whatever lacks a vector is embedded in slices.
- * That maintenance work runs one job at a time. "Summarize now" doesn't wait for it.
+ * Structure work and maintenance run in two lanes, one job at a time in each (see serial). "Summarize now" waits for neither.
  */
 export function createBackgroundService(deps: BackgroundDeps): BackgroundService {
     const timings = { ...DEFAULT_TIMINGS, ...deps.timings };
@@ -90,12 +94,19 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     const pendingUpdate = new Set<string>();
     const pendingRefresh = new Set<string>();
     let embedQueued = false;
-    let chain: Promise<unknown> = Promise.resolve();
+    const lanes: Record<Lane, Promise<unknown>> = { structure: Promise.resolve(), maintenance: Promise.resolve() };
 
-    /** Maintenance runs one job at a time, in the order queued. A failed job is logged and the next one still runs. */
-    function exclusive<T>(job: () => T | Promise<T>): Promise<T> {
-        const run = chain.then(job);
-        chain = run.catch((err: unknown) => log(`job failed: ${err instanceof Error ? err.message : String(err)}`));
+    /**
+     * Runs a job in its lane, one job at a time per lane, in the order queued; a failed job is logged and the lane goes
+     * on (ADR-038, amended). Structure work (updates, the startup check, re-index) is synchronous and takes milliseconds
+     * to seconds, and S6 gives a save 2 s to reach the index. Maintenance (summary refreshes, the sweep, embeddings)
+     * waits on Haiku, Sonnet or the embedding model for seconds to minutes. In one lane a save would wait behind all of
+     * that. Apart, a structure job runs between a maintenance job's awaits; a summary written for content that changed
+     * meanwhile is put back to stale when the refresh re-plans at its end.
+     */
+    function serial<T>(lane: Lane, job: () => T | Promise<T>): Promise<T> {
+        const run = lanes[lane].then(job);
+        lanes[lane] = run.catch((err: unknown) => log(`job failed: ${err instanceof Error ? err.message : String(err)}`));
         return run;
     }
 
@@ -111,7 +122,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     function queueUpdate(paths: readonly string[]): void {
         const wasEmpty = pendingUpdate.size === 0;
         for (const p of paths) pendingUpdate.add(p);
-        if (wasEmpty) void exclusive(runUpdate);   // one job takes everything queued by the time it starts
+        if (wasEmpty) void serial("structure", runUpdate);   // one job takes everything queued by the time it starts
     }
 
     function runUpdate(): void {
@@ -171,7 +182,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     function queueRefresh(paths: readonly string[]): void {
         const wasEmpty = pendingRefresh.size === 0;
         for (const p of paths) pendingRefresh.add(p);
-        if (wasEmpty) void exclusive(runRefresh);
+        if (wasEmpty) void serial("maintenance", runRefresh);
     }
 
     /**
@@ -186,6 +197,16 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         if (repo === null || paths.length === 0 || deps.summarizer === null) return;
 
         const wanted = new Set(paths.map((p) => targetKey("file", p)));
+        // The content whose quiet minute is up: each file's input hash as this run first plans it. A file saved again
+        // mid-refresh (structure updates don't wait for refreshes) plans with a new hash and isn't sent again here: its
+        // update restarted its own minute. Otherwise every save during a wave would be paid for at once.
+        const dueHash = new Map<string, string>();
+        const isDue = (target: PlannedTarget): boolean => {
+            const key = targetKey(target.kind, target.path);
+            if (!wanted.has(key)) return false;
+            if (!dueHash.has(key)) dueHash.set(key, target.inputHash);
+            return dueHash.get(key) === target.inputHash;
+        };
         try{
             const result = await runSummaries(repo, {
                 summarizer: deps.summarizer,
@@ -194,7 +215,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
-                select: (target) => wanted.has(targetKey(target.kind, target.path)),
+                select: isDue,
                 maxTargets: MAX_AUTO_REFRESH_FILES,
                 onProgress: (message) => log(`summaries: ${message}`),
             });
@@ -242,7 +263,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     function queueEmbed(): void {
         if (embedQueued) return;
         embedQueued = true;
-        void exclusive(runEmbed);
+        void serial("maintenance", runEmbed);
     }
 
     async function runEmbed(): Promise<void> {
@@ -270,9 +291,9 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
 
     async function idle(): Promise<void> {
         for (;;){
-            const current = chain;
-            await current;
-            if (current === chain) return;
+            const { structure, maintenance } = lanes;
+            await Promise.all([structure, maintenance]);
+            if (structure === lanes.structure && maintenance === lanes.maintenance) return;
         }
     }
 
@@ -300,7 +321,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         if (root !== repo || watcher !== current) return;   // switched again meanwhile, which closed this watcher
 
         // the startup check (PIVOT_SPEC.md §5.6): one warm full run catches what changed while nothing watched
-        await exclusive(() => {
+        await serial("structure", () => {
             try{
                 indexRepository(repo);
             } catch (err){
@@ -311,7 +332,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         });
         if (root !== repo) return;   // switched again meanwhile
 
-        sweepTimer = setInterval(() => { void exclusive(runSweep); }, timings.sweepEveryMs);
+        sweepTimer = setInterval(() => { void serial("maintenance", runSweep); }, timings.sweepEveryMs);
         queueEmbed();   // summaries the CLI wrote but never embedded (an interrupted run) get their vectors here
         log(`watching ${repo}`);
     }
@@ -350,7 +371,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             } catch (err){
                 return Promise.reject(err);
             }
-            return exclusive(() => {
+            return serial("structure", () => {
                 const result = indexRepository(repo, { onProgress });
                 refreshSummaryStatus(repo, { summarizerAvailable });
                 return result;
