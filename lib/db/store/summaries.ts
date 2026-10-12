@@ -287,3 +287,20 @@ export function pruneSummaries(db: Db, repoId: number): number {
     if (deleted > 0) bumpIndexVersion(db, repoId);
     return deleted;
 }
+
+/** How many of this repo's requests a batch carries. */
+export function countBatchRows(db: Db, repoId: number, batchId: string): number {
+    return db.select({ n: sql<number>`count(*)` }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), eq(summaries.batchId, batchId))).get()?.n ?? 0;
+}
+
+/**
+ * Gives up on a batch whose results can't be read (ADR-033, amended in V1.3). Its rows in this repo are marked failed
+ * with `reason` and unclaimed, so the next pass sends them again, and they're paid for again. If the batch's own
+ * answers ever arrive, they no longer land: the batch doesn't own the rows any more. Returns how many it released.
+ */
+export function releaseBatch(db: Db, repoId: number, batchId: string, reason: string): number {
+    const rows = db.select({ id: summaries.id, pendingHash: summaries.pendingHash }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), eq(summaries.batchId, batchId))).all();
+    return writeResults(db, rows.map((r) => ({ id: r.id, batchId, inputHash: r.pendingHash ?? "", outcome: { ok: false as const, error: reason } })));
+}

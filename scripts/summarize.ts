@@ -1,5 +1,6 @@
 /**
  * npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>]
+ *                      [--release-batch <batch id>]...
  *
  * Writes summaries for an indexed repository (PIVOT_SPEC.md §5.3), then embeds them for search (§5.4).
  * - A big first pass goes through the Message Batches API at half price and can take hours.
@@ -14,6 +15,8 @@
  *   Running again with a bigger --budget goes on from there.
  * - --path summarizes one file or folder right now through the regular API (an empty path
  *   means the repo itself). It's one request, so no budget applies.
+ * - --release-batch <batch id> (repeatable) gives up on a batch whose results keep failing to download: its
+ *   requests are sent again in this run, and paid for again. The summaries stage's note names such a batch.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import path from "path";
@@ -27,7 +30,8 @@ import { repoKey } from "../lib/index/paths";
 import { createClaudeSummarizer } from "../lib/index/summarize/claude";
 import { costUsd } from "../lib/index/summarize/pricing";
 import {
-    DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, type Transport,
+    BatchesUnreachableError, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError,
+    TargetNotReadyError, UnknownBatchError, type Transport,
 } from "../lib/index/summarize/run";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
@@ -38,7 +42,7 @@ const target = args[0];
 
 /** The arguments can't be run as given: print how to call the command, and exit. */
 function usage(): never {
-    console.error("usage: npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>]");
+    console.error("usage: npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>] [--release-batch <batch id>]...");
     process.exit(1);
 }
 
@@ -51,6 +55,8 @@ if (!target || target.startsWith("--")) usage();
 // repo path included, prints the usage line.
 const SWITCHES = ["--direct", "--batch", "--no-wait"];
 const OPTIONS = ["--budget", "--path"];
+const REPEATABLE = ["--release-batch"];
+const repeated = new Map<string, string[]>();
 const switches = new Set<string>();
 const values = new Map<string, string>();
 for (let i = 1; i < args.length; i++){
@@ -60,11 +66,16 @@ for (let i = 1; i < args.length; i++){
     } else if (OPTIONS.includes(arg) && !values.has(arg) && i + 1 < args.length){
         values.set(arg, args[i + 1]);
         i++;   // its value is used up
+    } else if (REPEATABLE.includes(arg) && i + 1 < args.length){
+        repeated.set(arg, [...(repeated.get(arg) ?? []), args[i + 1]]);
+        i++;   // its value is used up
     } else{
         usage();
     }
 }
 if (switches.has("--direct") && switches.has("--batch")) usage();   // one or the other
+const releaseBatches = repeated.get("--release-batch") ?? [];
+if (releaseBatches.length > 0 && values.has("--path")) usage();   // --path sends no batch, so there's nothing to release
 
 // --budget is a positive number of dollars: Number() reads an empty value as 0 and a word as NaN, and both are refused,
 // as are negatives and Infinity.
@@ -89,7 +100,7 @@ async function main(): Promise<void> {
         if (row.tagline) say(`${row.tagline} — ${row.summary}`);
     } else{
         if (!summarizer) say("ANTHROPIC_API_KEY is not set: writing test-file templates only (put the key in .env.local).");
-        const result = await runSummaries(root, { summarizer, transport, wait: !switches.has("--no-wait"), budgetUsd, onProgress: say });
+        const result = await runSummaries(root, { summarizer, transport, wait: !switches.has("--no-wait"), budgetUsd, releaseBatches, onProgress: say });
         say(`up to date ${result.upToDate}/${result.total} · summarized ${result.summarized} · templated ${result.templated}`
             + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
             + ` · waves ${result.waves} · batches ${result.batches}`);
@@ -136,13 +147,18 @@ function printSpend(): void {
 }
 
 main().catch((err: unknown) => {
-    if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError || err instanceof TargetNotReadyError || err instanceof StructureNotReadyError){
+    if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError || err instanceof TargetNotReadyError
+        || err instanceof StructureNotReadyError || err instanceof UnknownBatchError){
         console.error(`[summarize] ${err.message}`);
         process.exit(1);
     }
     if (err instanceof IndexLockedError){
         console.error(`[summarize] ${err.message} If no other run is going, the lock clears itself after 30 minutes.`);
         process.exit(2);
+    }
+    if (err instanceof BatchesUnreachableError){
+        console.error(`[summarize] ${summariesNote()}`);
+        process.exit(1);
     }
     console.error(err);
     process.exit(1);

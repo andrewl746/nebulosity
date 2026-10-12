@@ -13,7 +13,7 @@ import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, w
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError } from "./run";
+import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
@@ -372,7 +372,8 @@ describe("runSummaries — the Batch API", () => {
         // the 7 files' batch is still at Anthropic: running, not failed, long after this process is gone
         const muchLater = new Date(Date.now() + 6 * 60 * 1000);
         expect(readIndexStatus(root, muchLater)?.stages.summaries).toEqual({
-            state: "running", done: 1, total: 14, note: "Connection error.; 7 requests still at Anthropic; run npm run summarize to collect them",
+            state: "running", done: 1, total: 14,
+            note: `Connection error.; 7 requests still at Anthropic; run npm run summarize to collect them; if that batch can never be read, run npm run summarize -- "${repoKey(root)}" --release-batch ${first} to send its requests again (paid again)`,
         });
 
         // ...and, as the note says, the next run collects it: the 7 files were sent once
@@ -521,6 +522,28 @@ describe("runSummaries — the Batch API", () => {
         expect(await runSummaries(root, { summarizer: healthy.summarizer, transport: "batch", pollIntervalMs: 0 }))
             .toMatchObject({ summarized: 13, failed: 0, upToDate: 14 });
         expect(healthy.requests).toHaveLength(13);
+    });
+
+    it("--release-batch gives up on a batch: its requests go out again, and the batch is never polled again", async () => {
+        const root = indexedFixture();
+        const carrier = stubSummarizer({ pollsBeforeDone: 99 });
+        await runSummaries(root, { summarizer: carrier.summarizer, transport: "batch", wait: false });
+        const [stuck] = carrier.batches.keys();
+        const polls = carrier.batches.get(stuck)!.polls;
+
+        const said: string[] = [];
+        const result = await runSummaries(root, { summarizer: carrier.summarizer, transport: "direct", releaseBatches: [stuck], onProgress: (m) => said.push(m) });
+        expect(said).toContain(`released ${stuck}: 7 requests will be sent again`);
+        expect(result).toMatchObject({ summarized: 13, inFlight: 0 });
+        expect(carrier.batches.get(stuck)!.polls).toBe(polls);
+    });
+
+    it("refuses to release a batch this repo has nothing in, before taking the lock or touching the stage", async () => {
+        const root = indexedFixture();
+        await expect(runSummaries(root, { summarizer: stubSummarizer().summarizer, releaseBatches: ["msgbatch_nope"] }))
+            .rejects.toThrow(UnknownBatchError);
+        const db = getDb();
+        expect(readStages(db, requireRepository(db, repoKey(root))).summaries).toBeUndefined();
     });
 });
 

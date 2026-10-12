@@ -7,8 +7,8 @@ import { acquireSummaryLock, releaseSummaryLock, touchSummaryLock } from "../../
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import {
-    addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileSummaryChunk,
-    loadImporters, loadSummaries, loadUsage, markInFlight, targetKey, writeResults,
+    addUsage, applyTargetUpdates, countBatchRows, countInFlight, inFlightBatches, loadBatchRows, loadFileSummaryChunk,
+    loadImporters, loadSummaries, loadUsage, markInFlight, releaseBatch, targetKey, writeResults,
     type FileFacts, type StoredSummary, type SummaryResult,
 } from "../../db/store/summaries";
 import { repoKey } from "../paths";
@@ -46,6 +46,11 @@ export type SummaryRunOptions = {
      * DEFAULT_BUDGET_USD unless told otherwise.
      */
     budgetUsd?: number;
+    /**
+     * Batches to give up on before the run starts (ADR-033, amended in V1.3). Their requests are marked failed and sent
+     * again, and paid for again: for a batch whose results keep failing to download. The stage note names such a batch.
+     */
+    releaseBatches?: readonly string[];
     onProgress?: (message: string) => void;
 };
 
@@ -128,6 +133,32 @@ export class StructureNotReadyError extends Error {
     }
 }
 
+/** Thrown when --release-batch names a batch that carries none of this repo's requests. */
+export class UnknownBatchError extends Error {
+    constructor(readonly batchId: string){
+        super(`No request of this repo is waiting in batch ${batchId}. Copy the id from the summaries stage's note.`);
+        this.name = "UnknownBatchError";
+    }
+}
+
+/**
+ * Thrown when no batch could be checked MAX_MISSED_POLLS passes in a row. The message is the last poll's error; the ids
+ * say which batches stayed unreadable, so the stage note can say how to give up on them (ADR-033, amended in V1.3).
+ */
+export class BatchesUnreachableError extends Error {
+    constructor(readonly batchIds: readonly string[], cause: unknown){
+        super(messageOf(cause), { cause });
+        this.name = "BatchesUnreachableError";
+    }
+}
+
+/** How to give up on batches whose results keep failing to download: their requests go out again, and are paid for again. */
+export function releaseHint(root: string, batchIds: readonly string[]): string {
+    const one = batchIds.length === 1;
+    const flags = batchIds.map((id) => `--release-batch ${id}`).join(" ");
+    return `if ${one ? "that batch" : "those batches"} can never be read, run npm run summarize -- "${repoKey(root)}" ${flags} to send ${one ? "its" : "their"} requests again (paid again)`;
+}
+
 type Tally = { summarized: number; templated: number; failed: number; batches: number; waves: number };
 
 /** A run's spend cap (ADR-035). */
@@ -192,8 +223,16 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget);
     let last: PlannedTarget[] = [];
 
+    // a mistyped id must fail before anything is locked, released or rewritten
+    for (const batchId of options.releaseBatches ?? []){
+        if (countBatchRows(db, repoId, batchId) === 0) throw new UnknownBatchError(batchId);
+    }
     acquireSummaryLock(db);
     try{
+        for (const batchId of options.releaseBatches ?? []){
+            const released = releaseBatch(db, repoId, batchId, `released by hand: the results of ${batchId} couldn't be read`);
+            ctx.say(`released ${batchId}: ${plural(released, "request")} will be sent again`);
+        }
         for (;;){
             const snap = planSnapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun);
             last = snap.targets;
@@ -258,7 +297,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             return finish(ctx, snap.targets, summarizer !== null);
         }
     } catch (err){
-        reportRunError(db, repoId, last, err);
+        reportRunError(db, repoId, root, last, err);
         throw err;
     } finally{
         releaseSummaryLock(db);
@@ -506,7 +545,7 @@ async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollInt
         const givingUp = ctx.missedPasses >= MAX_MISSED_POLLS;
         const next = givingUp ? `giving up: no batch could be checked in ${MAX_MISSED_POLLS} passes in a row` : "will retry";
         for (const miss of misses) ctx.say(`couldn't check ${miss.batchId} (${messageOf(miss.error)}); ${next}`);
-        if (givingUp) throw misses[misses.length - 1].error;
+        if (givingUp) throw new BatchesUnreachableError(misses.map((m) => m.batchId), misses[misses.length - 1].error);
         if (collected) return;
 
         touchSummaryLock(ctx.db);
@@ -524,15 +563,20 @@ async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollInt
 async function collectEndedBatches(ctx: RunContext, summarizer: Summarizer): Promise<number> {
     let collected = 0;
     const unchecked: string[] = [];
+    const uncheckedIds: string[] = [];
 
     for (const batchId of inFlightBatches(ctx.db, ctx.repoId)){
         const poll = await pollBatch(ctx, summarizer, batchId);
         if (poll.kind === "collected") collected++;
-        if (poll.kind === "missed") unchecked.push(`couldn't check ${batchId} (${messageOf(poll.error)})`);
+        if (poll.kind === "missed"){
+            unchecked.push(`couldn't check ${batchId} (${messageOf(poll.error)})`);
+            uncheckedIds.push(batchId);
+        }
     }
 
     // after a pass that collected something the run goes round again; after one that didn't, it finishes
     for (const line of unchecked) ctx.say(`${line}; ${collected > 0 ? "will retry" : "the next run retries it"}`);
+    if (collected === 0 && uncheckedIds.length > 0) ctx.say(releaseHint(ctx.root, uncheckedIds));
     return collected;
 }
 
@@ -718,17 +762,22 @@ function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarize
 }
 
 /**
- * The stage after a run stopped on an error. Requests still at Anthropic go on without this
- * process, and the next run collects them, so the stage stays "running" (ADR-032's exception)
- * instead of calling paid-for work failed.
+ * The stage after a run stopped on an error. Requests still at Anthropic go on without this process, and the next run
+ * collects them, so the stage stays "running" (ADR-032's exception) instead of calling paid-for work failed. When the
+ * error was batches that couldn't be read, the note says how to give up on them.
  */
-function reportRunError(db: Db, repoId: number, targets: readonly PlannedTarget[], err: unknown): void {
+function reportRunError(db: Db, repoId: number, root: string, targets: readonly PlannedTarget[], err: unknown): void {
     try{
         const inFlight = countInFlight(db, repoId);
-        const progress = { done: upToDate(targets), total: targets.length };
-        writeStage(db, repoId, "summaries", inFlight > 0
-            ? { state: "running", ...progress, note: `${messageOf(err)}; ${stillAtAnthropic(inFlight)}` }
-            : { state: "failed", ...progress, note: messageOf(err) });
+        const notes = [messageOf(err)];
+        if (inFlight > 0) notes.push(stillAtAnthropic(inFlight));
+        if (err instanceof BatchesUnreachableError) notes.push(releaseHint(root, err.batchIds));
+        writeStage(db, repoId, "summaries", {
+            state: inFlight > 0 ? "running" : "failed",
+            done: upToDate(targets),
+            total: targets.length,
+            note: notes.join("; "),
+        });
     } catch{
         // the database itself may be what failed (SQLITE_BUSY, say); the original error matters more
     }
