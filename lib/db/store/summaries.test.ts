@@ -4,14 +4,17 @@ import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../../test/helpers/fixture";
 import { FILES } from "../../../test/helpers/mini-repo-facts";
+import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { getDb } from "../client";
 import { files, imports, summaryVectors } from "../schema";
 import { indexRepository } from "../../index/pipeline";
+import { runSummaries } from "../../index/summarize/run";
 import { upsertRepository } from "./structure";
 import {
     addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
     loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, pruneSummaries, targetKey, writeResults,
 } from "./summaries";
+import { writeSummaryVectors } from "./summary-vectors";
 
 const ok = (tagline: string) => ({ ok: true as const, text: { tagline, summary: "S" }, model: "m" });
 
@@ -233,5 +236,27 @@ describe("summary store — pruning", () => {
 
         expect(loadSummaries(db, repoId).map((s) => targetKey(s.kind, s.path)).sort()).toEqual(["file:src/util/strings.ts", "folder:src/util"]);
         expect(pruneSummaries(db, repoId)).toBe(0);   // nothing left to prune
+    });
+});
+
+describe("summary store — a template over model text", () => {
+    it("takes the old vector with it", async () => {
+        const root = copyFixture();
+        const { repoId } = indexRepository(root);
+        const stub = stubSummarizer();
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        const db = getDb();
+
+        // the test file's row as if a model had summarized it (before it counted as a test file), with a vector
+        const testFile = loadSummaries(db, repoId).find((s) => s.path === "src/util/strings.test.ts")!;
+        writeResults(db, [{ id: testFile.id, batchId: null, inputHash: "model-written", outcome: { ok: true, text: { tagline: "Shout checks", summary: "S." }, model: "m" } }]);
+        writeSummaryVectors(db, [{ summaryId: testFile.id, inputHash: "model-written", embedding: Buffer.alloc(12) }]);
+        const vectorsOf = () => db.select().from(summaryVectors).where(eq(summaryVectors.summaryId, testFile.id)).all();
+        expect(vectorsOf()).toHaveLength(1);
+
+        // the next run plans the template again (its hash differs) and writes it over the model's text
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        expect(loadSummaries(db, repoId).find((s) => s.id === testFile.id)).toMatchObject({ model: "template", tagline: "Tests for strings" });
+        expect(vectorsOf()).toEqual([]);
     });
 });

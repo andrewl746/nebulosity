@@ -219,6 +219,9 @@
 
 **Context:** ADR-005/006/013 built chunk-level vector RAG with brute-force search, with a revisit trigger at about 50k chunks. VS Code has 101,603 chunks. At the measured ~18 chunks/s, embedding them takes about 94 minutes, and the in-memory cache would hold every vector and every chunk's text. Code questions mix exact identifiers, where keyword search wins, with concepts, where embeddings win.
 **Decision:** Search merges three ranked lists with Reciprocal Rank Fusion (k = 60): BM25 over a code FTS5 index (with camelCase-split names), BM25 over a summary FTS5 index, and cosine similarity over embeddings of **summaries, not chunks**. The existing MiniLM pipeline and the ADR-017 encode/decode pair are reused unchanged. The chunk `vectors` table retires.
+
+> *(Amended 2026-10-12 in slice V1.3, from V1.2's review: a vector must describe its row's current text. A vector is stored only if the summary still has the `inputHash` it was computed for, inside one immediate transaction. A template written over model text deletes the old vector. Before this, a summary rewritten while it was being embedded kept its old text's vector for good.)*
+
 **Alternatives:** (a) Chunk embeddings in sqlite-vec: fixes the memory problem but not the 94-minute embedding cost. (b) Keyword search only: misses conceptual questions. (c) A hosted embedding model: adds an API key and a network dependency to indexing.
 **Consequences:** Keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive. About 15–20k summary vectors stay comfortably within brute-force range. RRF combines lists without calibrating their scores against each other. *(Amended 2026-10-11 in slice V1.2: fusion works on files and folders. Code hits are grouped by file before ranking, so a file with ten matching chunks counts once per list. Each list contributes its top 50, and vector matches below cosine 0.25 are dropped. Queries keep their non-stopword words, quoted and ORed, plus the parts of identifiers. See `RAG_PIPELINE.md` §6.)*
 **Revisit when:** the eval shows conceptual questions failing. Then try a code-specific embedding model, or chunk embeddings for the most-used areas only.
@@ -286,6 +289,7 @@
 > *Now the summaries stage is re-derived by `refreshSummaryStatus` whenever something other than a summary run changes what's planned: `npm run index`, the background worker's structure updates, and `summarizeNow`. It plans like a run that sends nothing (new rows, statuses, test templates) and writes the stage from the same pure `summaryStageStatus` a finishing run uses. While a live run holds the summarizing lock it leaves the row to that run. It keeps a failed run's note while its targets still wait. A new reading, `idle` with `N waiting to be summarized`, means nothing is running but work is known.*
 >
 > *The embeddings stage's counts are read live (two counts per request); only `running` and `failed` come from its row.)*
+
 **Alternatives:** (a) Derive every state from the data: honest by construction, but it can't show a running stage's progress. (b) Record process ids and check them: breaks across reboots and machines.
 **Consequences:** No state can stick at "running" forever, and the route needs no knowledge of which process runs which stage.
 **Revisit when:** a stage legitimately goes quiet for minutes (it must then write a heartbeat), or V1.3's UI needs pushed updates instead of polling.

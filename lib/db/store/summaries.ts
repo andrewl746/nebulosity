@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
 import {
@@ -167,6 +167,10 @@ export function applyTargetUpdates(db: Db, repoId: number, updates: readonly Tar
                     inputHash: u.inputHash, status: "skipped", error: null, updatedAt: now,
                 }).where(row).run();
                 if (result.changes > 0) changed = true;
+                // a template has no vector, and any old one described text that's gone (ADR-027, amended in V1.3)
+                tx.delete(summaryVectors)
+                    .where(inArray(summaryVectors.summaryId, tx.select({ id: summaries.id }).from(summaries).where(row)))
+                    .run();
             } else if (u.status !== null){
                 if (tx.update(summaries).set({ status: u.status, updatedAt: now }).where(row).run().changes > 0) changed = true;
             }
