@@ -5077,3 +5077,244 @@ The V1.3 plan (the Map) is written with superpowers:writing-plans at the start o
 - **Embeddings on a worker thread** in the Next server (`PIVOT_SPEC.md` §5.4).
 - **Retiring the old Phase 2–4 code:** `lib/index-repo.ts`, `lib/retrieve.ts`, the old `/api/search` and `/api/index`, `lib/db/graph-store.ts` and the chunk `vectors` table. `GET /api/search` then serves `SearchResult`.
 - **`indexVersion`** for HTTP caching of level and describe responses.
+
+---
+
+## Addendum (2026-10-11): the owner's checkpoint verdict
+
+The owner's answers to Review #1 (`docs/SUMMARY_REVIEW.md`):
+
+1. **File model.** Haiku 5.5 writes the file summaries.
+2. **Prompt v2** (`PROMPT_VERSION` 2) comes first:
+   - a 3–6 word noun-phrase tagline, with an example;
+   - "don't mention truncation or code you weren't shown" replaces the truncation instruction;
+   - each file's import count and a few example importer folders from the graph;
+   - identifiers in backticks;
+   - the parser stops cutting taglines mid-phrase and keeps them whole up to 8 words, with the spec updated to match.
+
+   Then Review #2 runs on the same 20 files, and the run stops for the owner.
+3. **Effort** stays low.
+4. **Go**, once Review #2 is approved: Haiku for files, Sonnet for folders and the repo, through the Batch API.
+   - Before submitting each further batch, stop if the spend so far plus the remaining estimate would pass $15.
+   - At wrap-up, add ADR-031 → ADR-033 to PIVOT_SPEC §15.
+
+Two tasks implement this, in order:
+- **Task 11b**: prompt v2. It is reviewed before any money is spent; then Review #2 runs and the run stops for the owner.
+- **Task 12a**: the spend cap.
+
+Task 12 runs only after the owner approves Review #2. Its wrap-up also lists this slice's ADRs, ADR-031 → ADR-035, in PIVOT_SPEC §15.
+
+### Task 11b: Summary prompt v2
+
+**Files:**
+- Modify: `lib/index/summarize/prompts.ts`, `lib/index/summarize/claude.ts`, `lib/index/summarize/run.ts` (`buildFilePrompt`), `lib/db/store/summaries.ts`, `lib/db/schema.ts` (one comment)
+- Test: `lib/index/summarize/prompts.test.ts`, `lib/index/summarize/claude.test.ts`, the summaries store test
+- Docs:
+  - `docs/PIVOT_SPEC.md`: the §4.1 `summaries` row and the §5.3 file input
+  - `docs/DATABASE_DESIGN.md`: the `summaries` tagline
+  - `docs/RAG_PIPELINE.md`: the prompt input and the tagline rule
+  - `docs/ENGINEERING_DECISIONS.md`: ADR-034
+  - `docs/SUMMARY_REVIEW.md`: Review #1's verdict
+
+**Interfaces:**
+- `renderFilePrompt(listing: string, lineCount: number, importers: readonly string[], source: string, maxChars?: number): string`
+- `importerLine(importers: readonly string[], maxFolders?: number): string` and `MAX_IMPORTER_FOLDERS = 3`, in prompts.ts
+- `loadImporterPaths(db: Db, repoId: number, filePath: string): string[]`, in the summaries store
+- `cleanTagline(raw: string): string` and `MAX_TAGLINE_WORDS = 8`, in claude.ts
+
+**Requirements:**
+
+1. `PROMPT_VERSION = 2`.
+
+2. The three system prompts, verbatim. Their examples are deliberately not from VS Code, so the model can't copy one into a summary.
+   ```ts
+   export const FILE_SYSTEM_PROMPT = [
+       "You write the summary a developer sees for one source file while exploring an unfamiliar codebase.",
+       "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Retry policy with exponential backoff\". The summary is 2 to 4 sentences.",
+       "The summary says what the file is responsible for, names its most important exports, and says how other code uses it. The \"Imported by\" line comes from the repository's import graph; use it to say how widely and where the file is used.",
+       "In the summary, write identifiers (functions, classes, types, variables and file names) in backticks, like `parseConfig`.",
+       "Use real identifiers from the file. Don't narrate the code line by line, and don't guess beyond what you're shown. Don't mention truncation or code you weren't shown.",
+   ].join("\n");
+
+   export const FOLDER_SYSTEM_PROMPT = [
+       "You write the summary a developer sees for one folder while exploring an unfamiliar codebase. You're given the summaries of the files and subfolders inside it.",
+       "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Payment provider integrations\". The summary is 2 to 4 sentences.",
+       "The summary says what the folder is responsible for as a whole, which parts matter most, and how they fit together.",
+       "In the summary, write file, folder, function and class names in backticks, like `retry.ts`.",
+       "Don't list every item, and don't guess beyond the summaries you're given.",
+   ].join("\n");
+
+   export const REPO_SYSTEM_PROMPT = [
+       "You write the overview a developer sees first when opening an unfamiliar repository. You're given the summaries of its top-level folders and files.",
+       "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Distributed task scheduling service\". The summary is 2 to 4 sentences.",
+       "The summary says what the project is, names its main areas, and says where a newcomer should start reading.",
+       "In the summary, write folder and file names in backticks, like `src/server`.",
+       "Don't guess beyond the summaries you're given.",
+   ].join("\n");
+   ```
+
+3. `renderFilePrompt` adds one line right after `Lines: <n>`:
+   ```ts
+   [listing, "", `Lines: ${lineCount}`, importerLine(importers), "", "Source:", truncateSource(source, maxChars)].join("\n")
+   ```
+
+4. `importerLine` is pure. Its rules:
+   - **Folder of an importer.** The folder of `a/b/c.ts` is `a/b`. A file at the top level sits in the repo root, which is shown as `the repo root`.
+   - **Ordering.** Count importers per folder, most first; break ties by folder path in code-point order. Show the first `maxFolders` as `<folder> (<count>)`, joined by `, `.
+   - **No importers:** `Imported by: no other indexed file`.
+   - **k ≤ maxFolders folders:** `` `Imported by: ${plural(n, "file")} in ${plural(k, "folder")}: ${list}` ``.
+   - **k > maxFolders folders:** the same line, followed by `` `, and ${plural(k - maxFolders, "other folder")}` ``.
+
+   Tests, with each expected string verbatim:
+   - `[]` gives `Imported by: no other indexed file`.
+   - `["src/app/main.ts"]` gives `Imported by: 1 file in 1 folder: src/app (1)`.
+   - `["src/app/main.ts", "src/app/view.tsx", "index.ts"]` gives `Imported by: 3 files in 2 folders: src/app (2), the repo root (1)`.
+   - `["a/x.ts", "a/y.ts", "b/x.ts", "b/y.ts", "c/x.ts", "d/x.ts", "e/x.ts"]` gives `Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders`.
+   - Every existing `renderFilePrompt` expectation gains the importer line and otherwise keeps its meaning.
+
+5. `loadImporterPaths` returns the paths of the files in that repo that import `filePath`, sorted by path.
+   - Each importer appears once, because imports are unique per source/target.
+   - An unknown path returns `[]`.
+   - Test it against the mini-repo fixture with hand-derived expectations: read the fixture's import statements to find a file with at least 2 importers. Don't derive the expectation by running the code.
+   - All SQL stays in `lib/db/*`.
+
+6. `buildFilePrompt` passes `loadImporterPaths(db, repoId, file.path)`.
+   - The importers are **not** part of a file's input hash, because the planner hashes only path and content.
+   - So a new importer doesn't re-summarize a central file on every pull. Say so in a one-line comment.
+
+7. **Taglines** (claude.ts).
+   - The schema's tagline description becomes `A noun phrase of 3 to 6 plain words.`
+   - `cleanTagline` works in this order:
+     1. Remove backticks, since the UI shows taglines as plain text.
+     2. Split on whitespace.
+     3. Keep 8 words or fewer whole.
+     4. For more than 8, keep the first 8, then drop trailing words while the last one is one of `a an the and or of for to in on with via by from at as` (case-insensitive). Never drop the first word.
+     5. Strip trailing `.`, `,`, `;` and `:`.
+   - An empty result is the existing "the reply didn't have a tagline and a summary" error.
+   - Tests, verbatim:
+     - `Typed event emitter and listener registry helpers` (7 words) stays unchanged.
+     - `Core DOM utilities for the browser workbench and its helpers` gives `Core DOM utilities for the browser workbench`.
+     - `Registry of commands for the workbench and for all extensions` gives `Registry of commands for the workbench`.
+     - `` `URI` parsing and formatting. `` gives `URI parsing and formatting`.
+   - The old six-word clamp expectation goes. Report which existing assertions changed, and why.
+
+8. **Docs.**
+   - The tagline wording is `tagline` (3–6 words asked for; up to 8 kept whole) in three places:
+     - PIVOT_SPEC's `summaries` row;
+     - DATABASE_DESIGN's `summaries` tagline;
+     - the schema comment.
+   - PIVOT_SPEC §5.3's file input becomes: "path, the file-summary chunk (imports/exports), its importers from the graph (how many, and the top 3 folders they sit in), and the file text capped at about 6k tokens".
+   - RAG_PIPELINE: the prompt input and the new tagline rule.
+   - **ADR-034, "Summary prompt v2, from the owner's checkpoint (2026-10-11)":**
+     - **Context.** Review #1 found Haiku close to Sonnet at about 1/20 the price. The 6-word clamp cut 7–8 of 20 Haiku taglines mid-phrase. Summaries hedged with "truncated" and "not shown".
+     - **Decision.**
+       - Haiku for files, and effort stays low.
+       - The prompt v2 items.
+       - Taglines are asked for in 3–6 words and kept whole up to 8. A longer one is cut at a word boundary, minus dangling connector words.
+       - Backticks are stripped from taglines.
+       - Importers go in the file prompt but not in the input hash.
+     - **Consequences.**
+       - v2 invalidates every stored summary, but VS Code has none yet.
+       - The usage sentence reflects the graph as it was when the file was summarized.
+       - The file prompt grows by about 100 tokens, roughly $0.05 over a VS Code pass.
+       - The UI's tagline promise becomes ≤ 8 words.
+   - In Review #1, replace the "Owner's verdict" placeholder line with:
+     > **Owner's verdict (2026-10-11):** Haiku 5.5 writes the file summaries; effort stays low. Before the full run, prompt v2 (`PROMPT_VERSION` 2): a 3–6 word noun-phrase tagline with an example; "don't mention truncation or code you weren't shown" replaces the truncation instruction; each file's import count and top importer folders from the graph; identifiers in backticks; taglines kept whole up to 8 words instead of cut at 6 (ADR-034). Then Review #2 on the same 20 files. Go for the full Batch run (Haiku files, Sonnet folders and the repo) once Review #2 is approved, stopping before any batch that would take the spend so far plus the remaining estimate past $15.
+
+9. **Commit.** Run the gate: `npx tsc --noEmit && npm run lint && npx vitest run`. Commit as `feat: summary prompt v2 from the owner's checkpoint: 3-6 word taglines kept whole up to 8, importers in the file prompt, identifiers in backticks`, then push.
+   - **Don't run `compare-summaries`.** After the task review, the controller runs Review #2 (`npm run compare-summaries -- ../vscode`), commits and pushes `docs/SUMMARY_REVIEW.md`, and STOPS for the owner.
+
+### Task 12a: The spend cap
+
+**Files:**
+- Create: `lib/index/summarize/budget.ts`, `lib/index/summarize/budget.test.ts`
+- Modify:
+  - `lib/index/summarize/run.ts`
+  - `lib/index/summarize/pricing.ts` (`formatUsd`)
+  - `lib/index/summarize/compare.ts` (to use the shared `formatUsd` and the shared folder-token assumption)
+  - `scripts/summarize.ts`
+  - the summaries store, if it needs a per-model count of in-flight rows
+- Test: `lib/index/summarize/run.test.ts`
+- Docs: `docs/PIVOT_SPEC.md` §5.3, `docs/ENGINEERING_DECISIONS.md` (ADR-035), `docs/RAG_PIPELINE.md` §4 and §8
+
+**Requirements:**
+
+1. **The budget module.** `budget.ts` is pure. It exports `ASSUMED_TOKENS`, the tokens per request assumed for a model with no recorded usage:
+   - file: 4,600 input and 260 output (Review #1's Haiku means);
+   - folder and repo: 1,000 input and 250 output.
+
+   compare.ts takes its folder-input assumption from here.
+
+2. **The projection.** Before **every** submission, including the first and before any prompt is built, the run projects: spent + at Anthropic + this submission + the rest. A submission is each batch chunk and each regular-API wave.
+   - **Spent:** every `summary_usage` row of the repo, priced at its own transport. This is cumulative across runs, so the cap bounds the repo's total summary spend.
+   - **At Anthropic:** the rows in flight, at batch prices.
+   - **This submission:** at its own transport.
+   - **The rest:** targets still `ready` or `waiting` after this submission, at batch prices, or at direct prices when the run's transport is `direct`.
+   - **Tokens per request for a model:** the repo's recorded mean for that model (Σ tokens ÷ Σ requests, over both transports) once it has any; until then, `ASSUMED_TOKENS` for the target's kind.
+   - **A model with no price:** counted as $0, and named in the progress line.
+
+3. **Money format.** Move `usd` from compare.ts to pricing.ts as the exported `formatUsd`: 4 decimals below $0.10, otherwise 2. compare's tests must not change.
+
+4. **The option.** `SummaryRunOptions.budgetUsd?: number`; undefined means no cap. `summarizeNow` gets no cap.
+
+5. **Under the budget:** `` ctx.say(`budget: spent ${S} + at Anthropic ≈ ${F} + this ${batch|wave} ≈ ${W} + the rest ≈ ${R} = ${T} of ${B}`) ``, with every amount formatted by `formatUsd`.
+
+6. **Over the budget:**
+   - Set `` ctx.stopped = `stopped: the next ${batch|wave} would bring the projected spend to ${T}, over the ${B} budget (spent ${S}, at Anthropic ≈ ${F}, this ${batch|wave} ≈ ${W}, the rest ≈ ${R}); run again with --budget <usd> to go on` ``.
+   - Send nothing. The rows stay pending: not failed, not claimed.
+   - The run ends through `finish` with `stopped: true`. The stage is `failed`, or `running` while batches are at Anthropic, exactly as the circuit breaker leaves it.
+
+7. **CLI.**
+   - `--budget <usd>` takes a positive number. Anything else prints the usage line and exits 1.
+   - The default is `DEFAULT_BUDGET_USD = 15`, the S2 ceiling, exported from run.ts.
+   - Update the header comment and the usage line.
+   - When a run stops, print the summaries stage's note.
+
+8. **Tests, hand-derived.**
+
+   Prices per MTok, input/output: Haiku 0.10/0.50, Sonnet 2/10; batch is half. The stub answers 100 input and 20 output tokens per ok request. The fixture plans 7 file targets (Haiku), then waves of 4, 1 and 1 Sonnet targets, all through the regular API under `auto`.
+
+   **budget.test.ts:**
+   - **No usage yet.** 3 file requests at batch, and a rest of 2 folders at batch.
+     - The files cost 3 × (4,600×0.10 + 260×0.50)/1M/2 = 3 × 0.000295 = 0.000885.
+     - The folders cost 2 × (1,000×2 + 250×10)/1M/2 = 2 × 0.00225 = 0.0045.
+     - Total 0.005385.
+   - **Recorded usage replaces the assumption.** One Haiku batch row: 4 requests, 8,000 input and 400 output tokens.
+     - Spent = (8,000×0.10 + 400×0.50)/1M/2 = 0.0005.
+     - The mean is 2,000 input and 100 output, so 2 file requests at batch cost 2 × (2,000×0.10 + 100×0.50)/1M/2 = 0.00025.
+     - A rest of 1 folder at batch costs 0.00225.
+     - Total 0.003.
+   - **At Anthropic.** 3 Haiku rows in flight with no usage cost 3 × 0.000295 = 0.000885.
+   - **Unpriced.** A usage row for a model with no price is counted as $0 and named.
+
+   **run.test.ts:**
+   - **`budgetUsd: 0.01`, auto.**
+     - The wave-1 projection is 7 × (4,600×0.10 + 260×0.50)/1M = 0.00413, plus a rest of 6 × 0.00225 = 0.0135, for 0.01763. That is over budget.
+     - The run stops before wave 1: the stub gets 0 requests, `summarized` 0, `stopped` true, stage `failed`.
+     - The note starts with `stopped: the next wave would bring the projected spend to $0.0176, over the $0.0100 budget`.
+   - **`budgetUsd: 0.02`, auto.**
+     - Wave 1 is sent (0.01763 ≤ 0.02).
+     - The wave-2 projection is spent 7 × (100×0.10 + 20×0.50)/1M = 0.00014, this wave 4 × (1,000×2 + 250×10)/1M = 0.018, and the rest 2 × 0.00225 = 0.0045, for 0.02264. That stops the run.
+     - `summarized` 7, and the stub got 7 requests.
+     - The note starts with `stopped: the next wave would bring the projected spend to $0.0226, over the $0.0200 budget`.
+   - **`budgetUsd: 0.01`, `transport: "batch"`.**
+     - This batch is 7 × 0.000295 = 0.002065, and the rest 0.0135, for 0.015565. That stops the run.
+     - No batch was submitted, and the 7 file rows are still `pending`.
+     - The note starts with `stopped: the next batch would bring the projected spend to $0.0156, over the $0.0100 budget`.
+   - **No `budgetUsd`.** The existing tests pass unchanged.
+
+9. **Docs.**
+   - PIVOT_SPEC §5.3 gets a **Spend cap** bullet: "Before each submission the run projects spent + at Anthropic + this submission + the rest and stops if that passes the budget (`--budget`, default $15 = S2)".
+   - **ADR-035.**
+     - The formula.
+     - The ruled choices: cumulative per repo; every submission, including regular-API waves; the rest at batch prices.
+     - The known gap: the last small regular-API waves are priced at batch rates in the rest, so the projection runs a little low (under $1 on VS Code). The next check catches it.
+   - RAG_PIPELINE §4 (cost), and a §8 row: "a run would pass its budget".
+
+10. **Commit.** Run the gate. Commit as `feat: a spend cap: stop before any submission that would take the projected summary spend past the budget (default $15)`, then push.
+
+### Task 12 (amended)
+
+Task 12 runs after the owner approves Review #2: `npm run summarize -- ../vscode`, under the $15 default. At wrap-up:
+- add rows for ADR-031 → ADR-035 to PIVOT_SPEC §15 (the owner's instruction);
+- fill in Review #2's verdict with the owner's words.
