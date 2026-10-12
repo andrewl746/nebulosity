@@ -458,6 +458,9 @@
 - **Refusing.** Each `summarize` and `index` request names its repo, and the worker refuses one meant for another (`RepoSwitchingError`, `409 INDEX_LOCKED`, "try again in a moment"). A request that beats the switch can't act on the wrong repo.
 - **Waiting for an index.** A repo that isn't indexed yet is checked again every 30 s, and the worker starts on it once it is, instead of logging once and idling.
 
+**Amended (2026-10-12, V1.3 final review): the worker survives what it will meet.**
+- **Watcher errors.** chokidar reports an error (Linux's inotify limit, too many open files) as an EventEmitter `error` event, which throws when nothing listens. That killed the worker, and every restart met the same error. The watcher now passes errors to the worker's log and keeps going, and folders this user can't read are skipped (`ignorePermissionErrors`).
+
 ## ADR-039 — The live channel: SSE out, localhost-only POST in, the server on loopback (2026-10-12)
 
 **Context:** PIVOT_SPEC.md §8 has MCP tool handlers notify the open Map, with `show_on_map` reusing ADR-008's UI actions. The routes that spend money (summarize), change the index (re-index, switch repo) or drive the Map (live events) are reachable from any web page the user has open: a page can POST to `localhost:3000`, and DNS rebinding can make a foreign host name resolve to 127.0.0.1. `next dev` listens on every interface, so the GET routes would serve code snippets and summaries to the local network.

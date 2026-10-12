@@ -77,7 +77,8 @@ export type BackgroundService = {
 export function createBackgroundService(deps: BackgroundDeps): BackgroundService {
     const timings = { ...DEFAULT_TIMINGS, ...deps.timings };
     const log = deps.log ?? (() => {});
-    const watchFn = deps.watch ?? watchRepository;
+    const watchFn = deps.watch ?? ((repoRoot: string, onChanges: (paths: string[]) => void) =>
+        watchRepository(repoRoot, onChanges, { onError: (err) => log(`the file watcher reported an error and goes on: ${err.message}`) }));
     const summarizerAvailable = deps.summarizer !== null;
 
     let root: string | null = null;

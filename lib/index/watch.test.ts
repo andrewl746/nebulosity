@@ -3,7 +3,22 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { makeTempDir } from "../../test/helpers/temp";
+import type { FSWatcher } from "chokidar";
 import { createBatcher, createFolderFilter, isWatchedFile, watchRepository } from "./watch";
+
+// the real chokidar, wrapped only to keep each watcher it makes, so a test can make one report an error
+const chokidarWatchers = vi.hoisted(() => [] as FSWatcher[]);
+vi.mock("chokidar", async (importOriginal) => {
+    const real = await importOriginal<typeof import("chokidar")>();
+    return {
+        ...real,
+        watch: (...args: Parameters<typeof real.watch>) => {
+            const watcher = real.watch(...args);
+            chokidarWatchers.push(watcher);
+            return watcher;
+        },
+    };
+});
 
 afterEach(() => { vi.useRealTimers(); });
 
@@ -104,6 +119,27 @@ describe("watchRepository", () => {
             fs.writeFileSync(path.join(root, "README.md"), "# hi\n");
             await vi.waitFor(() => expect(batches.flat()).toContain("src/a.ts"), { timeout: 10_000, interval: 50 });
             expect(batches.flat().filter((p) => p !== "src/a.ts")).toEqual([]);
+        } finally{
+            await watcher.close();
+        }
+    });
+
+    it("survives a watcher error (an unreadable folder, the inotify limit): reports it and keeps watching (I3)", { timeout: 20_000 }, async () => {
+        const root = makeTempDir("neb-watch-");
+        fs.mkdirSync(path.join(root, "src"));
+        const batches: string[][] = [];
+        const errors: Error[] = [];
+        const watcher = watchRepository(root, (paths) => batches.push(paths), { quietMs: 100, maxWaitMs: 1000, onError: (err) => errors.push(err) });
+
+        try{
+            await watcher.ready;
+            const failure = Object.assign(new Error("ENOSPC: System limit for number of file watchers reached"), { code: "ENOSPC" });
+            // with no listener, an EventEmitter's 'error' throws: in the worker, an uncaught exception that kills it
+            expect(() => chokidarWatchers.at(-1)!.emit("error", failure)).not.toThrow();
+            expect(errors).toEqual([failure]);
+
+            fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
+            await vi.waitFor(() => expect(batches.flat()).toContain("src/a.ts"), { timeout: 10_000, interval: 50 });
         } finally{
             await watcher.close();
         }

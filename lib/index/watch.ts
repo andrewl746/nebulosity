@@ -96,8 +96,15 @@ export type RepoWatcher = { ready: Promise<void>; close(): Promise<void> };
  * paths. It only says "look at these": the incremental update (update.ts) decides what each path now means. A deleted
  * folder is reported as the folder's own path, and the update expands it. Folders createFolderFilter skips are never
  * watched: node_modules alone can hold more files than the repo, and build output churns on every compile.
+ *
+ * A watcher error (Linux's inotify limit, too many open files) goes to onError and watching goes on. Unreported, it
+ * would throw out of chokidar's EventEmitter and kill the background worker, and every restart would meet it again.
  */
-export function watchRepository(repoRoot: string, onChanges: (paths: string[]) => void, options: { quietMs?: number; maxWaitMs?: number } = {}): RepoWatcher {
+export function watchRepository(
+    repoRoot: string,
+    onChanges: (paths: string[]) => void,
+    options: { quietMs?: number; maxWaitMs?: number; onError?: (err: Error) => void } = {}
+): RepoWatcher {
     const root = path.resolve(repoRoot);
     const batcher = createBatcher(onChanges, { quietMs: options.quietMs ?? 1000, maxWaitMs: options.maxWaitMs ?? 5000 });
     const relative = (absolute: string): string => normalizeSlashes(path.relative(root, absolute));
@@ -106,6 +113,8 @@ export function watchRepository(repoRoot: string, onChanges: (paths: string[]) =
 
     const watcher = watch(root, {
         ignoreInitial: true,
+        // a folder this user can't read (a root-owned Docker volume) is skipped quietly, as git and discovery skip it
+        ignorePermissionErrors: true,
         ignored: (absolute, stats) => {
             const rel = relative(absolute);
             if (rel === "") return false;
@@ -124,6 +133,9 @@ export function watchRepository(repoRoot: string, onChanges: (paths: string[]) =
         const rel = relative(absolute);
         if (event === "unlinkDir" || isWatchedFile(rel)) batcher.add(rel);
     });
+
+    const onError = options.onError ?? ((err: Error) => console.error(`[watch] ${err.message}`));
+    watcher.on("error", (err) => onError(err instanceof Error ? err : new Error(String(err))));
 
     const ready = new Promise<void>((resolve) => watcher.once("ready", () => resolve()));
     return {
