@@ -16,7 +16,7 @@ import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
 import { planSummaries, type PlannedTarget, type TargetState } from "./plan";
 import { formatUsd } from "./pricing";
-import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, plural, REPO_SYSTEM_PROMPT, renderFilePrompt, SUMMARY_MODELS } from "./prompts";
+import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt, SUMMARY_MODELS } from "./prompts";
 import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** auto: the Batch API for waves of BATCH_THRESHOLD requests or more, the regular API below that. */
@@ -304,7 +304,7 @@ export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick
     if (listing === null) return null;
 
     // The importers are in the prompt but not in the input hash (path + content only, plan.ts), so a new importer doesn't re-summarize a central file on every pull.
-    return renderFilePrompt(listing, file.lineCount, loadImporters(db, repoId, file.path), source);
+    return renderFilePrompt(listing, file.lineCount, importerLine(file.path, loadImporters(db, repoId, file.path)), source);
 }
 
 /**

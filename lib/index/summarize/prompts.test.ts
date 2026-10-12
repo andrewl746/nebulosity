@@ -30,69 +30,93 @@ const source = (...paths: string[]) => paths.map((path) => ({ path, isTest: fals
 
 describe("importerLine", () => {
     it("says so when no other indexed file imports the file", () => {
-        expect(importerLine([])).toBe("Imported by: no other indexed file");
+        expect(importerLine("src/app/main.ts", [])).toBe("Imported by: no other indexed file");
     });
 
-    it("counts a single importer, in the singular", () => {
-        expect(importerLine(source("src/app/main.ts"))).toBe("Imported by: 1 file in 1 folder: src/app (1)");
+    it("names the area an importer sits in: its group is the child of the lowest common folder", () => {
+        // the lowest common folder of src/core and src/app is src; the child of src toward src/app/main.ts is src/app
+        expect(importerLine("src/core/log.ts", source("src/app/main.ts"))).toBe("Imported by: 1 file: src/app (1)");
     });
 
-    it("groups importers by folder, biggest folder first, and calls a top-level file's folder the repo root", () => {
-        expect(importerLine(source("src/app/main.ts", "src/app/view.tsx", "index.ts")))
-            .toBe("Imported by: 3 files in 2 folders: src/app (2), the repo root (1)");
+    it("makes an importer directly inside the lowest common folder a group of its own", () => {
+        // for src/app and src/app the lowest common folder is src/app, so main.ts and view.tsx stand for themselves;
+        // for src/app and src it is src, and src/index.ts sits directly in it
+        expect(importerLine("src/app/util.ts", source("src/app/main.ts", "src/app/view.tsx", "src/index.ts")))
+            .toBe("Imported by: 3 files: src/app/main.ts (1), src/app/view.tsx (1), src/index.ts (1)");
     });
 
-    it("shows the 3 biggest folders, breaks ties by folder path, and folds the rest into a count", () => {
-        expect(importerLine(source("a/x.ts", "a/y.ts", "b/x.ts", "b/y.ts", "c/x.ts", "d/x.ts", "e/x.ts")))
-            .toBe("Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders");
+    it("counts importers by area, biggest first, ties by path, and folds the hidden groups into a count of files", () => {
+        // lifecycle.ts sits in src/vs/base/common. Each importer's group (lowest common folder, then its child toward the importer):
+        //   common/async.ts               src/vs/base/common  -> src/vs/base/common/async.ts (directly inside it)
+        //   common/worker/w.ts            src/vs/base/common  -> src/vs/base/common/worker
+        //   browser/dom.ts                src/vs/base         -> src/vs/base/browser
+        //   browser/ui/list.ts            src/vs/base         -> src/vs/base/browser
+        //   workbench a/x.ts, b/y.ts, c.ts  src/vs           -> src/vs/workbench (3)
+        //   platform/p/z.ts               src/vs              -> src/vs/platform
+        //   extensions/e/src/m.ts         the repo root       -> extensions
+        //   build.js                      the repo root       -> build.js (directly inside it)
+        // So: workbench 3, base/browser 2, then five groups of 1 in code-point order (build.js, extensions,
+        // src/vs/base/common/async.ts, src/vs/base/common/worker, src/vs/platform). The top 3 hold 3 + 2 + 1 = 6
+        // of the 10 files, so 4 are elsewhere. The one test file is tallied last.
+        expect(importerLine("src/vs/base/common/lifecycle.ts", [
+            ...source(
+                "src/vs/base/common/async.ts", "src/vs/base/common/worker/w.ts",
+                "src/vs/base/browser/dom.ts", "src/vs/base/browser/ui/list.ts",
+                "src/vs/workbench/a/x.ts", "src/vs/workbench/b/y.ts", "src/vs/workbench/c.ts",
+                "src/vs/platform/p/z.ts", "extensions/e/src/m.ts", "build.js"
+            ),
+            { path: "src/vs/base/test/common/lifecycle.test.ts", isTest: true },
+        ])).toBe("Imported by: 10 files: src/vs/workbench (3), src/vs/base/browser (2), build.js (1), and 4 files elsewhere, plus 1 test file");
     });
 
-    it("breaks ties by folder path whatever order the importers arrive in, the repo root's empty path first", () => {
-        expect(importerLine(source("z/x.ts", "y/x.ts", "x/x.ts", "w/x.ts")))
-            .toBe("Imported by: 4 files in 4 folders: w (1), x (1), y (1), and 1 other folder");
-        expect(importerLine(source("src/main.ts", "index.ts")))
-            .toBe("Imported by: 2 files in 2 folders: the repo root (1), src (1)");
+    it("breaks ties by path whatever order the importers arrive in", () => {
+        // from src/a, each importer's group is its own folder under src: src/w, src/x, src/y, src/z, one file each
+        expect(importerLine("src/a/x.ts", source("src/z/x.ts", "src/y/x.ts", "src/x/x.ts", "src/w/x.ts")))
+            .toBe("Imported by: 4 files: src/w (1), src/x (1), src/y (1), and 1 file elsewhere");
+        expect(importerLine("src/a/x.ts", source("src/z/x.ts", "src/y/x.ts", "src/w/x.ts")))
+            .toBe("Imported by: 3 files: src/w (1), src/y (1), src/z (1)");
     });
 
-    it("adds no 'other folders' tail when the folders exactly fit", () => {
-        expect(importerLine(source("a/x.ts", "b/x.ts", "c/x.ts"))).toBe("Imported by: 3 files in 3 folders: a (1), b (1), c (1)");
+    it("lets a top-level file be a group of its own, sorted by plain path", () => {
+        // from src, index.ts sits directly in the repo root (the lowest common folder) and src/main.ts directly in src; 'i' < 's'
+        expect(importerLine("src/a.ts", source("src/main.ts", "index.ts"))).toBe("Imported by: 2 files: index.ts (1), src/main.ts (1)");
     });
 
-    it("shows as many folders as it's told to", () => {
-        expect(importerLine(source("a/x.ts", "a/y.ts", "b/x.ts"), 1)).toBe("Imported by: 3 files in 2 folders: a (2), and 1 other folder");
+    it("shows as many groups as it's told to", () => {
+        // from lib, app/x.ts and app/y.ts make group app (2) and web/x.ts makes web (1); one group shown holds 2 of the 3 files
+        expect(importerLine("lib/a.ts", source("app/x.ts", "app/y.ts", "web/x.ts"), 1)).toBe("Imported by: 3 files: app (2), and 1 file elsewhere");
     });
 
-    it("counts test files apart: they leave the totals, the folders and the examples, and are tallied after them", () => {
-        expect(importerLine([
-            { path: "a/x.ts", isTest: false },
-            { path: "a/y.ts", isTest: false },
-            { path: "a/test/x.test.ts", isTest: true },
-            { path: "b/y.spec.ts", isTest: true },
-        ])).toBe("Imported by: 2 files in 1 folder: a (2), plus 2 test files");
+    it("adds no 'elsewhere' tail when the groups exactly fit", () => {
+        // from lib, the groups are web (2: x.ts, y.ts), app (1) and docs (1): three groups, all shown; the test file is tallied after them
+        expect(importerLine("lib/a.ts", [...source("app/x.ts", "web/x.ts", "web/y.ts", "docs/z.ts"), { path: "lib/a.test.ts", isTest: true }]))
+            .toBe("Imported by: 4 files: web (2), app (1), docs (1), plus 1 test file");
     });
 
-    it("puts the test-file tally after the 'other folders' tail", () => {
-        expect(importerLine([
-            ...source("a/x.ts", "a/y.ts", "b/x.ts", "b/y.ts", "c/x.ts", "d/x.ts", "e/x.ts"),
-            { path: "t/z.test.ts", isTest: true },
-        ])).toBe("Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders, plus 1 test file");
+    it("counts test files apart: they leave the totals, the groups and the examples, and are tallied after them", () => {
+        expect(importerLine("lib/a.ts", [
+            { path: "app/x.ts", isTest: false },
+            { path: "app/y.ts", isTest: false },
+            { path: "lib/a.test.ts", isTest: true },
+            { path: "web/y.spec.ts", isTest: true },
+        ])).toBe("Imported by: 2 files: app (2), plus 2 test files");
     });
 
     it("says so when only test files import the file", () => {
-        expect(importerLine([{ path: "src/app/main.test.ts", isTest: true }])).toBe("Imported by: only 1 test file");
-        expect(importerLine([{ path: "a/x.test.ts", isTest: true }, { path: "b/test/y.ts", isTest: true }])).toBe("Imported by: only 2 test files");
+        expect(importerLine("src/app/main.ts", [{ path: "src/app/main.test.ts", isTest: true }])).toBe("Imported by: only 1 test file");
+        expect(importerLine("a/x.ts", [{ path: "a/x.test.ts", isTest: true }, { path: "b/test/y.ts", isTest: true }])).toBe("Imported by: only 2 test files");
     });
 });
 
 describe("renderFilePrompt", () => {
     it("starts with the imports/exports listing, then the line count, who imports the file, and the source", () => {
-        expect(renderFilePrompt("File: src/a.ts\n\nImports:\n  (none)", 2, [], "const a = 1;\nexport { a };\n"))
+        expect(renderFilePrompt("File: src/a.ts\n\nImports:\n  (none)", 2, "Imported by: no other indexed file", "const a = 1;\nexport { a };\n"))
             .toBe("File: src/a.ts\n\nImports:\n  (none)\n\nLines: 2\nImported by: no other indexed file\n\nSource:\nconst a = 1;\nexport { a };\n");
     });
 
-    it("puts the importers right after the line count, and cuts the source at the limit it's given", () => {
-        expect(renderFilePrompt("File: src/a.ts", 3, source("src/main.ts", "src/view.ts"), "aaaa\nbbbb\ncccc\n", 7))
-            .toBe("File: src/a.ts\n\nLines: 3\nImported by: 2 files in 1 folder: src (2)\n\nSource:\naaaa\n… (truncated: 2 more lines)");
+    it("puts the importers line right after the line count, and cuts the source at the limit it's given", () => {
+        expect(renderFilePrompt("File: src/a.ts", 3, "Imported by: 2 files: src/main.ts (1), src/view.ts (1)", "aaaa\nbbbb\ncccc\n", 7))
+            .toBe("File: src/a.ts\n\nLines: 3\nImported by: 2 files: src/main.ts (1), src/view.ts (1)\n\nSource:\naaaa\n… (truncated: 2 more lines)");
     });
 });
 

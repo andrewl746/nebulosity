@@ -1,4 +1,5 @@
 import type { Importer, SummaryText } from "../../db/store/summaries";
+import { childToward, lcaFolder } from "../aggregate";
 import { countLines } from "../languages/typescript";
 import { dirOf } from "../paths";
 
@@ -24,8 +25,8 @@ export const MAX_SOURCE_CHARS = 20_000;
 /** A folder's prompt lists at most this many of its children, largest first. */
 export const MAX_FOLDER_ITEMS = 50;
 
-/** A file's prompt names this many of the folders its importers sit in; the rest fold into a count. */
-export const MAX_IMPORTER_FOLDERS = 3;
+/** A file's prompt names this many of the areas its importers sit in (PIVOT_SPEC.md §4.2's groups); the rest fold into a count. */
+export const MAX_IMPORTER_GROUPS = 3;
 
 // Prompt v2 (ADR-034). The taglines' examples are deliberately not from VS Code, so the model can't copy one into a summary.
 export const FILE_SYSTEM_PROMPT = [
@@ -62,46 +63,55 @@ export function plural(n: number, word: string, pluralWord = `${word}s`): string
 
 /**
  * A file's prompt: the imports/exports listing chunks.ts generates (it opens with
- * "File: <path>"), the line count, who imports the file, then the source, cut to about 6k tokens.
+ * "File: <path>"), the line count, who imports the file (the line importerLine renders),
+ * then the source, cut to about 6k tokens.
  */
 export function renderFilePrompt(
     listing: string,
     lineCount: number,
-    importers: readonly Importer[],
+    importedBy: string,
     source: string,
     maxChars: number = MAX_SOURCE_CHARS
 ): string {
-    return [listing, "", `Lines: ${lineCount}`, importerLine(importers), "", "Source:", truncateSource(source, maxChars)].join("\n");
+    return [listing, "", `Lines: ${lineCount}`, importedBy, "", "Source:", truncateSource(source, maxChars)].join("\n");
 }
 
 /**
- * How widely a file is used, from the import graph: a source file can't say who imports it, so the model is
- * told. Test files are counted apart and tallied last (", plus 2 test files"): on a central file the biggest
- * importer folders are test folders, which would skew how its use looks. The total, the folders and the
- * examples come from the other importers: counted per folder, biggest first (ties by folder path, compared
- * with plain `<` so the order never depends on a locale and the same graph always gives the same line), with
- * the first maxFolders named and the rest folded into a count. A top-level file's folder is "" (it sorts first
- * on a tie) and is shown as "the repo root".
+ * How widely, and where, a file is used, from the import graph: a source file can't say who imports it, so
+ * the model is told. Importers are grouped by area with the rule the Map uses for its level edges
+ * (PIVOT_SPEC.md §4.2): an importer's group is the child of the lowest common folder of the two files
+ * toward the importer, or the importer itself when it sits directly in that folder. A central file's
+ * importers then read as the areas that use it ("src/vs/workbench"), not as the biggest leaf folders, which
+ * named arbitrary deep folders. Test files are counted apart and tallied last (", plus 2 test files"): on a
+ * central file they would skew how its use looks. The total, the groups and the examples come from the other
+ * importers: counted per group, biggest first (ties by path, compared with plain `<` so the order never
+ * depends on a locale and the same graph always gives the same line), with the first maxGroups named and the
+ * files in the rest folded into a count.
  */
-export function importerLine(importers: readonly Importer[], maxFolders: number = MAX_IMPORTER_FOLDERS): string {
+export function importerLine(filePath: string, importers: readonly Importer[], maxGroups: number = MAX_IMPORTER_GROUPS): string {
     if (importers.length === 0) return "Imported by: no other indexed file";
 
     const nonTests = importers.filter((importer) => !importer.isTest);
     const tests = importers.length - nonTests.length;
     if (nonTests.length === 0) return `Imported by: only ${plural(tests, "test file")}`;
 
-    const perFolder = new Map<string, number>();
+    const folder = dirOf(filePath);
+    const perGroup = new Map<string, number>();
     for (const { path } of nonTests){
-        const folder = dirOf(path);
-        perFolder.set(folder, (perFolder.get(folder) ?? 0) + 1);
+        const group = childToward(lcaFolder(folder, dirOf(path)), path);
+        perGroup.set(group, (perGroup.get(group) ?? 0) + 1);
     }
 
-    const ranked = [...perFolder].sort(([folderA, countA], [folderB, countB]) =>
-        countB - countA || (folderA < folderB ? -1 : folderA > folderB ? 1 : 0));
-    const named = ranked.slice(0, maxFolders).map(([folder, count]) => `${folder === "" ? "the repo root" : folder} (${count})`);
+    const ranked = [...perGroup].sort(([groupA, countA], [groupB, countB]) =>
+        countB - countA || (groupA < groupB ? -1 : groupA > groupB ? 1 : 0));
+    const shown = ranked.slice(0, maxGroups);
+    const named = shown.map(([group, count]) => `${group} (${count})`);
 
-    let line = `Imported by: ${plural(nonTests.length, "file")} in ${plural(ranked.length, "folder")}: ${named.join(", ")}`;
-    if (ranked.length > maxFolders) line += `, and ${plural(ranked.length - maxFolders, "other folder")}`;
+    let line = `Imported by: ${plural(nonTests.length, "file")}: ${named.join(", ")}`;
+    if (ranked.length > maxGroups){
+        const rest = nonTests.length - shown.reduce((sum, [, count]) => sum + count, 0);
+        line += `, and ${plural(rest, "file")} elsewhere`;
+    }
     if (tests > 0) line += `, plus ${plural(tests, "test file")}`;
     return line;
 }

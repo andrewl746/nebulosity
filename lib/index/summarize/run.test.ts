@@ -94,9 +94,11 @@ describe("buildFilePrompt", () => {
         const repoId = requireRepository(db, repoKey(root));
         const log = loadFileFacts(db, repoId).find((f) => f.path === "src/core/log.ts")!;
 
-        // log.ts is imported by src/app/main.ts, src/core/index.ts and src/index.ts: one importer in each of three folders
+        // log.ts (in src/core) is imported by src/app/main.ts, src/core/index.ts and src/index.ts. Their groups:
+        // main.ts -> lowest common folder src, so the child src/app; src/core/index.ts sits directly in src/core, so it stands for itself;
+        // src/index.ts sits directly in src, so it does too. One file each, in code-point order: src/app < src/core/index.ts < src/index.ts
         expect(buildFilePrompt(db, repoId, root, log))
-            .toContain("\nLines: 9\nImported by: 3 files in 3 folders: src (1), src/app (1), src/core (1)\n\nSource:\n");
+            .toContain("\nLines: 9\nImported by: 3 files: src/app (1), src/core/index.ts (1), src/index.ts (1)\n\nSource:\n");
     });
 
     it("counts the test files that import the file apart from the rest", () => {
@@ -105,9 +107,10 @@ describe("buildFilePrompt", () => {
         const repoId = requireRepository(db, repoKey(root));
         const strings = loadFileFacts(db, repoId).find((f) => f.path === "src/util/strings.ts")!;
 
-        // strings.ts is imported by src/app/main.ts and by its own test, src/util/strings.test.ts
+        // strings.ts (in src/util) is imported by src/app/main.ts (lowest common folder src, so the group src/app)
+        // and by its own test, src/util/strings.test.ts, which is tallied apart
         expect(buildFilePrompt(db, repoId, root, strings))
-            .toContain("\nLines: 6\nImported by: 1 file in 1 folder: src/app (1), plus 1 test file\n\nSource:\n");
+            .toContain("\nLines: 6\nImported by: 1 file: src/app (1), plus 1 test file\n\nSource:\n");
     });
 
     it("says a file nothing imports has no importers", () => {
