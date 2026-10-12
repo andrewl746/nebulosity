@@ -38,6 +38,7 @@ try{
     console.log(`[index] discover ${seconds(result.timingsMs.discover)} · parse ${seconds(result.timingsMs.parse)}`
         + ` · write ${seconds(result.timingsMs.write)} · resolve ${seconds(result.timingsMs.resolve)}`
         + ` · aggregate ${seconds(result.timingsMs.aggregate)} · total ${seconds(result.totalMs)}`);
+    if (result.searchIndexMs > 0) console.log(`[index] code search filled in ${seconds(result.searchIndexMs)} after the structure stage`);
 
     if (result.skipped.length > 0){
         console.log(`[index] skipped ${result.skipped.length} (first: ${result.skipped[0].path}: ${result.skipped[0].reason})`);

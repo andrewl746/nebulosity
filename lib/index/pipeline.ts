@@ -4,6 +4,7 @@ import path from "path";
 import type { IndexStage } from "../contracts";
 import { getDb, type Db } from "../db/client";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
+import { deferCodeSearch, fillCodeSearch, isCodeSearchDeferred } from "../db/store/search";
 import { writeStage } from "../db/store/stages";
 import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
@@ -26,6 +27,11 @@ export type IndexOptions = {
     /** Files parsed and committed per transaction. */
     batchSize?: number;
     maxFileBytes?: number;
+    /**
+     * At least this many files to parse (new, or with no stored hash) and code search is filled in one go after the
+     * structure stage instead of by a trigger per chunk (ADR-031, amended). Default 2,000.
+     */
+    bulkSearchThreshold?: number;
 };
 
 export type IndexResult = {
@@ -42,6 +48,8 @@ export type IndexResult = {
     skipped: SkippedFile[];
     timingsMs: Record<IndexStage, number>;
     totalMs: number;
+    /** Filling code search after a bulk run (0 when it wasn't deferred); not part of totalMs (S1). */
+    searchIndexMs: number;
     usedGit: boolean;
     indexedHead: string | null;
 };
@@ -79,6 +87,9 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
     let stageRepoId: number | null = null;   // set once the repo row exists, so a failure can be reported on it
 
     try{
+        // a bulk run that died before filling code search left it deferred: repair that before anything else
+        if (isCodeSearchDeferred(db)) fillCodeSearch(db);
+
         const repoId = upsertRepository(db, repoKey(root));
         stageRepoId = repoId;
         writeStage(db, repoId, "structure", { state: "running", done: 0, total: 0, note: "discovering files" });
@@ -90,6 +101,10 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         timingsMs.discover = performance.now() - t;
         options.onProgress?.("discover", discovered.files.length, discovered.files.length);
         writeStage(db, repoId, "structure", { state: "running", done: 0, total: discovered.files.length });
+
+        const toParse = discovered.files.filter((f) => (stored.get(f.path)?.contentHash ?? "") === "").length;
+        const deferred = toParse >= (options.bulkSearchThreshold ?? 2_000);
+        if (deferred) deferCodeSearch(db);
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
@@ -171,6 +186,11 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         });
         bumpIndexVersion(db, repoId);   // the Map refetches what it shows (ADR-036)
 
+        const totalMs = performance.now() - started;   // S1 is the structure stage: everything above
+        const searchStarted = performance.now();
+        if (deferred) fillCodeSearch(db);
+        const searchIndexMs = deferred ? performance.now() - searchStarted : 0;
+
         return {
             repoId,
             files: fileSet.size,
@@ -183,7 +203,8 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             errors,
             skipped: discovered.skipped,
             timingsMs,
-            totalMs: performance.now() - started,
+            totalMs,
+            searchIndexMs,
             usedGit: discovered.usedGit,
             indexedHead,
         };

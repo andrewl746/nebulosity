@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { getDb } from "../db/client";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
+import { fillCodeSearch, isCodeSearchDeferred } from "../db/store/search";
 import { writeStage } from "../db/store/stages";
 import {
     applyEdgeChanges, deleteFiles, loadImportEdges, loadImportEdgesFrom, loadImportEdgesTouching, loadStoredFiles,
@@ -59,6 +60,9 @@ export function applyFileChanges(repoRoot: string, changedPaths: readonly string
 
     acquireIndexLock(db);
     try{
+        // a bulk run that died before filling code search left it deferred: repair that before anything else
+        if (isCodeSearchDeferred(db)) fillCodeSearch(db);
+
         const stored = loadStoredFiles(db, repoId);
         const paths = expandFolders(changedPaths, stored);
         // a new path .gitignore excludes never entered the index; one git call answers for all of them
