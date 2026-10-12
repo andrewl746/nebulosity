@@ -419,7 +419,11 @@
 - **The root** is a 6-layer chain with four boxes that have no lines. With those boxes in a grid below the chain, the level fit at 64% zoom, so 15 px names drew at about 10 px.
 - **`…/codex/protocol/generated`** has 49 files that all import one barrel. They made a single layer about 13,000 px wide, which fit at about 9%: a row of slivers.
 
-Dagre still decides each box's layer and its order within the layer (the order that crosses fewest lines). Its x positions are dropped: each layer is centred, and one wider than 6 boxes wraps into balanced rows (13 → 5, 5, 3). Boxes with no line go in a grid beside the tiers, as tall as them. The root now fits at 95% and `generated` at 50%. Fifty boxes can't all be full size on that screen, and 6 per row is about the best shape for it. Lines between tiers stay drawn from box to box; a parent is no longer placed right over its children.
+Dagre still decides each box's layer and its order within the layer (the order that crosses fewest lines). Its x positions are dropped: each layer is centred, and one wider than 6 boxes wraps into balanced rows (13 → 5, 5, 3). Boxes with no line go in a grid either beside the tiers (as tall as them) or below them (square-ish, centred), whichever fits the level larger on a nominal 1440 × 780 canvas; a tie stays beside.
+
+The final review measured why both are needed. Always beside was worse than below on 105 of VS Code's levels: `src/vs/editor/browser/viewParts` fit at 0.33 beside and 0.95 below. Always below costs the root (0.68 against 0.91).
+
+The root now fits at 91–95%, `viewParts` at 95% and `generated` at 50%. Fifty boxes can't all be full size on that screen, and 6 per row is about the best shape for it. Lines between tiers stay drawn from box to box; a parent is no longer placed right over its children.
 
 **Amended (2026-10-12, V1.3.1): describe answers are cached per index version.**
 - **Why.** `VISUAL_REFRESH.md` §8 reported that the `src` panel took about 5 s to open and asked for the answer to be cached per index version. Profiling on today's code did not reproduce the 5 s:

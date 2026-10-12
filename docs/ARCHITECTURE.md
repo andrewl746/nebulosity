@@ -98,16 +98,16 @@ Rules an implementer MUST follow:
 nebulosity/
 ├── app/
 │   ├── api/                 # adapters: level, describe, search, status, summarize, index, repos, live, live/stream; _lib/respond.ts
-│   ├── map/                 # the Map: MapView, MapCanvas, MapBox, DetailPanel, SearchPalette, StatusPill, LiveDock,
-│   │                        #   RepoMenu, the api.ts client, and pure helpers (layout, edges, paths, format, pulses)
-│   ├── components/StarField.tsx
-│   └── layout.tsx · page.tsx · globals.css
+│   ├── map/                 # the Map: MapView, MapCanvas, MapBox, Legend, DetailPanel, SearchPalette, StatusPill,
+│   │                        #   ActivityBar, TopBar, Breadcrumb, RepoMenu, the api.ts client, and pure helpers
+│   │                        #   (levelLayout, emphasis, activity, text, paths, format, pulses, summaries)
+│   └── layout.tsx · page.tsx · globals.css (the color tokens, VISUAL_REFRESH.md §2)
 ├── instrumentation.ts       # starts the background worker with the server
 ├── proxy.ts                 # every /api route: 403 unless the Host is this machine (ADR-039)
 ├── lib/
 │   ├── contracts.ts · config.ts · home.ts · embed.ts · chunks.ts
 │   ├── db/                  # schema, client, batch, store/{structure, summaries, summary-vectors, search, stages, lock, map, version}
-│   ├── engine/              # level, describe, graph, freshness, search, status, repos, errors
+│   ├── engine/              # level, describe, graph, freshness, search, status, repos, git-remote, errors
 │   ├── index/               # discover, languages/, resolve, aggregate, pipeline, update, watch, embed, summarize/
 │   ├── background/          # service, supervisor, protocol, child, start
 │   ├── live/                # hub, event, sse, local, client
