@@ -13,7 +13,7 @@ import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, w
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError } from "./run";
+import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
@@ -857,5 +857,39 @@ describe("runSummaries — incremental runs and summarizeNow", () => {
         expect(await summarizeNow(root, "src/util/strings.test.ts", stub.summarizer)).toMatchObject({ status: "skipped", tagline: "Tests for strings" });
         expect(stub.requests).toHaveLength(1);
         await expect(summarizeNow(root, "src/nope.ts", stub.summarizer)).rejects.toThrow(TargetNotFoundError);
+    });
+
+    it("summarizeNow: two calls for the same target at once send one request, and both get the summary", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        const [first, second] = await Promise.all([
+            summarizeNow(root, "src/core/log.ts", stub.summarizer),
+            summarizeNow(root, "src/core/log.ts", stub.summarizer),
+        ]);
+        expect(stub.requests).toHaveLength(1);
+        expect(second).toEqual(first);
+        expect(first.status).toBe("fresh");
+
+        // once it has landed, asking again finds it current: still one request
+        await summarizeNow(root, "src/core/log.ts", stub.summarizer);
+        expect(stub.requests).toHaveLength(1);
+    });
+
+    it("summarizeNow refuses a folder whose files have no summaries yet, without a request", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await expect(summarizeNow(root, "src/core", stub.summarizer)).rejects.toThrow(TargetNotReadyError);
+        expect(stub.requests).toHaveLength(0);
+    });
+
+    it("summarizeNow leaves the summaries stage current: the file fresh, its folder out of date", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        await summarizeNow(root, "src/core/log.ts", stub.summarizer);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "ready", done: 13, total: 14, note: "1 out of date (redone when opened)" });
     });
 });

@@ -27,7 +27,7 @@ import { repoKey } from "../lib/index/paths";
 import { createClaudeSummarizer } from "../lib/index/summarize/claude";
 import { costUsd } from "../lib/index/summarize/pricing";
 import {
-    DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, type Transport,
+    DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, type Transport,
 } from "../lib/index/summarize/run";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
@@ -136,7 +136,7 @@ function printSpend(): void {
 }
 
 main().catch((err: unknown) => {
-    if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError || err instanceof StructureNotReadyError){
+    if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError || err instanceof TargetNotReadyError || err instanceof StructureNotReadyError){
         console.error(`[summarize] ${err.message}`);
         process.exit(1);
     }

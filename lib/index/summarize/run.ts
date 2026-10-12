@@ -18,7 +18,7 @@ import type { PlannedTarget, TargetState } from "./plan";
 import { formatUsd } from "./pricing";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
 import { planSnapshot, type Snapshot } from "./snapshot";
-import { stillAtAnthropic, summaryStageStatus } from "./status";
+import { refreshSummaryStatus, stillAtAnthropic, summaryStageStatus } from "./status";
 import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** auto: the Batch API for waves of BATCH_THRESHOLD requests or more, the regular API below that. */
@@ -105,6 +105,14 @@ export class TargetNotFoundError extends Error {
     constructor(targetPath: string){
         super(`Nothing indexed at "${targetPath}". Pass a repo-relative file or folder path ("" for the repo itself).`);
         this.name = "TargetNotFoundError";
+    }
+}
+
+/** Thrown by summarizeNow for a folder whose files or subfolders don't all have summaries yet. */
+export class TargetNotReadyError extends Error {
+    constructor(targetPath: string){
+        super(`"${targetPath}" can't be summarized yet: some of its files or subfolders have no summary, and a folder's summary is written from theirs. Run npm run summarize, or open them first.`);
+        this.name = "TargetNotReadyError";
     }
 }
 
@@ -258,18 +266,36 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
 }
 
 /**
- * Summarizes one file or folder right now through the regular API, jumping the queue
- * (PIVOT_SPEC.md §5.3: the Map calls this when someone opens a path that has no summary,
- * or an out-of-date one). A current summary comes back as it is, without an API call.
+ * summarizeNow calls running in this process, by repo and path. A second call for a target already being summarized
+ * joins the first instead of paying again: the Map can ask twice (a double click, a second tab) before the answer lands.
  */
-export async function summarizeNow(repoRoot: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
+const summarizingNow = new Map<string, Promise<StoredSummary>>();
+
+/**
+ * Summarizes one file or folder right now through the regular API, jumping the queue (PIVOT_SPEC.md §5.3: the Map calls
+ * this when someone opens a path that has no summary, or an out-of-date one). A current summary comes back as it is,
+ * without an API call. A folder whose children aren't all summarized is refused (TargetNotReadyError): its summary would
+ * be written over "(no summary yet)" lines. Concurrent calls for one target share one request (ADR-033, amended).
+ */
+export function summarizeNow(repoRoot: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
     const root = path.resolve(repoRoot);
+    const key = `${repoKey(root)}\0${targetPath}`;
+    const running = summarizingNow.get(key);
+    if (running) return running;
+
+    const started = summarizeOnce(root, targetPath, summarizer).finally(() => summarizingNow.delete(key));
+    summarizingNow.set(key, started);
+    return started;
+}
+
+async function summarizeOnce(root: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     requireStructureReady(db, repoId);
     const snap = planSnapshot(db, repoId, true, new Set());
     const target = snap.targets.find((t) => t.path === targetPath);
     if (!target) throw new TargetNotFoundError(targetPath);
+    if (target.state === "waiting") throw new TargetNotReadyError(targetPath);
 
     const ids = applyTargetUpdates(db, repoId, [target]);
 
@@ -281,6 +307,8 @@ export async function summarizeNow(repoRoot: string, targetPath: string, summari
         ingest(ctx, [outcome], "direct", (customId) => destinations.get(customId));
     }
 
+    // this summary moved the stage's counts, and its folder may now be out of date (ADR-032, amended in V1.3)
+    refreshSummaryStatus(root, { summarizerAvailable: true });
     return loadSummaries(db, repoId).find((s) => s.kind === target.kind && s.path === target.path)!;
 }
 
