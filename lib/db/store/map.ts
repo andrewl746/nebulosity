@@ -1,7 +1,8 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
-import { files, folders, imports, levelEdges, summaries, type StoredSummaryStatus, type SummaryTargetKind } from "../schema";
+import type { SymbolInfo } from "../../contracts";
+import { files, folders, imports, levelEdges, summaries, symbols, type StoredSummaryStatus, type SummaryTargetKind } from "../schema";
 
 /** A folder as the Map draws it. */
 export type FolderInfo = { path: string; name: string; fileCount: number };
@@ -107,4 +108,33 @@ export function loadGraphEdges(db: Db, repoId: number): { source: number; target
         .innerJoin(files, eq(files.id, imports.sourceFileId))
         .where(eq(files.repoId, repoId))
         .all();
+}
+/** The lines of every file inside a folder ("" = the whole repo). */
+export function sumLinesInside(db: Db, repoId: number, folderPath: string): number {
+    return db.select({ lines: sql<number>`coalesce(sum(${files.lineCount}), 0)` }).from(files)
+        .where(and(eq(files.repoId, repoId), inside(files.path, folderPath))).get()?.lines ?? 0;
+}
+
+/** A file's declarations in line order: top-level ones and class members, members by their qualified name. */
+export function loadFileSymbols(db: Db, repoId: number, filePath: string): SymbolInfo[] {
+    return db.select({
+        name: symbols.qualifiedName,
+        kind: symbols.kind,
+        startLine: symbols.startLine,
+        endLine: symbols.endLine,
+        exported: symbols.exported,
+    })
+        .from(symbols)
+        .innerJoin(files, eq(files.id, symbols.fileId))
+        .where(and(eq(files.repoId, repoId), eq(files.path, filePath)))
+        .orderBy(symbols.startLine, symbols.qualifiedName)
+        .all();
+}
+
+/** How many files at or under a target have a stale summary: text written for bytes the file no longer has. */
+export function countStaleFileSummaries(db: Db, repoId: number, targetPath: string, kind: "repo" | "folder" | "file"): number {
+    const where = kind === "file" ? eq(summaries.targetPath, targetPath) : inside(summaries.targetPath, kind === "repo" ? "" : targetPath);
+    return db.select({ n: sql<number>`count(*)` }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), eq(summaries.targetKind, "file"), eq(summaries.status, "stale"), where))
+        .get()?.n ?? 0;
 }

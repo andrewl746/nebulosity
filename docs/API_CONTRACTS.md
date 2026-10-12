@@ -224,3 +224,25 @@ type LevelResponse = { repo: string; path: string; breadcrumb: string[]; nodes: 
 - `400 BAD_REQUEST`: a path that could leave the repo (`..`, absolute, a drive letter), or a file's path (the Map opens folders).
 - `404 NOT_FOUND`: nothing indexed at `path`.
 - `404 INDEX_EMPTY`: no active repo yet.
+
+## 12. GET /api/describe?path= (slice V1.3)
+
+What a folder, file or the repo (`path` empty) is (`lib/engine/describe.ts`). The detail panel shows it, and V1.4's MCP `describe` tool formats it as text.
+
+```ts
+type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
+type AreaCount = { path: string; kind: "folder" | "file"; count: number };
+type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | "file";
+  tagline?: string; summary?: string; summaryStatus: SummaryStatus; summaryError?: string;
+  stats: { fileCount: number; lineCount: number };
+  children?: MapNode[]; symbols?: SymbolInfo[];
+  uses: AreaCount[]; usedBy: AreaCount[]; stalePaths: number; indexVersion: number };
+```
+
+- **`children`** (folders and the repo) lists every child in the Map's order, so the boxes a level folds into "+N more" are exactly those after the first 49. A client shows 20 at a time.
+- **`symbols`** (files) are the top-level declarations and class members in line order, members by qualified name (`Logger.info`). The lines are the declaration's own, for jumping to it.
+- **`uses` / `usedBy`** count imports across the target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2), most first. An area is a folder, or a file when the other file sits directly in the lowest folder both share. Test files count like any other file. A file's summary was written from an "Imported by" line that counts tests apart (RAG_PIPELINE.md), so the numbers in its text can differ; the detail panel labels both.
+- **`summaryStatus`** follows §11's rule. **`summaryError`** says why the last attempt failed, and only appears when the status is `failed`.
+- **`stalePaths`** counts files at or under the target whose summary is out of date with their bytes. It's non-zero between a file's edit and the refresh of its summary (`PIVOT_SPEC.md` §5.6).
+
+**Errors:** `400 BAD_REQUEST` for a path that could leave the repo; `404 NOT_FOUND`; `404 INDEX_EMPTY`.

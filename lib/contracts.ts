@@ -139,6 +139,35 @@ export type LevelResponse = {
   indexVersion: number;
 };
 
+
+/** A declaration in a file: top-level ones and class members (`Logger.info`), with the lines to jump to. */
+export type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
+
+/** GET /api/describe — docs/API_CONTRACTS.md §12 */
+export type DescribeResponse = {
+  /** The repo's root: absolute, forward slashes (for vscode:// links). */
+  repo: string;
+  path: string;
+  kind: "repo" | "folder" | "file";
+  tagline?: string;
+  summary?: string;
+  summaryStatus: SummaryStatus;
+  /** Why the last attempt failed, when summaryStatus is "failed". */
+  summaryError?: string;
+  stats: { fileCount: number; lineCount: number };
+  /** Folders and the repo: every child, in the Map's order (so the boxes "+N more" folds are the ones after the first 49). */
+  children?: MapNode[];
+  /** Files: their declarations, in line order. */
+  symbols?: SymbolInfo[];
+  /** What the target imports, by area, most first. */
+  uses: AreaCount[];
+  /** What imports the target, by area, most first. */
+  usedBy: AreaCount[];
+  /** Files at or under the target whose summary is out of date with their bytes. */
+  stalePaths: number;
+  indexVersion: number;
+};
+
 /* ─────────────────────────── Error envelope ──────────────────────── */
 
 export type ErrorCode =
