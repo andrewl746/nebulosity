@@ -48,7 +48,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 |---|---|---|
 | S1 | Structure stage (discover → parse → resolve → aggregate → write) | ≤ 60 s |
 | S2 | Full summary pass, tiered, via the Batch API | ≤ $15 |
-| S3 | Map interaction (click, zoom, level change → rendered) | ≤ 100 ms; level API ≤ 50 ms |
+| S3 | Map interaction (click, zoom, level change → rendered), on the production build (`next build` + `next start`; the dev server is slower on dense levels, docs/BENCHMARKS.md Map Benchmark #1) | ≤ 100 ms; level API ≤ 50 ms |
 | S4 | Boxes on screen at once, counting the "+N more" box | ≤ 50 |
 | S5 | MCP tool latency, warm (after the first call of a session) | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
