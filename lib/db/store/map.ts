@@ -94,3 +94,17 @@ export function loadFileInfo(db: Db, repoId: number, filePath: string): { path: 
     return db.select({ path: files.path, lineCount: files.lineCount, isTest: files.isTest }).from(files)
         .where(and(eq(files.repoId, repoId), eq(files.path, filePath))).get() ?? null;
 }
+
+/** Every file of a repo, by id and path: the import graph's nodes. */
+export function loadGraphFiles(db: Db, repoId: number): { id: number; path: string }[] {
+    return db.select({ id: files.id, path: files.path }).from(files).where(eq(files.repoId, repoId)).all();
+}
+
+/** Every import of a repo as a pair of file ids: the import graph's edges. Imports never cross repos, so the source's repo decides. */
+export function loadGraphEdges(db: Db, repoId: number): { source: number; target: number }[] {
+    return db.select({ source: imports.sourceFileId, target: imports.targetFileId })
+        .from(imports)
+        .innerJoin(files, eq(files.id, imports.sourceFileId))
+        .where(eq(files.repoId, repoId))
+        .all();
+}

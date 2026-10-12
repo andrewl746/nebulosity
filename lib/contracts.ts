@@ -119,6 +119,9 @@ export type MapNode = {
 /** Imports from one box to another at one level, each import counted once (PIVOT_SPEC.md §4.2). */
 export type MapEdge = { source: string; target: string; count: number };
 
+/** Imports across a target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2). */
+export type AreaCount = { path: string; kind: "folder" | "file"; count: number };
+
 /** GET /api/level — docs/API_CONTRACTS.md §11 */
 export type LevelResponse = {
   /** The repo's root: absolute, forward slashes. */
