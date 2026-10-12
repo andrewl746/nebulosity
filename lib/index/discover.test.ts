@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { FIXTURE } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
-import { discoverFiles, isTestPath, readGitHead } from "./discover";
+import { discoverFiles, gitIgnored, isExcludedPath, isTestPath, readGitHead } from "./discover";
 
 const TS_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
@@ -106,5 +106,31 @@ describe("isTestPath", () => {
     it("does not mistake a word containing 'test' for a test folder", () => {
         expect(isTestPath("src/latest/x.ts")).toBe(false);
         expect(isTestPath("src/attest.ts")).toBe(false);
+    });
+});
+
+describe("isExcludedPath", () => {
+    it("leaves out what discoverFiles would, whatever the file holds", () => {
+        const git = { extensions: TS_EXTENSIONS, usedGit: true };
+        const walk = { extensions: TS_EXTENSIONS, usedGit: false };
+        expect(isExcludedPath("src/a.ts", git)).toBe(false);
+        expect(isExcludedPath("README.md", git)).toBe(true);
+        expect(isExcludedPath(".env.ts", git)).toBe(true);
+        expect(isExcludedPath("node_modules/x/a.ts", git)).toBe(true);
+        expect(isExcludedPath("a/.git/b.ts", git)).toBe(true);
+        expect(isExcludedPath("build/gulpfile.ts", git)).toBe(false);   // in a git repo, .gitignore decides
+        expect(isExcludedPath("build/gulpfile.ts", walk)).toBe(true);
+        expect(isExcludedPath("packages/p/dist/e.js", walk)).toBe(true);
+    });
+});
+
+describe("gitIgnored", () => {
+    it("asks git once which paths .gitignore excludes", () => {
+        const dir = makeTempDir("neb-ignored-");
+        execFileSync("git", ["init", "-q", dir]);
+        fs.writeFileSync(path.join(dir, ".gitignore"), "out/\n*.gen.ts\n");
+        expect([...gitIgnored(dir, ["out/a.ts", "src/b.gen.ts", "src/c.ts"])].sort()).toEqual(["out/a.ts", "src/b.gen.ts"]);
+        expect(gitIgnored(dir, ["src/c.ts"]).size).toBe(0);
+        expect(gitIgnored(dir, []).size).toBe(0);
     });
 });

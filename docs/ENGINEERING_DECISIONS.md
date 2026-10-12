@@ -408,6 +408,20 @@
 **Consequences:** A level costs three indexed lookups (0.25 ms for VS Code's busiest level's lines). The first describe after a change pays for loading the graph. A client that polls the version sees changes from any process: the CLI, the background worker, or the MCP server.
 **Revisit when:** users want a different order (for example, recently changed first, with E3).
 
+## ADR-037 — Incremental structure updates write only what changed (2026-10-12)
+
+**Context:** S6 asks for ≤ 2 s from saving a file until `level`/`describe` reflect it, and the watcher's 1 s debounce (PIVOT_SPEC.md §5.6) uses half of that. A warm full run takes 4.9 s on VS Code. Measured while planning V1.3, re-resolving all 151,527 specifiers in memory takes about 0.33 s and rebuilding the level edges 0.25 s. The rest of the run's 2.7 s of resolve and aggregate is the database rewriting 139,580 import rows and 19,345 level-edge rows, nearly all unchanged.
+**Decision:** `applyFileChanges(root, paths)` looks at each reported path as it is now.
+- **Edits.** An edited file is re-parsed, and only its own imports are re-resolved and diffed against its stored ones.
+- **Creates, deletes, tsconfigs.** When a file is created or deleted, or a tsconfig changes, every file's imports are re-resolved in memory, because a new file can be what `../core` now means. The result is diffed against all stored imports.
+- **Writes.** Only the differences are written. Import rows are deleted and inserted. Each level-edge count moves by its delta: an import is counted on a row decided by its two paths alone, so −1 per removed import and +1 per added one, netted, equals a rebuild. Folder rows are synced; summaries of vanished targets are pruned.
+- **One rule.** Edges come from one shared rule (`edgesFrom`) and records from one builder (`toFileRecord`), both used by the full run too.
+- **Exclusions.** A path is excluded exactly as discovery would exclude it (`isExcludedPath`). New paths are checked against `.gitignore` with one `git check-ignore --stdin` call.
+- **Folders as one path.** A path the index doesn't hold may be a deleted folder (a watcher's `unlinkDir`); every indexed file under it is looked at.
+**Alternatives:** (a) Run the full pipeline on every save: 4.9 s, so S6 fails. (b) Find the files that could import a new file by their specifiers, without re-resolving everything: faster, but every resolver rule (aliases, `baseUrl`, `index` files, NodeNext) would need an inverse, and an inverse that's wrong silently drops edges.
+**Consequences:** A single-file edit costs tens of milliseconds on VS Code (measured in Task 22); a create or delete about half a second. The tests check every kind of change against a full run of the same tree, so the two paths can't drift apart.
+**Revisit when:** a repo is big enough that the in-memory re-resolve of a create or delete passes 1 s (then index files by the specifier stems they could satisfy), or E2's call edges need the same treatment.
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

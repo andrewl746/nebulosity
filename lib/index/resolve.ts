@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import { dirOf, joinRepoPath, normalizeSlashes } from "./paths";
+import type { ImportEdge } from "../db/store/structure";
 
 /** Tried, in order, after a specifier that names no file directly. */
 const EXTENSIONS = [".ts", ".tsx", ".d.ts", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
@@ -168,4 +169,22 @@ function aliasCandidates(config: PathsConfig, specifier: string): string[] {
     }
 
     return candidates;
+}
+
+/**
+ * One file's import edges: each specifier resolved, one edge per target file, the first specifier that reaches it
+ * naming it. The full run and the incremental update both build edges here, so they can't disagree.
+ */
+export function edgesFrom(resolve: Resolver, source: string, specifiers: readonly string[]): ImportEdge[] {
+    const seen = new Set<string>();
+    const edges: ImportEdge[] = [];
+
+    for (const specifier of specifiers){
+        const target = resolve(source, specifier);
+        if (target === null || seen.has(target)) continue;   // one edge per file pair
+        seen.add(target);
+        edges.push({ source, target, specifier });
+    }
+
+    return edges;
 }

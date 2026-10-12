@@ -183,6 +183,8 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 - **Summaries:** a changed file has a new content hash, so a new inputHash, so it's ready again. Its folders follow as described in §4. Nothing whose input is unchanged is ever re-summarized.
 - **Vectors:** deleted when their summary's text changes, refilled by the next embeddings run.
 
+A saved file reaches the index through the background worker's `applyFileChanges` within about a second of the last save (ADR-037). The worker then re-plans the summaries (the file's summary turns stale), and redoes that file's summary after 60 quiet seconds, at most 50 files per refresh (ADR-038).
+
 ---
 
 ## 8. Failure modes and honest limitations

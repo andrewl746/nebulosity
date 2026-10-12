@@ -193,7 +193,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
   - Re-parse F and replace its rows.
   - Re-resolve F's imports.
   - Re-resolve imports **into** F's path only when F is created, deleted or renamed.
-  - Rebuild the aggregates.
+  - Update the aggregates by deltas: each import moves its level edge's count by one (ADR-037).
   - F's summary becomes `stale` and is redone after the debounce.
   - Ancestor folder summaries become `stale` and are refreshed lazily, when viewed or by a periodic sweep, so a `git pull` doesn't trigger hundreds of Sonnet calls.
   - Re-embed whatever was re-summarized.

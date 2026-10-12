@@ -15,7 +15,7 @@ import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./disc
 import { splitIdentifier } from "./identifiers";
 import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
 import { repoKey } from "./paths";
-import { createResolver } from "./resolve";
+import { createResolver, edgesFrom } from "./resolve";
 
 export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
 
@@ -119,19 +119,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 }
 
                 try{
-                    const parsed = parseTypeScriptFile(file.path, text);
-                    records.push({
-                        path: file.path,
-                        kind: /\.(tsx|jsx)$/.test(file.path) ? "component" : "module",
-                        contentHash,
-                        language: languageOf(file.path),
-                        sizeBytes: file.sizeBytes,
-                        lineCount: parsed.lineCount,
-                        isTest: isTestPath(file.path),
-                        importSpecifiers: parsed.imports,
-                        chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
-                        symbols: parsed.symbols,
-                    });
+                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes));
                 } catch (err){
                     errors.push({ path: file.path, error: message(err) });
                 }
@@ -157,15 +145,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const resolve = createResolver(root, fileSet);
         const edges: ImportEdge[] = [];
 
-        for (const [source, file] of current){
-            const targets = new Set<string>();
-            for (const specifier of file.importSpecifiers){
-                const target = resolve(source, specifier);
-                if (target === null || targets.has(target)) continue;   // one edge per file pair
-                targets.add(target);
-                edges.push({ source, target, specifier });
-            }
-        }
+        for (const [source, file] of current) edges.push(...edgesFrom(resolve, source, file.importSpecifiers));
 
         const edgeCount = replaceImports(db, repoId, edges);
         timingsMs.resolve = performance.now() - t;
@@ -232,4 +212,21 @@ function isDirectory(p: string): boolean {
     } catch{
         return false;   // missing, or unreachable through a file (ENOTDIR)
     }
+}
+
+/** One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed. */
+export function toFileRecord(filePath: string, text: string, contentHash: string, sizeBytes: number): FileRecord {
+    const parsed = parseTypeScriptFile(filePath, text);
+    return {
+        path: filePath,
+        kind: /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",
+        contentHash,
+        language: languageOf(filePath),
+        sizeBytes,
+        lineCount: parsed.lineCount,
+        isTest: isTestPath(filePath),
+        importSpecifiers: parsed.imports,
+        chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
+        symbols: parsed.symbols,
+    };
 }

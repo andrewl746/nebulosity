@@ -1,10 +1,11 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
 import {
     chunks, files, folders, imports, levelEdges, repositories, symbols,
     type FolderRow, type LevelEdgeRow, type SymbolRow,
 } from "../schema";
-import { columnCount, forEachBatch } from "../batch";
+import { chunkRows, columnCount, forEachBatch } from "../batch";
 import type { CodeChunk } from "../../contracts";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -192,4 +193,120 @@ export function replaceAggregates(db: Db, repoId: number, folderRows: readonly F
 export function markIndexed(db: Db, repoId: number, indexedHead: string | null): void {
     const now = new Date();
     db.update(repositories).set({ lastIndexAt: now, lastScanAt: now, indexedHead }).where(eq(repositories.id, repoId)).run();
+}
+
+/** Paths per IN (…) list: far under the parameter cap, with room for the other bound values. */
+const IN_LIST = 900;
+
+/** Paths → file ids in this repo, looked up in chunks under the parameter cap. Paths that aren't indexed are left out. */
+export function loadFileIds(db: Db, repoId: number, paths: readonly string[]): Map<string, number> {
+    const ids = new Map<string, number>();
+    for (const batch of chunkRows([...new Set(paths)], 1, IN_LIST)){
+        const rows = db.select({ id: files.id, path: files.path }).from(files)
+            .where(and(eq(files.repoId, repoId), inArray(files.path, batch))).all();
+        for (const row of rows) ids.set(row.path, row.id);
+    }
+    return ids;
+}
+
+/** Imports as paths, filtered by `where` over the source and target files (aliased; imports never cross repos). */
+function selectImportEdges(db: Db, repoId: number, where?: (source: typeof files, target: typeof files) => ReturnType<typeof and>): ImportEdge[] {
+    const source = alias(files, "source");
+    const target = alias(files, "target");
+    return db.select({ source: source.path, target: target.path, specifier: imports.specifier })
+        .from(imports)
+        .innerJoin(source, eq(source.id, imports.sourceFileId))
+        .innerJoin(target, eq(target.id, imports.targetFileId))
+        .where(and(eq(source.repoId, repoId), where?.(source as unknown as typeof files, target as unknown as typeof files)))
+        .all();
+}
+
+/** Every import of a repo, as paths. The incremental update diffs against these when the file set changed. */
+export function loadImportEdges(db: Db, repoId: number): ImportEdge[] {
+    return selectImportEdges(db, repoId);
+}
+
+/** The imports out of these files. */
+export function loadImportEdgesFrom(db: Db, repoId: number, paths: readonly string[]): ImportEdge[] {
+    return chunkRows([...new Set(paths)], 1, IN_LIST).flatMap((batch) =>
+        selectImportEdges(db, repoId, (source) => inArray(source.path, batch)));
+}
+
+/** The imports into or out of these files: the ones deleting the files would cascade away. */
+export function loadImportEdgesTouching(db: Db, repoId: number, paths: readonly string[]): ImportEdge[] {
+    const seen = new Map<string, ImportEdge>();
+    for (const batch of chunkRows([...new Set(paths)], 1, IN_LIST)){
+        for (const edge of selectImportEdges(db, repoId, (source, target) => or(inArray(source.path, batch), inArray(target.path, batch)))){
+            seen.set(`${edge.source}\0${edge.target}`, edge);
+        }
+    }
+    return [...seen.values()];
+}
+
+/** Deletes these files (their chunks, symbols and imports cascade) and returns the paths that were indexed, in order. */
+export function deleteFiles(db: Db, repoId: number, paths: readonly string[]): string[] {
+    const ids = loadFileIds(db, repoId, paths);
+    db.transaction((tx) => {
+        for (const id of ids.values()) tx.delete(files).where(eq(files.id, id)).run();
+    });
+    return [...ids.keys()].sort();
+}
+
+/**
+ * An incremental update of the import graph and the Map's lines (ADR-037), in one transaction so no reader sees half
+ * of it. The removed imports go and the added ones arrive (a removed and an added row for the same pair, when only
+ * the specifier changed). Each level edge moves by its delta, and a row that reaches 0 is deleted.
+ */
+export function applyEdgeChanges(
+    db: Db, repoId: number, removed: readonly ImportEdge[], added: readonly ImportEdge[], deltas: readonly LevelEdgeRow[]
+): void {
+    const ids = loadFileIds(db, repoId, [...removed, ...added].flatMap((e) => [e.source, e.target]));
+    const idsOf = (e: ImportEdge): { sourceFileId: number; targetFileId: number } | null => {
+        const sourceFileId = ids.get(e.source);
+        const targetFileId = ids.get(e.target);
+        return sourceFileId === undefined || targetFileId === undefined ? null : { sourceFileId, targetFileId };
+    };
+
+    db.transaction((tx) => {
+        for (const edge of removed){
+            const pair = idsOf(edge);
+            if (pair) tx.delete(imports).where(and(eq(imports.sourceFileId, pair.sourceFileId), eq(imports.targetFileId, pair.targetFileId))).run();
+        }
+
+        const rows = added.flatMap((edge) => {
+            const pair = idsOf(edge);
+            return pair ? [{ ...pair, specifier: edge.specifier }] : [];
+        });
+        forEachBatch(rows, columnCount(imports), (batch) => { tx.insert(imports).values(batch).onConflictDoNothing().run(); });
+
+        for (const delta of deltas){
+            tx.insert(levelEdges).values({ repoId, ...delta })
+                .onConflictDoUpdate({
+                    target: [levelEdges.repoId, levelEdges.levelPath, levelEdges.sourceNode, levelEdges.targetNode],
+                    set: { count: sql`${levelEdges.count} + ${delta.count}` },
+                })
+                .run();
+        }
+        tx.delete(levelEdges).where(and(eq(levelEdges.repoId, repoId), lte(levelEdges.count, 0))).run();
+    });
+}
+
+/** Makes the folders table match `rows` (buildFolders over the current files), writing only what differs. */
+export function syncFolders(db: Db, repoId: number, rows: readonly FolderRow[]): void {
+    const stored = new Map(db.select().from(folders).where(eq(folders.repoId, repoId)).all().map((f) => [f.path, f]));
+    const wanted = new Set(rows.map((r) => r.path));
+
+    db.transaction((tx) => {
+        for (const [folderPath, row] of stored) if (!wanted.has(folderPath)) tx.delete(folders).where(eq(folders.id, row.id)).run();
+
+        const created = rows.filter((r) => !stored.has(r.path)).map((r) => ({ repoId, ...r }));
+        forEachBatch(created, columnCount(folders), (batch) => { tx.insert(folders).values(batch).run(); });
+
+        for (const r of rows){
+            const row = stored.get(r.path);
+            if (row && (row.fileCount !== r.fileCount || row.directFileCount !== r.directFileCount)){
+                tx.update(folders).set({ fileCount: r.fileCount, directFileCount: r.directFileCount }).where(eq(folders.id, row.id)).run();
+            }
+        }
+    });
 }
