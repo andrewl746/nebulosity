@@ -55,9 +55,9 @@ export const REPO_SYSTEM_PROMPT = [
 /** One child of a folder, as its prompt shows it. lineCount is a folder's total, used only for ordering. */
 export type FolderItem = { name: string; kind: "file" | "folder"; fileCount: number; lineCount: number; text: SummaryText | null };
 
-/** "1 line", "9 lines", "12,103 files". */
-export function plural(n: number, word: string): string {
-    return `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
+/** "1 line", "9 lines", "12,103 files". Pass the plural form when it isn't the word plus "s", as in ("batch", "batches"). */
+export function plural(n: number, word: string, pluralWord = `${word}s`): string {
+    return `${n.toLocaleString("en-US")} ${n === 1 ? word : pluralWord}`;
 }
 
 /**

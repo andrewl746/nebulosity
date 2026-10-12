@@ -101,7 +101,7 @@ type CodeChunk = {
 **Cost.** Every answer's tokens go to `summary_usage`, per model and transport, including an answer whose row was redone or deleted meanwhile: it was still paid for. A Sonnet request that a server-side fallback finished counts each attempt under its own model, from `usage.iterations`, because the declined attempt is billed too. That's how S2 (≤ $15 for VS Code's full pass) is measured. The owner reviews Haiku against Sonnet on 20 VS Code files before the first full run (`SUMMARY_REVIEW.md`).
 
 **The spend cap (ADR-035).** Before every submission (each batch, and each regular-API wave), and before building any of its prompts, a run projects **spent + at Anthropic + this submission + the rest**:
-- **spent** is every `summary_usage` row of the repo, each at its own transport's price, so the cap bounds the repo's total summary spend, across runs;
+- **spent** is every `summary_usage` row of the repo, each at its own transport's price, so the cap bounds the repo's recorded summary spend across runs (ADR-035 lists what never reaches `summary_usage`);
 - **at Anthropic** is the requests in flight, at batch prices, including the batches this wave has already submitted;
 - **this submission** is priced at its own transport;
 - **the rest** is every target still `ready` or `waiting` after it, at batch prices (direct ones under `--direct`).
@@ -110,10 +110,10 @@ A request is expected to take its model's mean tokens on this repo (Σ tokens ÷
 
 Under the budget the run prints `budget: spent $… + at Anthropic ≈ $… + this wave ≈ $… + the rest ≈ $… = $… of $…` and sends. Over it, the run **stops sending but keeps collecting what's already at Anthropic**, which is paid for.
 - The rows it didn't send stay pending (not failed, not claimed), and a wave stopped before its first submission isn't counted.
-- After each collection the run checks again, with the real usage in place of the estimates, and sends if the projection now fits.
+- While it collects, the stage note reads `over budget, so nothing new goes out; collecting the N batches already at Anthropic`. After each collection the run checks again, with the real usage in place of the estimates, and sends if the projection now fits.
 - It finishes over budget once nothing more can happen: nothing in flight, or nothing more ended under `--no-wait`. The stage is then `failed`, or `running` while batches are still at Anthropic, and the note starts with `stopped:`, as after the circuit breaker.
 
-The budget is `--budget <usd>`, default $15 (S2). The projection runs a little low (under $1 on VS Code) because the last small waves go through the regular API at full price while the rest prices them by batch; the check before each of those waves catches it.
+The budget is `--budget <usd>`, default $15 (S2). The projection runs a little low, by an estimated under $1 on VS Code. The rest is priced by batch, but waves under 100 requests go through the regular API at full price: at the top of the tree, and also mid-run, when file batches land at different times. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
 
 ---
 

@@ -227,12 +227,18 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             // it out of flight), finds none left, or finishes.
             const batches = inFlightBatches(db, repoId);
             if (summarizer && batches.length > 0){
+                const out = plural(batches.length, "batch", "batches");
+                // What the stage says while the run waits. Over budget, it says sending has stopped, from the moment it
+                // does: hours of collecting must not read as an ordinary wait to whoever is watching the stage.
+                const waiting = ctx.overBudget === null
+                    ? `waiting on ${out} at Anthropic`
+                    : `over budget, so nothing new goes out; collecting the ${out} already at Anthropic`;
                 if (ctx.overBudget !== null){
-                    ctx.say(`over budget: sending nothing more, collecting the ${plural(batches.length, "batch")} already at Anthropic`);
+                    ctx.say(waiting);
+                    progress(waiting);
                 }
                 if (options.wait ?? true){
-                    await collectNextBatch(ctx, summarizer, options.pollIntervalMs ?? DEFAULT_POLL_MS,
-                        () => progress(`waiting on ${plural(batches.length, "batch")} at Anthropic`));
+                    await collectNextBatch(ctx, summarizer, options.pollIntervalMs ?? DEFAULT_POLL_MS, () => progress(waiting));
                     continue;
                 }
 

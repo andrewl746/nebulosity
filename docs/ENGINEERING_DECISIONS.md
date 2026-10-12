@@ -352,13 +352,13 @@
 - **Over it** the run stops sending, but keeps collecting what's already at Anthropic.
   - That submission and everything after it stay pending (not failed, not claimed).
   - A wave whose first submission is over budget is never announced or counted. A later batch over budget ends its wave's submissions.
-  - The batches already at Anthropic are still collected: as each one ends, with `wait`; the ones that have ended, with `--no-wait`. After each collection the run plans and checks again, with the real usage in place of the estimates, and sends normally if the projection now fits.
+  - The batches already at Anthropic are still collected: as each one ends, with `wait`; the ones that have ended, with `--no-wait`. Meanwhile the stage note reads `over budget, so nothing new goes out; collecting the N batches already at Anthropic`, so a long wait isn't mistaken for an ordinary one. After each collection the run plans and checks again, with the real usage in place of the estimates, and sends normally if the projection now fits.
   - This ends: nothing new is sent while over budget, so each pass collects a batch (taking it out of flight), finds none left, or finishes.
   - The run finishes over budget only when nothing more can happen: nothing is in flight, or `--no-wait` collected nothing. It reports the stop as the circuit breaker does (ADR-033): `stopped: true`, and the stage `failed`, or `running` while batches are still at Anthropic. The note is the latest failing check's: `stopped: the next batch would bring the projected spend to $…, over the $… budget (spent $…, at Anthropic ≈ $…, this batch ≈ $…, the rest ≈ $…); run again with --budget <usd> to go on` ("wave" for a regular-API wave).
   - A budget that isn't a number stops the sending too, rather than lifting the cap.
 - **The budget** is `SummaryRunOptions.budgetUsd`. Undefined means no cap, and `summarizeNow` (one request) has none. The CLI's `--budget <usd>` takes a positive number and defaults to $15 (`DEFAULT_BUDGET_USD`, S2).
 - **Ruled choices**, from the owner's verdict:
-  - **Cumulative per repo.** "Spent" is every usage row of the repo, so the default bounds the repo's total summary spend, not one run's.
+  - **Cumulative per repo.** "Spent" is every usage row of the repo, so the default bounds the repo's total recorded summary spend (see Consequences for what isn't recorded), not one run's.
   - **Every submission,** regular-API waves included: "each further batch" was read as every send.
   - **The rest at batch prices,** the transport of the big waves where nearly all the money goes, unless the run is `--direct`.
   - **A budget stop stops sending, not collecting.** The owner's condition is about submitting, and the batches already at Anthropic are paid for.
@@ -367,7 +367,8 @@
 
 **Consequences:**
 - A run stops sending before its projection passes the budget, so it can overspend only by what the projection misses.
-- **The known gap:** the last small regular-API waves are priced at batch rates in the rest, so the projection runs a little low (under $1 on VS Code). The next check catches it: each of those waves is priced at the regular API's rates when it's the one about to go.
+- **What the cap can't see:** spend that never reaches `summary_usage`. That covers the owner's checkpoint reviews (`compare-summaries`, about $0.49 on VS Code), and a batch Anthropic accepted but the run couldn't record, whose rows are later resent and paid for again.
+- **The known gap:** the rest prices every remaining target at batch rates, but a wave under 100 requests goes through the regular API at full price. Such waves come at the top of the tree, and also mid-run, when file batches land at different times and leave only a few folders ready at once. So the projection runs a little low, by an estimated under $1 on VS Code. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
 - A model is priced from the assumption until its first answers are recorded (a batch's, when it's collected), and from its measured mean after that. An unpriced fallback model makes the total a lower bound, and the progress line says so.
 - A later run on the same repo (an incremental update, say) starts from everything already spent, so past $15 it needs `--budget`.
 - With `wait`, a run over budget keeps running until the batches it's waiting on have ended, which can take hours. Everything paid for lands, and a re-run under the same budget collects whatever has ended since.

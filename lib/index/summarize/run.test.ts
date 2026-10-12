@@ -405,15 +405,28 @@ describe("runSummaries — the Batch API", () => {
 
     it("counts a pass that couldn't check any batch as one miss, however many batches are in flight", async () => {
         const root = indexedTwelveFiles();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
         const stub = stubSummarizer({ failPolls: 6 });
         await sixBatchesInFlight(root, stub);   // one more batch than MAX_MISSED_POLLS
+        // the stage's note at every poll: what GET /api/status shows while the run waits
+        const stageAtPoll: (string | undefined)[] = [];
+        const watched: Summarizer = {
+            ...stub.summarizer,
+            async batchResults(id){
+                stageAtPoll.push(readStages(db, repoId).summaries?.note);
+                return stub.summarizer.batchResults(id);
+            },
+        };
 
         // The first pass misses all 6 polls: that's one missed pass. From then on each pass collects a batch; when all
         // 12 files are in, src goes out, then the repo. The run's own tally holds only those two batches.
-        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
+        expect(await runSummaries(root, { summarizer: watched, transport: "batch", pollIntervalMs: 0 }))
             .toMatchObject({ summarized: 14, failed: 0, batches: 2, waves: 2, inFlight: 0, upToDate: 14 });
         // each of the 6 was polled twice (the failed pass, then the pass that collected it); src's and the repo's once
         expect([...stub.batches.values()].map((b) => b.polls)).toEqual([2, 2, 2, 2, 2, 2, 1, 1]);
+        // after the missed pass, the run waited with all 6 still out
+        expect(stageAtPoll).toContain("waiting on 6 batches at Anthropic");
     });
 
     it("with wait: false, a batch it couldn't check is left for the next run", async () => {
@@ -667,6 +680,23 @@ describe("runSummaries — the spend cap", () => {
         });
     });
 
+    it("prices the rest of a --direct run at regular-API rates", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+
+        // This wave, the 7 files: 7 × $0.00059 = $0.00413. Every wave of a direct run goes through the regular API, so
+        // the rest, the 4 leaf folders, src and the repo, is 6 × $0.0045 = $0.027, for $0.03113: over $0.02. (Priced by
+        // batch, the rest would be $0.0135 and the total $0.01763, under it.)
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", budgetUsd: 0.02 }))
+            .toMatchObject({ summarized: 0, failed: 0, waves: 0, inFlight: 0, stopped: true });
+        expect(stub.requests).toHaveLength(0);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "failed", done: 1, total: 14,
+            note: "stopped: the next wave would bring the projected spend to $0.0311, over the $0.0200 budget"
+                + " (spent $0.0000, at Anthropic ≈ $0.0000, this wave ≈ $0.0041, the rest ≈ $0.0270); run again with --budget <usd> to go on",
+        });
+    });
+
     it("stops rather than spends when the budget isn't a number", async () => {
         const root = indexedFixture();
         const stub = stubSummarizer();
@@ -706,7 +736,7 @@ describe("runSummaries — the spend cap", () => {
         expect(await run(said)).toMatchObject({ summarized: 6, failed: 0, batches: 1, waves: 1, inFlight: 6, stopped: false });
         expect(said.filter((m) => /^(stopped|over budget|collected|budget)/.test(m))).toEqual([
             overBudget,
-            "over budget: sending nothing more, collecting the 1 batch already at Anthropic",
+            "over budget, so nothing new goes out; collecting the 1 batch already at Anthropic",
             `collected ${batchId}: 6 summarized, 0 failed`,
             "budget: spent $0.0001 + at Anthropic ≈ $0.0000 + this batch ≈ $0.0001 + the rest ≈ $0.0045 = $0.0046 of $0.0075",
         ]);
@@ -715,14 +745,25 @@ describe("runSummaries — the spend cap", () => {
         });
     });
 
-    it("a budget stop still collects the batches already at Anthropic", async () => {
+    it("a budget stop still collects the batches already at Anthropic, and the stage says so while it waits", async () => {
         const root = indexedFixture();
-        const stub = stubSummarizer();   // its batches answer on the first poll
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const stub = stubSummarizer({ pollsBeforeDone: 1 });   // its batch is still processing at the first poll, so the run waits once
         // An earlier run left these 3 files at Anthropic. None of them is the last file its folder waits for, so no
         // folder becomes ready when they land.
         const three = ["src/app/main.ts", "src/core/log.ts", "src/index.ts"];
         const batchId = await leaveAtAnthropic(root, stub, three);
         const said: string[] = [];
+        // the stage's note at every poll: what GET /api/status shows while the run waits
+        const stageAtPoll: (string | undefined)[] = [];
+        const watched: Summarizer = {
+            ...stub.summarizer,
+            async batchResults(id){
+                stageAtPoll.push(readStages(db, repoId).summaries?.note);
+                return stub.summarizer.batchResults(id);
+            },
+        };
 
         // Pass 1, nothing recorded yet. At Anthropic 3 × $0.000295 = $0.000885; this batch, the other 4 files,
         // 4 × $0.000295 = $0.00118; the rest, the 4 leaf folders, src and the repo, 6 × $0.00225 = $0.0135. $0.015565 is
@@ -730,16 +771,20 @@ describe("runSummaries — the spend cap", () => {
         // Pass 2. Spent 3 × (100 × $0.10 + 20 × $0.50) / 1M / 2 = $0.00003; nothing at Anthropic; this batch, the 4
         // files at Haiku's recorded mean, 4 × $0.00001 = $0.00004; the rest $0.0135. $0.01357 is still over, and nothing
         // is in flight, so the run finishes.
-        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", budgetUsd: 0.0001, pollIntervalMs: 0, onProgress: (m) => said.push(m) }))
+        expect(await runSummaries(root, { summarizer: watched, transport: "batch", budgetUsd: 0.0001, pollIntervalMs: 0, onProgress: (m) => said.push(m) }))
             .toMatchObject({ summarized: 3, failed: 0, batches: 0, waves: 0, inFlight: 0, stopped: true });
         expect([...stub.batches.keys()]).toEqual([batchId]);
-        expect(stub.batches.get(batchId)!.polls).toBe(1);
+        expect(stub.batches.get(batchId)!.polls).toBe(2);
+        // From the moment it stops sending, and through the wait, the stage says the run is only collecting: monitoring
+        // mustn't read it as an ordinary wait.
+        const collecting = "over budget, so nothing new goes out; collecting the 1 batch already at Anthropic";
+        expect(stageAtPoll).toEqual([collecting, collecting]);
         const note = "stopped: the next batch would bring the projected spend to $0.0136, over the $0.0001 budget"
             + " (spent $0.0000, at Anthropic ≈ $0.0000, this batch ≈ $0.0000, the rest ≈ $0.0135); run again with --budget <usd> to go on";
         expect(said.filter((m) => /^(stopped|over budget|collected|budget)/.test(m))).toEqual([
             "stopped: the next batch would bring the projected spend to $0.0156, over the $0.0001 budget"
                 + " (spent $0.0000, at Anthropic ≈ $0.0009, this batch ≈ $0.0012, the rest ≈ $0.0135); run again with --budget <usd> to go on",
-            "over budget: sending nothing more, collecting the 1 batch already at Anthropic",
+            collecting,
             `collected ${batchId}: 3 summarized, 0 failed`,
             note,
         ]);

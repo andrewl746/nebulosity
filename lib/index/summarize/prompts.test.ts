@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { importerLine, renderFilePrompt, renderFolderPrompt, renderRepoPrompt, testFileSummary, truncateSource, type FolderItem } from "./prompts";
+import { importerLine, plural, renderFilePrompt, renderFolderPrompt, renderRepoPrompt, testFileSummary, truncateSource, type FolderItem } from "./prompts";
+
+describe("plural", () => {
+    it("adds an s by default, and takes the plural form a word needs when that isn't it", () => {
+        expect(plural(1, "file")).toBe("1 file");
+        expect(plural(12_103, "file")).toBe("12,103 files");
+        expect(plural(1, "batch", "batches")).toBe("1 batch");
+        expect(plural(0, "batch", "batches")).toBe("0 batches");
+        expect(plural(3, "batch", "batches")).toBe("3 batches");
+    });
+});
 
 describe("truncateSource", () => {
     it("leaves source within the limit alone", () => {

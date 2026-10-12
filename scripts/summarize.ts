@@ -43,8 +43,10 @@ function usage(): never {
 
 if (!target || target.startsWith("--")) usage();
 
-// --budget takes a positive number of dollars. Number() reads a missing value as NaN and an empty one as 0, so both
-// are refused here, as are words, negatives and Infinity.
+// --budget takes a positive number of dollars, as the next argument. "--budget=5" is refused rather than ignored: ignoring
+// it would quietly apply the default instead. Number() reads a missing value as NaN and an empty one as 0, so both are
+// refused here too, as are words, negatives and Infinity.
+if (args.some((arg) => arg.startsWith("--budget="))) usage();
 const budgetFlag = args.indexOf("--budget");
 const budgetUsd = budgetFlag === -1 ? DEFAULT_BUDGET_USD : Number(args[budgetFlag + 1]);
 if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) usage();
