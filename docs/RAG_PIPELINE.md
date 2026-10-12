@@ -1,9 +1,9 @@
 # RAG_PIPELINE.md — Understanding and Search
 
-> **2026-10-11 — rewritten in slice V1.2** for the pivot (`PIVOT_SPEC.md` §5.3–5.4, §6.1; ADR-027, ADR-028, ADR-031, ADR-033, ADR-034). Chunk-level embeddings are gone. Search fuses code keywords, summary keywords and summary meaning. §2–3 (chunking) carry over unchanged from the Phase 2 design.
+> **2026-10-11 — rewritten in slice V1.2** for the pivot (`PIVOT_SPEC.md` §5.3–5.4, §6.1; ADR-027, ADR-028, ADR-031, ADR-033, ADR-034, ADR-035). Chunk-level embeddings are gone. Search fuses code keywords, summary keywords and summary meaning. §2–3 (chunking) carry over unchanged from the Phase 2 design.
 
 **Status:** Implemented (V1.2)
-**Depends on:** `DATABASE_DESIGN.md` §7–8, `ENGINEERING_DECISIONS.md` ADR-004/005/017/027/028/031/033/034
+**Depends on:** `DATABASE_DESIGN.md` §7–8, `ENGINEERING_DECISIONS.md` ADR-004/005/017/027/028/031/033/034/035
 
 ---
 
@@ -100,6 +100,16 @@ type CodeChunk = {
 
 **Cost.** Every answer's tokens go to `summary_usage`, per model and transport, including an answer whose row was redone or deleted meanwhile: it was still paid for. A Sonnet request that a server-side fallback finished counts each attempt under its own model, from `usage.iterations`, because the declined attempt is billed too. That's how S2 (≤ $15 for VS Code's full pass) is measured. The owner reviews Haiku against Sonnet on 20 VS Code files before the first full run (`SUMMARY_REVIEW.md`).
 
+**The spend cap (ADR-035).** Before every submission (each batch, and each regular-API wave), and before building any of its prompts, a run projects **spent + at Anthropic + this submission + the rest**:
+- **spent** is every `summary_usage` row of the repo, each at its own transport's price, so the cap bounds the repo's total summary spend, across runs;
+- **at Anthropic** is the requests in flight, at batch prices, including the batches this wave has already submitted;
+- **this submission** is priced at its own transport;
+- **the rest** is every target still `ready` or `waiting` after it, at batch prices (direct ones under `--direct`).
+
+A request is expected to take its model's mean tokens on this repo (Σ tokens ÷ Σ requests, both transports). Until a model has answered anything, a file is assumed to take 4,600 tokens in and 260 out (Review #1's Haiku means), and a folder or the repo 1,000 and 250. A model with no price on file counts as $0 and is named.
+
+Under the budget the run prints `budget: spent $… + at Anthropic ≈ $… + this wave ≈ $… + the rest ≈ $… = $… of $…` and sends. Over it, the run sends nothing, stops the way the circuit breaker does, and leaves its rows pending (not failed, not claimed). Batches already at Anthropic stay there: a run sends what's ready before it collects, so collecting them takes a run whose budget covers its next submission. The budget is `--budget <usd>`, default $15 (S2). The projection runs a little low (under $1 on VS Code) because the last small waves go through the regular API at full price while the rest prices them by batch; the check before each of those waves catches it.
+
 ---
 
 ## 5. Embeddings
@@ -174,6 +184,7 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 | Summarizing while `npm run index` runs | Files fail as "changed after it was indexed" | The run refuses to start until the structure stage is `ready` |
 | A batch can't be submitted | Nothing goes out | The run stops with its rows still pending; batches already submitted are collected next run. A batch that was accepted but couldn't be recorded has its id printed and in the error |
 | Most of a wave or batch fails (a rejected key, an outage, a repo edited since indexing) | Folders would be summarized over "(no summary yet)" and paid for again | The circuit breaker (10+ failures, more than half) stops the run; the note starts with `stopped:`, and the failures are retried next run |
+| A run would pass its budget | The spend would go past what the owner approved (S2: $15 for VS Code) | The spend cap (ADR-035): before each batch or regular-API wave the run projects spent + at Anthropic + this submission + the rest. Over the budget it sends nothing; the rows stay pending, the stage is `failed` (or `running` while batches are at Anthropic), and the note starts with `stopped: the next wave would bring the projected spend to` (`batch` for a batch). Run again with a bigger `--budget` to go on |
 | Model refusal | A summary fails | Sonnet's regular-API requests fall back server-side; batch refusals are retried next run, in a small wave that goes direct |
 | Embedding model can't load | No meaning search | Keyword lists still answer, and the `note` says so |
 | Vocabulary mismatch | A concept finds nothing by keyword | The meaning list, and summaries written in plain words |

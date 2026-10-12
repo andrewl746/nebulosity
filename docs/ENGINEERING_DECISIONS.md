@@ -336,6 +336,40 @@
 
 **Revisit when:** Review #2 (the same 20 files) still shows taglines cut or summaries hedged, or usage sentences go stale enough to mislead. Then redo the most-imported files on a schedule.
 
+## ADR-035 — A spend cap on summary runs (2026-10-11)
+
+**Context:** The owner approved the full VS Code pass with one condition: "Before submitting each further batch, stop if the spend so far plus the remaining estimate would pass $15". Review #2 estimated the pass at about $11.70 (Haiku files, Sonnet folders and the repo, by batch), and $15 is S2's ceiling. Until now a run learned what it had spent only after paying: `summary_usage` records each answer's tokens as it lands.
+
+**Decision:**
+- **The projection.** Before every submission, and before any of its prompts is built, a run projects **spent + at Anthropic + this submission + the rest**. A submission is each batch and each regular-API wave. The math is pure (`projectSpend`, `lib/index/summarize/budget.ts`).
+  - **Spent:** every `summary_usage` row of the repo, each at its own transport's price.
+  - **At Anthropic:** the requests in flight, at batch prices. A pass's plan lists the ones in flight when it started. Each batch the wave submits joins them once it's recorded, so a later batch of the same wave counts the earlier ones. Leaving them out would make every later check more lenient than the first.
+  - **This submission:** at its own transport's price.
+  - **The rest:** every target still `ready` or `waiting` after it, at batch prices, or direct ones when the run's transport is `direct`.
+  - **Tokens per request:** the model's mean on this repo (Σ tokens ÷ Σ requests, both transports). Until a model has any usage, `ASSUMED_TOKENS` for the target's kind: files 4,600 in and 260 out (Review #1's Haiku means), folders and the repo 1,000 and 250. The checkpoint's estimate (`compare.ts`) takes its folder input from the same constant.
+  - A model with no price on file counts as $0 and is named in the progress line.
+- **Under the budget** the run prints `budget: spent $… + at Anthropic ≈ $… + this wave ≈ $… + the rest ≈ $… = $… of $…` and sends.
+- **Over it** the run stops the way the circuit breaker does (ADR-033).
+  - Nothing is sent, and the rows stay pending (not failed, not claimed).
+  - The stage is `failed`, or `running` while batches are at Anthropic, with the note `stopped: the next batch would bring the projected spend to $…, over the $… budget (spent $…, at Anthropic ≈ $…, this batch ≈ $…, the rest ≈ $…); run again with --budget <usd> to go on` ("wave" for a regular-API wave).
+  - A budget that isn't a number stops the run too, rather than lifting the cap.
+- **The budget** is `SummaryRunOptions.budgetUsd`. Undefined means no cap, and `summarizeNow` (one request) has none. The CLI's `--budget <usd>` takes a positive number and defaults to $15 (`DEFAULT_BUDGET_USD`, S2).
+- **Ruled choices**, from the owner's verdict:
+  - **Cumulative per repo.** "Spent" is every usage row of the repo, so the default bounds the repo's total summary spend, not one run's.
+  - **Every submission,** regular-API waves included: "each further batch" was read as every send.
+  - **The rest at batch prices,** the transport of the big waves where nearly all the money goes, unless the run is `--direct`.
+
+**Alternatives:** (a) A per-run budget: simpler, but a first pass can take several runs (`--no-wait`, an interruption), and the owner's condition is about the total. (b) Check batches only: the small regular-API waves at the top of the tree would go out unchecked. (c) Predict which later waves go direct (under 100 requests) and price them that way: wave sizes depend on how the tree fills in and on what fails, so that is a guess too, with more code to keep honest. (d) Re-read the in-flight rows from the database before each batch: the same count unless something else touches those rows mid-wave. A row that `summarizeNow` redoes meanwhile leaves the database's count, though Anthropic still bills its batch request.
+
+**Consequences:**
+- A run stops before its projection passes the budget, so it can overspend only by what the projection misses.
+- **The known gap:** the last small regular-API waves are priced at batch rates in the rest, so the projection runs a little low (under $1 on VS Code). The next check catches it: each of those waves is priced at the regular API's rates when it's the one about to go.
+- A model is priced from the assumption until its first answers are recorded (a batch's, when it's collected), and from its measured mean after that. An unpriced fallback model makes the total a lower bound, and the progress line says so.
+- A later run on the same repo (an incremental update, say) starts from everything already spent, so past $15 it needs `--budget`.
+- A stopped run doesn't collect the batches it leaves at Anthropic, just as after the circuit breaker. A run sends what's ready before it collects, so a re-run under the same budget stops at the same check without collecting them; that takes a run whose budget covers its next submission. Those requests are already paid for.
+
+**Revisit when:** a budget stop leaves paid-for batches at Anthropic that the owner doesn't want to raise the budget to collect (then let a stopped run go on collecting, sending nothing new), the assumed tokens prove far off on a new repo before its first answers land (then seed the means from the checkpoint's sample), or the regular-API gap grows past a dollar (then price the waves under 100 requests at direct rates).
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

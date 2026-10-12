@@ -25,3 +25,8 @@ export function costUsd(model: string, usage: TokenUsage, transport: "direct" | 
     const full = (usage.inputTokens * price.input + usage.outputTokens * price.output) / 1_000_000;
     return transport === "batch" ? full / 2 : full;
 }
+
+/** A dollar amount: 4 decimals below $0.10, so $0.0118 doesn't read as $0.01, and 2 above. */
+export function formatUsd(x: number): string {
+    return `$${x < 0.1 ? x.toFixed(4) : x.toFixed(2)}`;
+}

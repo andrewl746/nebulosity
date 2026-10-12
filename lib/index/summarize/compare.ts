@@ -1,10 +1,11 @@
 import type { FileFacts } from "../../db/store/summaries";
-import { costUsd, pricePerMTok } from "./pricing";
+import { ASSUMED_TOKENS } from "./budget";
+import { costUsd, formatUsd, pricePerMTok } from "./pricing";
 import { plural, PROMPT_VERSION } from "./prompts";
 import type { SummaryOutcome } from "./types";
 
-/** Folder inputs, assumed for the estimate: a folder lists its children's taglines and summaries. */
-const ASSUMED_FOLDER_INPUT_TOKENS = 1_000;
+/** Folder inputs, assumed for the estimate as the spend cap assumes them (budget.ts): a folder lists its children's taglines and summaries. */
+const ASSUMED_FOLDER_INPUT_TOKENS = ASSUMED_TOKENS.folder.inputTokens;
 
 export type ComparisonRow = { file: FileFacts; outcomes: Record<string, SummaryOutcome | undefined> };
 
@@ -66,14 +67,14 @@ export function renderComparison(report: ComparisonReport): string {
         "",
         "| Model | Requests | Input tokens | Output tokens | Cost |",
         "|---|---|---|---|---|",
-        ...stats.map((s) => `| ${s.model} | ${s.requests} | ${s.inputTokens.toLocaleString("en-US")} | ${s.outputTokens.toLocaleString("en-US")} | ${s.unpriced ? "at least " : ""}${usd(s.cost)} |`),
+        ...stats.map((s) => `| ${s.model} | ${s.requests} | ${s.inputTokens.toLocaleString("en-US")} | ${s.outputTokens.toLocaleString("en-US")} | ${s.unpriced ? "at least " : ""}${formatUsd(s.cost)} |`),
         "",
         "### Full-pass estimate (Batch API, half price)",
         "",
-        `- **Files:** ${report.fullPass.files.toLocaleString("en-US")} × ${filePrice.text} (${fileModel}'s mean) × ½ = **${usd(filesTotal)}**`,
-        `- **Folders and the repo:** ${report.fullPass.folders.toLocaleString("en-US")} × (${ASSUMED_FOLDER_INPUT_TOKENS.toLocaleString("en-US")} input tokens + ${meanFolderOutput.toLocaleString("en-US")} output tokens at ${folderModel}'s price) × ½ = **${usd(foldersTotal)}**`,
-        `- **Total ≈ ${usd(filesTotal + foldersTotal)}** against S2's $15.`,
-        `- If ${folderModel} wrote the file summaries too: ${report.fullPass.files.toLocaleString("en-US")} × ${folderModelFilePrice.text} × ½ = **${usd(allSonnetFiles)}**`,
+        `- **Files:** ${report.fullPass.files.toLocaleString("en-US")} × ${filePrice.text} (${fileModel}'s mean) × ½ = **${formatUsd(filesTotal)}**`,
+        `- **Folders and the repo:** ${report.fullPass.folders.toLocaleString("en-US")} × (${ASSUMED_FOLDER_INPUT_TOKENS.toLocaleString("en-US")} input tokens + ${meanFolderOutput.toLocaleString("en-US")} output tokens at ${folderModel}'s price) × ½ = **${formatUsd(foldersTotal)}**`,
+        `- **Total ≈ ${formatUsd(filesTotal + foldersTotal)}** against S2's $15.`,
+        `- If ${folderModel} wrote the file summaries too: ${report.fullPass.files.toLocaleString("en-US")} × ${folderModelFilePrice.text} × ½ = **${formatUsd(allSonnetFiles)}**`,
         "",
         `Folder inputs are assumed to be about ${ASSUMED_FOLDER_INPUT_TOKENS.toLocaleString("en-US")} tokens each, since a folder lists its children's taglines and summaries. The full run measures the real number.`,
         "",
@@ -148,9 +149,4 @@ function perRequestPrice(mean: number): { value: number; text: string } {
     let decimals = 4;
     while (decimals < 12 && Number(value.toFixed(decimals)) !== value) decimals++;
     return { value, text: `$${value.toFixed(decimals)}` };
-}
-
-/** A dollar amount: 4 decimals below $0.10, so $0.0118 doesn't read as $0.01, and 2 above. */
-function usd(x: number): string {
-    return `$${x < 0.1 ? x.toFixed(4) : x.toFixed(2)}`;
 }

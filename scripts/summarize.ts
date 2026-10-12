@@ -1,25 +1,32 @@
 /**
- * npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--path <repo-relative path>]
+ * npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>]
  *
  * Writes summaries for an indexed repository (PIVOT_SPEC.md §5.3), then embeds them for search (§5.4).
  * - A big first pass goes through the Message Batches API at half price and can take hours.
  *   --no-wait never sleeps: it collects the batches that have already ended, submits what
  *   that makes ready, and exits. Running the command again (by hand, or from cron) carries
  *   on from there.
+ * - --budget caps what this repo's summaries may cost in total, in US dollars (default 15,
+ *   S2's ceiling). Before each batch or regular-API wave the run projects spent + at
+ *   Anthropic + this submission + the rest, and stops instead of sending if that would pass
+ *   the budget (ADR-035). Running again with a bigger --budget goes on from there.
  * - --path summarizes one file or folder right now through the regular API (an empty path
- *   means the repo itself).
+ *   means the repo itself). It's one request, so no budget applies.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import path from "path";
 import { getDb } from "../lib/db/client";
 import { IndexLockedError } from "../lib/db/store/lock";
+import { readStages } from "../lib/db/store/stages";
 import { RepoNotIndexedError, requireRepository } from "../lib/db/store/structure";
 import { loadUsage } from "../lib/db/store/summaries";
 import { embedSummaries } from "../lib/index/embed";
 import { repoKey } from "../lib/index/paths";
 import { createClaudeSummarizer } from "../lib/index/summarize/claude";
 import { costUsd } from "../lib/index/summarize/pricing";
-import { runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, type Transport } from "../lib/index/summarize/run";
+import {
+    DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, type Transport,
+} from "../lib/index/summarize/run";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
 loadLocalEnv();
@@ -27,10 +34,19 @@ loadLocalEnv();
 const args = process.argv.slice(2);
 const target = args[0];
 
-if (!target || target.startsWith("--")){
-    console.error("usage: npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--path <repo-relative path>]");
+/** The arguments can't be run as given: print how to call the command, and exit. */
+function usage(): never {
+    console.error("usage: npm run summarize -- <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>]");
     process.exit(1);
 }
+
+if (!target || target.startsWith("--")) usage();
+
+// --budget takes a positive number of dollars. Number() reads a missing value as NaN and an empty one as 0, so both
+// are refused here, as are words, negatives and Infinity.
+const budgetFlag = args.indexOf("--budget");
+const budgetUsd = budgetFlag === -1 ? DEFAULT_BUDGET_USD : Number(args[budgetFlag + 1]);
+if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) usage();
 
 const root = path.resolve(target);
 const pathFlag = args.indexOf("--path");
@@ -50,11 +66,12 @@ async function main(): Promise<void> {
         if (row.tagline) say(`${row.tagline} — ${row.summary}`);
     } else{
         if (!summarizer) say("ANTHROPIC_API_KEY is not set: writing test-file templates only (put the key in .env.local).");
-        const result = await runSummaries(root, { summarizer, transport, wait: !args.includes("--no-wait"), onProgress: say });
+        const result = await runSummaries(root, { summarizer, transport, wait: !args.includes("--no-wait"), budgetUsd, onProgress: say });
         say(`up to date ${result.upToDate}/${result.total} · summarized ${result.summarized} · templated ${result.templated}`
             + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
             + ` · waves ${result.waves} · batches ${result.batches}`);
-        if (result.stopped) say("stopped early: most of the last wave or batch failed (the reason is above). Fix the cause and run again; the failures are retried.");
+        // the circuit breaker or the spend cap: the stage's note says which, what to do, and what's still at Anthropic
+        if (result.stopped) say(summariesNote());
     }
 
     const embedded = await embedSummaries(root, {
@@ -64,6 +81,12 @@ async function main(): Promise<void> {
     say(`embedded ${embedded.embedded} summaries; ${embedded.total} now have vectors`);
 
     printSpend();
+}
+
+/** The summaries stage's note, which a stopped run fills in with why it stopped. */
+function summariesNote(): string {
+    const db = getDb();
+    return readStages(db, requireRepository(db, repoKey(root))).summaries?.note ?? "stopped early";
 }
 
 /**

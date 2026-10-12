@@ -9,11 +9,13 @@ import { getDb } from "../../db/client";
 import { META_KEYS, meta } from "../../db/schema";
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
-import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, writeResults } from "../../db/store/summaries";
+import {
+    applyTargetUpdates, loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, targetKey, writeResults,
+} from "../../db/store/summaries";
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { buildFilePrompt, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError } from "./run";
+import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
@@ -569,6 +571,144 @@ describe("runSummaries — the structure guard and the circuit breaker", () => {
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
             .toMatchObject({ summarized: 14, failed: 0, upToDate: 14, inFlight: 0, stopped: false });
         expect(stub.requests).toHaveLength(14);
+    });
+});
+
+/**
+ * Every figure below is worked out by hand (ADR-035). Prices per million tokens, input/output: Haiku $0.10/$0.50,
+ * Sonnet $2/$10, and the Batch API halves them. A model with no recorded usage is assumed to take 4,600 tokens in and
+ * 260 out for a file, 1,000 and 250 for a folder or the repo:
+ * - a file: (4,600 × $0.10 + 260 × $0.50) / 1M = $0.00059 through the regular API, $0.000295 by batch;
+ * - a folder or the repo: (1,000 × $2 + 250 × $10) / 1M = $0.0045 through the regular API, $0.00225 by batch.
+ * The stub answers every request with 100 tokens in and 20 out. Under auto, the fixture's waves (7 files, then 4 leaf
+ * folders, src, the repo) are all smaller than BATCH_THRESHOLD, so they go through the regular API.
+ */
+describe("runSummaries — the spend cap", () => {
+    it("stops before a wave that would take the projected spend past the budget, failing and claiming nothing", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        const said: string[] = [];
+
+        // wave 1, the 7 files: 7 × $0.00059 = $0.00413. The rest, the 4 leaf folders, src and the repo, at batch
+        // prices: 6 × $0.00225 = $0.0135. Nothing spent or at Anthropic yet: $0.01763, over $0.01.
+        expect(await runSummaries(root, { summarizer: stub.summarizer, budgetUsd: 0.01, onProgress: (m) => said.push(m) })).toEqual({
+            total: 14, upToDate: 1, summarized: 0, templated: 1, failed: 0, lazy: 0, inFlight: 0, needModel: 0, batches: 0, waves: 1, stopped: true,
+        });
+        const note = "stopped: the next wave would bring the projected spend to $0.0176, over the $0.0100 budget"
+            + " (spent $0.0000, at Anthropic ≈ $0.0000, this wave ≈ $0.0041, the rest ≈ $0.0135); run again with --budget <usd> to go on";
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "failed", done: 1, total: 14, note });
+        expect(said).toContain(note);
+        expect(stub.requests).toHaveLength(0);
+        // all 13 targets that need a model are still pending, and no batch claims any of them
+        expect(rows(root).filter((r) => r.status === "pending" && r.batchId === null)).toHaveLength(13);
+        expect(rows(root).filter((r) => r.status === "failed")).toHaveLength(0);
+
+        // so a run with room in its budget sends each of the 13 exactly once
+        expect(await runSummaries(root, { summarizer: stub.summarizer, budgetUsd: 1 })).toMatchObject({ summarized: 13, failed: 0, upToDate: 14, stopped: false });
+        expect(stub.requests).toHaveLength(13);
+    });
+
+    it("checks every wave, not just the first: the 4 leaf folders would take it past $0.02", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+
+        // Wave 1 projects $0.01763, as above, so the 7 files go. Wave 2, the 4 leaf folders: spent 7 × (100 × $0.10 +
+        // 20 × $0.50) / 1M = $0.00014; this wave 4 × $0.0045 = $0.018 (Sonnet has no usage yet); the rest, src and the
+        // repo, 2 × $0.00225 = $0.0045. $0.02264 is over $0.02.
+        expect(await runSummaries(root, { summarizer: stub.summarizer, budgetUsd: 0.02 }))
+            .toMatchObject({ summarized: 7, failed: 0, inFlight: 0, waves: 2, stopped: true });
+        expect(stub.requests).toHaveLength(7);
+        expect(stub.subjects().every((s) => s.startsWith("File: "))).toBe(true);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "failed", done: 8, total: 14,
+            note: "stopped: the next wave would bring the projected spend to $0.0226, over the $0.0200 budget"
+                + " (spent $0.0001, at Anthropic ≈ $0.0000, this wave ≈ $0.0180, the rest ≈ $0.0045); run again with --budget <usd> to go on",
+        });
+        // the 4 leaf folders, src and the repo wait for the next run, unclaimed
+        expect(rows(root).filter((r) => r.kind !== "file" && r.status === "pending" && r.batchId === null)).toHaveLength(6);
+    });
+
+    it("stops before a batch that would pass the budget, without building its prompts or claiming its rows", async () => {
+        const root = indexedFixture();
+        // edited since indexing, so building its prompt would fail it: a row still pending shows no prompt was built
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        const stub = stubSummarizer();
+
+        // this batch, the 7 files: 7 × $0.000295 = $0.002065; the rest $0.0135, as above. $0.015565 is over $0.01.
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", budgetUsd: 0.01, pollIntervalMs: 0 }))
+            .toMatchObject({ summarized: 0, failed: 0, batches: 0, waves: 1, inFlight: 0, stopped: true });
+        expect(stub.batches.size).toBe(0);
+        expect(rows(root).filter((r) => r.kind === "file" && r.status === "pending" && r.batchId === null)).toHaveLength(7);
+        expect(rows(root).filter((r) => r.status === "failed")).toHaveLength(0);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "failed", done: 1, total: 14,
+            note: "stopped: the next batch would bring the projected spend to $0.0156, over the $0.0100 budget"
+                + " (spent $0.0000, at Anthropic ≈ $0.0000, this batch ≈ $0.0021, the rest ≈ $0.0135); run again with --budget <usd> to go on",
+        });
+    });
+
+    it("stops rather than spends when the budget isn't a number", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+
+        // NaN compares false with everything, so a check written as "total > budget" would never stop
+        expect(await runSummaries(root, { summarizer: stub.summarizer, budgetUsd: Number.NaN })).toMatchObject({ summarized: 0, stopped: true });
+        expect(stub.requests).toHaveLength(0);
+        expect(readIndexStatus(root)?.stages.summaries?.state).toBe("failed");
+    });
+
+    it("counts the requests already at Anthropic, and stays running for them when it stops", async () => {
+        const root = indexedTwelveFiles();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const stub = stubSummarizer();
+        // an earlier run left src/f01.ts … src/f06.ts at Anthropic, in a batch that's still processing (the hashes are
+        // placeholders: this run stops before it would collect anything)
+        const atAnthropic = FIRST_TEN.slice(0, 6);
+        const ids = applyTargetUpdates(db, repoId, atAnthropic.map((p) => ({ kind: "file" as const, path: p, inputHash: `h-${p}`, status: "pending" as const })));
+        markInFlight(db, "batch-from-an-earlier-run", atAnthropic.map((p) => ({ id: ids.get(targetKey("file", p))!, inputHash: `h-${p}` })));
+
+        // at Anthropic, those 6 at batch prices: 6 × $0.000295 = $0.00177; this batch, the other 6 files, the same
+        // $0.00177; the rest, src and the repo: 2 × $0.00225 = $0.0045. $0.00804 is over $0.0075.
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", wait: false, budgetUsd: 0.0075 }))
+            .toMatchObject({ summarized: 0, failed: 0, batches: 0, inFlight: 6, stopped: true });
+        expect(stub.requests).toHaveLength(0);
+        // the 6 are paid for and go on at Anthropic without this process: running, not failed
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({
+            state: "running", done: 0, total: 14,
+            note: "stopped: the next batch would bring the projected spend to $0.0080, over the $0.0075 budget"
+                + " (spent $0.0000, at Anthropic ≈ $0.0018, this batch ≈ $0.0018, the rest ≈ $0.0045); run again with --budget <usd> to go on;"
+                + " 6 requests still at Anthropic; run npm run summarize to collect them",
+        });
+    });
+
+    it("says the projection before every wave, from each model's recorded mean once it has one, naming a model with no price", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        // every Sonnet answer also bills claude-opus-5-5 (as when a server-side fallback ran), which has no price on file
+        const withFallback: Summarizer = {
+            ...stub.summarizer,
+            async summarize(request){
+                const outcome = await stub.summarizer.summarize(request);
+                if (request.model !== "claude-sonnet-5-5") return outcome;
+                return { ...outcome, usage: [...(outcome.usage ?? []), { model: "claude-opus-5-5", inputTokens: 100, outputTokens: 20 }] };
+            },
+        };
+        const said: string[] = [];
+
+        expect(await runSummaries(root, { summarizer: withFallback, budgetUsd: DEFAULT_BUDGET_USD, onProgress: (m) => said.push(m) }))
+            .toMatchObject({ summarized: 13, waves: 4, stopped: false });
+        expect(said.filter((m) => m.startsWith("budget: "))).toEqual([
+            // wave 1, the 7 files, and wave 2, the 4 leaf folders: as in the tests above (Sonnet has no usage before wave 2)
+            "budget: spent $0.0000 + at Anthropic ≈ $0.0000 + this wave ≈ $0.0041 + the rest ≈ $0.0135 = $0.0176 of $15.00",
+            "budget: spent $0.0001 + at Anthropic ≈ $0.0000 + this wave ≈ $0.0180 + the rest ≈ $0.0045 = $0.0226 of $15.00",
+            // wave 3, src. Spent: $0.00014 + Sonnet's 4 folders, (400 × $2 + 80 × $10) / 1M = $0.0016, + Opus at $0 =
+            // $0.00174. Sonnet's mean is now 100 in and 20 out: src (100 × $2 + 20 × $10) / 1M = $0.0004 through the
+            // regular API, and the rest, the repo, half that by batch. $0.00234 in all.
+            "budget: spent $0.0017 + at Anthropic ≈ $0.0000 + this wave ≈ $0.0004 + the rest ≈ $0.0002 = $0.0023 of $15.00 (no price on file for claude-opus-5-5: counted as $0)",
+            // wave 4, the repo: spent $0.00014 + 5 × $0.0004 = $0.00214; this wave $0.0004; nothing after it. $0.00254 in all.
+            "budget: spent $0.0021 + at Anthropic ≈ $0.0000 + this wave ≈ $0.0004 + the rest ≈ $0.0000 = $0.0025 of $15.00 (no price on file for claude-opus-5-5: counted as $0)",
+        ]);
     });
 });
 

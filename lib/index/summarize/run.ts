@@ -8,12 +8,14 @@ import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import {
     addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadImporters, loadSummaries, markInFlight, targetKey, writeResults,
+    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, targetKey, writeResults,
     type FileFacts, type StoredSummary, type SummaryResult,
 } from "../../db/store/summaries";
 import { repoKey } from "../paths";
+import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
 import { planSummaries, type PlannedTarget, type TargetState } from "./plan";
+import { formatUsd } from "./pricing";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, plural, REPO_SYSTEM_PROMPT, renderFilePrompt, SUMMARY_MODELS } from "./prompts";
 import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
@@ -35,6 +37,12 @@ export type SummaryRunOptions = {
     /** How often a long wave refreshes the stage and the lock. */
     heartbeatMs?: number;
     concurrency?: number;
+    /**
+     * The spend cap in US dollars (ADR-035). Before every submission, each batch and each regular-API wave, the run
+     * projects spent + at Anthropic + this submission + the rest, and stops instead of sending if that's over this.
+     * Undefined: no cap. The CLI passes DEFAULT_BUDGET_USD unless told otherwise.
+     */
+    budgetUsd?: number;
     onProgress?: (message: string) => void;
 };
 
@@ -51,13 +59,13 @@ export type SummaryRunResult = {
     failed: number;
     /** Out-of-date folders left for later (refreshStaleFolders: false). */
     lazy: number;
-    /** Requests still at Anthropic when the run ended: after wait: false, or when the circuit breaker stopped it. */
+    /** Requests still at Anthropic when the run ended: after wait: false, or when the circuit breaker or the spend cap stopped it. */
     inFlight: number;
     /** Targets that need a model and had none to go to (no API key). */
     needModel: number;
     batches: number;
     waves: number;
-    /** The circuit breaker ended the run early; the summaries stage's note says why. */
+    /** The circuit breaker or the spend cap ended the run early; the summaries stage's note says why. */
     stopped: boolean;
 };
 
@@ -77,6 +85,8 @@ export const MAX_MISSED_POLLS = 5;
  * were more than half of it. A few refusals in a small wave are normal and never trip it.
  */
 export const BREAKER_MIN_FAILURES = 10;
+/** The CLI's spend cap when --budget isn't given: S2's ceiling for VS Code's full pass (PIVOT_SPEC.md §2, ADR-035). */
+export const DEFAULT_BUDGET_USD = 15;
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_POLL_MS = 60_000;
 const DEFAULT_HEARTBEAT_MS = 30_000;
@@ -112,6 +122,13 @@ type Snapshot = { targets: PlannedTarget[]; files: Map<string, FileFacts> };
 
 type Tally = { summarized: number; templated: number; failed: number; batches: number; waves: number };
 
+/** A run's spend cap (ADR-035). */
+type Budget = {
+    usd: number;
+    /** How the projection prices the rest of the run: batch rates, or direct ones when the run's transport is direct. */
+    restTransport: "direct" | "batch";
+};
+
 type RunContext = {
     db: Db;
     repoId: number;
@@ -120,14 +137,16 @@ type RunContext = {
     tally: Tally;
     /** Passes in a row in which no batch could be checked (MAX_MISSED_POLLS). */
     missedPasses: number;
-    /** Set when the circuit breaker trips: why the run stops before planning another wave. */
+    /** Set when the circuit breaker trips or the spend cap is reached: why the run stops before planning another wave. */
     stopped: string | null;
+    /** Checked before every submission; null means no cap. */
+    budget: Budget | null;
     say: (message: string) => void;
 };
 
-function newContext(db: Db, repoId: number, root: string, say: (message: string) => void): RunContext {
+function newContext(db: Db, repoId: number, root: string, say: (message: string) => void, budget: Budget | null = null): RunContext {
     return {
-        db, repoId, root, say,
+        db, repoId, root, say, budget,
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPasses: 0,
@@ -150,7 +169,12 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     const repoId = requireRepository(db, repoKey(root));
     requireStructureReady(db, repoId);
     const summarizer = options.summarizer;
-    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}));
+    const transport = options.transport ?? "auto";
+    // Under auto most of the money goes on waves big enough for the Batch API, so the rest of the run is priced at
+    // batch rates (ADR-035; the small waves at the top of the tree make that a slight underestimate).
+    const budget: Budget | null = options.budgetUsd === undefined ? null
+        : { usd: options.budgetUsd, restTransport: transport === "direct" ? "direct" : "batch" };
+    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget);
     let last: PlannedTarget[] = [];
 
     acquireSummaryLock(db);
@@ -161,7 +185,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
 
-            // the circuit breaker tripped on the last wave or batch: report where things stand, and send nothing more
+            // the circuit breaker tripped, or the spend cap was reached: report where things stand, and send nothing more
             if (ctx.stopped !== null) return finish(ctx, snap.targets, summarizer !== null);
 
             const ready = snap.targets.filter((t) => t.state === "ready");
@@ -170,7 +194,6 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
 
             if (summarizer && ready.length > 0){
                 ctx.tally.waves++;
-                const transport = options.transport ?? "auto";
                 const useBatch = transport === "batch" || (transport === "auto" && ready.length >= BATCH_THRESHOLD);
                 const how = useBatch ? "through the Batch API" : "through the regular API";
                 progress(`wave ${ctx.tally.waves}: ${ready.length} to summarize ${how}`);
@@ -309,6 +332,10 @@ async function sendDirect(
     ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>,
     concurrency: number, heartbeatMs: number, progress: (note: string) => void
 ): Promise<void> {
+    // The whole wave is one submission, checked before any prompt is built. Every ready target is in it, so the rest of
+    // the run is what's still waiting.
+    if (!withinBudget(ctx, "direct", inState(snap, "in-flight"), ready, inState(snap, "waiting"))) return;
+
     const destinations = destinationsFor(ready, ids);
     let answered = 0;
     let lastBeat: number | null = null;
@@ -340,13 +367,23 @@ async function sendDirect(
 async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>): Promise<void> {
     const destinations = destinationsFor(ready, ids);
     const unsendable: string[] = [];
+    const waiting = inState(snap, "waiting");
+    // What's at Anthropic as each chunk is checked: the requests in flight when this pass planned, plus the chunks this
+    // wave has submitted since. The snapshot predates those, so each joins the list once markInFlight has recorded it.
+    // (The lock keeps any other run from submitting meanwhile.) Without them, a later chunk's projection would forget
+    // money this wave has already committed.
+    const atAnthropic: ProjectedRequest[] = inState(snap, "in-flight");
 
     for (let i = 0; i < ready.length; i += MAX_BATCH_REQUESTS){
+        const chunk = ready.slice(i, i + MAX_BATCH_REQUESTS);
+        // checked before the chunk's prompts are built; the rest is the later chunks and everything still waiting
+        if (!withinBudget(ctx, "batch", atAnthropic, chunk, [...ready.slice(i + MAX_BATCH_REQUESTS), ...waiting])) return;
+
         const requests: SummaryRequest[] = [];
         const failures: SummaryOutcome[] = [];
 
         // built one chunk at a time, so at most 5,000 prompts sit in memory at once
-        for (const target of ready.slice(i, i + MAX_BATCH_REQUESTS)){
+        for (const target of chunk){
             const built = buildRequest(ctx, snap, target, ids);
             if ("failure" in built) failures.push(built.failure);
             else requests.push(built.request);
@@ -379,6 +416,7 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
             ctx.say(message);
             throw new Error(message, { cause: err });
         }
+        atAnthropic.push(...requests.map((r) => ({ kind: destinations.get(r.customId)!.kind, model: r.model })));
         ctx.tally.batches++;
         ctx.say(`submitted ${batchId} with ${plural(requests.length, "request")}`);
     }
@@ -516,6 +554,48 @@ function checkFailures(ctx: RunContext, errors: readonly string[], total: number
     ctx.say(ctx.stopped);
 }
 
+/**
+ * The spend cap (ADR-035), checked before every submission: each regular-API wave ("direct") and each batch. It
+ * projects spent + at Anthropic + this submission + the rest (budget.ts) and returns whether the submission may go.
+ * Over the budget it stops the run the way the circuit breaker does: ctx.stopped is set, the caller sends nothing, and
+ * the loop's next pass ends the run, so no row is failed or claimed and the next run (with a bigger --budget) sends them.
+ */
+function withinBudget(
+    ctx: RunContext, transport: "direct" | "batch",
+    atAnthropic: readonly ProjectedRequest[], thisSubmission: readonly ProjectedRequest[], rest: readonly ProjectedRequest[]
+): boolean {
+    if (ctx.budget === null) return true;
+
+    const projection = projectSpend({
+        usage: loadUsage(ctx.db, ctx.repoId), atAnthropic, thisSubmission, thisTransport: transport, rest, restTransport: ctx.budget.restTransport,
+    });
+    const submission = transport === "batch" ? "batch" : "wave";
+    const usd = {
+        spent: formatUsd(projection.spent),
+        atAnthropic: formatUsd(projection.atAnthropic),
+        thisSubmission: formatUsd(projection.thisSubmission),
+        rest: formatUsd(projection.rest),
+        total: formatUsd(projection.total),
+        budget: formatUsd(ctx.budget.usd),
+    };
+
+    // Within means total ≤ budget, and anything else stops: a budget that isn't a number (NaN) stops the run instead
+    // of quietly lifting the cap.
+    if (!(projection.total <= ctx.budget.usd)){
+        ctx.stopped = `stopped: the next ${submission} would bring the projected spend to ${usd.total}, over the ${usd.budget} budget`
+            + ` (spent ${usd.spent}, at Anthropic ≈ ${usd.atAnthropic}, this ${submission} ≈ ${usd.thisSubmission}, the rest ≈ ${usd.rest});`
+            + " run again with --budget <usd> to go on";
+        ctx.say(ctx.stopped);
+        return false;
+    }
+
+    // a model with no price on file was counted as $0, so the total is only a lower bound: say which
+    const unpriced = projection.unpriced.length > 0 ? ` (no price on file for ${projection.unpriced.join(", ")}: counted as $0)` : "";
+    ctx.say(`budget: spent ${usd.spent} + at Anthropic ≈ ${usd.atAnthropic} + this ${submission} ≈ ${usd.thisSubmission}`
+        + ` + the rest ≈ ${usd.rest} = ${usd.total} of ${usd.budget}${unpriced}`);
+    return true;
+}
+
 /** The error of every failed outcome, in order. */
 function errorsOf(outcomes: readonly SummaryOutcome[]): string[] {
     return outcomes.flatMap((o) => (o.ok ? [] : [o.error]));
@@ -577,7 +657,7 @@ function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarize
     const notes: string[] = [];
 
     if (ctx.stopped !== null){
-        // the circuit breaker: still running if batches are at Anthropic (as after an error), failed otherwise
+        // the circuit breaker or the spend cap: still running if batches are at Anthropic (as after an error), failed otherwise
         state = result.inFlight > 0 ? "running" : "failed";
         notes.push(ctx.stopped);
         if (result.inFlight > 0) notes.push(stillAtAnthropic(result.inFlight));
@@ -625,6 +705,11 @@ function stillAtAnthropic(inFlight: number): string {
 
 function upToDate(targets: readonly PlannedTarget[]): number {
     return targets.filter((t) => t.state === "current" || t.state === "template").length;
+}
+
+/** The pass's targets in one state, as a new list. */
+function inState(snap: Snapshot, state: TargetState): PlannedTarget[] {
+    return snap.targets.filter((t) => t.state === state);
 }
 
 function messageOf(err: unknown): string {
