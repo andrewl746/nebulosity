@@ -251,7 +251,7 @@
 - New features arrive as lenses (Structure, History, Clusters), one active at a time, never as extra panels. Panels open only when needed.
 - The dark amethyst look stays, and React Flow + dagre stay.
 **Alternatives:** (a) Draw the whole graph with WebGL (sigma.js): it would render 100k dots nobody can read. (b) ADR-012's clustering above a 400-node budget: still allows 400 boxes, which is too dense to read. (c) A search-only UI: abandons the map, which is the product's identity.
-**Consequences:** Performance is bounded by design (≤ 50 nodes, ≤ 50 ms level loads), and there's a measured acceptance budget of ≤ 100 ms per interaction. Very large folders depend on the "+N more" behavior being good. The owner lifted the visual-design-frozen rule for this revamp.
+*(Look amended by ADR-041: light technical theme.)* **Consequences:** Performance is bounded by design (≤ 50 nodes, ≤ 50 ms level loads), and there's a measured acceptance budget of ≤ 100 ms per interaction. Very large folders depend on the "+N more" behavior being good. The owner lifted the visual-design-frozen rule for this revamp.
 **Revisit when:** users regularly need to compare boxes from different branches of the tree side by side. A pinned multi-level view would be the next step.
 
 ## ADR-030 — One tool registry, two adapters, and install-relative paths (2026-10-11)
@@ -502,3 +502,15 @@
 - ~~`server-only` marker inside `lib/scan.ts`~~ **Resolved 2026-07-13.** Removed outright (not relocated) once F1's test setup proved it throws in any non-Next.js Node context, including Vitest — which would have equally broken the future CLI and Electron adapters if "moved to the adapter layer" as originally planned. See `ARCHITECTURE.md` §3 rule 1 for the full reasoning.
 - ~~**Visual design is frozen** per the brief — functionality only from here.~~ **Lifted 2026-10-11** by the owner for the Map revamp (ADR-029). The dark amethyst identity stays and the layout is new.
 - **Scan scope allowlist (`app/`, `lib/`): resolved by the pivot.** Discovery starts at the repo root via `git ls-files` (`PIVOT_SPEC.md` §5.1).
+
+## ADR-041 — A light, technical theme with one warm accent replaces the dark amethyst look (2026-10-12) — amends ADR-029
+
+**Context:** ADR-029 kept the original dark amethyst look (dark background, starfield, purple glow). The owner found it hard to read and wanted a friendlier, clearly sectioned UI before the demo (V1.5). Five mockup rounds compared: pastel paper; a bold technical style with identical card layers; a bold style with a deep color per section; and three warm accents for selection.
+**Decision:**
+- **The look.** A light, bold, technical theme, fully specified in `VISUAL_REFRESH.md`: a cool gray page, white cards with 2px ink outlines and flat offset layers, monospace for data, and each section with its own deep color (navy Map, forest Overview, steel-blue Search, violet Activity).
+- **One warm accent.** Signal orange (`#E0662A`) is the only warm color. It means "what you selected", on the Map box and on the Details card, and nothing else.
+- **Consistent meaning.** A color means the same thing everywhere: violet is Claude's activity and steel blue is "used by the selection".
+- **Contrast.** Text on orange is ink, not white, for WCAG AA.
+**Alternatives:** (a) Pastel paper: friendly, but softer than the owner wanted for a dev tool. (b) One dark layer behind every card: strong, but the sections were indistinguishable. (c) Ochre, burnt orange or terracotta for selection: ochre was disliked, terracotta is calmer but stands out less, and signal orange makes the selection jump out. (d) A cool selection color: it would blur into the steel-blue "used by" boxes next to it.
+**Consequences:** A visual-only slice, V1.3.1: tokens in `app/globals.css`, restyled Map components, the starfield removed. APIs, data, behavior and performance budgets are unchanged, and S3 must still hold after the restyle. Violet keeps a thread of the original amethyst identity.
+**Revisit when:** a dark mode is requested. It should reuse the same section hues, adjusted for contrast, rather than bring back the old theme.
