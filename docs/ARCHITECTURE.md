@@ -103,6 +103,7 @@ nebulosity/
 │   ├── components/StarField.tsx
 │   └── layout.tsx · page.tsx · globals.css
 ├── instrumentation.ts       # starts the background worker with the server
+├── proxy.ts                 # every /api route: 403 unless the Host is this machine (ADR-039)
 ├── lib/
 │   ├── contracts.ts · config.ts · home.ts · embed.ts · chunks.ts
 │   ├── db/                  # schema, client, batch, store/{structure, summaries, summary-vectors, search, stages, lock, map, version}

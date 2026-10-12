@@ -475,6 +475,8 @@
 **Consequences:** No other machine can reach the Map, and no web page can make it spend money or move. Opening the Map from another device (a phone on the same network) would need a deliberate `-H 0.0.0.0` and a token, which is out of scope.
 **Revisit when:** the desktop app hosts the Map: the server then lives inside it and the guard moves to its IPC.
 
+**Amended (2026-10-12, V1.3 final review): every API route checks the Host.** Binding to loopback closes the network, but not DNS rebinding. A page whose host name rebinds to 127.0.0.1 is same-origin with itself, so it could read the whole index through the GET routes: Claude-written summaries, the file tree, symbol names and every indexed repo's absolute root. `allowedDevOrigins` covers only dev assets, and nothing under `next start`. A proxy (`proxy.ts`, Next 16's renamed middleware) runs before every `/api` route and answers `403 FORBIDDEN` unless the Host header names this machine (`isLocalHost`). The routes that change things still check the Origin as well.
+
 ## ADR-040 — Renderer-agnostic contracts (CONTRACTS_VERSION 2): the version names the API, migrations carry the data (2026-10-12)
 
 **Context:** `lib/contracts.ts` imported React Flow's `Node` and `Edge` for the old graph (`GraphResponse`), which tied the API to one renderer (PIVOT_SPEC.md §3, rule 3). V1.3 retires that graph, its routes and the Phase 2–4 chunk pipeline. The spec also said "a schema version mismatch triggers a rebuild": `meta.schemaVersion` was meant to wipe derived data on a contract change. Nothing ever implemented it, and the database now holds summaries that cost money to rebuild ($10.30 for VS Code).

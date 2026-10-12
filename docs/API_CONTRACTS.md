@@ -12,7 +12,7 @@
 - Base path `/api`. All bodies are JSON. All routes are same-origin (no CORS needed).
 - **Errors** (non-SSE routes): appropriate HTTP status + envelope
   `{ "error": { "code": string, "message": string } }`
-  Codes: `BAD_REQUEST` (400), `FORBIDDEN` (403), `NOT_FOUND` (404), `INDEX_EMPTY` (404), `INDEX_LOCKED` (409), `NOT_READY` (409), `SUMMARIES_OFF` (409), `BUDGET_EXCEEDED` (429), `UPSTREAM` (502) and `INTERNAL` (500). Route handlers map engine errors to codes by their type (`lib/engine/errors.ts`). `UPSTREAM` means Anthropic refused the API key (`SummarizerAuthError`).
+  Codes: `BAD_REQUEST` (400), `FORBIDDEN` (403), `NOT_FOUND` (404), `INDEX_EMPTY` (404), `INDEX_LOCKED` (409), `NOT_READY` (409), `SUMMARIES_OFF` (409), `BUDGET_EXCEEDED` (429), `UPSTREAM` (502) and `INTERNAL` (500). Route handlers map engine errors to codes by their type (`lib/engine/errors.ts`). `UPSTREAM` means Anthropic refused the API key (`SummarizerAuthError`). Every `/api` route answers `403 FORBIDDEN` when the `Host` header doesn't name this machine (`localhost`, `127.0.0.1` or `[::1]`, any port; `proxy.ts`, ADR-039 amended).
 - **SSE format:** standard `text/event-stream`:
   `event: <name>\ndata: <json>\n\n`
   Note for the UI implementer: the browser's `EventSource` API cannot send POST bodies. Consume SSE with `fetch` + `response.body.getReader()` and parse the stream manually (a small parser in the api-client module, ~30 lines).
