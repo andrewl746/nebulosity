@@ -91,8 +91,8 @@ function MapScreen(){
         setSelected(target);
     }, [open, levelPath]);
 
-    // show_on_map's highlights, as boxes of the level on screen
-    const highlighted = useMemo(
+    // Claude's focus (VISUAL_REFRESH.md §4): show_on_map's highlights, as boxes of the level on screen
+    const agent = useMemo(
         () => new Set(level === null ? [] : highlights.flatMap((p) => boxFor(level, p) ?? [])),
         [level, highlights],
     );
@@ -145,20 +145,20 @@ function MapScreen(){
                 onSearch={() => setPaletteOpen(true)}
                 status={<StatusPill status={status} />}
             />
-            <div className="pointer-events-auto relative z-10 flex h-9 items-center justify-between gap-4 border-b border-purple-500/10 bg-[#06070B]/40 px-4 backdrop-blur-md">
+            <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-hairline bg-canvas px-4">
                 {level && repo ? <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} /> : <span />}
                 {level && level.hiddenCount > 0 && (
-                    <span className="shrink-0 font-mono text-[10px] text-zinc-500">
+                    <span className="shrink-0 text-[12px] text-text-2">
                         {level.nodes.length - 1} of {level.nodes.length - 1 + level.hiddenCount} shown
                     </span>
                 )}
             </div>
             <main className="relative flex-1">
                 {level && (
-                    <MapCanvas level={level} selected={selected} highlighted={highlighted} pulses={pulses} onSelect={select} onOpen={open} onDrawn={onDrawn} />
+                    <MapCanvas level={level} selected={selected} agent={agent} pulses={pulses} onSelect={select} onOpen={open} onDrawn={onDrawn} />
                 )}
-                {!level && !levelError && <p className="absolute inset-0 grid place-items-center font-mono text-xs text-zinc-500">Loading the map…</p>}
-                {levelError && <p className="absolute inset-x-0 top-6 text-center font-mono text-xs text-red-300">{levelError.message}</p>}
+                {!level && !levelError && <p className="absolute inset-0 grid place-items-center text-[13px] text-text-2">Loading the map…</p>}
+                {levelError && <p className="absolute inset-x-0 top-6 text-center text-[13px] text-danger">{levelError.message}</p>}
                 {selected !== null && level && (
                     <DetailPanel
                         key={selected}
@@ -188,9 +188,9 @@ function MapScreen(){
 function EmptyState(){
     return (
         <div className="absolute inset-0 grid place-items-center">
-            <div className="max-w-md space-y-2 text-center font-mono text-xs text-zinc-400">
-                <p className="text-zinc-200">No repository indexed yet.</p>
-                <p>Index one from a terminal, then reload: <code className="text-purple-200">npm run index -- &lt;path-to-repo&gt;</code></p>
+            <div className="max-w-md space-y-2 text-center text-[14px] text-text-2">
+                <p className="text-[15px] font-medium text-text">No repository indexed yet.</p>
+                <p>Index one from a terminal, then reload: <code className="rounded-md bg-surface px-1 font-mono text-[13px] text-text">npm run index -- &lt;path-to-repo&gt;</code></p>
             </div>
         </div>
     );

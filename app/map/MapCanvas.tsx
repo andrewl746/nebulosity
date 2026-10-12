@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Background, BackgroundVariant, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow,
+    ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow,
     type Edge, type EdgeMouseHandler, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
-import { edgeKey, mapEmphasis } from "./emphasis";
+import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
 import { formatCount } from "./format";
+import Legend from "./Legend";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel } from "./levelLayout";
 import MapBox, { type BoxNode } from "./MapBox";
 import type { Pulse } from "./pulses";
@@ -16,11 +18,22 @@ import type { Pulse } from "./pulses";
 // at module scope: a new object per render would make React Flow remount every box
 const nodeTypes: NodeTypes = { box: MapBox };
 
+/** A level fits the screen with room around it, and a small level isn't blown up past 100% (VISUAL_REFRESH.md §4). */
+const FIT = { padding: 0.15, maxZoom: 1 } as const;
+
+/** Each line's look per tone (VISUAL_REFRESH.md §4): 1 px slate normally, 2 px purple for the selection's links. */
+const EDGE_STYLES: Record<EdgeTone, { stroke: string; width: number; opacity: number; layer: number }> = {
+    normal: { stroke: "var(--neutral-edge)", width: 1, opacity: 1, layer: 0 },
+    faded: { stroke: "var(--neutral-edge)", width: 1, opacity: 0.35, layer: 0 },
+    preview: { stroke: "var(--text-2)", width: 1.5, opacity: 1, layer: 1 },
+    selected: { stroke: "var(--select)", width: 2, opacity: 1, layer: 2 },
+};
+
 type MapCanvasProps = {
     level: LevelResponse;
     selected: string | null;
-    /** Boxes a show_on_map highlight points at (Task 20). */
-    highlighted: ReadonlySet<string>;
+    /** Boxes Claude Code is touching right now: recent tool calls and show_on_map highlights. */
+    agent: ReadonlySet<string>;
     pulses: ReadonlyMap<string, Pulse>;
     onSelect: (path: string | null) => void;
     onOpen: (folder: string) => void;
@@ -29,13 +42,19 @@ type MapCanvasProps = {
 };
 
 /**
- * The canvas (PIVOT_SPEC.md §7): one level's boxes, laid out by dagre, and the lines between them. A click selects
- * and a double-click opens a folder. The selected box's lines are drawn at full strength, the rest ghosted, and
- * hovering a line shows its count. React Flow stays controlled with the StrictMode workaround in next.config.ts.
+ * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line. A
+ * click selects and a double click opens a folder. The selection's lines turn purple and unrelated boxes fade;
+ * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
+ * controlled with the StrictMode workaround in next.config.ts.
  */
-export default function MapCanvas({ level, selected, highlighted, pulses, onSelect, onOpen, onDrawn }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }: MapCanvasProps){
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
-    const [hovered, setHovered] = useState<string | null>(null);
+    const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
+    const [hoveredBox, setHoveredBox] = useState<string | null>(null);
+    const emphasis = useMemo(
+        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox),
+        [level, selected, hoveredBox],
+    );
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const { fitView } = useReactFlow();
@@ -56,29 +75,33 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
             height: BOX_HEIGHT,
             draggable: false,
             connectable: false,
-            data: { box, selected: box.path === selected, highlighted: highlighted.has(box.path), pulseKey: pulses.get(box.path)?.key ?? 0 },
+            data: { box, tone: emphasis.boxes.get(box.path) ?? "normal", agent: agent.has(box.path), pulseKey: pulses.get(box.path)?.key ?? 0 },
         })));
-    }, [level, positions, selected, highlighted, pulses, setNodes]);
+    }, [level, positions, emphasis, agent, pulses, setNodes]);
 
     useEffect(() => {
-        const tones = mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, null).edges;
-        setEdges(level.edges.map((edge) => {
+        const drawn = level.edges.map((edge) => {
             const id = edgeKey(edge);
-            const tone = tones.get(id);
-            const stroke = `rgba(168, 85, 247, ${tone === "selected" ? 0.95 : tone === "faded" ? 0.06 : 0.3})`;
+            const look = EDGE_STYLES[emphasis.edges.get(id) ?? "normal"];
             return {
                 id,
                 source: edge.source,
                 target: edge.target,
                 focusable: false,
-                label: hovered === id ? `${formatCount(edge.count)} import${edge.count === 1 ? "" : "s"}` : undefined,
-                labelStyle: { fill: "#e4e4e7", fontSize: 11 },
-                labelBgStyle: { fill: "#0c0716", fillOpacity: 0.9 },
-                style: { stroke, strokeWidth: tone === "selected" ? 2 : 1 },
-                markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: stroke },
+                zIndex: look.layer,
+                label: hoveredEdge === id ? `${formatCount(edge.count)} import${edge.count === 1 ? "" : "s"}` : undefined,
+                labelStyle: { fill: "var(--text)", fontSize: 12 },
+                labelBgStyle: { fill: "var(--surface)" },
+                labelBgPadding: [6, 3] as [number, number],
+                labelBgBorderRadius: 6,
+                style: { stroke: look.stroke, strokeWidth: look.width, opacity: look.opacity },
+                // userSpaceOnUse: the arrowhead stays the same size whatever the line's width
+                markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: look.stroke, markerUnits: "userSpaceOnUse" },
             };
-        }));
-    }, [level, selected, hovered, setEdges]);
+        });
+        // the emphasized lines go last, so they're drawn over the quiet ones they cross
+        setEdges(drawn.sort((a, b) => a.zIndex - b.zIndex));
+    }, [level, emphasis, hoveredEdge, setEdges]);
 
     // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
     // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
@@ -92,7 +115,7 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
         if (!arrived) return;
         const frame = requestAnimationFrame(() => {
             fittedKey.current = levelKey;
-            void fitViewRef.current({ padding: 0.12, duration: 0 });
+            void fitViewRef.current({ ...FIT, duration: 0 });
             onDrawnRef.current();
         });
         return () => cancelAnimationFrame(frame);
@@ -102,8 +125,15 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
     const onNodeDoubleClick: NodeMouseHandler<BoxNode> = (_, node) => {
         if (node.data.box.kind === "folder") onOpen(node.id);
     };
-    const onEdgeMouseEnter: EdgeMouseHandler = (_, edge) => setHovered(edge.id);
-    const onEdgeMouseLeave: EdgeMouseHandler = () => setHovered(null);
+    const onNodeMouseEnter: NodeMouseHandler<BoxNode> = (_, node) => setHoveredBox(node.id);
+    const onNodeMouseLeave: NodeMouseHandler<BoxNode> = () => setHoveredBox(null);
+    const onEdgeMouseEnter: EdgeMouseHandler = (_, edge) => setHoveredEdge(edge.id);
+    const onEdgeMouseLeave: EdgeMouseHandler = () => setHoveredEdge(null);
+    /** Reset focus (§4): let go of the selection and the fade it brings. */
+    const resetFocus = (): void => {
+        setHoveredBox(null);
+        onSelect(null);
+    };
 
     return (
         <ReactFlow
@@ -114,6 +144,8 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
             nodeTypes={nodeTypes}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
+            onNodeMouseEnter={onNodeMouseEnter}
+            onNodeMouseLeave={onNodeMouseLeave}
             onPaneClick={() => onSelect(null)}
             onEdgeMouseEnter={onEdgeMouseEnter}
             onEdgeMouseLeave={onEdgeMouseLeave}
@@ -123,14 +155,16 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
             minZoom={0.1}
             maxZoom={2}
             colorMode="dark"
-            className="!bg-transparent"
         >
-            <Background bgColor="transparent" variant={BackgroundVariant.Lines} gap={48} lineWidth={0.5} color="rgba(157, 80, 221, 0.10)" />
-            <Controls
-                position="bottom-right"
-                showInteractive={false}
-                className="!rounded-none !border !border-purple-500/20 !bg-[#0c0716]/80 !shadow-none backdrop-blur-xl"
-            />
+            <Legend />
+            <Controls position="bottom-right" showInteractive={false} fitViewOptions={FIT} className="overflow-hidden rounded-lg border border-border">
+                <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
+                    <IconFocusCentered aria-hidden size={16} stroke={1.75} />
+                </ControlButton>
+            </Controls>
         </ReactFlow>
     );
 }
+
+// memo: the Map's clock ticks while Claude Code is active, and the canvas shouldn't redraw for it
+export default memo(MapCanvas);
