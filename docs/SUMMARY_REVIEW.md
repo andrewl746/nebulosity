@@ -254,7 +254,7 @@ Folder inputs are assumed to be about 1,000 tokens each, since a folder lists it
 
 ### Owner's verdict
 
-_To fill in: which model writes the file summaries, whether the prompt or the effort needs changing first, and go or no-go for the full Batch run._
+> **Owner's verdict (2026-10-11):** Before the full run: group the "Imported by" examples by area with spec §4.2's used-by rule, and preview the folder prompt on 10 varied VS Code folders (files with Haiku, then folders with Sonnet) as Review #3. Then stop for the owner.
 
 ## 2026 10 11 Summary Review #3 — folder preview: claude-haiku-5-5 files and claude-sonnet-5-5 folders on 10 folders of vscode
 
@@ -582,4 +582,4 @@ _build tooling, not product code_
 
 ### Owner's verdict
 
-_To fill in: go or no-go for the full run, and any prompt changes first._
+> **Owner's verdict (2026-10-11):** Go, with test-only folders templated like test files (ADR-034). First make sure a cut-off summary is never stored (detect it, retry with a higher limit, test it, and re-run `configurationService.ts` to confirm), and fix the ".." ending. No new review; run Task 12.
