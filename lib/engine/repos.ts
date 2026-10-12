@@ -3,6 +3,7 @@ import type { RepoList } from "../contracts";
 import { readConfig, writeConfig } from "../config";
 import { getDb } from "../db/client";
 import { listStagedRepositories } from "../db/store/stages";
+import { readRepoRemote } from "./git-remote";
 
 /** Thrown when the picker names a repo that was never indexed. */
 export class UnknownRepoError extends Error {
@@ -12,13 +13,20 @@ export class UnknownRepoError extends Error {
     }
 }
 
-/** The repos the Map can show, and which one is active (PIVOT_SPEC.md §7.1: a picker when more than one is indexed). */
+/**
+ * The repos the Map can show, and which one is active (PIVOT_SPEC.md §7.1: a picker when more than one is indexed).
+ * Each carries its origin's owner and name when it has one, for the top bar (VISUAL_REFRESH.md §6).
+ */
 export function listRepos(): RepoList {
-    const repos = listStagedRepositories(getDb()).map((r) => ({
-        root: r.rootPath,
-        name: path.basename(r.rootPath),
-        indexedAt: r.lastIndexAt?.toISOString() ?? null,
-    }));
+    const repos = listStagedRepositories(getDb()).map((r) => {
+        const remote = readRepoRemote(r.rootPath);
+        return {
+            root: r.rootPath,
+            name: path.basename(r.rootPath),
+            indexedAt: r.lastIndexAt?.toISOString() ?? null,
+            ...(remote ? { remote } : {}),
+        };
+    });
     return { active: readConfig().activeRepo, repos };
 }
 

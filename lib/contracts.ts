@@ -134,8 +134,17 @@ export type SummarizeResponse = {
   summaryError?: string;
 };
 
+/** Where a repo was cloned from: its origin remote's owner and name ("microsoft" / "vscode") — docs/API_CONTRACTS.md §15 */
+export type RepoRemote = { owner: string; name: string };
+
 /** One repo the Map can show — docs/API_CONTRACTS.md §15 */
-export type RepoSummary = { root: string; name: string; indexedAt: string | null };
+export type RepoSummary = {
+  root: string;
+  name: string;
+  indexedAt: string | null;
+  /** The origin remote, when the repo has one the top bar can show as "owner / repo" (added in V1.3.1). */
+  remote?: RepoRemote;
+};
 
 /** GET /api/repos — docs/API_CONTRACTS.md §15 */
 export type RepoList = { active: string | null; repos: RepoSummary[] };
