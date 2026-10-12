@@ -410,7 +410,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, and ADR-036 to ADR-040 during V1.3:
 
 | ADR | Decision |
 |---|---|
@@ -426,6 +426,11 @@ Each v1 slice ends demoable:
 | ADR-033 | Summary runs: bottom-up waves, the Batch API for 100+ requests and the regular API below, batch ids on the summary rows, a circuit breaker and a `summarizing` lock |
 | ADR-034 | Summary prompt v2: Haiku 5.5 for files, 3 to 6 word taglines kept whole up to 8, importers in the prompt but not the hash, whole summaries only (one retry), test-only folders templated |
 | ADR-035 | A spend cap: before each submission, project spent + at Anthropic + this submission + the rest, and stop sending past `--budget` (default $15); batches already at Anthropic are still collected |
+| ADR-036 | The Map reads one level at a time: children in size order, a 50-box fold with a `<level>/` "+N more" box, an index version for caching and refetching, area counts from an in-memory import graph |
+| ADR-037 | Incremental structure updates re-resolve only what can have changed and write only the differences, with level edges moved by ±1 per import |
+| ADR-038 | A forked background worker owns the index while the Map is open: watcher, incremental updates, summary refresh (60 s, ≤ 50 files), a folder sweep, sliced embeddings |
+| ADR-039 | The live channel: SSE out, a localhost-only POST in (Host and Origin checked), the server bound to loopback |
+| ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2); the version names the API and migrations carry the data |
 
 ## 16. Doc migration
 
