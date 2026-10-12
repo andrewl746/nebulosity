@@ -18,7 +18,6 @@
  * - --release-batch <batch id> (repeatable) gives up on a batch whose results keep failing to download: its
  *   requests are sent again in this run, and paid for again. The summaries stage's note names such a batch.
  */
-import Anthropic from "@anthropic-ai/sdk";
 import path from "path";
 import { getDb } from "../lib/db/client";
 import { IndexLockedError } from "../lib/db/store/lock";
@@ -27,13 +26,13 @@ import { RepoNotIndexedError, requireRepository } from "../lib/db/store/structur
 import { loadUsage } from "../lib/db/store/summaries";
 import { embedSummaries } from "../lib/index/embed";
 import { repoKey } from "../lib/index/paths";
-import { createClaudeSummarizer } from "../lib/index/summarize/claude";
+import { summarizerFromEnv } from "../lib/index/summarize/claude";
 import { costUsd } from "../lib/index/summarize/pricing";
 import {
     BatchesUnreachableError, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError,
     TargetNotReadyError, UnknownBatchError, type Transport,
 } from "../lib/index/summarize/run";
-import { hasAnthropicKey, loadLocalEnv } from "./env";
+import { loadLocalEnv } from "./env";
 
 loadLocalEnv();
 
@@ -87,7 +86,7 @@ const root = path.resolve(target);
 const onePath = values.get("--path") ?? null;
 const transport: Transport = switches.has("--direct") ? "direct" : switches.has("--batch") ? "batch" : "auto";
 const say = (message: string): void => console.log(`[summarize] ${message}`);
-const summarizer = hasAnthropicKey() ? createClaudeSummarizer(new Anthropic({ maxRetries: 3 })) : null;
+const summarizer = summarizerFromEnv();
 
 async function main(): Promise<void> {
     if (onePath !== null){

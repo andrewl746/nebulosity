@@ -174,9 +174,12 @@ export type DescribeResponse = {
 
 export type ErrorCode =
   | "BAD_REQUEST"
+  | "FORBIDDEN"
   | "NOT_FOUND"
   | "INDEX_EMPTY"
   | "INDEX_LOCKED"
+  | "NOT_READY"
+  | "SUMMARIES_OFF"
   | "BUDGET_EXCEEDED"
   | "UPSTREAM"
   | "INTERNAL";

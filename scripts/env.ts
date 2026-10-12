@@ -1,4 +1,5 @@
 import { nebulosityPath } from "../lib/home";
+import { summariesEnabled } from "../lib/index/summarize/env";
 
 /** tsx doesn't read .env.local the way Next does, and that's where ANTHROPIC_API_KEY lives. */
 export function loadLocalEnv(): void {
@@ -11,5 +12,5 @@ export function loadLocalEnv(): void {
 
 /** Summaries need a key. Without one the stage reports "off", and everything else still works. */
 export function hasAnthropicKey(): boolean {
-    return Boolean(process.env.ANTHROPIC_API_KEY);
+    return summariesEnabled();
 }

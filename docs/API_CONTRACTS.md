@@ -12,7 +12,7 @@
 - Base path `/api`. All bodies are JSON. All routes are same-origin (no CORS needed).
 - **Errors** (non-SSE routes): appropriate HTTP status + envelope
   `{ "error": { "code": string, "message": string } }`
-  Codes: `BAD_REQUEST`, `NOT_FOUND`, `INDEX_EMPTY`, `INDEX_LOCKED`, `INTERNAL`.
+  Codes: `BAD_REQUEST` (400), `FORBIDDEN` (403), `NOT_FOUND` (404), `INDEX_EMPTY` (404), `INDEX_LOCKED` (409), `NOT_READY` (409), `SUMMARIES_OFF` (409), `BUDGET_EXCEEDED` (429), `UPSTREAM` (502) and `INTERNAL` (500). Route handlers map engine errors to codes by their type (`lib/engine/errors.ts`). `UPSTREAM` means Anthropic refused the API key (`SummarizerAuthError`).
 - **SSE format:** standard `text/event-stream`:
   `event: <name>\ndata: <json>\n\n`
   Note for the UI implementer: the browser's `EventSource` API cannot send POST bodies. Consume SSE with `fetch` + `response.body.getReader()` and parse the stream manually (a small parser in the api-client module, ~30 lines).
@@ -144,6 +144,8 @@ data: {}
 
 ## 6. GET /api/search?q=… — debug endpoint
 
+> **Retired in V1.3:** `GET /api/search` now serves §10's `SearchResult`.
+
 Raw retrieval without the agent — exists so Phase 4 can be verified before Phase 5, and stays as a permanent debugging tool.
 
 **Response 200:** `{ results: (CodeChunk & { score: number })[] }` (top-k, same pipeline the `search_code` tool uses).
@@ -182,7 +184,7 @@ type IndexStatus = { repo: string; stages: Record<StageName, StageStatus>; index
 
 ## 10. Search results (slice V1.2)
 
-The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. In V1.2 only `npm run search` shows it. `GET /api/search` serves it from V1.3, and the MCP `search` tool formats it as text in V1.4.
+The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. `GET /api/search?q=&limit=` serves it (V1.3; `limit` 1–50, default 10), and V1.4's MCP `search` tool formats it as text. `400 BAD_REQUEST` without `q`, `404 INDEX_EMPTY` without an active repo.
 
 ```ts
 type SearchList = "code" | "summary" | "vector";
