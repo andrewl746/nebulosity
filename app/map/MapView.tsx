@@ -1,23 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import type { LevelResponse } from "@/lib/contracts";
+import type { LevelResponse, LiveEvent } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import Breadcrumb from "./Breadcrumb";
 import DetailPanel from "./DetailPanel";
+import LiveDock from "./LiveDock";
 import MapCanvas from "./MapCanvas";
-import { parentOf } from "./paths";
+import { boxFor, parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
-import type { Pulse } from "./pulses";
-import TopBar from "./TopBar";
+import { nextPulses, type Pulse } from "./pulses";
+import RepoMenu from "./RepoMenu";
 import SearchPalette from "./SearchPalette";
+import StatusPill from "./StatusPill";
+import TopBar from "./TopBar";
 import { useIndexStatus } from "./useIndexStatus";
+import { useLive } from "./useLive";
 
 /** Levels fetched for one repo and index version (ADR-036): going back up a level is instant until the index moves. */
 type LevelCache = { repo: string; version: number; levels: ReadonlyMap<string, LevelResponse> };
-
-const NO_PULSES: ReadonlyMap<string, Pulse> = new Map();
 
 /** The Map (PIVOT_SPEC.md §7): the page's one client component. */
 export default function MapView(){
@@ -29,12 +31,14 @@ export default function MapView(){
 }
 
 function MapScreen(){
-    const { status, error: statusError } = useIndexStatus();
+    const { status, error: statusError, refresh } = useIndexStatus();
     const [levelPath, setLevelPath] = useState("");
     const [cache, setCache] = useState<LevelCache | null>(null);
     const [levelError, setLevelError] = useState<ApiError | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
     const [paletteOpen, setPaletteOpen] = useState(false);
+    const [highlights, setHighlights] = useState<readonly string[]>([]);
+    const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
 
     const repo = status?.repo ?? null;
     const version = status?.indexVersion ?? null;
@@ -87,6 +91,32 @@ function MapScreen(){
         setSelected(target);
     }, [open, levelPath]);
 
+    // show_on_map's highlights, as boxes of the level on screen
+    const highlighted = useMemo(
+        () => new Set(level === null ? [] : highlights.flatMap((p) => boxFor(level, p) ?? [])),
+        [level, highlights],
+    );
+
+    /** A tool call from Claude Code (PIVOT_SPEC.md §8): pulse the boxes it touched, and run its UI action. */
+    const onLive = useCallback((event: LiveEvent) => {
+        if (level !== null){
+            const boxes = event.paths.flatMap((p) => boxFor(level, p) ?? []);
+            setPulses((state) => nextPulses(state, boxes, Date.now()));
+        }
+        const action = event.action;
+        if (action?.type === "highlight_nodes") setHighlights(action.nodeIds);
+        else if (action?.type === "clear_highlights") setHighlights([]);
+        else if (action?.type === "focus_node") focus(action.nodeId);
+    }, [level, focus]);
+    const live = useLive(onLive);
+
+    const onSwitched = useCallback(() => {
+        setLevelPath("");
+        setSelected(null);
+        setHighlights([]);
+        refresh();
+    }, [refresh]);
+
     const onDrawn = useCallback(() => measureAfterPaint("map:level"), []);
 
     // Escape lets go of the selection, Backspace goes up a level, unless the user is typing
@@ -110,7 +140,11 @@ function MapScreen(){
 
     return (
         <div className="absolute inset-0 flex flex-col">
-            <TopBar repo={<span className="truncate font-mono text-[11px] uppercase tracking-[0.3em] text-zinc-300">{repo ? repo.slice(repo.lastIndexOf("/") + 1) : "…"}</span>} onSearch={() => setPaletteOpen(true)} />
+            <TopBar
+                repo={repo ? <RepoMenu repo={repo} onSwitched={onSwitched} /> : null}
+                onSearch={() => setPaletteOpen(true)}
+                status={<StatusPill status={status} />}
+            />
             <div className="pointer-events-auto relative z-10 flex h-9 items-center justify-between gap-4 border-b border-purple-500/10 bg-[#06070B]/40 px-4 backdrop-blur-md">
                 {level && repo ? <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} /> : <span />}
                 {level && level.hiddenCount > 0 && (
@@ -121,7 +155,7 @@ function MapScreen(){
             </div>
             <main className="relative flex-1">
                 {level && (
-                    <MapCanvas level={level} selected={selected} highlighted={new Set()} pulses={NO_PULSES} onSelect={select} onOpen={open} onDrawn={onDrawn} />
+                    <MapCanvas level={level} selected={selected} highlighted={highlighted} pulses={pulses} onSelect={select} onOpen={open} onDrawn={onDrawn} />
                 )}
                 {!level && !levelError && <p className="absolute inset-0 grid place-items-center font-mono text-xs text-zinc-500">Loading the map…</p>}
                 {levelError && <p className="absolute inset-x-0 top-6 text-center font-mono text-xs text-red-300">{levelError.message}</p>}
@@ -136,6 +170,7 @@ function MapScreen(){
                         onClose={() => setSelected(null)}
                     />
                 )}
+                <LiveDock last={live.last} connected={live.connected} />
             </main>
             {paletteOpen && (
                 <SearchPalette
