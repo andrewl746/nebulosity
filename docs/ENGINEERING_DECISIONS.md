@@ -251,7 +251,7 @@
 - New features arrive as lenses (Structure, History, Clusters), one active at a time, never as extra panels. Panels open only when needed.
 - The dark amethyst look stays, and React Flow + dagre stay.
 **Alternatives:** (a) Draw the whole graph with WebGL (sigma.js): it would render 100k dots nobody can read. (b) ADR-012's clustering above a 400-node budget: still allows 400 boxes, which is too dense to read. (c) A search-only UI: abandons the map, which is the product's identity.
-*(Look amended by ADR-041: light technical theme.)* **Consequences:** Performance is bounded by design (≤ 50 nodes, ≤ 50 ms level loads), and there's a measured acceptance budget of ≤ 100 ms per interaction. Very large folders depend on the "+N more" behavior being good. The owner lifted the visual-design-frozen rule for this revamp.
+*(Look amended by ADR-041: refined dark theme.)* **Consequences:** Performance is bounded by design (≤ 50 nodes, ≤ 50 ms level loads), and there's a measured acceptance budget of ≤ 100 ms per interaction. Very large folders depend on the "+N more" behavior being good. The owner lifted the visual-design-frozen rule for this revamp.
 **Revisit when:** users regularly need to compare boxes from different branches of the tree side by side. A pinned multi-level view would be the next step.
 
 ## ADR-030 — One tool registry, two adapters, and install-relative paths (2026-10-11)
@@ -503,14 +503,24 @@
 - ~~**Visual design is frozen** per the brief — functionality only from here.~~ **Lifted 2026-10-11** by the owner for the Map revamp (ADR-029). The dark amethyst identity stays and the layout is new.
 - **Scan scope allowlist (`app/`, `lib/`): resolved by the pivot.** Discovery starts at the repo root via `git ls-files` (`PIVOT_SPEC.md` §5.1).
 
-## ADR-041 — A light, technical theme with one warm accent replaces the dark amethyst look (2026-10-12) — amends ADR-029
+## ADR-041 — The Map's dark theme is refined for readability: quiet canvas, larger boxes, one meaning per color (2026-10-12) — amends ADR-029
 
-**Context:** ADR-029 kept the original dark amethyst look (dark background, starfield, purple glow). The owner found it hard to read and wanted a friendlier, clearly sectioned UI before the demo (V1.5). Five mockup rounds compared: pastel paper; a bold technical style with identical card layers; a bold style with a deep color per section; and three warm accents for selection.
-**Decision:**
-- **The look.** A light, bold, technical theme, fully specified in `VISUAL_REFRESH.md`: a cool gray page, white cards with 2px ink outlines and flat offset layers, monospace for data, and each section with its own deep color (navy Map, forest Overview, steel-blue Search, violet Activity).
-- **One warm accent.** Signal orange (`#E0662A`) is the only warm color. It means "what you selected", on the Map box and on the Details card, and nothing else.
-- **Consistent meaning.** A color means the same thing everywhere: violet is Claude's activity and steel blue is "used by the selection".
-- **Contrast.** Text on orange is ink, not white, for WCAG AA.
-**Alternatives:** (a) Pastel paper: friendly, but softer than the owner wanted for a dev tool. (b) One dark layer behind every card: strong, but the sections were indistinguishable. (c) Ochre, burnt orange or terracotta for selection: ochre was disliked, terracotta is calmer but stands out less, and signal orange makes the selection jump out. (d) A cool selection color: it would blur into the steel-blue "used by" boxes next to it.
-**Consequences:** A visual-only slice, V1.3.1: tokens in `app/globals.css`, restyled Map components, the starfield removed. APIs, data, behavior and performance budgets are unchanged, and S3 must still hold after the restyle. Violet keeps a thread of the original amethyst identity.
-**Revisit when:** a dark mode is requested. It should reuse the same section hues, adjusted for contrast, rather than bring back the old theme.
+**Context:** ADR-029 kept the original dark amethyst look. On the real V1.3 screen, the owner found it hard to read:
+- a starfield, grid, purple haze and glowing edges competing with the content;
+- 9–10 px monospace box text, with a description in every box;
+- purple used for everything;
+- a details panel that was one dense monospace paragraph showing literal backticks, and took about 5 s to open for `src`.
+
+Light themes were mocked up in five rounds (pastel paper, then bold technical with signal orange). They were dropped the same day, before implementation, because they changed the styling without fixing the hierarchy, and the offset-card style read as generated.
+**Decision:** keep the dark identity and fix hierarchy and interaction, fully specified in `VISUAL_REFRESH.md`:
+- **Canvas:** a flat charcoal canvas with no stars, haze or glow.
+- **Boxes:** larger, simpler boxes (name plus count plus a folder or file icon); summaries move to the panel.
+- **Colors, one meaning each:** purple for the selection and its links, orange for Claude Code's activity, slate for neutral, green for indexing status only.
+- **Map behavior:** unrelated boxes fade to about 60%, every edge has a directional arrow, hover previews a box's connections, double click drills into a folder.
+- **Panel:** a structured, actionable panel with clickable relationships, child folders and expandable summaries.
+- **Top bar and activity:** a clearer top bar, and a slim activity bar that's always visible and shows Claude's last 3 actions.
+- **One system** of radius, type scale and spacing.
+- **Speed:** opening the `src` panel goes from about 5 s to ≤ 300 ms warm.
+**Alternatives:** (a) The light technical theme (the first draft of this ADR): cleaner than V1.3, but it treated the problem as a palette problem. (b) Keep V1.3 as is: unreadable at a glance, which defeats the product's purpose. (c) A collapsible activity panel: hides the demo's differentiator, so it's kept slim and always visible instead.
+**Consequences:** One slice, V1.3.1: tokens in `app/globals.css`, restyled Map components, interaction additions (hover, double click, focus from panel chips, reset), and a `describe` speed fix. S3 must still hold. A three-task test with an unfamiliar user is part of acceptance.
+**Revisit when:** the three-task test shows people still can't tell what an edge means, at which point the problem is the data shown, not the styling.
