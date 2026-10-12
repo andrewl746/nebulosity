@@ -409,7 +409,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2:
 
 | ADR | Decision |
 |---|---|
@@ -420,6 +420,11 @@ Each v1 slice ends demoable:
 | ADR-028 | Tiered summaries (Haiku 5.5 files, Sonnet 5.5 folders), Batch for the first pass, lazy folder refresh |
 | ADR-029 | The Map: levels, lenses and on-demand panels, with a 50-box cap; aggregated `level_edges` |
 | ADR-030 | One tool registry, two adapters (MCP for external agents, in-process for the Guide); install-relative paths |
+| ADR-031 | The FTS5 indexes (`code_fts`, `summary_fts`) are kept in sync by triggers, so cascades and the old pipeline can't leave stale search rows; a chunk's camelCase name split is stored on the chunk |
+| ADR-032 | Stage status lives in `meta`, written at least once a minute while running; a `running` stage silent for 5 minutes reads as failed, unless batches are still at Anthropic |
+| ADR-033 | Summary runs: bottom-up waves, the Batch API for 100+ requests and the regular API below, batch ids on the summary rows, a circuit breaker and a `summarizing` lock |
+| ADR-034 | Summary prompt v2: Haiku 5.5 for files, 3 to 6 word taglines kept whole up to 8, importers in the prompt but not the hash, whole summaries only (one retry), test-only folders templated |
+| ADR-035 | A spend cap: before each submission, project spent + at Anthropic + this submission + the rest, and stop sending past `--budget` (default $15); batches already at Anthropic are still collected |
 
 ## 16. Doc migration
 
