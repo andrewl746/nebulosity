@@ -127,4 +127,4 @@ Folder inputs are assumed to be about 1,000 tokens each, since a folder lists it
 
 ### Owner's verdict
 
-_To fill in: which model writes the file summaries, whether the prompt or the effort needs changing first, and go or no-go for the full Batch run._
+> **Owner's verdict (2026-10-11):** Haiku 5.5 writes the file summaries; effort stays low. Before the full run, prompt v2 (`PROMPT_VERSION` 2): a 3–6 word noun-phrase tagline with an example; "don't mention truncation or code you weren't shown" replaces the truncation instruction; each file's import count and top importer folders from the graph; identifiers in backticks; taglines kept whole up to 8 words instead of cut at 6 (ADR-034). Then Review #2 on the same 20 files. Go for the full Batch run (Haiku files, Sonnet folders and the repo) once Review #2 is approved, stopping before any batch that would take the spend so far plus the remaining estimate past $15.

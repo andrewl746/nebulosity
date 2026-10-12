@@ -1,6 +1,6 @@
 # RAG_PIPELINE.md — Understanding and Search
 
-> **2026-10-11 — rewritten in slice V1.2** for the pivot (`PIVOT_SPEC.md` §5.3–5.4, §6.1; ADR-027, ADR-028, ADR-031, ADR-033). Chunk-level embeddings are gone. Search fuses code keywords, summary keywords and summary meaning. §2–3 (chunking) carry over unchanged from the Phase 2 design.
+> **2026-10-11 — rewritten in slice V1.2** for the pivot (`PIVOT_SPEC.md` §5.3–5.4, §6.1; ADR-027, ADR-028, ADR-031, ADR-033, ADR-034). Chunk-level embeddings are gone. Search fuses code keywords, summary keywords and summary meaning. §2–3 (chunking) carry over unchanged from the Phase 2 design.
 
 **Status:** Implemented (V1.2)
 **Depends on:** `DATABASE_DESIGN.md` §7–8, `ENGINEERING_DECISIONS.md` ADR-004/005/017/027/028/031/033
@@ -72,14 +72,18 @@ type CodeChunk = {
 ## 4. Summaries
 
 **What gets one.** Every file, every folder, and the repo itself (`PIVOT_SPEC.md` §5.3).
-- **Files** go to `claude-haiku-5-5`. The prompt is the file's generated imports/exports listing (the file-summary chunk), its line count, and its source cut to about 6k tokens (20,000 characters, at a line break).
+- **Files** go to `claude-haiku-5-5`. The prompt is the file's generated imports/exports listing (the file-summary chunk), its line count, who imports it, and its source cut to about 6k tokens (20,000 characters, at a line break). "Who imports it" is one line from the import graph, for example `Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders`: the total, then the 3 folders with the most importers (ties by folder path; a top-level file's folder is `the repo root`), then a count of the rest. A file nothing imports gets `Imported by: no other indexed file`. The model uses it to say how widely, and where, the file is used.
 - **Folders** go to `claude-sonnet-5-5`, written bottom-up from their children's taglines and summaries. The 50 largest children are listed (by lines of code), plus "…and N smaller items".
 - **The repo** goes to `claude-sonnet-5-5`, from its top-level folders and files.
 - **Test files** skip the model and get a template (`Tests for strings`, status `skipped`).
 
-**Settings.** Effort `low` and adaptive thinking (the models' default). Structured outputs force `{ tagline, summary }`, and the tagline is cut to 6 words in code. `max_tokens` is 4,096.
+**Settings.** Effort `low` and adaptive thinking (the models' default). Structured outputs force `{ tagline, summary }`. `max_tokens` is 4,096.
 
-**inputHash = hash(model, PROMPT_VERSION, input).** Identical input is never summarized twice, and bumping `PROMPT_VERSION` redoes everything on purpose. For a file, the content hash stands in for the prompt (the prompt is a pure function of the bytes), so planning never reads source files.
+**Prompt v2 (ADR-034).** `PROMPT_VERSION` is 2. All three system prompts ask for a noun phrase of 3 to 6 plain words as the tagline, with an example that isn't from VS Code, and for names in the summary in backticks. The file prompt also explains the `Imported by` line, and tells the model not to mention truncation or code it wasn't shown (the source is still cut at about 6k tokens).
+
+**Taglines.** 3–6 words are asked for and up to 8 are kept whole, because a hard cut at 6 sliced 7–8 of Review #1's 20 Haiku taglines mid-phrase. In code (`cleanTagline`): backticks are removed (the UI shows plain text); a tagline of 8 words or fewer is kept as it is; a longer one is cut to its first 8 words, then loses the connector words it now ends on (`a an the and or of for to in on with via by from at as`, any case, never the first word); trailing `.`, `,`, `;` and `:` are stripped. A reply with no tagline left is an error, like one with no summary.
+
+**inputHash = hash(model, PROMPT_VERSION, input).** Identical input is never summarized twice, and bumping `PROMPT_VERSION` redoes everything on purpose. For a file, the input is its path and content hash, so planning never reads source files. The `Imported by` line comes from the graph and is **not** in the hash (ADR-034): a new importer would otherwise re-summarize a central file on every `git pull`. The cost is that a file's usage sentence reflects the graph as it was when the file was last summarized.
 
 **States** come from a pure planner (`planSummaries`): `current`, `template`, `ready`, `waiting` (a child isn't done yet), `lazy`, `in-flight` and `failed`. Stored statuses: `fresh`, `stale`, `pending`, `failed` and `skipped`; the API adds `off` when there's no key.
 

@@ -138,6 +138,19 @@ describe("planSummaries — after the first run", () => {
         const stored = allWaves().stored.map((s) => (s.path === "src/core/log.ts" ? { ...s, status: "stale" as const } : s));
         expect(planSummaries(FILES, FOLDERS, stored, options()).find((t) => t.path === "src/core/log.ts")).toMatchObject({ state: "current", status: "fresh" });
     });
+
+    it("redoes a file summary written under prompt version 1, so prompt v2 reaches every file", () => {
+        // the hash a version-1 run stored for log.ts: the planner's recipe for a file's input ("file", path, content hash), under version 1
+        const stored = allWaves().stored.map((s) =>
+            s.path === "src/core/log.ts" ? { ...s, inputHash: inputHash("claude-haiku-5-5", 1, "file\nsrc/core/log.ts\nh-log") } : s);
+        expect(planSummaries(FILES, FOLDERS, stored, options()).find((t) => t.path === "src/core/log.ts"))
+            .toMatchObject({ state: "ready", status: "stale" });
+    });
+
+    it("doesn't redo a file because more files import it: its hash covers the path and the bytes, not its importers", () => {
+        const moreImported = FILES.map((f) => (f.path === "src/core/log.ts" ? { ...f, importedBy: f.importedBy + 40 } : f));
+        expect(planSummaries(moreImported, FOLDERS, allWaves().stored, options()).every((t) => t.state === "current")).toBe(true);
+    });
 });
 
 describe("planSummaries — in flight and failed", () => {

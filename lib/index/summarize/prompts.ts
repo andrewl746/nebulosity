@@ -1,8 +1,9 @@
 import type { SummaryText } from "../../db/store/summaries";
 import { countLines } from "../languages/typescript";
+import { dirOf } from "../paths";
 
-/** Part of every inputHash. Bump it to redo every summary on purpose (a better prompt, new settings). */
-export const PROMPT_VERSION = 1;
+/** Part of every inputHash. Bump it to redo every summary on purpose (a better prompt, new settings). Version 2: ADR-034. */
+export const PROMPT_VERSION = 2;
 
 /** Who writes what (ADR-028): Haiku for the many files, Sonnet for the folders and the repo people read first. */
 export const SUMMARY_MODELS = {
@@ -23,24 +24,31 @@ export const MAX_SOURCE_CHARS = 20_000;
 /** A folder's prompt lists at most this many of its children, largest first. */
 export const MAX_FOLDER_ITEMS = 50;
 
+/** A file's prompt names this many of the folders its importers sit in; the rest fold into a count. */
+export const MAX_IMPORTER_FOLDERS = 3;
+
+// Prompt v2 (ADR-034). The taglines' examples are deliberately not from VS Code, so the model can't copy one into a summary.
 export const FILE_SYSTEM_PROMPT = [
     "You write the summary a developer sees for one source file while exploring an unfamiliar codebase.",
-    "Give a tagline of at most 6 words and a summary of 2 to 4 sentences.",
-    "The summary says what the file is responsible for, names its most important exports, and says how other code uses it when the source makes that clear.",
-    "Use real identifiers from the file. Don't narrate the code line by line, and don't guess beyond what you're shown; if the source is truncated, summarize what's there.",
+    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Retry policy with exponential backoff\". The summary is 2 to 4 sentences.",
+    "The summary says what the file is responsible for, names its most important exports, and says how other code uses it. The \"Imported by\" line comes from the repository's import graph; use it to say how widely and where the file is used.",
+    "In the summary, write identifiers (functions, classes, types, variables and file names) in backticks, like `parseConfig`.",
+    "Use real identifiers from the file. Don't narrate the code line by line, and don't guess beyond what you're shown. Don't mention truncation or code you weren't shown.",
 ].join("\n");
 
 export const FOLDER_SYSTEM_PROMPT = [
     "You write the summary a developer sees for one folder while exploring an unfamiliar codebase. You're given the summaries of the files and subfolders inside it.",
-    "Give a tagline of at most 6 words and a summary of 2 to 4 sentences.",
+    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Payment provider integrations\". The summary is 2 to 4 sentences.",
     "The summary says what the folder is responsible for as a whole, which parts matter most, and how they fit together.",
+    "In the summary, write file, folder, function and class names in backticks, like `retry.ts`.",
     "Don't list every item, and don't guess beyond the summaries you're given.",
 ].join("\n");
 
 export const REPO_SYSTEM_PROMPT = [
     "You write the overview a developer sees first when opening an unfamiliar repository. You're given the summaries of its top-level folders and files.",
-    "Give a tagline of at most 6 words and a summary of 2 to 4 sentences.",
+    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Distributed task scheduling service\". The summary is 2 to 4 sentences.",
     "The summary says what the project is, names its main areas, and says where a newcomer should start reading.",
+    "In the summary, write folder and file names in backticks, like `src/server`.",
     "Don't guess beyond the summaries you're given.",
 ].join("\n");
 
@@ -54,10 +62,40 @@ export function plural(n: number, word: string): string {
 
 /**
  * A file's prompt: the imports/exports listing chunks.ts generates (it opens with
- * "File: <path>"), the line count, then the source, cut to about 6k tokens.
+ * "File: <path>"), the line count, who imports the file, then the source, cut to about 6k tokens.
  */
-export function renderFilePrompt(listing: string, lineCount: number, source: string, maxChars: number = MAX_SOURCE_CHARS): string {
-    return [listing, "", `Lines: ${lineCount}`, "", "Source:", truncateSource(source, maxChars)].join("\n");
+export function renderFilePrompt(
+    listing: string,
+    lineCount: number,
+    importers: readonly string[],
+    source: string,
+    maxChars: number = MAX_SOURCE_CHARS
+): string {
+    return [listing, "", `Lines: ${lineCount}`, importerLine(importers), "", "Source:", truncateSource(source, maxChars)].join("\n");
+}
+
+/**
+ * How widely a file is used, from the import graph: a source file can't say who imports it, so the model is
+ * told. Counts the importers per folder, biggest first (ties by folder path, compared with plain `<` so the
+ * order never depends on a locale and the same graph always gives the same line), and names the first
+ * maxFolders; the rest fold into a count. A top-level file's folder is "" (it sorts first on a tie) and is
+ * shown as "the repo root".
+ */
+export function importerLine(importers: readonly string[], maxFolders: number = MAX_IMPORTER_FOLDERS): string {
+    if (importers.length === 0) return "Imported by: no other indexed file";
+
+    const perFolder = new Map<string, number>();
+    for (const importer of importers){
+        const folder = dirOf(importer);
+        perFolder.set(folder, (perFolder.get(folder) ?? 0) + 1);
+    }
+
+    const ranked = [...perFolder].sort(([folderA, countA], [folderB, countB]) =>
+        countB - countA || (folderA < folderB ? -1 : folderA > folderB ? 1 : 0));
+    const named = ranked.slice(0, maxFolders).map(([folder, count]) => `${folder === "" ? "the repo root" : folder} (${count})`);
+
+    const line = `Imported by: ${plural(importers.length, "file")} in ${plural(ranked.length, "folder")}: ${named.join(", ")}`;
+    return ranked.length > maxFolders ? `${line}, and ${plural(ranked.length - maxFolders, "other folder")}` : line;
 }
 
 export function renderFolderPrompt(

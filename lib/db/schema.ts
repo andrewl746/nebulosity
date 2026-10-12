@@ -161,7 +161,7 @@ export const summaries = sqliteTable("summaries", {
     repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
     targetKind: text("target_kind", { enum: SUMMARY_TARGET_KINDS }).notNull(),
     targetPath: text("target_path").notNull(),   // "" for the repo itself
-    tagline: text("tagline"),                     // ≤ 6 words; null until a summary exists
+    tagline: text("tagline"),                     // 3–6 words asked for, up to 8 kept whole; null until a summary exists
     summary: text("summary"),                     // 2–4 sentences
     model: text("model"),                         // the model that wrote it, or "template"
     inputHash: text("input_hash"),                // hash(model, prompt version, input) of the text above

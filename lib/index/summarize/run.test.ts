@@ -9,11 +9,11 @@ import { getDb } from "../../db/client";
 import { META_KEYS, meta } from "../../db/schema";
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
-import { loadBatchRows, loadSummaries, loadUsage, markInFlight, writeResults } from "../../db/store/summaries";
+import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, writeResults } from "../../db/store/summaries";
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError } from "./run";
+import { buildFilePrompt, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
@@ -65,6 +65,28 @@ async function sixBatchesInFlight(root: string, stub: ReturnType<typeof stubSumm
 
 const rows = (root: string) => loadSummaries(getDb(), requireRepository(getDb(), repoKey(root)));
 const row = (root: string, p: string) => rows(root).find((r) => r.path === p);
+
+describe("buildFilePrompt", () => {
+    it("tells the model who imports the file, from the import graph", () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const log = loadFileFacts(db, repoId).find((f) => f.path === "src/core/log.ts")!;
+
+        // log.ts is imported by src/app/main.ts, src/core/index.ts and src/index.ts: one importer in each of three folders
+        expect(buildFilePrompt(db, repoId, root, log))
+            .toContain("\nLines: 9\nImported by: 3 files in 3 folders: src (1), src/app (1), src/core (1)\n\nSource:\n");
+    });
+
+    it("says a file nothing imports has no importers", () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const build = loadFileFacts(db, repoId).find((f) => f.path === "scripts/build.js")!;
+
+        expect(buildFilePrompt(db, repoId, root, build)).toContain("\nLines: 3\nImported by: no other indexed file\n\nSource:\n");
+    });
+});
 
 describe("runSummaries — the regular API", () => {
     it("summarizes the fixture in four bottom-up waves, central files first", async () => {

@@ -5,12 +5,12 @@ import path from "path";
 import { copyFixture } from "../../../test/helpers/fixture";
 import { FILES } from "../../../test/helpers/mini-repo-facts";
 import { getDb } from "../client";
-import { summaryVectors } from "../schema";
+import { files, imports, summaryVectors } from "../schema";
 import { indexRepository } from "../../index/pipeline";
 import { upsertRepository } from "./structure";
 import {
     addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadSummaries, loadUsage, markInFlight, pruneSummaries, targetKey, writeResults,
+    loadFolderFacts, loadImporterPaths, loadSummaries, loadUsage, markInFlight, pruneSummaries, targetKey, writeResults,
 } from "./summaries";
 
 const ok = (tagline: string) => ({ ok: true as const, text: { tagline, summary: "S" }, model: "m" });
@@ -40,6 +40,51 @@ describe("summary store — facts for the planner", () => {
         expect(listing?.split("\n")[0]).toBe("File: src/core/log.ts");
         expect(listing).toContain("Logger (class)");
         expect(loadFileSummaryChunk(getDb(), repoId, "src/nope.ts")).toBeNull();
+    });
+});
+
+describe("summary store — importers", () => {
+    it("lists the files that import a file, each once, in path order", () => {
+        const { repoId } = indexRepository(copyFixture());
+        const importers = (filePath: string) => loadImporterPaths(getDb(), repoId, filePath);
+
+        expect(importers("src/app/main.ts")).toEqual(["scripts/build.js", "src/app/view.tsx", "src/index.ts"]);
+        expect(importers("src/core/log.ts")).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
+        expect(importers("src/util/strings.ts")).toEqual(["src/app/main.ts", "src/util/strings.test.ts"]);
+    });
+
+    it("is empty for a file nothing imports, and for a path that isn't indexed", () => {
+        const { repoId } = indexRepository(copyFixture());
+        expect(loadImporterPaths(getDb(), repoId, "scripts/build.js")).toEqual([]);
+        expect(loadImporterPaths(getDb(), repoId, "src/nope.ts")).toEqual([]);
+    });
+
+    it("finds as many importers as the by-hand import counts say, for every file", () => {
+        const { repoId } = indexRepository(copyFixture());
+        expect(FILES.map((f) => loadImporterPaths(getDb(), repoId, f.path).length)).toEqual(FILES.map((f) => f.importedBy));
+    });
+
+    it("only looks inside the repository it's asked about", () => {
+        const first = indexRepository(copyFixture()).repoId;
+        const second = indexRepository(copyFixture()).repoId;
+
+        // both copies have a src/core/log.ts: neither answer may include the other's importers
+        expect(loadImporterPaths(getDb(), first, "src/core/log.ts")).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
+        expect(loadImporterPaths(getDb(), second, "src/core/log.ts")).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
+    });
+
+    it("sorts importers by path, whatever order they were indexed in", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/summaries/importer-order");
+        // z.ts is indexed before a.ts, so insertion order and path order disagree
+        const [lib, z, a] = ["lib.ts", "z.ts", "a.ts"].map((p) =>
+            db.insert(files).values({ repoId, path: p, kind: "module", contentHash: `h-${p}` }).returning({ id: files.id }).get().id);
+        db.insert(imports).values([
+            { sourceFileId: z, targetFileId: lib, specifier: "./lib" },
+            { sourceFileId: a, targetFileId: lib, specifier: "./lib" },
+        ]).run();
+
+        expect(loadImporterPaths(db, repoId, "lib.ts")).toEqual(["a.ts", "z.ts"]);
     });
 });
 

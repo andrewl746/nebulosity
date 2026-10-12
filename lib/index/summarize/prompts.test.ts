@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderFilePrompt, renderFolderPrompt, renderRepoPrompt, testFileSummary, truncateSource, type FolderItem } from "./prompts";
+import { importerLine, renderFilePrompt, renderFolderPrompt, renderRepoPrompt, testFileSummary, truncateSource, type FolderItem } from "./prompts";
 
 describe("truncateSource", () => {
     it("leaves source within the limit alone", () => {
@@ -15,10 +15,50 @@ describe("truncateSource", () => {
     });
 });
 
+describe("importerLine", () => {
+    it("says so when no other indexed file imports the file", () => {
+        expect(importerLine([])).toBe("Imported by: no other indexed file");
+    });
+
+    it("counts a single importer, in the singular", () => {
+        expect(importerLine(["src/app/main.ts"])).toBe("Imported by: 1 file in 1 folder: src/app (1)");
+    });
+
+    it("groups importers by folder, biggest folder first, and calls a top-level file's folder the repo root", () => {
+        expect(importerLine(["src/app/main.ts", "src/app/view.tsx", "index.ts"]))
+            .toBe("Imported by: 3 files in 2 folders: src/app (2), the repo root (1)");
+    });
+
+    it("shows the 3 biggest folders, breaks ties by folder path, and folds the rest into a count", () => {
+        expect(importerLine(["a/x.ts", "a/y.ts", "b/x.ts", "b/y.ts", "c/x.ts", "d/x.ts", "e/x.ts"]))
+            .toBe("Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders");
+    });
+
+    it("breaks ties by folder path whatever order the importers arrive in, the repo root's empty path first", () => {
+        expect(importerLine(["z/x.ts", "y/x.ts", "x/x.ts", "w/x.ts"]))
+            .toBe("Imported by: 4 files in 4 folders: w (1), x (1), y (1), and 1 other folder");
+        expect(importerLine(["src/main.ts", "index.ts"]))
+            .toBe("Imported by: 2 files in 2 folders: the repo root (1), src (1)");
+    });
+
+    it("adds no 'other folders' tail when the folders exactly fit", () => {
+        expect(importerLine(["a/x.ts", "b/x.ts", "c/x.ts"])).toBe("Imported by: 3 files in 3 folders: a (1), b (1), c (1)");
+    });
+
+    it("shows as many folders as it's told to", () => {
+        expect(importerLine(["a/x.ts", "a/y.ts", "b/x.ts"], 1)).toBe("Imported by: 3 files in 2 folders: a (2), and 1 other folder");
+    });
+});
+
 describe("renderFilePrompt", () => {
-    it("starts with the imports/exports listing, then the line count and the source", () => {
-        expect(renderFilePrompt("File: src/a.ts\n\nImports:\n  (none)", 2, "const a = 1;\nexport { a };\n"))
-            .toBe("File: src/a.ts\n\nImports:\n  (none)\n\nLines: 2\n\nSource:\nconst a = 1;\nexport { a };\n");
+    it("starts with the imports/exports listing, then the line count, who imports the file, and the source", () => {
+        expect(renderFilePrompt("File: src/a.ts\n\nImports:\n  (none)", 2, [], "const a = 1;\nexport { a };\n"))
+            .toBe("File: src/a.ts\n\nImports:\n  (none)\n\nLines: 2\nImported by: no other indexed file\n\nSource:\nconst a = 1;\nexport { a };\n");
+    });
+
+    it("puts the importers right after the line count, and cuts the source at the limit it's given", () => {
+        expect(renderFilePrompt("File: src/a.ts", 3, ["src/main.ts", "src/view.ts"], "aaaa\nbbbb\ncccc\n", 7))
+            .toBe("File: src/a.ts\n\nLines: 3\nImported by: 2 files in 1 folder: src (2)\n\nSource:\naaaa\n… (truncated: 2 more lines)");
     });
 });
 

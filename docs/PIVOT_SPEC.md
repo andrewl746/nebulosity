@@ -123,7 +123,7 @@ Persistence shapes live in `lib/db/schema.ts` (ADR-013). The spec fixes their me
 | `folders` | new | `path` (unique per repo), `parentPath`, `depth`, `name`, `fileCount` (recursive), `directFileCount` |
 | `level_edges` | new | aggregated edges per level (§4.2): `levelPath`, `sourceNode`, `targetNode`, `count` |
 | `symbols` | new | top-level declarations **and class members**: `name`, `qualifiedName` (`Class.method`), `kind`, `startLine`, `endLine`, `exported`, `parentQualifiedName` (a string, so whole batches insert without needing ids first) |
-| `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (≤ 6 words), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped; `off` is reported, never stored), `error`, and `batchId`/`pendingHash` so a Batch run can resume (§5.3) |
+| `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (3–6 words asked for; up to 8 kept whole), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped; `off` is reported, never stored), `error`, and `batchId`/`pendingHash` so a Batch run can resume (§5.3) |
 | `summary_vectors` | new | one embedding per model-written summary (encode/decode pair, ADR-017) |
 | `summary_usage` | new | API tokens per repo, model and transport (direct, batch); S2 is measured from it |
 | `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks; kept in sync by triggers (ADR-031) |
@@ -170,7 +170,7 @@ Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; ot
 
 ### 5.3 Summaries (background)
 - **Order.** Most-imported files first, so central code lands early. When the UI opens a path that has no summary yet, it jumps the queue through the regular API (`POST /api/summarize`).
-- **File summaries** use Claude Haiku 5.5 (`claude-haiku-5-5`). Input: path, the file-summary chunk (imports/exports), and the file text capped at about 6k tokens. Output (structured): `{ tagline, summary }`. **Test files get a templated summary with no API call** (status `skipped`).
+- **File summaries** use Claude Haiku 5.5 (`claude-haiku-5-5`). Input: path, the file-summary chunk (imports/exports), its importers from the graph (how many, and the top 3 folders they sit in), and the file text capped at about 6k tokens. Output (structured): `{ tagline, summary }`. **Test files get a templated summary with no API call** (status `skipped`).
 - **Folder summaries** use Claude Sonnet 5.5 (`claude-sonnet-5-5`), built bottom-up once all children are fresh. Input: the folder path plus its children's taglines and summaries, capped at the 50 largest plus "N more". Same output shape.
 - **The repo summary** uses Sonnet 5.5, from the top-level folder summaries.
 - **Transport.** The first full pass uses the Message Batches API (half price), submitted in chunks of up to 5,000 requests, with results keyed by `custom_id`, never by position. Incremental and on-demand work uses the regular Messages API with a concurrency limit and honours `retry-after`. In practice the transport is chosen per wave (ADR-033): a run plans, sends what's ready and repeats as folders become ready bottom-up. Waves of 100+ requests go by batch and smaller ones by the regular API. Batch ids are stored on the summary rows, so an interrupted run resumes instead of resending.

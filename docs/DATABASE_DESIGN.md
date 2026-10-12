@@ -87,7 +87,7 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
 
 ## 8. V1.2 additions (summaries and search, `PIVOT_SPEC.md` §4.1, §5.3–5.4)
 
-- **`summaries`**: one row per file, folder and the repo (`target_kind` + `target_path`, unique per repo; `""` is the repo). It holds `tagline` (≤ 6 words), `summary` (2–4 sentences), `model` (the model that wrote it, or `template`), `input_hash` (the input that text answers), `status` and `error`. Statuses:
+- **`summaries`**: one row per file, folder and the repo (`target_kind` + `target_path`, unique per repo; `""` is the repo). It holds `tagline` (3–6 words asked for; up to 8 kept whole), `summary` (2–4 sentences), `model` (the model that wrote it, or `template`), `input_hash` (the input that text answers), `status` and `error`. Statuses:
   - `fresh`: the text matches the current input.
   - `stale`: text from an older input, kept on show until it's redone.
   - `pending`: no text yet.

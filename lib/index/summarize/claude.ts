@@ -8,7 +8,7 @@ import { BatchGoneError, SummarizerAuthError, type ModelUsage, type Summarizer, 
 export const SUMMARY_SCHEMA = {
     type: "object",
     properties: {
-        tagline: { type: "string", description: "What this is, in at most 6 words." },
+        tagline: { type: "string", description: "A noun phrase of 3 to 6 plain words." },
         summary: { type: "string", description: "2 to 4 sentences." },
     },
     required: ["tagline", "summary"],
@@ -16,6 +16,28 @@ export const SUMMARY_SCHEMA = {
 };
 
 const replySchema = z.object({ tagline: z.string().trim().min(1), summary: z.string().trim().min(1) });
+
+/** Taglines are asked for in 3 to 6 words; up to this many are kept whole (PIVOT_SPEC.md §4.1, ADR-034). */
+export const MAX_TAGLINE_WORDS = 8;
+
+/** Words a tagline can't end on: cut right after one, the phrase hangs ("…the browser workbench and"). */
+const CONNECTORS: ReadonlySet<string> = new Set(["a", "an", "the", "and", "or", "of", "for", "to", "in", "on", "with", "via", "by", "from", "at", "as"]);
+
+/**
+ * A tagline as the UI shows it: plain text, at most MAX_TAGLINE_WORDS words. Backticks go, since the UI doesn't
+ * render markdown. A tagline within the limit stays whole: a hard cut at the 6 words we ask for sliced taglines
+ * mid-phrase. A longer one is cut at the limit, then loses the connector words it now ends on (never the first word).
+ */
+export function cleanTagline(raw: string): string {
+    let words = raw.replace(/`/g, "").split(/\s+/).filter(Boolean);
+
+    if (words.length > MAX_TAGLINE_WORDS){
+        words = words.slice(0, MAX_TAGLINE_WORDS);
+        while (words.length > 1 && CONNECTORS.has(words[words.length - 1].toLowerCase())) words.pop();
+    }
+
+    return words.join(" ").replace(/[\s.,;:]+$/, "");
+}
 
 type Effort = "low" | "medium" | "high";
 
@@ -67,8 +89,8 @@ export function parseSummary(reply: Pick<Reply, "stop_reason" | "content">): Sum
     const parsed = replySchema.safeParse(json);
     if (!parsed.success) throw new Error("the reply didn't have a tagline and a summary");
 
-    // "≤ 6 words" (PIVOT_SPEC.md §4.1) is a promise to the UI, so it's enforced here, not just asked for
-    const tagline = parsed.data.tagline.split(/\s+/).slice(0, 6).join(" ").replace(/\.+$/, "");
+    // "up to 8 words, as plain text" (PIVOT_SPEC.md §4.1) is a promise to the UI, so it's enforced here, not just asked for
+    const tagline = cleanTagline(parsed.data.tagline);
     if (!tagline) throw new Error("the reply didn't have a tagline and a summary");
     return { tagline, summary: parsed.data.summary };
 }

@@ -303,12 +303,38 @@
 - **Structure first.** A run refuses to start while the structure stage is running or failed. A repo indexed before stage status existed has no structure row; that counts as ready.
 - **A circuit breaker.** After every wave and every collected batch (a released 404 batch included), if at least 10 requests failed and they were more than half of it, the run stops before planning another wave. The cause is then almost certainly shared (a rejected key, an outage, files edited since indexing), and failed children count as settled, so carrying on would summarize their folders over "no summary yet" and pay for those folders again. The stage reads `failed`, or `running` with batches still at Anthropic, with a note starting `stopped:`; the failures are retried next run.
 - **A lock.** A `summarizing` lock (the same race-safe `meta` row as the index lock, refreshed while waiting) stops a second run from paying twice. It doesn't block indexing.
-- **Templates and hashing.** Test files get a template (status `skipped`, model `template`). A file's `inputHash` hashes its content hash instead of its rendered prompt. That's equivalent, because the prompt is a pure function of the bytes and `PROMPT_VERSION`, and it means planning never reads source files.
+- **Templates and hashing.** Test files get a template (status `skipped`, model `template`). A file's `inputHash` hashes its content hash instead of its rendered prompt. That's equivalent, because the prompt is a pure function of the bytes and `PROMPT_VERSION`, and it means planning never reads source files. *(Amended 2026-10-11 in slice V1.2: from prompt v2 the prompt also names the file's importers, which stay out of the hash on purpose; see ADR-034.)*
 - **Request settings.** Effort `low` with adaptive thinking (the models' default), structured outputs for `{ tagline, summary }`, and `max_tokens` 4,096. Sonnet requests on the regular API carry the server-side refusal fallback (`fallbacks: "default"`). The Batches API rejects that parameter, and Haiku 5.5 has no fallback.
 
 **Alternatives:** (a) One batch for everything, with folders summarized from raw file text: no bottom-up synthesis, and much bigger folder inputs. (b) A jobs table: more state to keep consistent with the rows it describes. (c) Batch-only: each of the dozen top waves could wait hours.
 **Consequences:** A crash costs the requests in flight on the regular API; batch requests are collected rather than resent. The one gap is a batch caught between Anthropic accepting it and the run recording it: a failed recording names the batch, but a killed process or a lost reply leaves a batch nothing here can name, and its requests are paid for again when the next run resends them. A wave or batch where most requests fail (at least 10) stops the run before any folder is summarized over those failures. API spend is recorded per model and transport (`summary_usage`), which is how S2 is measured.
 **Revisit when:** waves cost too much wall time on a deeper repo (then submit folders speculatively), or refusals become common.
+
+## ADR-034 — Summary prompt v2, from the owner's checkpoint (2026-10-11)
+
+**Context:** The owner read Review #1 (`SUMMARY_REVIEW.md`: 20 VS Code files, each written by Haiku 5.5 and by Sonnet 5.5) before the first paid run.
+- Haiku was close to Sonnet at about 1/20 the price.
+- The 6-word clamp cut 7–8 of the 20 Haiku taglines mid-phrase.
+- Summaries hedged with "truncated" and "not shown", and a file's summary couldn't say who used it ("the source does not show which modules import these exports").
+
+**Decision:**
+- **Models.** Haiku 5.5 writes the file summaries, and effort stays low.
+- **Prompt v2** (`PROMPT_VERSION` 2):
+  - The tagline is a noun phrase of 3 to 6 plain words, with an example that isn't from VS Code, so the model can't copy it into a summary.
+  - "Don't mention truncation or code you weren't shown" replaces "if the source is truncated, summarize what's there".
+  - A file's prompt gets one line from the import graph: how many files import it, and the 3 folders with the most of them (`Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders`).
+  - Identifiers in the summary go in backticks.
+- **Taglines** are asked for in 3–6 words and kept whole up to 8. A longer one is cut at a word boundary, minus dangling connector words (`and`, `of`, `the`…). Backticks are stripped, since the UI shows taglines as plain text.
+- **Importers go in the file prompt but not in the input hash.** The planner still hashes the model, the prompt version, the path and the content hash.
+
+**Alternatives:** (a) Keep the hard 6-word clamp: a firm promise to the UI, but it cut 7–8 of 20 taglines mid-phrase. (b) Sonnet for files: about 20 times the price (Review #1 estimated $60.39 against $3.06 for the file pass) for summaries that were close. (c) Put the importers in the hash: the usage sentence would follow the live graph, but a new importer would re-summarize a central file on every pull.
+**Consequences:**
+- v2 invalidates every stored summary, but VS Code has none yet.
+- The usage sentence reflects the graph as it was when the file was summarized.
+- The file prompt grows by about 100 tokens, roughly $0.05 over a VS Code pass.
+- The UI's tagline promise becomes ≤ 8 words.
+
+**Revisit when:** Review #2 (the same 20 files) still shows taglines cut or summaries hedged, or usage sentences go stale enough to mislead. Then redo the most-imported files on a schedule.
 
 ---
 

@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
 import {
     chunks, files, folders, imports, summaries, summaryUsage, summaryVectors,
@@ -70,6 +71,24 @@ export function loadFileFacts(db: Db, repoId: number): FileFacts[] {
         .groupBy(files.id)
         .orderBy(files.path)
         .all();
+}
+
+/**
+ * The paths of the files that import filePath, in path order (empty for a path that isn't indexed). Each appears
+ * once: an import is unique per source and target. `files` is joined twice, once as the imported file and once,
+ * aliased, as its importer; imports never cross repos, so the importer needs no repo check of its own.
+ */
+export function loadImporterPaths(db: Db, repoId: number, filePath: string): string[] {
+    const importer = alias(files, "importer");
+
+    return db.select({ path: importer.path })
+        .from(files)
+        .innerJoin(imports, eq(imports.targetFileId, files.id))
+        .innerJoin(importer, eq(importer.id, imports.sourceFileId))
+        .where(and(eq(files.repoId, repoId), eq(files.path, filePath)))
+        .orderBy(importer.path)
+        .all()
+        .map((row) => row.path);
 }
 
 export function loadFolderFacts(db: Db, repoId: number): FolderFacts[] {

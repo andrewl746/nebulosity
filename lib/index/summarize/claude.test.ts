@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClaudeSummarizer, outcomeFromBatchItem, outcomeFromReply, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
+import { cleanTagline, createClaudeSummarizer, outcomeFromBatchItem, outcomeFromReply, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
 import { FILE_SYSTEM_PROMPT } from "./prompts";
 import { BatchGoneError, SummarizerAuthError, type SummaryRequest } from "./types";
 
@@ -23,10 +23,52 @@ describe("requestParams", () => {
     });
 });
 
+describe("cleanTagline", () => {
+    it("keeps a tagline of 8 words or fewer whole, connector words and all", () => {
+        expect(cleanTagline("Typed event emitter and listener registry helpers")).toBe("Typed event emitter and listener registry helpers");
+        // exactly 8 words, ending on a connector: the limit is inclusive, so nothing is cut
+        expect(cleanTagline("Registry of commands for the workbench and for")).toBe("Registry of commands for the workbench and for");
+        expect(cleanTagline("Logging helpers for")).toBe("Logging helpers for");
+    });
+
+    it("cuts a longer tagline to its first 8 words, then drops the connector words it now ends on", () => {
+        expect(cleanTagline("Core DOM utilities for the browser workbench and its helpers")).toBe("Core DOM utilities for the browser workbench");
+        expect(cleanTagline("Registry of commands for the workbench and for all extensions")).toBe("Registry of commands for the workbench");
+        // case doesn't matter
+        expect(cleanTagline("Registry Of Commands For The Workbench AND For All Extensions")).toBe("Registry Of Commands For The Workbench");
+        // nothing to drop when the cut lands on a content word
+        expect(cleanTagline("One two three four five six seven eight nine ten")).toBe("One two three four five six seven eight");
+    });
+
+    it("never drops the first word", () => {
+        expect(cleanTagline("to the of and a an in on at")).toBe("to");
+    });
+
+    it("strips backticks, extra whitespace and trailing punctuation, but leaves punctuation inside the phrase", () => {
+        expect(cleanTagline("`URI` parsing and formatting.")).toBe("URI parsing and formatting");
+        expect(cleanTagline("  Logging \n  helpers; ")).toBe("Logging helpers");
+        expect(cleanTagline("Logging helpers:")).toBe("Logging helpers");
+        expect(cleanTagline("Logging helpers,")).toBe("Logging helpers");
+        expect(cleanTagline("Logging helpers...")).toBe("Logging helpers");
+        expect(cleanTagline("Node.js parsing, formatting and merging")).toBe("Node.js parsing, formatting and merging");
+    });
+
+    it("returns an empty string when nothing is left", () => {
+        expect(cleanTagline("``")).toBe("");
+        expect(cleanTagline("  ")).toBe("");
+        expect(cleanTagline("...")).toBe("");
+    });
+});
+
 describe("parseSummary", () => {
-    it("reads the tagline and summary, trimming them and clamping the tagline to six words", () => {
+    it("reads the tagline and summary, trimming them and keeping a tagline of up to 8 words whole", () => {
         expect(parseSummary(reply(JSON.stringify({ tagline: "The central logging helpers for the core layer.", summary: " Writes log lines. " }))))
-            .toEqual({ tagline: "The central logging helpers for the", summary: "Writes log lines." });
+            .toEqual({ tagline: "The central logging helpers for the core layer", summary: "Writes log lines." });
+    });
+
+    it("shows the tagline as plain text, without backticks", () => {
+        expect(parseSummary(reply(JSON.stringify({ tagline: "`URI` parsing and formatting.", summary: "Parses URIs." }))).tagline)
+            .toBe("URI parsing and formatting");
     });
 
     it("explains every way a reply can be unusable", () => {
@@ -36,6 +78,8 @@ describe("parseSummary", () => {
         expect(() => parseSummary(reply("{not json"))).toThrow("the reply wasn't valid JSON");
         expect(() => parseSummary(reply(JSON.stringify({ tagline: "x" })))).toThrow("the reply didn't have a tagline and a summary");
         expect(() => parseSummary(reply(JSON.stringify({ tagline: "...", summary: "Writes log lines." })))).toThrow("the reply didn't have a tagline and a summary");
+        // nothing but backticks: empty once they're removed
+        expect(() => parseSummary(reply(JSON.stringify({ tagline: "``", summary: "Writes log lines." })))).toThrow("the reply didn't have a tagline and a summary");
     });
 
     it("reads the answer that stood when a fallback model took over partway", () => {
