@@ -9,12 +9,18 @@ describe("isLocalRequest", () => {
         expect(isLocalRequest(headers({ host: "127.0.0.1:3000" }))).toBe(true);
         expect(isLocalRequest(headers({ host: "[::1]:3000" }))).toBe(true);
         expect(isLocalRequest(headers({ host: "localhost:3000", origin: "http://localhost:3000" }))).toBe(true);
-        expect(isLocalRequest(headers({ host: "127.0.0.1:3000", origin: "http://127.0.0.1:4000" }))).toBe(true);
+        expect(isLocalRequest(headers({ host: "127.0.0.1:3000", origin: "http://127.0.0.1:3000" }))).toBe(true);
 
         expect(isLocalRequest(headers({}))).toBe(false);                                                        // no Host at all
         expect(isLocalRequest(headers({ host: "evil.example:3000" }))).toBe(false);                             // DNS rebinding
         expect(isLocalRequest(headers({ host: "192.168.1.20:3000" }))).toBe(false);                             // another machine
         expect(isLocalRequest(headers({ host: "localhost:3000", origin: "https://evil.example" }))).toBe(false); // another site's page
         expect(isLocalRequest(headers({ host: "localhost:3000", origin: "null" }))).toBe(false);                // a sandboxed or file:// page
+    });
+
+    it("refuses a page served from another local port: another dev server, or an untrusted repo's own app (M1)", () => {
+        expect(isLocalRequest(headers({ host: "127.0.0.1:3000", origin: "http://127.0.0.1:4000" }))).toBe(false);
+        expect(isLocalRequest(headers({ host: "localhost:3000", origin: "http://localhost:5173" }))).toBe(false);
+        expect(isLocalRequest(headers({ host: "localhost:3000", origin: "http://127.0.0.1:3000" }))).toBe(false);  // another name: not the Map's page
     });
 });

@@ -24,8 +24,9 @@ export function isLocalHost(headers: { get(name: string): string | null }): bool
  * spends money, changes the index or drives the Map.
  * - **Host.** It must name this machine. A page on another site that reaches 127.0.0.1 through DNS rebinding still
  *   sends its own host name.
- * - **Origin.** A browser request from any page carries that page's Origin, which must be this machine as well.
- *   Programs (the MCP server's fetch, curl) send none.
+ * - **Origin.** A browser request from any page carries that page's Origin, which must be the Map's own page: the
+ *   very host and port the request is addressed to. A page from another local port (another dev server, or the app of
+ *   a repo being explored) is another web page. Programs (the MCP server's fetch, curl) send no Origin.
  */
 export function isLocalRequest(headers: { get(name: string): string | null }): boolean {
     if (!isLocalHost(headers)) return false;
@@ -33,7 +34,8 @@ export function isLocalRequest(headers: { get(name: string): string | null }): b
     const origin = headers.get("origin");
     if (origin === null) return true;
     try{
-        return LOCAL_HOSTNAMES.has(new URL(origin).hostname);
+        // URL drops a default port from both sides, so "localhost:80" and "http://localhost" compare equal
+        return new URL(origin).host === new URL(`http://${headers.get("host")}`).host;
     } catch{
         return false;   // "null": a sandboxed frame or a file:// page
     }
