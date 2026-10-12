@@ -54,7 +54,7 @@ export type SummaryRunResult = {
     upToDate: number;
     /** Summaries a model wrote during this run. */
     summarized: number;
-    /** Test files given their template during this run. */
+    /** Test files and test-only folders given their template during this run. */
     templated: number;
     /** Requests that failed during this run; the next run retries them. */
     failed: number;

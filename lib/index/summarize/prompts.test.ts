@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importerLine, plural, renderFilePrompt, renderFolderPrompt, renderRepoPrompt, testFileSummary, truncateSource, type FolderItem } from "./prompts";
+import { importerLine, plural, renderFilePrompt, renderFolderPrompt, renderRepoPrompt, testFileSummary, testFolderSummary, truncateSource, type FolderItem } from "./prompts";
 
 describe("plural", () => {
     it("adds an s by default, and takes the plural form a word needs when that isn't it", () => {
@@ -180,5 +180,22 @@ describe("testFileSummary", () => {
             summary: "Test code (3 lines) for strings. Test files get this template instead of a model-written summary.",
         });
         expect(testFileSummary("src/vs/base/test/common/utils.ts", 1).tagline).toBe("Tests for utils");
+    });
+});
+
+describe("testFolderSummary", () => {
+    it("names the area above the first test segment", () => {
+        expect(testFolderSummary("src/vs/editor/contrib/folding/test/browser", 6)).toEqual({
+            tagline: "Tests for folding",
+            summary: "Test code (6 test files) for folding. Test-only folders get this template instead of a model-written summary.",
+        });
+        expect(testFolderSummary("src/vs/platform/configuration/test", 8).tagline).toBe("Tests for configuration");
+    });
+
+    it("falls back to the folder's own name when no segment is a test folder", () => {
+        expect(testFolderSummary("src/fixtures", 1)).toEqual({
+            tagline: "Tests for fixtures",
+            summary: "Test code (1 test file) for fixtures. Test-only folders get this template instead of a model-written summary.",
+        });
     });
 });

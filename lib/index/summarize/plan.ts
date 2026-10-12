@@ -2,11 +2,11 @@ import { createHash } from "crypto";
 import type { StoredSummaryStatus, SummaryTargetKind } from "../../db/schema";
 import { targetKey, type FileFacts, type FolderFacts, type StoredSummary, type SummaryText } from "../../db/store/summaries";
 import { dirOf } from "../paths";
-import { PROMPT_VERSION, renderFolderPrompt, renderRepoPrompt, testFileSummary, type FolderItem } from "./prompts";
+import { PROMPT_VERSION, renderFolderPrompt, renderRepoPrompt, testFileSummary, testFolderSummary, type FolderItem } from "./prompts";
 
 /**
- * current: the text matches the current input · template: a test file whose template is
- * missing or out of date, written right away · ready: needs a model and can go now ·
+ * current: the text matches the current input · template: a test file or test-only folder whose
+ * template is missing or out of date, written right away · ready: needs a model and can go now ·
  * waiting: needs a model, but a child isn't done yet · lazy: an out-of-date folder left
  * for later (redone when someone opens it) · in-flight: a batch already carries it ·
  * failed: failed earlier in this run; the next run retries it
@@ -101,8 +101,35 @@ export function planSummaries(
         }
     }
 
+    // what each folder's subtree holds, for spotting test-only folders (no model, like a test file)
+    const testFilesBelow = new Map<string, number>();
+    const nonTestFilesBelow = new Map<string, number>();
+    for (const file of files){
+        const tally = file.isTest ? testFilesBelow : nonTestFilesBelow;
+        for (let dir: string | null = dirOf(file.path); dir !== null; dir = dir === "" ? null : dirOf(dir)){
+            tally.set(dir, (tally.get(dir) ?? 0) + 1);
+        }
+    }
+
     for (const folder of [...folders].sort((a, b) => b.depth - a.depth || compare(a.path, b.path))){
         const kind: SummaryTargetKind = folder.path === "" ? "repo" : "folder";
+
+        // At least one file and no non-test file anywhere below: planned exactly like a test file, and
+        // settled at once, so its parent never waits on it. The repo always gets a real summary.
+        const testCount = testFilesBelow.get(folder.path) ?? 0;
+        if (kind === "folder" && testCount > 0 && !nonTestFilesBelow.has(folder.path)){
+            const key = targetKey("folder", folder.path);
+            const row = storedByKey.get(key);
+            const text = testFolderSummary(folder.path, testCount);
+            const hash = inputHash("template", PROMPT_VERSION, `${folder.path}
+${text.tagline}
+${text.summary}`);
+            planned.set(key, row?.inputHash === hash
+                ? { kind: "folder", path: folder.path, model: "template", inputHash: hash, state: "current", status: row.status === "skipped" ? null : "skipped" }
+                : { kind: "folder", path: folder.path, model: "template", inputHash: hash, state: "template", status: "skipped", templateText: text });
+            continue;
+        }
+
         const items: FolderItem[] = [];
         let settled = true;
 

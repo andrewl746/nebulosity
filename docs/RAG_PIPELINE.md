@@ -15,7 +15,7 @@ repo files
    ├─► chunks + symbols + imports ─► code_fts (triggers)     lib/db/store/structure.ts
    ▼
 summaries: npm run summarize                                 lib/index/summarize/
-   │  files: Haiku 5.5 · folders and the repo: Sonnet 5.5 · test files: a template
+   │  files: Haiku 5.5 · folders and the repo: Sonnet 5.5 · test files and test-only folders: a template
    ├─► summary_fts (triggers)
    ▼
 summary vectors (MiniLM, local)                              lib/index/embed.ts
@@ -75,7 +75,7 @@ type CodeChunk = {
 - **Files** go to `claude-haiku-5-5`. The prompt is the file's generated imports/exports listing (the file-summary chunk), its line count, who imports it, and its source cut to about 6k tokens (20,000 characters, at a line break). "Who imports it" is one line from the import graph, for example `Imported by: 10 files: src/vs/workbench (3), src/vs/base/browser (2), build.js (1), and 4 files elsewhere, plus 1 test file`: the total, then the 3 biggest groups with their importer counts, then a count of the files in the rest, then `, plus 1 test file` if there are any. Importers are grouped by area with the rule of `PIVOT_SPEC.md` §4.2 (the same `lcaFolder` and `childToward` that build the Map's level edges): an importer's group is the child of the lowest common folder of the two files, toward the importer, or the importer itself when it sits directly in that folder, so a sibling in the file's own folder is a group of its own and a top-level file is named by its path. Groups are ordered by count, then by path in code-point order, and counts are written with thousands separators like the total (`src/vs/workbench (1,840)`). Test files are left out of the total, the groups and the examples because on VS Code a central file's biggest importer folders are test folders, which would skew how its use looks; when tests are the only importers the line is `Imported by: only 3 test files`. A file nothing imports gets `Imported by: no other indexed file`. The model uses it to say how widely, and where, the file is used.
 - **Folders** go to `claude-sonnet-5-5`, written bottom-up from their children's taglines and summaries. The 50 largest children are listed (by lines of code), plus "…and N smaller items".
 - **The repo** goes to `claude-sonnet-5-5`, from its top-level folders and files.
-- **Test files** skip the model and get a template (`Tests for strings`, status `skipped`).
+- **Test files, and folders that hold only test files,** skip the model and get a template (`Tests for strings`, `Tests for folding`; status `skipped`). A folder qualifies when its subtree holds at least one file and no non-test file; the repo never does. The template is settled at once, so the parent folder goes out in the first folder wave.
 
 **Settings.** Effort `low` and adaptive thinking (the models' default). Structured outputs force `{ tagline, summary }`. `max_tokens` is 4,096, and 8,192 (`RETRY_MAX_OUTPUT_TOKENS`) for the one retry of a cut-off answer.
 

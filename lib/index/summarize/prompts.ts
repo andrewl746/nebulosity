@@ -190,3 +190,18 @@ export function testFileSummary(filePath: string, lineCount: number): SummaryTex
         summary: `Test code (${plural(lineCount, "line")}) for ${subject}. Test files get this template instead of a model-written summary.`,
     };
 }
+
+/**
+ * Folders that hold only test files skip the model too (PIVOT_SPEC.md §5.3). The subject is the area the
+ * tests cover: the segment just before the first test/tests/__tests__ segment ("folding" for
+ * ".../folding/test/browser"), else the folder's own name.
+ */
+export function testFolderSummary(folderPath: string, testFileCount: number): SummaryText {
+    const segments = folderPath.split("/");
+    const at = segments.findIndex((segment) => segment === "test" || segment === "tests" || segment === "__tests__");
+    const subject = at > 0 ? segments[at - 1] : segments[segments.length - 1];
+    return {
+        tagline: `Tests for ${subject}`,
+        summary: `Test code (${plural(testFileCount, "test file")}) for ${subject}. Test-only folders get this template instead of a model-written summary.`,
+    };
+}

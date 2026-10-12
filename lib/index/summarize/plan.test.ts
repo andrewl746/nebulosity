@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FILES, FOLDERS } from "../../../test/helpers/mini-repo-facts";
-import type { StoredSummary } from "../../db/store/summaries";
+import type { FileFacts, FolderFacts, StoredSummary } from "../../db/store/summaries";
 import { inputHash, planSummaries, type PlanOptions, type PlannedTarget } from "./plan";
 import { PROMPT_VERSION, SUMMARY_MODELS } from "./prompts";
 
@@ -168,6 +168,69 @@ describe("planSummaries — in flight and failed", () => {
         const core = plan.find((t) => t.path === "src/core");
         expect(core?.state).toBe("ready");
         expect(core?.prompt).toContain("- log.ts (9 lines): (no summary yet)");
+    });
+});
+
+describe("planSummaries — test-only folders", () => {
+    const file = (path: string, lineCount: number, isTest: boolean): FileFacts => ({ path, contentHash: `h-${path}`, lineCount, isTest, importedBy: 0 });
+    const folder = (path: string, parentPath: string | null, depth: number, fileCount: number, directFileCount: number): FolderFacts =>
+        ({ path, parentPath, depth, name: path.slice(path.lastIndexOf("/") + 1), fileCount, directFileCount });
+    const TEMPLATE_SUMMARY = "Test code (1 test file) for a. Test-only folders get this template instead of a model-written summary.";
+
+    const nestedFiles = [file("a/x.ts", 10, false), file("a/test/unit/x.test.ts", 5, true)];
+    const nestedFolders = [
+        folder("", null, 0, 2, 0),
+        folder("a", "", 1, 2, 1),
+        folder("a/test", "a", 2, 1, 0),
+        folder("a/test/unit", "a/test", 3, 1, 1),
+    ];
+
+    it("gives a test-only folder and its test-only subfolder a template, and the parent waits only on its own file", () => {
+        const first = planSummaries(nestedFiles, nestedFolders, [], options());
+        const byPath = new Map(first.map((t) => [t.path, t]));
+
+        for (const path of ["a/test", "a/test/unit"]){
+            expect(byPath.get(path)).toMatchObject({
+                kind: "folder", model: "template", state: "template", status: "skipped",
+                templateText: { tagline: "Tests for a", summary: TEMPLATE_SUMMARY },
+            });
+        }
+        expect(byPath.get("a/test")?.inputHash).toBe(inputHash("template", PROMPT_VERSION, `a/test
+Tests for a
+${TEMPLATE_SUMMARY}`));
+        expect(byPath.get("a")?.state).toBe("waiting");
+
+        const second = planSummaries(nestedFiles, nestedFolders, written(first, ["a/x.ts", "a/test", "a/test/unit"]), options());
+        const a = second.find((t) => t.path === "a");
+        expect(a?.state).toBe("ready");
+        expect(a?.prompt).toContain(`- test/ (1 file): Tests for a — ${TEMPLATE_SUMMARY}`);
+        // the templates are in place, so they are current and need no write
+        expect(second.find((t) => t.path === "a/test")).toMatchObject({ state: "current", status: null });
+    });
+
+    it("does not template a folder that holds a non-test file, directly or below", () => {
+        const files = [file("b/a.test.ts", 4, true), file("b/c.ts", 6, false), file("d/sub/e.ts", 2, false), file("d/f.test.ts", 3, true)];
+        const folders = [
+            folder("", null, 0, 4, 0), folder("b", "", 1, 2, 2), folder("d", "", 1, 2, 1), folder("d/sub", "d", 2, 1, 1),
+        ];
+        const byPath = new Map(planSummaries(files, folders, [], options()).map((t) => [t.path, t]));
+        expect(byPath.get("b")).toMatchObject({ model: "claude-sonnet-5-5", state: "waiting" });
+        expect(byPath.get("d")).toMatchObject({ model: "claude-sonnet-5-5", state: "waiting" });
+        expect(byPath.get("d/sub")).toMatchObject({ model: "claude-sonnet-5-5", state: "waiting" });
+    });
+
+    it("does not template a folder with no files", () => {
+        const byPath = new Map(planSummaries([], [folder("", null, 0, 0, 0), folder("empty", "", 1, 0, 0)], [], options()).map((t) => [t.path, t]));
+        expect(byPath.get("empty")).toMatchObject({ model: "claude-sonnet-5-5", state: "ready" });
+    });
+
+    it("never templates the repo, even when every file in it is a test", () => {
+        const files = [file("t/x.test.ts", 4, true)];
+        const folders = [folder("", null, 0, 1, 0), folder("t", "", 1, 1, 1)];
+        const byPath = new Map(planSummaries(files, folders, [], options()).map((t) => [t.path, t]));
+        expect(byPath.get("t")).toMatchObject({ model: "template", state: "template" });
+        expect(byPath.get("")).toMatchObject({ kind: "repo", model: "claude-sonnet-5-5", state: "ready" });
+        expect(byPath.get("")?.templateText).toBeUndefined();
     });
 });
 
