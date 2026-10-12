@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
-import os from "os";
 import path from "path";
+import { FIXTURE } from "../../test/helpers/fixture";
+import { makeTempDir } from "../../test/helpers/temp";
 import { createResolver } from "./resolve";
 
-const FIXTURE = path.resolve("test/fixtures/mini-repo");
 const FIXTURE_FILES = new Set([
     "scripts/build.js", "src/app/main.ts", "src/app/view.tsx", "src/core/index.ts",
     "src/core/log.ts", "src/index.ts", "src/util/strings.test.ts", "src/util/strings.ts",
 ]);
 
 function makeRepo(files: Record<string, string>): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "neb-resolve-"));
+    const dir = makeTempDir("neb-resolve-");
     for (const [rel, content] of Object.entries(files)){
         fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
         fs.writeFileSync(path.join(dir, rel), content);

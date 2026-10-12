@@ -73,6 +73,23 @@ export type HealthResponse = {
   agentReady: boolean; // ANTHROPIC_API_KEY present (never echo the key)
 };
 
+/* ─────────────────────────── Index status ────────────────────────── */
+
+/** The stages a repo goes through (PIVOT_SPEC.md §5). E2, E3 and E5 add more. */
+export type StageName = "structure" | "summaries" | "embeddings";
+
+/** idle: never ran · running · ready: done and current · off: can't run (e.g. no API key) · failed */
+export type StageState = "idle" | "running" | "ready" | "off" | "failed";
+
+export type StageStatus = { state: StageState; done: number; total: number; note?: string };
+
+/** GET /api/status — docs/API_CONTRACTS.md §9 */
+export type IndexStatus = {
+  /** The repo's root: absolute, forward slashes (repositories.rootPath). */
+  repo: string;
+  stages: Record<StageName, StageStatus>;
+};
+
 /* ─────────────────────────── Error envelope ──────────────────────── */
 
 export type ErrorCode =
@@ -209,6 +226,34 @@ export type RetrievedChunk = CodeChunk & { score: number };
 
 /** GET /api/search response — docs/API_CONTRACTS.md §6 */
 export type SearchResponse = { results: RetrievedChunk[] };
+
+/* ───────────────────────────── Search ────────────────────────────── */
+
+/** The three ranked lists hybrid search fuses (ADR-027). */
+export type SearchList = "code" | "summary" | "vector";
+
+/** One file or folder in a search result — docs/API_CONTRACTS.md §10 */
+export type SearchHit = {
+  path: string;
+  kind: "file" | "folder";
+  /** Reciprocal Rank Fusion: Σ 1 / (60 + rank) over the lists that found it. */
+  score: number;
+  matchedBy: SearchList[];
+  tagline?: string;
+  summary?: string;
+  /** The best-matching chunk, when the code list found this file. */
+  code?: { symbol: string; startLine: number; endLine: number; snippet: string };
+};
+
+/** What search(query) returns — docs/API_CONTRACTS.md §10 */
+export type SearchResult = {
+  query: string;
+  hits: SearchHit[];
+  /** How many files or folders each list contributed before fusion. */
+  lists: Record<SearchList, number>;
+  /** Set when something limits the results, e.g. no summaries yet. */
+  note?: string;
+};
 
 /* ──────────────────────────── Persistence ────────────────────────── */
 

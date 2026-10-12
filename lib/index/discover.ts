@@ -18,11 +18,18 @@ export const DEFAULT_MAX_FILE_BYTES = 1_000_000;
 const IGNORED_DIRS = new Set(["node_modules", ".git", ".next", ".nebulosity"]);
 
 /**
+ * Build output and coverage reports, skipped only when walking. In a git repo .gitignore
+ * already decides, and a tracked folder with one of these names can be real source:
+ * VS Code keeps its build scripts in build/.
+ */
+const WALK_ONLY_IGNORED_DIRS = new Set(["dist", "out", "build", "coverage"]);
+
+/**
  * Lists a repository's source files as sorted, repo-relative, forward-slash paths.
  *
  * In a git repo this asks git (`ls-files`), which honours .gitignore for free. That's
  * what keeps build output and vendored code out of a big repo's index. Without git,
- * it walks the tree and skips the usual heavy folders.
+ * it walks the tree and skips the usual heavy folders and build output.
  */
 export function discoverFiles(
     repoRoot: string,
@@ -94,6 +101,7 @@ function listByWalking(repoRoot: string, skipped: SkippedFile[]): string[] {
 
         for (const entry of entries){
             if (IGNORED_DIRS.has(entry.name)) continue;
+            if (entry.isDirectory() && WALK_ONLY_IGNORED_DIRS.has(entry.name)) continue;
 
             // built with "/" by hand: path.join would put backslashes in on Windows
             const rel = dirRel ? `${dirRel}/${entry.name}` : entry.name;

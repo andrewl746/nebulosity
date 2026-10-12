@@ -1,21 +1,25 @@
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
-import { getDb } from "../db/client";
+import { getDb, type Db } from "../db/client";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
+import { writeStage } from "../db/store/stages";
 import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
-    type FileRecord,
+    type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
+import { pruneSummaries } from "../db/store/summaries";
 import { buildFolders, buildLevelEdges } from "./aggregate";
-import { discoverFiles, isTestPath, readGitHead } from "./discover";
-import { TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
-import { normalizeSlashes } from "./paths";
+import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
+import { splitIdentifier } from "./identifiers";
+import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
+import { repoKey } from "./paths";
 import { createResolver } from "./resolve";
 
 export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
 
 export type IndexOptions = {
+    /** Called at least once per stage, in order. done/total count files (folders for "aggregate"). */
     onProgress?: (stage: IndexStage, done: number, total: number) => void;
     /** Files parsed and committed per transaction. */
     batchSize?: number;
@@ -32,8 +36,8 @@ export type IndexResult = {
     edges: number;
     folders: number;
     levelEdges: number;
-    errors: { path: string; error: string }[];
-    skipped: { path: string; reason: string }[];
+    errors: FileError[];
+    skipped: SkippedFile[];
     timingsMs: Record<IndexStage, number>;
     totalMs: number;
     usedGit: boolean;
@@ -46,11 +50,6 @@ export class RepoNotFoundError extends Error {
         super(`No directory at ${root}`);
         this.name = "RepoNotFoundError";
     }
-}
-
-/** One spelling of a repo root everywhere (repositories.rootPath): absolute, forward slashes. */
-export function repoKey(repoRoot: string): string {
-    return normalizeSlashes(path.resolve(repoRoot));
 }
 
 /**
@@ -75,22 +74,28 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
     const batchSize = options.batchSize ?? 500;
 
     acquireIndexLock(db);
+    let stageRepoId: number | null = null;   // set once the repo row exists, so a failure can be reported on it
 
     try{
         const repoId = upsertRepository(db, repoKey(root));
+        stageRepoId = repoId;
+        writeStage(db, repoId, "structure", { state: "running", done: 0, total: 0, note: "discovering files" });
 
         // ---- discover ---------------------------------------------------------
         let t = performance.now();
         const discovered = discoverFiles(root, { extensions: TYPESCRIPT_EXTENSIONS, maxBytes: options.maxFileBytes });
         const stored = loadStoredFiles(db, repoId);
         timingsMs.discover = performance.now() - t;
+        options.onProgress?.("discover", discovered.files.length, discovered.files.length);
+        writeStage(db, repoId, "structure", { state: "running", done: 0, total: discovered.files.length });
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
-        const errors: { path: string; error: string }[] = [];
+        const errors: FileError[] = [];
         let changed = 0;
         let unchanged = 0;
 
         for (let i = 0; i < discovered.files.length; i += batchSize){
+            const processed = Math.min(i + batchSize, discovered.files.length);
             const slice = discovered.files.slice(i, i + batchSize);
             const records: FileRecord[] = [];
 
@@ -118,12 +123,12 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                         path: file.path,
                         kind: /\.(tsx|jsx)$/.test(file.path) ? "component" : "module",
                         contentHash,
-                        language: "typescript",
+                        language: languageOf(file.path),
                         sizeBytes: file.sizeBytes,
                         lineCount: parsed.lineCount,
                         isTest: isTestPath(file.path),
                         importSpecifiers: parsed.imports,
-                        chunks: parsed.chunks,
+                        chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
                         symbols: parsed.symbols,
                     });
                 } catch (err){
@@ -131,14 +136,15 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 }
             }
             timingsMs.parse += performance.now() - t;
+            options.onProgress?.("parse", processed, discovered.files.length);
 
             t = performance.now();
             const writeErrors = writeFileRecords(db, repoId, records);
             errors.push(...writeErrors);
             changed += records.length - writeErrors.length;
             timingsMs.write += performance.now() - t;
-
-            options.onProgress?.("parse", Math.min(i + batchSize, discovered.files.length), discovered.files.length);
+            options.onProgress?.("write", processed, discovered.files.length);
+            writeStage(db, repoId, "structure", { state: "running", done: processed, total: discovered.files.length });
         }
 
         // ---- resolve: the database is the source of truth from here on ---------
@@ -148,7 +154,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const current = loadStoredFiles(db, repoId);
         const fileSet = new Set(current.keys());
         const resolve = createResolver(root, fileSet);
-        const edges: { source: string; target: string; specifier: string }[] = [];
+        const edges: ImportEdge[] = [];
 
         for (const [source, file] of current){
             const targets = new Set<string>();
@@ -162,16 +168,25 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         const edgeCount = replaceImports(db, repoId, edges);
         timingsMs.resolve = performance.now() - t;
+        options.onProgress?.("resolve", fileSet.size, fileSet.size);
 
         // ---- aggregate ------------------------------------------------------------
         t = performance.now();
         const folderRows = buildFolders([...fileSet], path.basename(root));
         const levelRows = buildLevelEdges(edges);
         replaceAggregates(db, repoId, folderRows, levelRows);
+        pruneSummaries(db, repoId);   // a deleted file or folder takes its summary with it
         timingsMs.aggregate = performance.now() - t;
+        options.onProgress?.("aggregate", folderRows.length, folderRows.length);
 
         const indexedHead = readGitHead(root);
         markIndexed(db, repoId, indexedHead);
+        writeStage(db, repoId, "structure", {
+            state: "ready",
+            done: fileSet.size,
+            total: fileSet.size,
+            ...(errors.length > 0 ? { note: `${errors.length} files failed to index` } : {}),
+        });
 
         return {
             repoId,
@@ -189,6 +204,9 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             usedGit: discovered.usedGit,
             indexedHead,
         };
+    } catch (err){
+        if (stageRepoId !== null) reportStructureFailure(db, stageRepoId, err);
+        throw err;
     } finally{
         releaseIndexLock(db);
     }
@@ -196,6 +214,14 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
 function message(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
+}
+
+function reportStructureFailure(db: Db, repoId: number, err: unknown): void {
+    try{
+        writeStage(db, repoId, "structure", { state: "failed", done: 0, total: 0, note: message(err) });
+    } catch{
+        // the database itself may be what failed; the original error matters more
+    }
 }
 
 function isDirectory(p: string): boolean {

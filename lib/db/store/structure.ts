@@ -1,38 +1,38 @@
 import { eq, inArray } from "drizzle-orm";
-import type { getDb } from "../client";
-import { chunks, files, folders, imports, levelEdges, repositories, symbols, type SymbolKind } from "../schema";
+import type { Db } from "../client";
+import {
+    chunks, files, folders, imports, levelEdges, repositories, symbols,
+    type FolderRow, type LevelEdgeRow, type SymbolRow,
+} from "../schema";
 import { columnCount, forEachBatch } from "../batch";
 import type { CodeChunk } from "../../contracts";
 
-type Db = ReturnType<typeof getDb>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** A file that couldn't be read, parsed or written this run, and why. It keeps its previous row. */
+export type FileError = { path: string; error: string };
+
+/** One resolved import: `source` imports `target`, written as `specifier` in the source. */
+export type ImportEdge = { source: string; target: string; specifier: string };
+
+/** A chunk plus its name split into words for code search (lib/index/identifiers.ts). */
+export type ChunkRecord = CodeChunk & { nameSplit: string };
 
 /** Everything one structure run knows about one changed file. */
 export type FileRecord = {
     path: string;
-    kind: "component" | "module";
+    kind: (typeof files.$inferInsert)["kind"];
     contentHash: string;
     language: string;
     sizeBytes: number;
     lineCount: number;
     isTest: boolean;
     importSpecifiers: string[];
-    chunks: CodeChunk[];
-    symbols: {
-        name: string;
-        qualifiedName: string;
-        kind: SymbolKind;
-        startLine: number;
-        endLine: number;
-        exported: boolean;
-        parentQualifiedName: string | null;
-    }[];
+    chunks: ChunkRecord[];
+    symbols: SymbolRow[];
 };
 
 export type StoredFile = { id: number; contentHash: string; importSpecifiers: string[] };
-
-type FolderInput = { path: string; parentPath: string | null; depth: number; name: string; fileCount: number; directFileCount: number };
-type LevelEdgeInput = { levelPath: string; sourceNode: string; targetNode: string; count: number };
 
 export function upsertRepository(db: Db, rootPath: string): number {
     return db.insert(repositories)
@@ -40,6 +40,26 @@ export function upsertRepository(db: Db, rootPath: string): number {
         .onConflictDoUpdate({ target: repositories.rootPath, set: { rootPath } })
         .returning({ id: repositories.id })
         .get().id;
+}
+
+/** The id of an indexed repo, or null if it was never indexed. */
+export function findRepository(db: Db, rootPath: string): number | null {
+    return db.select({ id: repositories.id }).from(repositories).where(eq(repositories.rootPath, rootPath)).get()?.id ?? null;
+}
+
+/** Thrown when a command needs a repo that `npm run index` hasn't indexed yet. */
+export class RepoNotIndexedError extends Error {
+    constructor(rootPath: string){
+        super(`${rootPath} isn't indexed yet. Run npm run index -- ${rootPath} first.`);
+        this.name = "RepoNotIndexedError";
+    }
+}
+
+/** The id of an indexed repo; throws RepoNotIndexedError if it was never indexed. */
+export function requireRepository(db: Db, rootPath: string): number {
+    const id = findRepository(db, rootPath);
+    if (id === null) throw new RepoNotIndexedError(rootPath);
+    return id;
 }
 
 /** path → what the last successful run stored. */
@@ -63,8 +83,8 @@ export function loadStoredFiles(db: Db, repoId: number): Map<string, StoredFile>
  * fails, it's retried file by file so one bad file can't sink its neighbours, and
  * that file keeps its old hash and is retried on the next run (ADR-022).
  */
-export function writeFileRecords(db: Db, repoId: number, records: readonly FileRecord[]): { path: string; error: string }[] {
-    const errors: { path: string; error: string }[] = [];
+export function writeFileRecords(db: Db, repoId: number, records: readonly FileRecord[]): FileError[] {
+    const errors: FileError[] = [];
 
     try{
         db.transaction((tx) => {
@@ -108,6 +128,7 @@ function writeOne(tx: Tx, repoId: number, r: FileRecord): void {
         chunkId: c.id,
         kind: c.kind,
         name: c.name,
+        nameSplit: c.nameSplit,
         startLine: c.startLine,
         endLine: c.endLine,
         exported: c.exported,
@@ -134,7 +155,7 @@ export function deleteFilesNotIn(db: Db, repoId: number, keep: ReadonlySet<strin
 }
 
 /** Replaces the repo's whole import graph and returns how many edges were stored. */
-export function replaceImports(db: Db, repoId: number, edges: readonly { source: string; target: string; specifier: string }[]): number {
+export function replaceImports(db: Db, repoId: number, edges: readonly ImportEdge[]): number {
     const idByPath = new Map(
         db.select({ id: files.id, path: files.path }).from(files).where(eq(files.repoId, repoId)).all().map((f) => [f.path, f.id])
     );
@@ -159,7 +180,7 @@ export function replaceImports(db: Db, repoId: number, edges: readonly { source:
 }
 
 /** Folder tree + level edges are fully derived from the file set and the edges, so they're rebuilt wholesale. */
-export function replaceAggregates(db: Db, repoId: number, folderRows: readonly FolderInput[], edgeRows: readonly LevelEdgeInput[]): void {
+export function replaceAggregates(db: Db, repoId: number, folderRows: readonly FolderRow[], edgeRows: readonly LevelEdgeRow[]): void {
     db.transaction((tx) => {
         tx.delete(folders).where(eq(folders.repoId, repoId)).run();
         tx.delete(levelEdges).where(eq(levelEdges.repoId, repoId)).run();

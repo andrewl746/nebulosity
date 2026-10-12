@@ -6,7 +6,8 @@
  * active one for the Map and the MCP server.
  */
 import path from "path";
-import { indexRepository, repoKey, RepoNotFoundError } from "../lib/index/pipeline";
+import { indexRepository, RepoNotFoundError } from "../lib/index/pipeline";
+import { repoKey } from "../lib/index/paths";
 import { IndexLockedError } from "../lib/db/store/lock";
 import { writeConfig } from "../lib/config";
 

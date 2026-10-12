@@ -10,7 +10,7 @@ import {
 const record = (p: string, overrides: Partial<FileRecord> = {}): FileRecord => ({
     path: p, kind: "module", contentHash: `hash-${p}`, language: "typescript", sizeBytes: 10, lineCount: 1, isTest: false,
     importSpecifiers: [],
-    chunks: [{ id: `${p}#a#0`, filePath: p, kind: "function", name: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: `hash-${p}` }],
+    chunks: [{ id: `${p}#a#0`, filePath: p, kind: "function", name: "a", nameSplit: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: `hash-${p}` }],
     symbols: [{ name: "a", qualifiedName: "a", kind: "function", startLine: 1, endLine: 1, exported: true, parentQualifiedName: null }],
     ...overrides,
 });
@@ -93,5 +93,24 @@ describe("structure store", () => {
 
         expect(db.select({ fileCount: folders.fileCount }).from(folders).where(eq(folders.repoId, repoId)).all()).toEqual([{ fileCount: 2 }]);
         expect(db.select().from(levelEdges).where(eq(levelEdges.repoId, repoId)).all()).toEqual([]);
+    });
+
+    it("puts every written chunk into code search and takes it out again when the file changes or goes", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/store/fts");
+        const withChunk = (name: string, nameSplit: string) => record("fts/widget.ts", {
+            chunks: [{ id: `fts/widget.ts#${name}#0`, filePath: "fts/widget.ts", kind: "function", name, nameSplit, startLine: 1, endLine: 1, exported: true, partIndex: 0, text: `function ${name}() {}`, fileHash: "h" }],
+        });
+        const hits = (word: string) => db.all<{ path: string }>(sql`select path from code_fts where code_fts match ${`"${word}"`} and path = 'fts/widget.ts'`);
+
+        writeFileRecords(db, repoId, [withChunk("openEditor", "open editor")]);
+        expect(hits("editor")).toHaveLength(1);
+
+        writeFileRecords(db, repoId, [withChunk("closeTab", "close tab")]);   // same file, new content
+        expect(hits("editor")).toEqual([]);
+        expect(hits("tab")).toHaveLength(1);
+
+        deleteFilesNotIn(db, repoId, new Set());
+        expect(hits("tab")).toEqual([]);
     });
 });

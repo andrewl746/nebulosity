@@ -220,7 +220,7 @@
 **Context:** ADR-005/006/013 built chunk-level vector RAG with brute-force search, with a revisit trigger at about 50k chunks. VS Code has 101,603 chunks. At the measured ~18 chunks/s, embedding them takes about 94 minutes, and the in-memory cache would hold every vector and every chunk's text. Code questions mix exact identifiers, where keyword search wins, with concepts, where embeddings win.
 **Decision:** Search merges three ranked lists with Reciprocal Rank Fusion (k = 60): BM25 over a code FTS5 index (with camelCase-split names), BM25 over a summary FTS5 index, and cosine similarity over embeddings of **summaries, not chunks**. The existing MiniLM pipeline and the ADR-017 encode/decode pair are reused unchanged. The chunk `vectors` table retires.
 **Alternatives:** (a) Chunk embeddings in sqlite-vec: fixes the memory problem but not the 94-minute embedding cost. (b) Keyword search only: misses conceptual questions. (c) A hosted embedding model: adds an API key and a network dependency to indexing.
-**Consequences:** Keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive. About 15–20k summary vectors stay comfortably within brute-force range. RRF combines lists without calibrating their scores against each other.
+**Consequences:** Keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive. About 15–20k summary vectors stay comfortably within brute-force range. RRF combines lists without calibrating their scores against each other. *(Amended 2026-10-11 in slice V1.2: fusion works on files and folders. Code hits are grouped by file before ranking, so a file with ten matching chunks counts once per list. Each list contributes its top 50, and vector matches below cosine 0.25 are dropped. Queries keep their non-stopword words, quoted and ORed, plus the parts of identifiers. See `RAG_PIPELINE.md` §6.)*
 **Revisit when:** the eval shows conceptual questions failing. Then try a code-specific embedding model, or chunk embeddings for the most-used areas only.
 
 ## ADR-028 — Tiered summaries through the Batch API, with lazy folder refresh (2026-10-11)
@@ -234,7 +234,7 @@
 - `inputHash` (model + prompt version + input) stops identical input from being summarized twice.
 - After an edit, a file's summary refreshes once the file has been quiet for 60 s. Its parent folders are marked stale and refresh lazily, when someone views them or during a periodic sweep.
 **Alternatives:** (a) Haiku everywhere (~$3): cheapest, but weaker synthesis exactly where it's most visible. (b) Sonnet or Opus everywhere (~$60 / ~$120): declined by the owner on cost. (c) Refresh folders eagerly: one `git pull` would trigger hundreds of Sonnet calls.
-**Consequences:** The full pass is estimated at ~$8–10 for VS Code. Each edited file costs a fraction of a cent, plus about 1 cent per folder that's actually viewed. Indexing without an API key still produces structure, search and dependencies; summaries just show as `off`.
+**Consequences:** The full pass is estimated at ~$8–10 for VS Code. Each edited file costs a fraction of a cent, plus about 1 cent per folder that's actually viewed. Indexing without an API key still produces structure, search and dependencies; summaries just show as `off`. *(Amended 2026-10-11 in slice V1.2: the run mechanics are ADR-033.)*
 **Revisit when:** the day-1 side-by-side shows Haiku's file summaries are too generic, or Batch turnaround routinely exceeds a few hours.
 
 ## ADR-029 — The Map: levels, lenses, on-demand panels, a 50-box cap and pre-aggregated level edges (2026-10-11) — supersedes ADR-012's tier plan; keeps ADR-011's dagre choice
@@ -263,6 +263,124 @@
 **Alternatives:** (a) Route the Guide through the MCP server too: guaranteed parity, but an extra process and protocol hop for what is an in-process call. (b) A separate tool set per agent: the drift this ADR exists to prevent.
 **Consequences:** Each new capability (call graph, history, clusters) reaches both agents from one definition. The MCP server runs correctly from any working directory because its launcher sets `NEBULOSITY_HOME`, and schema changes have a single owner.
 **Revisit when:** a third interface needs the tools (for example a REST API for another app). It becomes a third adapter over the same registry.
+
+## ADR-031 — Full-text indexes are kept in sync by triggers (2026-10-11)
+
+**Context:** V1.2 adds two FTS5 indexes: code (`code_fts`, over chunks) and summaries (`summary_fts`). A chunk disappears in four ways: its file is re-parsed, its file is deleted, its repository is deleted, or the Phase 2 pipeline (`lib/index-repo.ts`, retired in V1.3) rewrites it. Only the first passes through the new structure store, and two of the others are `ON DELETE CASCADE` deletes that no application code sees.
+**Decision:**
+- Both indexes are regular FTS5 tables whose rowid is the source row's id.
+- `AFTER INSERT`/`AFTER DELETE` triggers on `chunks` keep `code_fts` in sync. `AFTER INSERT`, `AFTER UPDATE OF tagline, summary` and `AFTER DELETE` triggers on `summaries` keep `summary_fts` in sync.
+- The camelCase split of a chunk's name needs JavaScript, so it is computed once at write time and stored on the chunk (`chunks.name_split`), where the insert trigger can read it.
+- Both tables use the `porter unicode61` tokenizer and keep their bm25 column weights as the `rank` setting.
+**Alternatives:** (a) Explicit writes in the structure store: misses cascades and the old pipeline, so deleted code would keep turning up in search. (b) External-content tables: no duplicate text, but deleting a row needs its old values, which a cascade has already removed. (c) Contentless tables (`contentless_delete=1`): smaller, but `snippet()` stops working and snippets would need their own code.
+**Consequences:** The search indexes can't drift from the data, whichever path changes it. The text is stored twice (the pivot spike measured 211 MB for VS Code's chunks), and every chunk insert also writes an FTS row: measured on VS Code, the cold write stage went from 13.1 s to 27.4 s, and the structure stage still passed S1 at 56.4 s (BENCHMARKS.md, Index Benchmark #2). Migration 0004 clears every content hash once, so existing chunks get indexed on the next run.
+**Revisit when:** database size starts to matter, or the FTS writes push S1 past 60 s.
+
+## ADR-032 — Stage status lives in `meta`, and a silent "running" means a crash (2026-10-11)
+
+**Context:** `PIVOT_SPEC.md` §5.7 asks for `idle | running | ready | off | failed` per stage, with progress, at `GET /api/status`. Stages run in different processes: the CLI now, a server worker from V1.3. A killed process never gets to write "failed".
+**Decision:** Each stage writes `stage:<repoId>:<stage>` in `meta` as it goes, at least once a minute while running. Readers report a `running` row untouched for 5 minutes as `failed`, with the note `interrupted: no progress since <time>`. The one exception is a summaries stage with requests still at Anthropic: that work goes on without any local process, so it stays running (added with ADR-033).
+**Alternatives:** (a) Derive every state from the data: honest by construction, but it can't show a running stage's progress. (b) Record process ids and check them: breaks across reboots and machines.
+**Consequences:** No state can stick at "running" forever, and the route needs no knowledge of which process runs which stage.
+**Revisit when:** a stage legitimately goes quiet for minutes (it must then write a heartbeat), or V1.3's UI needs pushed updates instead of polling.
+
+## ADR-033 — Summary runs: bottom-up waves, a transport per wave, batch ids on the rows (2026-10-11)
+
+**Context:** ADR-028 fixed the models, the Batch API for the first pass, `inputHash` caching and lazy folder refresh. Implementing it raised three questions:
+- Folders need their children's summaries first, so the first pass can't be a single batch.
+- A batch takes minutes to hours, and the process waiting on it may die.
+- Two runs at once would pay twice.
+
+**Decision:**
+- **Waves.** A run is a loop of waves. Each wave plans every target with a pure function (`planSummaries`), sends whatever is ready, then waits for batches still at Anthropic.
+  - Files are always ready.
+  - A folder is ready when none of its children still waits for a model. A child that failed this run counts as done, shown as "no summary yet".
+  - VS Code's first pass takes about a dozen waves, as many as its folder tree is deep.
+- **A transport per wave.** 100 or more requests go through the Batch API, in batches of up to 5,000. Smaller waves use the regular API with 4 requests in flight and the SDK's own retries (`maxRetries: 3`, honouring `retry-after`). The small waves at the top of the tree then take seconds instead of a batch round-trip each.
+- **Batch ids on the rows.** A submitted request is recorded on its summary row (`batch_id`, `pending_hash`), not in a jobs table. Any later run finds the batches still at Anthropic, collects them and carries on. `--no-wait` never sleeps: it collects the batches that have already ended, submits what that makes ready, and exits. An answer only lands if its batch still owns the row. A batch Anthropic no longer has (404) has its rows marked failed and is resent on the next run.
+- **Polling.** A poll that errors (a dropped connection, a laptop waking from sleep) is a missed poll: the run says so and asks again on its next pass. A pass in which no batch could be checked counts as one miss, however many batches are in flight, and any answer (still processing, ended, or gone) resets the count. The run stops after 5 missed passes in a row (`MAX_MISSED_POLLS`), or at once when Anthropic rejects the key (401/403). The batches are still at Anthropic then, so the stage stays `running`, with a note saying how to collect them. `--no-wait` doesn't sleep, so a batch it couldn't check waits for the next run.
+- **Submitting.** A batch that can't be submitted ends the run. Its rows stay pending (not failed, not claimed), batches submitted earlier stay at Anthropic for the next run, and no folder is summarized over placeholders. If Anthropic accepted the batch but recording it on its rows fails (SQLITE_BUSY while `npm run index` holds the write lock, say), the run prints the batch id and puts it in the error before stopping. Creating a batch is never retried automatically (`maxRetries: 0`): after a lost reply, a retry would create a second batch that's billed and never collected, so the run stops instead and the next run resubmits once.
+- **Structure first.** A run refuses to start while the structure stage is running or failed. A repo indexed before stage status existed has no structure row; that counts as ready.
+- **A circuit breaker.** After every wave and every collected batch (a released 404 batch included), if at least 10 requests failed and they were more than half of it, the run stops before planning another wave. The cause is then almost certainly shared (a rejected key, an outage, files edited since indexing), and failed children count as settled, so carrying on would summarize their folders over "no summary yet" and pay for those folders again. The stage reads `failed`, or `running` with batches still at Anthropic, with a note starting `stopped:`; the failures are retried next run.
+- **A lock.** A `summarizing` lock (the same race-safe `meta` row as the index lock, refreshed while waiting) stops a second run from paying twice. It doesn't block indexing.
+- **Templates and hashing.** Test files get a template (status `skipped`, model `template`). A file's `inputHash` hashes its content hash instead of its rendered prompt. That's equivalent, because the prompt is a pure function of the bytes and `PROMPT_VERSION`, and it means planning never reads source files. *(Amended 2026-10-11 in slice V1.2: from prompt v2 the prompt also names the file's importers, which stay out of the hash on purpose; see ADR-034.)*
+- **Request settings.** Effort `low` with adaptive thinking (the models' default), structured outputs for `{ tagline, summary }`, and `max_tokens` 4,096 (a cut-off answer is retried once at 8,192). Sonnet requests on the regular API carry the server-side refusal fallback (`fallbacks: "default"`). The Batches API rejects that parameter, and Haiku 5.5 has no fallback.
+
+**Alternatives:** (a) One batch for everything, with folders summarized from raw file text: no bottom-up synthesis, and much bigger folder inputs. (b) A jobs table: more state to keep consistent with the rows it describes. (c) Batch-only: each of the dozen top waves could wait hours.
+**Consequences:** A crash costs the requests in flight on the regular API; batch requests are collected rather than resent. The one gap is a batch caught between Anthropic accepting it and the run recording it: a failed recording names the batch, but a killed process or a lost reply leaves a batch nothing here can name, and its requests are paid for again when the next run resends them. A wave or batch where most requests fail (at least 10) stops the run before any folder is summarized over those failures. API spend is recorded per model and transport (`summary_usage`), which is how S2 is measured.
+**Revisit when:** waves cost too much wall time on a deeper repo (then submit folders speculatively), or refusals become common.
+
+## ADR-034 — Summary prompt v2, from the owner's checkpoint (2026-10-11)
+
+**Context:** The owner read Review #1 (`SUMMARY_REVIEW.md`: 20 VS Code files, each written by Haiku 5.5 and by Sonnet 5.5) before the full run.
+- Haiku was close to Sonnet at about 1/20 the price.
+- The 6-word clamp cut 7–8 of the 20 Haiku taglines mid-phrase.
+- Summaries hedged with "truncated" and "not shown", and a file's summary couldn't say who used it ("the source does not show which modules import these exports").
+
+**Decision:**
+- **Models.** Haiku 5.5 writes the file summaries, and effort stays low.
+- **Prompt v2** (`PROMPT_VERSION` 2):
+  - The tagline is a noun phrase of 3 to 6 plain words, with an example that isn't from VS Code, so the model can't copy it into a summary.
+  - "Don't mention truncation or code you weren't shown" replaces "if the source is truncated, summarize what's there".
+  - A file's prompt gets one line from the import graph: how many files import it, and the 3 folders with the most of them (`Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders`). Test files are counted apart (`, plus 2 test files`), because on VS Code the biggest importer folders of central files such as `log.ts` and `uri.ts` are test folders (a preview put `src/vs/platform/agentHost/test/node` first for `log.ts`, with 138 importers), which would skew how the file's use looks. *(Amended 2026-10-11 in slice V1.2, after the owner's Review #2 response: the line groups importers by area, not by leaf folder, and reads `Imported by: 10 files: src/vs/workbench (3), src/vs/base/browser (2), build.js (1), and 4 files elsewhere, plus 1 test file`. An importer's group is the child of the lowest common folder of the two files toward the importer, or the importer itself when it sits directly in that folder: spec §4.2's used-by rule, with `lcaFolder` and `childToward` from `lib/index/aggregate.ts` shared with the Map's level edges. The reason: leaf folders named arbitrary deep folders for central files, whereas area groups say where in the codebase a file is used. The hidden groups fold into `, and N files elsewhere`; the test tally and the totals are as before. `PROMPT_VERSION` stays 2, since no v2 summary had been stored yet.)*
+  - Identifiers in the summary go in backticks.
+- **Taglines** are asked for in 3–6 words and kept whole up to 8. A longer one is cut at a word boundary, minus dangling connector words (`and`, `of`, `the`…). Backticks are stripped, since the UI shows taglines as plain text.
+- **Importers go in the file prompt but not in the input hash.** The planner still hashes the model, the prompt version, the path and the content hash.
+- **Whole summaries only.** *(Amended 2026-10-11 in slice V1.2, after the owner's Review #3 response.)* Review #3's `common/configurationService.ts` summary ended "…applyEdits. The". The output limit wasn't the cause: `parseSummary` already failed every `max_tokens` reply, and three fresh runs of the same prompt came back whole (`end_turn`, about 280 output tokens, one text block). Haiku had returned well-formed JSON whose summary simply stopped, and only `refusal` and `max_tokens` were checked, so every other stop reason passed too.
+  - **Completeness.** A reply is whole only when its stop reason is `end_turn`, its summary isn't empty, and the trimmed summary ends a sentence (`/[.!?]["'`)\]]*$/`). A refusal keeps its error; every other incomplete reply fails with `the summary was cut off (stop reason: …)`. Before the check, a trailing run of two or more periods becomes one (`..` → `.`).
+  - **One retry.** A cut-off answer is asked for once more on the regular API with `RETRY_MAX_OUTPUT_TOKENS` (8,192), whichever transport sent it: `summarize` retries its own, and `batchResults` retries a batch's cut-off items before returning the results, so the runner (which only sees outcomes) needed no change. Doubling the limit removes the one known cause of a cut, and costs nothing unused. If the retry is cut off too, or fails, the outcome is failed: nothing is stored, the folder above gets "(no summary yet)", and the next run resends it. Never more than one retry per answer, and a failed retry is an outcome, never a throw.
+  - **Accounting.** Both attempts are billed, so the outcome's usage sums both, per model. The runner records a batch's outcomes at batch prices, so a retried batch item's regular-API tokens are counted at half their price. Retries are rare, so the gap is accepted rather than splitting one outcome's usage across transports. A retried answer still counts as one request in `summary_usage` while both attempts' tokens are summed, so the per-request mean the spend cap uses (ADR-035) errs high, which is safe for the cap.
+  - **Memory.** A batch's results don't carry the prompts, so the summarizer keeps each batch's requests from submission until its results are collected: on the order of 100 MB for VS Code's file pass. A batch submitted by another process (a run resumed after a restart) has no requests there. Only the process that submitted a batch retries its cut-off items in-process: when another process collects the batches (after a restart, or in `--no-wait` runs), those items fail, are never stored, and are resent on the next run.
+  - **No heartbeat during retries.** Retries of a collected batch run inside one poll, without a lock heartbeat (ADR-033). A mass cut-off could outlast the 5-minute "running means alive" window (ADR-032). This is a known limit, accepted because cut-offs are rare.
+- **Test-only folders get a template.** *(Amended 2026-10-11 in slice V1.2, after the owner's Review #3 response.)* The owner chose to skip the model for folders that hold only test files, as test files already do. A folder (never the repo) whose subtree holds at least one file and no non-test file is planned like a test file: model `template`, status `skipped`, ``inputHash("template", PROMPT_VERSION, `${path}\n${tagline}\n${summary}`)``, and settled at once, so its parent isn't held back. The text comes from `testFolderSummary`: `Tests for <subject>`, where the subject is the path segment before the first `test`, `tests` or `__tests__` segment, else the folder's own name. Measured scale: VS Code has 1,266 of 3,793 folders that are test-only, and templating them saves an estimated $2.20.
+
+**Alternatives:** (a) Keep the hard 6-word clamp: a firm promise to the UI, but it cut 7–8 of 20 taglines mid-phrase. (b) Sonnet for files: about 20 times the price (Review #1 estimated $60.39 against $3.06 for the file pass) for summaries that were close. (c) Put the importers in the hash: the usage sentence would follow the live graph, but a new importer would re-summarize a central file on every pull.
+**Consequences:**
+- v2 invalidates every stored summary, but VS Code has none yet.
+- The usage sentence reflects the graph as it was when the file was summarized.
+- The file prompt grows by about 100 tokens, roughly $0.05 over a VS Code pass.
+- The UI's tagline promise becomes ≤ 8 words.
+
+**Revisit when:** Review #2 (the same 20 files) still shows taglines cut or summaries hedged, or usage sentences go stale enough to mislead. Then redo the most-imported files on a schedule.
+
+## ADR-035 — A spend cap on summary runs (2026-10-11)
+
+**Context:** The owner approved the full VS Code pass with one condition: "Before submitting each further batch, stop if the spend so far plus the remaining estimate would pass $15". Review #2 estimated the pass at about $11.70 (Haiku files, Sonnet folders and the repo, by batch), and $15 is S2's ceiling. Until now a run learned what it had spent only after paying: `summary_usage` records each answer's tokens as it lands.
+
+**Decision:**
+- **The projection.** Before every submission, and before any of its prompts is built, a run projects **spent + at Anthropic + this submission + the rest**. A submission is each batch and each regular-API wave. The math is pure (`projectSpend`, `lib/index/summarize/budget.ts`).
+  - **Spent:** every `summary_usage` row of the repo, each at its own transport's price.
+  - **At Anthropic:** the requests in flight, at batch prices. A pass's plan lists the ones in flight when it started. Each batch the wave submits joins them once it's recorded, so a later batch of the same wave counts the earlier ones. Leaving them out would make every later check more lenient than the first.
+  - **This submission:** at its own transport's price.
+  - **The rest:** every target still `ready` or `waiting` after it, at batch prices, or direct ones when the run's transport is `direct`.
+  - **Tokens per request:** the model's mean on this repo (Σ tokens ÷ Σ requests, both transports). Until a model has any usage, `ASSUMED_TOKENS` for the target's kind: files 4,600 in and 260 out (Review #1's Haiku means), folders and the repo 1,000 and 250. The checkpoint's estimate (`compare.ts`) takes its folder input from the same constant.
+  - A model with no price on file counts as $0 and is named in the progress line.
+- **Under the budget** the run prints `budget: spent $… + at Anthropic ≈ $… + this wave ≈ $… + the rest ≈ $… = $… of $…` and sends.
+- **Over it** the run stops sending, but keeps collecting what's already at Anthropic.
+  - That submission and everything after it stay pending (not failed, not claimed).
+  - A wave whose first submission is over budget is never announced or counted. A later batch over budget ends its wave's submissions.
+  - The batches already at Anthropic are still collected: as each one ends, with `wait`; the ones that have ended, with `--no-wait`. Meanwhile the stage note reads `over budget, so nothing new goes out; collecting the N batches already at Anthropic`, so a long wait isn't mistaken for an ordinary one. After each collection the run plans and checks again, with the real usage in place of the estimates, and sends normally if the projection now fits.
+  - This ends: nothing new is sent while over budget, so each pass collects a batch (taking it out of flight), finds none left, or finishes.
+  - The run finishes over budget only when nothing more can happen: nothing is in flight, or `--no-wait` collected nothing. It reports the stop as the circuit breaker does (ADR-033): `stopped: true`, and the stage `failed`, or `running` while batches are still at Anthropic. The note is the latest failing check's: `stopped: the next batch would bring the projected spend to $…, over the $… budget (spent $…, at Anthropic ≈ $…, this batch ≈ $…, the rest ≈ $…); run again with --budget <usd> to go on` ("wave" for a regular-API wave).
+  - A budget that isn't a number stops the sending too, rather than lifting the cap.
+- **The budget** is `SummaryRunOptions.budgetUsd`. Undefined means no cap, and `summarizeNow` (one request) has none. The CLI's `--budget <usd>` takes a positive number and defaults to $15 (`DEFAULT_BUDGET_USD`, S2).
+- **Ruled choices**, from the owner's verdict:
+  - **Cumulative per repo.** "Spent" is every usage row of the repo, so the default bounds the repo's total recorded summary spend (see Consequences for what isn't recorded), not one run's.
+  - **Every submission,** regular-API waves included: "each further batch" was read as every send.
+  - **The rest at batch prices,** the transport of the big waves where nearly all the money goes, unless the run is `--direct`.
+  - **A budget stop stops sending, not collecting.** The owner's condition is about submitting, and the batches already at Anthropic are paid for.
+
+**Alternatives:** (a) A per-run budget: simpler, but a first pass can take several runs (`--no-wait`, an interruption), and the owner's condition is about the total. (b) Check batches only: the small regular-API waves at the top of the tree would go out unchecked. (c) Predict which later waves go direct (under 100 requests) and price them that way: wave sizes depend on how the tree fills in and on what fails, so that is a guess too, with more code to keep honest. (d) Re-read the in-flight rows from the database before each batch: the same count unless something else touches those rows mid-wave. A row that `summarizeNow` redoes meanwhile leaves the database's count, though Anthropic still bills its batch request. (e) End the run at once, the way the circuit breaker does (this ADR's first version): a run sends what's ready before it collects, so every re-run under the same budget stopped at the same check, and the paid-for batches were never collected.
+
+**Consequences:**
+- A run stops sending before its projection passes the budget, so it can overspend only by what the projection misses.
+- **What the cap can't see:** spend that never reaches `summary_usage`. That covers the owner's checkpoint reviews (`compare-summaries`, about $0.49 on VS Code, and the `preview-folders` folder preview, about $0.24), and a batch Anthropic accepted but the run couldn't record, whose rows are later resent and paid for again.
+- **The known gap:** the rest prices every remaining target at batch rates, but a wave under 100 requests goes through the regular API at full price. Such waves come at the top of the tree, and also mid-run, when file batches land at different times and leave only a few folders ready at once. So the projection runs a little low, by an estimated under $1 on VS Code. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
+- A model is priced from the assumption until its first answers are recorded (a batch's, when it's collected), and from its measured mean after that. An unpriced fallback model makes the total a lower bound, and the progress line says so.
+- A later run on the same repo (an incremental update, say) starts from everything already spent, so past $15 it needs `--budget`.
+- With `wait`, a run over budget keeps running until the batches it's waiting on have ended, which can take hours. Everything paid for lands, and a re-run under the same budget collects whatever has ended since.
+
+**Revisit when:** the assumed tokens prove far off on a new repo before its first answers land (then seed the means from the checkpoint's sample), or the regular-API gap grows past a dollar (then price the waves under 100 requests at direct rates).
 
 ---
 

@@ -1,6 +1,6 @@
 # DATABASE_DESIGN.md — Embedded Relational Storage (SQLite + Drizzle)
 
-> **2026-10-11 — pivot:** the schema is extended (folders, level_edges, symbols, summaries, summary_vectors, FTS5), the chunk `vectors` table retires, and every write is batched under SQLite's 32,766-parameter cap. See `PIVOT_SPEC.md` §4; §7 documents the V1.1 additions.
+> **2026-10-11 — pivot:** the schema is extended (folders, level_edges, symbols, summaries, summary_vectors, FTS5), the chunk `vectors` table retires, and every write is batched under SQLite's 32,766-parameter cap. See `PIVOT_SPEC.md` §4; §7 documents the V1.1 additions and §8 the V1.2 ones.
 
 **Status:** Approved design, implemented 2026-07-12 (schema live, wired to the app in Phase D)
 **Supersedes:** the JSON file store (see ADR-006 → ADR-013 in `ENGINEERING_DECISIONS.md`)
@@ -76,7 +76,7 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
 
 ## 7. Pivot additions (slice V1.1, `PIVOT_SPEC.md` §4)
 
-- **`files`** gains `language`, `size_bytes`, `line_count`, `is_test` and `import_specifiers` (a JSON array of the raw specifiers). Storing the specifiers lets an incremental run re-resolve *every* file's imports, because a new or deleted file can change what `"../core"` points at, while re-parsing only the files whose hash changed.
+- **`files`** gains `language` (`typescript` or `javascript`, by extension), `size_bytes`, `line_count`, `is_test` and `import_specifiers` (a JSON array of the raw specifiers). Storing the specifiers lets an incremental run re-resolve *every* file's imports, because a new or deleted file can change what `"../core"` points at, while re-parsing only the files whose hash changed.
 - **`chunks.chunk_id`** is unique per file (`(file_id, chunk_id)`), not globally. With many repos in one database, two of them can both contain `src/index.ts#start#0`.
 - **`symbols`** has one row per top-level declaration and per class member: `name`, `qualified_name` (`Logger.info`), `kind`, `start_line`/`end_line`, `exported` and `parent_qualified_name`. The line range covers the declaration itself, excluding its doc comment, because it's used for jumping to a definition.
 - **`folders`** is the folder tree of the indexed files: `path` (`""` is the repo root), `parent_path`, `depth`, `name`, `file_count` (recursive) and `direct_file_count`.
@@ -84,3 +84,24 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
 - **`repositories.indexed_head`** records the git commit the last run saw.
 - **Write discipline.** Every bulk insert goes through `lib/db/batch.ts`, which splits rows so no statement exceeds SQLite's 32,766 bound parameters. Drizzle binds every column, defaults included, so the cost per row is the table's column count. Repo-wide deletes use a subquery, never an `IN (...)` list of every id.
 - **Durability.** `client.ts` pairs WAL with `synchronous = NORMAL`, SQLite's recommended setting for WAL: commits stop waiting for an fsync, which matters for an indexer that commits a batch every 500 files. A power cut or OS crash can roll back the last few commits but never corrupts the file. That trade is safe because everything here is derived: a lost commit means its content hashes were never written either, so the next run re-indexes those files (ADR-022).
+
+## 8. V1.2 additions (summaries and search, `PIVOT_SPEC.md` §4.1, §5.3–5.4)
+
+- **`summaries`**: one row per file, folder and the repo (`target_kind` + `target_path`, unique per repo; `""` is the repo). It holds `tagline` (3–6 words asked for; up to 8 kept whole), `summary` (2–4 sentences), `model` (the model that wrote it, or `template`), `input_hash` (the input that text answers), `status` and `error`. Statuses:
+  - `fresh`: the text matches the current input.
+  - `stale`: text from an older input, kept on show until it's redone.
+  - `pending`: no text yet.
+  - `failed`: the last attempt failed; the next run retries it.
+  - `skipped`: test files, which get a template instead of a model call.
+
+  Rows are keyed by path, never by id, because folders are rebuilt wholesale on every structure run. Two more columns make long Batch runs resumable without a jobs table: `batch_id` (the Message Batch carrying this row's request) and `pending_hash` (the input that request answers). An answer only lands if its batch still owns the row.
+- **`summary_vectors`**: one MiniLM vector per model-written summary (`summary_id` unique, cascading), stored with the ADR-017 encode/decode pair. Rewriting a summary deletes its vector; the embeddings stage refills whatever is missing.
+- **`summary_usage`**: API tokens per repo, model and transport (`direct` or `batch`), added up with an upsert as answers arrive. Success criterion S2 is read from here.
+- **`chunks.name_split`**: the chunk's name as lowercase words (`openEditor` → `open editor`), so a word search finds camelCase names.
+- **Search indexes.** `code_fts` (FTS5 over `path`, `name`, `name_split`, `text`; rowid = `chunks.id`) and `summary_fts` (FTS5 over `path`, `tagline`, `summary`; rowid = `summaries.id`), both with the `porter unicode61` tokenizer.
+  - **Triggers keep them in sync (ADR-031).** Every chunk insert adds its row. Every chunk delete removes it, whatever caused the delete: a re-parse, a deleted file, a deleted repository (`ON DELETE CASCADE` fires triggers too).
+  - A summary is indexed once it has text and re-indexed when the text changes (`AFTER UPDATE OF tagline, summary`), so status-only updates cost nothing.
+  - Each table stores its `bm25` column weights as its `rank` (code: path 2, name 10, name_split 6, text 1; summaries: path 1, tagline 4, summary 2), so queries just `ORDER BY rank`.
+- **Migration 0004 clears every `files.content_hash`, once.** Chunks written before it have no `code_fts` rows, so the next `npm run index` re-parses every file and the triggers fill the index.
+- **Stage status** lives in `meta` as `stage:<repoId>:<stage>` → `{ state, done, total, note? }`, written by each stage as it goes (`API_CONTRACTS.md` §9, ADR-032).
+- **The `summarizing` lock** is a second `meta` lock row, taken by summary runs (ADR-033). Indexing can go on during a summary run; two summary runs can't, because both would pay for the same summaries. A run waiting on batches refreshes it, so it never looks abandoned.

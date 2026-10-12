@@ -92,7 +92,7 @@ lib/index/discover.ts       ← lib/scan.ts (git ls-files + fallback walk)
 lib/index/languages/        adapter.ts (interface), typescript.ts ← lib/chunks.ts + AST imports
 lib/index/resolve.ts        ← resolveImport & co. from lib/graph.ts, + per-package tsconfig
 lib/index/aggregate.ts      folders + level edges (§4.2)
-lib/index/summarize.ts      tiered summaries, Batch + on-demand
+lib/index/summarize/        tiered summaries: prompts, planner, Claude transport, runner (Batch + on demand)
 lib/index/embed.ts          ← lib/embed.ts (plumbing unchanged; embeds summaries)
 lib/index/pipeline.ts       ← lib/index-repo.ts (stages, lock, progress)
 lib/index/watch.ts          file watcher + debounce
@@ -117,16 +117,17 @@ Persistence shapes live in `lib/db/schema.ts` (ADR-013). The spec fixes their me
 | `repositories` | kept | one row per indexed repo; gains `indexedHead` (git commit at last index) |
 | `files` | extended | adds `language`, `sizeBytes`, `lineCount`, `isTest`, `importSpecifiers` (raw specifiers as JSON, so unchanged files are re-resolved without re-parsing). `contentHash` keeps its single owner and meaning (ADR-022) |
 | `imports` | kept | file → file edges; now produced from the AST |
-| `chunks` | kept | retrieval units (existing chunker); feeds the code FTS index; `chunkId` is now unique per file |
+| `chunks` | kept | retrieval units (existing chunker); feeds the code FTS index; `chunkId` is now unique per file; `nameSplit` is the name as words |
 | `vectors` | **retired** | chunk embeddings; replaced by `summary_vectors` (§5.4) |
 | `meta` | kept | lock, model ids, schema version, per-stage status (§5.7) |
 | `folders` | new | `path` (unique per repo), `parentPath`, `depth`, `name`, `fileCount` (recursive), `directFileCount` |
 | `level_edges` | new | aggregated edges per level (§4.2): `levelPath`, `sourceNode`, `targetNode`, `count` |
 | `symbols` | new | top-level declarations **and class members**: `name`, `qualifiedName` (`Class.method`), `kind`, `startLine`, `endLine`, `exported`, `parentQualifiedName` (a string, so whole batches insert without needing ids first) |
-| `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (≤ 6 words), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped, off) |
-| `summary_vectors` | new | one embedding per fresh summary (encode/decode pair, ADR-017) |
-| `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks |
-| `summary_fts` | new (FTS5) | `path`, `tagline`, `summary` |
+| `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (3–6 words asked for; up to 8 kept whole), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped; `off` is reported, never stored), `error`, and `batchId`/`pendingHash` so a Batch run can resume (§5.3) |
+| `summary_vectors` | new | one embedding per model-written summary (encode/decode pair, ADR-017) |
+| `summary_usage` | new | API tokens per repo, model and transport (direct, batch); S2 is measured from it |
+| `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks; kept in sync by triggers (ADR-031) |
+| `summary_fts` | new (FTS5) | `path`, `tagline`, `summary`; kept in sync by triggers (ADR-031) |
 | E2 `calls` | later | `callerSymbolId`, `calleeSymbolId`, `count`, `resolution` (typed, heuristic) |
 | E3 `file_history`, `co_changes` | later | churn, last change, first commit, top authors; co-change pairs with confidence |
 | E5 `clusters`, `file_clusters` | later | cluster id, label, size; file → cluster |
@@ -149,7 +150,7 @@ For every import edge `a → b`, take `L = LCA(dir(a), dir(b))`, the deepest fol
 ## 5. Indexing pipeline
 
 ### 5.1 Discover
-Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree with the ignore list. Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. Files larger than 1 MB are recorded as skipped. The scan is no longer limited to `app/` and `lib/`.
+Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree, skipping `node_modules`, `.git`, `.next` and `.nebulosity` (skipped in git mode too), plus `dist`, `out`, `build` and `coverage` (skipped only when walking: in a git repo `.gitignore` decides, and a tracked `build/` can be real source, as in VS Code). Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. Files larger than 1 MB are recorded as skipped. The scan is no longer limited to `app/` and `lib/`.
 
 ### 5.2 Structure (blocking; target S1 ≤ 60 s)
 1. Hash every file and skip unchanged ones (ADR-022's contentHash rule).
@@ -169,11 +170,12 @@ Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; ot
 
 ### 5.3 Summaries (background)
 - **Order.** Most-imported files first, so central code lands early. When the UI opens a path that has no summary yet, it jumps the queue through the regular API (`POST /api/summarize`).
-- **File summaries** use Claude Haiku 5.5 (`claude-haiku-5-5`). Input: path, the file-summary chunk (imports/exports), and the file text capped at about 6k tokens. Output (structured): `{ tagline, summary }`. **Test files get a templated summary with no API call.**
+- **File summaries** use Claude Haiku 5.5 (`claude-haiku-5-5`). Input: path, the file-summary chunk (imports/exports), its importers from the graph (how many, grouped by area with §4.2's used-by rule: an importer counts under the child of the lowest common folder toward it, or as itself when it sits directly in that folder, and the top 3 groups are named; test files counted separately), and the file text capped at about 6k tokens. Output (structured): `{ tagline, summary }`. **Test files, and folders that hold only test files, get a templated summary with no API call** (status `skipped`).
 - **Folder summaries** use Claude Sonnet 5.5 (`claude-sonnet-5-5`), built bottom-up once all children are fresh. Input: the folder path plus its children's taglines and summaries, capped at the 50 largest plus "N more". Same output shape.
 - **The repo summary** uses Sonnet 5.5, from the top-level folder summaries.
-- **Transport.** The first full pass uses the Message Batches API (half price), submitted in chunks of up to 5,000 requests, with results keyed by `custom_id`, never by position. Incremental and on-demand work uses the regular Messages API with a concurrency limit and honours `retry-after`.
-- **Cache key.** `inputHash = hash(model, promptVersion, input)`, so identical input is never re-summarized. Bumping `promptVersion` invalidates everything deliberately.
+- **Transport.** The first full pass uses the Message Batches API (half price), submitted in chunks of up to 5,000 requests, with results keyed by `custom_id`, never by position. Incremental and on-demand work uses the regular Messages API with a concurrency limit and honours `retry-after`. In practice the transport is chosen per wave (ADR-033): a run plans, sends what's ready and repeats as folders become ready bottom-up. Waves of 100+ requests go by batch and smaller ones by the regular API. Batch ids are stored on the summary rows, so an interrupted run resumes instead of resending.
+- **Spend cap (ADR-035).** Before each submission the run projects spent + at Anthropic + this submission + the rest and stops sending if that passes the budget (`--budget`, default $15 = S2). What's already at Anthropic is paid for, so it's still collected.
+- **Cache key.** `inputHash = hash(model, promptVersion, input)`, so identical input is never re-summarized. Bumping `promptVersion` invalidates everything deliberately. A file's hash covers its path and content; the importer line in its prompt is left out on purpose (ADR-034), so a new importer doesn't redo a central file.
 - **Effort.** Low by default, tunable. On day 1, 20 VS Code files go through both models side by side, and the owner checks quality before the full run.
 - **No API key** sets the stage to `off` with a reason. Everything else still works.
 - API usage follows the `claude-api` skill's TypeScript reference (official `@anthropic-ai/sdk`). Nothing is guessed.
@@ -203,7 +205,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ### 5.7 Errors and status
 - Per-file failures are recorded and reported, and never abort a run (ADR-021).
 - API failures retry three times with backoff, then become `failed` and are retried on the next run.
-- Stage status is `idle | running | ready | off | failed`, with `done/total` and a note. It's exposed at `GET /api/status` and drives the UI's progress pill.
+- Stage status is `idle | running | ready | off | failed`, with `done/total` and a note. It's exposed at `GET /api/status` and drives the UI's progress pill. v1's stages are `structure`, `summaries` and `embeddings` (`API_CONTRACTS.md` §9). A `running` stage that stops writing for 5 minutes reads as failed (ADR-032).
 
 ---
 
@@ -212,7 +214,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ### 6.1 Queries (pure functions over the store, unit-tested, cached per index version)
 - **`level(path)`**: breadcrumb, at most 50 nodes plus a "+N more" node, that level's edges, and the hidden count.
 - **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
-- **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet.
+- **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance.
 - **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path".
 - **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
@@ -401,13 +403,13 @@ Each v1 slice ends demoable:
 | Windows path separators | forward-slash normalization at every boundary (existing convention) |
 | Target repo inside the project dir would be swept into `tsc` | target repos live outside the Nebulosity checkout (VS Code is at `../vscode`) |
 | Public-repo hygiene | `CLAUDE.md` is gitignored (verified) and never published. The Phase 2–4 provenance story *does* appear in tracked docs (`IMPLEMENTATION_ROADMAP.md`, `RAG_IMPLEMENTATION_REVIEW.md`, `BUGS_ENCOUNTERED.md`), so the owner reviews `docs/` before release |
-| API cost creep | `inputHash` caching, test files templated, input caps, lazy folder refresh |
+| API cost creep | `inputHash` caching, test files and test-only folders templated, input caps, lazy folder refresh |
 
 ---
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2:
 
 | ADR | Decision |
 |---|---|
@@ -418,6 +420,11 @@ Each v1 slice ends demoable:
 | ADR-028 | Tiered summaries (Haiku 5.5 files, Sonnet 5.5 folders), Batch for the first pass, lazy folder refresh |
 | ADR-029 | The Map: levels, lenses and on-demand panels, with a 50-box cap; aggregated `level_edges` |
 | ADR-030 | One tool registry, two adapters (MCP for external agents, in-process for the Guide); install-relative paths |
+| ADR-031 | The FTS5 indexes (`code_fts`, `summary_fts`) are kept in sync by triggers, so cascades and the old pipeline can't leave stale search rows; a chunk's camelCase name split is stored on the chunk |
+| ADR-032 | Stage status lives in `meta`, written at least once a minute while running; a `running` stage silent for 5 minutes reads as failed, unless batches are still at Anthropic |
+| ADR-033 | Summary runs: bottom-up waves, the Batch API for 100+ requests and the regular API below, batch ids on the summary rows, a circuit breaker and a `summarizing` lock |
+| ADR-034 | Summary prompt v2: Haiku 5.5 for files, 3 to 6 word taglines kept whole up to 8, importers in the prompt but not the hash, whole summaries only (one retry), test-only folders templated |
+| ADR-035 | A spend cap: before each submission, project spent + at Anthropic + this submission + the rest, and stop sending past `--budget` (default $15); batches already at Anthropic are still collected |
 
 ## 16. Doc migration
 

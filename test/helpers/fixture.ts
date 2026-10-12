@@ -1,0 +1,13 @@
+import fs from "fs";
+import path from "path";
+import { makeTempDir } from "./temp";
+
+/** test/fixtures/mini-repo: the hand-designed repo whose ground truth is in the V1.1 plan. */
+export const FIXTURE = path.resolve("test/fixtures/mini-repo");
+
+/** A private copy of the fixture, for tests that index or edit it. Deleted when the test ends. */
+export function copyFixture(): string {
+    const dir = makeTempDir("neb-fixture-");
+    fs.cpSync(FIXTURE, dir, { recursive: true });
+    return dir;
+}
