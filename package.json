@@ -11,7 +11,8 @@
     "index": "tsx scripts/index.ts",
     "summarize": "tsx scripts/summarize.ts",
     "search": "tsx scripts/search.ts",
-    "compare-summaries": "tsx scripts/compare-summaries.ts"
+    "compare-summaries": "tsx scripts/compare-summaries.ts",
+    "preview-folders": "tsx scripts/preview-folders.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

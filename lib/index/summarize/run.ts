@@ -311,7 +311,7 @@ export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick
  * Summaries are built on the structure index, so it has to be finished first. A repo indexed
  * before stage status existed has no structure row at all; that counts as ready.
  */
-function requireStructureReady(db: Db, repoId: number): void {
+export function requireStructureReady(db: Db, repoId: number): void {
     const structure = readStages(db, repoId).structure;
     if (structure && structure.state !== "ready") throw new StructureNotReadyError(structure.state);
 }

@@ -15,7 +15,7 @@ import { loadFileFacts, loadFolderFacts } from "../lib/db/store/summaries";
 import { nebulosityPath } from "../lib/home";
 import { repoKey } from "../lib/index/paths";
 import { createClaudeSummarizer } from "../lib/index/summarize/claude";
-import { pickSample, renderComparison, type ComparisonRow } from "../lib/index/summarize/compare";
+import { nextReviewNumber, pickSample, renderComparison, reviewDate, SUMMARY_REVIEW_HEADER, type ComparisonRow } from "../lib/index/summarize/compare";
 import { mapLimit } from "../lib/index/summarize/concurrency";
 import { FILE_SYSTEM_PROMPT, SUMMARY_EFFORT, SUMMARY_MODELS } from "../lib/index/summarize/prompts";
 import { buildFilePrompt } from "../lib/index/summarize/run";
@@ -62,17 +62,14 @@ async function main(): Promise<void> {
     }
 
     const existing = fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "";
-    const reviewNumber = (existing.match(/Summary Review #\d+/g) ?? []).length + 1;
-    const today = new Date();
-    const date = `${today.getFullYear()} ${String(today.getMonth() + 1).padStart(2, "0")} ${String(today.getDate()).padStart(2, "0")}`;
-    const title = `${date} Summary Review #${reviewNumber} — ${models[0]} vs ${models[1]} on ${sample.length} files of ${path.basename(root)}`;
+    // numbered from the review headings already there, so a verdict that names an earlier review can't skip a number
+    const title = `${reviewDate(new Date())} Summary Review #${nextReviewNumber(existing)} — ${models[0]} vs ${models[1]} on ${sample.length} files of ${path.basename(root)}`;
 
-    const header = "# SUMMARY_REVIEW.md — Summary quality reviews\n\nThe owner's checks of model-written summaries before they're generated at scale. Each review is a dated, numbered section; the newest is last.\n";
     const section = renderComparison({
         title, repo: repoKey(root), effort, models, rows,
         fullPass: { files: files.filter((f) => !f.isTest).length, folders: loadFolderFacts(db, repoId).length },
     });
-    fs.writeFileSync(out, `${existing || header}\n${section}`);
+    fs.writeFileSync(out, `${existing || SUMMARY_REVIEW_HEADER}\n${section}`);
     console.log(`[compare] wrote "${title}" to ${out}`);
 }
 

@@ -1,6 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { FILES } from "../../../test/helpers/mini-repo-facts";
-import { pickSample, renderComparison } from "./compare";
+import { nextReviewNumber, pickSample, renderComparison, reviewDate } from "./compare";
+
+describe("nextReviewNumber", () => {
+    it("counts only review headings, not a review named in a verdict or a deeper heading", () => {
+        const doc = [
+            "# SUMMARY_REVIEW.md — Summary quality reviews",
+            "",
+            "## 2026 10 11 Summary Review #1 — a vs b on 20 files of vscode",
+            "",
+            "> **Owner's verdict:** Summary Review #1 reads well; Summary Review #2 follows the prompt change.",
+            "",
+            "## 2026 10 11 Summary Review #2 — a vs b on 20 files of vscode",
+            "",
+            "#### 1. `docs/Summary Review #7.md` (3 lines)",
+            "",
+        ].join("\n");
+
+        // two "## … Summary Review #n" headings; the verdict's two mentions and the "####" line aren't reviews
+        // (counting every "Summary Review #n" would have made this one #6)
+        expect(nextReviewNumber(doc)).toBe(3);
+        expect(nextReviewNumber("")).toBe(1);
+    });
+});
+
+describe("reviewDate", () => {
+    it("writes a date as the review headings do, zero-padded", () => {
+        expect(reviewDate(new Date(2026, 0, 5))).toBe("2026 01 05");
+        expect(reviewDate(new Date(2026, 9, 11))).toBe("2026 10 11");
+    });
+});
 
 describe("pickSample", () => {
     it("takes the most-imported half, then spreads the rest evenly through the tree, never a test file", () => {

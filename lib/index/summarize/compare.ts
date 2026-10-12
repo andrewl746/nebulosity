@@ -7,6 +7,24 @@ import type { SummaryOutcome } from "./types";
 /** Folder inputs, assumed for the estimate as the spend cap assumes them (budget.ts): a folder lists its children's taglines and summaries. */
 const ASSUMED_FOLDER_INPUT_TOKENS = ASSUMED_TOKENS.folder.inputTokens;
 
+/** What a new docs/SUMMARY_REVIEW.md opens with. */
+export const SUMMARY_REVIEW_HEADER =
+    "# SUMMARY_REVIEW.md — Summary quality reviews\n\nThe owner's checks of model-written summaries before they're generated at scale. Each review is a dated, numbered section; the newest is last.\n";
+
+/**
+ * The number the next review in SUMMARY_REVIEW.md gets: one more than the reviews it holds. Only review headings
+ * count ("## <date> Summary Review #<n> — …"): a verdict that names an earlier review, or a file path that happens to
+ * contain the words, must not push the number up.
+ */
+export function nextReviewNumber(existing: string): number {
+    return (existing.match(/^## .*Summary Review #\d+/gm) ?? []).length + 1;
+}
+
+/** A review heading's date, "2026 10 11" (the dated-header convention of the review docs). */
+export function reviewDate(date: Date): string {
+    return `${date.getFullYear()} ${String(date.getMonth() + 1).padStart(2, "0")} ${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export type ComparisonRow = { file: FileFacts; outcomes: Record<string, SummaryOutcome | undefined> };
 
 export type ComparisonReport = {
@@ -42,7 +60,7 @@ export function pickSample(files: readonly FileFacts[], count: number): FileFact
 
 export function renderComparison(report: ComparisonReport): string {
     const [fileModel, folderModel] = report.models;
-    const stats = report.models.map((model) => modelStats(model, report.rows));
+    const stats = report.models.map((model) => usageStats(model, report.rows.map((row) => row.outcomes[model])));
     const [fileStats, folderStats] = stats;
     const central = Math.ceil(report.rows.length / 2);
 
@@ -96,15 +114,34 @@ export function renderComparison(report: ComparisonReport): string {
     return lines.join("\n") + "\n";
 }
 
-function modelStats(model: string, rows: readonly ComparisonRow[]){
+/** One model's requests, tokens and cost over a set of answers (usageStats). */
+export type UsageStats = {
+    model: string;
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    /** USD at regular-API prices; a lower bound when `unpriced`. */
+    cost: number;
+    /** Some model that ran has no price on file, so `cost` leaves it out. */
+    unpriced: boolean;
+    meanCost: number;
+    meanInputTokens: number;
+    meanOutputTokens: number;
+};
+
+/**
+ * Adds up the answers one model was asked for (undefined: it wasn't asked). An answer that came with usage is a
+ * request, failed or not; one that got no reply at all (usage null) isn't, and costs nothing.
+ */
+export function usageStats(model: string, outcomes: readonly (SummaryOutcome | undefined)[]): UsageStats {
     let requests = 0;
     let inputTokens = 0;
     let outputTokens = 0;
     let cost = 0;
     let unpriced = false;
 
-    for (const row of rows){
-        const usage = row.outcomes[model]?.usage;
+    for (const outcome of outcomes){
+        const usage = outcome?.usage;
         if (!usage) continue;
         requests++;
 
@@ -123,6 +160,7 @@ function modelStats(model: string, rows: readonly ComparisonRow[]){
     return {
         model, requests, inputTokens, outputTokens, cost, unpriced,
         meanCost: requests > 0 ? cost / requests : 0,
+        meanInputTokens: requests > 0 ? inputTokens / requests : 0,
         meanOutputTokens: requests > 0 ? outputTokens / requests : 0,
     };
 }
@@ -142,7 +180,7 @@ function answerLabel(model: string, answeredBy: string): string {
  * "$0.0006" while multiplying the exact $0.000588225 left a line that works out to $3.12.
  * Prints at least 4 decimals, and more only while the rounded value needs them ($0.0060, $0.000588).
  */
-function perRequestPrice(mean: number): { value: number; text: string } {
+export function perRequestPrice(mean: number): { value: number; text: string } {
     const value = Number(mean.toPrecision(3));
 
     // the cap is a backstop: NaN never equals itself, and would otherwise add decimals forever
