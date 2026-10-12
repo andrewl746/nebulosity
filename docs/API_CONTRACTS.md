@@ -168,13 +168,15 @@ What each indexing stage of the **active repo** is doing. The active repo is `ac
 type StageName = "structure" | "summaries" | "embeddings";
 type StageState = "idle" | "running" | "ready" | "off" | "failed";
 type StageStatus = { state: StageState; done: number; total: number; note?: string };
-type IndexStatus = { repo: string; stages: Record<StageName, StageStatus> };
+type IndexStatus = { repo: string; stages: Record<StageName, StageStatus>; indexVersion: number };
 ```
 
 - **`done`/`total`** count files for `structure`, summary targets (files, folders and the repo) for `summaries`, and model-written summaries with a vector for `embeddings`.
-- **A stage that never ran** is `idle` with `0/0`.
+- **`idle`** means nothing is running for that stage. Either it never ran (`0/0`), or there's work waiting and the note says how much: `N waiting to be summarized`, `N summaries without a vector yet`.
+- The summaries stage is re-derived after every structure change and every "summarize now" (ADR-032, amended). The embeddings counts are always counted live.
 - **`off`** means the stage can't run, and `note` says why (`summaries` without `ANTHROPIC_API_KEY`).
 - **An honest `running`.** A running stage writes its row at least once a minute. A `running` row untouched for 5 minutes is reported as `failed`, with the note `interrupted: no progress since <time>`, because its process died (ADR-032). The one exception is `summaries` with requests still in a Message Batch at Anthropic: that work is in progress without any local process, so it stays `running`, and its note says how to collect it. A summary run that stops early while requests are at Anthropic, on an error or because its circuit breaker tripped or its spend cap was reached (the note then starts with `stopped:`; ADR-033, ADR-035), leaves the stage `running` for the same reason, with the note `<why it stopped>; <N> requests still at Anthropic; run npm run summarize to collect them`.
+- **`indexVersion`**: see §11. A client polling this route refetches its levels when it moves.
 
 **Error 404 `INDEX_EMPTY`** when no repo has been indexed yet.
 

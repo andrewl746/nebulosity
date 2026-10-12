@@ -1,9 +1,12 @@
 import type { IndexStatus, StageName, StageStatus } from "../contracts";
 import { getDb } from "../db/client";
-import { readStages, STAGE_NAMES, type StoredStage } from "../db/store/stages";
+import { readStages, type StoredStage } from "../db/store/stages";
 import { countInFlight } from "../db/store/summaries";
+import { countEmbeddable, countEmbedded } from "../db/store/summary-vectors";
 import { findRepository } from "../db/store/structure";
+import { readIndexVersion } from "../db/store/version";
 import { repoKey } from "../index/paths";
+import { plural } from "../index/summarize/prompts";
 
 /** A running stage writes at least once a minute; five silent minutes means its process died. */
 export const RUNNING_STALE_AFTER_MS = 5 * 60 * 1000;
@@ -16,13 +19,35 @@ export function readIndexStatus(repoRoot: string, now: Date = new Date()): Index
     if (repoId === null) return null;
 
     const stored = readStages(db, repoId);
-    const stages = {} as Record<StageName, StageStatus>;
+    const inFlight = () => countInFlight(db, repoId);
 
-    for (const name of STAGE_NAMES){
-        stages[name] = honest(name, stored[name], now, () => countInFlight(db, repoId));
-    }
+    return {
+        repo,
+        stages: {
+            structure: honest("structure", stored.structure, now, inFlight),
+            summaries: honest("summaries", stored.summaries, now, inFlight),
+            embeddings: liveEmbeddings(honest("embeddings", stored.embeddings, now, inFlight), {
+                done: countEmbedded(db, repoId),
+                total: countEmbeddable(db, repoId),
+            }),
+        },
+        indexVersion: readIndexVersion(db, repoId),
+    };
+}
 
-    return { repo, stages };
+/**
+ * The embeddings stage with its counts taken from the tables (ADR-032, amended in V1.3): a rewritten summary loses its
+ * vector at once, and a stored count would claim it for as long as nothing re-embeds. A running or failed stage keeps
+ * its state and note. Otherwise the counts decide: nothing to embed is idle, everything embedded is ready, and anything
+ * missing is idle with a note.
+ */
+export function liveEmbeddings(stage: StageStatus, live: { done: number; total: number }): StageStatus {
+    if (stage.state === "running" || stage.state === "failed") return { ...stage, done: live.done, total: live.total };
+    if (live.total === 0) return { state: "idle", done: 0, total: 0 };
+    if (live.done >= live.total) return { state: "ready", done: live.done, total: live.total };
+
+    const missing = live.total - live.done;
+    return { state: "idle", done: live.done, total: live.total, note: `${plural(missing, "summary", "summaries")} without a vector yet` };
 }
 
 /**

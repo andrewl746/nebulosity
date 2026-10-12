@@ -88,6 +88,8 @@ export type IndexStatus = {
   /** The repo's root: absolute, forward slashes (repositories.rootPath). */
   repo: string;
   stages: Record<StageName, StageStatus>;
+  /** Moves whenever anything the Map shows changes (API_CONTRACTS.md §11). */
+  indexVersion: number;
 };
 
 /* ─────────────────────────────── Map ─────────────────────────────── */

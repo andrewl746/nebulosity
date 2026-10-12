@@ -109,3 +109,4 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
 ## 9. V1.3 additions (the Map, incremental updates, `PIVOT_SPEC.md` §5.6, §7)
 
 - **The index version** is a `meta` row per repo, `indexVersion:<repoId>`: a counter bumped by one statement whenever anything the Map shows changes. That covers the end of a structure run, an incremental update, and any summary write that creates, rewrites or prunes a row or changes its status. Level and describe answers carry it, so readers cache per version and the Map refetches when it moves (ADR-036).
+- **Stage rows stay current.** The summaries stage's row is rewritten from a fresh plan after every structure change and every "summarize now" (`refreshSummaryStatus`). The embeddings stage's counts are read live from `summaries` and `summary_vectors`, not from its row (ADR-032, amended).

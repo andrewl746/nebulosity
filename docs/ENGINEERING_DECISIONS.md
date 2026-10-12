@@ -280,6 +280,12 @@
 
 **Context:** `PIVOT_SPEC.md` §5.7 asks for `idle | running | ready | off | failed` per stage, with progress, at `GET /api/status`. Stages run in different processes: the CLI now, a server worker from V1.3. A killed process never gets to write "failed".
 **Decision:** Each stage writes `stage:<repoId>:<stage>` in `meta` as it goes, at least once a minute while running. Readers report a `running` row untouched for 5 minutes as `failed`, with the note `interrupted: no progress since <time>`. The one exception is a summaries stage with requests still at Anthropic: that work goes on without any local process, so it stays running (added with ADR-033).
+
+> *(Amended 2026-10-12 in slice V1.3, from V1.2's review: stage rows went stale. A stored row describes the moment it was written, and later changes left it wrong. After an edit and a re-index, `summaries` still read `ready 14/14`. After a summary was rewritten, `embeddings` still counted its deleted vector.*
+>
+> *Now the summaries stage is re-derived by `refreshSummaryStatus` whenever something other than a summary run changes what's planned: `npm run index`, the background worker's structure updates, and `summarizeNow`. It plans like a run that sends nothing (new rows, statuses, test templates) and writes the stage from the same pure `summaryStageStatus` a finishing run uses. While a live run holds the summarizing lock it leaves the row to that run. It keeps a failed run's note while its targets still wait. A new reading, `idle` with `N waiting to be summarized`, means nothing is running but work is known.*
+>
+> *The embeddings stage's counts are read live (two counts per request); only `running` and `failed` come from its row.)*
 **Alternatives:** (a) Derive every state from the data: honest by construction, but it can't show a running stage's progress. (b) Record process ids and check them: breaks across reboots and machines.
 **Consequences:** No state can stick at "running" forever, and the route needs no knowledge of which process runs which stage.
 **Revisit when:** a stage legitimately goes quiet for minutes (it must then write a heartbeat), or V1.3's UI needs pushed updates instead of polling.

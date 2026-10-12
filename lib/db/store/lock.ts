@@ -82,3 +82,11 @@ export function releaseSummaryLock(db: Db): void {
 export function touchSummaryLock(db: Db): void {
     db.update(meta).set({ value: new Date().toISOString(), updatedAt: new Date() }).where(eq(meta.key, META_KEYS.SUMMARIZING_LOCK)).run();
 }
+
+/** Whether a live summary run holds the summarizing lock: its row is younger than LOCK_STALE_AFTER_MS (a dead run's is older). */
+export function isSummaryLockHeld(db: Db, now: Date = new Date()): boolean {
+    const holder = readLock(db, META_KEYS.SUMMARIZING_LOCK);
+    if (holder === null) return false;
+    const since = Date.parse(holder);
+    return !Number.isNaN(since) && now.getTime() - since <= LOCK_STALE_AFTER_MS;
+}

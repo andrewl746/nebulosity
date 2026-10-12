@@ -7,16 +7,18 @@ import { acquireSummaryLock, releaseSummaryLock, touchSummaryLock } from "../../
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import {
-    addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, targetKey, writeResults,
+    addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileSummaryChunk,
+    loadImporters, loadSummaries, loadUsage, markInFlight, targetKey, writeResults,
     type FileFacts, type StoredSummary, type SummaryResult,
 } from "../../db/store/summaries";
 import { repoKey } from "../paths";
 import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
-import { planSummaries, type PlannedTarget, type TargetState } from "./plan";
+import type { PlannedTarget, TargetState } from "./plan";
 import { formatUsd } from "./pricing";
-import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt, SUMMARY_MODELS } from "./prompts";
+import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
+import { planSnapshot, type Snapshot } from "./snapshot";
+import { stillAtAnthropic, summaryStageStatus } from "./status";
 import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** auto: the Batch API for waves of BATCH_THRESHOLD requests or more, the regular API below that. */
@@ -118,9 +120,6 @@ export class StructureNotReadyError extends Error {
     }
 }
 
-/** One planning pass: the plan, and the file facts it was made from. */
-type Snapshot = { targets: PlannedTarget[]; files: Map<string, FileFacts> };
-
 type Tally = { summarized: number; templated: number; failed: number; batches: number; waves: number };
 
 /** A run's spend cap (ADR-035). */
@@ -188,7 +187,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     acquireSummaryLock(db);
     try{
         for (;;){
-            const snap = snapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun);
+            const snap = planSnapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun);
             last = snap.targets;
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
@@ -268,7 +267,7 @@ export async function summarizeNow(repoRoot: string, targetPath: string, summari
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     requireStructureReady(db, repoId);
-    const snap = snapshot(db, repoId, true, new Set());
+    const snap = planSnapshot(db, repoId, true, new Set());
     const target = snap.targets.find((t) => t.path === targetPath);
     if (!target) throw new TargetNotFoundError(targetPath);
 
@@ -314,20 +313,6 @@ export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick
 export function requireStructureReady(db: Db, repoId: number): void {
     const structure = readStages(db, repoId).structure;
     if (structure && structure.state !== "ready") throw new StructureNotReadyError(structure.state);
-}
-
-function snapshot(db: Db, repoId: number, refreshStaleFolders: boolean, failedThisRun: ReadonlySet<string>): Snapshot {
-    // One read transaction: a structure run committing meanwhile can't hand us half of its changes.
-    // (better-sqlite3 has one connection, so reads through `db` inside the callback belong to it.)
-    return db.transaction(() => {
-        const files = loadFileFacts(db, repoId);
-        const targets = planSummaries(files, loadFolderFacts(db, repoId), loadSummaries(db, repoId), {
-            models: SUMMARY_MODELS,
-            refreshStaleFolders,
-            failedThisRun,
-        });
-        return { targets, files: new Map(files.map((f) => [f.path, f])) };
-    });
 }
 
 function buildRequest(ctx: RunContext, snap: Snapshot, target: PlannedTarget, ids: ReadonlyMap<string, number>): { request: SummaryRequest } | { failure: SummaryOutcome } {
@@ -695,31 +680,12 @@ function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarize
         stopped: stopped !== null,
     };
 
-    let state: "ready" | "running" | "failed" | "off" = "ready";
-    const notes: string[] = [];
-
-    if (stopped !== null){
-        // the circuit breaker or the spend cap: still running if batches are at Anthropic (as after an error), failed otherwise
-        state = result.inFlight > 0 ? "running" : "failed";
-        notes.push(stopped);
-        if (result.inFlight > 0) notes.push(stillAtAnthropic(result.inFlight));
-    } else if (result.needModel > 0){
-        state = "off";
-        notes.push(`ANTHROPIC_API_KEY is not set, so ${result.needModel} of ${result.total} summaries can't be written`);
-    } else if (result.inFlight > 0){
-        state = "running";
-        notes.push(`${plural(result.inFlight, "request")} at Anthropic in batches; run npm run summarize to collect them`);
-    } else{
-        if (result.failed > 0) notes.push(`${result.failed} failed this run (retried next run)`);
-        if (result.lazy > 0) notes.push(`${result.lazy} out of date (redone when opened)`);
-    }
-
-    writeStage(ctx.db, ctx.repoId, "summaries", {
-        state,
-        done: result.upToDate,
-        total: result.total,
-        ...(notes.length > 0 ? { note: notes.join("; ") } : {}),
-    });
+    writeStage(ctx.db, ctx.repoId, "summaries", summaryStageStatus(targets, {
+        summarizerAvailable: hasSummarizer,
+        inFlight: result.inFlight,
+        failed: result.failed,
+        stopped,
+    }));
     return result;
 }
 
@@ -738,11 +704,6 @@ function reportRunError(db: Db, repoId: number, targets: readonly PlannedTarget[
     } catch{
         // the database itself may be what failed (SQLITE_BUSY, say); the original error matters more
     }
-}
-
-/** The note for requests a stopped run leaves at Anthropic: they're paid for, and the next run collects them. */
-function stillAtAnthropic(inFlight: number): string {
-    return `${plural(inFlight, "request")} still at Anthropic; run npm run summarize to collect them`;
 }
 
 function upToDate(targets: readonly PlannedTarget[]): number {

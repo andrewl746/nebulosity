@@ -10,6 +10,10 @@ import { indexRepository, RepoNotFoundError } from "../lib/index/pipeline";
 import { repoKey } from "../lib/index/paths";
 import { IndexLockedError } from "../lib/db/store/lock";
 import { writeConfig } from "../lib/config";
+import { refreshSummaryStatus } from "../lib/index/summarize/status";
+import { hasAnthropicKey, loadLocalEnv } from "./env";
+
+loadLocalEnv();
 
 const target = process.argv[2];
 
@@ -40,6 +44,12 @@ try{
     }
     if (result.errors.length > 0){
         console.log(`[index] ${result.errors.length} file errors (first: ${result.errors[0].path}: ${result.errors[0].error})`);
+    }
+
+    // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now
+    const summaries = refreshSummaryStatus(root, { summarizerAvailable: hasAnthropicKey() });
+    if (summaries){
+        console.log(`[index] summaries: ${summaries.state} ${summaries.done}/${summaries.total}${summaries.note ? ` (${summaries.note})` : ""}`);
     }
 
     writeConfig({ activeRepo: repoKey(root) });

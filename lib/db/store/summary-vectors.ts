@@ -50,3 +50,10 @@ export function summaryVectorStamp(db: Db, repoId: number): string {
         .get();
     return `${row?.n ?? 0}:${row?.maxId ?? 0}`;
 }
+
+/** How many model-written summaries have their vector: the embeddings stage's `done`, counted live. */
+export function countEmbedded(db: Db, repoId: number): number {
+    return db.select({ n: sql<number>`count(*)` }).from(summaries)
+        .innerJoin(summaryVectors, eq(summaryVectors.summaryId, summaries.id))
+        .where(embeddable(repoId)).get()?.n ?? 0;
+}
