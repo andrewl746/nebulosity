@@ -5327,3 +5327,115 @@ Task 12 runs only after the owner approves Review #2. Its wrap-up also lists thi
 Task 12 runs after the owner approves Review #2: `npm run summarize -- ../vscode`, under the $15 default. At wrap-up:
 - add rows for ADR-031 → ADR-035 to PIVOT_SPEC §15 (the owner's instruction);
 - fill in Review #2's verdict with the owner's words.
+
+---
+
+## Addendum 2 (2026-10-11): the owner's Review #2 response
+
+The owner asked for two things before Task 12:
+
+1. **Group the "Imported by" examples by area,** using spec §4.2's "used by" rule: count the importers under the child of the LCA folder, instead of under the biggest leaf folders. Central files should then read, for example, "mostly `src/vs/workbench` and `src/vs/platform`".
+2. **Preview the folder prompt.** Pick 10 varied VS Code folders, summarize their files with Haiku and then the folders with Sonnet through the direct API, write both up as Summary Review #3, and stop for the owner.
+
+Two tasks implement this, in order: **Task 11c** (area grouping) and **Task 11d** (the folder preview tool). After 11d's review, the controller runs the preview (about $0.25) and stops. Task 12 waits for the owner's "go".
+
+`PROMPT_VERSION` stays 2. No v2 summary has been stored for VS Code yet (its index holds 0 summaries), so nothing stored can go stale.
+
+### Task 11c: "Imported by" grouped by area (§4.2's used-by rule)
+
+**Files:**
+- Modify: `lib/index/summarize/prompts.ts`, `lib/index/summarize/run.ts` (`buildFilePrompt`)
+- Test: `lib/index/summarize/prompts.test.ts`, `lib/index/summarize/run.test.ts`
+- Docs: `docs/PIVOT_SPEC.md` (§5.3 file input), `docs/RAG_PIPELINE.md`, `docs/ENGINEERING_DECISIONS.md` (an ADR-034 amendment, in the style of earlier amendments)
+
+**Interfaces:**
+- `importerLine(filePath: string, importers: readonly Importer[], maxGroups = MAX_IMPORTER_GROUPS): string`. `MAX_IMPORTER_GROUPS = 3` replaces `MAX_IMPORTER_FOLDERS`.
+- `renderFilePrompt(listing: string, lineCount: number, importedBy: string, source: string, maxChars?: number): string` takes the rendered line. `buildFilePrompt` computes `importerLine(file.path, loadImporters(db, repoId, file.path))`.
+
+**Requirements:**
+
+1. **The group of an importer `a` of file `X`** is `childToward(lcaFolder(dirOf(X), dirOf(a)), a)`. Reuse `lcaFolder` and `childToward` from `lib/index/aggregate.ts`, and `dirOf` from `lib/index/paths.ts`: one implementation of §4.2, shared with the Map's level edges. The group is a folder, or the importer file itself when it sits directly in the LCA folder. A sibling in X's own folder is its own group.
+2. **Counting.** Counts come from non-test importers only. Groups are ordered by count, most first, with ties broken by path in code-point order. The first `maxGroups` are shown as `<group> (<count>)`.
+3. **The line, in each case:**
+   - **No importers:** `Imported by: no other indexed file`. Unchanged.
+   - **Only test importers:** `Imported by: only <N test file(s)>`. Unchanged.
+   - **Otherwise:** `` `Imported by: ${plural(n, "file")}: ${list}` ``, followed by:
+     - `` `, and ${plural(rest, "file")} elsewhere` `` when groups are hidden, where `rest` is n minus the shown counts;
+     - `` `, plus ${plural(tests, "test file")}` `` when tests > 0.
+4. **Tests,** each expected string verbatim and hand-derived:
+   - `importerLine("src/vs/base/common/lifecycle.ts", …)` with these non-test importers:
+     - `src/vs/base/common/async.ts`, `src/vs/base/common/worker/w.ts`;
+     - `src/vs/base/browser/dom.ts`, `src/vs/base/browser/ui/list.ts`;
+     - `src/vs/workbench/a/x.ts`, `src/vs/workbench/b/y.ts`, `src/vs/workbench/c.ts`;
+     - `src/vs/platform/p/z.ts`, `extensions/e/src/m.ts`, `build.js`;
+
+     plus the test importer `src/vs/base/test/common/lifecycle.test.ts`. The groups are:
+     - `src/vs/workbench` with 3;
+     - `src/vs/base/browser` with 2;
+     - 1 each for `build.js`, `extensions`, `src/vs/base/common/async.ts`, `src/vs/base/common/worker` and `src/vs/platform`.
+
+     Expected: `Imported by: 10 files: src/vs/workbench (3), src/vs/base/browser (2), build.js (1), and 4 files elsewhere, plus 1 test file`.
+   - `importerLine("src/app/util.ts", [src/app/main.ts, src/app/view.tsx, src/index.ts])`, all non-test, gives `Imported by: 3 files: src/app/main.ts (1), src/app/view.tsx (1), src/index.ts (1)`.
+   - `importerLine("src/core/log.ts", [src/app/main.ts])` gives `Imported by: 1 file: src/app (1)`.
+   - `importerLine(x, [])` gives `Imported by: no other indexed file`.
+   - `importerLine("src/app/main.ts", [{ path: "src/app/main.test.ts", isTest: true }])` gives `Imported by: only 1 test file`.
+   - **Prompt shape.** Every existing `renderFilePrompt` and `buildFilePrompt` expectation is adjusted to the new line, derived by hand from the fixture's import statements, and otherwise keeps its meaning. Report each change.
+5. **Docs:**
+   - PIVOT_SPEC §5.3's file input says the importers are grouped by §4.2's used-by rule (the top 3 groups; test files counted separately).
+   - RAG_PIPELINE says the same.
+   - The ADR-034 amendment gives the reason: leaf folders named arbitrary deep folders for central files, whereas area groups say where in the codebase a file is used.
+6. **Commit.** Run the gate, then commit as `feat: "Imported by" groups importers by area with spec §4.2's used-by rule` and push. Make no API call.
+
+### Task 11d: Folder preview, Summary Review #3
+
+**Files:**
+- Create: `lib/index/summarize/preview.ts` (pure helpers), `lib/index/summarize/preview.test.ts`, `scripts/preview-folders.ts`
+- Modify: `package.json` (`"preview-folders": "tsx scripts/preview-folders.ts"`)
+- Docs: a one-line pointer in `docs/RAG_PIPELINE.md`. `docs/SUMMARY_REVIEW.md` is written by the run, not by this task.
+
+**The sample** is fixed in the script as `REVIEW_3_FOLDERS`, each with a one-line reason the review prints. That gives 128 non-test files plus about 25 folders, roughly $0.25 on the direct API.
+
+| Folder | Why |
+|---|---|
+| `src/vs/base/browser/ui/scrollbar` | a leaf UI widget (8 files) |
+| `src/vs/base/parts/contextmenu` | VS Code's common/browser/electron layering: 3 one-file subfolders |
+| `src/vs/platform/configuration` | a platform service with more test files than code |
+| `src/vs/editor/common/model/tokens` | files plus a subfolder |
+| `src/vs/editor/contrib/folding` | an editor contribution with tests |
+| `src/vs/workbench/contrib/terminal/browser/xterm` | a leaf integration with a third-party library |
+| `src/vs/workbench/services/remote` | a workbench service split by layer (3 subfolders) |
+| `src/vs/workbench/contrib/chat/browser/aiCustomization` | a big leaf (55 files) that exercises the 50-item cap |
+| `extensions/mermaid-markdown-features/src` | a built-in extension |
+| `build/npm` | build tooling, not product code |
+
+**Requirements:**
+
+1. **Read-only.** The preview **never writes the index**: no store write function is called. It reads facts with `loadFileFacts`, `loadFolderFacts`, `loadSummaries` and `buildFilePrompt`, and sends requests with `createClaudeSummarizer(...).summarize` (regular API, concurrency 4 via `mapLimit`). It records nothing in `summary_usage`.
+2. **Files.** Every non-test file under a sample folder is summarized with `SUMMARY_MODELS.file` and `FILE_SYSTEM_PROMPT`, using exactly the prompt `buildFilePrompt` builds. Test files get their template through the planner, as in a real run.
+3. **Folders,** bottom-up, deepest first. Every folder at or under a sample folder gets an in-memory `StoredSummary` row for each answer received. The `inputHash` is the planner's hash for that target, so the planner sees it as current.
+   - Then call the pure `planSummaries(files, folders, rows, options)`. Take each folder's planned `prompt` once it's `ready`, and send it with `SUMMARY_MODELS.folder` and `FOLDER_SYSTEM_PROMPT`.
+   - These are exactly the folder prompts the real run will build.
+   - A failed child is settled (as in the runner), so its folder still goes out, with "(no summary yet)" for that child. The review lists every failure.
+4. **The review.** Append `## <date> Summary Review #<n> — folder preview: <file model> files and <folder model> folders on 10 folders of <repo>` to `docs/SUMMARY_REVIEW.md`. Number it as compare-summaries does. It contains:
+   - **Header:** a metadata line (repo, effort, prompt version, the regular Messages API) and the sample table with the reasons.
+   - **"Imported by" grouped by area:** the new line for each of Review #1's 20 sample files (`pickSample(files, 20)`), computed from the graph with no API call.
+   - **Cost on this sample:** one row per model with requests, input and output tokens, mean input and output tokens per request, and cost. It uses `formatUsd`, and "at least" when unpriced, like compare.
+   - **Full-pass estimate (Batch API, half price):**
+     - files at Haiku's measured mean;
+     - folders and the repo at Sonnet's **measured folder mean**, input and output, replacing the 1,000-token assumption;
+     - the total against S2's $15.
+     - Note that this sample skews toward small folders, and give the measured mean for the 55-file folder on its own line.
+   - **The folders:** one section per sample folder, the folder's own summary first.
+     - Each subfolder summary is indented beneath it, deepest last.
+     - Its file summaries go in a `<details><summary>N file summaries (model)</summary> … </details>` block, so the folder summaries stay readable.
+     - Failures are shown inline as `failed: <error>`.
+   - **Owner's verdict:** a placeholder line, `_To fill in: go or no-go for the full run, and any prompt changes first._`
+5. **Pure, tested helpers** in `preview.ts`:
+   - the subtree selection (which files and folders a sample covers);
+   - the bottom-up order;
+   - the in-memory row construction;
+   - the review rendering.
+
+   Test them on the mini-repo fixture with hand-derived expectations: a sample of one folder with a subfolder covers the right files, plans the folder only after its subfolder, and renders a small review with exact strings.
+6. **The CLI** accepts only `<path-to-repo>`. Anything else prints the usage line and exits 1, with the same strictness as `summarize`. It prints progress and the review's title.
+7. **Commit.** Run the gate, then commit as `feat: a folder preview tool: Haiku files then Sonnet folders on 10 sample folders, written up as a summary review` and push. Don't run the tool. The controller runs `npm run preview-folders -- ../vscode` after the task review, commits the review, and STOPS for the owner.
