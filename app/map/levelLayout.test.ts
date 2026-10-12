@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
-import { BOX_HEIGHT, BOX_WIDTH, layoutLevel } from "./layout";
+import { BOX_HEIGHT, BOX_WIDTH, layoutLevel } from "./levelLayout";
 
 const node = (p: string): MapNode => ({ path: p, name: p, kind: "folder", fileCount: 1, summaryStatus: "fresh" });
 

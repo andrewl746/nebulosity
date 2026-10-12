@@ -24,3 +24,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* A tool call touched this box (PIVOT_SPEC.md §7, "Live"): one ring that grows and fades. */
+@keyframes neb-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+}
+
+.neb-pulse {
+  animation: neb-pulse 0.9s ease-out;
+}
