@@ -5315,6 +5315,13 @@ Task 12 runs only after the owner approves Review #2. Its wrap-up also lists thi
 
 10. **Commit.** Run the gate. Commit as `feat: a spend cap: stop before any submission that would take the projected summary spend past the budget (default $15)`, then push.
 
+**Ruled during execution (2026-10-11).**
+
+- **A budget stop stops sending, not collecting.** When the run goes over budget, it sends nothing new. It still collects the batches already at Anthropic, which are paid for, and re-checks after each collection, because recorded usage replaces the estimates. It finishes as stopped only when nothing is left in flight, or when `--no-wait` collected nothing.
+- **Wave checks.** A wave's first check runs before the wave is counted.
+- **Status note.** While over budget, the stage note says sending stopped.
+- **CLI arguments.** The summarize CLI refuses arguments it doesn't know. Before this, `--budget=5` silently applied the default $15, and `--path=src/x.ts` started a full run (ADR-035).
+
 ### Task 12 (amended)
 
 Task 12 runs after the owner approves Review #2: `npm run summarize -- ../vscode`, under the $15 default. At wrap-up:
