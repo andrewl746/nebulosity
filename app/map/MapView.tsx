@@ -5,6 +5,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import type { LevelResponse } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import Breadcrumb from "./Breadcrumb";
+import DetailPanel from "./DetailPanel";
 import MapCanvas from "./MapCanvas";
 import { parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
@@ -71,6 +72,19 @@ function MapScreen(){
         setSelected(target);
     }, []);
 
+    /** Goes to the level that holds a path and selects it there: search results, the panel's links, focus_node. */
+    const focus = useCallback((target: string) => {
+        if (target === ""){
+            open("");
+            return;
+        }
+        const next = parentOf(target);
+        // a new level is timed as one; a box on the level already showing is a selection (open() says why)
+        markStart(next !== levelPath ? "map:level" : "map:select");
+        setLevelPath(next);
+        setSelected(target);
+    }, [open, levelPath]);
+
     const onDrawn = useCallback(() => measureAfterPaint("map:level"), []);
 
     // Escape lets go of the selection, Backspace goes up a level, unless the user is typing
@@ -104,6 +118,17 @@ function MapScreen(){
                 )}
                 {!level && !levelError && <p className="absolute inset-0 grid place-items-center font-mono text-xs text-zinc-500">Loading the map…</p>}
                 {levelError && <p className="absolute inset-x-0 top-6 text-center font-mono text-xs text-red-300">{levelError.message}</p>}
+                {selected !== null && level && (
+                    <DetailPanel
+                        key={selected}
+                        path={selected}
+                        level={level}
+                        indexVersion={version ?? 0}
+                        onFocus={focus}
+                        onOpen={open}
+                        onClose={() => setSelected(null)}
+                    />
+                )}
             </main>
         </div>
     );
