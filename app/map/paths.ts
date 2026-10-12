@@ -1,0 +1,33 @@
+import type { LevelResponse } from "@/lib/contracts";
+
+// The UI imports nothing from lib/ but types (ARCHITECTURE.md §3), so these few lines mirror lib/index/paths.ts.
+
+/** The folder that holds a path ("" for something at the root). */
+export function parentOf(targetPath: string): string {
+    const slash = targetPath.lastIndexOf("/");
+    return slash === -1 ? "" : targetPath.slice(0, slash);
+}
+
+/** What a path is called on screen: its last segment, or the repo's folder name for the root. */
+export function nameOf(targetPath: string, repoRoot: string): string {
+    if (targetPath === "") return repoRoot.slice(repoRoot.lastIndexOf("/") + 1) || repoRoot;
+    return targetPath.slice(targetPath.lastIndexOf("/") + 1);
+}
+
+/** Whether `targetPath` is strictly inside `folder` ("" holds everything but itself). */
+export function isInside(targetPath: string, folder: string): boolean {
+    return folder === "" ? targetPath !== "" : targetPath.startsWith(`${folder}/`);
+}
+
+/**
+ * The box on this level that holds `targetPath`: the child on the way down to it, or "+N more" when that child is
+ * folded. Null when the path isn't inside this level, or is the level itself. Live pulses and highlights use it.
+ */
+export function boxFor(level: Pick<LevelResponse, "path" | "nodes">, targetPath: string): string | null {
+    if (!isInside(targetPath, level.path)) return null;
+    const below = level.path === "" ? targetPath : targetPath.slice(level.path.length + 1);
+    const slash = below.indexOf("/");
+    const child = slash === -1 ? targetPath : `${level.path === "" ? "" : `${level.path}/`}${below.slice(0, slash)}`;
+    if (level.nodes.some((n) => n.path === child)) return child;
+    return level.nodes.find((n) => n.kind === "more")?.path ?? null;
+}
