@@ -3,7 +3,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
     ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow,
-    type Edge, type EdgeMouseHandler, type NodeMouseHandler, type NodeTypes,
+    type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
@@ -15,9 +15,12 @@ import Legend from "./Legend";
 import { BOX_HEIGHT, BOX_WIDTH, FIT_PADDING, layoutLevel } from "./levelLayout";
 import MapBox, { type BoxNode } from "./MapBox";
 import type { Pulse } from "./pulses";
+import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
+import { routeEdges } from "./routes";
 
-// at module scope: a new object per render would make React Flow remount every box
+// at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
+const edgeTypes: EdgeTypes = { routed: RoutedEdge };
 
 /** A level fits the screen with room around it, and a small level isn't blown up past 100% (VISUAL_REFRESH.md §4). */
 const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
@@ -43,13 +46,15 @@ type MapCanvasProps = {
 };
 
 /**
- * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line. A
+ * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
+ * around the boxes (routes.ts). A
  * click selects and a double click opens a folder. The selection's lines turn purple and unrelated boxes fade;
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
 function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }: MapCanvasProps){
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
+    const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
     const emphasis = useMemo(
@@ -57,7 +62,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
         [level, selected, hoveredBox],
     );
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
     const { fitView } = useReactFlow();
     // the latest fitView and onDrawn, for the fit below: it runs when the level changes, not when they do
     const fitViewRef = useRef(fitView);
@@ -84,8 +89,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
         const drawn = level.edges.map((edge) => {
             const id = edgeKey(edge);
             const look = EDGE_STYLES[emphasis.edges.get(id) ?? "normal"];
-            const drawnEdge: Edge = {
+            const drawnEdge: RoutedEdgeType = {
                 id,
+                type: "routed",
+                data: { points: routes.get(id) ?? [] },
                 source: edge.source,
                 target: edge.target,
                 focusable: false,
@@ -103,7 +110,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
         // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
         // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
         setEdges(drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge));
-    }, [level, emphasis, hoveredEdge, setEdges]);
+    }, [level, routes, emphasis, hoveredEdge, setEdges]);
 
     // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
     // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
@@ -144,6 +151,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
             onNodeMouseEnter={onNodeMouseEnter}

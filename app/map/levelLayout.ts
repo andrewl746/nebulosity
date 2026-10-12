@@ -4,9 +4,9 @@ import type { MapEdge, MapNode } from "@/lib/contracts";
 /** Every box is drawn the same size, so the layout needs no measuring (VISUAL_REFRESH.md §4: larger, roomier boxes). */
 export const BOX_WIDTH = 232;
 export const BOX_HEIGHT = 64;
-const GAP = 40;
+export const GAP = 40;
 /** Room between layers: enough for a line's arrowhead to read before it meets the box below. */
-const RANK_GAP = 72;
+export const RANK_GAP = 72;
 
 export type Position = { x: number; y: number };
 

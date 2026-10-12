@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { IndexStatus, StageName } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount, headline, stageLabel, type Tone } from "./format";
+import { useDismiss } from "./useDismiss";
 
 /** Green means indexed and nothing else (VISUAL_REFRESH.md §2); a failure, or nothing indexed, is the error color. No motion. */
 const DOTS: Record<Tone, string> = {
@@ -23,6 +24,7 @@ const STAGES: readonly StageName[] = ["structure", "summaries", "embeddings"];
 export default function StatusPill({ status }: { status: IndexStatus | null }){
     const [open, setOpen] = useState(false);
     const [reindex, setReindex] = useState<string | null>(null);
+    const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
     if (status === null) return null;
     const head = headline(status);
 
@@ -35,7 +37,7 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
     };
 
     return (
-        <div className="relative">
+        <div ref={ref} className="relative">
             <button
                 type="button"
                 data-testid="status-pill"
@@ -46,7 +48,7 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                 {head.text}
             </button>
             {open && (
-                <div className="absolute right-0 top-9 z-30 w-[340px] space-y-3 rounded-lg border border-border bg-panel p-3 text-[12px] text-text-2">
+                <div data-testid="status-menu" className="absolute right-0 top-9 z-30 w-[340px] space-y-3 rounded-lg border border-border bg-surface p-3 text-[12px] text-text-2">
                     {STAGES.map((name) => (
                         <div key={name}>
                             <div className="text-[13px] text-text">{stageLabel(name, status.stages[name])}</div>

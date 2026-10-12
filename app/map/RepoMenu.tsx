@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
 import type { RepoList, RepoSummary } from "@/lib/contracts";
 import { api, ApiError } from "./api";
+import { useDismiss } from "./useDismiss";
 
 type RepoMenuProps = { repo: string; onSwitched: () => void };
 
@@ -24,6 +25,7 @@ export default function RepoMenu({ repo, onSwitched }: RepoMenuProps){
     const [list, setList] = useState<RepoList | null>(null);
     const [open, setOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
 
     useEffect(() => {
         api.repos().then(setList, () => {});
@@ -40,16 +42,16 @@ export default function RepoMenu({ repo, onSwitched }: RepoMenuProps){
     };
 
     return (
-        <div className="relative min-w-0">
+        <div ref={ref} className="relative min-w-0">
             <button type="button" data-testid="repo-menu" onClick={() => setOpen((o) => !o)} className="flex min-w-0 items-center gap-1 rounded-md px-1 hover:bg-surface">
                 {label}
                 <IconChevronDown aria-hidden size={14} stroke={1.75} className="shrink-0 text-text-2" />
             </button>
             {open && (
-                <ul className="absolute left-0 top-9 z-30 w-[320px] rounded-lg border border-border bg-panel py-1 text-[13px]">
+                <ul className="absolute left-0 top-9 z-30 w-[320px] rounded-lg border border-border bg-surface py-1 text-[13px]">
                     {list.repos.map((r) => (
                         <li key={r.root}>
-                            <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-surface">
+                            <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-border">
                                 <span className={r.root === repo ? "font-medium text-text" : "text-text"}>{r.remote ? `${r.remote.owner} / ${r.remote.name}` : r.name}</span>
                                 <span className="block truncate font-mono text-[12px] text-text-2">{r.root}</span>
                             </button>

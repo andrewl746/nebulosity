@@ -56,6 +56,12 @@ Purple is never used just because something is interactive. Links and buttons us
 | Hover | highlights that box's direct connections without selecting it |
 | Spacing | more room between boxes, and the level fits the viewport with comfortable padding |
 
+*(Amended in the V1.3.1 build, after the owner's first look.)* Lines are **routed**:
+- Each line leaves its box's bottom, runs along the empty channel under that row, and goes up or down a lane in the gutter between boxes. It then runs along the channel above its target and drops into the target's top, with corners rounded at 8 px.
+- No line crosses a box. React Flow's default curve went straight from box to box and cut through whatever lay between.
+- Lines sharing a lane overlap like a bus. The selection's route stays purple and on top.
+- Popovers (the status menu, the repo picker) sit on `--surface` and close on an outside click or Escape.
+
 **Interaction:**
 - **Single click** selects a box and shows its details.
 - **Double click** on a folder goes into it.
