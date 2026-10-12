@@ -460,6 +460,7 @@
 
 **Amended (2026-10-12, V1.3 final review): the worker survives what it will meet.**
 - **Watcher errors.** chokidar reports an error (Linux's inotify limit, too many open files) as an EventEmitter `error` event, which throws when nothing listens. That killed the worker, and every restart met the same error. The watcher now passes errors to the worker's log and keeps going, and folders this user can't read are skipped (`ignorePermissionErrors`).
+- **Locks a killed process leaves.** The worker shares the server's terminal, so Ctrl+C kills it on the spot, mid-update or mid-refresh, and its `finally` never runs. A lock was judged by its age alone (30 minutes), so for half an hour after the next start every update failed on the lock. A lock row now names its holder's PID and machine, and a lock whose process is gone (on this machine) is abandoned at once. A reused PID only makes a dead holder look alive, and the 30 minutes still apply. This covers a killed CLI run too, so the worker needs no signal handlers.
 
 ## ADR-039 — The live channel: SSE out, localhost-only POST in, the server on loopback (2026-10-12)
 

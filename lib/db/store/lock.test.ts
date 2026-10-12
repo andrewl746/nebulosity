@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { spawnSync } from "child_process";
 import { eq } from "drizzle-orm";
+import os from "os";
 import { getDb } from "../client";
 import { META_KEYS, meta } from "../schema";
-import { IndexLockedError, LOCK_STALE_AFTER_MS, acquireIndexLock, acquireSummaryLock, releaseIndexLock, releaseSummaryLock, touchSummaryLock } from "./lock";
+import {
+    IndexLockedError, LOCK_STALE_AFTER_MS, acquireIndexLock, acquireSummaryLock, isSummaryLockHeld, releaseIndexLock, releaseSummaryLock,
+    touchSummaryLock,
+} from "./lock";
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -11,6 +16,12 @@ afterEach(() => {
 });
 
 const lockValue = () => getDb().select().from(meta).where(eq(meta.key, META_KEYS.INDEXING_LOCK)).get()?.value;
+
+/** The PID of a process that has already exited: a run killed before its `finally` (Ctrl+C, a crash, a kill). */
+function deadPid(): number {
+    const child = spawnSync(process.execPath, ["-e", ""]);
+    return child.pid!;
+}
 
 describe("index lock", () => {
     it("refuses a second holder while the first is fresh", () => {
@@ -25,6 +36,29 @@ describe("index lock", () => {
         db.insert(meta).values({ key: META_KEYS.INDEXING_LOCK, value: ancient }).run();
         expect(() => acquireIndexLock(db)).not.toThrow();
         expect(lockValue()).not.toBe(ancient);
+    });
+
+    it("names the process holding it, so a later run can tell whether that process is still alive (I2)", () => {
+        acquireIndexLock(getDb());
+        expect(lockValue()).toMatch(new RegExp(`^\\d{4}-\\d\\d-\\d\\dT\\S+ pid ${process.pid} on `));
+    });
+
+    it("clears a fresh lock at once when the process holding it has died (I2)", () => {
+        const db = getDb();
+        const orphan = `${new Date().toISOString()} pid ${deadPid()} on ${os.hostname()}`;
+        db.insert(meta).values({ key: META_KEYS.INDEXING_LOCK, value: orphan }).run();
+        expect(() => acquireIndexLock(db)).not.toThrow();
+        expect(lockValue()).not.toBe(orphan);
+    });
+
+    it("keeps a fresh lock whose holder is alive, or runs on another machine where its PID means nothing", () => {
+        const db = getDb();
+        const now = new Date().toISOString();
+        db.insert(meta).values({ key: META_KEYS.INDEXING_LOCK, value: `${now} pid ${process.pid} on ${os.hostname()}` }).run();
+        expect(() => acquireIndexLock(db)).toThrow(IndexLockedError);
+        releaseIndexLock(db);
+        db.insert(meta).values({ key: META_KEYS.INDEXING_LOCK, value: `${now} pid ${deadPid()} on not-${os.hostname()}` }).run();
+        expect(() => acquireIndexLock(db)).toThrow(`Indexing already in progress (started ${now}).`);
     });
 
     it("reports IndexLockedError, not a database error, when another process takes the lock between our check and our write", () => {
@@ -63,6 +97,12 @@ describe("summary lock", () => {
         acquireIndexLock(db);
         expect(() => acquireSummaryLock(db)).not.toThrow();
         expect(() => acquireSummaryLock(db)).toThrow(/^Summarizing already in progress/);
+    });
+
+    it("isn't held by a run that died (I2): the summaries stage may be re-derived again", () => {
+        const db = getDb();
+        db.insert(meta).values({ key: META_KEYS.SUMMARIZING_LOCK, value: `${new Date().toISOString()} pid ${deadPid()} on ${os.hostname()}` }).run();
+        expect(isSummaryLockHeld(db)).toBe(false);
     });
 
     it("stays fresh while its holder keeps touching it", () => {
