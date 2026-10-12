@@ -5439,3 +5439,93 @@ Two tasks implement this, in order: **Task 11c** (area grouping) and **Task 11d*
    Test them on the mini-repo fixture with hand-derived expectations: a sample of one folder with a subfolder covers the right files, plans the folder only after its subfolder, and renders a small review with exact strings.
 6. **The CLI** accepts only `<path-to-repo>`. Anything else prints the usage line and exits 1, with the same strictness as `summarize`. It prints progress and the review's title.
 7. **Commit.** Run the gate, then commit as `feat: a folder preview tool: Haiku files then Sonnet folders on 10 sample folders, written up as a summary review` and push. Don't run the tool. The controller runs `npm run preview-folders -- ../vscode` after the task review, commits the review, and STOPS for the owner.
+
+---
+
+## Addendum 3 (2026-10-11): the owner's Review #3 response
+
+The owner chose to template test-only folders and asked for two fixes before the run:
+
+- **A cut-off summary.** Review #3's `common/configurationService.ts` summary ends mid-sentence ("…applyEdits. The"). The owner asked us to find the cause, never store a cut-off summary, detect it, retry with a higher limit, add a test, and re-run that file to confirm.
+- **The ".." ending.**
+
+Then Task 12 runs, with no new review.
+
+**Diagnosis (controller, 2026-10-11).** The cut-off was not the output-token limit.
+- `parseSummary` already fails every `max_tokens` reply, and this answer was stored.
+- Three fresh runs of the same prompt all came back complete, with stop reason `end_turn`, about 280 output tokens, and a single text block.
+- So Haiku returned well-formed JSON whose summary string simply stopped at "The".
+
+Only refusal and max_tokens are checked today, so any other stop reason also passes through unchecked.
+
+### Task 11e: Never store a cut-off summary; the ".." ending
+
+**Files:** `lib/index/summarize/claude.ts`, `lib/index/summarize/prompts.ts` (a constant), `lib/index/summarize/claude.test.ts`, and the docs: `docs/RAG_PIPELINE.md` (§4 settings and the §8 failure table) and `docs/ENGINEERING_DECISIONS.md` (an ADR-034 amendment).
+
+**Requirements:**
+
+1. **Completeness.** A reply is complete only when all three hold:
+   - `stop_reason === "end_turn"`;
+   - the parsed summary, trimmed, ends in sentence punctuation: `/[.!?]["'`)\]]*$/`;
+   - the parsed summary isn't empty.
+
+   Refusals keep their existing error. Every other incomplete reply fails with an error that starts `the summary was cut off` and names the stop reason.
+2. **The ".." ending.** Before the completeness check, `parseSummary` collapses a trailing run of two or more periods to one.
+3. **Retry with a higher limit.**
+   - When a regular-API answer is cut off, `summarize` retries once with `RETRY_MAX_OUTPUT_TOKENS = 8192` (prompts.ts, with a "why" comment).
+   - The outcome's usage lists both attempts' tokens per model, because both are billed.
+   - If the retry is cut off too, the outcome is failed, so nothing is stored and the next run resends it.
+   - Never more than one retry.
+4. **Batch answers.** In `batchResults`, each cut-off item is re-requested once through the same regular-API path with the higher limit, before results go back to the runner.
+   - The batch attempt's usage and the retry's usage are both kept on the outcome.
+   - Document the accounting gap: the runner records a batch outcome at batch rates, so a retried item's direct tokens are counted at half price. Retries are rare.
+5. **Tests.** Use the fake client in `claude.test.ts`; the expectations are verbatim and hand-derived.
+   - **Regular API, cut off, then complete.** A first reply with `end_turn` and the summary `"Writes go through ConfigurationEditing. The"`, then a complete reply.
+     - The outcome is ok with the second text.
+     - The second request has `max_tokens: 8192`.
+     - The usage holds both attempts.
+   - **Cut off twice.** The outcome is failed, the error starts with `the summary was cut off`, and exactly 2 requests were sent.
+   - **Unchecked stop reason.** A reply with stop reason `pause_turn` and a complete-looking summary is treated as cut off, so it is retried.
+   - **The ".." ending.** `parseSummary` turns `"…in one place.."` into `"…in one place."`.
+   - **Batch.** One cut-off item and one complete item come back. Only the cut-off one is re-requested, at 8192, and its outcome is ok.
+6. **Commit:** gate, then `fix: a cut-off summary is retried once with a higher limit and never stored; trailing ".." becomes "."`, then push.
+   - After the review, the controller re-runs `src/vs/platform/configuration/common/configurationService.ts` alone, through `createClaudeSummarizer`, to confirm it comes back complete.
+
+### Task 11f: Test-only folders get a template
+
+**Files:** `lib/index/summarize/plan.ts`, `lib/index/summarize/prompts.ts`, the tests (`plan.test.ts`, `prompts.test.ts`), and the docs: `docs/PIVOT_SPEC.md` §5.3 (next to the test-file sentence), `docs/RAG_PIPELINE.md` (next to its test-file templating), and `docs/ENGINEERING_DECISIONS.md` (an ADR-034 amendment).
+
+**Requirements:**
+
+1. **Which folders.** A folder (never the repo) whose subtree holds at least one file and no non-test file gets a template summary, with no API call. It is planned exactly like a test file:
+   - model `"template"`;
+   - state `template`, then `current`;
+   - status `skipped`;
+   - `inputHash = inputHash("template", PROMPT_VERSION, `${path}\n${tagline}\n${summary}`)`.
+
+   It's settled at once, so its parent can go out in the first folder wave.
+2. **The template.** `testFolderSummary(folderPath, testFileCount)` in prompts.ts, pure:
+   - **subject:** the path segment just before the first `test`, `tests` or `__tests__` segment, if there is one; otherwise the folder's own name;
+   - **tagline:** `Tests for ${subject}`;
+   - **summary:** `` `Test code (${plural(n, "test file")}) for ${subject}. Test-only folders get this template instead of a model-written summary.` ``
+
+   Tests, verbatim:
+   - `("src/vs/editor/contrib/folding/test/browser", 6)` gives `{ tagline: "Tests for folding", summary: "Test code (6 test files) for folding. Test-only folders get this template instead of a model-written summary." }`.
+   - `("src/vs/platform/configuration/test", 8)` gives the tagline `Tests for configuration`.
+   - `("src/fixtures", 1)` gives `{ tagline: "Tests for fixtures", summary: "Test code (1 test file) for fixtures. Test-only folders get this template instead of a model-written summary." }`.
+3. **Planner tests** on synthetic `FileFacts`/`FolderFacts`, hand-derived:
+   - **The parent waits on nothing.** Take a folder `a` with a non-test file `a/x.ts`, plus the test-only subfolders `a/test` and `a/test/unit`, the latter holding `a/test/unit/x.test.ts`.
+     - Both `a/test` and `a/test/unit` are planned `template`, with model `"template"`.
+     - `a` is `waiting` until `a/x.ts` is current, then `ready`.
+     - `a`'s prompt lists `test/` with the template text.
+   - **Mixed folders aren't templated.** A folder with one test file and one non-test file is not templated.
+   - **The repo is never templated.**
+4. **Docs.**
+   - **PIVOT_SPEC §5.3:** "**Test files, and folders that hold only test files, get a templated summary with no API call** (status `skipped`)".
+   - **RAG_PIPELINE:** the same.
+   - **ADR-034 amendment:** the owner's reason and the measured scale. VS Code has 1,266 of 3,793 folders that are test-only; templating them saves an estimated $2.20.
+5. **Commit:** gate, then `feat: test-only folders get a template instead of a Sonnet summary`, then push. No API call.
+
+### Task 12 (amended again)
+
+Run Task 12 after 11e and 11f are reviewed, with no new review. Its estimate is about $13.02 minus the test-folder saving, so about $10.8, against the $15 cap.
