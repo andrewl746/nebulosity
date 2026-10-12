@@ -461,6 +461,19 @@
 **Consequences:** No other machine can reach the Map, and no web page can make it spend money or move. Opening the Map from another device (a phone on the same network) would need a deliberate `-H 0.0.0.0` and a token, which is out of scope.
 **Revisit when:** the desktop app hosts the Map: the server then lives inside it and the guard moves to its IPC.
 
+## ADR-040 — Renderer-agnostic contracts (CONTRACTS_VERSION 2): the version names the API, migrations carry the data (2026-10-12)
+
+**Context:** `lib/contracts.ts` imported React Flow's `Node` and `Edge` for the old graph (`GraphResponse`), which tied the API to one renderer (PIVOT_SPEC.md §3, rule 3). V1.3 retires that graph, its routes and the Phase 2–4 chunk pipeline. The spec also said "a schema version mismatch triggers a rebuild": `meta.schemaVersion` was meant to wipe derived data on a contract change. Nothing ever implemented it, and the database now holds summaries that cost money to rebuild ($10.30 for VS Code).
+**Decision:**
+- **Data, not drawing.** `lib/contracts.ts` describes data: `LevelResponse`, `MapNode`, `MapEdge`, `DescribeResponse`, `SummarizeResponse`, `SearchResult`, `IndexStatus`, `LiveEvent`, `RepoList` and `IndexEventMap`. The UI maps them onto React Flow itself.
+- **Retired types.** `GraphResponse`, `HealthResponse`, `FileNodeData`, `GraphFileNode`, `FileKind`, `RetrievedChunk` and `SearchResponse` are deleted, with `GET /api/graph`, `GET /api/health`, the radial graph UI, `lib/graph.ts`, `lib/scan.ts`, `lib/retrieve.ts`, `lib/index-repo.ts`, `lib/index-status.ts` and `lib/db/graph-store.ts`.
+- **The version.** `CONTRACTS_VERSION` is 2. It names the HTTP and SSE contract, and moves on a breaking change to it; it never touches the database.
+- **The data.** Stored data changes only through Drizzle migrations, which carry their own data fixes. 0004 cleared content hashes to force a re-parse; 0005 drops the chunk `vectors` table, whose last writer was `lib/index-repo.ts`. Nothing wipes the database on a version change. Summaries are keyed by path, so they survive any structure rebuild anyway.
+- **The tools.** `lib/agent/tools.ts`, the owner's Phase 5 tools, is ported onto the new engine as-is. V1.4 moves its logic into the tool registry.
+**Alternatives:** (a) Implement the wipe-and-rebuild: a contract change would throw away paid-for summaries for no gain. (b) Keep the React Flow types next to the new ones: the very coupling the adapter split exists to remove.
+**Consequences:** A static export (V1.5), the MCP server (V1.4) and a desktop shell can all serve the same shapes. The regex scanner's golden vectors (`GRAPH_IMPLEMENTATION_REVIEW.md` PART 3) retire with the code they tested.
+**Revisit when:** a second renderer (a WebGL overview, say) needs layout data the contract doesn't carry; then it becomes a separate, renderer-neutral shape.
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **2026-10-11 — pivot:** the v1 endpoints change, and `/api/graph` and `/api/health` retire (`PIVOT_SPEC.md` §7.1). Slice V1.3 adds the new endpoints as §11 onward while it builds them, then rewrites this doc into its final order (Task 21 of `docs/plans/2026-10-12-v1-3-map.md`). §5 (`/api/chat`) still applies to E1.
+> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -16,53 +16,15 @@
 - **SSE format:** standard `text/event-stream`:
   `event: <name>\ndata: <json>\n\n`
   Note for the UI implementer: the browser's `EventSource` API cannot send POST bodies. Consume SSE with `fetch` + `response.body.getReader()` and parse the stream manually (a small parser in the api-client module, ~30 lines).
-- **Node ids = file paths.** Graph node ids, `highlight_nodes` arguments, and `sources` entries are all project-relative forward-slash paths ("lib/graph.ts"). This single shared identifier is what lets every subsystem point at the same things.
+- **Node ids = repo-relative paths.** Map boxes, `highlight_nodes`/`focus_node` arguments, panel links and search hits all use repo-relative forward-slash paths (`src/vs/base`, `""` for the repo root), files and folders alike.
 
 ## 2. GET /api/graph
 
-Scans the repo and returns the dependency graph. Never requires an index or API key.
-
-**Reserved query params (Tier L scaling, not implemented in v1 — see `VISUALIZATION_DESIGN.md` §4 / ADR-012):** `?root=<dir>` scopes the graph to a subtree; `?depth=<n>` controls directory-cluster expansion. v1 servers ignore them; clients must not send them until Tier L ships.
-
-**Response 200 — `GraphResponse`:**
-```ts
-type GraphResponse = {
-  nodes: FileNodeType[];   // exact React Flow node shape produced by lib/graph.ts
-  edges: Edge[];           // exact React Flow edge shape
-  stats: {
-    fileCount: number;
-    edgeCount: number;
-    rootName: string;                       // "Nebulosity"
-    warningCount: number;                   // per-file scan warnings (F2); 0 = clean scan
-    centralFiles: { path: string; inDegree: number; outDegree: number }[]; // top 5
-  };
-};
-```
+> **Retired in V1.3** with the radial graph UI (ADR-040). The Map reads levels instead: §11.
 
 ## 3. GET /api/health
 
-Powers the status bar and "do I need to reindex?" hints.
-
-**Response 200 — `HealthResponse`:**
-```ts
-type HealthResponse = {
-  ok: true;
-  lastScanAt: string | null; // ISO timestamp of the repo's last dependency-graph scan (DB-backed, Phase D); null if never scanned
-  index: {
-    exists: boolean;
-    indexedAt: string | null;
-    chunkCount: number;
-    staleFiles: number;      // files whose contentHash differs from disk (0 = fresh)
-  };
-  scannerEngine: "native" | "node"; // which scan engine will serve the next scan (ADR-014)
-  agentReady: boolean;       // ANTHROPIC_API_KEY is present (never echo the key)
-};
-```
-
-**Implemented for real as of Phase 2/3 (2026-09-04).** The `index` block was hardcoded to zeros through Phase D; it is now served by `getIndexStatus` (`lib/index-status.ts`), shared with `POST /api/index` so the two endpoints cannot disagree about what "indexed" means.
-
-- `exists` is **`chunkCount > 0`**, not "a run happened" — a run that failed every file still stamps `lastIndexAt`, and the status pip must not call that indexed.
-- `staleFiles` re-hashes every indexed file on each request. That is affordable because the status bar fetches health once on mount for one local repo; if health ever becomes polled, or targets a large repo, it needs an mtime fast-path first.
+> **Retired in V1.3** (ADR-040). The index's state is `GET /api/status`: §9.
 
 ## 4. POST /api/index — SSE (rewritten in slice V1.3)
 
@@ -138,12 +100,7 @@ data: {}
 
 ## 6. GET /api/search?q=… — debug endpoint
 
-> **Retired in V1.3:** `GET /api/search` now serves §10's `SearchResult`.
-
-Raw retrieval without the agent — exists so Phase 4 can be verified before Phase 5, and stays as a permanent debugging tool.
-
-**Response 200:** `{ results: (CodeChunk & { score: number })[] }` (top-k, same pipeline the `search_code` tool uses).
-**Error:** `INDEX_EMPTY` envelope if no index.
+> **Retired in V1.3** (ADR-040). `GET /api/search` serves §10's `SearchResult`.
 
 ## 7. Reserved for v1.1 (designed, not built)
 
@@ -154,6 +111,8 @@ Raw retrieval without the agent — exists so Phase 4 can be verified before Pha
 ## 8. Versioning policy
 
 These are private, same-repo contracts — no URL versioning. The rule is simpler: **any change to `lib/contracts.ts` must update every consumer in the same commit.** TypeScript enforces most of it; the SSE event names (which are strings) are the one place the compiler can't help, which is why the tables above are exhaustive.
+
+`CONTRACTS_VERSION` (2 since V1.3) names this contract and moves on a breaking change to it. The database evolves through migrations, never through this number (ADR-040).
 
 ## 9. GET /api/status (slice V1.2)
 

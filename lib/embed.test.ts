@@ -20,8 +20,7 @@
 // ================================================================
 
 import { describe, it, expect } from "vitest";
-import { embedTexts, validateVector, getEmbeddingModelInfo, buildEmbeddingText } from "./embed";
-import type { CodeChunk } from "./contracts";
+import { embedTexts, validateVector, getEmbeddingModelInfo } from "./embed";
 
 describe("embed", () => {
     it("should produce 384-dim normalized vectors", async () => {
@@ -47,26 +46,6 @@ describe("embed", () => {
             expect(vec.length).toBe(384);
         }
     }, 30000); // timeout (30 seconds)
-
-    it("should build embedding text with doc comments", () => {
-        const chunk: CodeChunk = {
-            id: 'test#foo#0',
-            filePath: 'lib/test.ts',
-            kind: 'function',
-            name: 'foo',
-            startLine: 1,
-            endLine: 10,
-            exported: true,
-            partIndex: 0,
-            text: '/** This function does something */\nfunction foo() { return "bar"; }',
-            fileHash: 'abc123'
-        };
-        
-        const text = buildEmbeddingText(chunk);
-        expect(text).toContain('lib/test.ts');
-        expect(text).toContain('function: foo');
-        expect(text).toContain('This function does something');
-    });
 
     it("should return correct model info", () => {
         const info = getEmbeddingModelInfo();

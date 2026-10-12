@@ -143,7 +143,7 @@ For every import edge `a → b`, take `L = LCA(dir(a), dir(b))`, the deepest fol
 - **Batched statements.** Every bulk write is split into statements of at most `floor(32,766 / columns)` rows, inside one transaction per batch of files. A regression test inserts more rows than one statement can hold.
 - **No `inArray` over every id.** Repo-scoped reads use joins on `repoId`.
 - Per-file transactions keep the existing atomicity: derived rows and the content hash land together or not at all (ADR-022).
-- `CONTRACTS_VERSION` → 2. A schema version mismatch triggers a rebuild, which is the existing rule.
+- `CONTRACTS_VERSION` → 2. It versions the API contract. Stored data changes only through Drizzle migrations, and nothing wipes the database on a version change (ADR-040).
 
 ---
 
@@ -260,7 +260,7 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 - **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists show 20 entries plus "load more".
 - **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it.
 
-### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` during the UI slice)
+### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` §11–§15 in slice V1.3)
 
 ```ts
 type MapNode = { path: string; name: string; kind: "folder" | "file" | "more";

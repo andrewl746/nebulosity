@@ -1,9 +1,6 @@
 import { sqliteTable, integer, text, uniqueIndex, index, blob } from "drizzle-orm/sqlite-core";
 
 export const META_KEYS = {
-    EMBEDDING_MODEL: "embeddingModel",
-    EMBEDDING_DIM: "embeddingDim",
-    SCHEMA_VERSION: "schemaVersion",
     INDEXING_LOCK: "indexing",
     SUMMARIZING_LOCK: "summarizing"
 } as const;
@@ -70,17 +67,9 @@ export const chunks = sqliteTable("chunks", {
 
 export const meta = sqliteTable("meta", {
     id: integer().primaryKey({ autoIncrement: true }),
-    key: text("key").notNull().unique(),   // "embeddingModel"
-    value: text("value").notNull(),        // "Xenova/all-MiniLM-L6-v2"
+    key: text("key").notNull().unique(),   // "indexing", "stage:3:summaries", "indexVersion:3"
+    value: text("value").notNull(),        // a timestamp, a JSON stage status, a counter
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()).$onUpdateFn(() => new Date())
-});
-
-export const vectors = sqliteTable("vectors", {
-    id: integer().primaryKey({ autoIncrement: true }),
-    chunkId: integer("chunk_id")
-        .notNull()
-        .references(() => chunks.id, { onDelete: "cascade" }),
-    embedding: blob("embedding", { mode: "buffer" }).notNull()
 });
 
 export const SYMBOL_KINDS = [

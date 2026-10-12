@@ -10,68 +10,21 @@
  * Rules:
  *  - Types only. No functions, no logic, no runtime values (the one
  *    exception: CONTRACTS_VERSION).
- *  - Importable from anywhere (core, adapters, UI). May import types from
- *    npm packages, never from app/.
- *  - Node ids, chunk file paths, tool arguments, and source citations are
- *    ALL project-relative forward-slash paths ("lib/graph.ts"). One shared
- *    identifier is what lets every subsystem point at the same things.
+ *  - Importable from anywhere (core, adapters, UI). Never imports from app/,
+ *    and never a renderer's types: the UI maps these shapes onto React Flow
+ *    itself (ADR-040).
+ *  - Node ids, file and folder paths, tool arguments, and source citations
+ *    are ALL repo-relative forward-slash paths ("src/vs/base/common/lifecycle.ts",
+ *    "" for the repo root). One shared identifier is what lets every subsystem
+ *    point at the same things.
  */
-
-import type { Node, Edge } from "@xyflow/react";
-
-/** Bump on breaking contract changes; mismatch tells storage to rebuild. */
-export const CONTRACTS_VERSION = 1;
-
-/* ────────────────────────────── Graph ────────────────────────────── */
-
-/** Semantic class of a file node — decides the indicator dot color. */
-export type FileKind = "component" | "module";
-
-/** Payload carried by every graph node (rendered by app/components/FileNode.tsx). */
-export type FileNodeData = {
-  fileName: string; // "graph.ts"
-  dir: string;      // "lib" ("" for root-level files)
-  kind: FileKind;
-};
 
 /**
- * Canonical React Flow node shape for a file.
- * Phase 1 migrates FileNode.tsx and lib/graph.ts to import this type
- * (they currently declare a structurally-identical local copy).
+ * The API contract's version (ADR-040): bumped on a breaking change to these
+ * shapes. Stored data changes only through Drizzle migrations; nothing wipes
+ * the database when this moves.
  */
-export type GraphFileNode = Node<FileNodeData, "file">;
-
-/** GET /api/graph — docs/API_CONTRACTS.md §2 */
-export type GraphResponse = {
-  nodes: GraphFileNode[];
-  edges: Edge[];
-  stats: {
-    fileCount: number;
-    edgeCount: number;
-    rootName: string;
-    warningCount: number;
-    /** Top 5 by degree centrality (ADR-010). */
-    centralFiles: { path: string; inDegree: number; outDegree: number }[];
-  };
-};
-
-/* ────────────────────────────── Health ───────────────────────────── */
-
-/** GET /api/health — docs/API_CONTRACTS.md §3 */
-export type HealthResponse = {
-  ok: true;
-  /** ISO timestamp of the repo's last dependency-graph scan (DB-backed, Phase D); null if never scanned. */
-  lastScanAt: string | null;
-  index: {
-    exists: boolean;
-    indexedAt: string | null; // ISO timestamp
-    chunkCount: number;
-    staleFiles: number; // files whose contentHash differs from disk (0 = fresh)
-  };
-  /** Which scan engine will serve the next scan (ADR-014). */
-  scannerEngine: "native" | "node";
-  agentReady: boolean; // ANTHROPIC_API_KEY present (never echo the key)
-};
+export const CONTRACTS_VERSION = 2;
 
 /* ─────────────────────────── Index status ────────────────────────── */
 
@@ -262,9 +215,6 @@ export type ChatEvent = {
 
 /* ─────────────────────────── Indexing (SSE) ──────────────────────── */
 
-/** The retired Phase 2 pipeline's phases: only lib/index-repo.ts uses it, and both go in V1.3 (Task 21). */
-export type IndexPhase = "scanning" | "chunking" | "embedding";
-
 /** The structure stage's steps, in order (PIVOT_SPEC.md §5.2). */
 export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
 
@@ -332,11 +282,6 @@ export type CodeChunk = {
   fileHash: string;  // sha256 of the whole source file at index time
 };
 
-export type RetrievedChunk = CodeChunk & { score: number };
-
-/** GET /api/search response — docs/API_CONTRACTS.md §6 */
-export type SearchResponse = { results: RetrievedChunk[] };
-
 /* ───────────────────────────── Search ────────────────────────────── */
 
 /** The three ranked lists hybrid search fuses (ADR-027). */
@@ -368,9 +313,6 @@ export type SearchResult = {
 /* ──────────────────────────── Persistence ────────────────────────── */
 
 /**
- * Persistence shapes live in lib/db/schema.ts (SQLite via Drizzle, ADR-013),
- * not here. This file owns API and domain types only. CONTRACTS_VERSION is
- * stored in the database's `meta` table as schemaVersion — a mismatch at
- * startup means derived data must be wiped and rebuilt
- * (docs/DATABASE_DESIGN.md §2, §5).
+ * Persistence shapes live in lib/db/schema.ts (SQLite via Drizzle, ADR-013), not here. This file owns API and domain
+ * types only. The database evolves through Drizzle migrations (lib/db/migrations), never through CONTRACTS_VERSION.
  */

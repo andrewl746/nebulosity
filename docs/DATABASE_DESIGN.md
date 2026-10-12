@@ -19,7 +19,12 @@ One embedded SQLite database at `.nebulosity/nebulosity.db` under `NEBULOSITY_HO
 | `lib/db/batch.ts` | Splits every bulk insert under SQLite's 32,766-parameter cap (§7). |
 | `lib/db/store/lock.ts` | The shared indexing lock (one indexer at a time, stale after 30 minutes). |
 | `lib/db/store/structure.ts` | Persistence for one structure run of the V1.1 engine: batched, failure-isolated file writes, the import graph, folders and level edges. |
-| `lib/db/graph-store.ts` | Graph persistence operations: `saveScan` (transactional replace) and `loadGraph`. RAG operations join it in Phases 2–4. |
+| `lib/db/store/summaries.ts` | Summary rows, batches and usage. |
+| `lib/db/store/summary-vectors.ts` | Search vectors and their counts. |
+| `lib/db/store/search.ts` | The FTS queries. |
+| `lib/db/store/stages.ts` | Stage rows. |
+| `lib/db/store/map.ts` | The Map's reads. |
+| `lib/db/store/version.ts` | The index version. |
 
 No other file may open the database or embed SQL. This is the seam the whole layer swaps through.
 
@@ -30,7 +35,7 @@ No other file may open the database or embed SQL. This is the seam the whole lay
 ## 2. The schema (normalized, three core tables + three support tables)
 
 ```
-repositories 1 ──── * files 1 ──── * chunks 1 ──── 1 vectors
+repositories 1 ──── * files 1 ──── * chunks (chunk vectors retired in V1.3)
                       │
                       * imports (source_file_id → target_file_id)
 ```
@@ -47,11 +52,11 @@ Directed: `source_file_id` imports `target_file_id`, with the raw `specifier` te
 ### chunks (used from Phase 2)
 Mirrors `CodeChunk` in `lib/contracts.ts`, keyed by the stable `${path}#${name}#${part}` id so vectors survive re-indexing of unchanged files. Cascades from `files`.
 
-### vectors (used from Phase 3)
-One BLOB per chunk: the raw bytes of a `Float32Array` (384 × 4 = 1,536 bytes/row — roughly 4× smaller than the JSON encoding and zero parse cost). Retrieval is unchanged from the original design: load into memory once, brute-force dot products (that half of ADR-006 still stands).
+### vectors
+Retired in V1.3 (migration 0005, ADR-040). Search vectors are per summary: `summary_vectors`, §8.
 
 ### meta + sessions
-`meta` is key/value bookkeeping (`schemaVersion`, `embeddingModel`, `embeddingDim`); a mismatch at startup means wipe-and-rebuild derived data — the same invalidation contract the manifest carried. `sessions` is reserved for v1.1 chat persistence.
+`meta` is key/value bookkeeping: the locks, each stage's status, and each repo's index version. `sessions` is reserved for v1.1 chat persistence.
 
 ## 3. Write discipline
 
@@ -112,3 +117,4 @@ Everything in `.nebulosity/` is derived. Recovery from any corruption, version m
 - **Stage rows stay current.** The summaries stage's row is rewritten from a fresh plan after every structure change and every "summarize now" (`refreshSummaryStatus`). The embeddings stage's counts are read live from `summaries` and `summary_vectors`, not from its row (ADR-032, amended).
 - **A vector always matches its summary's text.** It's stored only if the summary's `input_hash` is still the one it was computed for, and a template written over model text deletes the old vector (ADR-027, amended).
 - **Incremental writes** (ADR-037). The background worker's structure updates write only differences: import rows deleted and inserted, `level_edges` counts moved by ±1 per import (a row that reaches 0 is deleted), folder rows synced, and summaries of vanished targets pruned. All of it in one transaction, apart from the file rows themselves.
+- **Chunk vectors dropped** (migration 0005): their only writer, the Phase 2 pipeline, is gone (ADR-040).

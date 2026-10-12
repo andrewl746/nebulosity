@@ -121,7 +121,7 @@ function writeOne(tx: Tx, repoId: number, r: FileRecord): void {
         .returning({ id: files.id })
         .get();
 
-    tx.delete(chunks).where(eq(chunks.fileId, fileId)).run();   // cascades to the old vectors
+    tx.delete(chunks).where(eq(chunks.fileId, fileId)).run();   // cascades to their code search rows (the delete trigger, ADR-031)
     tx.delete(symbols).where(eq(symbols.fileId, fileId)).run();
 
     const chunkRows = r.chunks.map((c) => ({
