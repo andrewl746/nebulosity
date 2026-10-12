@@ -64,23 +64,17 @@ type HealthResponse = {
 - `exists` is **`chunkCount > 0`**, not "a run happened" — a run that failed every file still stamps `lastIndexAt`, and the status pip must not call that indexed.
 - `staleFiles` re-hashes every indexed file on each request. That is affordable because the status bar fetches health once on mount for one local repo; if health ever becomes polled, or targets a large repo, it needs an mtime fast-path first.
 
-## 4. POST /api/index — SSE
+## 4. POST /api/index — SSE (rewritten in slice V1.3)
 
-Runs the indexing pipeline (`RAG_PIPELINE.md`). Body: `{}` (repo root is the server's project root in v1).
-
-**SSE events, in order:**
+A full structure run of the active repo, in the background worker (ADR-038), with its progress as SSE. Localhost only (§14's guard: `403 FORBIDDEN` otherwise); `404 INDEX_EMPTY` without an active repo. Body: none.
 
 | event | data | notes |
 |---|---|---|
-| `progress` | `{ phase: "scanning" \| "chunking" \| "embedding", done: number, total: number, currentFile?: string }` | emitted at least once per phase; `done`/`total` are **run-scoped** in every phase |
-| `done` | `{ fileCount, chunkCount, skippedUnchanged, tookMs, changed, errors[], warnings[] }` | terminal event on success |
-| `error` | `{ code, message }` | terminal on failure; `INDEX_LOCKED` if another run holds the lock |
+| `progress` | `{ stage: "discover" \| "parse" \| "write" \| "resolve" \| "aggregate", done, total }` | at least once per stage, in order |
+| `done` | `{ files, changed, deleted, edges, folders, levelEdges, errors[], skipped, totalMs }` | terminal on success; `errors` are per-file failures (ADR-021) |
+| `error` | `{ code, message }` | terminal on failure: `INDEX_LOCKED` while another run holds the lock, `INTERNAL` if the worker stopped |
 
-**Phase semantics (Phase 2/3, 2026-09-04).** The pipeline runs `scanning` → `chunking` → `embedding` → commit, and embedding is a **single batched pass over the whole run**, not per file — so `done`/`total` count chunks across the entire job and rise monotonically. An earlier per-file loop reset the counters on every file, which no client can render as a progress bar. A warm re-index emits no `embedding` events at all.
-
-**`done` carries per-file failures (ADR-021):** `errors[]` and `warnings[]` are `{ path, error }[]`, and `changed` is the number of files re-chunked. Indexing is per-file error-tolerant, so without these a run where every file failed looks identical to a clean one.
-
-**`INDEX_LOCKED`** is raised from a typed `IndexLockedError`, not matched on message text. The lock is a `meta` row holding the run's ISO start time and is treated as stale after 30 minutes, so a crashed run cannot block indexing forever.
+The run goes on in the worker if the client leaves.
 
 ## 5. POST /api/chat — SSE (the main event)
 
@@ -251,6 +245,25 @@ type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | 
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo; `404 NOT_FOUND`; `404 INDEX_EMPTY`.
 
+## 13. POST /api/summarize?path= (slice V1.3)
+
+Summarizes one file or folder now through the regular API, jumping the queue (PIVOT_SPEC.md §5.3). The Map sends it when it opens a target whose summary is `pending` or `stale`; it never sends it when summaries are `off`. Localhost only, because it spends money.
+
+```ts
+type SummarizeResponse = { path: string; kind: "repo" | "folder" | "file"; tagline?: string; summary?: string;
+  summaryStatus: SummaryStatus; summaryError?: string };
+```
+
+- **Current summaries.** A current summary comes back as it is, with no API call.
+- **Duplicates.** Concurrent requests for one target share one request (ADR-033, amended).
+- **Status codes.**
+  - `409 NOT_READY`: a folder whose files or subfolders aren't all summarized yet. Its summary would be written over "(no summary yet)".
+  - `409 SUMMARIES_OFF`: no API key.
+  - `502 UPSTREAM`: Anthropic refused the API key.
+  - `404 NOT_FOUND`, `400 BAD_REQUEST` and `403 FORBIDDEN` as usual.
+  - `500 INTERNAL` when the background worker stopped before answering.
+- **Afterwards.** The summary lands in the index, so the index version moves and the Map refetches. Its vector follows within seconds.
+
 ## 14. The live channel (slice V1.3)
 
 `POST /api/live` takes a tool call, and `GET /api/live/stream` sends each one to the open Maps (`PIVOT_SPEC.md` §8, ADR-039).
@@ -266,3 +279,15 @@ type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction 
   - At most 20 events a second are passed on; the rest are dropped.
 - **`GET /api/live/stream`** is Server-Sent Events: `ready` (`{}`) once, then `tool` (a `LiveEvent`) per call, and a `: keep-alive` comment every 15 s. It's a GET, so the browser's `EventSource` reads it directly.
 - **`postLiveEvent`** (`lib/live/client.ts`) is the poster. It sends one POST to `http://127.0.0.1:<port>/api/live` with a 200 ms timeout and ignores every failure, since no Map being open is the normal case. `port` comes from `.nebulosity/config.json` (default 3000). V1.4's MCP tools call it, and `npm run live -- <tool> [path …] [--highlight | --focus | --clear]` sends one by hand.
+
+## 15. GET /api/repos, POST /api/repos (slice V1.3)
+
+The repo picker (PIVOT_SPEC.md §7.1).
+
+```ts
+type RepoSummary = { root: string; name: string; indexedAt: string | null };
+type RepoList = { active: string | null; repos: RepoSummary[] };
+```
+
+- **`GET`** lists the repos the structure stage has indexed, by root, and the active one.
+- **`POST { root }`** makes an indexed repo the active one (`activeRepo` in `.nebulosity/config.json`) and points the background worker at it. It answers with the new `RepoList`. Localhost only. A root that was never indexed gets `404 NOT_FOUND`.

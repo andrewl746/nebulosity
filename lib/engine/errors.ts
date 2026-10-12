@@ -4,6 +4,7 @@ import { RepoNotIndexedError } from "../db/store/structure";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
 import { SummarizerAuthError } from "../index/summarize/types";
 import { NotAFolderError, PathNotFoundError } from "./level";
+import { UnknownRepoError } from "./repos";
 
 /** Thrown when a summary is asked for and there's no API key to write it with. */
 export class SummariesOffError extends Error {
@@ -47,7 +48,9 @@ export function errorResponseFor(err: unknown): { status: number; error: { code:
 
 function codeFor(err: unknown): ErrorCode {
     if (err instanceof RepoNotIndexedError || err instanceof NoActiveRepoError) return "INDEX_EMPTY";
-    if (err instanceof PathNotFoundError || err instanceof TargetNotFoundError || err instanceof UnknownBatchError) return "NOT_FOUND";
+    if (err instanceof PathNotFoundError || err instanceof TargetNotFoundError || err instanceof UnknownBatchError || err instanceof UnknownRepoError){
+        return "NOT_FOUND";
+    }
     if (err instanceof NotAFolderError) return "BAD_REQUEST";
     if (err instanceof IndexLockedError || err instanceof StructureNotReadyError) return "INDEX_LOCKED";
     if (err instanceof TargetNotReadyError) return "NOT_READY";

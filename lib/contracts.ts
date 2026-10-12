@@ -181,6 +181,12 @@ export type SummarizeResponse = {
   summaryError?: string;
 };
 
+/** One repo the Map can show — docs/API_CONTRACTS.md §15 */
+export type RepoSummary = { root: string; name: string; indexedAt: string | null };
+
+/** GET /api/repos — docs/API_CONTRACTS.md §15 */
+export type RepoList = { active: string | null; repos: RepoSummary[] };
+
 /* ─────────────────────────── Error envelope ──────────────────────── */
 
 export type ErrorCode =

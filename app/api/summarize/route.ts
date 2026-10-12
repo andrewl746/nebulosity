@@ -1,0 +1,22 @@
+import { NextRequest, NextResponse } from "next/server";
+import type { ErrorEnvelope, SummarizeResponse } from "@/lib/contracts";
+import { backgroundSupervisor } from "@/lib/background/start";
+import { STATUS_FOR } from "@/lib/engine/errors";
+import { parseRepoPath } from "@/lib/index/paths";
+import { isLocalRequest } from "@/lib/live/local";
+import { activeRepo, badPath, forbidden, noActiveRepo } from "../_lib/respond";
+
+export const runtime = "nodejs";
+
+// POST /api/summarize?path= — summarize one file or folder now, jumping the queue (API_CONTRACTS.md §13).
+// It spends money, so only this machine may ask.
+export async function POST(request: NextRequest){
+    if (!isLocalRequest(request.headers)) return forbidden();
+    if (activeRepo() === null) return noActiveRepo();
+    const target = parseRepoPath(request.nextUrl.searchParams.get("path"));
+    if (target === null) return badPath();
+
+    const outcome = await backgroundSupervisor().summarize(target);
+    if (!outcome.ok) return NextResponse.json<ErrorEnvelope>({ error: outcome.error }, { status: STATUS_FOR[outcome.error.code] });
+    return NextResponse.json<SummarizeResponse>(outcome.summary);
+}
