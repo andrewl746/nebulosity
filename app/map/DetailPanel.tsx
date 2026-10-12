@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { IconFile, IconFolder, IconX } from "@tabler/icons-react";
 import type { AreaCount, DescribeResponse, LevelResponse, MapNode, SummarizeResponse, SymbolInfo } from "@/lib/contracts";
 import { api, ApiError } from "./api";
-import { formatCount } from "./format";
-import { nameOf } from "./paths";
+import { formatCompact, formatCount } from "./format";
+import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
 import { placeholderFor, wantsSummary } from "./summaries";
+import { inlineCode, splitSummary } from "./text";
 
 type DetailPanelProps = {
     /** The selection: a file, a folder, the repo, or the level's "+N more" box. */
@@ -20,14 +22,17 @@ type DetailPanelProps = {
     onClose: () => void;
 };
 
-/** Long lists show this many at a time (PIVOT_SPEC.md §7: "20 entries plus load more"). */
-const PAGE = 20;
+/** Chips and rows shown before "+N more" or "View all": enough to act on without scrolling. */
+const PREVIEW = 8;
+
+const KIND_LABELS: Record<DescribeResponse["kind"], string> = { repo: "Repository", folder: "Folder", file: "File" };
 
 /**
- * The detail panel (PIVOT_SPEC.md §7). It opens on selection with what describe() knows: the summary, the size, what's
- * inside (children or symbols), what it uses and what uses it. A missing or out-of-date summary is asked for once
- * ("summarize now", §5.3). Selecting "+N more" lists the boxes it folds. MapView remounts the panel for each
- * selection (key), so nothing leaks from one target to the next.
+ * The details panel (VISUAL_REFRESH.md §5), top to bottom: what kind of thing it is, its name, its size, a short
+ * summary that expands, what it depends on and what uses it (chips that focus the Map), and what's inside. A missing
+ * or out-of-date summary is asked for once ("summarize now", PIVOT_SPEC.md §5.3), and the panel says so while it's
+ * refreshing. Selecting "+N more" lists the boxes it folds. MapView remounts the panel for each selection (key), so
+ * nothing leaks from one target to the next.
  */
 export default function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
     const more = level.nodes.find((n) => n.path === path && n.kind === "more") ?? null;
@@ -37,6 +42,7 @@ export default function DetailPanel({ path, level, indexVersion, onFocus, onOpen
     const [error, setError] = useState<ApiError | null>(null);
     const [fresh, setFresh] = useState<SummarizeResponse | null>(null);
     const [summaryError, setSummaryError] = useState<ApiError | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
     // keys already asked for: "<path>@<index version>", or the bare path once the server answered NOT_READY
     const asked = useRef(new Set<string>());
 
@@ -53,6 +59,20 @@ export default function DetailPanel({ path, level, indexVersion, onFocus, onOpen
         if (data) measureAfterPaint("map:select");
     }, [data]);
 
+    /** "Summarize now": the answer replaces what describe() said, and "Refreshing…" shows until it lands. */
+    const summarize = (targetPath: string, onNotReady?: () => void): void => {
+        setRefreshing(true);
+        api.summarize(targetPath).then(
+            (answer) => { setFresh(answer); setRefreshing(false); },
+            (err: unknown) => {
+                setRefreshing(false);
+                if (!(err instanceof ApiError)) return;
+                if (err.code === "NOT_READY") onNotReady?.();
+                setSummaryError(err);
+            },
+        );
+    };
+
     // "summarize now", once per target and index version: the server joins a request already running (ADR-033).
     // After a NOT_READY answer, once per target: the index moves with every child summary the worker writes, and each
     // move would otherwise ask again for a folder that still isn't ready. Reselecting it asks afresh (a new panel).
@@ -61,173 +81,267 @@ export default function DetailPanel({ path, level, indexVersion, onFocus, onOpen
         const key = `${data.path}@${data.indexVersion}`;
         if (asked.current.has(data.path) || asked.current.has(key)) return;
         asked.current.add(key);
-        api.summarize(data.path).then(setFresh, (err: unknown) => {
-            if (!(err instanceof ApiError)) return;
-            if (err.code === "NOT_READY") asked.current.add(data.path);
-            setSummaryError(err);
-        });
+        summarize(data.path, () => asked.current.add(data.path));
     }, [data, isMore]);
 
     const retry = (): void => {
         if (data === null) return;
         setSummaryError(null);
-        api.summarize(data.path).then(setFresh, (err: unknown) => { if (err instanceof ApiError) setSummaryError(err); });
+        summarize(data.path);
     };
 
     const name = more ? more.name : nameOf(target, level.repo);
-    const kindLabel = more ? "folded here" : data?.kind ?? "";
+    const kindLabel = more ? "Folded boxes" : data ? KIND_LABELS[data.kind] : "";
 
     return (
-        <aside data-panel={path} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex w-[380px] flex-col border-l border-purple-400/20 bg-[#0c0716]/85 font-mono backdrop-blur-xl">
-            <header className="flex items-start justify-between gap-2 border-b border-purple-400/15 px-4 py-3">
-                <div className="min-w-0">
-                    <div className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">{kindLabel}</div>
-                    <h2 className="truncate text-[13px] text-zinc-100">{name}</h2>
-                    <div className="truncate text-[10px] text-zinc-500">{target || "(repo root)"}</div>
+        <aside data-panel={path} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex w-[400px] flex-col border-l border-hairline bg-panel">
+            <header className="border-b border-hairline px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="text-[12px] leading-4 text-text-2">{kindLabel}</div>
+                        <h2 className="mt-1 truncate text-[18px] font-medium leading-6 text-text" title={target || name}>{name}</h2>
+                        <div className="truncate font-mono text-[12px] leading-4 text-text-2" title={target}>{target || "(repo root)"}</div>
+                    </div>
+                    <button type="button" onClick={onClose} aria-label="Close the panel" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">
+                        <IconX aria-hidden size={16} stroke={1.75} />
+                    </button>
                 </div>
-                <button type="button" onClick={onClose} aria-label="Close the panel" className="text-lg leading-none text-zinc-500 hover:text-zinc-200">×</button>
+                {data && !more && <Stats data={data} onOpen={onOpen} />}
             </header>
-            <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 text-[11.5px] leading-relaxed text-zinc-300">
-                {error && <p className="text-red-300">{error.message}</p>}
-                {!data && !error && <p className="text-zinc-500">Loading…</p>}
-                {data && more && <FoldedList data={data} level={level} onFocus={onFocus} />}
+            <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
+                {error && <p className="text-danger">{error.message}</p>}
+                {!data && !error && <p className="text-text-2">Loading…</p>}
+                {data && more && <FoldedList data={data} level={level} onFocus={onFocus} onOpen={onOpen} />}
                 {data && !more && (
-                    <Details data={data} fresh={fresh} summaryError={summaryError} onRetry={retry} onFocus={onFocus} onOpen={onOpen} />
+                    <Details
+                        data={data}
+                        fresh={fresh}
+                        refreshing={refreshing}
+                        summaryError={summaryError}
+                        onRetry={retry}
+                        onFocus={onFocus}
+                        onOpen={onOpen}
+                    />
                 )}
             </div>
         </aside>
     );
 }
 
+/** "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. */
+function Stats({ data, onOpen }: { data: DescribeResponse; onOpen: (folder: string) => void }){
+    const lines = `${formatCompact(data.stats.lineCount)} ${data.stats.lineCount === 1 ? "line" : "lines"}`;
+    const size = data.kind === "file" ? lines : `${formatCount(data.stats.fileCount)} ${data.stats.fileCount === 1 ? "file" : "files"} · ${lines}`;
+    return (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-text-2">
+            <span>{size}</span>
+            {data.stalePaths > 0 && <span>{formatCount(data.stalePaths)} changed since summarized</span>}
+            {data.kind === "folder" && (
+                <button type="button" onClick={() => onOpen(data.path)} className="text-text underline underline-offset-2 hover:text-text-2">Open folder</button>
+            )}
+            {data.kind === "file" && (
+                <a href={editorLink(data)} className="text-text underline underline-offset-2 hover:text-text-2">Open in VS Code</a>
+            )}
+        </div>
+    );
+}
+
+const editorLink = (data: Pick<DescribeResponse, "repo" | "path">, line?: number): string =>
+    `vscode://file/${data.repo}/${data.path}${line ? `:${line}` : ""}`;
+
 type DetailsProps = {
     data: DescribeResponse;
     fresh: SummarizeResponse | null;
+    refreshing: boolean;
     summaryError: ApiError | null;
     onRetry: () => void;
     onFocus: (targetPath: string) => void;
     onOpen: (folder: string) => void;
 };
 
-function Details({ data, fresh, summaryError, onRetry, onFocus, onOpen }: DetailsProps){
-    // a "summarize now" answer is newer than the description it was asked from
-    const shown = fresh ?? data;
-    const editorLink = (line?: number) => `vscode://file/${data.repo}/${data.path}${line ? `:${line}` : ""}`;
-
+function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOpen }: DetailsProps){
     return (
         <>
-            <section>
-                {shown.tagline
-                    ? <p className={`text-[12.5px] ${shown.summaryStatus === "stale" ? "text-zinc-400" : "text-zinc-100"}`}>{shown.tagline}</p>
-                    : <p className="italic text-zinc-500">{summaryError?.code === "NOT_READY" ? "Waiting for what's inside to be summarized first." : placeholderFor(shown.summaryStatus)}</p>}
-                {shown.summary && <p className="mt-1.5 text-zinc-300">{shown.summary}</p>}
-                {/* the summary was written from an "Imported by" line that counts tests apart; "Used by" below counts them */}
-                {shown.summary && data.kind === "file" && (
-                    <p className="mt-1 text-[10px] text-zinc-600">Import counts in this summary leave out test files.</p>
-                )}
-                {shown.summaryStatus === "stale" && <p className="mt-1.5 text-[10.5px] text-amber-200/70">Out of date: this changed since it was summarized.</p>}
-                {(shown.summaryError ?? (summaryError && summaryError.code !== "NOT_READY" ? summaryError.message : null)) && (
-                    <p className="mt-1.5 text-[10.5px] text-red-300">
-                        {shown.summaryError ?? summaryError?.message}{" "}
-                        <button type="button" onClick={onRetry} className="underline hover:text-red-200">Try again</button>
-                    </p>
-                )}
-            </section>
+            <Summary data={data} fresh={fresh} refreshing={refreshing} summaryError={summaryError} onRetry={onRetry} />
 
-            <section className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-zinc-500">
-                <span>{formatCount(data.stats.fileCount)} {data.stats.fileCount === 1 ? "file" : "files"} · {formatCount(data.stats.lineCount)} lines</span>
-                {data.stalePaths > 0 && <span className="text-amber-200/70">{formatCount(data.stalePaths)} changed since summarized</span>}
-                {data.kind === "folder" && <button type="button" onClick={() => onOpen(data.path)} className="text-purple-300/80 hover:text-purple-200">Open folder</button>}
-                {data.kind === "file" && <a href={editorLink()} className="text-purple-300/80 hover:text-purple-200">Open in VS Code</a>}
+            <section aria-label="Relationships" className="space-y-4">
+                <Chips title="Depends on" note="by number of imports" items={data.uses} empty="Imports nothing outside itself." onFocus={onFocus} />
+                <Chips title="Used by" note="by number of imports, test files included" items={data.usedBy} empty="Nothing outside it imports it." onFocus={onFocus} />
             </section>
 
             {data.children && (
-                <List title="Inside" items={data.children} render={(child: MapNode) => (
-                    <li key={child.path}>
-                        <button type="button" onClick={() => onFocus(child.path)} className="w-full text-left hover:text-purple-200">
-                            <span className="text-zinc-200">{child.name}{child.kind === "folder" ? "/" : ""}</span>
-                            <span className="text-zinc-600"> · {child.kind === "folder" ? `${formatCount(child.fileCount)} files` : "file"}</span>
-                            {child.tagline && <span className="block truncate text-[10.5px] text-zinc-500">{child.tagline}</span>}
-                        </button>
-                    </li>
+                <Rows title="Contents" items={data.children} render={(child: MapNode) => (
+                    <ChildRow key={child.path} child={child} onFocus={onFocus} onOpen={onOpen} />
                 )} />
             )}
 
             {data.symbols && (
-                <List title="Declarations" items={data.symbols} empty="None found." render={(symbol: SymbolInfo) => (
+                <Rows title="Declarations" items={data.symbols} empty="None found." render={(symbol: SymbolInfo) => (
                     <li key={`${symbol.name}:${symbol.startLine}`}>
-                        <a href={editorLink(symbol.startLine)} className="hover:text-purple-200">
-                            <span className={symbol.exported ? "text-zinc-200" : "text-zinc-400"}>{symbol.name}</span>
-                            <span className="text-zinc-600"> · {symbol.kind} · line {symbol.startLine}</span>
+                        <a href={editorLink(data, symbol.startLine)} className="flex items-baseline justify-between gap-3 rounded-md px-2 py-1 hover:bg-surface">
+                            <span className={`truncate font-mono text-[13px] ${symbol.exported ? "text-text" : "text-text-2"}`}>{symbol.name}</span>
+                            <span className="shrink-0 text-[12px] text-text-2">{symbol.kind} · line {symbol.startLine}</span>
                         </a>
                     </li>
                 )} />
             )}
-
-            <List title="Uses" items={data.uses} empty="Imports nothing outside itself." render={(area: AreaCount) => <AreaRow key={area.path} area={area} onFocus={onFocus} />} />
-            <List
-                title="Used by"
-                note="imports from outside it, by area, test files included"
-                items={data.usedBy}
-                empty="Nothing outside it imports it."
-                render={(area: AreaCount) => <AreaRow key={area.path} area={area} onFocus={onFocus} />}
-            />
         </>
     );
 }
 
-function AreaRow({ area, onFocus }: { area: AreaCount; onFocus: (targetPath: string) => void }){
+type SummaryProps = Pick<DetailsProps, "data" | "fresh" | "refreshing" | "summaryError" | "onRetry">;
+
+/** The tagline and the first sentence; "Read full summary" shows the rest. Identifiers in backticks render as code. */
+function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProps){
+    const [expanded, setExpanded] = useState(false);
+    // a "summarize now" answer is newer than the description it was asked from
+    const shown = fresh ?? data;
+    const { lead, rest } = splitSummary(shown.summary ?? "");
+    const failure = shown.summaryError ?? (summaryError && summaryError.code !== "NOT_READY" ? summaryError.message : null);
+
+    return (
+        <section aria-label="Summary">
+            {shown.tagline
+                ? <p className="text-[15px] font-medium leading-snug text-text"><Rich text={shown.tagline} /></p>
+                : <p className="text-text-2">{summaryError?.code === "NOT_READY" ? "Waiting for what's inside to be summarized first." : placeholderFor(shown.summaryStatus)}</p>}
+            {lead && <p className="mt-2"><Rich text={lead} /></p>}
+            {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2"><Rich text={paragraph} /></p>)}
+            {rest && !expanded && (
+                <button type="button" onClick={() => setExpanded(true)} className="mt-2 text-[13px] text-text underline underline-offset-2 hover:text-text-2">
+                    Read full summary
+                </button>
+            )}
+            <div className="mt-2 space-y-1 text-[13px] text-text-2">
+                {refreshing && shown.tagline && <p>Refreshing…</p>}
+                {shown.summaryStatus === "stale" && !refreshing && <p>Out of date: this changed since it was summarized.</p>}
+                {/* the summary was written from an "Imported by" line that counts tests apart; "Used by" below counts them */}
+                {shown.summary && data.kind === "file" && <p className="text-[12px]">Import counts in this summary leave out test files.</p>}
+                {failure && (
+                    <p className="text-danger">
+                        {failure}{" "}
+                        <button type="button" onClick={onRetry} className="underline underline-offset-2">Try again</button>
+                    </p>
+                )}
+            </div>
+        </section>
+    );
+}
+
+/** Prose with its `identifiers` as inline code (VISUAL_REFRESH.md §5). */
+function Rich({ text }: { text: string }){
+    return (
+        <>
+            {inlineCode(text).map((part, i) => part.code
+                ? <code key={i} className="rounded-md bg-surface px-1 font-mono text-[13px] text-text">{part.text}</code>
+                : <span key={i}>{part.text}</span>)}
+        </>
+    );
+}
+
+function SectionTitle({ title, count, note }: { title: string; count: number; note?: string }){
+    return (
+        <div className="mb-2">
+            <h3 className="text-[13px] font-medium text-text">
+                {title} <span className="font-normal text-text-2">{formatCount(count)}</span>
+            </h3>
+            {note && <p className="text-[12px] text-text-2">{note}</p>}
+        </div>
+    );
+}
+
+type ChipsProps = { title: string; note: string; items: readonly AreaCount[]; empty: string; onFocus: (targetPath: string) => void };
+
+/** "Depends on" / "Used by" as chips (§5): each focuses that area on the Map. The first 8, then "+N more". */
+function Chips({ title, note, items, empty, onFocus }: ChipsProps){
+    const [all, setAll] = useState(false);
+    const shown = all ? items : items.slice(0, PREVIEW);
+    return (
+        <div>
+            <SectionTitle title={title} count={items.length} note={note} />
+            {items.length === 0
+                ? <p className="text-[13px] text-text-2">{empty}</p>
+                : (
+                    <ul className="flex flex-wrap gap-2">
+                        {shown.map((area) => (
+                            <li key={area.path} className="min-w-0">
+                                <button
+                                    type="button"
+                                    data-chip={area.path}
+                                    title={`${area.path}: ${formatCount(area.count)} import${area.count === 1 ? "" : "s"}`}
+                                    onClick={() => onFocus(area.path)}
+                                    className="flex max-w-[360px] items-center gap-2 rounded-md border border-border bg-surface px-2 py-1 text-[13px] text-text hover:border-text-2"
+                                >
+                                    <span className="truncate">{shortPath(area.path)}</span>
+                                    <span className="shrink-0 text-text-2">{formatCount(area.count)}</span>
+                                </button>
+                            </li>
+                        ))}
+                        {!all && items.length > PREVIEW && (
+                            <li>
+                                <button type="button" onClick={() => setAll(true)} className="rounded-md border border-dashed border-border px-2 py-1 text-[13px] text-text-2 hover:text-text">
+                                    +{formatCount(items.length - PREVIEW)} more
+                                </button>
+                            </li>
+                        )}
+                    </ul>
+                )}
+        </div>
+    );
+}
+
+/** A child in Contents: a folder goes into it, a file is selected on the Map (§5). */
+function ChildRow({ child, onFocus, onOpen }: { child: MapNode; onFocus: (targetPath: string) => void; onOpen: (folder: string) => void }){
+    const folder = child.kind === "folder";
+    const Icon = folder ? IconFolder : IconFile;
     return (
         <li>
-            <button type="button" onClick={() => onFocus(area.path)} className="flex w-full justify-between gap-3 text-left hover:text-purple-200">
-                <span className="truncate">{area.path}{area.kind === "folder" ? "/" : ""}</span>
-                <span className="shrink-0 text-zinc-500">{formatCount(area.count)}</span>
+            <button
+                type="button"
+                data-child={child.path}
+                title={child.tagline ? `${child.path}: ${child.tagline}` : child.path}
+                onClick={() => (folder ? onOpen(child.path) : onFocus(child.path))}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-surface"
+            >
+                <Icon aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
+                <span className="min-w-0 flex-1 truncate">{child.name}</span>
+                {folder && <span className="shrink-0 text-[12px] text-text-2">{formatCount(child.fileCount)} {child.fileCount === 1 ? "file" : "files"}</span>}
             </button>
         </li>
     );
 }
 
 /** "+N more" selected: the boxes it folds, from describe(level).children minus the ones drawn. */
-function FoldedList({ data, level, onFocus }: { data: DescribeResponse; level: LevelResponse; onFocus: (targetPath: string) => void }){
+function FoldedList({ data, level, onFocus, onOpen }: { data: DescribeResponse; level: LevelResponse; onFocus: (targetPath: string) => void; onOpen: (folder: string) => void }){
     const drawn = new Set(level.nodes.map((n) => n.path));
     const folded = (data.children ?? []).filter((child) => !drawn.has(child.path));
     return (
-        <List title="Folded into this box" items={folded} render={(child: MapNode) => (
-            <li key={child.path}>
-                <button type="button" onClick={() => onFocus(child.path)} className="w-full text-left hover:text-purple-200">
-                    <span className="text-zinc-200">{child.name}{child.kind === "folder" ? "/" : ""}</span>
-                    {child.tagline && <span className="block truncate text-[10.5px] text-zinc-500">{child.tagline}</span>}
-                </button>
-            </li>
+        <Rows title="Folded into this box" items={folded} render={(child: MapNode) => (
+            <ChildRow key={child.path} child={child} onFocus={onFocus} onOpen={onOpen} />
         )} />
     );
 }
 
-type ListProps<T> = {
+type RowsProps<T> = {
     title: string;
-    /** What the counts in the list mean, under the title. */
-    note?: string;
     items: readonly T[];
     render: (item: T) => ReactNode;
     empty?: string;
 };
 
-/** A titled list that shows PAGE items at a time. */
-function List<T>({ title, note, items, render, empty }: ListProps<T>){
-    const [shown, setShown] = useState(PAGE);
+/** A titled list: the first 8, then "View all" shows the rest. */
+function Rows<T>({ title, items, render, empty }: RowsProps<T>){
+    const [all, setAll] = useState(false);
     if (items.length === 0 && empty === undefined) return null;
 
     return (
-        <section>
-            <h3 className={`${note ? "" : "mb-1.5 "}text-[10px] uppercase tracking-[0.25em] text-zinc-500`}>
-                {title} <span className="text-zinc-600">{formatCount(items.length)}</span>
-            </h3>
-            {note && <p className="mb-1.5 text-[10px] text-zinc-600">{note}</p>}
+        <section aria-label={title}>
+            <SectionTitle title={title} count={items.length} />
             {items.length === 0
-                ? <p className="text-zinc-600">{empty}</p>
-                : <ul className="space-y-1">{items.slice(0, shown).map(render)}</ul>}
-            {items.length > shown && (
-                <button type="button" onClick={() => setShown((n) => n + PAGE)} className="mt-1.5 text-[10.5px] text-purple-300/80 hover:text-purple-200">
-                    Show {Math.min(PAGE, items.length - shown)} more of {formatCount(items.length - shown)}
+                ? <p className="text-[13px] text-text-2">{empty}</p>
+                : <ul className="-mx-2">{(all ? items : items.slice(0, PREVIEW)).map(render)}</ul>}
+            {!all && items.length > PREVIEW && (
+                <button type="button" onClick={() => setAll(true)} className="mt-2 text-[13px] text-text underline underline-offset-2 hover:text-text-2">
+                    View all {formatCount(items.length)}
                 </button>
             )}
         </section>
