@@ -11,6 +11,7 @@ import { parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
 import type { Pulse } from "./pulses";
 import TopBar from "./TopBar";
+import SearchPalette from "./SearchPalette";
 import { useIndexStatus } from "./useIndexStatus";
 
 /** Levels fetched for one repo and index version (ADR-036): going back up a level is instant until the index moves. */
@@ -33,6 +34,7 @@ function MapScreen(){
     const [cache, setCache] = useState<LevelCache | null>(null);
     const [levelError, setLevelError] = useState<ApiError | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
+    const [paletteOpen, setPaletteOpen] = useState(false);
 
     const repo = status?.repo ?? null;
     const version = status?.indexVersion ?? null;
@@ -91,6 +93,11 @@ function MapScreen(){
     useEffect(() => {
         const onKey = (event: KeyboardEvent): void => {
             const typing = event.target instanceof HTMLElement && ["INPUT", "TEXTAREA"].includes(event.target.tagName);
+            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k"){
+                event.preventDefault();
+                setPaletteOpen(true);
+                return;
+            }
             if (typing) return;
             if (event.key === "Escape") setSelected(null);
             else if (event.key === "Backspace" && levelPath !== "") open(parentOf(levelPath));
@@ -103,7 +110,7 @@ function MapScreen(){
 
     return (
         <div className="absolute inset-0 flex flex-col">
-            <TopBar repo={<span className="truncate font-mono text-[11px] uppercase tracking-[0.3em] text-zinc-300">{repo ? repo.slice(repo.lastIndexOf("/") + 1) : "…"}</span>} />
+            <TopBar repo={<span className="truncate font-mono text-[11px] uppercase tracking-[0.3em] text-zinc-300">{repo ? repo.slice(repo.lastIndexOf("/") + 1) : "…"}</span>} onSearch={() => setPaletteOpen(true)} />
             <div className="pointer-events-auto relative z-10 flex h-9 items-center justify-between gap-4 border-b border-purple-500/10 bg-[#06070B]/40 px-4 backdrop-blur-md">
                 {level && repo ? <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} /> : <span />}
                 {level && level.hiddenCount > 0 && (
@@ -130,6 +137,15 @@ function MapScreen(){
                     />
                 )}
             </main>
+            {paletteOpen && (
+                <SearchPalette
+                    onPick={(hit) => {
+                        setPaletteOpen(false);
+                        focus(hit.path);
+                    }}
+                    onClose={() => setPaletteOpen(false)}
+                />
+            )}
         </div>
     );
 }
