@@ -39,6 +39,35 @@ describe("layoutLevel", () => {
         expect(at.get("l4")).toEqual({ x: left + BOX_WIDTH + 40, y: top + BOX_HEIGHT + 40 });
     });
 
+    it("centres every layer, keeping dagre's order", () => {
+        const at = layoutLevel([node("a"), node("b"), node("c")], [{ source: "a", target: "b", count: 1 }, { source: "a", target: "c", count: 1 }]);
+        // one box: 232 wide, centred on x = 0 → x = -116; two boxes: 232 + 40 + 232 = 504 wide → x = -252 and 20
+        expect(at.get("a")).toEqual({ x: -116, y: 0 });
+        expect([at.get("b")!.x, at.get("c")!.x].sort((p, q) => p - q)).toEqual([-252, 20]);
+        expect([at.get("b")!.y, at.get("c")!.y]).toEqual([136, 136]);
+    });
+
+    it("wraps a layer wider than 6 boxes into centred rows, and moves the layers below it down", () => {
+        // a imports b1..b13 (one layer of 13), and b1 imports c (the layer below)
+        const bs = Array.from({ length: 13 }, (_, i) => `b${i + 1}`);
+        const at = layoutLevel(
+            [node("a"), ...bs.map(node), node("c")],
+            [...bs.map((b) => ({ source: "a", target: b, count: 1 })), { source: "b1", target: "c", count: 1 }],
+        );
+        // 13 boxes need ceil(13 / 6) = 3 rows, balanced at ceil(13 / 3) = 5 a row: 5, 5 and 3, 104 px apart from y = 136
+        const rows = new Map<number, number[]>();
+        for (const b of bs) rows.set(at.get(b)!.y, [...(rows.get(at.get(b)!.y) ?? []), at.get(b)!.x]);
+        // a full row of 5 is 5 × 232 + 4 × 40 = 1,320 wide, so it starts at -660; a row of 3 is 776 wide, from -388
+        expect([...rows].sort(([p], [q]) => p - q).map(([y, xs]) => [y, xs.sort((p, q) => p - q)])).toEqual([
+            [136, [-660, -388, -116, 156, 428]],
+            [240, [-660, -388, -116, 156, 428]],
+            [344, [-388, -116, 156]],
+        ]);
+        // the layer below starts 72 px under the last row: 344 + 64 + 72 = 480
+        expect(at.get("a")).toEqual({ x: -116, y: 0 });
+        expect(at.get("c")).toEqual({ x: -116, y: 480 });
+    });
+
     it("lays a level with no lines at all in a square-ish grid", () => {
         const at = layoutLevel(["l1", "l2", "l3", "l4"].map(node), []);
         expect([...at.values()]).toEqual([

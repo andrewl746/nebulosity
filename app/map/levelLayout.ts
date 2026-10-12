@@ -10,6 +10,36 @@ const RANK_GAP = 72;
 
 export type Position = { x: number; y: number };
 
+/** A layer wider than this wraps into rows: 6 boxes span about 1,600 px, a laptop screen at a readable zoom. */
+export const MAX_PER_ROW = 6;
+
+/**
+ * Dagre's layers, redrawn as centred tiers (VISUAL_REFRESH.md §4: the level fits the viewport). Dagre decides which
+ * layer each box is in and their order within it (the order that crosses fewest lines); its x positions are dropped.
+ * Left to them, 49 files that all import one barrel make one layer 13,000 px wide, and fitting that to a screen
+ * shrinks every box to a sliver. So each layer is centred on x = 0, and one wider than MAX_PER_ROW wraps into rows,
+ * balanced so the last isn't left with one box (13 → 5, 5, 3). The tiers stack from y = 0, RANK_GAP apart.
+ */
+function placeTiers(centres: readonly { path: string; x: number; y: number }[]): Map<string, Position> {
+    const layers = new Map<number, { path: string; x: number }[]>();
+    for (const { path, x, y } of centres) layers.set(y, [...(layers.get(y) ?? []), { path, x }]);
+
+    const placed = new Map<string, Position>();
+    let top = 0;
+    for (const y of [...layers.keys()].sort((a, b) => a - b)){
+        const layer = layers.get(y)!.sort((a, b) => a.x - b.x || (a.path < b.path ? -1 : 1));
+        const rowCount = Math.ceil(layer.length / MAX_PER_ROW);
+        const perRow = Math.ceil(layer.length / rowCount);
+        for (let row = 0; row < rowCount; row++){
+            const boxes = layer.slice(row * perRow, (row + 1) * perRow);
+            const left = -(boxes.length * BOX_WIDTH + (boxes.length - 1) * GAP) / 2;
+            boxes.forEach((box, i) => placed.set(box.path, { x: left + i * (BOX_WIDTH + GAP), y: top + row * (BOX_HEIGHT + GAP) }));
+        }
+        top += rowCount * (BOX_HEIGHT + GAP) - GAP + RANK_GAP;
+    }
+    return placed;
+}
+
 /**
  * At most this many lines shape a level's layout: the heaviest. Dagre's crossing reduction grows with the lines, and
  * VS Code's src/vs/platform level has 390 of them: about 0.6 s to lay out, against 30 ms with the heaviest 100. Every
@@ -18,13 +48,13 @@ export type Position = { x: number; y: number };
 export const LAYOUT_MAX_LINES = 100;
 
 /**
- * Where each box of a level goes (ADR-011, PIVOT_SPEC.md §7): dagre's layered layout, importers above what they
- * import, from the level's `maxLines` heaviest lines. A box with no line to any other at this level adds nothing to
- * the layering, so those go in a grid beside the rest, as tall as the layers, in the level's order. Beside rather than
- * below: the layers are usually a tall, narrow chain, and screens are wide, so the level fits at a larger zoom and its
- * names stay readable (VISUAL_REFRESH.md §4; VS Code's root goes from 64% to about 90%). A level with no lines at all
- * is one square-ish grid. Pure and deterministic: the same level always draws the same picture. React Flow places a
- * node by its top-left corner and dagre by its centre, hence the half-box shift.
+ * Where each box of a level goes (ADR-011, PIVOT_SPEC.md §7): dagre's layers, importers above what they import, from
+ * the level's `maxLines` heaviest lines, drawn as centred tiers that wrap past MAX_PER_ROW (placeTiers). A box with no
+ * line to any other at this level adds nothing to the layering, so those go in a grid beside the tiers, as tall as
+ * them, in the level's order. Beside rather than below: the tiers are usually a tall, narrow chain, and screens are
+ * wide, so the level fits at a larger zoom and its names stay readable (VISUAL_REFRESH.md §4; VS Code's root goes from
+ * 64% to about 90%). A level with no lines at all is one square-ish grid. Pure and deterministic: the same level always
+ * draws the same picture. Positions are top-left corners, as React Flow places nodes.
  */
 export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[], maxLines: number = LAYOUT_MAX_LINES): Map<string, Position> {
     const positions = new Map<string, Position>();
@@ -37,9 +67,8 @@ export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[]
     const shaping = [...lines]
         .sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0) || (a.target < b.target ? -1 : a.target > b.target ? 1 : 0))
         .slice(0, maxLines);
-    // where the grid starts, and how many rows it may use
+    // where the grid starts (the tiers start at y = 0), and how many rows it may use
     let gridLeft = 0;
-    let gridTop = 0;
     let rows = 0;
 
     if (connected.length > 0){
@@ -51,27 +80,23 @@ export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[]
         for (const edge of shaping) graph.setEdge(edge.source, edge.target, { weight: Math.max(1, Math.round(Math.sqrt(edge.count))) });
         dagre.layout(graph);
 
-        let top = Infinity;
-        let bottom = -Infinity;
+        const placed = placeTiers(connected.map((node) => ({ path: node.path, ...(graph.node(node.path) as { x: number; y: number }) })));
+        let bottom = 0;
         let right = -Infinity;
-        for (const node of connected){
-            const centre = graph.node(node.path) as { x: number; y: number };
-            const at = { x: centre.x - BOX_WIDTH / 2, y: centre.y - BOX_HEIGHT / 2 };
-            positions.set(node.path, at);
-            top = Math.min(top, at.y);
+        for (const [path, at] of placed){
+            positions.set(path, at);
             bottom = Math.max(bottom, at.y + BOX_HEIGHT);
             right = Math.max(right, at.x + BOX_WIDTH);
         }
         gridLeft = right + GAP * 2;
-        gridTop = top;
-        rows = Math.max(1, Math.floor((bottom - top + GAP) / (BOX_HEIGHT + GAP)));
+        rows = Math.max(1, Math.floor((bottom + GAP) / (BOX_HEIGHT + GAP)));
     }
 
     const columns = rows > 0 ? Math.ceil(loose.length / rows) : Math.max(1, Math.ceil(Math.sqrt(loose.length)));
     loose.forEach((node, i) => {
         positions.set(node.path, {
             x: gridLeft + (i % columns) * (BOX_WIDTH + GAP),
-            y: gridTop + Math.floor(i / columns) * (BOX_HEIGHT + GAP),
+            y: Math.floor(i / columns) * (BOX_HEIGHT + GAP),
         });
     });
 

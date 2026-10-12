@@ -415,6 +415,12 @@
 
 **Amended (2026-10-12, V1.3): layout from the heaviest lines, and a fit that waits for the boxes.** Measuring S3 on VS Code found two things. Dagre's crossing reduction grows with the lines: `src/vs/platform`'s 50 boxes and 390 lines took 0.5–0.65 s to lay out, `src/vs/workbench/contrib`'s 217 lines 0.2 s. The layout now uses each level's 100 heaviest lines (`LAYOUT_MAX_LINES`; ties broken by path, so a level always draws the same), which takes 30–45 ms; every line is still drawn, and a box joined only by lighter lines stays in the layers. Second, a level served from the client's cache kept the previous level's viewport: the fit ran in the frame after the level changed, before its boxes reached React Flow. The fit now waits until React Flow holds the new level's boxes, and still runs once per level, so a refetch of the same level keeps the user's pan and zoom.
 
+**Amended (2026-10-12, V1.3.1): layers drawn as centred tiers that wrap, loose boxes beside them.** On VS Code, dagre's own x positions made two levels unreadable once fitted to a 1440 × 900 screen.
+- **The root** is a 6-layer chain with four boxes that have no lines. With those boxes in a grid below the chain, the level fit at 64% zoom, so 15 px names drew at about 10 px.
+- **`…/codex/protocol/generated`** has 49 files that all import one barrel. They made a single layer about 13,000 px wide, which fit at about 9%: a row of slivers.
+
+Dagre still decides each box's layer and its order within the layer (the order that crosses fewest lines). Its x positions are dropped: each layer is centred, and one wider than 6 boxes wraps into balanced rows (13 → 5, 5, 3). Boxes with no line go in a grid beside the tiers, as tall as them. The root now fits at 95% and `generated` at 50%. Fifty boxes can't all be full size on that screen, and 6 per row is about the best shape for it. Lines between tiers stay drawn from box to box; a parent is no longer placed right over its children.
+
 **Amended (2026-10-12, V1.3.1): describe answers are cached per index version.**
 - **Why.** `VISUAL_REFRESH.md` §8 reported that the `src` panel took about 5 s to open and asked for the answer to be cached per index version. Profiling on today's code did not reproduce the 5 s:
   - `describe("src")` takes 30–32 ms in process. Most of that is two scans: stale summaries inside (13 ms) and lines inside (8 ms). The area counts already come from the in-memory graph.

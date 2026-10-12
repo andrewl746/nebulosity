@@ -241,23 +241,23 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 ## 7. The Map UI
 
 - **Regions:**
-  - top bar: repo name, a ⌘K search palette, and a lens switcher that shows only the lenses that exist
-  - breadcrumb plus index-status pill
+  - top bar: the Nebulosity mark, the repo as `owner / repo`, the view's title ("Dependency map", where a lens switcher will show the lenses that exist), a ⌘K search field, and the index status *(V1.3.1, `VISUAL_REFRESH.md` §6)*
+  - breadcrumb (`vscode / src / vs`)
   - the canvas
   - a detail panel that opens on selection
-  - a bottom dock: the live Claude Code pill in v1, plus the Guide input in E1
+  - an activity bar along the bottom, always visible: Claude Code's last 3 tool calls in v1, plus the Guide input in E1 *(V1.3.1)*
 - **Levels.** Repo root → folders → files. A leaf folder shows its files and the imports between them. The file panel lists symbols and, from E2, opens a call flow per function.
 - **Moving around.** Click selects a box; double-click opens a folder; the breadcrumb and Backspace go back up.
 - **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), ties going to the more-imported file (ADR-036), and opening it lists them in the panel instead of drawing more boxes.
-- **Boxes** show the name, file count and tagline. While the summary is pending they show a quiet placeholder.
-- **Edges** come from `level_edges`, with thickness ∝ √count. Only the selected box's edges are drawn at full strength; the rest are ghosted. Hovering shows the count.
-- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. It lays out from the level's 100 heaviest lines (every line is still drawn): VS Code's densest level, 50 boxes and 390 lines, takes about 40 ms that way, against 0.6 s with every line (ADR-036, amended).
+- **Boxes** show an outline icon, the name and, for folders, the file count. Summaries live in the panel, not in boxes *(V1.3.1, `VISUAL_REFRESH.md` §4; V1.3 showed the tagline)*.
+- **Edges** come from `level_edges`. Every one carries a directional arrow (importer → imported). They're 1 px slate normally and 2 px purple for the selection's direct links, and a selection fades unrelated boxes to about 60%. Hovering a box previews its links; hovering a line shows its count *(V1.3.1; V1.3 drew thickness ∝ √count and ghosted the rest)*.
+- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. It lays out from the level's 100 heaviest lines (every line is still drawn): VS Code's densest level, 50 boxes and 390 lines, takes about 40 ms that way, against 0.6 s with every line (ADR-036, amended). Each dagre layer is drawn as a centred tier that wraps into rows of at most 6, and boxes with no line at the level go in a grid beside the tiers, so a tall chain or a wide fan still fits at a readable zoom *(V1.3.1)*.
 - **Lenses, one at a time.** Structure (v1), History (E3), Clusters (E5).
 - **Search.** ⌘K over files, symbols and summaries. Picking a result moves the canvas to that item's level and selects it.
-- **Live.** `GET /api/live/stream` (SSE). Each MCP tool call pulses the box that contains the touched path at the current level and updates the pill. Throttled.
+- **Live.** `GET /api/live/stream` (SSE). Each MCP tool call pulses the box that contains the touched path at the current level, rings it in orange while the call is under 30 s old, and appears in the activity bar. Throttled.
 - **Open in editor.** File panels link to `vscode://file/<absolute path>:<line>`.
-- **Look.** The existing dark amethyst theme and starfield stay; the layout is new (the owner explicitly requested a revamp, overriding the "visual design is frozen" note). React Flow remains the renderer, and 50 nodes is well inside its comfort zone. The StrictMode workaround stays.
-- **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists show 20 entries plus "load more".
+- **Look.** *(Superseded in V1.3.1 by `VISUAL_REFRESH.md`, ADR-041: a flat charcoal canvas, larger boxes, one meaning per color.)* The owner explicitly requested a revamp, overriding the "visual design is frozen" note. React Flow remains the renderer, and 50 nodes is well inside its comfort zone. The StrictMode workaround stays.
+- **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists in the panel show their first 8 entries plus "View all" *(V1.3.1)*.
 - **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it.
 
 ### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` §11–§15 in slice V1.3)
