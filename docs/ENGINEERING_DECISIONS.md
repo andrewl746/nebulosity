@@ -415,6 +415,15 @@
 
 **Amended (2026-10-12, V1.3): layout from the heaviest lines, and a fit that waits for the boxes.** Measuring S3 on VS Code found two things. Dagre's crossing reduction grows with the lines: `src/vs/platform`'s 50 boxes and 390 lines took 0.5–0.65 s to lay out, `src/vs/workbench/contrib`'s 217 lines 0.2 s. The layout now uses each level's 100 heaviest lines (`LAYOUT_MAX_LINES`; ties broken by path, so a level always draws the same), which takes 30–45 ms; every line is still drawn, and a box joined only by lighter lines stays in the layers. Second, a level served from the client's cache kept the previous level's viewport: the fit ran in the frame after the level changed, before its boxes reached React Flow. The fit now waits until React Flow holds the new level's boxes, and still runs once per level, so a refetch of the same level keeps the user's pan and zoom.
 
+**Amended (2026-10-12, V1.3.1): describe answers are cached per index version.**
+- **Why.** `VISUAL_REFRESH.md` §8 reported that the `src` panel took about 5 s to open and asked for the answer to be cached per index version. Profiling on today's code did not reproduce the 5 s:
+  - `describe("src")` takes 30–32 ms in process. Most of that is two scans: stale summaries inside (13 ms) and lines inside (8 ms). The area counts already come from the in-memory graph.
+  - Over HTTP on the V1.3 production server it took 48–82 ms.
+  - In the browser it took 53–141 ms on the production build. On the dev server it was 233 ms the first time (including the route's compile) and 53–95 ms after.
+  - The likely sources of the 5 s are a cold dev-server compile, or the on-demand summary refresh landing seconds after the panel opened, with nothing saying it was coming. The panel now says "Refreshing…".
+- **Decision.** `describe()` keeps every answer for the current index version, keyed by repo (its id and key), path and whether summaries are off. It reads the version and returns a kept answer before any other query. A new version empties the answers, and past 2,000 the map starts over, as the area cache does.
+- **Consequences.** On VS Code a repeat costs 0.1 ms at p50 and p95 (a first describe of a folder is 1.3 ms p50 and 2.4 ms p95, with a 35 ms max). Callers share the answer, so they treat it as read-only. A writer that changes what describe shows without bumping the version would now be served stale data. Every writer bumps it today, and the cache test pins the contract.
+
 ## ADR-037 — Incremental structure updates write only what changed (2026-10-12)
 
 **Context:** S6 asks for ≤ 2 s from saving a file until `level`/`describe` reflect it, and the watcher's 1 s debounce (PIVOT_SPEC.md §5.6) uses half of that. A warm full run takes 4.9 s on VS Code. Measured while planning V1.3, re-resolving all 151,527 specifiers in memory takes about 0.33 s and rebuilding the level edges 0.25 s. The rest of the run's 2.7 s of resolve and aggregate is the database rewriting 139,580 import rows and 19,345 level-edge rows, nearly all unchanged.
