@@ -219,6 +219,9 @@
 
 **Context:** ADR-005/006/013 built chunk-level vector RAG with brute-force search, with a revisit trigger at about 50k chunks. VS Code has 101,603 chunks. At the measured ~18 chunks/s, embedding them takes about 94 minutes, and the in-memory cache would hold every vector and every chunk's text. Code questions mix exact identifiers, where keyword search wins, with concepts, where embeddings win.
 **Decision:** Search merges three ranked lists with Reciprocal Rank Fusion (k = 60): BM25 over a code FTS5 index (with camelCase-split names), BM25 over a summary FTS5 index, and cosine similarity over embeddings of **summaries, not chunks**. The existing MiniLM pipeline and the ADR-017 encode/decode pair are reused unchanged. The chunk `vectors` table retires.
+
+> *(Amended 2026-10-12 in slice V1.3, from V1.2's review: a vector must describe its row's current text. A vector is stored only if the summary still has the `inputHash` it was computed for, inside one immediate transaction. A template written over model text deletes the old vector. Before this, a summary rewritten while it was being embedded kept its old text's vector for good.)*
+
 **Alternatives:** (a) Chunk embeddings in sqlite-vec: fixes the memory problem but not the 94-minute embedding cost. (b) Keyword search only: misses conceptual questions. (c) A hosted embedding model: adds an API key and a network dependency to indexing.
 **Consequences:** Keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive. About 15–20k summary vectors stay comfortably within brute-force range. RRF combines lists without calibrating their scores against each other. *(Amended 2026-10-11 in slice V1.2: fusion works on files and folders. Code hits are grouped by file before ranking, so a file with ten matching chunks counts once per list. Each list contributes its top 50, and vector matches below cosine 0.25 are dropped. Queries keep their non-stopword words, quoted and ORed, plus the parts of identifiers. See `RAG_PIPELINE.md` §6.)*
 **Revisit when:** the eval shows conceptual questions failing. Then try a code-specific embedding model, or chunk embeddings for the most-used areas only.
@@ -248,7 +251,7 @@
 - New features arrive as lenses (Structure, History, Clusters), one active at a time, never as extra panels. Panels open only when needed.
 - The dark amethyst look stays, and React Flow + dagre stay.
 **Alternatives:** (a) Draw the whole graph with WebGL (sigma.js): it would render 100k dots nobody can read. (b) ADR-012's clustering above a 400-node budget: still allows 400 boxes, which is too dense to read. (c) A search-only UI: abandons the map, which is the product's identity.
-**Consequences:** Performance is bounded by design (≤ 50 nodes, ≤ 50 ms level loads), and there's a measured acceptance budget of ≤ 100 ms per interaction. Very large folders depend on the "+N more" behavior being good. The owner lifted the visual-design-frozen rule for this revamp.
+*(Look amended by ADR-041: refined dark theme.)* **Consequences:** Performance is bounded by design (≤ 50 nodes, ≤ 50 ms level loads), and there's a measured acceptance budget of ≤ 100 ms per interaction. Very large folders depend on the "+N more" behavior being good. The owner lifted the visual-design-frozen rule for this revamp.
 **Revisit when:** users regularly need to compare boxes from different branches of the tree side by side. A pinned multi-level view would be the next step.
 
 ## ADR-030 — One tool registry, two adapters, and install-relative paths (2026-10-11)
@@ -272,6 +275,9 @@
 - `AFTER INSERT`/`AFTER DELETE` triggers on `chunks` keep `code_fts` in sync. `AFTER INSERT`, `AFTER UPDATE OF tagline, summary` and `AFTER DELETE` triggers on `summaries` keep `summary_fts` in sync.
 - The camelCase split of a chunk's name needs JavaScript, so it is computed once at write time and stored on the chunk (`chunks.name_split`), where the insert trigger can read it.
 - Both tables use the `porter unicode61` tokenizer and keep their bm25 column weights as the `rank` setting.
+
+> *(Amended 2026-10-12 in slice V1.3, for S1's margin: Index Benchmark #3. A run with at least 2,000 files to parse (a first index, or a forced re-parse) sets a `meta` row that a `WHEN NOT EXISTS` clause on the chunk insert trigger respects. After the structure stage, one `INSERT … SELECT` fills `code_fts`, about 3 times faster than a trigger per chunk, and clears the row. A run that dies before filling leaves the row; the next run, under the same index lock, fills first. Search adds a note while the fill is pending. Incremental updates keep the trigger.)*
+
 **Alternatives:** (a) Explicit writes in the structure store: misses cascades and the old pipeline, so deleted code would keep turning up in search. (b) External-content tables: no duplicate text, but deleting a row needs its old values, which a cascade has already removed. (c) Contentless tables (`contentless_delete=1`): smaller, but `snippet()` stops working and snippets would need their own code.
 **Consequences:** The search indexes can't drift from the data, whichever path changes it. The text is stored twice (the pivot spike measured 211 MB for VS Code's chunks), and every chunk insert also writes an FTS row: measured on VS Code, the cold write stage went from 13.1 s to 27.4 s, and the structure stage still passed S1 at 56.4 s (BENCHMARKS.md, Index Benchmark #2). Migration 0004 clears every content hash once, so existing chunks get indexed on the next run.
 **Revisit when:** database size starts to matter, or the FTS writes push S1 past 60 s.
@@ -280,6 +286,13 @@
 
 **Context:** `PIVOT_SPEC.md` §5.7 asks for `idle | running | ready | off | failed` per stage, with progress, at `GET /api/status`. Stages run in different processes: the CLI now, a server worker from V1.3. A killed process never gets to write "failed".
 **Decision:** Each stage writes `stage:<repoId>:<stage>` in `meta` as it goes, at least once a minute while running. Readers report a `running` row untouched for 5 minutes as `failed`, with the note `interrupted: no progress since <time>`. The one exception is a summaries stage with requests still at Anthropic: that work goes on without any local process, so it stays running (added with ADR-033).
+
+> *(Amended 2026-10-12 in slice V1.3, from V1.2's review: stage rows went stale. A stored row describes the moment it was written, and later changes left it wrong. After an edit and a re-index, `summaries` still read `ready 14/14`. After a summary was rewritten, `embeddings` still counted its deleted vector.*
+>
+> *Now the summaries stage is re-derived by `refreshSummaryStatus` whenever something other than a summary run changes what's planned: `npm run index`, the background worker's structure updates, and `summarizeNow`. It plans like a run that sends nothing (new rows, statuses, test templates) and writes the stage from the same pure `summaryStageStatus` a finishing run uses. While a live run holds the summarizing lock it leaves the row to that run. It keeps a failed run's note while its targets still wait. A new reading, `idle` with `N waiting to be summarized`, means nothing is running but work is known.*
+>
+> *The embeddings stage's counts are read live (two counts per request); only `running` and `failed` come from its row.)*
+
 **Alternatives:** (a) Derive every state from the data: honest by construction, but it can't show a running stage's progress. (b) Record process ids and check them: breaks across reboots and machines.
 **Consequences:** No state can stick at "running" forever, and the route needs no knowledge of which process runs which stage.
 **Revisit when:** a stage legitimately goes quiet for minutes (it must then write a heartbeat), or V1.3's UI needs pushed updates instead of polling.
@@ -305,6 +318,8 @@
 - **A lock.** A `summarizing` lock (the same race-safe `meta` row as the index lock, refreshed while waiting) stops a second run from paying twice. It doesn't block indexing.
 - **Templates and hashing.** Test files get a template (status `skipped`, model `template`). A file's `inputHash` hashes its content hash instead of its rendered prompt. That's equivalent, because the prompt is a pure function of the bytes and `PROMPT_VERSION`, and it means planning never reads source files. *(Amended 2026-10-11 in slice V1.2: from prompt v2 the prompt also names the file's importers, which stay out of the hash on purpose; see ADR-034.)*
 - **Request settings.** Effort `low` with adaptive thinking (the models' default), structured outputs for `{ tagline, summary }`, and `max_tokens` 4,096 (a cut-off answer is retried once at 8,192). Sonnet requests on the regular API carry the server-side refusal fallback (`fallbacks: "default"`). The Batches API rejects that parameter, and Haiku 5.5 has no fallback.
+- **"Summarize now" can't pay twice.** *(Added 2026-10-12 in slice V1.3, from V1.2's review.)* Concurrent `summarizeNow` calls for one target in one process share one promise and one request. The Map's requests all go through the one background worker (ADR-038), so a double click or two tabs pay once. A CLI `--path` running at the same moment is a separate process and isn't covered; it's rare, and costs one request. A folder whose children aren't all summarized is refused (`TargetNotReadyError`): it would otherwise be written over "(no summary yet)" lines for the price of a Sonnet call. Every call ends by refreshing the summaries stage (ADR-032).
+- **A way out for a batch that keeps erroring.** *(Added 2026-10-12 in slice V1.3, from V1.2's review.)* A batch whose results can't be read (not a 404, which `BatchGoneError` already handles) used to fail every run at the same point, its rows claimed forever. When a run gives up on polling, the stage note now names the batches and the command: `npm run summarize -- "<repo>" --release-batch <id>` (repeatable). That marks their rows failed, so the run sends them again, and they're paid for again. A `--no-wait` run that couldn't check a batch prints the same hint. Release stays a decision the owner makes: Anthropic keeps results for 29 days, and an outage looks the same as a broken batch, so an automatic release would pay twice for answers that were only late.
 
 **Alternatives:** (a) One batch for everything, with folders summarized from raw file text: no bottom-up synthesis, and much bigger folder inputs. (b) A jobs table: more state to keep consistent with the rows it describes. (c) Batch-only: each of the dozen top waves could wait hours.
 **Consequences:** A crash costs the requests in flight on the regular API; batch requests are collected rather than resent. The one gap is a batch caught between Anthropic accepting it and the run recording it: a failed recording names the batch, but a killed process or a lost reply leaves a batch nothing here can name, and its requests are paid for again when the next run resends them. A wave or batch where most requests fail (at least 10) stops the run before any folder is summarized over those failures. API spend is recorded per model and transport (`summary_usage`), which is how S2 is measured.
@@ -382,6 +397,101 @@
 
 **Revisit when:** the assumed tokens prove far off on a new repo before its first answers land (then seed the means from the checkpoint's sample), or the regular-API gap grows past a dollar (then price the waves under 100 requests at direct rates).
 
+**Amended (2026-10-12, V1.3): a per-run scope.** The cap above is cumulative: it counts every `summary_usage` row the repo has. That suits the CLI, but not the background worker (ADR-038). VS Code's first pass already spent $10.30 of the $15, so the worker would have refreshed about $4.70 of summaries and then refused every refresh for good, quietly. A run can now be capped on its own spend (`budgetScope: "run"`): usage recorded before it began is a baseline, left out of `spent`, while each model's mean still comes from all of it. Each worker refresh and sweep runs under $1 that way (`INCREMENTAL_BUDGET_USD`). At VS Code's measured means, 50 Haiku files cost about $0.03 and 20 Sonnet folders $0.11–0.16, so the cap only stops a run gone wrong; the file and folder limits bound the normal case. The CLI keeps the cumulative cap.
+
+## ADR-036 — The Map reads one level at a time: the fold, its order, and an index version (2026-10-12)
+
+**Context:** ADR-029 fixed the Map's shape: levels, a 50-box cap with "+N more", and precomputed level edges. Building it raised four questions: which boxes fold, what the "+N more" box is called, how a client knows its copy is old, and how "uses / used by" (§4.2) is computed.
+**Decision:**
+- **Order and fold.** A level's children are sorted by file count (a file counts 1), then by importer count, then by path. Past 50, the first 49 stay and the rest fold into one box, so exactly 50 are drawn. The "+N more" box's path is the level's path plus `/` (`/` at the root): no stored path ends in a slash, so the id can't collide. Lines into folded children are redirected to it and added up; lines between two folded children are dropped.
+- **An index version.** A counter per repo in `meta` (`indexVersion:<repoId>`) is bumped by one SQL statement by every write the Map can see: a structure run, an incremental update, and any summary write that changes a row. Level and describe answers carry it, and `GET /api/status` reports it, so a client caches per version and refetches when it moves, and a server cache keyed on it can't serve stale data.
+- **Areas from memory.** "Uses / used by" needs every import across a boundary: about 65,000 for `src/vs/workbench`. They're counted from an in-memory import graph (files sorted by path, so a folder is one contiguous range; imports as pairs of positions), loaded once per index version (about 60 ms on VS Code) and cached per path.
+**Alternatives:**
+- (a) Fold alphabetically: a 780-file folder would hide its most-imported files behind "+731 more".
+- (b) A timestamp version: two writes in the same millisecond look like one.
+- (c) Area counts in SQL: a join over 139,580 imports per click, about 3 times slower than the in-memory scan and not cacheable across paths.
+**Consequences:** A level costs three indexed lookups (0.25 ms for VS Code's busiest level's lines). The first describe after a change pays for loading the graph. A client that polls the version sees changes from any process: the CLI, the background worker, or the MCP server.
+**Revisit when:** users want a different order (for example, recently changed first, with E3).
+
+**Amended (2026-10-12, V1.3): layout from the heaviest lines, and a fit that waits for the boxes.** Measuring S3 on VS Code found two things. Dagre's crossing reduction grows with the lines: `src/vs/platform`'s 50 boxes and 390 lines took 0.5–0.65 s to lay out, `src/vs/workbench/contrib`'s 217 lines 0.2 s. The layout now uses each level's 100 heaviest lines (`LAYOUT_MAX_LINES`; ties broken by path, so a level always draws the same), which takes 30–45 ms; every line is still drawn, and a box joined only by lighter lines stays in the layers. Second, a level served from the client's cache kept the previous level's viewport: the fit ran in the frame after the level changed, before its boxes reached React Flow. The fit now waits until React Flow holds the new level's boxes, and still runs once per level, so a refetch of the same level keeps the user's pan and zoom.
+
+## ADR-037 — Incremental structure updates write only what changed (2026-10-12)
+
+**Context:** S6 asks for ≤ 2 s from saving a file until `level`/`describe` reflect it, and the watcher's 1 s debounce (PIVOT_SPEC.md §5.6) uses half of that. A warm full run takes 4.9 s on VS Code. Measured while planning V1.3, re-resolving all 151,527 specifiers in memory takes about 0.33 s and rebuilding the level edges 0.25 s. The rest of the run's 2.7 s of resolve and aggregate is the database rewriting 139,580 import rows and 19,345 level-edge rows, nearly all unchanged.
+**Decision:** `applyFileChanges(root, paths)` looks at each reported path as it is now.
+- **Edits.** An edited file is re-parsed, and only its own imports are re-resolved and diffed against its stored ones.
+- **Creates, deletes, tsconfigs.** When a file is created or deleted, or a tsconfig changes, every file's imports are re-resolved in memory, because a new file can be what `../core` now means. The result is diffed against all stored imports.
+- **Writes.** Only the differences are written. Import rows are deleted and inserted. Each level-edge count moves by its delta: an import is counted on a row decided by its two paths alone, so −1 per removed import and +1 per added one, netted, equals a rebuild. Folder rows are synced; summaries of vanished targets are pruned.
+- **One rule.** Edges come from one shared rule (`edgesFrom`) and records from one builder (`toFileRecord`), both used by the full run too.
+- **Exclusions.** A path is excluded exactly as discovery would exclude it (`isExcludedPath`). New paths are checked against `.gitignore` with one `git check-ignore --stdin` call.
+- **Folders as one path.** A path the index doesn't hold may be a deleted folder (a watcher's `unlinkDir`); every indexed file under it is looked at.
+**Alternatives:** (a) Run the full pipeline on every save: 4.9 s, so S6 fails. (b) Find the files that could import a new file by their specifiers, without re-resolving everything: faster, but every resolver rule (aliases, `baseUrl`, `index` files, NodeNext) would need an inverse, and an inverse that's wrong silently drops edges.
+**Consequences:** A single-file edit costs tens of milliseconds on VS Code (measured in Task 22); a create or delete about half a second. The tests check every kind of change against a full run of the same tree, so the two paths can't drift apart.
+**Revisit when:** a repo is big enough that the in-memory re-resolve of a create or delete passes 1 s (then index files by the specifier stems they could satisfy), or E2's call edges need the same treatment.
+
+## ADR-038 — A background worker process owns the index while the Map is open (2026-10-12)
+
+**Context:** PIVOT_SPEC.md §3 has the Next server run "background indexing on a worker thread". §5.6 asks for a watcher, debounced structure updates, a summary refresh 60 s after a file's last change, a periodic sweep of out-of-date folders, and re-embedding. On VS Code a warm full run takes 4.9 s and planning the summaries about 0.2 s. On the server's event loop, either would stall every request behind it, and S3 allows 100 ms per interaction. The server is bundled by Turbopack, so a worker thread would have to load the TypeScript engine through the bundle, or through a loader that isn't known to apply inside threads.
+**Decision:**
+- **A forked child process, not a worker thread.** The server forks `scripts/background.ts` through tsx (`--import tsx`, resolved from the checkout), the way every CLI script runs. The child owns every write while the Map is open. The server stays a reader: level, describe, search and status read the shared SQLite file (WAL). "Summarize now" and "re-index" go to the child as requests over the IPC channel.
+- **One job at a time.** Structure updates, summary refreshes, sweeps and embedding slices run one after another. "Summarize now" runs at once beside them, deduplicated per target (ADR-033, amended). *(Split into two lanes by the amendment below.)*
+- **Structure.** A batch of watched paths goes through `applyFileChanges` (ADR-037). Over 500 paths, or a changed `.gitignore`, gets one full run instead. Every update ends by re-deriving the summaries stage (ADR-032, amended).
+- **Summaries.** Each changed file waits 60 s, and another save restarts its wait. Files that changed together wait on one timer, so they come due as one refresh (a timer per file would start a refresh each). Due files are refreshed through the regular API: most-imported first, at most 50 per refresh (per 10 minutes since the amendment below), under a $1 cap on that refresh's own spend (ADR-035, amended). Their folders turn stale and wait.
+- **The sweep.** Every 10 minutes it redoes out-of-date folders whose children are settled, deepest first, at most 20, under the same per-run cap. A pull can't set off hundreds of Sonnet calls at once.
+- **Embeddings.** Whatever lacks a vector is embedded in slices of 64, so a structure update never waits more than a few seconds.
+- **Startup.** On start and on every repo switch, the watcher starts first; once its first crawl is ready, one warm full run catches what changed while nothing watched (4.9 s on VS Code, in the child). The other order would lose edits made during the crawl, which takes seconds on VS Code. Size-and-mtime filtering (§5.6) waits until that grows.
+- **Locks.** Work another process holds a lock on is retried after 30 s.
+- **Crashes.** The server's supervisor restarts a crashed child after growing delays (1, 2, 5, 10, then 30 s) and answers anything it owed with an error. The child exits when the server does, because its IPC channel closes.
+**Alternatives:**
+- (a) Everything on the server's event loop: simplest, but a save on VS Code would freeze the Map for up to a second, and a branch switch for tens of seconds.
+- (b) A worker thread, as the spec first said: loading TypeScript inside one under Turbopack is unproven, and a crash in a thread can take the server with it.
+- (c) Refresh every changed file however many there are: a branch switch could send thousands of requests silently.
+**Consequences:**
+- The Map never waits on indexing.
+- A second Node process costs about 100–200 MB.
+- The child needs tsx at run time, a devDependency: fine for a local tool, and noted for the desktop build.
+- When more than 50 files change at once, the rest keep stale summaries until opened, swept, or summarized by the CLI.
+**Revisit when:** the desktop app (Electron or Tauri) replaces Next as the host; the worker becomes its background process.
+
+**Amended (2026-10-12, V1.3 final review): the worker follows the active repo.** `npm run index` rewrites `activeRepo` in the config without telling the server, and the Map's empty state tells a new user to do exactly that. The read routes and the Map followed the config, but the worker kept the repo it started with. Live updates then stopped silently, and "summarize now" or re-index could run on a repo other than the one on screen, paying for the wrong target.
+- **Following.** Every route that talks to the worker, and the status route the Map polls every 2 s, first tells the supervisor the config's repo (`workerOn`). The supervisor passes on only a change, so the poll costs nothing.
+- **Refusing.** Each `summarize` and `index` request names its repo, and the worker refuses one meant for another (`RepoSwitchingError`, `409 INDEX_LOCKED`, "try again in a moment"). A request that beats the switch can't act on the wrong repo.
+- **Waiting for an index.** A repo that isn't indexed yet is checked again every 30 s, and the worker starts on it once it is, instead of logging once and idling.
+
+**Amended (2026-10-12, V1.3 final review): the worker survives what it will meet.**
+- **Watcher errors.** chokidar reports an error (Linux's inotify limit, too many open files) as an EventEmitter `error` event, which throws when nothing listens. That killed the worker, and every restart met the same error. The watcher now passes errors to the worker's log and keeps going, and folders this user can't read are skipped (`ignorePermissionErrors`).
+- **Locks a killed process leaves.** The worker shares the server's terminal, so Ctrl+C kills it on the spot, mid-update or mid-refresh, and its `finally` never runs. A lock was judged by its age alone (30 minutes), so for half an hour after the next start every update failed on the lock. A lock row now names its holder's PID and machine, and a lock whose process is gone (on this machine) is abandoned at once. A reused PID only makes a dead holder look alive, and the 30 minutes still apply. This covers a killed CLI run too, so the worker needs no signal handlers.
+- **Two lanes, not one queue.** Structure work (updates, the startup check, re-index) and maintenance (summary refreshes, the sweep, embedding slices) each run one job at a time, but apart. In one queue a save waited behind whatever was running: a refresh of 50 files (about 40 s), a sweep up a deep folder chain (30–100 s), an embedding slice (3.5 s). S6 then held only for an idle worker. Structure jobs are synchronous, so one runs between a maintenance job's awaits and never half-way through a write. A refresh sends each file only for the content whose quiet minute is up: a file saved again mid-refresh plans with a new input hash and isn't sent again in that run. Its update restarted its own minute, and its row reads stale until then.
+- **50 files per 10 minutes, not per refresh.** The watcher hands a long burst over in batches at most 5 s apart: a formatter over the tree, a rebase. Each batch was its own wait group, so each got its own 50, and a minute-long burst on VS Code could send hundreds of Haiku requests unasked. Automatic refreshes now share 50 files per rolling 10 minutes (`AUTO_REFRESH_WINDOW_MS`). Files past it keep their old summaries, marked stale, until opened or summarized by the CLI.
+
+## ADR-039 — The live channel: SSE out, localhost-only POST in, the server on loopback (2026-10-12)
+
+**Context:** PIVOT_SPEC.md §8 has MCP tool handlers notify the open Map, with `show_on_map` reusing ADR-008's UI actions. The routes that spend money (summarize), change the index (re-index, switch repo) or drive the Map (live events) are reachable from any web page the user has open: a page can POST to `localhost:3000`, and DNS rebinding can make a foreign host name resolve to 127.0.0.1. `next dev` listens on every interface, so the GET routes would serve code snippets and summaries to the local network.
+**Decision:**
+- **The event.** A tool call is `{ tool, paths, at, action? }`. The Map pulses the box holding each path at its current level and runs `action` if there is one, so `show_on_map` is just a tool event with an action.
+- **The stream.** `GET /api/live/stream` sends events as SSE (ADR-002), with a keep-alive comment every 15 s. The hub that fans events out lives in the server process (`lib/live/hub.ts`), kept on `globalThis` across hot reloads, and passes on at most 20 events a second.
+- **The guard.** Every state-changing route checks `isLocalRequest`: the Host header must name this machine, and an Origin, if present, too. Programs send no Origin; a foreign page always does.
+- **Loopback.** `npm run dev` and `npm run start` bind to 127.0.0.1.
+- **The poster.** It fires and forgets: a 200 ms timeout, failures ignored, the port from the config.
+**Alternatives:** (a) A shared secret in a header: the MCP server would need to read it from disk, and it guards nothing a loopback bind and the Host/Origin check don't. (b) WebSockets: two-way, which nothing here needs (ADR-002's reasoning holds).
+**Consequences:** No other machine can reach the Map, and no web page can make it spend money or move. Opening the Map from another device (a phone on the same network) would need a deliberate `-H 0.0.0.0` and a token, which is out of scope.
+**Revisit when:** the desktop app hosts the Map: the server then lives inside it and the guard moves to its IPC.
+
+**Amended (2026-10-12, V1.3 final review): every API route checks the Host.** Binding to loopback closes the network, but not DNS rebinding. A page whose host name rebinds to 127.0.0.1 is same-origin with itself, so it could read the whole index through the GET routes: Claude-written summaries, the file tree, symbol names and every indexed repo's absolute root. `allowedDevOrigins` covers only dev assets, and nothing under `next start`. A proxy (`proxy.ts`, Next 16's renamed middleware) runs before every `/api` route and answers `403 FORBIDDEN` unless the Host header names this machine (`isLocalHost`). The routes that change things still check the Origin as well, and it must now be the Map's own page: the same host and port the request is addressed to. Before, any localhost port passed. That let another local web page spend money or drive the Map: another dev server, or the app of the very repo being explored.
+
+## ADR-040 — Renderer-agnostic contracts (CONTRACTS_VERSION 2): the version names the API, migrations carry the data (2026-10-12)
+
+**Context:** `lib/contracts.ts` imported React Flow's `Node` and `Edge` for the old graph (`GraphResponse`), which tied the API to one renderer (PIVOT_SPEC.md §3, rule 3). V1.3 retires that graph, its routes and the Phase 2–4 chunk pipeline. The spec also said "a schema version mismatch triggers a rebuild": `meta.schemaVersion` was meant to wipe derived data on a contract change. Nothing ever implemented it, and the database now holds summaries that cost money to rebuild ($10.30 for VS Code).
+**Decision:**
+- **Data, not drawing.** `lib/contracts.ts` describes data: `LevelResponse`, `MapNode`, `MapEdge`, `DescribeResponse`, `SummarizeResponse`, `SearchResult`, `IndexStatus`, `LiveEvent`, `RepoList` and `IndexEventMap`. The UI maps them onto React Flow itself.
+- **Retired types.** `GraphResponse`, `HealthResponse`, `FileNodeData`, `GraphFileNode`, `FileKind`, `RetrievedChunk` and `SearchResponse` are deleted, with `GET /api/graph`, `GET /api/health`, the radial graph UI, `lib/graph.ts`, `lib/scan.ts`, `lib/retrieve.ts`, `lib/index-repo.ts`, `lib/index-status.ts` and `lib/db/graph-store.ts`.
+- **The version.** `CONTRACTS_VERSION` is 2. It names the HTTP and SSE contract, and moves on a breaking change to it; it never touches the database.
+- **The data.** Stored data changes only through Drizzle migrations, which carry their own data fixes. 0004 cleared content hashes to force a re-parse; 0005 drops the chunk `vectors` table, whose last writer was `lib/index-repo.ts`. Nothing wipes the database on a version change. Summaries are keyed by path, so they survive any structure rebuild anyway.
+- **The tools.** `lib/agent/tools.ts`, the owner's Phase 5 tools, is ported onto the new engine as-is. V1.4 moves its logic into the tool registry.
+**Alternatives:** (a) Implement the wipe-and-rebuild: a contract change would throw away paid-for summaries for no gain. (b) Keep the React Flow types next to the new ones: the very coupling the adapter split exists to remove.
+**Consequences:** A static export (V1.5), the MCP server (V1.4) and a desktop shell can all serve the same shapes. The regex scanner's golden vectors (`GRAPH_IMPLEMENTATION_REVIEW.md` PART 3) retire with the code they tested.
+**Revisit when:** a second renderer (a WebGL overview, say) needs layout data the contract doesn't carry; then it becomes a separate, renderer-neutral shape.
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)
@@ -392,3 +502,25 @@
 - ~~`server-only` marker inside `lib/scan.ts`~~ **Resolved 2026-07-13.** Removed outright (not relocated) once F1's test setup proved it throws in any non-Next.js Node context, including Vitest — which would have equally broken the future CLI and Electron adapters if "moved to the adapter layer" as originally planned. See `ARCHITECTURE.md` §3 rule 1 for the full reasoning.
 - ~~**Visual design is frozen** per the brief — functionality only from here.~~ **Lifted 2026-10-11** by the owner for the Map revamp (ADR-029). The dark amethyst identity stays and the layout is new.
 - **Scan scope allowlist (`app/`, `lib/`): resolved by the pivot.** Discovery starts at the repo root via `git ls-files` (`PIVOT_SPEC.md` §5.1).
+
+## ADR-041 — The Map's dark theme is refined for readability: quiet canvas, larger boxes, one meaning per color (2026-10-12) — amends ADR-029
+
+**Context:** ADR-029 kept the original dark amethyst look. On the real V1.3 screen, the owner found it hard to read:
+- a starfield, grid, purple haze and glowing edges competing with the content;
+- 9–10 px monospace box text, with a description in every box;
+- purple used for everything;
+- a details panel that was one dense monospace paragraph showing literal backticks, and took about 5 s to open for `src`.
+
+Light themes were mocked up in five rounds (pastel paper, then bold technical with signal orange). They were dropped the same day, before implementation, because they changed the styling without fixing the hierarchy, and the offset-card style read as generated.
+**Decision:** keep the dark identity and fix hierarchy and interaction, fully specified in `VISUAL_REFRESH.md`:
+- **Canvas:** a flat charcoal canvas with no stars, haze or glow.
+- **Boxes:** larger, simpler boxes (name plus count plus a folder or file icon); summaries move to the panel.
+- **Colors, one meaning each:** purple for the selection and its links, orange for Claude Code's activity, slate for neutral, green for indexing status only.
+- **Map behavior:** unrelated boxes fade to about 60%, every edge has a directional arrow, hover previews a box's connections, double click drills into a folder.
+- **Panel:** a structured, actionable panel with clickable relationships, child folders and expandable summaries.
+- **Top bar and activity:** a clearer top bar, and a slim activity bar that's always visible and shows Claude's last 3 actions.
+- **One system** of radius, type scale and spacing.
+- **Speed:** opening the `src` panel goes from about 5 s to ≤ 300 ms warm.
+**Alternatives:** (a) The light technical theme (the first draft of this ADR): cleaner than V1.3, but it treated the problem as a palette problem. (b) Keep V1.3 as is: unreadable at a glance, which defeats the product's purpose. (c) A collapsible activity panel: hides the demo's differentiator, so it's kept slim and always visible instead.
+**Consequences:** One slice, V1.3.1: tokens in `app/globals.css`, restyled Map components, interaction additions (hover, double click, focus from panel chips, reset), and a `describe` speed fix. S3 must still hold. A three-task test with an unfamiliar user is part of acceptance.
+**Revisit when:** the three-task test shows people still can't tell what an edge means, at which point the problem is the data shown, not the styling.

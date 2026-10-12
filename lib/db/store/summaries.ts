@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
 import {
@@ -6,6 +6,7 @@ import {
     type StoredSummaryStatus, type SummaryTargetKind,
 } from "../schema";
 import { columnCount, forEachBatch } from "../batch";
+import { bumpIndexVersion } from "./version";
 
 /** What a model (or a template) wrote about a target. */
 export type SummaryText = { tagline: string; summary: string };
@@ -137,6 +138,7 @@ export function loadFileSummaryChunk(db: Db, repoId: number, filePath: string): 
 export function applyTargetUpdates(db: Db, repoId: number, updates: readonly TargetUpdate[]): Map<string, number> {
     const now = new Date();
     const existing = new Set(loadSummaries(db, repoId).map((s) => targetKey(s.kind, s.path)));
+    let changed = false;
 
     db.transaction((tx) => {
         const created = updates
@@ -153,22 +155,30 @@ export function applyTargetUpdates(db: Db, repoId: number, updates: readonly Tar
                 updatedAt: now,
             }));
         forEachBatch(created, columnCount(summaries), (batch) => { tx.insert(summaries).values(batch).run(); });
+        if (created.length > 0) changed = true;
 
         for (const u of updates){
             if (!existing.has(targetKey(u.kind, u.path))) continue;
             const row = and(eq(summaries.repoId, repoId), eq(summaries.targetKind, u.kind), eq(summaries.targetPath, u.path));
 
             if (u.templateText){
-                tx.update(summaries).set({
+                const result = tx.update(summaries).set({
                     tagline: u.templateText.tagline, summary: u.templateText.summary, model: "template",
                     inputHash: u.inputHash, status: "skipped", error: null, updatedAt: now,
                 }).where(row).run();
+                if (result.changes > 0) changed = true;
+                // a template has no vector, and any old one described text that's gone (ADR-027, amended in V1.3)
+                tx.delete(summaryVectors)
+                    .where(inArray(summaryVectors.summaryId, tx.select({ id: summaries.id }).from(summaries).where(row)))
+                    .run();
             } else if (u.status !== null){
-                tx.update(summaries).set({ status: u.status, updatedAt: now }).where(row).run();
+                if (tx.update(summaries).set({ status: u.status, updatedAt: now }).where(row).run().changes > 0) changed = true;
             }
         }
     });
 
+    // a new row, a template or a new status changes what the Map shows (ADR-036)
+    if (changed) bumpIndexVersion(db, repoId);
     return new Map(loadSummaries(db, repoId).map((s) => [targetKey(s.kind, s.path), s.id]));
 }
 
@@ -215,6 +225,7 @@ export function loadBatchRows(db: Db, batchId: string): { id: number; kind: Summ
  */
 export function writeResults(db: Db, results: readonly SummaryResult[]): number {
     const now = new Date();
+    const repos = new Set<number>();
     let written = 0;
 
     db.transaction((tx) => {
@@ -227,14 +238,17 @@ export function writeResults(db: Db, results: readonly SummaryResult[]): number 
             // Only a regular-API failure keeps the row's claim: a regular-API success supersedes the batch,
             // and a batch's own answer, either way, is the end of that batch's request.
             const releasesClaim = r.outcome.ok || r.batchId !== null;
-            const changed = tx.update(summaries)
+            const updated = tx.update(summaries)
                 .set({ ...answer, ...(releasesClaim ? { batchId: null, pendingHash: null } : {}), updatedAt: now })
-                .where(owner).run().changes;
-            if (changed > 0 && r.outcome.ok) tx.delete(summaryVectors).where(eq(summaryVectors.summaryId, r.id)).run();
-            written += changed;
+                .where(owner).returning({ repoId: summaries.repoId }).all();
+            if (updated.length > 0 && r.outcome.ok) tx.delete(summaryVectors).where(eq(summaryVectors.summaryId, r.id)).run();
+            for (const row of updated) repos.add(row.repoId);
+            written += updated.length;
         }
     });
 
+    // results carry row ids, not repos; the rows they changed say which repos' Maps moved (ADR-036)
+    for (const repoId of repos) bumpIndexVersion(db, repoId);
     return written;
 }
 
@@ -265,9 +279,34 @@ export function loadUsage(db: Db, repoId: number): UsageRow[] {
 
 /** Deletes summaries whose file or folder no longer exists (their vectors and search rows follow). Returns how many. */
 export function pruneSummaries(db: Db, repoId: number): number {
-    return db.run(sql`
+    const deleted = db.run(sql`
         delete from summaries where repo_id = ${repoId} and (
             (target_kind = 'file' and not exists (select 1 from files f where f.repo_id = ${repoId} and f.path = summaries.target_path))
             or (target_kind = 'folder' and not exists (select 1 from folders d where d.repo_id = ${repoId} and d.path = summaries.target_path))
         )`).changes;
+    if (deleted > 0) bumpIndexVersion(db, repoId);
+    return deleted;
+}
+
+/** How many of this repo's requests a batch carries. */
+export function countBatchRows(db: Db, repoId: number, batchId: string): number {
+    return db.select({ n: sql<number>`count(*)` }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), eq(summaries.batchId, batchId))).get()?.n ?? 0;
+}
+
+/**
+ * Gives up on a batch whose results can't be read (ADR-033, amended in V1.3). Its rows in this repo are marked failed
+ * with `reason` and unclaimed, so the next pass sends them again, and they're paid for again. If the batch's own
+ * answers ever arrive, they no longer land: the batch doesn't own the rows any more. Returns how many it released.
+ */
+export function releaseBatch(db: Db, repoId: number, batchId: string, reason: string): number {
+    const rows = db.select({ id: summaries.id, pendingHash: summaries.pendingHash }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), eq(summaries.batchId, batchId))).all();
+    return writeResults(db, rows.map((r) => ({ id: r.id, batchId, inputHash: r.pendingHash ?? "", outcome: { ok: false as const, error: reason } })));
+}
+
+/** How many folder and repo summaries are stale: what the background worker's sweep has to do. */
+export function countStaleFolders(db: Db, repoId: number): number {
+    return db.select({ n: sql<number>`count(*)` }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), eq(summaries.status, "stale"), sql`${summaries.targetKind} != 'file'`)).get()?.n ?? 0;
 }

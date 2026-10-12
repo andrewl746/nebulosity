@@ -10,68 +10,21 @@
  * Rules:
  *  - Types only. No functions, no logic, no runtime values (the one
  *    exception: CONTRACTS_VERSION).
- *  - Importable from anywhere (core, adapters, UI). May import types from
- *    npm packages, never from app/.
- *  - Node ids, chunk file paths, tool arguments, and source citations are
- *    ALL project-relative forward-slash paths ("lib/graph.ts"). One shared
- *    identifier is what lets every subsystem point at the same things.
+ *  - Importable from anywhere (core, adapters, UI). Never imports from app/,
+ *    and never a renderer's types: the UI maps these shapes onto React Flow
+ *    itself (ADR-040).
+ *  - Node ids, file and folder paths, tool arguments, and source citations
+ *    are ALL repo-relative forward-slash paths ("src/vs/base/common/lifecycle.ts",
+ *    "" for the repo root). One shared identifier is what lets every subsystem
+ *    point at the same things.
  */
-
-import type { Node, Edge } from "@xyflow/react";
-
-/** Bump on breaking contract changes; mismatch tells storage to rebuild. */
-export const CONTRACTS_VERSION = 1;
-
-/* ────────────────────────────── Graph ────────────────────────────── */
-
-/** Semantic class of a file node — decides the indicator dot color. */
-export type FileKind = "component" | "module";
-
-/** Payload carried by every graph node (rendered by app/components/FileNode.tsx). */
-export type FileNodeData = {
-  fileName: string; // "graph.ts"
-  dir: string;      // "lib" ("" for root-level files)
-  kind: FileKind;
-};
 
 /**
- * Canonical React Flow node shape for a file.
- * Phase 1 migrates FileNode.tsx and lib/graph.ts to import this type
- * (they currently declare a structurally-identical local copy).
+ * The API contract's version (ADR-040): bumped on a breaking change to these
+ * shapes. Stored data changes only through Drizzle migrations; nothing wipes
+ * the database when this moves.
  */
-export type GraphFileNode = Node<FileNodeData, "file">;
-
-/** GET /api/graph — docs/API_CONTRACTS.md §2 */
-export type GraphResponse = {
-  nodes: GraphFileNode[];
-  edges: Edge[];
-  stats: {
-    fileCount: number;
-    edgeCount: number;
-    rootName: string;
-    warningCount: number;
-    /** Top 5 by degree centrality (ADR-010). */
-    centralFiles: { path: string; inDegree: number; outDegree: number }[];
-  };
-};
-
-/* ────────────────────────────── Health ───────────────────────────── */
-
-/** GET /api/health — docs/API_CONTRACTS.md §3 */
-export type HealthResponse = {
-  ok: true;
-  /** ISO timestamp of the repo's last dependency-graph scan (DB-backed, Phase D); null if never scanned. */
-  lastScanAt: string | null;
-  index: {
-    exists: boolean;
-    indexedAt: string | null; // ISO timestamp
-    chunkCount: number;
-    staleFiles: number; // files whose contentHash differs from disk (0 = fresh)
-  };
-  /** Which scan engine will serve the next scan (ADR-014). */
-  scannerEngine: "native" | "node";
-  agentReady: boolean; // ANTHROPIC_API_KEY present (never echo the key)
-};
+export const CONTRACTS_VERSION = 2;
 
 /* ─────────────────────────── Index status ────────────────────────── */
 
@@ -88,15 +41,115 @@ export type IndexStatus = {
   /** The repo's root: absolute, forward slashes (repositories.rootPath). */
   repo: string;
   stages: Record<StageName, StageStatus>;
+  /** Moves whenever anything the Map shows changes (API_CONTRACTS.md §11). */
+  indexVersion: number;
 };
+
+/* ─────────────────────────────── Map ─────────────────────────────── */
+
+/**
+ * A summary as the UI reports it: the stored statuses (fresh, stale, pending, failed, skipped) plus "off", which is
+ * never stored: there's no API key, so a summary that doesn't exist yet can't be written.
+ */
+export type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
+
+export type MapNodeKind = "folder" | "file" | "more";
+
+/** One box on the Map — docs/API_CONTRACTS.md §11 */
+export type MapNode = {
+  /** Repo-relative. The "+N more" box uses its level's path plus "/" ("/" at the root), which no real path can be. */
+  path: string;
+  /** "workbench", "lifecycle.ts" or "+12 more". */
+  name: string;
+  kind: MapNodeKind;
+  /** Source files inside: 1 for a file; for "+N more", the folded boxes' total. */
+  fileCount: number;
+  tagline?: string;
+  /** "skipped" for the "+N more" box, which has no summary of its own. */
+  summaryStatus: SummaryStatus;
+  /** "+N more" only: how many boxes it stands for. */
+  hiddenCount?: number;
+};
+
+/** Imports from one box to another at one level, each import counted once (PIVOT_SPEC.md §4.2). */
+export type MapEdge = { source: string; target: string; count: number };
+
+/** Imports across a target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2). */
+export type AreaCount = { path: string; kind: "folder" | "file"; count: number };
+
+/** GET /api/level — docs/API_CONTRACTS.md §11 */
+export type LevelResponse = {
+  /** The repo's root: absolute, forward slashes. */
+  repo: string;
+  /** The folder on screen; "" is the repo root. */
+  path: string;
+  /** Folder paths from the root down to `path`: ["", "src", "src/vs"]. */
+  breadcrumb: string[];
+  /** At most 50 boxes, largest first; "+N more", if any, last. */
+  nodes: MapNode[];
+  edges: MapEdge[];
+  /** How many children "+N more" stands for (0 when everything fits). */
+  hiddenCount: number;
+  /** Moves whenever anything the Map shows changes: refetch when it does. */
+  indexVersion: number;
+};
+
+
+/** A declaration in a file: top-level ones and class members (`Logger.info`), with the lines to jump to. */
+export type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
+
+/** GET /api/describe — docs/API_CONTRACTS.md §12 */
+export type DescribeResponse = {
+  /** The repo's root: absolute, forward slashes (for vscode:// links). */
+  repo: string;
+  path: string;
+  kind: "repo" | "folder" | "file";
+  tagline?: string;
+  summary?: string;
+  summaryStatus: SummaryStatus;
+  /** Why the last attempt failed, when summaryStatus is "failed". */
+  summaryError?: string;
+  stats: { fileCount: number; lineCount: number };
+  /** Folders and the repo: every child, in the Map's order (so the boxes "+N more" folds are the ones after the first 49). */
+  children?: MapNode[];
+  /** Files: their declarations, in line order. */
+  symbols?: SymbolInfo[];
+  /** What the target imports, by area, most first. */
+  uses: AreaCount[];
+  /** What imports the target, by area, most first. */
+  usedBy: AreaCount[];
+  /** Files at or under the target whose summary is out of date with their bytes. */
+  stalePaths: number;
+  indexVersion: number;
+};
+
+/** POST /api/summarize — docs/API_CONTRACTS.md §13 */
+export type SummarizeResponse = {
+  path: string;
+  kind: "repo" | "folder" | "file";
+  tagline?: string;
+  summary?: string;
+  summaryStatus: SummaryStatus;
+  /** Why it failed, when summaryStatus is "failed". */
+  summaryError?: string;
+};
+
+/** One repo the Map can show — docs/API_CONTRACTS.md §15 */
+export type RepoSummary = { root: string; name: string; indexedAt: string | null };
+
+/** GET /api/repos — docs/API_CONTRACTS.md §15 */
+export type RepoList = { active: string | null; repos: RepoSummary[] };
 
 /* ─────────────────────────── Error envelope ──────────────────────── */
 
 export type ErrorCode =
   | "BAD_REQUEST"
+  | "FORBIDDEN"
   | "NOT_FOUND"
   | "INDEX_EMPTY"
   | "INDEX_LOCKED"
+  | "NOT_READY"
+  | "SUMMARIES_OFF"
   | "BUDGET_EXCEEDED"
   | "UPSTREAM"
   | "INTERNAL";
@@ -116,6 +169,20 @@ export type UIAction =
   | { type: "highlight_nodes"; nodeIds: string[] }
   | { type: "focus_node"; nodeId: string }
   | { type: "clear_highlights" };
+
+/* ─────────────────────────────── Live ────────────────────────────── */
+
+/**
+ * A tool call to show on the open Maps (PIVOT_SPEC.md §8) — docs/API_CONTRACTS.md §14. The boxes holding `paths`
+ * pulse; an `action` (show_on_map's) also highlights, focuses or clears. Node ids may be folders as well as files.
+ */
+export type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction };
+
+/** GET /api/live/stream's SSE events — docs/API_CONTRACTS.md §14 */
+export type LiveStreamEventMap = {
+  ready: Record<string, never>;
+  tool: LiveEvent;
+};
 
 /* ───────────────────────────── Chat (SSE) ────────────────────────── */
 
@@ -148,31 +215,24 @@ export type ChatEvent = {
 
 /* ─────────────────────────── Indexing (SSE) ──────────────────────── */
 
-export type IndexPhase = "scanning" | "chunking" | "embedding";
+/** The structure stage's steps, in order (PIVOT_SPEC.md §5.2). */
+export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
 
 /** POST /api/index SSE events — docs/API_CONTRACTS.md §4 */
 export type IndexEventMap = {
-  progress: {
-    phase: IndexPhase;
-    done: number;
-    total: number;
-    currentFile?: string;
-  };
+  progress: { stage: IndexStage; done: number; total: number };
   done: {
-    fileCount: number;
-    chunkCount: number;
-    skippedUnchanged: number;
-    tookMs: number;
-    /** Files re-chunked and re-embedded this run. */
+    files: number;
     changed: number;
-    /**
-     * Per-file failures. Indexing is per-file error-tolerant, so a run can
-     * succeed overall while individual files failed — without this the caller
-     * cannot tell the difference (ADR-021).
-     */
+    deleted: number;
+    edges: number;
+    folders: number;
+    levelEdges: number;
+    /** Per-file failures: indexing is per-file error-tolerant (ADR-021). */
     errors: Array<{ path: string; error: string }>;
-    /** Unreadable files/directories reported by the scanner (F2). */
-    warnings: Array<{ path: string; error: string }>;
+    /** Files left out (over 1 MB, unreadable). */
+    skipped: number;
+    totalMs: number;
   };
   error: { code: ErrorCode; message: string };
 };
@@ -222,11 +282,6 @@ export type CodeChunk = {
   fileHash: string;  // sha256 of the whole source file at index time
 };
 
-export type RetrievedChunk = CodeChunk & { score: number };
-
-/** GET /api/search response — docs/API_CONTRACTS.md §6 */
-export type SearchResponse = { results: RetrievedChunk[] };
-
 /* ───────────────────────────── Search ────────────────────────────── */
 
 /** The three ranked lists hybrid search fuses (ADR-027). */
@@ -258,9 +313,6 @@ export type SearchResult = {
 /* ──────────────────────────── Persistence ────────────────────────── */
 
 /**
- * Persistence shapes live in lib/db/schema.ts (SQLite via Drizzle, ADR-013),
- * not here. This file owns API and domain types only. CONTRACTS_VERSION is
- * stored in the database's `meta` table as schemaVersion — a mismatch at
- * startup means derived data must be wiped and rebuilt
- * (docs/DATABASE_DESIGN.md §2, §5).
+ * Persistence shapes live in lib/db/schema.ts (SQLite via Drizzle, ADR-013), not here. This file owns API and domain
+ * types only. The database evolves through Drizzle migrations (lib/db/migrations), never through CONTRACTS_VERSION.
  */

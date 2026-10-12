@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **2026-10-11 — pivot:** the v1 endpoints change (`/api/level`, `/api/describe`, `/api/status`, `/api/summarize`, `/api/live*`), and `/api/graph` and `/api/health` retire. See `PIVOT_SPEC.md` §7.1; this doc is rewritten in slice V1.3. §5 (`/api/chat`) still applies to E1, and §9 (`/api/status`) and §10 (search results) are live from slice V1.2.
+> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -12,75 +12,31 @@
 - Base path `/api`. All bodies are JSON. All routes are same-origin (no CORS needed).
 - **Errors** (non-SSE routes): appropriate HTTP status + envelope
   `{ "error": { "code": string, "message": string } }`
-  Codes: `BAD_REQUEST`, `NOT_FOUND`, `INDEX_EMPTY`, `INDEX_LOCKED`, `INTERNAL`.
+  Codes: `BAD_REQUEST` (400), `FORBIDDEN` (403), `NOT_FOUND` (404), `INDEX_EMPTY` (404), `INDEX_LOCKED` (409), `NOT_READY` (409), `SUMMARIES_OFF` (409), `BUDGET_EXCEEDED` (429), `UPSTREAM` (502) and `INTERNAL` (500). Route handlers map engine errors to codes by their type (`lib/engine/errors.ts`). `UPSTREAM` means Anthropic refused the API key (`SummarizerAuthError`). Every `/api` route answers `403 FORBIDDEN` when the `Host` header doesn't name this machine (`localhost`, `127.0.0.1` or `[::1]`, any port; `proxy.ts`, ADR-039 amended).
 - **SSE format:** standard `text/event-stream`:
   `event: <name>\ndata: <json>\n\n`
   Note for the UI implementer: the browser's `EventSource` API cannot send POST bodies. Consume SSE with `fetch` + `response.body.getReader()` and parse the stream manually (a small parser in the api-client module, ~30 lines).
-- **Node ids = file paths.** Graph node ids, `highlight_nodes` arguments, and `sources` entries are all project-relative forward-slash paths ("lib/graph.ts"). This single shared identifier is what lets every subsystem point at the same things.
+- **Node ids = repo-relative paths.** Map boxes, `highlight_nodes`/`focus_node` arguments, panel links and search hits all use repo-relative forward-slash paths (`src/vs/base`, `""` for the repo root), files and folders alike.
 
 ## 2. GET /api/graph
 
-Scans the repo and returns the dependency graph. Never requires an index or API key.
-
-**Reserved query params (Tier L scaling, not implemented in v1 — see `VISUALIZATION_DESIGN.md` §4 / ADR-012):** `?root=<dir>` scopes the graph to a subtree; `?depth=<n>` controls directory-cluster expansion. v1 servers ignore them; clients must not send them until Tier L ships.
-
-**Response 200 — `GraphResponse`:**
-```ts
-type GraphResponse = {
-  nodes: FileNodeType[];   // exact React Flow node shape produced by lib/graph.ts
-  edges: Edge[];           // exact React Flow edge shape
-  stats: {
-    fileCount: number;
-    edgeCount: number;
-    rootName: string;                       // "Nebulosity"
-    warningCount: number;                   // per-file scan warnings (F2); 0 = clean scan
-    centralFiles: { path: string; inDegree: number; outDegree: number }[]; // top 5
-  };
-};
-```
+> **Retired in V1.3** with the radial graph UI (ADR-040). The Map reads levels instead: §11.
 
 ## 3. GET /api/health
 
-Powers the status bar and "do I need to reindex?" hints.
+> **Retired in V1.3** (ADR-040). The index's state is `GET /api/status`: §9.
 
-**Response 200 — `HealthResponse`:**
-```ts
-type HealthResponse = {
-  ok: true;
-  lastScanAt: string | null; // ISO timestamp of the repo's last dependency-graph scan (DB-backed, Phase D); null if never scanned
-  index: {
-    exists: boolean;
-    indexedAt: string | null;
-    chunkCount: number;
-    staleFiles: number;      // files whose contentHash differs from disk (0 = fresh)
-  };
-  scannerEngine: "native" | "node"; // which scan engine will serve the next scan (ADR-014)
-  agentReady: boolean;       // ANTHROPIC_API_KEY is present (never echo the key)
-};
-```
+## 4. POST /api/index — SSE (rewritten in slice V1.3)
 
-**Implemented for real as of Phase 2/3 (2026-09-04).** The `index` block was hardcoded to zeros through Phase D; it is now served by `getIndexStatus` (`lib/index-status.ts`), shared with `POST /api/index` so the two endpoints cannot disagree about what "indexed" means.
-
-- `exists` is **`chunkCount > 0`**, not "a run happened" — a run that failed every file still stamps `lastIndexAt`, and the status pip must not call that indexed.
-- `staleFiles` re-hashes every indexed file on each request. That is affordable because the status bar fetches health once on mount for one local repo; if health ever becomes polled, or targets a large repo, it needs an mtime fast-path first.
-
-## 4. POST /api/index — SSE
-
-Runs the indexing pipeline (`RAG_PIPELINE.md`). Body: `{}` (repo root is the server's project root in v1).
-
-**SSE events, in order:**
+A full structure run of the active repo, in the background worker (ADR-038), with its progress as SSE. Localhost only (§14's guard: `403 FORBIDDEN` otherwise); `404 INDEX_EMPTY` without an active repo. Body: none.
 
 | event | data | notes |
 |---|---|---|
-| `progress` | `{ phase: "scanning" \| "chunking" \| "embedding", done: number, total: number, currentFile?: string }` | emitted at least once per phase; `done`/`total` are **run-scoped** in every phase |
-| `done` | `{ fileCount, chunkCount, skippedUnchanged, tookMs, changed, errors[], warnings[] }` | terminal event on success |
-| `error` | `{ code, message }` | terminal on failure; `INDEX_LOCKED` if another run holds the lock |
+| `progress` | `{ stage: "discover" \| "parse" \| "write" \| "resolve" \| "aggregate", done, total }` | at least once per stage, in order |
+| `done` | `{ files, changed, deleted, edges, folders, levelEdges, errors[], skipped, totalMs }` | terminal on success; `errors` are per-file failures (ADR-021) |
+| `error` | `{ code, message }` | terminal on failure: `INDEX_LOCKED` while another run holds the lock or the worker is still switching to the active repo (ADR-038, amended), `INTERNAL` if the worker stopped |
 
-**Phase semantics (Phase 2/3, 2026-09-04).** The pipeline runs `scanning` → `chunking` → `embedding` → commit, and embedding is a **single batched pass over the whole run**, not per file — so `done`/`total` count chunks across the entire job and rise monotonically. An earlier per-file loop reset the counters on every file, which no client can render as a progress bar. A warm re-index emits no `embedding` events at all.
-
-**`done` carries per-file failures (ADR-021):** `errors[]` and `warnings[]` are `{ path, error }[]`, and `changed` is the number of files re-chunked. Indexing is per-file error-tolerant, so without these a run where every file failed looks identical to a clean one.
-
-**`INDEX_LOCKED`** is raised from a typed `IndexLockedError`, not matched on message text. The lock is a `meta` row holding the run's ISO start time and is treated as stale after 30 minutes, so a crashed run cannot block indexing forever.
+The run goes on in the worker if the client leaves.
 
 ## 5. POST /api/chat — SSE (the main event)
 
@@ -144,10 +100,7 @@ data: {}
 
 ## 6. GET /api/search?q=… — debug endpoint
 
-Raw retrieval without the agent — exists so Phase 4 can be verified before Phase 5, and stays as a permanent debugging tool.
-
-**Response 200:** `{ results: (CodeChunk & { score: number })[] }` (top-k, same pipeline the `search_code` tool uses).
-**Error:** `INDEX_EMPTY` envelope if no index.
+> **Retired in V1.3** (ADR-040). `GET /api/search` serves §10's `SearchResult`.
 
 ## 7. Reserved for v1.1 (designed, not built)
 
@@ -159,6 +112,8 @@ Raw retrieval without the agent — exists so Phase 4 can be verified before Pha
 
 These are private, same-repo contracts — no URL versioning. The rule is simpler: **any change to `lib/contracts.ts` must update every consumer in the same commit.** TypeScript enforces most of it; the SSE event names (which are strings) are the one place the compiler can't help, which is why the tables above are exhaustive.
 
+`CONTRACTS_VERSION` (2 since V1.3) names this contract and moves on a breaking change to it. The database evolves through migrations, never through this number (ADR-040).
+
 ## 9. GET /api/status (slice V1.2)
 
 What each indexing stage of the **active repo** is doing. The active repo is `activeRepo` in `.nebulosity/config.json`, which `npm run index` sets. This route replaces `/api/health` when the new Map lands (V1.3) and drives its status pill.
@@ -168,19 +123,21 @@ What each indexing stage of the **active repo** is doing. The active repo is `ac
 type StageName = "structure" | "summaries" | "embeddings";
 type StageState = "idle" | "running" | "ready" | "off" | "failed";
 type StageStatus = { state: StageState; done: number; total: number; note?: string };
-type IndexStatus = { repo: string; stages: Record<StageName, StageStatus> };
+type IndexStatus = { repo: string; stages: Record<StageName, StageStatus>; indexVersion: number };
 ```
 
 - **`done`/`total`** count files for `structure`, summary targets (files, folders and the repo) for `summaries`, and model-written summaries with a vector for `embeddings`.
-- **A stage that never ran** is `idle` with `0/0`.
+- **`idle`** means nothing is running for that stage. Either it never ran (`0/0`), or there's work waiting and the note says how much: `N waiting to be summarized`, `N summaries without a vector yet`.
+- The summaries stage is re-derived after every structure change and every "summarize now" (ADR-032, amended). The embeddings counts are always counted live.
 - **`off`** means the stage can't run, and `note` says why (`summaries` without `ANTHROPIC_API_KEY`).
 - **An honest `running`.** A running stage writes its row at least once a minute. A `running` row untouched for 5 minutes is reported as `failed`, with the note `interrupted: no progress since <time>`, because its process died (ADR-032). The one exception is `summaries` with requests still in a Message Batch at Anthropic: that work is in progress without any local process, so it stays `running`, and its note says how to collect it. A summary run that stops early while requests are at Anthropic, on an error or because its circuit breaker tripped or its spend cap was reached (the note then starts with `stopped:`; ADR-033, ADR-035), leaves the stage `running` for the same reason, with the note `<why it stopped>; <N> requests still at Anthropic; run npm run summarize to collect them`.
+- **`indexVersion`**: see §11. A client polling this route refetches its levels when it moves.
 
 **Error 404 `INDEX_EMPTY`** when no repo has been indexed yet.
 
 ## 10. Search results (slice V1.2)
 
-The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. In V1.2 only `npm run search` shows it. `GET /api/search` serves it from V1.3, and the MCP `search` tool formats it as text in V1.4.
+The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. `GET /api/search?q=&limit=` serves it (V1.3; `limit` 1–50, default 10), and V1.4's MCP `search` tool formats it as text. `400 BAD_REQUEST` without `q`, `404 INDEX_EMPTY` without an active repo.
 
 ```ts
 type SearchList = "code" | "summary" | "vector";
@@ -199,3 +156,98 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **Hits are files and folders**, never chunks: a file's chunks are grouped before ranking, and `code` is its best one. The repo summary is never a hit.
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.
+
+## 11. GET /api/level?path= (slice V1.3)
+
+One folder of the Map (`lib/engine/level.ts`). `path` is repo-relative; empty or missing means the repo root.
+
+```ts
+type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
+type MapNode = { path: string; name: string; kind: "folder" | "file" | "more"; fileCount: number;
+  tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number };
+type MapEdge = { source: string; target: string; count: number };
+type LevelResponse = { repo: string; path: string; breadcrumb: string[]; nodes: MapNode[]; edges: MapEdge[];
+  hiddenCount: number; indexVersion: number };
+```
+
+- **Boxes** are the folder's subfolders and the files directly inside it, largest first. A file counts as 1; among equals the more-imported file comes first, then the path decides.
+- **The cap.** With more than 50 children, the first 49 are drawn and the rest fold into one `kind: "more"` box named `+N more`. Its `path` is the level's path plus `/` (`/` at the root), which no stored path can be. Its `fileCount` adds up the folded boxes', `hiddenCount` is N, and its `summaryStatus` is `skipped`, since it has no summary of its own. So `nodes` never holds more than 50 (S4).
+- **Lines** are the level's rows of `level_edges` (PIVOT_SPEC.md §4.2): each import is counted once, at the deepest folder holding both files. A folded end points at the `+N more` box, lines that then join the same two boxes are added up, and lines between two folded children are dropped.
+- **`summaryStatus`** is the stored status when the box has text. Without text it's `off` when there's no `ANTHROPIC_API_KEY`, otherwise the stored status, or `pending` when no row exists yet.
+- **`breadcrumb`** lists the folder paths from the root down to `path`.
+- **`indexVersion`** moves whenever anything the Map shows changes (ADR-036). A client caches levels per version and refetches when `GET /api/status` reports a new one.
+
+**Errors:**
+- `400 BAD_REQUEST`: a path that could leave the repo (`..`, absolute, a drive letter), or a file's path (the Map opens folders).
+- `404 NOT_FOUND`: nothing indexed at `path`.
+- `404 INDEX_EMPTY`: no active repo yet.
+
+## 12. GET /api/describe?path= (slice V1.3)
+
+What a folder, file or the repo (`path` empty) is (`lib/engine/describe.ts`). The detail panel shows it, and V1.4's MCP `describe` tool formats it as text.
+
+```ts
+type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
+type AreaCount = { path: string; kind: "folder" | "file"; count: number };
+type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | "file";
+  tagline?: string; summary?: string; summaryStatus: SummaryStatus; summaryError?: string;
+  stats: { fileCount: number; lineCount: number };
+  children?: MapNode[]; symbols?: SymbolInfo[];
+  uses: AreaCount[]; usedBy: AreaCount[]; stalePaths: number; indexVersion: number };
+```
+
+- **`children`** (folders and the repo) lists every child in the Map's order, so the boxes a level folds into "+N more" are exactly those after the first 49. A client shows 20 at a time.
+- **`symbols`** (files) are the top-level declarations and class members in line order, members by qualified name (`Logger.info`). The lines are the declaration's own, for jumping to it.
+- **`uses` / `usedBy`** count imports across the target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2), most first. An area is a folder, or a file when the other file sits directly in the lowest folder both share. Test files count like any other file. A file's summary was written from an "Imported by" line that counts tests apart (RAG_PIPELINE.md), so the numbers in its text can differ; the detail panel labels both.
+- **`summaryStatus`** follows §11's rule. **`summaryError`** says why the last attempt failed, and only appears when the status is `failed`.
+- **`stalePaths`** counts files at or under the target whose summary is out of date with their bytes. It's non-zero between a file's edit and the refresh of its summary (`PIVOT_SPEC.md` §5.6).
+
+**Errors:** `400 BAD_REQUEST` for a path that could leave the repo; `404 NOT_FOUND`; `404 INDEX_EMPTY`.
+
+## 13. POST /api/summarize?path= (slice V1.3)
+
+Summarizes one file or folder now through the regular API, jumping the queue (PIVOT_SPEC.md §5.3). The Map sends it when it opens a target whose summary is `pending` or `stale`; it never sends it when summaries are `off`. Localhost only, because it spends money.
+
+```ts
+type SummarizeResponse = { path: string; kind: "repo" | "folder" | "file"; tagline?: string; summary?: string;
+  summaryStatus: SummaryStatus; summaryError?: string };
+```
+
+- **Current summaries.** A current summary comes back as it is, with no API call.
+- **Duplicates.** Concurrent requests for one target share one request (ADR-033, amended).
+- **Status codes.**
+  - `409 NOT_READY`: a folder whose files or subfolders aren't all summarized yet. Its summary would be written over "(no summary yet)".
+  - `409 SUMMARIES_OFF`: no API key.
+  - `409 INDEX_LOCKED`: the background worker is still switching to the active repo (ADR-038, amended); try again in a moment. It never summarizes another repo's path.
+  - `502 UPSTREAM`: Anthropic refused the API key.
+  - `404 NOT_FOUND`, `400 BAD_REQUEST` and `403 FORBIDDEN` as usual.
+  - `500 INTERNAL` when the background worker stopped before answering.
+- **Afterwards.** The summary lands in the index, so the index version moves and the Map refetches. Its vector follows within seconds.
+
+## 14. The live channel (slice V1.3)
+
+`POST /api/live` takes a tool call, and `GET /api/live/stream` sends each one to the open Maps (`PIVOT_SPEC.md` §8, ADR-039).
+
+```ts
+type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction };
+```
+
+- **`POST /api/live`** takes a `LiveEvent` as its body and answers `204`.
+  - `at` and `paths` are optional. `paths` holds at most 50 repo-relative paths; others are dropped. `action` is a `UIAction`, whose node ids may be folders.
+  - **Localhost only.** The `Host` header must be `localhost`, `127.0.0.1` or `[::1]` (any port), and an `Origin`, if present, must be the Map's own page: the same host and port as the `Host` header. Anything else gets `403 FORBIDDEN`, including a page served from another local port.
+  - A body that isn't a live event gets `400 BAD_REQUEST`.
+  - At most 20 events a second are passed on; the rest are dropped.
+- **`GET /api/live/stream`** is Server-Sent Events: `ready` (`{}`) once, then `tool` (a `LiveEvent`) per call, and a `: keep-alive` comment every 15 s. It's a GET, so the browser's `EventSource` reads it directly.
+- **`postLiveEvent`** (`lib/live/client.ts`) is the poster. It sends one POST to `http://127.0.0.1:<port>/api/live` with a 200 ms timeout and ignores every failure, since no Map being open is the normal case. `port` comes from `.nebulosity/config.json` (default 3000). V1.4's MCP tools call it, and `npm run live -- <tool> [path …] [--highlight | --focus | --clear]` sends one by hand.
+
+## 15. GET /api/repos, POST /api/repos (slice V1.3)
+
+The repo picker (PIVOT_SPEC.md §7.1).
+
+```ts
+type RepoSummary = { root: string; name: string; indexedAt: string | null };
+type RepoList = { active: string | null; repos: RepoSummary[] };
+```
+
+- **`GET`** lists the repos the structure stage has indexed, by root, and the active one.
+- **`POST { root }`** makes an indexed repo the active one (`activeRepo` in `.nebulosity/config.json`) and points the background worker at it. It answers with the new `RepoList`. Localhost only. A root that was never indexed gets `404 NOT_FOUND`.

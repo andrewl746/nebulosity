@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "../client";
-import { meta } from "../schema";
+import { meta, repositories } from "../schema";
 import type { StageName, StageStatus } from "../../contracts";
 
 /** Every stage, in pipeline order. */
@@ -31,4 +31,16 @@ export function readStages(db: Db, repoId: number): Partial<Record<StageName, St
     }
 
     return stages;
+}
+
+/**
+ * Repositories the structure stage has indexed: they have a stage row (`stage:<id>:structure`). Rows the retired
+ * Phase D pipeline left have none, so they're left out.
+ */
+export function listStagedRepositories(db: Db): { rootPath: string; lastIndexAt: Date | null }[] {
+    return db.select({ rootPath: repositories.rootPath, lastIndexAt: repositories.lastIndexAt })
+        .from(repositories)
+        .where(sql`exists (select 1 from ${meta} where ${meta.key} = 'stage:' || ${repositories.id} || ':structure')`)
+        .orderBy(repositories.rootPath)
+        .all();
 }

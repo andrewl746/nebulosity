@@ -24,6 +24,11 @@ type Billing = "direct" | "batch";
 export type SpendInput = {
     /** Every summary_usage row of the repo: what it has paid so far, and each model's tokens per request. */
     usage: readonly UsageRow[];
+    /**
+     * Usage already recorded when the run began. A per-run cap (ADR-035, amended) leaves it out of `spent`; the models'
+     * means still come from all of `usage`, the better estimate. Omitted: the repo's cumulative cap, where all of it counts.
+     */
+    baseline?: readonly UsageRow[];
     /** Requests already in batches at Anthropic: billed when their batch ends, at batch prices. */
     atAnthropic: readonly ProjectedRequest[];
     /** The submission about to go out (one batch, or one regular-API wave), at its own transport's prices. */
@@ -66,7 +71,9 @@ export function projectSpend(input: SpendInput): SpendProjection {
     const estimate = (requests: readonly ProjectedRequest[], transport: Billing): number =>
         requests.reduce((sum, r) => sum + price(r.model, means.get(r.model) ?? ASSUMED_TOKENS[r.kind], transport), 0);
 
-    const spent = input.usage.reduce((sum, row) => sum + price(row.model, row, row.transport), 0);
+    // usage rows are running totals and prices are linear, so what this run spent is all of it less the baseline
+    const priceOf = (rows: readonly UsageRow[]): number => rows.reduce((sum, row) => sum + price(row.model, row, row.transport), 0);
+    const spent = priceOf(input.usage) - priceOf(input.baseline ?? []);
     const atAnthropic = estimate(input.atAnthropic, "batch");
     const thisSubmission = estimate(input.thisSubmission, input.thisTransport);
     const rest = estimate(input.rest, input.restTransport);

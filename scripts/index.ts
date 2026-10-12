@@ -9,7 +9,11 @@ import path from "path";
 import { indexRepository, RepoNotFoundError } from "../lib/index/pipeline";
 import { repoKey } from "../lib/index/paths";
 import { IndexLockedError } from "../lib/db/store/lock";
-import { writeConfig } from "../lib/config";
+import { readConfig, writeConfig } from "../lib/config";
+import { refreshSummaryStatus } from "../lib/index/summarize/status";
+import { hasAnthropicKey, loadLocalEnv } from "./env";
+
+loadLocalEnv();
 
 const target = process.argv[2];
 
@@ -34,6 +38,7 @@ try{
     console.log(`[index] discover ${seconds(result.timingsMs.discover)} · parse ${seconds(result.timingsMs.parse)}`
         + ` · write ${seconds(result.timingsMs.write)} · resolve ${seconds(result.timingsMs.resolve)}`
         + ` · aggregate ${seconds(result.timingsMs.aggregate)} · total ${seconds(result.totalMs)}`);
+    if (result.searchIndexMs > 0) console.log(`[index] code search filled in ${seconds(result.searchIndexMs)} after the structure stage`);
 
     if (result.skipped.length > 0){
         console.log(`[index] skipped ${result.skipped.length} (first: ${result.skipped[0].path}: ${result.skipped[0].reason})`);
@@ -42,7 +47,13 @@ try{
         console.log(`[index] ${result.errors.length} file errors (first: ${result.errors[0].path}: ${result.errors[0].error})`);
     }
 
-    writeConfig({ activeRepo: repoKey(root) });
+    // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now
+    const summaries = refreshSummaryStatus(root, { summarizerAvailable: hasAnthropicKey() });
+    if (summaries){
+        console.log(`[index] summaries: ${summaries.state} ${summaries.done}/${summaries.total}${summaries.note ? ` (${summaries.note})` : ""}`);
+    }
+
+    writeConfig({ ...readConfig(), activeRepo: repoKey(root) });
     console.log(`[index] active repo → ${repoKey(root)}`);
 } catch (err){
     if (err instanceof RepoNotFoundError){

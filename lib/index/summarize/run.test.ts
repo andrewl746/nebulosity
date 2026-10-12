@@ -9,11 +9,11 @@ import { getDb } from "../../db/client";
 import { META_KEYS, meta, summaries } from "../../db/schema";
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
-import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, writeResults } from "../../db/store/summaries";
+import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, targetKey, writeResults } from "../../db/store/summaries";
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError } from "./run";
+import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
@@ -372,7 +372,8 @@ describe("runSummaries — the Batch API", () => {
         // the 7 files' batch is still at Anthropic: running, not failed, long after this process is gone
         const muchLater = new Date(Date.now() + 6 * 60 * 1000);
         expect(readIndexStatus(root, muchLater)?.stages.summaries).toEqual({
-            state: "running", done: 1, total: 14, note: "Connection error.; 7 requests still at Anthropic; run npm run summarize to collect them",
+            state: "running", done: 1, total: 14,
+            note: `Connection error.; 7 requests still at Anthropic; run npm run summarize to collect them; if that batch can never be read, run npm run summarize -- "${repoKey(root)}" --release-batch ${first} to send its requests again (paid again)`,
         });
 
         // ...and, as the note says, the next run collects it: the 7 files were sent once
@@ -521,6 +522,28 @@ describe("runSummaries — the Batch API", () => {
         expect(await runSummaries(root, { summarizer: healthy.summarizer, transport: "batch", pollIntervalMs: 0 }))
             .toMatchObject({ summarized: 13, failed: 0, upToDate: 14 });
         expect(healthy.requests).toHaveLength(13);
+    });
+
+    it("--release-batch gives up on a batch: its requests go out again, and the batch is never polled again", async () => {
+        const root = indexedFixture();
+        const carrier = stubSummarizer({ pollsBeforeDone: 99 });
+        await runSummaries(root, { summarizer: carrier.summarizer, transport: "batch", wait: false });
+        const [stuck] = carrier.batches.keys();
+        const polls = carrier.batches.get(stuck)!.polls;
+
+        const said: string[] = [];
+        const result = await runSummaries(root, { summarizer: carrier.summarizer, transport: "direct", releaseBatches: [stuck], onProgress: (m) => said.push(m) });
+        expect(said).toContain(`released ${stuck}: 7 requests will be sent again`);
+        expect(result).toMatchObject({ summarized: 13, inFlight: 0 });
+        expect(carrier.batches.get(stuck)!.polls).toBe(polls);
+    });
+
+    it("refuses to release a batch this repo has nothing in, before taking the lock or touching the stage", async () => {
+        const root = indexedFixture();
+        await expect(runSummaries(root, { summarizer: stubSummarizer().summarizer, releaseBatches: ["msgbatch_nope"] }))
+            .rejects.toThrow(UnknownBatchError);
+        const db = getDb();
+        expect(readStages(db, requireRepository(db, repoKey(root))).summaries).toBeUndefined();
     });
 });
 
@@ -857,5 +880,88 @@ describe("runSummaries — incremental runs and summarizeNow", () => {
         expect(await summarizeNow(root, "src/util/strings.test.ts", stub.summarizer)).toMatchObject({ status: "skipped", tagline: "Tests for strings" });
         expect(stub.requests).toHaveLength(1);
         await expect(summarizeNow(root, "src/nope.ts", stub.summarizer)).rejects.toThrow(TargetNotFoundError);
+    });
+
+    it("summarizeNow: two calls for the same target at once send one request, and both get the summary", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        const [first, second] = await Promise.all([
+            summarizeNow(root, "src/core/log.ts", stub.summarizer),
+            summarizeNow(root, "src/core/log.ts", stub.summarizer),
+        ]);
+        expect(stub.requests).toHaveLength(1);
+        expect(second).toEqual(first);
+        expect(first.status).toBe("fresh");
+
+        // once it has landed, asking again finds it current: still one request
+        await summarizeNow(root, "src/core/log.ts", stub.summarizer);
+        expect(stub.requests).toHaveLength(1);
+    });
+
+    it("summarizeNow refuses a folder whose files have no summaries yet, without a request", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await expect(summarizeNow(root, "src/core", stub.summarizer)).rejects.toThrow(TargetNotReadyError);
+        expect(stub.requests).toHaveLength(0);
+    });
+
+    it("summarizeNow leaves the summaries stage current: the file fresh, its folder out of date", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        await summarizeNow(root, "src/core/log.ts", stub.summarizer);
+        expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "ready", done: 13, total: 14, note: "1 out of date (redone when opened)" });
+    });
+
+    it("sends only the targets `select` accepts", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        fs.appendFileSync(path.join(root, "src/app/main.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        const wanted = new Set(["file:src/app/main.ts"]);
+        expect(await runSummaries(root, {
+            summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, select: (t) => wanted.has(targetKey(t.kind, t.path)),
+        })).toMatchObject({ summarized: 1 });
+        expect(row(root, "src/app/main.ts")?.status).toBe("fresh");
+        expect(row(root, "src/core/log.ts")?.status).toBe("stale");
+    });
+
+    it("sends at most `maxTargets`, the most-imported first", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        fs.appendFileSync(path.join(root, "src/app/main.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, maxTargets: 1 }))
+            .toMatchObject({ summarized: 1 });
+        // main.ts and log.ts both have 3 importers; the path breaks the tie
+        expect(row(root, "src/app/main.ts")?.status).toBe("fresh");
+        expect(row(root, "src/core/log.ts")?.status).toBe("stale");
+    });
+
+    it("a per-run cap counts only what this run spends", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        // the first pass spends $0.00254: 7 Haiku files at 100 in / 20 out ($0.00014) and 6 Sonnet folders and the repo ($0.0024)
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        // against everything the repo has spent, $0.001 is already gone
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, budgetUsd: 0.001 }))
+            .toMatchObject({ summarized: 0, stopped: true });
+        // counting only this run: one Haiku file at its mean, (100 × $0.10 + 20 × $0.50) / 1M = $0.00002
+        expect(await runSummaries(root, {
+            summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, budgetUsd: 0.001, budgetScope: "run",
+        })).toMatchObject({ summarized: 1, stopped: false });
+        expect(row(root, "src/core/log.ts")?.status).toBe("fresh");
     });
 });

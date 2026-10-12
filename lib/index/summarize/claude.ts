@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { SummaryText } from "../../db/store/summaries";
 import { mapLimit } from "./concurrency";
+import { summariesEnabled } from "./env";
 import { MAX_OUTPUT_TOKENS, RETRY_MAX_OUTPUT_TOKENS, SUMMARY_EFFORT } from "./prompts";
 import { BatchGoneError, SummarizerAuthError, type ModelUsage, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
@@ -289,4 +290,9 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
 function messageOf(err: unknown): string {
     if (err instanceof Anthropic.APIError) return `API error ${err.status ?? "(no status)"}: ${err.message}`;
     return err instanceof Error ? err.message : String(err);
+}
+
+/** The real Summarizer when ANTHROPIC_API_KEY is set, its failed requests retried 3 times (PIVOT_SPEC.md §5.7); else null. */
+export function summarizerFromEnv(): Summarizer | null {
+    return summariesEnabled() ? createClaudeSummarizer(new Anthropic({ maxRetries: 3 })) : null;
 }

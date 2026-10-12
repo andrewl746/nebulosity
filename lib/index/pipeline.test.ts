@@ -7,8 +7,9 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
+import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/search";
 import { readStages, type StoredStage } from "../db/store/stages";
-import { findRepository } from "../db/store/structure";
+import { findRepository, upsertRepository, writeFileRecords } from "../db/store/structure";
 import { repoKey } from "./paths";
 import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
 
@@ -199,5 +200,34 @@ describe("indexRepository — stage status", () => {
         const recovered = readStages(db, repoId).structure;
         expect(recovered).toMatchObject({ state: "ready", done: 8, total: 8 });
         expect(recovered?.note).toBeUndefined();   // nothing of the failure lingers
+    });
+});
+
+describe("indexRepository — code search deferred for a bulk run (ADR-031, amended)", () => {
+    it("fills code search in one go after the structure stage, with what the trigger would have written", () => {
+        const root = copyFixture();
+        const result = indexRepository(root, { bulkSearchThreshold: 1 });
+        const db = getDb();
+        expect(result.searchIndexMs).toBeGreaterThan(0);
+        expect(isCodeSearchDeferred(db)).toBe(false);
+        // "shout" appears in exactly 3 files' chunks (the V1.2 plan's code search facts)
+        expect([...new Set(searchCode(db, result.repoId, '"shout"', 50).map((m) => m.path))].sort())
+            .toEqual(["src/app/main.ts", "src/util/strings.test.ts", "src/util/strings.ts"]);
+    });
+
+    it("repairs a bulk run that died before filling, at the start of the next run", () => {
+        const db = getDb();
+        const crashed = upsertRepository(db, "/fts-test/crashed");
+        deferCodeSearch(db);   // a bulk run began…
+        writeFileRecords(db, crashed, [{
+            path: "crashed.ts", kind: "module", contentHash: "h", language: "typescript", sizeBytes: 10, lineCount: 1, isTest: false,
+            importSpecifiers: [], symbols: [],
+            chunks: [{ id: "crashed.ts#a#0", filePath: "crashed.ts", kind: "function", name: "a", nameSplit: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: "h" }],
+        }]);                  // …wrote its chunks, and died before filling
+        expect(searchCode(db, crashed, '"crashed"', 10)).toEqual([]);
+
+        indexRepository(copyFixture());   // any later run repairs first
+        expect(isCodeSearchDeferred(db)).toBe(false);
+        expect(searchCode(db, crashed, '"crashed"', 10).map((m) => m.path)).toEqual(["crashed.ts"]);
     });
 });

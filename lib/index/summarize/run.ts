@@ -7,16 +7,18 @@ import { acquireSummaryLock, releaseSummaryLock, touchSummaryLock } from "../../
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import {
-    addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, targetKey, writeResults,
-    type FileFacts, type StoredSummary, type SummaryResult,
+    addUsage, applyTargetUpdates, countBatchRows, countInFlight, inFlightBatches, loadBatchRows, loadFileSummaryChunk,
+    loadImporters, loadSummaries, loadUsage, markInFlight, releaseBatch, targetKey, writeResults,
+    type FileFacts, type StoredSummary, type SummaryResult, type UsageRow,
 } from "../../db/store/summaries";
 import { repoKey } from "../paths";
 import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
-import { planSummaries, type PlannedTarget, type TargetState } from "./plan";
+import type { PlannedTarget, TargetState } from "./plan";
 import { formatUsd } from "./pricing";
-import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt, SUMMARY_MODELS } from "./prompts";
+import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
+import { planSnapshot, type Snapshot } from "./snapshot";
+import { refreshSummaryStatus, stillAtAnthropic, summaryStageStatus } from "./status";
 import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** auto: the Batch API for waves of BATCH_THRESHOLD requests or more, the regular API below that. */
@@ -44,6 +46,21 @@ export type SummaryRunOptions = {
      * DEFAULT_BUDGET_USD unless told otherwise.
      */
     budgetUsd?: number;
+    /**
+     * What `budgetUsd` caps. "repo" (the default, the CLI's): everything the repo has ever spent on summaries, plus this
+     * run. "run": only what this run spends. The background worker uses it (ADR-038), since a repo's first full pass can
+     * already sit near the CLI's cap (ADR-035, amended).
+     */
+    budgetScope?: "repo" | "run";
+    /**
+     * Batches to give up on before the run starts (ADR-033, amended in V1.3). Their requests are marked failed and sent
+     * again, and paid for again: for a batch whose results keep failing to download. The stage note names such a batch.
+     */
+    releaseBatches?: readonly string[];
+    /** Only targets this accepts are sent: the background worker refreshes just the files it saw change (ADR-038). Default: all. */
+    select?: (target: PlannedTarget) => boolean;
+    /** Send at most this many targets in this run, in queue order (most-imported files first). Default: no limit. */
+    maxTargets?: number;
     onProgress?: (message: string) => void;
 };
 
@@ -106,6 +123,14 @@ export class TargetNotFoundError extends Error {
     }
 }
 
+/** Thrown by summarizeNow for a folder whose files or subfolders don't all have summaries yet. */
+export class TargetNotReadyError extends Error {
+    constructor(targetPath: string){
+        super(`"${targetPath}" can't be summarized yet: some of its files or subfolders have no summary, and a folder's summary is written from theirs. Run npm run summarize, or open them first.`);
+        this.name = "TargetNotReadyError";
+    }
+}
+
 /**
  * Thrown by runSummaries and summarizeNow while the structure stage is running or failed:
  * summaries of a half-indexed repo would fail as "changed after it was indexed", or be
@@ -118,8 +143,31 @@ export class StructureNotReadyError extends Error {
     }
 }
 
-/** One planning pass: the plan, and the file facts it was made from. */
-type Snapshot = { targets: PlannedTarget[]; files: Map<string, FileFacts> };
+/** Thrown when --release-batch names a batch that carries none of this repo's requests. */
+export class UnknownBatchError extends Error {
+    constructor(readonly batchId: string){
+        super(`No request of this repo is waiting in batch ${batchId}. Copy the id from the summaries stage's note.`);
+        this.name = "UnknownBatchError";
+    }
+}
+
+/**
+ * Thrown when no batch could be checked MAX_MISSED_POLLS passes in a row. The message is the last poll's error; the ids
+ * say which batches stayed unreadable, so the stage note can say how to give up on them (ADR-033, amended in V1.3).
+ */
+export class BatchesUnreachableError extends Error {
+    constructor(readonly batchIds: readonly string[], cause: unknown){
+        super(messageOf(cause), { cause });
+        this.name = "BatchesUnreachableError";
+    }
+}
+
+/** How to give up on batches whose results keep failing to download: their requests go out again, and are paid for again. */
+export function releaseHint(root: string, batchIds: readonly string[]): string {
+    const one = batchIds.length === 1;
+    const flags = batchIds.map((id) => `--release-batch ${id}`).join(" ");
+    return `if ${one ? "that batch" : "those batches"} can never be read, run npm run summarize -- "${repoKey(root)}" ${flags} to send ${one ? "its" : "their"} requests again (paid again)`;
+}
 
 type Tally = { summarized: number; templated: number; failed: number; batches: number; waves: number };
 
@@ -128,6 +176,9 @@ type Budget = {
     usd: number;
     /** How the projection prices the rest of the run: batch rates, or direct ones when the run's transport is direct. */
     restTransport: "direct" | "batch";
+    /** "run": usage recorded before the run began is the baseline, left out of what's spent (SummaryRunOptions.budgetScope). */
+    scope: "repo" | "run";
+    baseline: readonly UsageRow[];
 };
 
 type RunContext = {
@@ -142,6 +193,10 @@ type RunContext = {
     stopped: string | null;
     /** Checked before every submission; null means no cap. */
     budget: Budget | null;
+    /** Only targets this accepts are sent (SummaryRunOptions.select). */
+    select: (target: PlannedTarget) => boolean;
+    /** How many more targets this run may send (SummaryRunOptions.maxTargets). */
+    sendLeft: number;
     /**
      * The note of the spend-cap check that failed in this pass; every pass starts with none. While it's set nothing more
      * is sent, but batches at Anthropic are still collected, and the run finishes with it when nothing more can happen.
@@ -150,9 +205,12 @@ type RunContext = {
     say: (message: string) => void;
 };
 
-function newContext(db: Db, repoId: number, root: string, say: (message: string) => void, budget: Budget | null = null): RunContext {
+function newContext(
+    db: Db, repoId: number, root: string, say: (message: string) => void, budget: Budget | null = null,
+    select: (target: PlannedTarget) => boolean = () => true, sendLeft: number = Infinity
+): RunContext {
     return {
-        db, repoId, root, say, budget,
+        db, repoId, root, say, budget, select, sendLeft,
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPasses: 0,
@@ -180,15 +238,27 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     // Under auto most of the money goes on waves big enough for the Batch API, so the rest of the run is priced at
     // batch rates (ADR-035). The small regular-API waves, at the top of the tree and mid-run as file batches land at
     // different times, make that a slight underestimate.
-    const budget: Budget | null = options.budgetUsd === undefined ? null
-        : { usd: options.budgetUsd, restTransport: transport === "direct" ? "direct" : "batch" };
-    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget);
+    const budget: Budget | null = options.budgetUsd === undefined ? null : {
+        usd: options.budgetUsd,
+        restTransport: transport === "direct" ? "direct" : "batch",
+        scope: options.budgetScope ?? "repo",
+        baseline: options.budgetScope === "run" ? loadUsage(db, repoId) : [],
+    };
+    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget, options.select, options.maxTargets);
     let last: PlannedTarget[] = [];
 
+    // a mistyped id must fail before anything is locked, released or rewritten
+    for (const batchId of options.releaseBatches ?? []){
+        if (countBatchRows(db, repoId, batchId) === 0) throw new UnknownBatchError(batchId);
+    }
     acquireSummaryLock(db);
     try{
+        for (const batchId of options.releaseBatches ?? []){
+            const released = releaseBatch(db, repoId, batchId, `released by hand: the results of ${batchId} couldn't be read`);
+            ctx.say(`released ${batchId}: ${plural(released, "request")} will be sent again`);
+        }
         for (;;){
-            const snap = snapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun);
+            const snap = planSnapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun);
             last = snap.targets;
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
@@ -198,7 +268,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             // each pass checks the spend cap afresh before it sends anything (below)
             ctx.overBudget = null;
 
-            const ready = snap.targets.filter((t) => t.state === "ready");
+            const ready = snap.targets.filter((t) => t.state === "ready" && ctx.select(t)).slice(0, ctx.sendLeft);
             const progress = (note: string) =>
                 writeStage(db, repoId, "summaries", { state: "running", done: upToDate(snap.targets), total: snap.targets.length, note });
 
@@ -216,6 +286,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
                     if (useBatch) await submitInBatches(ctx, summarizer, snap, ready, ids);
                     else await sendDirect(ctx, summarizer, snap, ready, ids, options.concurrency ?? DEFAULT_CONCURRENCY,
                         options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS, progress);
+                    ctx.sendLeft -= ready.length;
                     // A later batch of this wave may have found the run over budget: then it collects, below. If the
                     // circuit breaker tripped as well, the next pass ends the run at once, as it always does.
                     if (ctx.overBudget === null || ctx.stopped !== null) continue;
@@ -251,7 +322,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             return finish(ctx, snap.targets, summarizer !== null);
         }
     } catch (err){
-        reportRunError(db, repoId, last, err);
+        reportRunError(db, repoId, root, last, err);
         throw err;
     } finally{
         releaseSummaryLock(db);
@@ -259,18 +330,36 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
 }
 
 /**
- * Summarizes one file or folder right now through the regular API, jumping the queue
- * (PIVOT_SPEC.md §5.3: the Map calls this when someone opens a path that has no summary,
- * or an out-of-date one). A current summary comes back as it is, without an API call.
+ * summarizeNow calls running in this process, by repo and path. A second call for a target already being summarized
+ * joins the first instead of paying again: the Map can ask twice (a double click, a second tab) before the answer lands.
  */
-export async function summarizeNow(repoRoot: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
+const summarizingNow = new Map<string, Promise<StoredSummary>>();
+
+/**
+ * Summarizes one file or folder right now through the regular API, jumping the queue (PIVOT_SPEC.md §5.3: the Map calls
+ * this when someone opens a path that has no summary, or an out-of-date one). A current summary comes back as it is,
+ * without an API call. A folder whose children aren't all summarized is refused (TargetNotReadyError): its summary would
+ * be written over "(no summary yet)" lines. Concurrent calls for one target share one request (ADR-033, amended).
+ */
+export function summarizeNow(repoRoot: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
     const root = path.resolve(repoRoot);
+    const key = `${repoKey(root)}\0${targetPath}`;
+    const running = summarizingNow.get(key);
+    if (running) return running;
+
+    const started = summarizeOnce(root, targetPath, summarizer).finally(() => summarizingNow.delete(key));
+    summarizingNow.set(key, started);
+    return started;
+}
+
+async function summarizeOnce(root: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     requireStructureReady(db, repoId);
-    const snap = snapshot(db, repoId, true, new Set());
+    const snap = planSnapshot(db, repoId, true, new Set());
     const target = snap.targets.find((t) => t.path === targetPath);
     if (!target) throw new TargetNotFoundError(targetPath);
+    if (target.state === "waiting") throw new TargetNotReadyError(targetPath);
 
     const ids = applyTargetUpdates(db, repoId, [target]);
 
@@ -282,6 +371,8 @@ export async function summarizeNow(repoRoot: string, targetPath: string, summari
         ingest(ctx, [outcome], "direct", (customId) => destinations.get(customId));
     }
 
+    // this summary moved the stage's counts, and its folder may now be out of date (ADR-032, amended in V1.3)
+    refreshSummaryStatus(root, { summarizerAvailable: true });
     return loadSummaries(db, repoId).find((s) => s.kind === target.kind && s.path === target.path)!;
 }
 
@@ -314,20 +405,6 @@ export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick
 export function requireStructureReady(db: Db, repoId: number): void {
     const structure = readStages(db, repoId).structure;
     if (structure && structure.state !== "ready") throw new StructureNotReadyError(structure.state);
-}
-
-function snapshot(db: Db, repoId: number, refreshStaleFolders: boolean, failedThisRun: ReadonlySet<string>): Snapshot {
-    // One read transaction: a structure run committing meanwhile can't hand us half of its changes.
-    // (better-sqlite3 has one connection, so reads through `db` inside the callback belong to it.)
-    return db.transaction(() => {
-        const files = loadFileFacts(db, repoId);
-        const targets = planSummaries(files, loadFolderFacts(db, repoId), loadSummaries(db, repoId), {
-            models: SUMMARY_MODELS,
-            refreshStaleFolders,
-            failedThisRun,
-        });
-        return { targets, files: new Map(files.map((f) => [f.path, f])) };
-    });
 }
 
 function buildRequest(ctx: RunContext, snap: Snapshot, target: PlannedTarget, ids: ReadonlyMap<string, number>): { request: SummaryRequest } | { failure: SummaryOutcome } {
@@ -493,7 +570,7 @@ async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollInt
         const givingUp = ctx.missedPasses >= MAX_MISSED_POLLS;
         const next = givingUp ? `giving up: no batch could be checked in ${MAX_MISSED_POLLS} passes in a row` : "will retry";
         for (const miss of misses) ctx.say(`couldn't check ${miss.batchId} (${messageOf(miss.error)}); ${next}`);
-        if (givingUp) throw misses[misses.length - 1].error;
+        if (givingUp) throw new BatchesUnreachableError(misses.map((m) => m.batchId), misses[misses.length - 1].error);
         if (collected) return;
 
         touchSummaryLock(ctx.db);
@@ -511,15 +588,20 @@ async function collectNextBatch(ctx: RunContext, summarizer: Summarizer, pollInt
 async function collectEndedBatches(ctx: RunContext, summarizer: Summarizer): Promise<number> {
     let collected = 0;
     const unchecked: string[] = [];
+    const uncheckedIds: string[] = [];
 
     for (const batchId of inFlightBatches(ctx.db, ctx.repoId)){
         const poll = await pollBatch(ctx, summarizer, batchId);
         if (poll.kind === "collected") collected++;
-        if (poll.kind === "missed") unchecked.push(`couldn't check ${batchId} (${messageOf(poll.error)})`);
+        if (poll.kind === "missed"){
+            unchecked.push(`couldn't check ${batchId} (${messageOf(poll.error)})`);
+            uncheckedIds.push(batchId);
+        }
     }
 
     // after a pass that collected something the run goes round again; after one that didn't, it finishes
     for (const line of unchecked) ctx.say(`${line}; ${collected > 0 ? "will retry" : "the next run retries it"}`);
+    if (collected === 0 && uncheckedIds.length > 0) ctx.say(releaseHint(ctx.root, uncheckedIds));
     return collected;
 }
 
@@ -602,13 +684,16 @@ function withinBudget(
     const end = transport === "batch" ? start + MAX_BATCH_REQUESTS : ready.length;
     const projection = projectSpend({
         usage: loadUsage(ctx.db, ctx.repoId),
+        baseline: ctx.budget.baseline,
         atAnthropic,
         thisSubmission: ready.slice(start, end),
         thisTransport: transport,
-        rest: [...ready.slice(end), ...inState(snap, "waiting")],
+        rest: [...ready.slice(end), ...inState(snap, "waiting").filter(ctx.select)]
+            .slice(0, Math.max(0, ctx.sendLeft - (Math.min(end, ready.length) - start))),
         restTransport: ctx.budget.restTransport,
     });
     const submission = transport === "batch" ? "batch" : "wave";
+    const spentLabel = ctx.budget.scope === "run" ? "spent this run" : "spent";
     const usd = {
         spent: formatUsd(projection.spent),
         atAnthropic: formatUsd(projection.atAnthropic),
@@ -622,15 +707,15 @@ function withinBudget(
     // instead of quietly lifting the cap.
     if (!(projection.total <= ctx.budget.usd)){
         ctx.overBudget = `stopped: the next ${submission} would bring the projected spend to ${usd.total}, over the ${usd.budget} budget`
-            + ` (spent ${usd.spent}, at Anthropic ≈ ${usd.atAnthropic}, this ${submission} ≈ ${usd.thisSubmission}, the rest ≈ ${usd.rest});`
-            + " run again with --budget <usd> to go on";
+            + ` (${spentLabel} ${usd.spent}, at Anthropic ≈ ${usd.atAnthropic}, this ${submission} ≈ ${usd.thisSubmission}, the rest ≈ ${usd.rest});`
+            + (ctx.budget.scope === "run" ? " the rest waits for the next run" : " run again with --budget <usd> to go on");
         ctx.say(ctx.overBudget);
         return false;
     }
 
     // a model with no price on file was counted as $0, so the total is only a lower bound: say which
     const unpriced = projection.unpriced.length > 0 ? ` (no price on file for ${projection.unpriced.join(", ")}: counted as $0)` : "";
-    ctx.say(`budget: spent ${usd.spent} + at Anthropic ≈ ${usd.atAnthropic} + this ${submission} ≈ ${usd.thisSubmission}`
+    ctx.say(`budget: ${spentLabel} ${usd.spent} + at Anthropic ≈ ${usd.atAnthropic} + this ${submission} ≈ ${usd.thisSubmission}`
         + ` + the rest ≈ ${usd.rest} = ${usd.total} of ${usd.budget}${unpriced}`);
     return true;
 }
@@ -695,54 +780,35 @@ function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarize
         stopped: stopped !== null,
     };
 
-    let state: "ready" | "running" | "failed" | "off" = "ready";
-    const notes: string[] = [];
-
-    if (stopped !== null){
-        // the circuit breaker or the spend cap: still running if batches are at Anthropic (as after an error), failed otherwise
-        state = result.inFlight > 0 ? "running" : "failed";
-        notes.push(stopped);
-        if (result.inFlight > 0) notes.push(stillAtAnthropic(result.inFlight));
-    } else if (result.needModel > 0){
-        state = "off";
-        notes.push(`ANTHROPIC_API_KEY is not set, so ${result.needModel} of ${result.total} summaries can't be written`);
-    } else if (result.inFlight > 0){
-        state = "running";
-        notes.push(`${plural(result.inFlight, "request")} at Anthropic in batches; run npm run summarize to collect them`);
-    } else{
-        if (result.failed > 0) notes.push(`${result.failed} failed this run (retried next run)`);
-        if (result.lazy > 0) notes.push(`${result.lazy} out of date (redone when opened)`);
-    }
-
-    writeStage(ctx.db, ctx.repoId, "summaries", {
-        state,
-        done: result.upToDate,
-        total: result.total,
-        ...(notes.length > 0 ? { note: notes.join("; ") } : {}),
-    });
+    writeStage(ctx.db, ctx.repoId, "summaries", summaryStageStatus(targets, {
+        summarizerAvailable: hasSummarizer,
+        inFlight: result.inFlight,
+        failed: result.failed,
+        stopped,
+    }));
     return result;
 }
 
 /**
- * The stage after a run stopped on an error. Requests still at Anthropic go on without this
- * process, and the next run collects them, so the stage stays "running" (ADR-032's exception)
- * instead of calling paid-for work failed.
+ * The stage after a run stopped on an error. Requests still at Anthropic go on without this process, and the next run
+ * collects them, so the stage stays "running" (ADR-032's exception) instead of calling paid-for work failed. When the
+ * error was batches that couldn't be read, the note says how to give up on them.
  */
-function reportRunError(db: Db, repoId: number, targets: readonly PlannedTarget[], err: unknown): void {
+function reportRunError(db: Db, repoId: number, root: string, targets: readonly PlannedTarget[], err: unknown): void {
     try{
         const inFlight = countInFlight(db, repoId);
-        const progress = { done: upToDate(targets), total: targets.length };
-        writeStage(db, repoId, "summaries", inFlight > 0
-            ? { state: "running", ...progress, note: `${messageOf(err)}; ${stillAtAnthropic(inFlight)}` }
-            : { state: "failed", ...progress, note: messageOf(err) });
+        const notes = [messageOf(err)];
+        if (inFlight > 0) notes.push(stillAtAnthropic(inFlight));
+        if (err instanceof BatchesUnreachableError) notes.push(releaseHint(root, err.batchIds));
+        writeStage(db, repoId, "summaries", {
+            state: inFlight > 0 ? "running" : "failed",
+            done: upToDate(targets),
+            total: targets.length,
+            note: notes.join("; "),
+        });
     } catch{
         // the database itself may be what failed (SQLITE_BUSY, say); the original error matters more
     }
-}
-
-/** The note for requests a stopped run leaves at Anthropic: they're paid for, and the next run collects them. */
-function stillAtAnthropic(inFlight: number): string {
-    return `${plural(inFlight, "request")} still at Anthropic; run npm run summarize to collect them`;
 }
 
 function upToDate(targets: readonly PlannedTarget[]): number {

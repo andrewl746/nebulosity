@@ -1,22 +1,25 @@
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
+import type { IndexStage } from "../contracts";
 import { getDb, type Db } from "../db/client";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
+import { deferCodeSearch, fillCodeSearch, isCodeSearchDeferred } from "../db/store/search";
 import { writeStage } from "../db/store/stages";
 import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
     type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
 import { pruneSummaries } from "../db/store/summaries";
+import { bumpIndexVersion } from "../db/store/version";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
 import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
 import { repoKey } from "./paths";
-import { createResolver } from "./resolve";
+import { createResolver, edgesFrom } from "./resolve";
 
-export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
+export type { IndexStage };
 
 export type IndexOptions = {
     /** Called at least once per stage, in order. done/total count files (folders for "aggregate"). */
@@ -24,6 +27,11 @@ export type IndexOptions = {
     /** Files parsed and committed per transaction. */
     batchSize?: number;
     maxFileBytes?: number;
+    /**
+     * At least this many files to parse (new, or with no stored hash) and code search is filled in one go after the
+     * structure stage instead of by a trigger per chunk (ADR-031, amended). Default 2,000.
+     */
+    bulkSearchThreshold?: number;
 };
 
 export type IndexResult = {
@@ -40,6 +48,8 @@ export type IndexResult = {
     skipped: SkippedFile[];
     timingsMs: Record<IndexStage, number>;
     totalMs: number;
+    /** Filling code search after a bulk run (0 when it wasn't deferred); not part of totalMs (S1). */
+    searchIndexMs: number;
     usedGit: boolean;
     indexedHead: string | null;
 };
@@ -77,6 +87,9 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
     let stageRepoId: number | null = null;   // set once the repo row exists, so a failure can be reported on it
 
     try{
+        // a bulk run that died before filling code search left it deferred: repair that before anything else
+        if (isCodeSearchDeferred(db)) fillCodeSearch(db);
+
         const repoId = upsertRepository(db, repoKey(root));
         stageRepoId = repoId;
         writeStage(db, repoId, "structure", { state: "running", done: 0, total: 0, note: "discovering files" });
@@ -88,6 +101,10 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         timingsMs.discover = performance.now() - t;
         options.onProgress?.("discover", discovered.files.length, discovered.files.length);
         writeStage(db, repoId, "structure", { state: "running", done: 0, total: discovered.files.length });
+
+        const toParse = discovered.files.filter((f) => (stored.get(f.path)?.contentHash ?? "") === "").length;
+        const deferred = toParse >= (options.bulkSearchThreshold ?? 2_000);
+        if (deferred) deferCodeSearch(db);
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
@@ -118,19 +135,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 }
 
                 try{
-                    const parsed = parseTypeScriptFile(file.path, text);
-                    records.push({
-                        path: file.path,
-                        kind: /\.(tsx|jsx)$/.test(file.path) ? "component" : "module",
-                        contentHash,
-                        language: languageOf(file.path),
-                        sizeBytes: file.sizeBytes,
-                        lineCount: parsed.lineCount,
-                        isTest: isTestPath(file.path),
-                        importSpecifiers: parsed.imports,
-                        chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
-                        symbols: parsed.symbols,
-                    });
+                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes));
                 } catch (err){
                     errors.push({ path: file.path, error: message(err) });
                 }
@@ -156,15 +161,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const resolve = createResolver(root, fileSet);
         const edges: ImportEdge[] = [];
 
-        for (const [source, file] of current){
-            const targets = new Set<string>();
-            for (const specifier of file.importSpecifiers){
-                const target = resolve(source, specifier);
-                if (target === null || targets.has(target)) continue;   // one edge per file pair
-                targets.add(target);
-                edges.push({ source, target, specifier });
-            }
-        }
+        for (const [source, file] of current) edges.push(...edgesFrom(resolve, source, file.importSpecifiers));
 
         const edgeCount = replaceImports(db, repoId, edges);
         timingsMs.resolve = performance.now() - t;
@@ -187,6 +184,12 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             total: fileSet.size,
             ...(errors.length > 0 ? { note: `${errors.length} files failed to index` } : {}),
         });
+        bumpIndexVersion(db, repoId);   // the Map refetches what it shows (ADR-036)
+
+        const totalMs = performance.now() - started;   // S1 is the structure stage: everything above
+        const searchStarted = performance.now();
+        if (deferred) fillCodeSearch(db);
+        const searchIndexMs = deferred ? performance.now() - searchStarted : 0;
 
         return {
             repoId,
@@ -200,7 +203,8 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             errors,
             skipped: discovered.skipped,
             timingsMs,
-            totalMs: performance.now() - started,
+            totalMs,
+            searchIndexMs,
             usedGit: discovered.usedGit,
             indexedHead,
         };
@@ -230,4 +234,21 @@ function isDirectory(p: string): boolean {
     } catch{
         return false;   // missing, or unreachable through a file (ENOTDIR)
     }
+}
+
+/** One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed. */
+export function toFileRecord(filePath: string, text: string, contentHash: string, sizeBytes: number): FileRecord {
+    const parsed = parseTypeScriptFile(filePath, text);
+    return {
+        path: filePath,
+        kind: /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",
+        contentHash,
+        language: languageOf(filePath),
+        sizeBytes,
+        lineCount: parsed.lineCount,
+        isTest: isTestPath(filePath),
+        importSpecifiers: parsed.imports,
+        chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
+        symbols: parsed.symbols,
+    };
 }

@@ -15,14 +15,14 @@ export const DEFAULT_MAX_FILE_BYTES = 1_000_000;
  * needs this too, because a repo whose .gitignore doesn't list node_modules would
  * otherwise hand over its whole dependency tree as untracked files.
  */
-const IGNORED_DIRS = new Set(["node_modules", ".git", ".next", ".nebulosity"]);
+export const IGNORED_DIRS: ReadonlySet<string> = new Set(["node_modules", ".git", ".next", ".nebulosity"]);
 
 /**
  * Build output and coverage reports, skipped only when walking. In a git repo .gitignore
  * already decides, and a tracked folder with one of these names can be real source:
  * VS Code keeps its build scripts in build/.
  */
-const WALK_ONLY_IGNORED_DIRS = new Set(["dist", "out", "build", "coverage"]);
+export const WALK_ONLY_IGNORED_DIRS: ReadonlySet<string> = new Set(["dist", "out", "build", "coverage"]);
 
 /**
  * Lists a repository's source files as sorted, repo-relative, forward-slash paths.
@@ -133,5 +133,39 @@ export function readGitHead(repoRoot: string): string | null {
         return head || null;
     } catch{
         return null;
+    }
+}
+
+/**
+ * Whether discoverFiles would leave this path out whatever its contents: a .env file, an extension no adapter claims,
+ * or a folder it never enters (plus build output when walking). The incremental update (update.ts) asks this of every
+ * path a watcher reports, so a file is in the index exactly when a full run would put it there.
+ */
+export function isExcludedPath(rel: string, opts: { extensions: readonly string[]; usedGit: boolean }): boolean {
+    const segments = rel.split("/");
+    const base = segments[segments.length - 1];
+    if (base.startsWith(".env") || !opts.extensions.some((ext) => rel.endsWith(ext))) return true;
+
+    const parents = segments.slice(0, -1);
+    if (parents.some((segment) => IGNORED_DIRS.has(segment))) return true;
+    return !opts.usedGit && parents.some((segment) => WALK_ONLY_IGNORED_DIRS.has(segment));
+}
+
+/**
+ * Which of these paths .gitignore excludes, asked of git once for all of them. Tracked files are never reported, by
+ * git's own rule, which matches ls-files. Exit status 1 means none is ignored; a git that can't answer ignores nothing.
+ */
+export function gitIgnored(repoRoot: string, rels: readonly string[]): Set<string> {
+    if (rels.length === 0) return new Set();
+
+    try{
+        const out = execFileSync("git", ["-C", repoRoot, "check-ignore", "-z", "--stdin"], {
+            input: rels.join("\0"),
+            stdio: ["pipe", "pipe", "ignore"],
+            maxBuffer: 64 * 1024 * 1024,
+        });
+        return new Set(out.toString("utf8").split("\0").filter(Boolean).map(normalizeSlashes));
+    } catch{
+        return new Set();
     }
 }

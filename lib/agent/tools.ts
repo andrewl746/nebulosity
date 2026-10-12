@@ -4,27 +4,44 @@ import { Command } from "@langchain/langgraph";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
-import { retrieve, getVectorCache } from "@/lib/retrieve";
-import { loadGraph, getCentralFiles } from "@/lib/db/graph-store";
-import { IGNORE_LIST } from "@/lib/scan"; // requires exporting it in scan.ts first
+import { readConfig } from "@/lib/config";
+import { getDb } from "@/lib/db/client";
+import { findRepository, loadImportEdgesFrom, loadImportEdgesTouching } from "@/lib/db/store/structure";
+import { loadFileFacts, loadFolderFacts } from "@/lib/db/store/summaries";
+import { search } from "@/lib/engine/search";
+import { IGNORED_DIRS } from "@/lib/index/discover";
+import { repoKey } from "@/lib/index/paths";
 
-const REPO_ROOT = process.cwd();
 const MAX_READ_LINES = 400;
+
+// V1.3: the tools answer about the active repo (.nebulosity/config.json) from the new engine. V1.4 moves their logic
+// into lib/tools/registry.ts, and E1 wraps the registry's entries for the Guide (PIVOT_SPEC.md §6.2).
+
+/** The repo the tools work on, and its id; null until one is indexed. */
+function activeRepo(): { root: string; repoId: number } | null {
+    const root = readConfig().activeRepo;
+    if (root === null) return null;
+    const repoId = findRepository(getDb(), repoKey(root));
+    return repoId === null ? null : { root, repoId };
+}
+
+const NO_REPO = "ERROR INDEX_EMPTY: no repository is indexed yet — tell the user to run npm run index -- <path-to-repo>.";
 
 // makes sure the relative path:
 // 1. doesn't escape the repo (e.g., ../../../../etc/passwd)
 // 2. doesn't touch ignored directories (e.g., .next, .git)
 // 3. doesn't touch any secrets (e.g., .env)
-function safePath(relativePath: string): { ok: true; absolute: string } | { ok: false; error: string } {
-    const resolved = path.resolve(REPO_ROOT, relativePath);
+function safePath(root: string, relativePath: string): { ok: true; absolute: string } | { ok: false; error: string } {
+    const base = path.resolve(root);
+    const resolved = path.resolve(base, relativePath);
 
-    if (resolved !== REPO_ROOT && !resolved.startsWith(REPO_ROOT + path.sep)){
+    if (resolved !== base && !resolved.startsWith(base + path.sep)){
         return { ok: false, error: `Path "${relativePath}" resolves outside the repository.` };
     }
 
-    const segments = path.relative(REPO_ROOT, resolved).split(path.sep);
+    const segments = path.relative(base, resolved).split(path.sep);
 
-    if (segments.some((s) => IGNORE_LIST.includes(s) || s.startsWith(".env"))){
+    if (segments.some((s) => IGNORED_DIRS.has(s) || s.startsWith(".env"))){
         return { ok: false, error: `Path "${relativePath}" is not accessible.` };
     }
 
@@ -34,34 +51,32 @@ function safePath(relativePath: string): { ok: true; absolute: string } | { ok: 
 /* ─────────────────────────── Knowledge tools ─────────────────────────── */
 export const searchCode = tool(
     async ({ query }: { query: string }, runtime: ToolRuntime) => {
-        const vectorCache = await getVectorCache();
+        const repo = activeRepo();
+        if (!repo) return NO_REPO;
 
-        if (vectorCache.lastIndexAtMs === null){
-            return "ERROR INDEX_EMPTY: no index exists yet — tell the user to run indexing first.";
+        const result = await search(repo.root, query, { limit: 8 });
+
+        if (result.hits.length === 0){
+            return `No results for "${query}". Try rewording the query once before concluding the code doesn't exist.${result.note ? ` (${result.note})` : ""}`;
         }
 
-        const results = await retrieve(query);
+        // one line per file or folder: what it is, then its best-matching code when there is some
+        const formatted = result.hits
+            .map((h, i) => `[${i + 1}] ${h.path}${h.kind === "folder" ? "/" : ""} · ${h.tagline ?? "(no summary yet)"}`
+                + (h.code ? `\n    ${h.code.symbol}, lines ${h.code.startLine}-${h.code.endLine}: ${h.code.snippet}` : ""))
+            .join("\n");
 
-        if (results.length === 0){
-            return `No results above the relevance threshold for "${query}". Try rewording the query once before concluding the code doesn't exist.`;
-        }
-
-        // format matches the one in RAG_PIPELINE.md exactly 
-        const formatted = results
-            .map((r, i) => `[${i + 1}] ${r.filePath}:${r.startLine}-${r.endLine} · ${r.kind} ${r.name} (score ${r.score.toFixed(2)})\n${r.text}`)
-            .join("\n\n");
-        
         // cite every file this search actually surfaced
         return new Command({
             update: {
                 messages: [new ToolMessage({ content: formatted, tool_call_id: runtime.toolCallId })],
-                sources: [...new Set(results.map((r) => r.filePath))]
+                sources: result.hits.filter((h) => h.kind === "file").map((h) => h.path)
             }
         });
     },
     {
         name: "search_code",
-        description: "Semantic search over the repository's code. Use for any question about how something works or where something happens. Reword and retry if results look irrelevant.",
+        description: "Hybrid search over the repository: code keywords, summary keywords and summary meaning. Use for any question about how something works or where something happens. Reword and retry if results look irrelevant.",
         schema: z.object({ query: z.string() })
     }
 );
@@ -71,7 +86,10 @@ export const readFile = tool(
         { path: relativePath, startLine, endLine }: { path: string; startLine?: number; endLine?: number },
         runtime: ToolRuntime
     ) => {
-        const guard = safePath(relativePath);
+        const repo = activeRepo();
+        if (!repo) return NO_REPO;
+
+        const guard = safePath(repo.root, relativePath);
 
         if (!guard.ok){
             return `ERROR: ${guard.error}`;
@@ -114,7 +132,10 @@ export const readFile = tool(
 
 export const listDirectory = tool(
     ({ path: relativePath }) => {
-        const guard = safePath(relativePath);
+        const repo = activeRepo();
+        if (!repo) return NO_REPO;
+
+        const guard = safePath(repo.root, relativePath);
 
         if (!guard.ok){
             return `ERROR: ${guard.error}`;
@@ -129,7 +150,7 @@ export const listDirectory = tool(
         }
 
         const lines = entries
-            .filter((e) => !IGNORE_LIST.includes(e.name) && !e.name.startsWith("."))
+            .filter((e) => !IGNORED_DIRS.has(e.name) && !e.name.startsWith("."))
             .map((e) => {
                 if (e.isDirectory()) return `${e.name}/ (dir)`;
                 const size = fs.statSync(path.join(guard.absolute, e.name)).size;
@@ -147,16 +168,13 @@ export const listDirectory = tool(
 
 export const getDependencies = tool(
     ({ path: filePath }) => {
-        const graph = loadGraph(REPO_ROOT);
+        const repo = activeRepo();
+        if (!repo) return NO_REPO;
 
-        if (!graph){
-            return "ERROR: no scan exists yet (the repository has not been scanned).";
-        }
-
-        const edges = graph.edges.filter((e) => e.source === filePath);
+        const edges = loadImportEdgesFrom(getDb(), repo.repoId, [filePath]);
 
         if (edges.length === 0){
-            return `"${filePath}" has no outgoing dependencies (or the path doesn't exist in the graph).`;
+            return `"${filePath}" has no outgoing dependencies (or the path isn't indexed).`;
         }
 
         return edges.map((e) => `${e.target} (via "${e.specifier}")`).join("\n");
@@ -170,16 +188,13 @@ export const getDependencies = tool(
 
 export const getImporters = tool(
     ({ path: filePath }) => {
-        const graph = loadGraph(REPO_ROOT);
+        const repo = activeRepo();
+        if (!repo) return NO_REPO;
 
-        if (!graph){
-            return "ERROR: no scan exists yet (the repository has not been scanned).";
-        }
-
-        const edges = graph.edges.filter((e) => e.target === filePath);
+        const edges = loadImportEdgesTouching(getDb(), repo.repoId, [filePath]).filter((e) => e.target === filePath);
 
         if (edges.length === 0){
-            return `No files import "${filePath}" (or the path doesn't exist in the graph).`;
+            return `No files import "${filePath}" (or the path isn't indexed).`;
         }
 
         return edges.map((e) => `${e.source} (via "${e.specifier}")`).join("\n");
@@ -192,20 +207,25 @@ export const getImporters = tool(
 );
 
 export const getCentralFilesTool = tool(
-        ({ limit }) => {
-        const central = getCentralFiles(REPO_ROOT).slice(0, limit ?? 10);
+    ({ limit }) => {
+        const repo = activeRepo();
+        if (!repo) return NO_REPO;
+
+        const central = loadFileFacts(getDb(), repo.repoId)
+            .sort((a, b) => b.importedBy - a.importedBy || (a.path < b.path ? -1 : 1))
+            .slice(0, limit ?? 10);
 
         if (central.length === 0){
-            return "ERROR: no scan exists yet (the repository has not been scanned).";
+            return "The index holds no files yet.";
         }
 
         return central
-            .map((f, i) => `${i + 1}. ${f.path} (in ${f.inDegree} / out ${f.outDegree})`)
+            .map((f, i) => `${i + 1}. ${f.path} (imported by ${f.importedBy})`)
             .join("\n");
     },
     {
         name: "get_central_files",
-        description: "Files ranked by degree centrality (high in-degree files are load-bearing and a good place to start reading).",
+        description: "Files ranked by how many files import them (in-degree, ADR-010): load-bearing files, and a good place to start reading.",
         schema: z.object({ limit: z.number().optional() })
     }
 );
@@ -216,8 +236,9 @@ export const highlightNodes = tool(
     // `reason` isn't read here — the schema requires it purely so the model has
     // to articulate WHY it's highlighting something, per AI_AGENT_DESIGN.md §3
     ({ nodeIds, reason: _reason }: { nodeIds: string[]; reason: string }, runtime: ToolRuntime) => {
-        const graph = loadGraph(REPO_ROOT);
-        const validIds = new Set(graph?.files.map((f) => f.path) ?? []);
+        const repo = activeRepo();
+        const db = getDb();
+        const validIds = new Set(repo ? [...loadFileFacts(db, repo.repoId).map((f) => f.path), ...loadFolderFacts(db, repo.repoId).map((f) => f.path)] : []);
 
         const valid = nodeIds.filter((id) => validIds.has(id));
         const invalid = nodeIds.filter((id) => !validIds.has(id));
@@ -225,8 +246,8 @@ export const highlightNodes = tool(
         // the model needs to know if some ids were dropped so it can correct
         // itself (AI_AGENT_DESIGN.md §3) (that's why this isn't just "ok")
         const content = invalid.length > 0
-            ? `Highlighted ${valid.length} file(s). Ignored invalid ids (not in graph): ${invalid.join(", ")}`
-            : `Highlighted ${valid.length} file(s).`;
+            ? `Highlighted ${valid.length} path(s). Ignored invalid ids (not in the index): ${invalid.join(", ")}`
+            : `Highlighted ${valid.length} path(s).`;
 
         return new Command({
             update: {
@@ -237,7 +258,7 @@ export const highlightNodes = tool(
     },
     {
         name: "highlight_nodes",
-        description: "Highlight one or more files on the dependency graph while discussing them.",
+        description: "Highlight one or more files or folders on the Map while discussing them.",
         schema: z.object({
             nodeIds: z.array(z.string()),
             reason: z.string()
@@ -256,7 +277,7 @@ export const focusNode = tool(
     },
     {
         name: "focus_node",
-        description: "Pan/zoom the graph camera to a specific file.",
+        description: "Move the Map to a specific file or folder.",
         schema: z.object({ nodeId: z.string() })
     }
 );
@@ -272,7 +293,7 @@ export const clearHighlights = tool(
     },
     {
         name: "clear_highlights",
-        description: "Reset all graph highlights, e.g. when the topic changes.",
+        description: "Reset all Map highlights, e.g. when the topic changes.",
         schema: z.object({})
     }
 );

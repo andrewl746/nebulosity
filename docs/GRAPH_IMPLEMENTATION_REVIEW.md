@@ -241,3 +241,7 @@ Expected edges — exactly two (the `"react"` import produces none):
 Dedupe vector: a file with `imports: ["./a", "./a"]` (where `a.ts` exists) yields **one** edge. Self-import vector: `{ id: "lib/a.ts", imports: ["./a"] }` yields **zero** edges.
 
 **Extension-priority vector** (moved here 2026-07-13 from §3.3, since extension matching now lives inline in `toFlowGraph`, not in `resolveImport`): given scanned files `lib/b.ts` (`imports: ["./a"]`), `lib/a.ts`, and `lib/a/index.ts` (both present), the resulting edge must target `lib/a.ts` — the loop's `for (const ext of EXTENSION_CANDIDATES)` tries `.ts` before `/index.ts`, so the first one wins. If this ever regresses to matching `lib/a/index.ts` instead, `EXTENSION_CANDIDATES`'s order was changed or the loop stopped breaking on first match.
+
+## 2026 10 12 Retirement note (slice V1.3)
+
+The regex scanner (`lib/scan.ts`), the old graph transform (`lib/graph.ts`) and the 35 tests of `lib/graph.test.ts` were deleted in slice V1.3 (ADR-040). PART 3's golden vectors describe code that no longer exists. Imports now come from the TypeScript AST (ADR-026), and are tested against `test/fixtures/mini-repo` and its hand-derived ground truth (the V1.1 plan). The vectors stay above as history (PIVOT_SPEC.md §11).

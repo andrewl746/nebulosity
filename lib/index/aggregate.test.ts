@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFolders, buildLevelEdges, childToward, lcaFolder } from "./aggregate";
+import { buildFolders, buildLevelEdges, childToward, lcaFolder, levelEdgeDeltas } from "./aggregate";
 
 const FILES = [
     "scripts/build.js", "src/app/main.ts", "src/app/view.tsx", "src/core/index.ts",
@@ -76,5 +76,21 @@ describe("buildLevelEdges", () => {
 
     it("never loses or double-counts an import (the counts sum to the edge count)", () => {
         expect(buildLevelEdges(EDGES).reduce((sum, row) => sum + row.count, 0)).toBe(EDGES.length);
+    });
+});
+
+describe("levelEdgeDeltas", () => {
+    it("nets removals against additions at the row each import is counted on", () => {
+        // main.ts's import moves from core/log.ts to core/index.ts: both are counted on (src, src/app → src/core)
+        expect(levelEdgeDeltas([{ source: "src/app/main.ts", target: "src/core/log.ts" }], [{ source: "src/app/main.ts", target: "src/core/index.ts" }]))
+            .toEqual([]);
+        expect(levelEdgeDeltas([], [{ source: "src/util/strings.ts", target: "src/core/log.ts" }]))
+            .toEqual([{ levelPath: "src", sourceNode: "src/util", targetNode: "src/core", count: 1 }]);
+        expect(levelEdgeDeltas([{ source: "src/core/index.ts", target: "src/core/log.ts" }], []))
+            .toEqual([{ levelPath: "src/core", sourceNode: "src/core/index.ts", targetNode: "src/core/log.ts", count: -1 }]);
+    });
+
+    it("from nothing, builds exactly what buildLevelEdges builds", () => {
+        expect(levelEdgeDeltas([], EDGES)).toEqual(buildLevelEdges(EDGES));
     });
 });

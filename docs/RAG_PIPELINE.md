@@ -120,7 +120,7 @@ Under the budget the run prints `budget: spent $… + at Anthropic ≈ $… + th
 - While it collects, the stage note reads `over budget, so nothing new goes out; collecting the N batches already at Anthropic`. After each collection the run checks again, with the real usage in place of the estimates, and sends if the projection now fits.
 - It finishes over budget once nothing more can happen: nothing in flight, or nothing more ended under `--no-wait`. The stage is then `failed`, or `running` while batches are still at Anthropic, and the note starts with `stopped:`, as after the circuit breaker.
 
-The budget is `--budget <usd>`, default $15 (S2). The projection runs a little low, by an estimated under $1 on VS Code. The rest is priced by batch, but waves under 100 requests go through the regular API at full price: at the top of the tree, and also mid-run, when file batches land at different times. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
+The budget is `--budget <usd>`, default $15 (S2). The background worker caps each refresh and sweep at $1 of its own spend instead (`budgetScope: "run"`, ADR-035 amended). The projection runs a little low, by an estimated under $1 on VS Code. The rest is priced by batch, but waves under 100 requests go through the regular API at full price: at the top of the tree, and also mid-run, when file batches land at different times. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
 
 ---
 
@@ -183,6 +183,8 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 - **Summaries:** a changed file has a new content hash, so a new inputHash, so it's ready again. Its folders follow as described in §4. Nothing whose input is unchanged is ever re-summarized.
 - **Vectors:** deleted when their summary's text changes, refilled by the next embeddings run.
 
+A saved file reaches the index through the background worker's `applyFileChanges` within about a second of the last save (ADR-037). The worker then re-plans the summaries (the file's summary turns stale), and redoes that file's summary after 60 quiet seconds, at most 50 files per refresh (ADR-038).
+
 ---
 
 ## 8. Failure modes and honest limitations
@@ -192,6 +194,7 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 | No API key | No summaries | Stage `off` with the reason; templates, structure and code search still work |
 | Batch takes hours | Summaries arrive late | Keyword search works meanwhile; `--no-wait` and resume; `summarizeNow` for what someone opens |
 | The network drops while waiting on a batch | Polls fail | A failed poll is asked again on the next pass. After 5 passes in a row in which no batch could be checked, or a rejected key, the run stops; the stage stays `running`, and the next run collects the batch |
+| A batch's results never download (a malformed result line, a 5xx on that one batch) | Every run gives up at the same batch, its rows claimed | The run gives up after 5 missed passes; the stage note names the batch and the `--release-batch` command, which resends its requests (paid again) |
 | File edited after indexing | Summary would describe bytes the index never saw | That target fails with "changed after it was indexed" and is retried after `npm run index` |
 | Summarizing while `npm run index` runs | Files fail as "changed after it was indexed" | The run refuses to start until the structure stage is `ready` |
 | A batch can't be submitted | Nothing goes out | The run stops with its rows still pending; batches already submitted are collected next run. A batch that was accepted but couldn't be recorded has its id printed and in the error |

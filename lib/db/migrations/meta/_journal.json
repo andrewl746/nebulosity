@@ -36,6 +36,20 @@
       "when": 1791748389085,
       "tag": "0004_v1_2_search_index",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791830256686,
+      "tag": "0005_v1_3_drop_chunk_vectors",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791831490270,
+      "tag": "0006_v1_3_deferred_code_search",
+      "breakpoints": true
     }
   ]
 }

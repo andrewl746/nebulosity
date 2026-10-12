@@ -1,7 +1,7 @@
 import path from "path";
 import type { SearchHit, SearchList, SearchResult } from "../contracts";
 import { getDb, type Db } from "../db/client";
-import { loadSummaryText, searchCode, searchSummaries, type CodeMatch } from "../db/store/search";
+import { isCodeSearchDeferred, loadSummaryText, searchCode, searchSummaries, type CodeMatch } from "../db/store/search";
 import { requireRepository } from "../db/store/structure";
 import { targetKey } from "../db/store/summaries";
 import { countEmbeddable, loadSummaryVectors, summaryVectorStamp } from "../db/store/summary-vectors";
@@ -114,6 +114,7 @@ export async function search(repoRoot: string, query: string, options: SearchOpt
         }
     }
 
+    if (isCodeSearchDeferred(db)) notes.push("Code search is still being built after a large index run, so code results may be missing.");
     if (countEmbeddable(db, repoId) === 0) notes.unshift("Summaries aren't ready yet, so results come from code keywords only.");
     else if (index.targets.length === 0) notes.unshift("Summaries aren't embedded yet, so results come from keywords only.");
 

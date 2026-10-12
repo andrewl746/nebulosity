@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Nebulosity System Architecture
 
-> **2026-10-11 — pivot:** `PIVOT_SPEC.md` is now the entry point. It supersedes §2's diagram (no native scanner; the MCP server and static exporter are new adapters), §5's layout and §6 Flow A. §3's layering rules still hold, and rule 4 now also requires a renderer-agnostic `contracts.ts`. Sections are rewritten as each pivot slice lands.
+> **Updated in slice V1.3** for the pivot (`PIVOT_SPEC.md`): §2, §4, §5 and §6 below describe the Map, the background worker and the live channel. §3's layering rules hold unchanged.
 
 **Status:** Approved design, not yet fully implemented
 **Date:** 2026-07-10
@@ -22,39 +22,30 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
 ## 2. The system at a glance
 
 ```
-┌─────────────────────────────  BROWSER (client)  ─────────────────────────────┐
-│                                                                              │
-│   TerminalPanel ────────┐          GraphCanvas (React Flow)                  │
-│   (chat UI, streams     │          (nodes, edges, highlights,                │
-│    agent responses)     │           camera focus)                            │
-│            │            │                    ▲                               │
-│            │      UI actions executed here ──┘                               │
-└────────────┼─────────────────────────────────────────────────────────────────┘
-             │  HTTP + SSE (JSON contracts — see API_CONTRACTS.md)
-┌────────────▼──────────────  NEXT.JS SERVER (adapters)  ──────────────────────┐
-│   app/api/graph      app/api/index      app/api/chat       app/api/health    │
-│   (thin route handlers: parse request → call core → serialize response)      │
-└────────────┬──────────────────────────────────────────────────────────────── ┘
-             │  plain function calls
-┌────────────▼────────────────────  CORE (lib/)  ──────────────────────────────┐
-│                                                                              │
-│  scanner-bridge.ts ──► graph.ts       chunk.ts ──► embed.ts ──► retrieve.ts  │
-│   │ prefers native,    (nodes/edges   (AST →       (text →      (top-k       │
-│   │ falls back to       + layout)      chunks)      vectors)     search)     │
-│   │ scan.ts (Node)                                                           │
-│   │                                                                          │
-│  agent/ ── state.ts · tools.ts · prompts.ts · graph.ts (LangGraph loop)      │
-│   │                                                                          │
-│  db/ ── schema.ts · client.ts · graph-store.ts  (Drizzle, ADR-013)           │
-└───┬─────────────────────┬──────────────────────────────────┬─────────────────┘
-    │ spawn + JSON        │                                  │
-    │ over stdout (IPC)   │                                  │
-┌───▼────────────────┐ ┌──▼─────────────────────┐  ┌─────────▼─────────┐
-│ native/scanner     │ │ .nebulosity/           │  │  Anthropic API    │
-│ (C++17 thread pool │ │ nebulosity.db (SQLite, │  │  (Claude models)  │
-│  scanner, ADR-014) │ │ WAL) — the data layer  │  └───────────────────┘
-└────────────────────┘ └────────────────────────┘
+┌──────────────────────────────── BROWSER ─────────────────────────────────┐
+│  The Map (app/map): one level on a React Flow canvas, the detail panel,  │
+│  ⌘K search, the status pill, the live dock                               │
+└──────────────┬────────────────────────────────────────▲──────────────────┘
+               │ HTTP (app/map/api.ts)                  │ SSE /api/live/stream
+┌──────────────▼──────────── NEXT.JS SERVER (adapters, a reader) ─────────┴┐
+│  app/api/{level, describe, search, status, summarize, index, repos,      │
+│           live, live/stream}         instrumentation.ts → supervisor     │
+└──────────────┬──────────────────────────────┬────────────────────────────┘
+               │ plain function calls          │ fork + IPC (ADR-038)
+┌──────────────▼────────────── CORE (lib/) ────▼────────────────────────────┐
+│ engine/      level · describe · graph (areas) · search · status · repos   │
+│ index/       discover → parse → resolve → aggregate · update · watch      │
+│              summarize/ (plan, run, Claude) · embed                       │
+│ background/  service (the worker's logic) · supervisor · protocol         │
+│ live/        hub · guard · poster        db/  schema · client · store/*   │
+└──────────────┬──────────────────────────────────────────┬─────────────────┘
+               │                                          │
+  .nebulosity/nebulosity.db (SQLite, WAL):          Anthropic API
+  read by the server; written by the worker         (summaries, from the worker
+  and the CLI                                        and the CLI)
 ```
+
+The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server (V1.4) is a third process: read-only on the database, posting live events to the server.
 
 ---
 
@@ -91,10 +82,10 @@ Rules an implementer MUST follow:
 | Concern | Where | Why |
 |---|---|---|
 | Filesystem scanning, AST parsing | Server (core) | Browsers cannot read the filesystem |
-| Chunking, embedding, vector search | Server (core) | CPU-heavy; embedding model runs in Node |
+| Indexing, file watching, summaries, embeddings | Background worker process (ADR-038) | CPU-heavy and long-running; it must never stall the server's requests |
 | LangGraph agent loop, tool execution | Server (core) | Holds API keys; calls Anthropic |
 | `.nebulosity/` storage reads/writes | Server (core) | Filesystem |
-| Graph rendering, pan/zoom, node drag | Client | Interactivity requires browser events/state |
+| The Map: rendering, pan/zoom, the panel | Client | Interactivity requires browser events/state |
 | Chat input, streamed message display | Client | Interactivity |
 | Executing UI actions (highlight/focus) | Client | They mutate React Flow state |
 | Secrets (`ANTHROPIC_API_KEY` in `.env.local`) | Server only | Never shipped to the browser |
@@ -106,66 +97,45 @@ Rules an implementer MUST follow:
 ```
 nebulosity/
 ├── app/
-│   ├── api/
-│   │   ├── graph/route.ts        # GET  — build/return dependency graph
-│   │   ├── index/route.ts        # POST — run indexing pipeline (SSE progress)
-│   │   ├── chat/route.ts         # POST — agent conversation (SSE stream)
-│   │   ├── search/route.ts       # GET  — debug: raw retrieval results
-│   │   └── health/route.ts       # GET  — index status, counts, versions
-│   ├── components/
-│   │   ├── GraphCanvas.tsx       # exists — gains highlight/focus support (Phase 1)
-│   │   ├── FileNode.tsx          # exists
-│   │   ├── TerminalPanel.tsx     # exists — gains real streaming chat (Phase 6)
-│   │   └── StarField.tsx         # exists
-│   ├── layout.tsx / page.tsx / globals.css / icon.svg
+│   ├── api/                 # adapters: level, describe, search, status, summarize, index, repos, live, live/stream; _lib/respond.ts
+│   ├── map/                 # the Map: MapView, MapCanvas, MapBox, DetailPanel, SearchPalette, StatusPill, LiveDock,
+│   │                        #   RepoMenu, the api.ts client, and pure helpers (layout, edges, paths, format, pulses)
+│   ├── components/StarField.tsx
+│   └── layout.tsx · page.tsx · globals.css
+├── instrumentation.ts       # starts the background worker with the server
+├── proxy.ts                 # every /api route: 403 unless the Host is this machine (ADR-039)
 ├── lib/
-│   ├── contracts.ts              # shared API + domain types (exists)
-│   ├── scan.ts                   # exists — Node import scanner (fallback engine)
-│   ├── scanner-bridge.ts         # exists — engine selection + IPC + fallback (ADR-014)
-│   ├── graph.ts                  # exists — nodes/edges + layout
-│   ├── chunk.ts                  # AST → code chunks (Phase 2)
-│   ├── embed.ts                  # text → vectors (Phase 3)
-│   ├── retrieve.ts               # query → top-k chunks (Phase 4)
-│   ├── db/                       # exists — the data layer (ADR-013)
-│   │   ├── schema.ts             #   tables: repositories/files/imports/chunks/vectors/meta/sessions
-│   │   ├── client.ts             #   getDb(): WAL, FKs, hot-reload-safe singleton
-│   │   └── graph-store.ts        #   saveScan (transactional) + loadGraph
-│   └── agent/
-│       ├── state.ts              # LangGraph state schema (Phase 5)
-│       ├── tools.ts              # tool implementations (Phase 5)
-│       ├── prompts.ts            # system prompt builder (Phase 5)
-│       └── graph.ts              # LangGraph wiring (Phase 5)
-├── native/scanner/               # exists — C++17 thread-pool scanner (ADR-014)
-│   ├── main.cpp                  #   traversal + worker pool + JSON over stdout
-│   ├── CMakeLists.txt
-│   └── README.md                 #   build instructions (toolchain optional)
-├── drizzle.config.ts             # exists — migration tooling config
-├── scripts/scan.ts               # exists — standalone CLI demo of the scanner
-├── docs/                         # this document set
-└── .nebulosity/nebulosity.db     # SQLite database (gitignored, derived)
+│   ├── contracts.ts · config.ts · home.ts · embed.ts · chunks.ts
+│   ├── db/                  # schema, client, batch, store/{structure, summaries, summary-vectors, search, stages, lock, map, version}
+│   ├── engine/              # level, describe, graph, freshness, search, status, repos, errors
+│   ├── index/               # discover, languages/, resolve, aggregate, pipeline, update, watch, embed, summarize/
+│   ├── background/          # service, supervisor, protocol, child, start
+│   ├── live/                # hub, event, sse, local, client
+│   └── agent/               # E1: tools.ts (ported in V1.3), state.ts
+├── scripts/                 # index, summarize, search, live, background (the worker), bench-map, bench-update, …
+├── test/                    # fixtures/mini-repo, helpers
+└── docs/
 ```
 
 ---
 
 ## 6. The three data flows
 
-### Flow A — Page load (graph display)
+### Flow A — Opening the Map
+1. The page loads. `MapView` polls `GET /api/status` every 2 s and fetches `GET /api/level?path=` for the root.
+2. The route calls `level()`: three indexed lookups (the children, their summaries, the level's `level_edges`), folded to 50 boxes (ADR-036).
+3. The canvas lays the boxes out with dagre and draws the lines. A click fetches `describe()` for the panel, and a missing summary is asked for once (`POST /api/summarize`, done by the worker).
+4. When the index version moves (a saved file, a summary landing), the Map refetches what's on screen.
 
-1. Browser requests `/`. The page fetches `GET /api/graph`.
-2. The route handler calls `scanProject()` → `toFlowGraph()` in core.
-3. Response: `{ nodes, edges, stats }` (see `API_CONTRACTS.md`).
-4. `GraphCanvas` renders it. No AI, no index required — the graph works even if the user never indexes or configures an API key.
-
-### Flow B — Indexing (one-time per repo, re-run after changes)
-
-1. User triggers `POST /api/index` (a button in the UI, Phase 6, or curl before that).
-2. Core pipeline per file: hash → skip if unchanged → AST-chunk → embed → persist.
-3. Progress streams back as SSE events (`scanning`, `chunking`, `embedding`, counts).
-4. Result lands in the SQLite database as one transaction per stage (see `DATABASE_DESIGN.md`). Nothing is held only in memory, so the server can restart without re-indexing.
+### Flow B — Indexing
+1. A full run is `npm run index -- <repo>`, or `POST /api/index` (the status pill's re-index, run by the worker). While the Map is open, the worker's watcher applies incremental updates instead (ADR-037).
+2. The structure stage: discover → parse changed files → write → resolve → aggregate (`lib/index/pipeline.ts`). Over HTTP, progress streams as SSE `progress` events, one per step (`API_CONTRACTS.md` §4).
+3. Summaries and embeddings follow in the background (`npm run summarize`, or the worker's refresh). Each stage reports its state at `GET /api/status`.
+4. Everything lands in SQLite (`DATABASE_DESIGN.md`). Nothing is held only in memory, so the server can restart without re-indexing.
 
 ### Flow C — Conversation (the core product loop)
 
-1. User sends a message from `TerminalPanel` → `POST /api/chat` `{ sessionId, message }`.
+1. User sends a message from the Guide's input (E1; `TerminalPanel` retired in V1.3) → `POST /api/chat` `{ sessionId, message }`.
 2. The route handler invokes the LangGraph agent (see `LANGGRAPH_DESIGN.md`).
 3. The agent loops: reason → call tools (`search_code`, `read_file`, `get_importers`, `highlight_nodes`, …) → reason → answer.
 4. Everything streams to the browser as SSE events: `token` (answer text), `tool_start`/`tool_end` (visible activity), `ui_action` (graph commands), `sources` (cited files), `done`.

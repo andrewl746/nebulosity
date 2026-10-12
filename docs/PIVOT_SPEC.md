@@ -48,7 +48,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 |---|---|---|
 | S1 | Structure stage (discover → parse → resolve → aggregate → write) | ≤ 60 s |
 | S2 | Full summary pass, tiered, via the Batch API | ≤ $15 |
-| S3 | Map interaction (click, zoom, level change → rendered) | ≤ 100 ms; level API ≤ 50 ms |
+| S3 | Map interaction (click, zoom, level change → rendered), on the production build (`next build` + `next start`; the dev server is slower on dense levels, docs/BENCHMARKS.md Map Benchmark #1) | ≤ 100 ms; level API ≤ 50 ms |
 | S4 | Boxes on screen at once, counting the "+N more" box | ≤ 50 |
 | S5 | MCP tool latency, warm (after the first call of a session) | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
@@ -81,7 +81,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 4. **Paths resolve from the install directory, not `cwd`.** `lib/db/client.ts` opens `.nebulosity/nebulosity.db` and the migrations folder relative to `process.cwd()`. Claude Code launches the MCP server from the *user's* repo, so both must resolve from `NEBULOSITY_HOME`, falling back to `process.cwd()` when it's unset. That fallback is correct for Next.js, the CLI and Vitest, which all run from the checkout. The MCP launcher (V1.4) always sets it.
 5. One database, many repos. The `repositories` table already supports this. WAL lets the MCP server read while the indexer writes. **The MCP server opens the database read-only and never runs migrations.** Only the Next server and CLI own the schema. Running two processes against one database file is exactly ADR-023's revisit trigger, and this is the answer to it.
 
-**Processes.** The Next.js server runs the UI, the API, the live channel, and background indexing on a worker thread. The MCP server is spawned once per Claude Code session, is read-only on the database, and posts live events over HTTP. CLI scripts cover index, export, bench and eval.
+**Processes.** The Next.js server runs the UI, the API and the live channel, and forks one background worker (ADR-038) that owns every write while the Map is open: the watcher, incremental updates, summary refreshes, the folder sweep and embeddings. The MCP server is spawned once per Claude Code session, is read-only on the database, and posts live events over HTTP. CLI scripts cover index, export, bench and eval.
 
 **Target layout and where today's files go:**
 
@@ -143,7 +143,7 @@ For every import edge `a → b`, take `L = LCA(dir(a), dir(b))`, the deepest fol
 - **Batched statements.** Every bulk write is split into statements of at most `floor(32,766 / columns)` rows, inside one transaction per batch of files. A regression test inserts more rows than one statement can hold.
 - **No `inArray` over every id.** Repo-scoped reads use joins on `repoId`.
 - Per-file transactions keep the existing atomicity: derived rows and the content hash land together or not at all (ADR-022).
-- `CONTRACTS_VERSION` → 2. A schema version mismatch triggers a rebuild, which is the existing rule.
+- `CONTRACTS_VERSION` → 2. It versions the API contract. Stored data changes only through Drizzle migrations, and nothing wipes the database on a version change (ADR-040).
 
 ---
 
@@ -180,22 +180,22 @@ Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; ot
 - **No API key** sets the stage to `off` with a reason. Everything else still works.
 - API usage follows the `claude-api` skill's TypeScript reference (official `@anthropic-ai/sdk`). Nothing is guessed.
 
-### 5.4 Embeddings (background, worker thread)
+### 5.4 Embeddings (background worker, ADR-038)
 Embed `tagline + summary + path` for each fresh summary with the existing MiniLM pipeline (ADR-005), storing results in `summary_vectors`. That's roughly 15–20k vectors, about 15 minutes at the measured 18/s. It runs in the background and never blocks the Map. Chunk-level embeddings are dropped: 94 minutes is unaffordable, and summaries carry meaning better than raw code chunks (ADR-027).
 
 ### 5.5 Later stages
 The call graph (E2), git history (E3) and clusters (E5) plug into the same stage and status mechanism.
 
 ### 5.6 Incremental updates and freshness
-- **Watcher.** While the Next server runs, a watcher (chokidar) covers the repo root, ignoring `.git` and `node_modules`. Structure updates are debounced by 1 s. A file's summary refreshes only after 60 s with no further change to that file.
-- **Startup check.** Size and modification time act as a fast filter, and only candidates get re-hashed. Even a full re-read is cheap: 2.4 s for VS Code.
+- **Watcher.** While the Next server runs, its background worker (ADR-038) watches the repo root with chokidar. It ignores `.git`, `node_modules` and the other folders discovery skips, plus build output (`dist`, `out`, `build`, `coverage`; in a git repo only where `.gitignore` leaves them out) and top-level folders `.gitignore` leaves out. Structure updates are debounced by 1 s (5 s at most during a steady stream). A file's summary refreshes only after 60 s with no further change to that file, and at most 50 files are refreshed automatically in any 10 minutes, under a $1 cap per refresh.
+- **Startup check.** Size and modification time act as a fast filter, and only candidates get re-hashed. Even a full re-read is cheap: 2.4 s for VS Code. (V1.3 runs one warm full run in the worker, 4.9 s on VS Code; the size-and-mtime filter waits until that's too slow.)
 - **When file F changes:**
   - Re-parse F and replace its rows.
   - Re-resolve F's imports.
   - Re-resolve imports **into** F's path only when F is created, deleted or renamed.
-  - Rebuild the aggregates.
+  - Update the aggregates by deltas: each import moves its level edge's count by one (ADR-037).
   - F's summary becomes `stale` and is redone after the debounce.
-  - Ancestor folder summaries become `stale` and are refreshed lazily, when viewed or by a periodic sweep, so a `git pull` doesn't trigger hundreds of Sonnet calls.
+  - Ancestor folder summaries become `stale` and are refreshed lazily, when viewed or by a periodic sweep (every 10 minutes, at most 20 folders, deepest first), so a `git pull` doesn't trigger hundreds of Sonnet calls.
   - Re-embed whatever was re-summarized.
   - Untouched files are never re-read, re-parsed or re-summarized.
 - **E2 nuance.** Call edges *into* F's symbols are re-resolved in files that import F. A rename in F changes what those links point at.
@@ -247,10 +247,11 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
   - a detail panel that opens on selection
   - a bottom dock: the live Claude Code pill in v1, plus the Guide input in E1
 - **Levels.** Repo root → folders → files. A leaf folder shows its files and the imports between them. The file panel lists symbols and, from E2, opens a call flow per function.
-- **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), and opening it lists them in the panel instead of drawing more boxes.
+- **Moving around.** Click selects a box; double-click opens a folder; the breadcrumb and Backspace go back up.
+- **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), ties going to the more-imported file (ADR-036), and opening it lists them in the panel instead of drawing more boxes.
 - **Boxes** show the name, file count and tagline. While the summary is pending they show a quiet placeholder.
 - **Edges** come from `level_edges`, with thickness ∝ √count. Only the selected box's edges are drawn at full strength; the rest are ghosted. Hovering shows the count.
-- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. 50 nodes take milliseconds.
+- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. It lays out from the level's 100 heaviest lines (every line is still drawn): VS Code's densest level, 50 boxes and 390 lines, takes about 40 ms that way, against 0.6 s with every line (ADR-036, amended).
 - **Lenses, one at a time.** Structure (v1), History (E3), Clusters (E5).
 - **Search.** ⌘K over files, symbols and summaries. Picking a result moves the canvas to that item's level and selects it.
 - **Live.** `GET /api/live/stream` (SSE). Each MCP tool call pulses the box that contains the touched path at the current level and updates the pill. Throttled.
@@ -259,7 +260,7 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 - **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists show 20 entries plus "load more".
 - **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it.
 
-### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` during the UI slice)
+### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` §11–§15 in slice V1.3)
 
 ```ts
 type MapNode = { path: string; name: string; kind: "folder" | "file" | "more";
@@ -275,7 +276,7 @@ type IndexStatus = { repo: string; stages: Record<StageName, { state: StageState
 type LiveEvent = { tool: string; paths: string[]; at: string };
 ```
 
-**v1 endpoints:**
+**v1 endpoints:** The final shapes are in API_CONTRACTS.md §11 onward (slice V1.3).
 
 | Endpoint | Notes |
 |---|---|
@@ -409,7 +410,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, and ADR-036 to ADR-040 during V1.3:
 
 | ADR | Decision |
 |---|---|
@@ -425,6 +426,11 @@ Each v1 slice ends demoable:
 | ADR-033 | Summary runs: bottom-up waves, the Batch API for 100+ requests and the regular API below, batch ids on the summary rows, a circuit breaker and a `summarizing` lock |
 | ADR-034 | Summary prompt v2: Haiku 5.5 for files, 3 to 6 word taglines kept whole up to 8, importers in the prompt but not the hash, whole summaries only (one retry), test-only folders templated |
 | ADR-035 | A spend cap: before each submission, project spent + at Anthropic + this submission + the rest, and stop sending past `--budget` (default $15); batches already at Anthropic are still collected |
+| ADR-036 | The Map reads one level at a time: children in size order, a 50-box fold with a `<level>/` "+N more" box, an index version for caching and refetching, area counts from an in-memory import graph |
+| ADR-037 | Incremental structure updates re-resolve only what can have changed and write only the differences, with level edges moved by ±1 per import |
+| ADR-038 | A forked background worker owns the index while the Map is open: watcher, incremental updates, summary refresh (60 s, ≤ 50 files per 10 minutes), a folder sweep, sliced embeddings |
+| ADR-039 | The live channel: SSE out, a localhost-only POST in (Host and Origin checked), the server bound to loopback |
+| ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2); the version names the API and migrations carry the data |
 
 ## 16. Doc migration
 

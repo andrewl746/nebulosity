@@ -1,11 +1,9 @@
-import type { CodeChunk } from "@/lib/contracts";
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 
 export const EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 export const EMBEDDING_DIM = 384;
 
 const BATCH_SIZE = 16;
-const MAX_BODY_LINES = 200;
 
 // lazy loaded embedding pipeline (model loads on first call, not at module import time)
 let pipelineInstance: FeatureExtractionPipeline | null = null;
@@ -18,132 +16,13 @@ async function getPipeline(){
         // the model is ~25 MB and is fetched from huggingface.co the first time
         // it is used, then cached under node_modules/.cache. Without this line a
         // cold first index looks like a hang.
-        console.log(`[embed] loading ${EMBEDDING_MODEL} (first run downloads ~25 MB)…`);
+        // stderr, not stdout: V1.4's MCP server speaks JSON-RPC over stdout, and one stray line there breaks the protocol.
+        console.error(`[embed] loading ${EMBEDDING_MODEL} (first run downloads ~25 MB)…`);
 
         pipelineInstance = await pipeline("feature-extraction", EMBEDDING_MODEL);
     }
 
     return pipelineInstance;
-}
-
-/**
- * builds the text that actually gets embedded
- * we embed a constructed text (acting like an enriched summary page), not the raw chunk source
- * 
- * why? the model has a ~256 token limit
- * we front-load the most identifying information (path, kind/name, doc comment, signature)
- */
-
-// export only for testing
-export function buildEmbeddingText(chunk: CodeChunk): string {
-    const parts: string[] = [];
-    
-    // 1. file path (tells the model where this code lives)
-    parts.push(`File: ${chunk.filePath}`);
-    
-    // 2. kind and name (the most important signal)
-    parts.push(`${chunk.kind}: ${chunk.name}`);
-    
-    // 3. doc comment (extracts JSDoc/comment above the declaration)
-    const docComment = extractDocComment(chunk.text);
-    if (docComment){
-        parts.push(`Description: ${docComment}`);
-    }
-    
-    // 4. signature — the first line that is actual code.
-    // chunk.text begins with the declaration's attached comment block (ADR-018),
-    // so line 0 is usually "/**". Taking it blindly, as this used to, threw away
-    // the single most identifying line in the chunk for every documented
-    // declaration (RAG_IMPLEMENTATION_REVIEW.md R9).
-    const lines = chunk.text.split("\n");
-    const signatureIndex = lines.findIndex(isCodeLine);
-
-    if (signatureIndex !== -1){
-        parts.push(`Signature: ${lines[signatureIndex].trim()}`);
-    }
-
-    // 5. body (capped to fit the model's ~256 token budget)
-    const bodyStart = signatureIndex === -1 ? 0 : signatureIndex + 1;
-    const body = lines.slice(bodyStart, bodyStart + MAX_BODY_LINES).join("\n");
-
-    if (body.trim()){
-        parts.push(body);
-    }
-
-    return parts.join("\n");
-}
-
-// a line carrying code rather than whitespace or a comment
-function isCodeLine(line: string): boolean {
-    const trimmed = line.trim();
-
-    if (trimmed === "") return false;
-
-    return !trimmed.startsWith("//") && !trimmed.startsWith("/*") && !trimmed.startsWith("*");
-}
-
-/**
- * extracts the leading doc comment from code text
- * handles both /** and // styles
- */
-function extractDocComment(text: string): string | null {
-    const lines = text.split("\n");
-    const commentLines: string[] = [];
-    let inComment = false;
-    
-    for (const line of lines){
-        const trimmed = line.trim();
-        
-        // JSDoc style: /**
-        if (trimmed.startsWith("/**")){
-            inComment = true;
-            const content = trimmed.replace(/^\/\*\*?\s*/, "").replace(/\*\/$/, "");
-
-            if (content){
-                commentLines.push(content);
-            }
-
-            continue;
-        }
-        
-        // JSDoc continuation: *
-        if (inComment && trimmed.startsWith("*")){
-            const content = trimmed.replace(/^\*\s?/, "");
-
-            if (content && !content.startsWith("/")){
-                commentLines.push(content);
-            }
-
-            continue;
-        }
-        
-        // end of JSDoc
-        if (inComment && trimmed.endsWith("*/")){
-            inComment = false;
-            continue;
-        }
-        
-        // single-line comment: //
-        if (trimmed.startsWith("//")){
-            const content = trimmed.replace(/^\/\/\s?/, "");
-            if (content){
-                // Check if this is a "description" comment (not just a TODO or warning)
-                if (!content.match(/^(TODO|FIXME|HACK|NOTE|WARNING|DEPRECATED|eslint|prettier|@ts-)/i)){
-                    commentLines.push(content);
-                }
-            }
-
-            // continue checking subsequent lines (multi-line // comments)
-            continue;
-        }
-        
-        // stop collecting if we hit code (unless we're in a JSDoc block)
-        if (!inComment && trimmed && !trimmed.startsWith("//")){
-            break;
-        }
-    }
-    
-    return commentLines.length > 0 ? commentLines.join(" ") : null;
 }
 
 /**
@@ -197,28 +76,6 @@ export async function embedTexts(
     }
 
     return results;
-}
-
-// embed an array of code chunks
-export async function embedChunks(
-    chunks: CodeChunk[],
-    onProgress?: (done: number, total: number) => void
-): Promise<Array<{ chunk: CodeChunk; vector: Float32Array }>> {
-    if (chunks.length === 0){
-        return [];
-    }
-    
-    // build the embedding texts
-    const embeddingTexts = chunks.map(chunk => buildEmbeddingText(chunk));
-    
-    // get embeddings
-    const vectors = await embedTexts(embeddingTexts, onProgress);
-    
-    // pair them back up
-    return chunks.map((chunk, i) => ({
-        chunk,
-        vector: vectors[i]
-    }));
 }
 
 /**

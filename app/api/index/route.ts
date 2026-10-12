@@ -1,73 +1,38 @@
-import { NextResponse } from "next/server";
-import { indexRepo, IndexLockedError } from "@/lib/index-repo";
-import { getIndexStatus } from "@/lib/index-status";
-import type { ErrorCode, IndexEventMap } from "@/lib/contracts";
+import { NextRequest } from "next/server";
+import type { IndexEventMap } from "@/lib/contracts";
+import { workerOn } from "@/lib/background/start";
+import { isLocalRequest } from "@/lib/live/local";
+import { SSE_HEADERS, sseFrame } from "@/lib/live/sse";
+import { activeRepo, forbidden, noActiveRepo } from "../_lib/respond";
 
 export const runtime = "nodejs";
 
-// helper to send SSE events — see docs/API_CONTRACTS.md §4
-function sendEvent<K extends keyof IndexEventMap>(event: K, data: IndexEventMap[K]){
-    return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-}
-
-export async function POST(){
+// POST /api/index — a full structure run of the active repo in the background worker, its progress as SSE (API_CONTRACTS.md §4)
+export function POST(request: NextRequest){
+    if (!isLocalRequest(request.headers)) return forbidden();
+    const repo = activeRepo();
+    if (repo === null) return noActiveRepo();
     const encoder = new TextEncoder();
-    const repoRoot = process.cwd();
-    const startTime = Date.now();
 
-    const stream = new ReadableStream({
+    const stream = new ReadableStream<Uint8Array>({
         async start(controller){
-            const send = <K extends keyof IndexEventMap>(event: K, data: IndexEventMap[K]) => {
-                controller.enqueue(encoder.encode(sendEvent(event, data)));
-            };
-
-            try{
-                const stats = await indexRepo(repoRoot, {
-                    onProgress: (phase, done, total, currentFile) => {
-                        send("progress", { phase, done, total, currentFile });
-                    }
-                });
-
-                const status = getIndexStatus(repoRoot);
-
-                send("done", {
-                    fileCount: stats.changed + stats.skipped,
-                    chunkCount: status.chunkCount,
-                    skippedUnchanged: stats.skipped,
-                    tookMs: Date.now() - startTime,
-                    // beyond API_CONTRACTS.md §4's four required fields: per-file
-                    // failures that would otherwise be invisible, since one bad
-                    // file no longer sinks the run
-                    changed: stats.changed,
-                    errors: stats.errors,
-                    warnings: stats.warnings
-                });
-
-                controller.close();
-            } catch (err){
-                const error = err instanceof Error ? err : new Error(String(err));
-
-                // classify on the error's TYPE, not on its message text — a
-                // reworded sentence must not silently change the error code
-                let code: ErrorCode = "INTERNAL";
-
-                if (err instanceof IndexLockedError){
-                    code = "INDEX_LOCKED";
-                } else if (error.message.includes("Repository not found")){
-                    code = "NOT_FOUND";
+            const send = <K extends keyof IndexEventMap>(event: K, data: IndexEventMap[K]): void => {
+                try{
+                    controller.enqueue(encoder.encode(sseFrame(event, data)));
+                } catch{
+                    // the client left; the run goes on in the worker either way
                 }
-
-                send("error", { code, message: error.message });
+            };
+            const outcome = await workerOn(repo).index((progress) => send("progress", progress), repo);
+            if (outcome.ok) send("done", outcome.result);
+            else send("error", outcome.error);
+            try{
                 controller.close();
+            } catch{
+                // already closed
             }
-        }
+        },
     });
 
-    return new NextResponse(stream, {
-        headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive"
-        }
-    });
+    return new Response(stream, { headers: SSE_HEADERS });
 }
