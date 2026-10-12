@@ -170,6 +170,17 @@ export type DescribeResponse = {
   indexVersion: number;
 };
 
+/** POST /api/summarize — docs/API_CONTRACTS.md §13 */
+export type SummarizeResponse = {
+  path: string;
+  kind: "repo" | "folder" | "file";
+  tagline?: string;
+  summary?: string;
+  summaryStatus: SummaryStatus;
+  /** Why it failed, when summaryStatus is "failed". */
+  summaryError?: string;
+};
+
 /* ─────────────────────────── Error envelope ──────────────────────── */
 
 export type ErrorCode =
@@ -231,31 +242,27 @@ export type ChatEvent = {
 
 /* ─────────────────────────── Indexing (SSE) ──────────────────────── */
 
+/** The retired Phase 2 pipeline's phases: only lib/index-repo.ts uses it, and both go in V1.3 (Task 21). */
 export type IndexPhase = "scanning" | "chunking" | "embedding";
+
+/** The structure stage's steps, in order (PIVOT_SPEC.md §5.2). */
+export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
 
 /** POST /api/index SSE events — docs/API_CONTRACTS.md §4 */
 export type IndexEventMap = {
-  progress: {
-    phase: IndexPhase;
-    done: number;
-    total: number;
-    currentFile?: string;
-  };
+  progress: { stage: IndexStage; done: number; total: number };
   done: {
-    fileCount: number;
-    chunkCount: number;
-    skippedUnchanged: number;
-    tookMs: number;
-    /** Files re-chunked and re-embedded this run. */
+    files: number;
     changed: number;
-    /**
-     * Per-file failures. Indexing is per-file error-tolerant, so a run can
-     * succeed overall while individual files failed — without this the caller
-     * cannot tell the difference (ADR-021).
-     */
+    deleted: number;
+    edges: number;
+    folders: number;
+    levelEdges: number;
+    /** Per-file failures: indexing is per-file error-tolerant (ADR-021). */
     errors: Array<{ path: string; error: string }>;
-    /** Unreadable files/directories reported by the scanner (F2). */
-    warnings: Array<{ path: string; error: string }>;
+    /** Files left out (over 1 MB, unreadable). */
+    skipped: number;
+    totalMs: number;
   };
   error: { code: ErrorCode; message: string };
 };

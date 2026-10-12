@@ -81,7 +81,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 4. **Paths resolve from the install directory, not `cwd`.** `lib/db/client.ts` opens `.nebulosity/nebulosity.db` and the migrations folder relative to `process.cwd()`. Claude Code launches the MCP server from the *user's* repo, so both must resolve from `NEBULOSITY_HOME`, falling back to `process.cwd()` when it's unset. That fallback is correct for Next.js, the CLI and Vitest, which all run from the checkout. The MCP launcher (V1.4) always sets it.
 5. One database, many repos. The `repositories` table already supports this. WAL lets the MCP server read while the indexer writes. **The MCP server opens the database read-only and never runs migrations.** Only the Next server and CLI own the schema. Running two processes against one database file is exactly ADR-023's revisit trigger, and this is the answer to it.
 
-**Processes.** The Next.js server runs the UI, the API, the live channel, and background indexing on a worker thread. The MCP server is spawned once per Claude Code session, is read-only on the database, and posts live events over HTTP. CLI scripts cover index, export, bench and eval.
+**Processes.** The Next.js server runs the UI, the API and the live channel, and forks one background worker (ADR-038) that owns every write while the Map is open: the watcher, incremental updates, summary refreshes, the folder sweep and embeddings. The MCP server is spawned once per Claude Code session, is read-only on the database, and posts live events over HTTP. CLI scripts cover index, export, bench and eval.
 
 **Target layout and where today's files go:**
 
@@ -180,7 +180,7 @@ Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; ot
 - **No API key** sets the stage to `off` with a reason. Everything else still works.
 - API usage follows the `claude-api` skill's TypeScript reference (official `@anthropic-ai/sdk`). Nothing is guessed.
 
-### 5.4 Embeddings (background, worker thread)
+### 5.4 Embeddings (background worker, ADR-038)
 Embed `tagline + summary + path` for each fresh summary with the existing MiniLM pipeline (ADR-005), storing results in `summary_vectors`. That's roughly 15–20k vectors, about 15 minutes at the measured 18/s. It runs in the background and never blocks the Map. Chunk-level embeddings are dropped: 94 minutes is unaffordable, and summaries carry meaning better than raw code chunks (ADR-027).
 
 ### 5.5 Later stages

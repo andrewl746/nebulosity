@@ -434,7 +434,7 @@
 - **Summaries.** Each changed file waits 60 s, and another save restarts its wait. Files that changed together wait on one timer, so they come due as one refresh (a timer per file would start a refresh each). Due files are refreshed through the regular API: most-imported first, at most 50 per refresh, under a $1 cap on that refresh's own spend (ADR-035, amended). Their folders turn stale and wait.
 - **The sweep.** Every 10 minutes it redoes out-of-date folders whose children are settled, deepest first, at most 20, under the same per-run cap. A pull can't set off hundreds of Sonnet calls at once.
 - **Embeddings.** Whatever lacks a vector is embedded in slices of 64, so a structure update never waits more than a few seconds.
-- **Startup.** On start and on every repo switch, one warm full run catches what changed while nothing watched (4.9 s on VS Code, in the child). Size-and-mtime filtering (§5.6) waits until that grows.
+- **Startup.** On start and on every repo switch, the watcher starts first; once its first crawl is ready, one warm full run catches what changed while nothing watched (4.9 s on VS Code, in the child). The other order would lose edits made during the crawl, which takes seconds on VS Code. Size-and-mtime filtering (§5.6) waits until that grows.
 - **Locks.** Work another process holds a lock on is retried after 30 s.
 - **Crashes.** The server's supervisor restarts a crashed child after growing delays (1, 2, 5, 10, then 30 s) and answers anything it owed with an error. The child exits when the server does, because its IPC channel closes.
 **Alternatives:**

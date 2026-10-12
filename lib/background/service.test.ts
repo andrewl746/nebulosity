@@ -231,6 +231,21 @@ describe("background service", () => {
         await service.stop();
     });
 
+    it("catches a change made while the watcher is still starting: it watches first, then runs the startup check", async () => {
+        const root = await summarizedFixture();
+        // chokidar reports nothing for a file it hasn't crawled yet (VS Code's first crawl takes seconds): an edit
+        // landing as the watcher starts is only caught by a startup check that runs after it
+        const watch = (): RepoWatcher => {
+            fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const duringCrawl = 1;\n");
+            return { ready: Promise.resolve(), async close(){} };
+        };
+        const service = createBackgroundService({ summarizer: null, watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+        expect(describeTarget(root, "src/core/log.ts").symbols?.map((s) => s.name)).toContain("duringCrawl");
+        await service.stop();
+    });
+
     it("stops watching and forgets pending waits when the repo is cleared", async () => {
         const root = await summarizedFixture();
         const watcher = fakeWatcher();

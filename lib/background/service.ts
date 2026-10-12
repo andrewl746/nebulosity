@@ -281,13 +281,21 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             root = next === null ? null : path.resolve(next);
             const repo = root;
             if (repo === null) return;
+            if (findRepository(getDb(), repoKey(repo)) === null){
+                log(`${repo} isn't indexed yet; run npm run index -- "${repo}"`);
+                return;
+            }
+
+            // Watch first, then catch up. chokidar reports nothing for a file its first crawl hasn't reached (VS Code's
+            // crawl takes seconds), so a change made before the crawl ends is caught by the startup check that follows
+            // it, and any later change by the watcher. The other order would lose edits made during the crawl.
+            const current = watchFn(repo, queueUpdate);
+            watcher = current;
+            await current.ready;
+            if (root !== repo || watcher !== current) return;   // switched again meanwhile, which closed this watcher
 
             // the startup check (PIVOT_SPEC.md §5.6): one warm full run catches what changed while nothing watched
-            const indexed = await exclusive(() => {
-                if (findRepository(getDb(), repoKey(repo)) === null){
-                    log(`${repo} isn't indexed yet; run npm run index -- "${repo}"`);
-                    return false;
-                }
+            await exclusive(() => {
                 try{
                     indexRepository(repo);
                 } catch (err){
@@ -295,11 +303,9 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                     log("another index run holds the lock; watching without the startup check");
                 }
                 refreshSummaryStatus(repo, { summarizerAvailable });
-                return true;
             });
-            if (!indexed || root !== repo) return;   // never indexed, or switched again meanwhile
+            if (root !== repo) return;   // switched again meanwhile
 
-            watcher = watchFn(repo, queueUpdate);
             sweepTimer = setInterval(() => { void exclusive(runSweep); }, timings.sweepEveryMs);
             queueEmbed();   // summaries the CLI wrote but never embedded (an interrupted run) get their vectors here
             log(`watching ${repo}`);

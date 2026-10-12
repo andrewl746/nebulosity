@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
+import type { IndexStage } from "../contracts";
 import { getDb, type Db } from "../db/client";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
 import { writeStage } from "../db/store/stages";
@@ -17,7 +18,7 @@ import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./langua
 import { repoKey } from "./paths";
 import { createResolver, edgesFrom } from "./resolve";
 
-export type IndexStage = "discover" | "parse" | "write" | "resolve" | "aggregate";
+export type { IndexStage };
 
 export type IndexOptions = {
     /** Called at least once per stage, in order. done/total count files (folders for "aggregate"). */
