@@ -8,7 +8,7 @@ import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import {
     addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadImporterPaths, loadSummaries, markInFlight, targetKey, writeResults,
+    loadFolderFacts, loadImporters, loadSummaries, markInFlight, targetKey, writeResults,
     type FileFacts, type StoredSummary, type SummaryResult,
 } from "../../db/store/summaries";
 import { repoKey } from "../paths";
@@ -251,7 +251,7 @@ export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick
     if (listing === null) return null;
 
     // The importers are in the prompt but not in the input hash (path + content only, plan.ts), so a new importer doesn't re-summarize a central file on every pull.
-    return renderFilePrompt(listing, file.lineCount, loadImporterPaths(db, repoId, file.path), source);
+    return renderFilePrompt(listing, file.lineCount, loadImporters(db, repoId, file.path), source);
 }
 
 /**

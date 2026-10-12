@@ -27,6 +27,9 @@ export type StoredSummary = {
 /** A file as the summary planner sees it. */
 export type FileFacts = { path: string; contentHash: string; lineCount: number; isTest: boolean; importedBy: number };
 
+/** A file that imports another, as that file's prompt needs it: where it is, and whether the indexer calls it a test file. */
+export type Importer = { path: string; isTest: boolean };
+
 /** A folder as the summary planner sees it. */
 export type FolderFacts = { path: string; parentPath: string | null; depth: number; name: string; fileCount: number; directFileCount: number };
 
@@ -74,21 +77,21 @@ export function loadFileFacts(db: Db, repoId: number): FileFacts[] {
 }
 
 /**
- * The paths of the files that import filePath, in path order (empty for a path that isn't indexed). Each appears
- * once: an import is unique per source and target. `files` is joined twice, once as the imported file and once,
- * aliased, as its importer; imports never cross repos, so the importer needs no repo check of its own.
+ * The files that import filePath, in path order (empty for a path that isn't indexed), each with its own is-test
+ * flag. Each appears once: an import is unique per source and target. `files` is joined twice, once as the
+ * imported file and once, aliased, as its importer; imports never cross repos, so the importer needs no repo
+ * check of its own.
  */
-export function loadImporterPaths(db: Db, repoId: number, filePath: string): string[] {
+export function loadImporters(db: Db, repoId: number, filePath: string): Importer[] {
     const importer = alias(files, "importer");
 
-    return db.select({ path: importer.path })
+    return db.select({ path: importer.path, isTest: importer.isTest })
         .from(files)
         .innerJoin(imports, eq(imports.targetFileId, files.id))
         .innerJoin(importer, eq(importer.id, imports.sourceFileId))
         .where(and(eq(files.repoId, repoId), eq(files.path, filePath)))
         .orderBy(importer.path)
-        .all()
-        .map((row) => row.path);
+        .all();
 }
 
 export function loadFolderFacts(db: Db, repoId: number): FolderFacts[] {

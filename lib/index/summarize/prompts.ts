@@ -1,4 +1,4 @@
-import type { SummaryText } from "../../db/store/summaries";
+import type { Importer, SummaryText } from "../../db/store/summaries";
 import { countLines } from "../languages/typescript";
 import { dirOf } from "../paths";
 
@@ -67,7 +67,7 @@ export function plural(n: number, word: string): string {
 export function renderFilePrompt(
     listing: string,
     lineCount: number,
-    importers: readonly string[],
+    importers: readonly Importer[],
     source: string,
     maxChars: number = MAX_SOURCE_CHARS
 ): string {
@@ -76,17 +76,23 @@ export function renderFilePrompt(
 
 /**
  * How widely a file is used, from the import graph: a source file can't say who imports it, so the model is
- * told. Counts the importers per folder, biggest first (ties by folder path, compared with plain `<` so the
- * order never depends on a locale and the same graph always gives the same line), and names the first
- * maxFolders; the rest fold into a count. A top-level file's folder is "" (it sorts first on a tie) and is
- * shown as "the repo root".
+ * told. Test files are counted apart and tallied last (", plus 2 test files"): on a central file the biggest
+ * importer folders are test folders, which would skew how its use looks. The total, the folders and the
+ * examples come from the other importers: counted per folder, biggest first (ties by folder path, compared
+ * with plain `<` so the order never depends on a locale and the same graph always gives the same line), with
+ * the first maxFolders named and the rest folded into a count. A top-level file's folder is "" (it sorts first
+ * on a tie) and is shown as "the repo root".
  */
-export function importerLine(importers: readonly string[], maxFolders: number = MAX_IMPORTER_FOLDERS): string {
+export function importerLine(importers: readonly Importer[], maxFolders: number = MAX_IMPORTER_FOLDERS): string {
     if (importers.length === 0) return "Imported by: no other indexed file";
 
+    const nonTests = importers.filter((importer) => !importer.isTest);
+    const tests = importers.length - nonTests.length;
+    if (nonTests.length === 0) return `Imported by: only ${plural(tests, "test file")}`;
+
     const perFolder = new Map<string, number>();
-    for (const importer of importers){
-        const folder = dirOf(importer);
+    for (const { path } of nonTests){
+        const folder = dirOf(path);
         perFolder.set(folder, (perFolder.get(folder) ?? 0) + 1);
     }
 
@@ -94,8 +100,10 @@ export function importerLine(importers: readonly string[], maxFolders: number = 
         countB - countA || (folderA < folderB ? -1 : folderA > folderB ? 1 : 0));
     const named = ranked.slice(0, maxFolders).map(([folder, count]) => `${folder === "" ? "the repo root" : folder} (${count})`);
 
-    const line = `Imported by: ${plural(importers.length, "file")} in ${plural(ranked.length, "folder")}: ${named.join(", ")}`;
-    return ranked.length > maxFolders ? `${line}, and ${plural(ranked.length - maxFolders, "other folder")}` : line;
+    let line = `Imported by: ${plural(nonTests.length, "file")} in ${plural(ranked.length, "folder")}: ${named.join(", ")}`;
+    if (ranked.length > maxFolders) line += `, and ${plural(ranked.length - maxFolders, "other folder")}`;
+    if (tests > 0) line += `, plus ${plural(tests, "test file")}`;
+    return line;
 }
 
 export function renderFolderPrompt(

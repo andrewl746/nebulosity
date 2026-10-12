@@ -10,7 +10,7 @@ import { indexRepository } from "../../index/pipeline";
 import { upsertRepository } from "./structure";
 import {
     addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadImporterPaths, loadSummaries, loadUsage, markInFlight, pruneSummaries, targetKey, writeResults,
+    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, pruneSummaries, targetKey, writeResults,
 } from "./summaries";
 
 const ok = (tagline: string) => ({ ok: true as const, text: { tagline, summary: "S" }, model: "m" });
@@ -46,22 +46,38 @@ describe("summary store — facts for the planner", () => {
 describe("summary store — importers", () => {
     it("lists the files that import a file, each once, in path order", () => {
         const { repoId } = indexRepository(copyFixture());
-        const importers = (filePath: string) => loadImporterPaths(getDb(), repoId, filePath);
+        const importers = (filePath: string) => loadImporters(getDb(), repoId, filePath).map((i) => i.path);
 
         expect(importers("src/app/main.ts")).toEqual(["scripts/build.js", "src/app/view.tsx", "src/index.ts"]);
         expect(importers("src/core/log.ts")).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
         expect(importers("src/util/strings.ts")).toEqual(["src/app/main.ts", "src/util/strings.test.ts"]);
     });
 
+    it("says which of the importers are test files", () => {
+        const { repoId } = indexRepository(copyFixture());
+
+        // strings.ts is imported by main.ts and by its own test; the flag is the importer's, not strings.ts's
+        expect(loadImporters(getDb(), repoId, "src/util/strings.ts")).toEqual([
+            { path: "src/app/main.ts", isTest: false },
+            { path: "src/util/strings.test.ts", isTest: true },
+        ]);
+        // main.ts is imported by source files only
+        expect(loadImporters(getDb(), repoId, "src/app/main.ts")).toEqual([
+            { path: "scripts/build.js", isTest: false },
+            { path: "src/app/view.tsx", isTest: false },
+            { path: "src/index.ts", isTest: false },
+        ]);
+    });
+
     it("is empty for a file nothing imports, and for a path that isn't indexed", () => {
         const { repoId } = indexRepository(copyFixture());
-        expect(loadImporterPaths(getDb(), repoId, "scripts/build.js")).toEqual([]);
-        expect(loadImporterPaths(getDb(), repoId, "src/nope.ts")).toEqual([]);
+        expect(loadImporters(getDb(), repoId, "scripts/build.js")).toEqual([]);
+        expect(loadImporters(getDb(), repoId, "src/nope.ts")).toEqual([]);
     });
 
     it("finds as many importers as the by-hand import counts say, for every file", () => {
         const { repoId } = indexRepository(copyFixture());
-        expect(FILES.map((f) => loadImporterPaths(getDb(), repoId, f.path).length)).toEqual(FILES.map((f) => f.importedBy));
+        expect(FILES.map((f) => loadImporters(getDb(), repoId, f.path).length)).toEqual(FILES.map((f) => f.importedBy));
     });
 
     it("only looks inside the repository it's asked about", () => {
@@ -69,8 +85,8 @@ describe("summary store — importers", () => {
         const second = indexRepository(copyFixture()).repoId;
 
         // both copies have a src/core/log.ts: neither answer may include the other's importers
-        expect(loadImporterPaths(getDb(), first, "src/core/log.ts")).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
-        expect(loadImporterPaths(getDb(), second, "src/core/log.ts")).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
+        expect(loadImporters(getDb(), first, "src/core/log.ts").map((i) => i.path)).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
+        expect(loadImporters(getDb(), second, "src/core/log.ts").map((i) => i.path)).toEqual(["src/app/main.ts", "src/core/index.ts", "src/index.ts"]);
     });
 
     it("sorts importers by path, whatever order they were indexed in", () => {
@@ -84,7 +100,7 @@ describe("summary store — importers", () => {
             { sourceFileId: a, targetFileId: lib, specifier: "./lib" },
         ]).run();
 
-        expect(loadImporterPaths(db, repoId, "lib.ts")).toEqual(["a.ts", "z.ts"]);
+        expect(loadImporters(db, repoId, "lib.ts")).toEqual([{ path: "a.ts", isTest: false }, { path: "z.ts", isTest: false }]);
     });
 });
 

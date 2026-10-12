@@ -312,7 +312,7 @@
 
 ## ADR-034 — Summary prompt v2, from the owner's checkpoint (2026-10-11)
 
-**Context:** The owner read Review #1 (`SUMMARY_REVIEW.md`: 20 VS Code files, each written by Haiku 5.5 and by Sonnet 5.5) before the first paid run.
+**Context:** The owner read Review #1 (`SUMMARY_REVIEW.md`: 20 VS Code files, each written by Haiku 5.5 and by Sonnet 5.5) before the full run.
 - Haiku was close to Sonnet at about 1/20 the price.
 - The 6-word clamp cut 7–8 of the 20 Haiku taglines mid-phrase.
 - Summaries hedged with "truncated" and "not shown", and a file's summary couldn't say who used it ("the source does not show which modules import these exports").
@@ -322,7 +322,7 @@
 - **Prompt v2** (`PROMPT_VERSION` 2):
   - The tagline is a noun phrase of 3 to 6 plain words, with an example that isn't from VS Code, so the model can't copy it into a summary.
   - "Don't mention truncation or code you weren't shown" replaces "if the source is truncated, summarize what's there".
-  - A file's prompt gets one line from the import graph: how many files import it, and the 3 folders with the most of them (`Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders`).
+  - A file's prompt gets one line from the import graph: how many files import it, and the 3 folders with the most of them (`Imported by: 7 files in 5 folders: a (2), b (2), c (1), and 2 other folders`). Test files are counted apart (`, plus 2 test files`), because on VS Code the biggest importer folders of central files such as `log.ts` and `uri.ts` are test folders (a preview put `src/vs/platform/agentHost/test/node` first for `log.ts`, with 138 importers), which would skew how the file's use looks.
   - Identifiers in the summary go in backticks.
 - **Taglines** are asked for in 3–6 words and kept whole up to 8. A longer one is cut at a word boundary, minus dangling connector words (`and`, `of`, `the`…). Backticks are stripped, since the UI shows taglines as plain text.
 - **Importers go in the file prompt but not in the input hash.** The planner still hashes the model, the prompt version, the path and the content hash.

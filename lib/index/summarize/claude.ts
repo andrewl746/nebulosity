@@ -23,6 +23,9 @@ export const MAX_TAGLINE_WORDS = 8;
 /** Words a tagline can't end on: cut right after one, the phrase hangs ("…the browser workbench and"). */
 const CONNECTORS: ReadonlySet<string> = new Set(["a", "an", "the", "and", "or", "of", "for", "to", "in", "on", "with", "via", "by", "from", "at", "as"]);
 
+/** Whitespace and the punctuation that closes a phrase, which a tagline never ends on. */
+const TRAILING_PUNCTUATION = /[\s.,;:]+$/;
+
 /**
  * A tagline as the UI shows it: plain text, at most MAX_TAGLINE_WORDS words. Backticks go, since the UI doesn't
  * render markdown. A tagline within the limit stays whole: a hard cut at the 6 words we ask for sliced taglines
@@ -33,10 +36,11 @@ export function cleanTagline(raw: string): string {
 
     if (words.length > MAX_TAGLINE_WORDS){
         words = words.slice(0, MAX_TAGLINE_WORDS);
-        while (words.length > 1 && CONNECTORS.has(words[words.length - 1].toLowerCase())) words.pop();
+        // punctuation stuck to the last word doesn't make it any less dangling: "and," is still an "and"
+        while (words.length > 1 && CONNECTORS.has(words[words.length - 1].replace(TRAILING_PUNCTUATION, "").toLowerCase())) words.pop();
     }
 
-    return words.join(" ").replace(/[\s.,;:]+$/, "");
+    return words.join(" ").replace(TRAILING_PUNCTUATION, "");
 }
 
 type Effort = "low" | "medium" | "high";

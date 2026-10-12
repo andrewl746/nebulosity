@@ -78,6 +78,17 @@ describe("buildFilePrompt", () => {
             .toContain("\nLines: 9\nImported by: 3 files in 3 folders: src (1), src/app (1), src/core (1)\n\nSource:\n");
     });
 
+    it("counts the test files that import the file apart from the rest", () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const strings = loadFileFacts(db, repoId).find((f) => f.path === "src/util/strings.ts")!;
+
+        // strings.ts is imported by src/app/main.ts and by its own test, src/util/strings.test.ts
+        expect(buildFilePrompt(db, repoId, root, strings))
+            .toContain("\nLines: 6\nImported by: 1 file in 1 folder: src/app (1), plus 1 test file\n\nSource:\n");
+    });
+
     it("says a file nothing imports has no importers", () => {
         const root = indexedFixture();
         const db = getDb();

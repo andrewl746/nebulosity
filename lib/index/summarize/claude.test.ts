@@ -40,6 +40,11 @@ describe("cleanTagline", () => {
         expect(cleanTagline("One two three four five six seven eight nine ten")).toBe("One two three four five six seven eight");
     });
 
+    it("drops a connector at the cut even when punctuation is stuck to it", () => {
+        expect(cleanTagline("Registry of commands for the workbench and, for all extensions")).toBe("Registry of commands for the workbench");
+        expect(cleanTagline("Registry of commands for the workbench and; for all extensions")).toBe("Registry of commands for the workbench");
+    });
+
     it("never drops the first word", () => {
         expect(cleanTagline("to the of and a an in on at")).toBe("to");
     });
