@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **2026-10-11 — pivot:** the v1 endpoints change (`/api/level`, `/api/describe`, `/api/status`, `/api/summarize`, `/api/live*`), and `/api/graph` and `/api/health` retire. See `PIVOT_SPEC.md` §7.1; this doc is rewritten in slice V1.3. §5 (`/api/chat`) still applies to E1, and §9 (`/api/status`) and §10 (search results) are live from slice V1.2.
+> **2026-10-11 — pivot:** the v1 endpoints change, and `/api/graph` and `/api/health` retire (`PIVOT_SPEC.md` §7.1). Slice V1.3 adds the new endpoints as §11 onward while it builds them, then rewrites this doc into its final order (Task 21 of `docs/plans/2026-10-12-v1-3-map.md`). §5 (`/api/chat`) still applies to E1.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -199,3 +199,28 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **Hits are files and folders**, never chunks: a file's chunks are grouped before ranking, and `code` is its best one. The repo summary is never a hit.
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.
+
+## 11. GET /api/level?path= (slice V1.3)
+
+One folder of the Map (`lib/engine/level.ts`). `path` is repo-relative; empty or missing means the repo root.
+
+```ts
+type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
+type MapNode = { path: string; name: string; kind: "folder" | "file" | "more"; fileCount: number;
+  tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number };
+type MapEdge = { source: string; target: string; count: number };
+type LevelResponse = { repo: string; path: string; breadcrumb: string[]; nodes: MapNode[]; edges: MapEdge[];
+  hiddenCount: number; indexVersion: number };
+```
+
+- **Boxes** are the folder's subfolders and the files directly inside it, largest first. A file counts as 1; among equals the more-imported file comes first, then the path decides.
+- **The cap.** With more than 50 children, the first 49 are drawn and the rest fold into one `kind: "more"` box named `+N more`. Its `path` is the level's path plus `/` (`/` at the root), which no stored path can be. Its `fileCount` adds up the folded boxes', `hiddenCount` is N, and its `summaryStatus` is `skipped`, since it has no summary of its own. So `nodes` never holds more than 50 (S4).
+- **Lines** are the level's rows of `level_edges` (PIVOT_SPEC.md §4.2): each import is counted once, at the deepest folder holding both files. A folded end points at the `+N more` box, lines that then join the same two boxes are added up, and lines between two folded children are dropped.
+- **`summaryStatus`** is the stored status when the box has text. Without text it's `off` when there's no `ANTHROPIC_API_KEY`, otherwise the stored status, or `pending` when no row exists yet.
+- **`breadcrumb`** lists the folder paths from the root down to `path`.
+- **`indexVersion`** moves whenever anything the Map shows changes (ADR-036). A client caches levels per version and refetches when `GET /api/status` reports a new one.
+
+**Errors:**
+- `400 BAD_REQUEST`: a path that could leave the repo (`..`, absolute, a drive letter), or a file's path (the Map opens folders).
+- `404 NOT_FOUND`: nothing indexed at `path`.
+- `404 INDEX_EMPTY`: no active repo yet.

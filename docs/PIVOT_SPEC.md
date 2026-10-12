@@ -247,7 +247,7 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
   - a detail panel that opens on selection
   - a bottom dock: the live Claude Code pill in v1, plus the Guide input in E1
 - **Levels.** Repo root → folders → files. A leaf folder shows its files and the imports between them. The file panel lists symbols and, from E2, opens a call flow per function.
-- **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), and opening it lists them in the panel instead of drawing more boxes.
+- **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), ties going to the more-imported file (ADR-036), and opening it lists them in the panel instead of drawing more boxes.
 - **Boxes** show the name, file count and tagline. While the summary is pending they show a quiet placeholder.
 - **Edges** come from `level_edges`, with thickness ∝ √count. Only the selected box's edges are drawn at full strength; the rest are ghosted. Hovering shows the count.
 - **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. 50 nodes take milliseconds.
@@ -275,7 +275,7 @@ type IndexStatus = { repo: string; stages: Record<StageName, { state: StageState
 type LiveEvent = { tool: string; paths: string[]; at: string };
 ```
 
-**v1 endpoints:**
+**v1 endpoints:** The final shapes are in API_CONTRACTS.md §11 onward (slice V1.3).
 
 | Endpoint | Notes |
 |---|---|

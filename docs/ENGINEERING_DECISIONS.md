@@ -382,6 +382,20 @@
 
 **Revisit when:** the assumed tokens prove far off on a new repo before its first answers land (then seed the means from the checkpoint's sample), or the regular-API gap grows past a dollar (then price the waves under 100 requests at direct rates).
 
+## ADR-036 — The Map reads one level at a time: the fold, its order, and an index version (2026-10-12)
+
+**Context:** ADR-029 fixed the Map's shape: levels, a 50-box cap with "+N more", and precomputed level edges. Building it raised four questions: which boxes fold, what the "+N more" box is called, how a client knows its copy is old, and how "uses / used by" (§4.2) is computed.
+**Decision:**
+- **Order and fold.** A level's children are sorted by file count (a file counts 1), then by importer count, then by path. Past 50, the first 49 stay and the rest fold into one box, so exactly 50 are drawn. The "+N more" box's path is the level's path plus `/` (`/` at the root): no stored path ends in a slash, so the id can't collide. Lines into folded children are redirected to it and added up; lines between two folded children are dropped.
+- **An index version.** A counter per repo in `meta` (`indexVersion:<repoId>`) is bumped by one SQL statement by every write the Map can see: a structure run, an incremental update, and any summary write that changes a row. Level and describe answers carry it, and `GET /api/status` reports it, so a client caches per version and refetches when it moves, and a server cache keyed on it can't serve stale data.
+- **Areas from memory.** "Uses / used by" needs every import across a boundary: about 65,000 for `src/vs/workbench`. They're counted from an in-memory import graph (files sorted by path, so a folder is one contiguous range; imports as pairs of positions), loaded once per index version (about 60 ms on VS Code) and cached per path.
+**Alternatives:**
+- (a) Fold alphabetically: a 780-file folder would hide its most-imported files behind "+731 more".
+- (b) A timestamp version: two writes in the same millisecond look like one.
+- (c) Area counts in SQL: a join over 139,580 imports per click, about 3 times slower than the in-memory scan and not cacheable across paths.
+**Consequences:** A level costs three indexed lookups (0.25 ms for VS Code's busiest level's lines). The first describe after a change pays for loading the graph. A client that polls the version sees changes from any process: the CLI, the background worker, or the MCP server.
+**Revisit when:** users want a different order (for example, recently changed first, with E3).
+
 ---
 
 ## Decisions inherited from the existing codebase (pre-dating this doc set)

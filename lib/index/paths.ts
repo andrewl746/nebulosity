@@ -37,3 +37,18 @@ export function joinRepoPath(baseDir: string, relative: string): string | null {
 export function repoKey(repoRoot: string): string {
     return normalizeSlashes(path.resolve(repoRoot));
 }
+
+/**
+ * A repo-relative path from outside (a query string, a tool argument, a live event), checked and put in the spelling
+ * stored paths use: forward slashes, no leading "./", no trailing "/", no empty or "." segments. "" is the repo root.
+ * Null when it could name a place outside the repo: a ".." segment, an absolute or drive-letter path, a NUL byte.
+ */
+export function parseRepoPath(raw: string | null | undefined): string | null {
+    if (raw === null || raw === undefined) return null;
+    const trimmed = normalizeSlashes(raw.trim());
+    if (trimmed.includes("\0") || trimmed.startsWith("/") || /^[a-zA-Z]:/.test(trimmed)) return null;
+
+    const segments = trimmed.split("/").filter((segment) => segment !== "" && segment !== ".");
+    if (segments.includes("..")) return null;
+    return segments.join("/");
+}

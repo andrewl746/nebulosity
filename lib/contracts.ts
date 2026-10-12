@@ -90,6 +90,52 @@ export type IndexStatus = {
   stages: Record<StageName, StageStatus>;
 };
 
+/* ─────────────────────────────── Map ─────────────────────────────── */
+
+/**
+ * A summary as the UI reports it: the stored statuses (fresh, stale, pending, failed, skipped) plus "off", which is
+ * never stored: there's no API key, so a summary that doesn't exist yet can't be written.
+ */
+export type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
+
+export type MapNodeKind = "folder" | "file" | "more";
+
+/** One box on the Map — docs/API_CONTRACTS.md §11 */
+export type MapNode = {
+  /** Repo-relative. The "+N more" box uses its level's path plus "/" ("/" at the root), which no real path can be. */
+  path: string;
+  /** "workbench", "lifecycle.ts" or "+12 more". */
+  name: string;
+  kind: MapNodeKind;
+  /** Source files inside: 1 for a file; for "+N more", the folded boxes' total. */
+  fileCount: number;
+  tagline?: string;
+  /** "skipped" for the "+N more" box, which has no summary of its own. */
+  summaryStatus: SummaryStatus;
+  /** "+N more" only: how many boxes it stands for. */
+  hiddenCount?: number;
+};
+
+/** Imports from one box to another at one level, each import counted once (PIVOT_SPEC.md §4.2). */
+export type MapEdge = { source: string; target: string; count: number };
+
+/** GET /api/level — docs/API_CONTRACTS.md §11 */
+export type LevelResponse = {
+  /** The repo's root: absolute, forward slashes. */
+  repo: string;
+  /** The folder on screen; "" is the repo root. */
+  path: string;
+  /** Folder paths from the root down to `path`: ["", "src", "src/vs"]. */
+  breadcrumb: string[];
+  /** At most 50 boxes, largest first; "+N more", if any, last. */
+  nodes: MapNode[];
+  edges: MapEdge[];
+  /** How many children "+N more" stands for (0 when everything fits). */
+  hiddenCount: number;
+  /** Moves whenever anything the Map shows changes: refetch when it does. */
+  indexVersion: number;
+};
+
 /* ─────────────────────────── Error envelope ──────────────────────── */
 
 export type ErrorCode =
