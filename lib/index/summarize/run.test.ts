@@ -9,7 +9,7 @@ import { getDb } from "../../db/client";
 import { META_KEYS, meta, summaries } from "../../db/schema";
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
-import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, writeResults } from "../../db/store/summaries";
+import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, targetKey, writeResults } from "../../db/store/summaries";
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
@@ -914,5 +914,54 @@ describe("runSummaries — incremental runs and summarizeNow", () => {
 
         await summarizeNow(root, "src/core/log.ts", stub.summarizer);
         expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "ready", done: 13, total: 14, note: "1 out of date (redone when opened)" });
+    });
+
+    it("sends only the targets `select` accepts", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        fs.appendFileSync(path.join(root, "src/app/main.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        const wanted = new Set(["file:src/app/main.ts"]);
+        expect(await runSummaries(root, {
+            summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, select: (t) => wanted.has(targetKey(t.kind, t.path)),
+        })).toMatchObject({ summarized: 1 });
+        expect(row(root, "src/app/main.ts")?.status).toBe("fresh");
+        expect(row(root, "src/core/log.ts")?.status).toBe("stale");
+    });
+
+    it("sends at most `maxTargets`, the most-imported first", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        fs.appendFileSync(path.join(root, "src/app/main.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, maxTargets: 1 }))
+            .toMatchObject({ summarized: 1 });
+        // main.ts and log.ts both have 3 importers; the path breaks the tie
+        expect(row(root, "src/app/main.ts")?.status).toBe("fresh");
+        expect(row(root, "src/core/log.ts")?.status).toBe("stale");
+    });
+
+    it("a per-run cap counts only what this run spends", async () => {
+        const root = indexedFixture();
+        const stub = stubSummarizer();
+        // the first pass spends $0.00254: 7 Haiku files at 100 in / 20 out ($0.00014) and 6 Sonnet folders and the repo ($0.0024)
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+
+        // against everything the repo has spent, $0.001 is already gone
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, budgetUsd: 0.001 }))
+            .toMatchObject({ summarized: 0, stopped: true });
+        // counting only this run: one Haiku file at its mean, (100 × $0.10 + 20 × $0.50) / 1M = $0.00002
+        expect(await runSummaries(root, {
+            summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, budgetUsd: 0.001, budgetScope: "run",
+        })).toMatchObject({ summarized: 1, stopped: false });
+        expect(row(root, "src/core/log.ts")?.status).toBe("fresh");
     });
 });

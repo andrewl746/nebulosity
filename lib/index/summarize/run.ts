@@ -9,7 +9,7 @@ import { requireRepository } from "../../db/store/structure";
 import {
     addUsage, applyTargetUpdates, countBatchRows, countInFlight, inFlightBatches, loadBatchRows, loadFileSummaryChunk,
     loadImporters, loadSummaries, loadUsage, markInFlight, releaseBatch, targetKey, writeResults,
-    type FileFacts, type StoredSummary, type SummaryResult,
+    type FileFacts, type StoredSummary, type SummaryResult, type UsageRow,
 } from "../../db/store/summaries";
 import { repoKey } from "../paths";
 import { projectSpend, type ProjectedRequest } from "./budget";
@@ -47,10 +47,20 @@ export type SummaryRunOptions = {
      */
     budgetUsd?: number;
     /**
+     * What `budgetUsd` caps. "repo" (the default, the CLI's): everything the repo has ever spent on summaries, plus this
+     * run. "run": only what this run spends. The background worker uses it (ADR-038), since a repo's first full pass can
+     * already sit near the CLI's cap (ADR-035, amended).
+     */
+    budgetScope?: "repo" | "run";
+    /**
      * Batches to give up on before the run starts (ADR-033, amended in V1.3). Their requests are marked failed and sent
      * again, and paid for again: for a batch whose results keep failing to download. The stage note names such a batch.
      */
     releaseBatches?: readonly string[];
+    /** Only targets this accepts are sent: the background worker refreshes just the files it saw change (ADR-038). Default: all. */
+    select?: (target: PlannedTarget) => boolean;
+    /** Send at most this many targets in this run, in queue order (most-imported files first). Default: no limit. */
+    maxTargets?: number;
     onProgress?: (message: string) => void;
 };
 
@@ -166,6 +176,9 @@ type Budget = {
     usd: number;
     /** How the projection prices the rest of the run: batch rates, or direct ones when the run's transport is direct. */
     restTransport: "direct" | "batch";
+    /** "run": usage recorded before the run began is the baseline, left out of what's spent (SummaryRunOptions.budgetScope). */
+    scope: "repo" | "run";
+    baseline: readonly UsageRow[];
 };
 
 type RunContext = {
@@ -180,6 +193,10 @@ type RunContext = {
     stopped: string | null;
     /** Checked before every submission; null means no cap. */
     budget: Budget | null;
+    /** Only targets this accepts are sent (SummaryRunOptions.select). */
+    select: (target: PlannedTarget) => boolean;
+    /** How many more targets this run may send (SummaryRunOptions.maxTargets). */
+    sendLeft: number;
     /**
      * The note of the spend-cap check that failed in this pass; every pass starts with none. While it's set nothing more
      * is sent, but batches at Anthropic are still collected, and the run finishes with it when nothing more can happen.
@@ -188,9 +205,12 @@ type RunContext = {
     say: (message: string) => void;
 };
 
-function newContext(db: Db, repoId: number, root: string, say: (message: string) => void, budget: Budget | null = null): RunContext {
+function newContext(
+    db: Db, repoId: number, root: string, say: (message: string) => void, budget: Budget | null = null,
+    select: (target: PlannedTarget) => boolean = () => true, sendLeft: number = Infinity
+): RunContext {
     return {
-        db, repoId, root, say, budget,
+        db, repoId, root, say, budget, select, sendLeft,
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPasses: 0,
@@ -218,9 +238,13 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     // Under auto most of the money goes on waves big enough for the Batch API, so the rest of the run is priced at
     // batch rates (ADR-035). The small regular-API waves, at the top of the tree and mid-run as file batches land at
     // different times, make that a slight underestimate.
-    const budget: Budget | null = options.budgetUsd === undefined ? null
-        : { usd: options.budgetUsd, restTransport: transport === "direct" ? "direct" : "batch" };
-    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget);
+    const budget: Budget | null = options.budgetUsd === undefined ? null : {
+        usd: options.budgetUsd,
+        restTransport: transport === "direct" ? "direct" : "batch",
+        scope: options.budgetScope ?? "repo",
+        baseline: options.budgetScope === "run" ? loadUsage(db, repoId) : [],
+    };
+    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget, options.select, options.maxTargets);
     let last: PlannedTarget[] = [];
 
     // a mistyped id must fail before anything is locked, released or rewritten
@@ -244,7 +268,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             // each pass checks the spend cap afresh before it sends anything (below)
             ctx.overBudget = null;
 
-            const ready = snap.targets.filter((t) => t.state === "ready");
+            const ready = snap.targets.filter((t) => t.state === "ready" && ctx.select(t)).slice(0, ctx.sendLeft);
             const progress = (note: string) =>
                 writeStage(db, repoId, "summaries", { state: "running", done: upToDate(snap.targets), total: snap.targets.length, note });
 
@@ -262,6 +286,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
                     if (useBatch) await submitInBatches(ctx, summarizer, snap, ready, ids);
                     else await sendDirect(ctx, summarizer, snap, ready, ids, options.concurrency ?? DEFAULT_CONCURRENCY,
                         options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS, progress);
+                    ctx.sendLeft -= ready.length;
                     // A later batch of this wave may have found the run over budget: then it collects, below. If the
                     // circuit breaker tripped as well, the next pass ends the run at once, as it always does.
                     if (ctx.overBudget === null || ctx.stopped !== null) continue;
@@ -659,13 +684,16 @@ function withinBudget(
     const end = transport === "batch" ? start + MAX_BATCH_REQUESTS : ready.length;
     const projection = projectSpend({
         usage: loadUsage(ctx.db, ctx.repoId),
+        baseline: ctx.budget.baseline,
         atAnthropic,
         thisSubmission: ready.slice(start, end),
         thisTransport: transport,
-        rest: [...ready.slice(end), ...inState(snap, "waiting")],
+        rest: [...ready.slice(end), ...inState(snap, "waiting").filter(ctx.select)]
+            .slice(0, Math.max(0, ctx.sendLeft - (Math.min(end, ready.length) - start))),
         restTransport: ctx.budget.restTransport,
     });
     const submission = transport === "batch" ? "batch" : "wave";
+    const spentLabel = ctx.budget.scope === "run" ? "spent this run" : "spent";
     const usd = {
         spent: formatUsd(projection.spent),
         atAnthropic: formatUsd(projection.atAnthropic),
@@ -679,15 +707,15 @@ function withinBudget(
     // instead of quietly lifting the cap.
     if (!(projection.total <= ctx.budget.usd)){
         ctx.overBudget = `stopped: the next ${submission} would bring the projected spend to ${usd.total}, over the ${usd.budget} budget`
-            + ` (spent ${usd.spent}, at Anthropic ≈ ${usd.atAnthropic}, this ${submission} ≈ ${usd.thisSubmission}, the rest ≈ ${usd.rest});`
-            + " run again with --budget <usd> to go on";
+            + ` (${spentLabel} ${usd.spent}, at Anthropic ≈ ${usd.atAnthropic}, this ${submission} ≈ ${usd.thisSubmission}, the rest ≈ ${usd.rest});`
+            + (ctx.budget.scope === "run" ? " the rest waits for the next run" : " run again with --budget <usd> to go on");
         ctx.say(ctx.overBudget);
         return false;
     }
 
     // a model with no price on file was counted as $0, so the total is only a lower bound: say which
     const unpriced = projection.unpriced.length > 0 ? ` (no price on file for ${projection.unpriced.join(", ")}: counted as $0)` : "";
-    ctx.say(`budget: spent ${usd.spent} + at Anthropic ≈ ${usd.atAnthropic} + this ${submission} ≈ ${usd.thisSubmission}`
+    ctx.say(`budget: ${spentLabel} ${usd.spent} + at Anthropic ≈ ${usd.atAnthropic} + this ${submission} ≈ ${usd.thisSubmission}`
         + ` + the rest ≈ ${usd.rest} = ${usd.total} of ${usd.budget}${unpriced}`);
     return true;
 }

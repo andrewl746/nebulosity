@@ -394,6 +394,8 @@
 
 **Revisit when:** the assumed tokens prove far off on a new repo before its first answers land (then seed the means from the checkpoint's sample), or the regular-API gap grows past a dollar (then price the waves under 100 requests at direct rates).
 
+**Amended (2026-10-12, V1.3): a per-run scope.** The cap above is cumulative: it counts every `summary_usage` row the repo has. That suits the CLI, but not the background worker (ADR-038). VS Code's first pass already spent $10.30 of the $15, so the worker would have refreshed about $4.70 of summaries and then refused every refresh for good, quietly. A run can now be capped on its own spend (`budgetScope: "run"`): usage recorded before it began is a baseline, left out of `spent`, while each model's mean still comes from all of it. Each worker refresh and sweep runs under $1 that way (`INCREMENTAL_BUDGET_USD`). At VS Code's measured means, 50 Haiku files cost about $0.03 and 20 Sonnet folders $0.11–0.16, so the cap only stops a run gone wrong; the file and folder limits bound the normal case. The CLI keeps the cumulative cap.
+
 ## ADR-036 — The Map reads one level at a time: the fold, its order, and an index version (2026-10-12)
 
 **Context:** ADR-029 fixed the Map's shape: levels, a 50-box cap with "+N more", and precomputed level edges. Building it raised four questions: which boxes fold, what the "+N more" box is called, how a client knows its copy is old, and how "uses / used by" (§4.2) is computed.
@@ -421,6 +423,30 @@
 **Alternatives:** (a) Run the full pipeline on every save: 4.9 s, so S6 fails. (b) Find the files that could import a new file by their specifiers, without re-resolving everything: faster, but every resolver rule (aliases, `baseUrl`, `index` files, NodeNext) would need an inverse, and an inverse that's wrong silently drops edges.
 **Consequences:** A single-file edit costs tens of milliseconds on VS Code (measured in Task 22); a create or delete about half a second. The tests check every kind of change against a full run of the same tree, so the two paths can't drift apart.
 **Revisit when:** a repo is big enough that the in-memory re-resolve of a create or delete passes 1 s (then index files by the specifier stems they could satisfy), or E2's call edges need the same treatment.
+
+## ADR-038 — A background worker process owns the index while the Map is open (2026-10-12)
+
+**Context:** PIVOT_SPEC.md §3 has the Next server run "background indexing on a worker thread". §5.6 asks for a watcher, debounced structure updates, a summary refresh 60 s after a file's last change, a periodic sweep of out-of-date folders, and re-embedding. On VS Code a warm full run takes 4.9 s and planning the summaries about 0.2 s. On the server's event loop, either would stall every request behind it, and S3 allows 100 ms per interaction. The server is bundled by Turbopack, so a worker thread would have to load the TypeScript engine through the bundle, or through a loader that isn't known to apply inside threads.
+**Decision:**
+- **A forked child process, not a worker thread.** The server forks `scripts/background.ts` through tsx (`--import tsx`, resolved from the checkout), the way every CLI script runs. The child owns every write while the Map is open. The server stays a reader: level, describe, search and status read the shared SQLite file (WAL). "Summarize now" and "re-index" go to the child as requests over the IPC channel.
+- **One job at a time.** Structure updates, summary refreshes, sweeps and embedding slices run one after another. "Summarize now" runs at once beside them, deduplicated per target (ADR-033, amended).
+- **Structure.** A batch of watched paths goes through `applyFileChanges` (ADR-037). Over 500 paths, or a changed `.gitignore`, gets one full run instead. Every update ends by re-deriving the summaries stage (ADR-032, amended).
+- **Summaries.** Each changed file waits 60 s, and another save restarts its wait. Files that changed together wait on one timer, so they come due as one refresh (a timer per file would start a refresh each). Due files are refreshed through the regular API: most-imported first, at most 50 per refresh, under a $1 cap on that refresh's own spend (ADR-035, amended). Their folders turn stale and wait.
+- **The sweep.** Every 10 minutes it redoes out-of-date folders whose children are settled, deepest first, at most 20, under the same per-run cap. A pull can't set off hundreds of Sonnet calls at once.
+- **Embeddings.** Whatever lacks a vector is embedded in slices of 64, so a structure update never waits more than a few seconds.
+- **Startup.** On start and on every repo switch, one warm full run catches what changed while nothing watched (4.9 s on VS Code, in the child). Size-and-mtime filtering (§5.6) waits until that grows.
+- **Locks.** Work another process holds a lock on is retried after 30 s.
+- **Crashes.** The server's supervisor restarts a crashed child after growing delays (1, 2, 5, 10, then 30 s) and answers anything it owed with an error. The child exits when the server does, because its IPC channel closes.
+**Alternatives:**
+- (a) Everything on the server's event loop: simplest, but a save on VS Code would freeze the Map for up to a second, and a branch switch for tens of seconds.
+- (b) A worker thread, as the spec first said: loading TypeScript inside one under Turbopack is unproven, and a crash in a thread can take the server with it.
+- (c) Refresh every changed file however many there are: a branch switch could send thousands of requests silently.
+**Consequences:**
+- The Map never waits on indexing.
+- A second Node process costs about 100–200 MB.
+- The child needs tsx at run time, a devDependency: fine for a local tool, and noted for the desktop build.
+- When more than 50 files change at once, the rest keep stale summaries until opened, swept, or summarized by the CLI.
+**Revisit when:** the desktop app (Electron or Tauri) replaces Next as the host; the worker becomes its background process.
 
 ---
 

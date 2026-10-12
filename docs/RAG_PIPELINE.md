@@ -120,7 +120,7 @@ Under the budget the run prints `budget: spent $… + at Anthropic ≈ $… + th
 - While it collects, the stage note reads `over budget, so nothing new goes out; collecting the N batches already at Anthropic`. After each collection the run checks again, with the real usage in place of the estimates, and sends if the projection now fits.
 - It finishes over budget once nothing more can happen: nothing in flight, or nothing more ended under `--no-wait`. The stage is then `failed`, or `running` while batches are still at Anthropic, and the note starts with `stopped:`, as after the circuit breaker.
 
-The budget is `--budget <usd>`, default $15 (S2). The projection runs a little low, by an estimated under $1 on VS Code. The rest is priced by batch, but waves under 100 requests go through the regular API at full price: at the top of the tree, and also mid-run, when file batches land at different times. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
+The budget is `--budget <usd>`, default $15 (S2). The background worker caps each refresh and sweep at $1 of its own spend instead (`budgetScope: "run"`, ADR-035 amended). The projection runs a little low, by an estimated under $1 on VS Code. The rest is priced by batch, but waves under 100 requests go through the regular API at full price: at the top of the tree, and also mid-run, when file batches land at different times. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
 
 ---
 

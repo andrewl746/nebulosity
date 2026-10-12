@@ -187,15 +187,15 @@ Embed `tagline + summary + path` for each fresh summary with the existing MiniLM
 The call graph (E2), git history (E3) and clusters (E5) plug into the same stage and status mechanism.
 
 ### 5.6 Incremental updates and freshness
-- **Watcher.** While the Next server runs, a watcher (chokidar) covers the repo root, ignoring `.git` and `node_modules`. Structure updates are debounced by 1 s. A file's summary refreshes only after 60 s with no further change to that file.
-- **Startup check.** Size and modification time act as a fast filter, and only candidates get re-hashed. Even a full re-read is cheap: 2.4 s for VS Code.
+- **Watcher.** While the Next server runs, its background worker (ADR-038) watches the repo root with chokidar. It ignores `.git`, `node_modules` and the other folders discovery skips, plus build output (`dist`, `out`, `build`, `coverage`; in a git repo only where `.gitignore` leaves them out) and top-level folders `.gitignore` leaves out. Structure updates are debounced by 1 s (5 s at most during a steady stream). A file's summary refreshes only after 60 s with no further change to that file, and at most 50 files are refreshed at once, under a $1 cap per refresh.
+- **Startup check.** Size and modification time act as a fast filter, and only candidates get re-hashed. Even a full re-read is cheap: 2.4 s for VS Code. (V1.3 runs one warm full run in the worker, 4.9 s on VS Code; the size-and-mtime filter waits until that's too slow.)
 - **When file F changes:**
   - Re-parse F and replace its rows.
   - Re-resolve F's imports.
   - Re-resolve imports **into** F's path only when F is created, deleted or renamed.
   - Update the aggregates by deltas: each import moves its level edge's count by one (ADR-037).
   - F's summary becomes `stale` and is redone after the debounce.
-  - Ancestor folder summaries become `stale` and are refreshed lazily, when viewed or by a periodic sweep, so a `git pull` doesn't trigger hundreds of Sonnet calls.
+  - Ancestor folder summaries become `stale` and are refreshed lazily, when viewed or by a periodic sweep (every 10 minutes, at most 20 folders, deepest first), so a `git pull` doesn't trigger hundreds of Sonnet calls.
   - Re-embed whatever was re-summarized.
   - Untouched files are never re-read, re-parsed or re-summarized.
 - **E2 nuance.** Call edges *into* F's symbols are re-resolved in files that import F. A rename in F changes what those links point at.

@@ -304,3 +304,9 @@ export function releaseBatch(db: Db, repoId: number, batchId: string, reason: st
         .where(and(eq(summaries.repoId, repoId), eq(summaries.batchId, batchId))).all();
     return writeResults(db, rows.map((r) => ({ id: r.id, batchId, inputHash: r.pendingHash ?? "", outcome: { ok: false as const, error: reason } })));
 }
+
+/** How many folder and repo summaries are stale: what the background worker's sweep has to do. */
+export function countStaleFolders(db: Db, repoId: number): number {
+    return db.select({ n: sql<number>`count(*)` }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), eq(summaries.status, "stale"), sql`${summaries.targetKind} != 'file'`)).get()?.n ?? 0;
+}

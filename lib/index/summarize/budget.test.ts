@@ -76,4 +76,22 @@ describe("projectSpend", () => {
         expect(projection.total).toBeCloseTo(0.00225, 12);
         expect(projection.unpriced).toEqual([opus]);
     });
+
+    it("leaves a baseline out of what's spent, but still takes the means over everything", () => {
+        const projection = projectSpend({
+            usage: [
+                { model: "claude-haiku-5-5", transport: "batch", requests: 4, inputTokens: 8_000, outputTokens: 400 },
+                { model: "claude-haiku-5-5", transport: "direct", requests: 1, inputTokens: 2_000, outputTokens: 100 },
+            ],
+            baseline: [{ model: "claude-haiku-5-5", transport: "batch", requests: 4, inputTokens: 8_000, outputTokens: 400 }],
+            atAnthropic: [], thisSubmission: [file], thisTransport: "direct", rest: [], restTransport: "direct",
+        });
+
+        // all of it: (8,000 × $0.10 + 400 × $0.50) / 1M / 2 = $0.0005 at batch, plus (2,000 × $0.10 + 100 × $0.50) / 1M = $0.00025;
+        // less the baseline's $0.0005, that's $0.00025 spent
+        expect(projection.spent).toBeCloseTo(0.00025, 12);
+        // Haiku's mean over all 5 requests: 10,000 / 5 = 2,000 in and 500 / 5 = 100 out, so one file direct is $0.00025
+        expect(projection.thisSubmission).toBeCloseTo(0.00025, 12);
+        expect(projection.total).toBeCloseTo(0.0005, 12);
+    });
 });
