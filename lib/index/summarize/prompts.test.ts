@@ -87,6 +87,23 @@ describe("importerLine", () => {
         expect(importerLine("lib/a.ts", source("app/x.ts", "app/y.ts", "web/x.ts"), 1)).toBe("Imported by: 3 files: app (2), and 1 file elsewhere");
     });
 
+    it("pins a file at the repo root: the lowest common folder is the root, so an importer's group is its top-level folder", () => {
+        // dirOf("build.js") is "", so the lowest common folder is "" and the child toward src/x/y.ts is src
+        expect(importerLine("build.js", [{ path: "src/x/y.ts", isTest: false }])).toBe("Imported by: 1 file: src (1)");
+    });
+
+    it("writes group counts with thousands separators, the way the total is written", () => {
+        // lcaFolder("b", "a") is "" and childToward("", "a/fN.ts") is a, so all 1,000 importers are one group
+        const importers = source(...Array.from({ length: 1000 }, (_, i) => `a/f${i}.ts`));
+        expect(importerLine("b/x.ts", importers)).toBe("Imported by: 1,000 files: a (1,000)");
+    });
+
+    it("shows at least one group however small a limit it's given", () => {
+        // three groups of one in path order; a limit of 0 is raised to 1, so src/app/main.ts is shown and the other 2 files are elsewhere
+        expect(importerLine("src/app/util.ts", source("src/app/main.ts", "src/app/view.tsx", "src/index.ts"), 0))
+            .toBe("Imported by: 3 files: src/app/main.ts (1), and 2 files elsewhere");
+    });
+
     it("adds no 'elsewhere' tail when the groups exactly fit", () => {
         // from lib, the groups are web (2: x.ts, y.ts), app (1) and docs (1): three groups, all shown; the test file is tallied after them
         expect(importerLine("lib/a.ts", [...source("app/x.ts", "web/x.ts", "web/y.ts", "docs/z.ts"), { path: "lib/a.test.ts", isTest: true }]))

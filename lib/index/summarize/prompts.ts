@@ -104,11 +104,14 @@ export function importerLine(filePath: string, importers: readonly Importer[], m
 
     const ranked = [...perGroup].sort(([groupA, countA], [groupB, countB]) =>
         countB - countA || (groupA < groupB ? -1 : groupA > groupB ? 1 : 0));
-    const shown = ranked.slice(0, maxGroups);
-    const named = shown.map(([group, count]) => `${group} (${count})`);
+    // At least one group is always named: with none, the line would read "Imported by: 3 files: , and 3 files elsewhere".
+    const limit = Math.max(1, maxGroups);
+    const shown = ranked.slice(0, limit);
+    // Counts are written the way plural() writes the total, so a central file reads "3,066 files: src/vs/workbench (1,840), ...".
+    const named = shown.map(([group, count]) => `${group} (${count.toLocaleString("en-US")})`);
 
     let line = `Imported by: ${plural(nonTests.length, "file")}: ${named.join(", ")}`;
-    if (ranked.length > maxGroups){
+    if (ranked.length > limit){
         const rest = nonTests.length - shown.reduce((sum, [, count]) => sum + count, 0);
         line += `, and ${plural(rest, "file")} elsewhere`;
     }
