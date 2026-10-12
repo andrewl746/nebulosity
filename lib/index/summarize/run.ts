@@ -178,7 +178,8 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     const summarizer = options.summarizer;
     const transport = options.transport ?? "auto";
     // Under auto most of the money goes on waves big enough for the Batch API, so the rest of the run is priced at
-    // batch rates (ADR-035; the small waves at the top of the tree make that a slight underestimate).
+    // batch rates (ADR-035). The small regular-API waves, at the top of the tree and mid-run as file batches land at
+    // different times, make that a slight underestimate.
     const budget: Budget | null = options.budgetUsd === undefined ? null
         : { usd: options.budgetUsd, restTransport: transport === "direct" ? "direct" : "batch" };
     const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget);
