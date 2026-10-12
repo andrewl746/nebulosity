@@ -14,6 +14,11 @@ export function nameOf(targetPath: string, repoRoot: string): string {
     return targetPath.slice(targetPath.lastIndexOf("/") + 1);
 }
 
+/** A path's last two segments, "src/vs/platform/files/common" → "files/common": enough to tell areas apart in a chip. */
+export function shortPath(targetPath: string): string {
+    return targetPath.split("/").slice(-2).join("/");
+}
+
 /** Whether `targetPath` is strictly inside `folder` ("" holds everything but itself). */
 export function isInside(targetPath: string, folder: string): boolean {
     return folder === "" ? targetPath !== "" : targetPath.startsWith(`${folder}/`);

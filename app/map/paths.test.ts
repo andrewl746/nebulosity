@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapNode } from "@/lib/contracts";
-import { boxFor, nameOf, parentOf } from "./paths";
+import { boxFor, nameOf, parentOf, shortPath } from "./paths";
 
 const box = (p: string, kind: MapNode["kind"] = "folder"): MapNode => ({ path: p, name: p, kind, fileCount: 1, summaryStatus: "fresh" });
 
@@ -21,5 +21,12 @@ describe("Map paths", () => {
         expect(boxFor(level, "scripts/build.js")).toBeNull();
         expect(boxFor(level, "src")).toBeNull();
         expect(boxFor({ path: "", nodes: [box("src")] }, "src/app/main.ts")).toBe("src");
+    });
+
+    it("shortens a path to its last two segments, for the panel's chips", () => {
+        expect(shortPath("src/vs/platform/files/common")).toBe("files/common");
+        expect(shortPath("build")).toBe("build");
+        expect(shortPath("src/vs")).toBe("src/vs");
+        expect(shortPath("")).toBe("");
     });
 });
