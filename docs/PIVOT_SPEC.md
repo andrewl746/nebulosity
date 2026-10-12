@@ -187,7 +187,7 @@ Embed `tagline + summary + path` for each fresh summary with the existing MiniLM
 The call graph (E2), git history (E3) and clusters (E5) plug into the same stage and status mechanism.
 
 ### 5.6 Incremental updates and freshness
-- **Watcher.** While the Next server runs, its background worker (ADR-038) watches the repo root with chokidar. It ignores `.git`, `node_modules` and the other folders discovery skips, plus build output (`dist`, `out`, `build`, `coverage`; in a git repo only where `.gitignore` leaves them out) and top-level folders `.gitignore` leaves out. Structure updates are debounced by 1 s (5 s at most during a steady stream). A file's summary refreshes only after 60 s with no further change to that file, and at most 50 files are refreshed at once, under a $1 cap per refresh.
+- **Watcher.** While the Next server runs, its background worker (ADR-038) watches the repo root with chokidar. It ignores `.git`, `node_modules` and the other folders discovery skips, plus build output (`dist`, `out`, `build`, `coverage`; in a git repo only where `.gitignore` leaves them out) and top-level folders `.gitignore` leaves out. Structure updates are debounced by 1 s (5 s at most during a steady stream). A file's summary refreshes only after 60 s with no further change to that file, and at most 50 files are refreshed automatically in any 10 minutes, under a $1 cap per refresh.
 - **Startup check.** Size and modification time act as a fast filter, and only candidates get re-hashed. Even a full re-read is cheap: 2.4 s for VS Code. (V1.3 runs one warm full run in the worker, 4.9 s on VS Code; the size-and-mtime filter waits until that's too slow.)
 - **When file F changes:**
   - Re-parse F and replace its rows.
@@ -428,7 +428,7 @@ Each v1 slice ends demoable:
 | ADR-035 | A spend cap: before each submission, project spent + at Anthropic + this submission + the rest, and stop sending past `--budget` (default $15); batches already at Anthropic are still collected |
 | ADR-036 | The Map reads one level at a time: children in size order, a 50-box fold with a `<level>/` "+N more" box, an index version for caching and refetching, area counts from an in-memory import graph |
 | ADR-037 | Incremental structure updates re-resolve only what can have changed and write only the differences, with level edges moved by ±1 per import |
-| ADR-038 | A forked background worker owns the index while the Map is open: watcher, incremental updates, summary refresh (60 s, ≤ 50 files), a folder sweep, sliced embeddings |
+| ADR-038 | A forked background worker owns the index while the Map is open: watcher, incremental updates, summary refresh (60 s, ≤ 50 files per 10 minutes), a folder sweep, sliced embeddings |
 | ADR-039 | The live channel: SSE out, a localhost-only POST in (Host and Origin checked), the server bound to loopback |
 | ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2); the version names the API and migrations carry the data |
 

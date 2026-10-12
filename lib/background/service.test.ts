@@ -188,6 +188,42 @@ describe("background service", () => {
         await service.stop();
     });
 
+    it("refreshes at most 50 files per 10 minutes, however a long burst splits into groups (M2)", async () => {
+        const root = makeTempDir("neb-many-");
+        fs.mkdirSync(path.join(root, "src"));
+        const names = Array.from({ length: 61 }, (_, i) => `src/f${String(i).padStart(2, "0")}.ts`);
+        for (const name of names) fs.writeFileSync(path.join(root, name), "export const v = 1;\n");
+        indexRepository(root);
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        const save = async (batch: string[]) => {
+            for (const name of batch) fs.appendFileSync(path.join(root, name), "export const w = 2;\n");
+            watcher.changed(batch);
+            await service.idle();
+        };
+        const filesSent = () => stub.subjects().filter((s) => s.startsWith("File: ")).length;
+
+        // a formatter over the tree: the watcher hands its saves over in batches at most 5 s apart
+        await save(names.slice(0, 30));
+        await vi.advanceTimersByTimeAsync(5_000);
+        await save(names.slice(30, 60));
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(filesSent()).toBe(MAX_AUTO_REFRESH_FILES);
+
+        // ten minutes on, the window has room again
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await save([names[60]]);
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(filesSent()).toBe(MAX_AUTO_REFRESH_FILES + 1);
+        await service.stop();
+    });
+
     it("still refreshes a repo whose summaries have cost more than the CLI's $15: each refresh has its own cap", async () => {
         const root = await summarizedFixture();
         const db = getDb();

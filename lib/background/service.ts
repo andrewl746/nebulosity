@@ -16,8 +16,13 @@ import { watchRepository, type RepoWatcher } from "../index/watch";
 
 /** More changed paths than this at once (a branch switch, a big pull), and one full run is cheaper than an update. */
 export const MAX_INCREMENTAL_PATHS = 500;
-/** At most this many file summaries per refresh, so a pull that touches thousands of files can't spend silently (ADR-038). */
+/**
+ * At most this many file summaries are refreshed automatically per AUTO_REFRESH_WINDOW_MS, so a pull or a formatter that
+ * touches thousands of files can't spend silently (ADR-038). A window, not a refresh: a long burst reaches the worker as
+ * many batches, and each would otherwise get its own 50.
+ */
 export const MAX_AUTO_REFRESH_FILES = 50;
+export const AUTO_REFRESH_WINDOW_MS = 10 * 60_000;
 /** At most this many out-of-date folders per sweep, deepest first; their parents follow in later sweeps. */
 export const SWEEP_MAX_FOLDERS = 20;
 /** Summaries embedded per slice: about 3.5 s of MiniLM at its measured 18 a second, so no other job waits long. */
@@ -94,6 +99,8 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     const pendingUpdate = new Set<string>();
     const pendingRefresh = new Set<string>();
     let embedQueued = false;
+    /** Files refreshed automatically in the last AUTO_REFRESH_WINDOW_MS: each refresh's count leaves it when its window ends. */
+    let refreshedInWindow = 0;
     const lanes: Record<Lane, Promise<unknown>> = { structure: Promise.resolve(), maintenance: Promise.resolve() };
 
     /**
@@ -187,7 +194,8 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
 
     /**
      * Redoes the summaries of files whose quiet minute is up (PIVOT_SPEC.md §5.6): most-imported first, at most
-     * MAX_AUTO_REFRESH_FILES, through the regular API, under a cap on this refresh's own spend (INCREMENTAL_BUDGET_USD).
+     * MAX_AUTO_REFRESH_FILES per AUTO_REFRESH_WINDOW_MS, through the regular API, under a cap on this refresh's own spend
+     * (INCREMENTAL_BUDGET_USD).
      * Their folders turn stale and wait to be opened or swept, so a pull can't set off hundreds of Sonnet calls.
      */
     async function runRefresh(): Promise<void> {
@@ -195,6 +203,11 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         const paths = [...pendingRefresh].sort();
         pendingRefresh.clear();
         if (repo === null || paths.length === 0 || deps.summarizer === null) return;
+        const allowance = MAX_AUTO_REFRESH_FILES - refreshedInWindow;
+        if (allowance <= 0){
+            log(`${paths.length} changed files keep their old summaries: ${MAX_AUTO_REFRESH_FILES} were refreshed in the last ${AUTO_REFRESH_WINDOW_MS / 60_000} minutes; they're redone when opened, or by npm run summarize`);
+            return;
+        }
 
         const wanted = new Set(paths.map((p) => targetKey("file", p)));
         // The content whose quiet minute is up: each file's input hash as this run first plans it. A file saved again
@@ -216,11 +229,14 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
                 select: isDue,
-                maxTargets: MAX_AUTO_REFRESH_FILES,
+                maxTargets: allowance,
                 onProgress: (message) => log(`summaries: ${message}`),
             });
-            if (paths.length > MAX_AUTO_REFRESH_FILES){
-                log(`refreshed at most ${MAX_AUTO_REFRESH_FILES} of ${paths.length} changed files; the rest stay out of date until opened or npm run summarize`);
+            const sent = result.summarized + result.failed;
+            refreshedInWindow += sent;
+            later(() => { refreshedInWindow -= sent; }, AUTO_REFRESH_WINDOW_MS);
+            if (paths.length > allowance){
+                log(`refreshed at most ${allowance} of ${paths.length} changed files; the rest stay out of date until opened or npm run summarize`);
             }
             if (result.summarized > 0) queueEmbed();
         } catch (err){
@@ -282,6 +298,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         waiting.clear();
         for (const timer of retryTimers) clearTimeout(timer);
         retryTimers.clear();
+        refreshedInWindow = 0;   // its timers just went with retryTimers: another repo starts a fresh window
         pendingUpdate.clear();
         pendingRefresh.clear();
         const current = watcher;
