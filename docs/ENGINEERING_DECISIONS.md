@@ -453,6 +453,11 @@
 - When more than 50 files change at once, the rest keep stale summaries until opened, swept, or summarized by the CLI.
 **Revisit when:** the desktop app (Electron or Tauri) replaces Next as the host; the worker becomes its background process.
 
+**Amended (2026-10-12, V1.3 final review): the worker follows the active repo.** `npm run index` rewrites `activeRepo` in the config without telling the server, and the Map's empty state tells a new user to do exactly that. The read routes and the Map followed the config, but the worker kept the repo it started with. Live updates then stopped silently, and "summarize now" or re-index could run on a repo other than the one on screen, paying for the wrong target.
+- **Following.** Every route that talks to the worker, and the status route the Map polls every 2 s, first tells the supervisor the config's repo (`workerOn`). The supervisor passes on only a change, so the poll costs nothing.
+- **Refusing.** Each `summarize` and `index` request names its repo, and the worker refuses one meant for another (`RepoSwitchingError`, `409 INDEX_LOCKED`, "try again in a moment"). A request that beats the switch can't act on the wrong repo.
+- **Waiting for an index.** A repo that isn't indexed yet is checked again every 30 s, and the worker starts on it once it is, instead of logging once and idling.
+
 ## ADR-039 — The live channel: SSE out, localhost-only POST in, the server on loopback (2026-10-12)
 
 **Context:** PIVOT_SPEC.md §8 has MCP tool handlers notify the open Map, with `show_on_map` reusing ADR-008's UI actions. The routes that spend money (summarize), change the index (re-index, switch repo) or drive the Map (live events) are reachable from any web page the user has open: a page can POST to `localhost:3000`, and DNS rebinding can make a foreign host name resolve to 127.0.0.1. `next dev` listens on every interface, so the GET routes would serve code snippets and summaries to the local network.

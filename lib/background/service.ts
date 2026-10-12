@@ -3,7 +3,7 @@ import { getDb } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { findRepository } from "../db/store/structure";
 import { countStaleFolders, targetKey, type StoredSummary } from "../db/store/summaries";
-import { NoActiveRepoError, SummariesOffError } from "../engine/errors";
+import { NoActiveRepoError, RepoSwitchingError, SummariesOffError } from "../engine/errors";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository, type IndexOptions, type IndexResult } from "../index/pipeline";
@@ -57,9 +57,9 @@ export type BackgroundService = {
     /** Points the worker at a repo (null: none): catches up on what changed while nothing watched, then watches it. */
     setRepo(repoRoot: string | null): Promise<void>;
     /** "Summarize now" for the Map (PIVOT_SPEC.md §5.3). It runs at once, beside the queued maintenance work. */
-    summarizeNow(targetPath: string): Promise<StoredSummary>;
+    summarizeNow(targetPath: string, expectedRoot?: string): Promise<StoredSummary>;
     /** A full structure run (POST /api/index), queued behind the work already waiting. */
-    indexNow(onProgress?: IndexOptions["onProgress"]): Promise<IndexResult>;
+    indexNow(onProgress?: IndexOptions["onProgress"], expectedRoot?: string): Promise<IndexResult>;
     /** Resolves once every queued job has run (tests use it). */
     idle(): Promise<void>;
     stop(): Promise<void>;
@@ -275,53 +275,80 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         }
     }
 
+    /**
+     * Starts on an indexed repo: the watcher, then the startup check, the sweep and any embedding left to do. A repo
+     * that isn't indexed yet is checked again every retryLockedMs until it is (npm run index from a terminal), instead
+     * of leaving the worker idle while the Map shows the repo (C1).
+     */
+    async function begin(repo: string, firstTry: boolean): Promise<void> {
+        if (findRepository(getDb(), repoKey(repo)) === null){
+            if (firstTry) log(`${repo} isn't indexed yet; run npm run index -- "${repo}" (checked again every ${timings.retryLockedMs / 1000} s)`);
+            later(() => {
+                if (root !== repo || watcher !== null) return;
+                begin(repo, false).catch((err: unknown) => log(`starting on ${repo} failed: ${err instanceof Error ? err.message : String(err)}`));
+            }, timings.retryLockedMs);
+            return;
+        }
+
+        // Watch first, then catch up. chokidar reports nothing for a file its first crawl hasn't reached (VS Code's
+        // crawl takes seconds), so a change made before the crawl ends is caught by the startup check that follows
+        // it, and any later change by the watcher. The other order would lose edits made during the crawl.
+        const current = watchFn(repo, queueUpdate);
+        watcher = current;
+        await current.ready;
+        if (root !== repo || watcher !== current) return;   // switched again meanwhile, which closed this watcher
+
+        // the startup check (PIVOT_SPEC.md §5.6): one warm full run catches what changed while nothing watched
+        await exclusive(() => {
+            try{
+                indexRepository(repo);
+            } catch (err){
+                if (!(err instanceof IndexLockedError)) throw err;
+                log("another index run holds the lock; watching without the startup check");
+            }
+            refreshSummaryStatus(repo, { summarizerAvailable });
+        });
+        if (root !== repo) return;   // switched again meanwhile
+
+        sweepTimer = setInterval(() => { void exclusive(runSweep); }, timings.sweepEveryMs);
+        queueEmbed();   // summaries the CLI wrote but never embedded (an interrupted run) get their vectors here
+        log(`watching ${repo}`);
+    }
+
+    /**
+     * The repo a request runs on: the worker's own, which must be the one the request is for. The Map follows the
+     * config, and a request can reach the worker before it has switched; acting anyway would hit the wrong repo (C1).
+     */
+    function rootFor(expectedRoot: string | undefined): string {
+        if (expectedRoot !== undefined && (root === null || repoKey(expectedRoot) !== repoKey(root))){
+            throw new RepoSwitchingError(expectedRoot, root === null ? null : repoKey(root));
+        }
+        if (root === null) throw new NoActiveRepoError();
+        return root;
+    }
+
     return {
         async setRepo(next){
             await stopWatching();
             root = next === null ? null : path.resolve(next);
-            const repo = root;
-            if (repo === null) return;
-            if (findRepository(getDb(), repoKey(repo)) === null){
-                log(`${repo} isn't indexed yet; run npm run index -- "${repo}"`);
-                return;
-            }
-
-            // Watch first, then catch up. chokidar reports nothing for a file its first crawl hasn't reached (VS Code's
-            // crawl takes seconds), so a change made before the crawl ends is caught by the startup check that follows
-            // it, and any later change by the watcher. The other order would lose edits made during the crawl.
-            const current = watchFn(repo, queueUpdate);
-            watcher = current;
-            await current.ready;
-            if (root !== repo || watcher !== current) return;   // switched again meanwhile, which closed this watcher
-
-            // the startup check (PIVOT_SPEC.md §5.6): one warm full run catches what changed while nothing watched
-            await exclusive(() => {
-                try{
-                    indexRepository(repo);
-                } catch (err){
-                    if (!(err instanceof IndexLockedError)) throw err;
-                    log("another index run holds the lock; watching without the startup check");
-                }
-                refreshSummaryStatus(repo, { summarizerAvailable });
-            });
-            if (root !== repo) return;   // switched again meanwhile
-
-            sweepTimer = setInterval(() => { void exclusive(runSweep); }, timings.sweepEveryMs);
-            queueEmbed();   // summaries the CLI wrote but never embedded (an interrupted run) get their vectors here
-            log(`watching ${repo}`);
+            if (root !== null) await begin(root, true);
         },
 
-        async summarizeNow(targetPath){
+        async summarizeNow(targetPath, expectedRoot){
             if (deps.summarizer === null) throw new SummariesOffError();
-            if (root === null) throw new NoActiveRepoError();
-            const row = await summarizeNow(root, targetPath, deps.summarizer);
+            const repo = rootFor(expectedRoot);
+            const row = await summarizeNow(repo, targetPath, deps.summarizer);
             queueEmbed();
             return row;
         },
 
-        indexNow(onProgress){
-            const repo = root;
-            if (repo === null) return Promise.reject(new NoActiveRepoError());
+        indexNow(onProgress, expectedRoot){
+            let repo: string;
+            try{
+                repo = rootFor(expectedRoot);
+            } catch (err){
+                return Promise.reject(err);
+            }
             return exclusive(() => {
                 const result = indexRepository(repo, { onProgress });
                 refreshSummaryStatus(repo, { summarizerAvailable });

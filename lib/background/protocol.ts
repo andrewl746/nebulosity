@@ -3,8 +3,9 @@ import type { ErrorEnvelope, IndexEventMap, SummarizeResponse } from "../contrac
 /** Server → worker over the IPC channel (ADR-038). Requests carry an id, and the answer carries it back. */
 export type ParentMessage =
     | { type: "repo"; root: string | null }
-    | { type: "summarize"; id: number; path: string }
-    | { type: "index"; id: number };
+    // each request names the repo it's for: the worker refuses one meant for a repo it isn't on (C1)
+    | { type: "summarize"; id: number; path: string; root: string }
+    | { type: "index"; id: number; root: string };
 
 /** A request that couldn't be done, with the code and message the API shows. */
 export type ApiFailure = { ok: false; error: ErrorEnvelope["error"] };

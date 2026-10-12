@@ -22,6 +22,17 @@ export function backgroundSupervisor(): Supervisor {
     return globalForBackground.nebulosityBackground;
 }
 
+/**
+ * The worker, on the repo the config names now. `npm run index` can change the active repo behind the server's back,
+ * and the Map follows the config on its next status poll, so every route that talks to the worker (and that poll)
+ * comes through here first (ADR-038, amended). Telling the supervisor the repo it already has costs nothing.
+ */
+export function workerOn(root: string | null): Supervisor {
+    const supervisor = backgroundSupervisor();
+    supervisor.setRepo(root);
+    return supervisor;
+}
+
 /** Forks scripts/background.ts through tsx, the way every CLI script runs; `--import tsx` resolves from the checkout (cwd). */
 function spawnWorker(): ChildLike {
     const child = fork(nebulosityPath("scripts", "background.ts"), [], {

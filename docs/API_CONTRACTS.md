@@ -34,7 +34,7 @@ A full structure run of the active repo, in the background worker (ADR-038), wit
 |---|---|---|
 | `progress` | `{ stage: "discover" \| "parse" \| "write" \| "resolve" \| "aggregate", done, total }` | at least once per stage, in order |
 | `done` | `{ files, changed, deleted, edges, folders, levelEdges, errors[], skipped, totalMs }` | terminal on success; `errors` are per-file failures (ADR-021) |
-| `error` | `{ code, message }` | terminal on failure: `INDEX_LOCKED` while another run holds the lock, `INTERNAL` if the worker stopped |
+| `error` | `{ code, message }` | terminal on failure: `INDEX_LOCKED` while another run holds the lock or the worker is still switching to the active repo (ADR-038, amended), `INTERNAL` if the worker stopped |
 
 The run goes on in the worker if the client leaves.
 
@@ -218,6 +218,7 @@ type SummarizeResponse = { path: string; kind: "repo" | "folder" | "file"; tagli
 - **Status codes.**
   - `409 NOT_READY`: a folder whose files or subfolders aren't all summarized yet. Its summary would be written over "(no summary yet)".
   - `409 SUMMARIES_OFF`: no API key.
+  - `409 INDEX_LOCKED`: the background worker is still switching to the active repo (ADR-038, amended); try again in a moment. It never summarizes another repo's path.
   - `502 UPSTREAM`: Anthropic refused the API key.
   - `404 NOT_FOUND`, `400 BAD_REQUEST` and `403 FORBIDDEN` as usual.
   - `500 INTERNAL` when the background worker stopped before answering.

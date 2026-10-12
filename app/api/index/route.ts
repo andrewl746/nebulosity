@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import type { IndexEventMap } from "@/lib/contracts";
-import { backgroundSupervisor } from "@/lib/background/start";
+import { workerOn } from "@/lib/background/start";
 import { isLocalRequest } from "@/lib/live/local";
 import { SSE_HEADERS, sseFrame } from "@/lib/live/sse";
 import { activeRepo, forbidden, noActiveRepo } from "../_lib/respond";
@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 // POST /api/index — a full structure run of the active repo in the background worker, its progress as SSE (API_CONTRACTS.md §4)
 export function POST(request: NextRequest){
     if (!isLocalRequest(request.headers)) return forbidden();
-    if (activeRepo() === null) return noActiveRepo();
+    const repo = activeRepo();
+    if (repo === null) return noActiveRepo();
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream<Uint8Array>({
@@ -22,7 +23,7 @@ export function POST(request: NextRequest){
                     // the client left; the run goes on in the worker either way
                 }
             };
-            const outcome = await backgroundSupervisor().index((progress) => send("progress", progress));
+            const outcome = await workerOn(repo).index((progress) => send("progress", progress), repo);
             if (outcome.ok) send("done", outcome.result);
             else send("error", outcome.error);
             try{

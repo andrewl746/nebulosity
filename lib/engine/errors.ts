@@ -22,6 +22,18 @@ export class NoActiveRepoError extends Error {
     }
 }
 
+/**
+ * Thrown when a request is for a repo the background worker isn't on (yet). The worker follows the active repo
+ * (ADR-038, amended), so a request made just after a switch can reach it before it has moved; acting anyway would
+ * summarize or re-index the wrong repo.
+ */
+export class RepoSwitchingError extends Error {
+    constructor(wanted: string, current: string | null){
+        super(`The background worker is on ${current ?? "no repository"}, not ${wanted}; it's switching now, so try again in a moment.`);
+        this.name = "RepoSwitchingError";
+    }
+}
+
 /** Each error code's HTTP status (API_CONTRACTS.md §1). */
 export const STATUS_FOR: Readonly<Record<ErrorCode, number>> = {
     BAD_REQUEST: 400,
@@ -52,7 +64,7 @@ function codeFor(err: unknown): ErrorCode {
         return "NOT_FOUND";
     }
     if (err instanceof NotAFolderError) return "BAD_REQUEST";
-    if (err instanceof IndexLockedError || err instanceof StructureNotReadyError) return "INDEX_LOCKED";
+    if (err instanceof IndexLockedError || err instanceof StructureNotReadyError || err instanceof RepoSwitchingError) return "INDEX_LOCKED";
     if (err instanceof TargetNotReadyError) return "NOT_READY";
     if (err instanceof SummariesOffError) return "SUMMARIES_OFF";
     // Anthropic refused the key: the fault is upstream of this server, and retrying won't help until the key changes

@@ -10,7 +10,7 @@ import { requireRepository } from "../db/store/structure";
 import { addUsage, loadSummaries } from "../db/store/summaries";
 import { countEmbedded } from "../db/store/summary-vectors";
 import { describe as describeTarget } from "../engine/describe";
-import { SummariesOffError } from "../engine/errors";
+import { RepoSwitchingError, SummariesOffError } from "../engine/errors";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
@@ -243,6 +243,39 @@ describe("background service", () => {
         await service.setRepo(root);
         await service.idle();
         expect(describeTarget(root, "src/core/log.ts").symbols?.map((s) => s.name)).toContain("duringCrawl");
+        await service.stop();
+    });
+
+    it("refuses summarize-now and re-index meant for another repo, without a request (C1)", async () => {
+        const root = await summarizedFixture();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed });
+        await service.setRepo(root);
+
+        await expect(service.summarizeNow("src/core/log.ts", "C:/somewhere/else")).rejects.toThrow(RepoSwitchingError);
+        await expect(service.indexNow(undefined, "C:/somewhere/else")).rejects.toThrow(RepoSwitchingError);
+        expect(stub.requests).toHaveLength(0);
+        // the repo it's on, spelled as the config spells it (forward slashes), is fine
+        expect(await service.summarizeNow("src/core/log.ts", repoKey(root))).toMatchObject({ status: "fresh" });
+        await service.stop();
+    });
+
+    it("picks up a repo that wasn't indexed yet once it is, instead of giving up (C1)", async () => {
+        const root = copyFixture();
+        let watching = 0;
+        const watch = (): RepoWatcher => { watching++; return { ready: Promise.resolve(), async close(){} }; };
+        const logs: string[] = [];
+        const service = createBackgroundService({ summarizer: null, watch, embed: fakeEmbed, log: (m) => logs.push(m) });
+
+        await service.setRepo(root);
+        expect(watching).toBe(0);
+        expect(logs.some((m) => m.includes("isn't indexed yet"))).toBe(true);
+
+        indexRepository(root);   // npm run index, from a terminal
+        await vi.advanceTimersByTimeAsync(30_000);
+        await service.idle();
+        expect(watching).toBe(1);
+        expect(logs.at(-1)).toBe(`watching ${path.resolve(root)}`);
         await service.stop();
     });
 

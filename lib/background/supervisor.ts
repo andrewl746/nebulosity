@@ -12,8 +12,8 @@ export type ChildLike = {
 export type Supervisor = {
     /** Points the worker at a repo (null: none), now and after every restart; starts the worker on first use. */
     setRepo(root: string | null): void;
-    summarize(targetPath: string): Promise<SummarizeOutcome>;
-    index(onProgress: (progress: IndexEventMap["progress"]) => void): Promise<IndexOutcome>;
+    summarize(targetPath: string, root: string): Promise<SummarizeOutcome>;
+    index(onProgress: (progress: IndexEventMap["progress"]) => void, root: string): Promise<IndexOutcome>;
     stop(): void;
 };
 
@@ -100,20 +100,22 @@ export function createSupervisor(spawn: () => ChildLike, options: { log?: (messa
 
     return {
         setRepo(root){
+            // the server calls this on every request, to follow the config: only a change is news to the worker
+            if (root === repo && (child !== null || restartTimer !== null)) return;
             repo = root;
             if (stopped) return;
             if (child) child.send({ type: "repo", root });
             else if (restartTimer === null) start();
         },
 
-        async summarize(targetPath){
-            const reply = await ask((id) => ({ type: "summarize", id, path: targetPath }));
+        async summarize(targetPath, root){
+            const reply = await ask((id) => ({ type: "summarize", id, path: targetPath, root }));
             if (!("type" in reply)) return reply;
             return reply.type === "summarized" ? reply.outcome : { ok: false, error: GONE };
         },
 
-        async index(onProgress){
-            const reply = await ask((id) => ({ type: "index", id }), onProgress);
+        async index(onProgress, root){
+            const reply = await ask((id) => ({ type: "index", id, root }), onProgress);
             if (!("type" in reply)) return reply;
             return reply.type === "indexed" ? reply.outcome : { ok: false, error: GONE };
         },

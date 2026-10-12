@@ -44,7 +44,7 @@ export async function handleParentMessage(service: BackgroundService, message: P
 
         case "summarize":
             try{
-                send({ type: "summarized", id: message.id, outcome: { ok: true, summary: toSummarizeResponse(await service.summarizeNow(message.path)) } });
+                send({ type: "summarized", id: message.id, outcome: { ok: true, summary: toSummarizeResponse(await service.summarizeNow(message.path, message.root)) } });
             } catch (err){
                 send({ type: "summarized", id: message.id, outcome: { ok: false, error: errorResponseFor(err).error } });
             }
@@ -52,7 +52,7 @@ export async function handleParentMessage(service: BackgroundService, message: P
 
         case "index":
             try{
-                const result = await service.indexNow((stage, done, total) => send({ type: "index-progress", id: message.id, progress: { stage, done, total } }));
+                const result = await service.indexNow((stage, done, total) => send({ type: "index-progress", id: message.id, progress: { stage, done, total } }), message.root);
                 send({ type: "indexed", id: message.id, outcome: { ok: true, result: toIndexDone(result) } });
             } catch (err){
                 send({ type: "indexed", id: message.id, outcome: { ok: false, error: errorResponseFor(err).error } });

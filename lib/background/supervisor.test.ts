@@ -42,11 +42,27 @@ describe("supervisor", () => {
         expect(children[0].sent.at(-1)).toEqual({ type: "repo", root: "/s" });
     });
 
+    it("tells the worker about a repo only when it changes: the server calls setRepo on every request (C1)", () => {
+        const { supervisor, children } = supervised();
+        supervisor.setRepo("/r");
+        supervisor.setRepo("/r");
+        expect(children[0].sent).toEqual([{ type: "repo", root: "/r" }]);
+        supervisor.setRepo("/s");
+        expect(children[0].sent).toEqual([{ type: "repo", root: "/r" }, { type: "repo", root: "/s" }]);
+    });
+
+    it("puts the repo a request is for in the message, so the worker can refuse it if it's on another", async () => {
+        const { supervisor, children } = supervised();
+        supervisor.setRepo("/r");
+        void supervisor.index(() => {}, "/r");
+        expect(children[0].sent.at(-1)).toMatchObject({ type: "index", root: "/r" });
+    });
+
     it("answers a summarize request with the worker's reply", async () => {
         const { supervisor, children } = supervised();
         supervisor.setRepo("/r");
-        const answer = supervisor.summarize("src/a.ts");
-        expect(children[0].sent.at(-1)).toEqual({ type: "summarize", id: 1, path: "src/a.ts" });
+        const answer = supervisor.summarize("src/a.ts", "/r");
+        expect(children[0].sent.at(-1)).toEqual({ type: "summarize", id: 1, path: "src/a.ts", root: "/r" });
         children[0].reply({ type: "summarized", id: 1, outcome: { ok: true, summary } });
         await expect(answer).resolves.toEqual({ ok: true, summary });
     });
@@ -54,7 +70,7 @@ describe("supervisor", () => {
     it("answers what a dying worker owed with an error, and brings a new one back with the repo after 1 s", async () => {
         const { supervisor, children } = supervised();
         supervisor.setRepo("/r");
-        const answer = supervisor.summarize("src/a.ts");
+        const answer = supervisor.summarize("src/a.ts", "/r");
         children[0].exit(1);
         await expect(answer).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
 
@@ -69,7 +85,7 @@ describe("supervisor", () => {
         const { supervisor, children } = supervised();
         supervisor.setRepo("/r");
         children[0].exit(1);
-        await expect(supervisor.summarize("src/a.ts")).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+        await expect(supervisor.summarize("src/a.ts", "/r")).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
     });
 
     it("waits longer after each crash, and starts over once a worker reports ready", () => {
@@ -92,7 +108,7 @@ describe("supervisor", () => {
         const { supervisor, children } = supervised();
         supervisor.setRepo("/r");
         const progress: unknown[] = [];
-        const answer = supervisor.index((p) => progress.push(p));
+        const answer = supervisor.index((p) => progress.push(p), "/r");
         const { id } = children[0].sent.at(-1) as { id: number };
         children[0].reply({ type: "index-progress", id, progress: { stage: "parse", done: 1, total: 2 } });
         const result = { files: 2, changed: 1, deleted: 0, edges: 1, folders: 1, levelEdges: 1, errors: [], skipped: 0, totalMs: 5 };

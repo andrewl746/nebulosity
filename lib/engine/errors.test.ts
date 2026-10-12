@@ -3,7 +3,7 @@ import { IndexLockedError } from "../db/store/lock";
 import { RepoNotIndexedError } from "../db/store/structure";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
 import { SummarizerAuthError } from "../index/summarize/types";
-import { errorResponseFor, NoActiveRepoError, SummariesOffError } from "./errors";
+import { errorResponseFor, NoActiveRepoError, RepoSwitchingError, SummariesOffError } from "./errors";
 import { NotAFolderError, PathNotFoundError } from "./level";
 
 describe("errorResponseFor", () => {
@@ -20,6 +20,7 @@ describe("errorResponseFor", () => {
             [new TargetNotReadyError("src"), "NOT_READY", 409],
             [new SummariesOffError(), "SUMMARIES_OFF", 409],
             [new SummarizerAuthError("invalid x-api-key"), "UPSTREAM", 502],
+            [new RepoSwitchingError("C:/b", "C:/a"), "INDEX_LOCKED", 409],
         ];
         for (const [err, code, status] of cases){
             expect(errorResponseFor(err)).toEqual({ status, error: { code, message: err.message } });

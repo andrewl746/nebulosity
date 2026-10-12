@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { RepoList } from "@/lib/contracts";
-import { backgroundSupervisor } from "@/lib/background/start";
+import { workerOn } from "@/lib/background/start";
 import { listRepos, setActiveRepo } from "@/lib/engine/repos";
 import { isLocalRequest } from "@/lib/live/local";
 import { errorJson, forbidden, jsonError } from "../_lib/respond";
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest){
 
     try{
         const list = setActiveRepo(body.root);
-        backgroundSupervisor().setRepo(body.root);   // the worker watches the new repo from now on
+        workerOn(list.active);   // the worker watches the new repo from now on
         return NextResponse.json<RepoList>(list);
     } catch (err){
         return errorJson(err);
