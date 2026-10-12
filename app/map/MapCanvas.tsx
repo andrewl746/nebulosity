@@ -7,7 +7,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { LevelResponse } from "@/lib/contracts";
-import { edgeOpacity, edgeWidth } from "./edges";
+import { edgeKey, mapEmphasis } from "./emphasis";
 import { formatCount } from "./format";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel } from "./levelLayout";
 import MapBox, { type BoxNode } from "./MapBox";
@@ -35,7 +35,6 @@ type MapCanvasProps = {
  */
 export default function MapCanvas({ level, selected, highlighted, pulses, onSelect, onOpen, onDrawn }: MapCanvasProps){
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
-    const maxCount = useMemo(() => Math.max(0, ...level.edges.map((e) => e.count)), [level]);
     const [hovered, setHovered] = useState<string | null>(null);
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -62,9 +61,11 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
     }, [level, positions, selected, highlighted, pulses, setNodes]);
 
     useEffect(() => {
+        const tones = mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, null).edges;
         setEdges(level.edges.map((edge) => {
-            const id = `${edge.source}->${edge.target}`;
-            const stroke = `rgba(168, 85, 247, ${edgeOpacity(edge, selected)})`;
+            const id = edgeKey(edge);
+            const tone = tones.get(id);
+            const stroke = `rgba(168, 85, 247, ${tone === "selected" ? 0.95 : tone === "faded" ? 0.06 : 0.3})`;
             return {
                 id,
                 source: edge.source,
@@ -73,11 +74,11 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
                 label: hovered === id ? `${formatCount(edge.count)} import${edge.count === 1 ? "" : "s"}` : undefined,
                 labelStyle: { fill: "#e4e4e7", fontSize: 11 },
                 labelBgStyle: { fill: "#0c0716", fillOpacity: 0.9 },
-                style: { stroke, strokeWidth: edgeWidth(edge.count, maxCount) },
+                style: { stroke, strokeWidth: tone === "selected" ? 2 : 1 },
                 markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: stroke },
             };
         }));
-    }, [level, selected, hovered, maxCount, setEdges]);
+    }, [level, selected, hovered, setEdges]);
 
     // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
     // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
