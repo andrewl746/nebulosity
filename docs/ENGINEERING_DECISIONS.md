@@ -367,7 +367,7 @@
 
 **Consequences:**
 - A run stops sending before its projection passes the budget, so it can overspend only by what the projection misses.
-- **What the cap can't see:** spend that never reaches `summary_usage`. That covers the owner's checkpoint reviews (`compare-summaries`, about $0.49 on VS Code), and a batch Anthropic accepted but the run couldn't record, whose rows are later resent and paid for again.
+- **What the cap can't see:** spend that never reaches `summary_usage`. That covers the owner's checkpoint reviews (`compare-summaries`, about $0.49 on VS Code, and the `preview-folders` folder preview, about $0.24), and a batch Anthropic accepted but the run couldn't record, whose rows are later resent and paid for again.
 - **The known gap:** the rest prices every remaining target at batch rates, but a wave under 100 requests goes through the regular API at full price. Such waves come at the top of the tree, and also mid-run, when file batches land at different times and leave only a few folders ready at once. So the projection runs a little low, by an estimated under $1 on VS Code. That can only delay a stop, never cause an overspend: each regular-API wave is priced at direct rates in its own check, before it goes.
 - A model is priced from the assumption until its first answers are recorded (a batch's, when it's collected), and from its measured mean after that. An unpriced fallback model makes the total a lower bound, and the progress line says so.
 - A later run on the same repo (an incremental update, say) starts from everything already spent, so past $15 it needs `--budget`.
