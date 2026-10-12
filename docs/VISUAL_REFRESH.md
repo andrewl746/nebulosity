@@ -31,6 +31,7 @@ Define these as CSS custom properties in `app/globals.css`. Components use token
 | `--select-fill` | `#241D33` | the selected box's fill |
 | `--agent` | `#F08A4B` | **orange: what Claude Code is touching right now.** Nothing else |
 | `--ok` | `#4CC38A` | **green: indexing status only** (the "indexed" dot) |
+| `--danger` | `#F07A7A` | error text and a failed stage. *(Added in the V1.3.1 build: the table had no color for errors, and people need to see them.)* |
 
 Purple is never used just because something is interactive. Links and buttons use `--text` with an underline or border, not purple.
 

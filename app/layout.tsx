@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Nebulosity",
-  description: "Autonomous codebase observatory",
+  description: "A code-intelligence companion for massive codebases",
 };
 
 export default function RootLayout({

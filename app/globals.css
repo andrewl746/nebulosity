@@ -1,36 +1,78 @@
 @import "tailwindcss";
 
+/*
+ * The Map's colors (VISUAL_REFRESH.md §2): each token is defined once here and means one thing. Components use the
+ * tokens (bg-surface, text-text-2, border-select, …), never a raw value.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #111318;        /* page and Map background, one flat charcoal */
+  --surface: #1B1D24;       /* boxes, inputs, cards */
+  --panel: #16181F;         /* the details panel */
+  --hairline: #262933;      /* dividers */
+  --border: #3A3E4A;        /* box and input borders */
+  --text: #F0F1F5;          /* primary text */
+  --text-2: #B1B5C0;        /* secondary text, counts, labels */
+  --neutral-edge: #4A4F5C;  /* ordinary connections */
+  --select: #B58AFF;        /* purple: the selected box, its direct links, its path. Nothing else */
+  --select-fill: #241D33;   /* the selected box's fill */
+  --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
+  --ok: #4CC38A;            /* green: indexing status only */
+  --danger: #F07A7A;        /* errors and a failed stage (added to §2 in V1.3.1) */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-hairline: var(--hairline);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-neutral-edge: var(--neutral-edge);
+  --color-select: var(--select);
+  --color-select-fill: var(--select-fill);
+  --color-agent: var(--agent);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-/* A tool call touched this box (PIVOT_SPEC.md §7, "Live"): one ring that grows and fades. */
+/* React Flow's own parts (controls, edge labels) take the same tokens */
+.react-flow {
+  --xy-background-color: var(--canvas);
+  --xy-edge-stroke: var(--neutral-edge);
+  --xy-edge-label-background-color: var(--surface);
+  --xy-edge-label-color: var(--text);
+  --xy-controls-button-background-color: var(--surface);
+  --xy-controls-button-background-color-hover: var(--border);
+  --xy-controls-button-color: var(--text-2);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--hairline);
+  --xy-controls-box-shadow: none;
+}
+
+/*
+ * Claude's focus moved to this box (VISUAL_REFRESH.md §4): one orange ring that steps out and fades. It's the only
+ * motion on the Map, and people who ask for less motion don't get it.
+ */
 @keyframes neb-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.55); }
-  100% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+  0% { outline: 2px solid var(--agent); outline-offset: 0; opacity: 1; }
+  100% { outline: 2px solid var(--agent); outline-offset: 8px; opacity: 0; }
 }
 
 .neb-pulse {
   animation: neb-pulse 0.9s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neb-pulse {
+    animation: none;
+  }
 }
