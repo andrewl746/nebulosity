@@ -5224,6 +5224,8 @@ Task 12 runs only after the owner approves Review #2. Its wrap-up also lists thi
 9. **Commit.** Run the gate: `npx tsc --noEmit && npm run lint && npx vitest run`. Commit as `feat: summary prompt v2 from the owner's checkpoint: 3-6 word taglines kept whole up to 8, importers in the file prompt, identifiers in backticks`, then push.
    - **Don't run `compare-summaries`.** After the task review, the controller runs Review #2 (`npm run compare-summaries -- ../vscode`), commits and pushes `docs/SUMMARY_REVIEW.md`, and STOPS for the owner.
 
+**Ruled during execution (2026-10-11).** A read-only preview on VS Code's graph showed central files' example folders were mostly test folders. For example, `log.ts`'s top folder was `src/vs/platform/agentHost/test/node` (138). So `loadImporterPaths` became `loadImporters(db, repoId, filePath): { path: string; isTest: boolean }[]`, and `importerLine` builds its counts and examples from non-test importers only. It reports tests as `, plus N test files`, or `only N test files` when nothing else imports the file (ADR-034). A connector is also dropped at the cut when trailing punctuation is attached to it (`and,`).
+
 ### Task 12a: The spend cap
 
 **Files:**
