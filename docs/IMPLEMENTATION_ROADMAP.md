@@ -12,7 +12,7 @@
 | **V1.2 Understanding** — DONE 2026-10-12 (see BENCHMARKS.md) | tiered summaries (Batch for the first pass, regular API on demand); summary embeddings; code and summary FTS; hybrid search with RRF; `/api/status` | S2 ≤ $15; day-1 Haiku vs Sonnet side-by-side reviewed by the owner |
 | **V1.3 Map** | level/describe/search APIs; new Map UI (levels, 50-box cap, panel, ⌘K, status pill); live channel | S3, S4, S6 measured |
 | **V1.4 MCP** | tool registry; `mcp/server.ts` (read-only DB); `claude mcp add` instructions; smoke test | S5; every tool exercised through `claude -p` |
-| **V1.5 Ship** | static export + hosted demo; eval vs Claude Code alone; README; demo-video script | S7, S8 |
+| **V1.5 Ship** | static export + hosted demo; eval vs Claude Code alone, and search ranking tuned against its query set (folders can't appear in the code list, so RRF under-ranks them: the "integrated terminal" miss, BENCHMARKS.md Summary Benchmark #1); README; demo-video script | S7, S8 |
 | **E1 Guide** | LangGraph agent per `LANGGRAPH_DESIGN.md`, using registry tools and map tools; owner picks the model at kickoff | own plan |
 | **E2 Call graph** | type-checker resolution (typed vs heuristic), call-flow view, `callers`/`callees`/`call_flow` | own plan; measure memory first |
 | **E3 Git overlays** | needs `git fetch --unshallow` (owner approval); History lens, hidden coupling, ownership | own plan |

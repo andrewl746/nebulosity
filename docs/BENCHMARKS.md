@@ -78,6 +78,12 @@ Errored batch requests aren't billed. Nothing that succeeded was ever sent twice
 | `file watcher` | something under `src/vs/platform/files/` | pass (rank 1) | 81 ms |
 | `keybinding resolution` | something under `src/vs/platform/keybinding/` | pass (rank 1) | 42 ms |
 
+**The miss, investigated (2026-10-12):** ranking, not wording and not a bug.
+- **The expected folders lead two of the three lists.** `src/vs/workbench/contrib/terminal/` is #1 by summary keywords (its tagline is "Integrated terminal feature core"), and its `browser/` folder is #1 by meaning (cosine 0.539).
+- **Folders can never be in the third list.** Code search indexes file chunks only. Reciprocal Rank Fusion rewards appearing in all three lists, so files that sit mid-list in all three (`extHostTerminalShellIntegration.ts`: code #4, in the summary and meaning lists too) outscore folders that lead two. `contrib/terminal/browser/` lands at #10 and `contrib/terminal/` at #11.
+- **The folder's own files don't make up for it.** `terminal.contribution.ts` is in the meaning list only (#44); `terminalInstance.ts` is code #17 and meaning #79.
+- **Deferred to V1.5**, whose eval brings the query set a ranking change needs (for example, scoring folders over the two lists they can appear in, or giving a folder its files' best code rank). One query is too few to tune RRF against. A related case from building V1.3's search route: `lifecycle` ranks `src/vs/base/common/lifecycle.ts` 6th, behind five other files about lifecycles.
+
 ## 2026 10 12 Map Benchmark #1 — levels, panels and zoom on VS Code (S3, S4)
 
 - **Target and machine:** VS Code @ `cc3fec88`, on the owner's laptop, every summary written (Summary Benchmark #1).
