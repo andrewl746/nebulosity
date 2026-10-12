@@ -251,7 +251,7 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 - **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), ties going to the more-imported file (ADR-036), and opening it lists them in the panel instead of drawing more boxes.
 - **Boxes** show the name, file count and tagline. While the summary is pending they show a quiet placeholder.
 - **Edges** come from `level_edges`, with thickness ∝ √count. Only the selected box's edges are drawn at full strength; the rest are ghosted. Hovering shows the count.
-- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. 50 nodes take milliseconds.
+- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. It lays out from the level's 100 heaviest lines (every line is still drawn): VS Code's densest level, 50 boxes and 390 lines, takes about 40 ms that way, against 0.6 s with every line (ADR-036, amended).
 - **Lenses, one at a time.** Structure (v1), History (E3), Clusters (E5).
 - **Search.** ⌘K over files, symbols and summaries. Picking a result moves the canvas to that item's level and selects it.
 - **Live.** `GET /api/live/stream` (SSE). Each MCP tool call pulses the box that contains the touched path at the current level and updates the pill. Throttled.

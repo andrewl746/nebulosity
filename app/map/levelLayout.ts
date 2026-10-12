@@ -9,17 +9,30 @@ const GAP = 28;
 export type Position = { x: number; y: number };
 
 /**
- * Where each box of a level goes (ADR-011, PIVOT_SPEC.md §7): dagre's layered layout, importers above what they
- * import. A box with no line to any other at this level adds nothing to the layering, so those go in a grid below
- * the rest, in the level's order. Pure and deterministic: the same level always draws the same picture. React Flow
- * places a node by its top-left corner and dagre by its centre, hence the half-box shift.
+ * At most this many lines shape a level's layout: the heaviest. Dagre's crossing reduction grows with the lines, and
+ * VS Code's src/vs/platform level has 390 of them: about 0.6 s to lay out, against 30 ms with the heaviest 100. Every
+ * line is still drawn; the lighter ones just don't move the boxes (S3, PIVOT_SPEC.md §2).
  */
-export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[]): Map<string, Position> {
+export const LAYOUT_MAX_LINES = 100;
+
+/**
+ * Where each box of a level goes (ADR-011, PIVOT_SPEC.md §7): dagre's layered layout, importers above what they
+ * import, from the level's `maxLines` heaviest lines. A box with no line to any other at this level adds nothing to
+ * the layering, so those go in a grid below the rest, in the level's order. Pure and deterministic: the same level
+ * always draws the same picture. React Flow places a node by its top-left corner and dagre by its centre, hence the
+ * half-box shift.
+ */
+export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[], maxLines: number = LAYOUT_MAX_LINES): Map<string, Position> {
     const positions = new Map<string, Position>();
     const lines = edges.filter((e) => e.source !== e.target);
+    // a box joined by any line stays in the layers, even when only lighter lines join it
     const linked = new Set(lines.flatMap((e) => [e.source, e.target]));
     const connected = nodes.filter((n) => linked.has(n.path));
     const loose = nodes.filter((n) => !linked.has(n.path));
+    // heaviest first; ties by source, then target, so the same level always keeps the same lines
+    const shaping = [...lines]
+        .sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0) || (a.target < b.target ? -1 : a.target > b.target ? 1 : 0))
+        .slice(0, maxLines);
     let gridTop = 0;
 
     if (connected.length > 0){
@@ -28,7 +41,7 @@ export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[]
         graph.setDefaultEdgeLabel(() => ({}));
         for (const node of connected) graph.setNode(node.path, { width: BOX_WIDTH, height: BOX_HEIGHT });
         // a heavier line pulls its boxes closer; the square root keeps 20,000 imports from flattening everything else
-        for (const edge of lines) graph.setEdge(edge.source, edge.target, { weight: Math.max(1, Math.round(Math.sqrt(edge.count))) });
+        for (const edge of shaping) graph.setEdge(edge.source, edge.target, { weight: Math.max(1, Math.round(Math.sqrt(edge.count))) });
         dagre.layout(graph);
 
         for (const node of connected){

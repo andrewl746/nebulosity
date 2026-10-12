@@ -79,16 +79,23 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
         }));
     }, [level, selected, hovered, maxCount, setEdges]);
 
-    // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The same level
-    // refetched after the index moved is a new object with the same key, so the user's pan and zoom stay put.
+    // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
+    // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
+    // level's boxes: fitting sooner frames the previous level's, which is what a level from the cache got. The same
+    // level refetched after the index moved keeps its key, so the user's pan and zoom stay put.
     const levelKey = `${level.repo}\n${level.path}`;
+    const fittedKey = useRef<string | null>(null);
     useEffect(() => {
+        if (fittedKey.current === levelKey) return;
+        const arrived = nodes.length === level.nodes.length && nodes.every((node, i) => node.id === level.nodes[i].path);
+        if (!arrived) return;
         const frame = requestAnimationFrame(() => {
+            fittedKey.current = levelKey;
             void fitViewRef.current({ padding: 0.12, duration: 0 });
             onDrawnRef.current();
         });
         return () => cancelAnimationFrame(frame);
-    }, [levelKey]);
+    }, [levelKey, nodes, level.nodes]);
 
     const onNodeClick: NodeMouseHandler<BoxNode> = (_, node) => onSelect(node.id);
     const onNodeDoubleClick: NodeMouseHandler<BoxNode> = (_, node) => {

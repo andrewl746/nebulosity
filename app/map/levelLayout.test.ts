@@ -11,6 +11,19 @@ describe("layoutLevel", () => {
         expect(at.get("b")!.y).toBeLessThan(at.get("c")!.y);
     });
 
+    it("lays out only the heaviest lines, so a dense level stays fast; a box joined by a lighter one stays in the layers", () => {
+        const nodes = [node("a"), node("b"), node("c"), node("d")];
+        const edges: MapEdge[] = [{ source: "a", target: "b", count: 5 }, { source: "c", target: "a", count: 1 }];
+        // every line: c above a above b
+        const full = layoutLevel(nodes, edges);
+        expect(full.get("c")!.y).toBeLessThan(full.get("a")!.y);
+        // only the heaviest line: c is no longer pulled above a, it sits on the top rank beside it, not in the grid with d
+        const capped = layoutLevel(nodes, edges, 1);
+        expect(capped.get("c")!.y).toBe(capped.get("a")!.y);
+        expect(capped.get("a")!.y).toBeLessThan(capped.get("b")!.y);
+        expect(capped.get("d")!.y).toBeGreaterThan(capped.get("b")!.y + BOX_HEIGHT);   // d has no line at all: the grid
+    });
+
     it("lays boxes with no lines in a grid below the rest, in the level's order", () => {
         const at = layoutLevel([node("a"), node("b"), ...["l1", "l2", "l3", "l4"].map(node)], [{ source: "a", target: "b", count: 1 }]);
         const bottomOfTheRest = Math.max(at.get("a")!.y, at.get("b")!.y) + BOX_HEIGHT;
