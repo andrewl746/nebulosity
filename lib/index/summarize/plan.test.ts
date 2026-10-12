@@ -195,9 +195,7 @@ describe("planSummaries — test-only folders", () => {
                 templateText: { tagline: "Tests for a", summary: TEMPLATE_SUMMARY },
             });
         }
-        expect(byPath.get("a/test")?.inputHash).toBe(inputHash("template", PROMPT_VERSION, `a/test
-Tests for a
-${TEMPLATE_SUMMARY}`));
+        expect(byPath.get("a/test")?.inputHash).toBe(inputHash("template", PROMPT_VERSION, `a/test\nTests for a\n${TEMPLATE_SUMMARY}`));
         expect(byPath.get("a")?.state).toBe("waiting");
 
         const second = planSummaries(nestedFiles, nestedFolders, written(first, ["a/x.ts", "a/test", "a/test/unit"]), options());

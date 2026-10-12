@@ -121,9 +121,7 @@ export function planSummaries(
             const key = targetKey("folder", folder.path);
             const row = storedByKey.get(key);
             const text = testFolderSummary(folder.path, testCount);
-            const hash = inputHash("template", PROMPT_VERSION, `${folder.path}
-${text.tagline}
-${text.summary}`);
+            const hash = inputHash("template", PROMPT_VERSION, `${folder.path}\n${text.tagline}\n${text.summary}`);
             planned.set(key, row?.inputHash === hash
                 ? { kind: "folder", path: folder.path, model: "template", inputHash: hash, state: "current", status: row.status === "skipped" ? null : "skipped" }
                 : { kind: "folder", path: folder.path, model: "template", inputHash: hash, state: "template", status: "skipped", templateText: text });

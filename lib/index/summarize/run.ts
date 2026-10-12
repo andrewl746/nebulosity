@@ -410,7 +410,8 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
         const requests: SummaryRequest[] = [];
         const failures: SummaryOutcome[] = [];
 
-        // built one chunk at a time, so at most 5,000 prompts sit in memory at once
+        // built one chunk at a time, so at most 5,000 prompts are built at once; the Claude summarizer
+        // then keeps each submitted batch's requests until collection, for the cut-off retry
         for (const target of chunk){
             const built = buildRequest(ctx, snap, target, ids);
             if ("failure" in built) failures.push(built.failure);
