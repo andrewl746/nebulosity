@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { SummaryText } from "../../db/store/summaries";
-import { MAX_OUTPUT_TOKENS, SUMMARY_EFFORT } from "./prompts";
+import { mapLimit } from "./concurrency";
+import { MAX_OUTPUT_TOKENS, RETRY_MAX_OUTPUT_TOKENS, SUMMARY_EFFORT } from "./prompts";
 import { BatchGoneError, SummarizerAuthError, type ModelUsage, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** The reply we ask for, enforced by structured outputs (output_config.format). */
@@ -15,7 +16,20 @@ export const SUMMARY_SCHEMA = {
     additionalProperties: false,
 };
 
-const replySchema = z.object({ tagline: z.string().trim().min(1), summary: z.string().trim().min(1) });
+// An empty summary passes the schema: parseSummary then calls it cut off, so it gets the retry.
+const replySchema = z.object({ tagline: z.string().trim().min(1), summary: z.string().trim() });
+
+/** How the error of a cut-off answer starts. The summarizer retries exactly these, once (ADR-034). */
+const CUT_OFF = "the summary was cut off";
+
+/** The end of a sentence: . ! or ?, then any closing quotes, backticks or brackets ("…(see `log.ts`.)"). */
+const SENTENCE_END = /[.!?]["'`)\]]*$/;
+
+/** Two or more periods at the very end ("…in one place.."), which read as one. */
+const TRAILING_PERIODS = /\.{2,}$/;
+
+/** Regular-API retries of a batch's cut-off answers in flight at once: as many as the runner's regular-API waves send. */
+const RETRY_CONCURRENCY = 4;
 
 /** Taglines are asked for in 3 to 6 words; up to this many are kept whole (PIVOT_SPEC.md §4.1, ADR-034). */
 export const MAX_TAGLINE_WORDS = 8;
@@ -63,21 +77,30 @@ type Reply = {
     usage: { input_tokens: number; output_tokens: number; iterations?: ReadonlyArray<Attempt> | null };
 };
 
-/** One request's parameters, the same on the regular API and inside a batch. Thinking stays at the model's default (adaptive). */
-export function requestParams(request: SummaryRequest, effort: Effort = SUMMARY_EFFORT) {
+/**
+ * One request's parameters, the same on the regular API and inside a batch. Thinking stays at the model's default
+ * (adaptive). maxTokens is raised only for the retry of a cut-off answer.
+ */
+export function requestParams(request: SummaryRequest, effort: Effort = SUMMARY_EFFORT, maxTokens: number = MAX_OUTPUT_TOKENS) {
     return {
         model: request.model,
-        max_tokens: MAX_OUTPUT_TOKENS,
+        max_tokens: maxTokens,
         system: request.system,
         messages: [{ role: "user" as const, content: request.prompt }],
         output_config: { effort, format: { type: "json_schema" as const, schema: SUMMARY_SCHEMA } },
     };
 }
 
-/** The tagline and summary in a reply, or an Error saying what was wrong with it. */
+/**
+ * The tagline and summary in a reply, or an Error saying what was wrong with it. A summary that isn't whole is never
+ * returned (ADR-034): the reply has to have ended its turn, and its summary has to end a sentence. Anything else is
+ * "cut off", the one failure the summarizer retries.
+ */
 export function parseSummary(reply: Pick<Reply, "stop_reason" | "content">): SummaryText {
     if (reply.stop_reason === "refusal") throw new Error("the model declined to summarize this");
-    if (reply.stop_reason === "max_tokens") throw new Error(`the reply ran past ${MAX_OUTPUT_TOKENS} output tokens`);
+    // Only end_turn means the model finished. max_tokens hit the limit, and pause_turn (or any stop reason added later)
+    // didn't end the turn, so the text may stop anywhere, even inside JSON that happens to parse.
+    if (reply.stop_reason !== "end_turn") throw new Error(`${CUT_OFF} (stop reason: ${reply.stop_reason})`);
 
     // the last text block is the answer that stood: a Sonnet fallback leaves the declined partial before its marker
     const text = reply.content.findLast((block) => block.type === "text")?.text;
@@ -96,7 +119,13 @@ export function parseSummary(reply: Pick<Reply, "stop_reason" | "content">): Sum
     // "up to 8 words, as plain text" (PIVOT_SPEC.md §4.1) is a promise to the UI, so it's enforced here, not just asked for
     const tagline = cleanTagline(parsed.data.tagline);
     if (!tagline) throw new Error("the reply didn't have a tagline and a summary");
-    return { tagline, summary: parsed.data.summary };
+
+    // ".." is a slip, not an ellipsis, and so is "...": the run becomes one "." before the check below
+    const summary = parsed.data.summary.replace(TRAILING_PERIODS, ".");
+    // A normal stop doesn't prove the answer is whole: Summary Review #3 found well-formed JSON, stopped at end_turn,
+    // whose summary ended "…applyEdits. The". A summary is 2 to 4 sentences, so a whole one ends a sentence.
+    if (!SENTENCE_END.test(summary)) throw new Error(`${CUT_OFF} (stop reason: end_turn): ${summary === "" ? "it's empty" : "it ends mid-sentence"}`);
+    return { tagline, summary };
 }
 
 /**
@@ -120,6 +149,26 @@ export function usageByModel(reply: Pick<Reply, "model" | "usage">): ModelUsage[
         byModel.set(model, sum);
     }
     return [...byModel.values()];
+}
+
+/**
+ * Several attempts' tokens, summed per model, in the order the models first appear. Every attempt is billed, so a
+ * retried answer counts both; and per model, one target still adds one request to that model's tally.
+ */
+export function mergeUsage(...attempts: ReadonlyArray<readonly ModelUsage[] | null>): ModelUsage[] {
+    const byModel = new Map<string, ModelUsage>();
+    for (const share of attempts.flatMap((usage) => usage ?? [])){
+        const sum = byModel.get(share.model) ?? { model: share.model, inputTokens: 0, outputTokens: 0 };
+        sum.inputTokens += share.inputTokens;
+        sum.outputTokens += share.outputTokens;
+        byModel.set(share.model, sum);
+    }
+    return [...byModel.values()];
+}
+
+/** Whether an outcome is a cut-off answer: the one failure worth asking for again. */
+function isCutOff(outcome: SummaryOutcome): boolean {
+    return !outcome.ok && outcome.error.startsWith(CUT_OFF);
 }
 
 export function outcomeFromReply(customId: string, reply: Reply): SummaryOutcome {
@@ -152,19 +201,42 @@ export function outcomeFromBatchItem(item: Anthropic.Messages.MessageBatchIndivi
  * SDK then retries connection errors, 408/409/429 and 5xx three times with backoff,
  * honouring retry-after (PIVOT_SPEC.md §5.7), before a request counts as failed.
  * Creating a batch is the exception: it's never retried (see submitBatch).
+ *
+ * A cut-off answer (parseSummary) is asked for once more on the regular API with
+ * RETRY_MAX_OUTPUT_TOKENS, whichever transport sent it (ADR-034). Once at most: a second
+ * cut-off answer is a failed outcome, so nothing is stored and the next run resends it.
  */
 export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMARY_EFFORT): Summarizer {
+    // Each batch's requests, kept from submission until its results are collected: the results don't carry the
+    // prompts, and a retry needs them. A batch another process submitted (a run resumed after a restart) isn't here,
+    // so its cut-off answers stay failed, and the next run resends them.
+    const submitted = new Map<string, Map<string, SummaryRequest>>();
+
+    /** One request on the regular API. Never throws: a failure is an outcome. */
+    async function send(request: SummaryRequest, maxTokens: number): Promise<SummaryOutcome> {
+        try{
+            const params = requestParams(request, effort, maxTokens);
+            const reply = request.model.startsWith("claude-sonnet")
+                ? await client.beta.messages.create({ ...params, ...SONNET_FALLBACK })
+                : await client.messages.create(params);
+            return outcomeFromReply(request.customId, reply);
+        } catch (err){
+            return { customId: request.customId, ok: false, error: messageOf(err), model: null, usage: null };
+        }
+    }
+
+    /** The one retry of a cut-off answer. Both attempts are billed, so the outcome counts both. Never throws. */
+    async function retry(request: SummaryRequest, cutOff: SummaryOutcome): Promise<SummaryOutcome> {
+        const second = await send(request, RETRY_MAX_OUTPUT_TOKENS);
+        const usage = mergeUsage(cutOff.usage, second.usage);
+        if (second.ok) return { ...second, usage };
+        return { ...second, error: `${second.error} (retried once at ${RETRY_MAX_OUTPUT_TOKENS} output tokens)`, model: second.model ?? cutOff.model, usage };
+    }
+
     return {
         async summarize(request){
-            try{
-                const params = requestParams(request, effort);
-                const reply = request.model.startsWith("claude-sonnet")
-                    ? await client.beta.messages.create({ ...params, ...SONNET_FALLBACK })
-                    : await client.messages.create(params);
-                return outcomeFromReply(request.customId, reply);
-            } catch (err){
-                return { customId: request.customId, ok: false, error: messageOf(err), model: null, usage: null };
-            }
+            const first = await send(request, MAX_OUTPUT_TOKENS);
+            return isCutOff(first) ? retry(request, first) : first;
         },
 
         async submitBatch(requests){
@@ -173,29 +245,43 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
                 // never retried: after a lost reply, a retry would create a second batch that's billed and never collected
                 { maxRetries: 0 },
             );
+            submitted.set(batch.id, new Map(requests.map((r) => [r.customId, r])));
             return batch.id;
         },
 
         async batchResults(batchId){
+            let outcomes: SummaryOutcome[];
             try{
                 const batch = await client.messages.batches.retrieve(batchId);
                 if (batch.processing_status !== "ended") return null;
 
                 // results arrive in any order: they're matched by custom_id, never by position
-                const outcomes: SummaryOutcome[] = [];
+                outcomes = [];
                 for await (const item of await client.messages.batches.results(batchId)){
                     outcomes.push(outcomeFromBatchItem(item));
                 }
-                return outcomes;
             } catch (err){
                 // A 404 is permanent (results past retention, or another workspace's key), and so is a rejected key.
                 // Anything else (a dropped connection, a 5xx) may heal: the runner counts it as a missed poll.
-                if (err instanceof Anthropic.NotFoundError) throw new BatchGoneError(batchId, messageOf(err));
+                if (err instanceof Anthropic.NotFoundError){
+                    submitted.delete(batchId);
+                    throw new BatchGoneError(batchId, messageOf(err));
+                }
                 if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError){
                     throw new SummarizerAuthError(messageOf(err));
                 }
                 throw err;
             }
+
+            // Cut-off answers are retried before the runner sees them, so it only gets whole summaries or failures.
+            // retry never throws, so nothing from here on can lose a collected batch's results.
+            const requests = submitted.get(batchId);
+            const settled = await mapLimit(outcomes, RETRY_CONCURRENCY, async (outcome) => {
+                const request = isCutOff(outcome) ? requests?.get(outcome.customId) : undefined;
+                return request ? retry(request, outcome) : outcome;
+            });
+            submitted.delete(batchId);
+            return settled;
         },
     };
 }

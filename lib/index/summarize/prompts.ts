@@ -19,6 +19,14 @@ export const SUMMARY_EFFORT = "low" as const;
 /** Room for the reply plus whatever thinking low effort does. Unused tokens cost nothing. */
 export const MAX_OUTPUT_TOKENS = 4096;
 
+/**
+ * The one retry's limit when an answer came back cut off (ADR-034). Review #3's cut-off summary had stopped normally
+ * at about 280 output tokens, so the limit wasn't the cause there; but a reply that did hit the limit is cut off
+ * whatever its text says, and asking again at the same limit could only hit it again. Doubling it removes that one
+ * known cause and costs nothing when unused.
+ */
+export const RETRY_MAX_OUTPUT_TOKENS = 8192;
+
 /** About 6k tokens of source (PIVOT_SPEC.md §5.3): code runs roughly 3.5 characters per token. */
 export const MAX_SOURCE_CHARS = 20_000;
 
