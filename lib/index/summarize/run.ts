@@ -39,8 +39,9 @@ export type SummaryRunOptions = {
     concurrency?: number;
     /**
      * The spend cap in US dollars (ADR-035). Before every submission, each batch and each regular-API wave, the run
-     * projects spent + at Anthropic + this submission + the rest, and stops instead of sending if that's over this.
-     * Undefined: no cap. The CLI passes DEFAULT_BUDGET_USD unless told otherwise.
+     * projects spent + at Anthropic + this submission + the rest. Over this, it sends nothing more, but still collects
+     * what's already at Anthropic (paid for) and checks again after each collection. Undefined: no cap. The CLI passes
+     * DEFAULT_BUDGET_USD unless told otherwise.
      */
     budgetUsd?: number;
     onProgress?: (message: string) => void;
@@ -137,10 +138,15 @@ type RunContext = {
     tally: Tally;
     /** Passes in a row in which no batch could be checked (MAX_MISSED_POLLS). */
     missedPasses: number;
-    /** Set when the circuit breaker trips or the spend cap is reached: why the run stops before planning another wave. */
+    /** Set when the circuit breaker trips: why the run stops before planning another wave. */
     stopped: string | null;
     /** Checked before every submission; null means no cap. */
     budget: Budget | null;
+    /**
+     * The note of the spend-cap check that failed in this pass; every pass starts with none. While it's set nothing more
+     * is sent, but batches at Anthropic are still collected, and the run finishes with it when nothing more can happen.
+     */
+    overBudget: string | null;
     say: (message: string) => void;
 };
 
@@ -151,6 +157,7 @@ function newContext(db: Db, repoId: number, root: string, say: (message: string)
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPasses: 0,
         stopped: null,
+        overBudget: null,
     };
 }
 
@@ -185,28 +192,44 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
 
-            // the circuit breaker tripped, or the spend cap was reached: report where things stand, and send nothing more
+            // the circuit breaker tripped on the last wave or batch: report where things stand, and send nothing more
             if (ctx.stopped !== null) return finish(ctx, snap.targets, summarizer !== null);
+            // each pass checks the spend cap afresh before it sends anything (below)
+            ctx.overBudget = null;
 
             const ready = snap.targets.filter((t) => t.state === "ready");
             const progress = (note: string) =>
                 writeStage(db, repoId, "summaries", { state: "running", done: upToDate(snap.targets), total: snap.targets.length, note });
 
             if (summarizer && ready.length > 0){
-                ctx.tally.waves++;
                 const useBatch = transport === "batch" || (transport === "auto" && ready.length >= BATCH_THRESHOLD);
-                const how = useBatch ? "through the Batch API" : "through the regular API";
-                progress(`wave ${ctx.tally.waves}: ${ready.length} to summarize ${how}`);
-                ctx.say(`wave ${ctx.tally.waves}: ${ready.length} to summarize ${how}`);
 
-                if (useBatch) await submitInBatches(ctx, summarizer, snap, ready, ids);
-                else await sendDirect(ctx, summarizer, snap, ready, ids, options.concurrency ?? DEFAULT_CONCURRENCY,
-                    options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS, progress);
-                continue;
+                // The spend cap checks a wave's first submission (its first batch, or the whole regular-API wave) before
+                // the wave begins, so a wave the budget stops is never announced or counted.
+                if (withinBudget(ctx, snap, ready, 0, useBatch ? "batch" : "direct", inState(snap, "in-flight"))){
+                    ctx.tally.waves++;
+                    const how = useBatch ? "through the Batch API" : "through the regular API";
+                    progress(`wave ${ctx.tally.waves}: ${ready.length} to summarize ${how}`);
+                    ctx.say(`wave ${ctx.tally.waves}: ${ready.length} to summarize ${how}`);
+
+                    if (useBatch) await submitInBatches(ctx, summarizer, snap, ready, ids);
+                    else await sendDirect(ctx, summarizer, snap, ready, ids, options.concurrency ?? DEFAULT_CONCURRENCY,
+                        options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS, progress);
+                    // A later batch of this wave may have found the run over budget: then it collects, below. If the
+                    // circuit breaker tripped as well, the next pass ends the run at once, as it always does.
+                    if (ctx.overBudget === null || ctx.stopped !== null) continue;
+                }
             }
 
+            // Collect what's at Anthropic. A run over budget gets here too: those requests are already paid for, and once
+            // they land the next pass checks the cap again with their real usage in place of the estimates (and sends,
+            // if it now fits). That ends: nothing is sent while over budget, so each such pass collects a batch (taking
+            // it out of flight), finds none left, or finishes.
             const batches = inFlightBatches(db, repoId);
             if (summarizer && batches.length > 0){
+                if (ctx.overBudget !== null){
+                    ctx.say(`over budget: sending nothing more, collecting the ${plural(batches.length, "batch")} already at Anthropic`);
+                }
                 if (options.wait ?? true){
                     await collectNextBatch(ctx, summarizer, options.pollIntervalMs ?? DEFAULT_POLL_MS,
                         () => progress(`waiting on ${plural(batches.length, "batch")} at Anthropic`));
@@ -332,10 +355,6 @@ async function sendDirect(
     ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>,
     concurrency: number, heartbeatMs: number, progress: (note: string) => void
 ): Promise<void> {
-    // The whole wave is one submission, checked before any prompt is built. Every ready target is in it, so the rest of
-    // the run is what's still waiting.
-    if (!withinBudget(ctx, "direct", inState(snap, "in-flight"), ready, inState(snap, "waiting"))) return;
-
     const destinations = destinationsFor(ready, ids);
     let answered = 0;
     let lastBeat: number | null = null;
@@ -362,23 +381,25 @@ async function sendDirect(
 /**
  * Submits ready targets as Message Batches of up to MAX_BATCH_REQUESTS and records which batch carries each row.
  * A chunk that can't be submitted ends the run (see below); chunks submitted before it stay at Anthropic, and the
- * next run collects them.
+ * next run collects them. A chunk over budget ends the wave instead: the run goes on to collect what's at Anthropic.
  */
 async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>): Promise<void> {
     const destinations = destinationsFor(ready, ids);
     const unsendable: string[] = [];
-    const waiting = inState(snap, "waiting");
-    // What's at Anthropic as each chunk is checked: the requests in flight when this pass planned, plus the chunks this
-    // wave has submitted since. The snapshot predates those, so each joins the list once markInFlight has recorded it.
-    // (The lock keeps any other run from submitting meanwhile.) Without them, a later chunk's projection would forget
+    let attempted = 0;
+    // What's at Anthropic as each later chunk is checked: the requests in flight when this pass planned, plus the chunks
+    // this wave has submitted since. The snapshot predates those, so each joins the list once markInFlight has recorded
+    // it. (The lock keeps any other run from submitting meanwhile.) Without them, a later chunk's projection would forget
     // money this wave has already committed.
     const atAnthropic: ProjectedRequest[] = inState(snap, "in-flight");
 
     for (let i = 0; i < ready.length; i += MAX_BATCH_REQUESTS){
-        const chunk = ready.slice(i, i + MAX_BATCH_REQUESTS);
-        // checked before the chunk's prompts are built; the rest is the later chunks and everything still waiting
-        if (!withinBudget(ctx, "batch", atAnthropic, chunk, [...ready.slice(i + MAX_BATCH_REQUESTS), ...waiting])) return;
+        // The wave's first chunk was checked before the wave began; each later one is checked here, before its prompts
+        // are built. Over budget, this wave sends nothing more.
+        if (i > 0 && !withinBudget(ctx, snap, ready, i, "batch", atAnthropic)) break;
 
+        const chunk = ready.slice(i, i + MAX_BATCH_REQUESTS);
+        attempted += chunk.length;
         const requests: SummaryRequest[] = [];
         const failures: SummaryOutcome[] = [];
 
@@ -421,8 +442,9 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
         ctx.say(`submitted ${batchId} with ${plural(requests.length, "request")}`);
     }
 
-    // files that couldn't even be sent (edited since indexing) count against the wave
-    checkFailures(ctx, unsendable, ready.length, "wave");
+    // files that couldn't even be sent (edited since indexing) count against the part of the wave that was tried: all of
+    // it, unless the budget ended the wave early
+    checkFailures(ctx, unsendable, attempted, "wave");
 }
 
 /**
@@ -555,19 +577,28 @@ function checkFailures(ctx: RunContext, errors: readonly string[], total: number
 }
 
 /**
- * The spend cap (ADR-035), checked before every submission: each regular-API wave ("direct") and each batch. It
- * projects spent + at Anthropic + this submission + the rest (budget.ts) and returns whether the submission may go.
- * Over the budget it stops the run the way the circuit breaker does: ctx.stopped is set, the caller sends nothing, and
- * the loop's next pass ends the run, so no row is failed or claimed and the next run (with a bigger --budget) sends them.
+ * The spend cap (ADR-035), checked before every submission: the one that starts at ready[start], which is one batch of
+ * up to MAX_BATCH_REQUESTS or the whole regular-API wave ("direct"). It projects spent + at Anthropic + this submission
+ * + the rest (budget.ts), where the rest is every ready target after this submission and everything still waiting.
+ * - Within the budget it says so and returns true: the submission may go.
+ * - Over it, it records the note on ctx.overBudget and returns false. The caller sends nothing, so those rows stay
+ *   pending (not failed, not claimed); the run goes on collecting what's already at Anthropic, checks again after each
+ *   collection, and finishes with the latest note once nothing more can happen.
  */
 function withinBudget(
-    ctx: RunContext, transport: "direct" | "batch",
-    atAnthropic: readonly ProjectedRequest[], thisSubmission: readonly ProjectedRequest[], rest: readonly ProjectedRequest[]
+    ctx: RunContext, snap: Snapshot, ready: readonly PlannedTarget[], start: number, transport: "direct" | "batch",
+    atAnthropic: readonly ProjectedRequest[]
 ): boolean {
     if (ctx.budget === null) return true;
 
+    const end = transport === "batch" ? start + MAX_BATCH_REQUESTS : ready.length;
     const projection = projectSpend({
-        usage: loadUsage(ctx.db, ctx.repoId), atAnthropic, thisSubmission, thisTransport: transport, rest, restTransport: ctx.budget.restTransport,
+        usage: loadUsage(ctx.db, ctx.repoId),
+        atAnthropic,
+        thisSubmission: ready.slice(start, end),
+        thisTransport: transport,
+        rest: [...ready.slice(end), ...inState(snap, "waiting")],
+        restTransport: ctx.budget.restTransport,
     });
     const submission = transport === "batch" ? "batch" : "wave";
     const usd = {
@@ -579,13 +610,13 @@ function withinBudget(
         budget: formatUsd(ctx.budget.usd),
     };
 
-    // Within means total ≤ budget, and anything else stops: a budget that isn't a number (NaN) stops the run instead
-    // of quietly lifting the cap.
+    // Within means total ≤ budget, and anything else stops the sending: a budget that isn't a number (NaN) stops it
+    // instead of quietly lifting the cap.
     if (!(projection.total <= ctx.budget.usd)){
-        ctx.stopped = `stopped: the next ${submission} would bring the projected spend to ${usd.total}, over the ${usd.budget} budget`
+        ctx.overBudget = `stopped: the next ${submission} would bring the projected spend to ${usd.total}, over the ${usd.budget} budget`
             + ` (spent ${usd.spent}, at Anthropic ≈ ${usd.atAnthropic}, this ${submission} ≈ ${usd.thisSubmission}, the rest ≈ ${usd.rest});`
             + " run again with --budget <usd> to go on";
-        ctx.say(ctx.stopped);
+        ctx.say(ctx.overBudget);
         return false;
     }
 
@@ -643,6 +674,9 @@ function ingest(ctx: RunContext, outcomes: readonly SummaryOutcome[], transport:
 
 function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarizer: boolean): SummaryRunResult {
     const count = (state: TargetState) => targets.filter((t) => t.state === state).length;
+    // Why the run ended early, if it did: the circuit breaker, which ends it at once, or a spend cap still over budget
+    // once nothing more could be collected.
+    const stopped = ctx.stopped ?? ctx.overBudget;
     const result: SummaryRunResult = {
         total: targets.length,
         upToDate: upToDate(targets),
@@ -650,16 +684,16 @@ function finish(ctx: RunContext, targets: readonly PlannedTarget[], hasSummarize
         lazy: count("lazy"),
         inFlight: countInFlight(ctx.db, ctx.repoId),
         needModel: hasSummarizer ? 0 : count("ready") + count("waiting"),
-        stopped: ctx.stopped !== null,
+        stopped: stopped !== null,
     };
 
     let state: "ready" | "running" | "failed" | "off" = "ready";
     const notes: string[] = [];
 
-    if (ctx.stopped !== null){
+    if (stopped !== null){
         // the circuit breaker or the spend cap: still running if batches are at Anthropic (as after an error), failed otherwise
         state = result.inFlight > 0 ? "running" : "failed";
-        notes.push(ctx.stopped);
+        notes.push(stopped);
         if (result.inFlight > 0) notes.push(stillAtAnthropic(result.inFlight));
     } else if (result.needModel > 0){
         state = "off";

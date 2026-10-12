@@ -8,8 +8,9 @@
  *   on from there.
  * - --budget caps what this repo's summaries may cost in total, in US dollars (default 15,
  *   S2's ceiling). Before each batch or regular-API wave the run projects spent + at
- *   Anthropic + this submission + the rest, and stops instead of sending if that would pass
- *   the budget (ADR-035). Running again with a bigger --budget goes on from there.
+ *   Anthropic + this submission + the rest. If that would pass the budget, the run stops
+ *   sending but keeps collecting what's already at Anthropic, which is paid for (ADR-035).
+ *   Running again with a bigger --budget goes on from there.
  * - --path summarizes one file or folder right now through the regular API (an empty path
  *   means the repo itself). It's one request, so no budget applies.
  */
