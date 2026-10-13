@@ -22,8 +22,12 @@ export function inlineCode(text: string): TextPart[] {
 
 /** Words that end in a period without ending the sentence. */
 const ABBREVIATIONS: ReadonlySet<string> = new Set(["e.g", "i.e", "etc", "vs", "cf"]);
-/** What the next sentence can start with. A backtick isn't on the list, so "e.g. `foo`" never splits. */
-const STARTS_SENTENCE = /[A-Z0-9"'(“‘]/;
+/**
+ * What the next sentence can start with, code included: summaries often start a sentence with an identifier
+ * ("`common/` holds…"), and leaving the backtick out made a whole paragraph the lead. "e.g. `foo`" still doesn't
+ * split: the abbreviation check catches it.
+ */
+const STARTS_SENTENCE = /[A-Z0-9"'(“‘`]/;
 
 /** The word that ends at `end` (the stop's position), without an opening parenthesis: "(i.e" → "i.e". */
 function wordBefore(text: string, end: number): string {

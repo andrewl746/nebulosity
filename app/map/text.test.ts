@@ -35,4 +35,12 @@ describe("splitSummary (§5: about two lines, then 'Read full summary')", () => 
         expect(splitSummary("Version 3.4 ships. More.")).toEqual({ lead: "Version 3.4 ships.", rest: "More." });
         expect(splitSummary("A period inside `code. Like this` stays. Next.")).toEqual({ lead: "A period inside `code. Like this` stays.", rest: "Next." });
     });
+
+    it("ends a sentence before one that starts with code (the owner saw a whole paragraph as the lead)", () => {
+        // the theme folder's summary: its second sentence starts with `common/`
+        expect(splitSummary("This folder is the theming layer. `common/` holds the registries. `browser/` turns them into CSS."))
+            .toEqual({ lead: "This folder is the theming layer.", rest: "`common/` holds the registries. `browser/` turns them into CSS." });
+        // but an abbreviation before code still doesn't end one
+        expect(splitSummary("Uses e.g. `foo` to log. Second.")).toEqual({ lead: "Uses e.g. `foo` to log.", rest: "Second." });
+    });
 });
