@@ -37,10 +37,11 @@ describe("portals", () => {
         expect(portalLinks(EDGES, "x//page-1")).toBe(2);
     });
 
-    it("says how many folders and files are behind a doorway and how many links it has, in the singular when it's one", () => {
-        expect(portalCaption(ONWARD, 7)).toBe("135 folders and files · 7 links");
-        expect(portalCaption(portal("x//page-3", { hiddenCount: 1 }), 1)).toBe("1 folder or file · 1 link");
-        expect(portalCaption(portal("x//page-3", { hiddenCount: 1200 }), 0)).toBe("1,200 folders and files · 0 links");
+    it("says how many folders and files are behind a doorway and how many imports its lines carry, in the singular when it's one", () => {
+        // "imports", the word a line's hover sentence uses ("github uses log · 29 imports"); "links" read as a count of lines
+        expect(portalCaption(ONWARD, 7)).toBe("135 folders and files · 7 imports");
+        expect(portalCaption(portal("x//page-3", { hiddenCount: 1 }), 1)).toBe("1 folder or file · 1 import");
+        expect(portalCaption(portal("x//page-3", { hiddenCount: 1200 }), 0)).toBe("1,200 folders and files · 0 imports");
     });
 
     it("lists this page's boxes linked to a doorway, most imports first, ties in the Map's order", () => {

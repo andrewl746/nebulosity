@@ -16,7 +16,7 @@ export type BoxData = {
     agent: boolean;
     /** Changes when a tool call touches this box: the pulse ring remounts and plays again. */
     pulseKey: number;
-    /** Portals only: which way the doorway leads, "Lines to page 2", and "44 folders and files · 6 links" under it (portals.ts). */
+    /** Portals only: which way the doorway leads, "Lines to page 2", and "44 folders and files · 6 imports" under it (portals.ts). */
     portal?: { direction: "previous" | "next" | "many"; title: string; caption: string };
 };
 
@@ -52,7 +52,7 @@ const PORTAL_ICONS = { previous: IconArrowLeft, next: IconArrowRight, many: Icon
  * One box on the Map (VISUAL_REFRESH.md §4): an outline icon, the name, and for folders how many files they hold.
  * Summaries live in the panel, not here. A portal, the doorway to another page of a big folder, is dashed and unfilled,
  * titled by where its lines go ("Lines to page 2"), with an arrow toward its page (a stack for several) and how many
- * boxes and links are behind it; double-clicking it turns to that page.
+ * boxes and imports are behind it; double-clicking it turns to that page.
  */
 function MapBox({ data }: NodeProps<BoxNode>){
     const { box, tone, agent, pulseKey, portal } = data;

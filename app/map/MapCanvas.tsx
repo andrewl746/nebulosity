@@ -74,7 +74,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
     const divider = useMemo(() => looseDivider(level.nodes, level.edges, positions), [level, positions]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
-    // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 links", worked out once per level, not on every hover
+    // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 imports", worked out once per level, not on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
         n.path,
         { direction: portalDirection(n, level.page), title: portalTitle(n), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
@@ -203,7 +203,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     <LooseDivider divider={divider} />
                 </ViewportPortal>
             )}
-            <Legend quietLines={quietLines} />
+            <Legend quietLines={quietLines} doorways={level.nodes.some((n) => n.kind === "portal")} />
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
             <Controls
                 position="bottom-right"

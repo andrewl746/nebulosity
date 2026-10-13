@@ -28,9 +28,12 @@ export function portalTitle(box: Pick<MapNode, "page" | "pages">): string {
     return `Lines to ${plural(box.pages?.length ?? 0, "more page", "more pages")}`;
 }
 
-/** Under a doorway's name: "44 folders and files · 6 links" (the owner's wording; "boxes" read as jargon). */
-export function portalCaption(box: Pick<MapNode, "hiddenCount">, links: number): string {
-    return `${plural(box.hiddenCount ?? 0, "folder or file", "folders and files")} · ${plural(links, "link", "links")}`;
+/**
+ * Under a doorway's name: "44 folders and files · 6 imports" (the owner's wording; "boxes" read as jargon). Imports, as a
+ * line's hover sentence counts them; "links" read as a count of lines (deferred minor, 2026-10-13).
+ */
+export function portalCaption(box: Pick<MapNode, "hiddenCount">, imports: number): string {
+    return `${plural(box.hiddenCount ?? 0, "folder or file", "folders and files")} · ${plural(imports, "import", "imports")}`;
 }
 
 /**
