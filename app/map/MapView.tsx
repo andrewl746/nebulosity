@@ -15,6 +15,7 @@ import { mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { boxFor, parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
 import { pageNote } from "./portals";
+import { mapShortcut } from "./shortcuts";
 import { nextPulses, type Pulse } from "./pulses";
 import RepoMenu from "./RepoMenu";
 import SearchPalette from "./SearchPalette";
@@ -227,22 +228,27 @@ function MapScreen(){
     const closePanel = useCallback(() => setSelected(null), []);
 
     // Escape lets go of the selection, Backspace goes up a level, the arrow keys turn the page, unless the user is typing
+    // or a dialog is open over the Map (shortcuts.ts)
     const page = level?.page ?? 0;
     const pageCount = level?.pageCount ?? 1;
     useEffect(() => {
         const onKey = (event: KeyboardEvent): void => {
-            const typing = event.target instanceof HTMLElement && ["INPUT", "TEXTAREA"].includes(event.target.tagName);
-            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k"){
+            const shortcut = mapShortcut(event, {
+                typing: event.target instanceof HTMLElement && ["INPUT", "TEXTAREA"].includes(event.target.tagName),
+                // the dialogs render into the page's body (portals), so the page itself says whether one is open
+                dialogOpen: document.querySelector('[role="dialog"]') !== null,
+                levelPath,
+                page,
+                pageCount,
+            });
+            if (shortcut === null) return;
+            if (shortcut.type === "search"){
                 event.preventDefault();
                 setPaletteOpen(true);
-                return;
-            }
-            if (typing) return;
-            if (event.key === "?") setHelpOpen(true);
-            else if (event.key === "Escape") setSelected(null);
-            else if (event.key === "Backspace" && levelPath !== "") open(parentOf(levelPath));
-            else if (event.key === "ArrowLeft" && page > 0) turnPage(page - 1);
-            else if (event.key === "ArrowRight" && page < pageCount - 1) turnPage(page + 1);
+            } else if (shortcut.type === "help") setHelpOpen(true);
+            else if (shortcut.type === "deselect") setSelected(null);
+            else if (shortcut.type === "up") open(parentOf(levelPath));
+            else turnPage(shortcut.page);
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
