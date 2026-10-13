@@ -19,7 +19,7 @@ import { portalCaption, portalDirection, portalLinks, portalTitle } from "./port
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { routeEdges } from "./routes";
-import { boundsOf, initialViewport } from "./viewport";
+import { boundsOf, initialViewport, TOP_INSET } from "./viewport";
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
@@ -101,11 +101,13 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const { setViewport } = useReactFlow();
     const canvasWidth = useStore((s) => s.width);
     const canvasHeight = useStore((s) => s.height);
+    // a paged level keeps clear of the page pill at the canvas's top right (viewport.ts)
+    const pillBand = level.pageCount > 1 ? TOP_INSET : 0;
     // the latest of each, for the opening view below: it runs when the level changes, not when they do
-    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } });
+    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight }, pillBand });
     useEffect(() => {
-        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } };
-    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight]);
+        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight }, pillBand };
+    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight, pillBand]);
 
     useEffect(() => {
         // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts)
@@ -160,7 +162,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         const frame = requestAnimationFrame(() => {
             fittedKey.current = levelKey;
             const open = openRef.current;
-            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas), { duration: 0 });
+            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas, open.pillBand), { duration: 0 });
             open.onDrawn();
         });
         return () => cancelAnimationFrame(frame);

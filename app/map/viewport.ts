@@ -12,8 +12,11 @@ import { BOX_HEIGHT, BOX_WIDTH, FIT_PADDING, type Position } from "./levelLayout
 export const MIN_READABLE_ZOOM = 0.75;
 /** A small level isn't blown up past 100% (VISUAL_REFRESH.md §4). */
 export const MAX_FIT_ZOOM = 1;
-/** How far below the canvas's top edge a level too big to fit starts: clear of the page pill. */
-const TOP_INSET = 64;
+/**
+ * How far below the canvas's top edge a level too big to fit starts, clear of the page pill; on a paged level, the band a
+ * fitted level is kept below too.
+ */
+export const TOP_INSET = 64;
 /**
  * The room left on each side of a level that opens filling the width: the owner's pick (sheet 1, B, 2026-10-13), which
  * opens VS Code's contrib, page 2, at 83% on a 1907 px screen instead of 75%.
@@ -39,12 +42,15 @@ export function boundsOf(positions: ReadonlyMap<string, Position>): Bounds {
 /**
  * The viewport a level opens at: React Flow's fit (the same zoom and centring, with FIT_PADDING) when that's readable,
  * otherwise as wide as the canvas allows, from the level's top, never under MIN_READABLE_ZOOM or over MAX_FIT_ZOOM.
- * Pure, so the rule is tested apart from React Flow.
+ * `topBand` keeps a fitted level below a strip at the top: on a paged level the page pill sits there, and a level
+ * centred in the whole canvas could open with its top-right box under the pill (deferred minor). Pure, so the rule is
+ * tested apart from React Flow.
  */
-export function initialViewport(bounds: Bounds, canvas: { width: number; height: number }): Viewport {
+export function initialViewport(bounds: Bounds, canvas: { width: number; height: number }, topBand = 0): Viewport {
+    const below = canvas.height - topBand;
     const centre = (zoom: number): Viewport => ({
         x: canvas.width / 2 - (bounds.x + bounds.width / 2) * zoom,
-        y: canvas.height / 2 - (bounds.y + bounds.height / 2) * zoom,
+        y: topBand + below / 2 - (bounds.y + bounds.height / 2) * zoom,
         zoom,
     });
     if (bounds.width === 0 || bounds.height === 0 || canvas.width === 0 || canvas.height === 0) return centre(1);
@@ -52,7 +58,7 @@ export function initialViewport(bounds: Bounds, canvas: { width: number; height:
     const fit = Math.min(
         MAX_FIT_ZOOM,
         canvas.width / (bounds.width * (1 + FIT_PADDING)),
-        canvas.height / (bounds.height * (1 + FIT_PADDING)),
+        below / (bounds.height * (1 + FIT_PADDING)),
     );
     if (fit >= MIN_READABLE_ZOOM) return centre(fit);
 
