@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { IconFile, IconFolder, IconSearch } from "@tabler/icons-react";
 import type { SearchHit, SearchResult } from "@/lib/contracts";
 import { api, ApiError } from "./api";
+import { formatCount } from "./format";
 import { languageFor } from "./paths";
+import { groupHits } from "./searchHits";
 
 type SearchPaletteProps = { onPick: (hit: SearchHit) => void; onClose: () => void };
 
-/** Results asked for per query, and how long typing must pause before a query goes out. */
-const LIMIT = 12;
+/** Results asked for per query (enough to fill both groups; the list scrolls), and how long typing must pause. */
+const LIMIT = 40;
 const DEBOUNCE_MS = 150;
 
 /**
- * ⌘K (PIVOT_SPEC.md §7): hybrid search over files, symbols and summaries (GET /api/search). Arrow keys move, Enter
- * picks, Escape closes. Picking moves the Map to the result's level and selects it. MapView mounts it only while
- * open, so each opening starts empty.
+ * ⌘K (PIVOT_SPEC.md §7): hybrid search over files, symbols, summaries and folder names (GET /api/search). Folders come
+ * first, then files, each under a heading with its count (searchHits.ts). Arrow keys move through both, Enter picks,
+ * Escape closes. Picking moves the Map to the result's level and selects it. MapView mounts it only while open, so
+ * each opening starts empty.
  */
 export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
     const [query, setQuery] = useState("");
@@ -23,6 +26,7 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
     const [error, setError] = useState<ApiError | null>(null);
     const [active, setActive] = useState(0);
     const input = useRef<HTMLInputElement>(null);
+    const list = useRef<HTMLUListElement>(null);
     // the code lines take VS Code's colors once the highlighter loads (owner review); plain until then
     const [highlight, setHighlight] = useState<((code: string, language: string) => string) | null>(null);
 
@@ -52,8 +56,14 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
     }, [query]);
 
     // results for an older query, or for an empty box, show nothing
-    const hits = result !== null && result.query === query.trim() ? result.hits : [];
+    const groups = groupHits(result !== null && result.query === query.trim() ? result.hits : []);
+    const hits = groups.ordered;
     const current = Math.min(active, hits.length - 1);
+
+    // the arrow keys can walk past the bottom of a long list: keep the highlighted row in view
+    useEffect(() => {
+        list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+    }, [current]);
 
     const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
         if (event.key === "Escape") onClose();
@@ -85,34 +95,42 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                 </div>
                 {error && <p className="px-4 py-3 text-[13px] text-danger">{error.message}</p>}
                 {result?.note && hits.length > 0 && <p className="px-4 pt-2 text-[12px] text-text-2">{result.note}</p>}
-                <ul role="listbox" className="max-h-[52vh] overflow-y-auto py-1">
+                <ul ref={list} role="listbox" className="max-h-[52vh] overflow-y-auto py-1">
                     {hits.map((hit, i) => (
-                        <li key={hit.path} role="option" aria-selected={i === current}>
-                            <button
-                                type="button"
-                                data-hit={hit.path}
-                                onMouseEnter={() => setActive(i)}
-                                onClick={() => onPick(hit)}
-                                className={`flex w-full gap-3 px-4 py-2 text-left ${i === current ? "bg-surface" : ""}`}
-                            >
-                                {hit.kind === "folder"
-                                    ? <IconFolder aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-folder" />
-                                    : <IconFile aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-text-2" />}
-                                <span className="min-w-0 flex-1">
-                                    <span className="block truncate font-mono text-[13px] text-text">{hit.path}</span>
-                                    {hit.tagline && <span className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
-                                    {hit.code && (
-                                        <span className="block truncate font-mono text-[12px] text-text-2">
-                                            {hit.code.symbol} · lines {hit.code.startLine}–{hit.code.endLine}:{" "}
-                                            {highlight
-                                                // highlightCode escapes the snippet, so this HTML is only its spans (syntax.ts)
-                                                ? <span className="syntax" dangerouslySetInnerHTML={{ __html: highlight(hit.code.snippet, languageFor(hit.path)) }} />
-                                                : <span className="syntax">{hit.code.snippet}</span>}
-                                        </span>
-                                    )}
-                                </span>
-                            </button>
-                        </li>
+                        <Fragment key={hit.path}>
+                            {(i === 0 || i === groups.folders.length) && (
+                                <li role="presentation" className="px-4 pb-1 pt-2 text-[12px] font-medium text-text-2">
+                                    {hit.kind === "folder" ? "Folders" : "Files"}{" "}
+                                    <span className="font-normal">{formatCount(hit.kind === "folder" ? groups.folders.length : groups.files.length)}</span>
+                                </li>
+                            )}
+                            <li role="option" aria-selected={i === current}>
+                                <button
+                                    type="button"
+                                    data-hit={hit.path}
+                                    onMouseEnter={() => setActive(i)}
+                                    onClick={() => onPick(hit)}
+                                    className={`flex w-full gap-3 px-4 py-2 text-left ${i === current ? "bg-surface" : ""}`}
+                                >
+                                    {hit.kind === "folder"
+                                        ? <IconFolder aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-folder" />
+                                        : <IconFile aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-text-2" />}
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate font-mono text-[13px] text-text">{hit.path}</span>
+                                        {hit.tagline && <span className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
+                                        {hit.code && (
+                                            <span className="block truncate font-mono text-[12px] text-text-2">
+                                                {hit.code.symbol} · lines {hit.code.startLine}–{hit.code.endLine}:{" "}
+                                                {highlight
+                                                    // highlightCode escapes the snippet, so this HTML is only its spans (syntax.ts)
+                                                    ? <span className="syntax" dangerouslySetInnerHTML={{ __html: highlight(hit.code.snippet, languageFor(hit.path)) }} />
+                                                    : <span className="syntax">{hit.code.snippet}</span>}
+                                            </span>
+                                        )}
+                                    </span>
+                                </button>
+                            </li>
+                        </Fragment>
                     ))}
                     {query.trim() !== "" && result !== null && result.query === query.trim() && hits.length === 0 && (
                         <li className="px-4 py-3 text-[13px] text-text-2">{result.note ?? "Nothing matched."}</li>

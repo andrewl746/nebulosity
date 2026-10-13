@@ -20,7 +20,7 @@ summaries: npm run summarize                                 lib/index/summarize
    ▼
 summary vectors (MiniLM, local)                              lib/index/embed.ts
    ▼
-search(query) = RRF(code_fts, summary_fts, cosine)           lib/engine/search.ts
+search(query) = RRF(code_fts, summary_fts, cosine, folder names)           lib/engine/search.ts
 ```
 
 Every stage is incremental and records its status in `meta` (`GET /api/status`). Each leaves the earlier stages usable: keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive.
@@ -143,11 +143,12 @@ Model-written summaries only, as `tagline \n summary \n path` (`summaryEmbedding
 
 ## 6. Search
 
-### The three lists
+### The four lists
 
 1. **Code keywords:** bm25 over `code_fts` (path 2, name 10, name_split 6, text 1). The top 200 chunks are grouped by file, and a file's best chunk stands for it.
 2. **Summary keywords:** bm25 over `summary_fts` (path 1, tagline 4, summary 2), over files and folders. The repo summary is never a hit.
 3. **Meaning:** cosine similarity between the query's MiniLM vector and every summary vector, held in memory as one flat matrix and reloaded only when the set of vectors changes. Matches below 0.25 are dropped.
+4. **Folder names** *(V1.3.1, owner review)*: folders whose name matches a word of the query (`rankFolderNames`). Best first: the name is the word, or differs from it by an ending of up to 3 letters (`debug` for "debugger"); then the name starts with the word (`terminalContrib`); then it contains it (`externalTerminal`, words of 3+ letters); then the word starts with the name (`term` for "terminal", names of 4+ letters). Ties go to the folder with more files. Before this list, searching "terminal" ranked VS Code's terminal folder 57th: folders only competed through their summaries, against hundreds of files.
 
 Each list contributes at most 50 files or folders.
 
@@ -157,7 +158,7 @@ Each list contributes at most 50 files or folders.
 
 ### Reciprocal Rank Fusion
 
-`score(d) = Σ 1 / (60 + rankᵢ(d))` over every list that ranks `d`, with ranks starting at 1. A worked example: lists code `[a, b, c]`, summary `[b]`, vector `[c, b]` give
+`score(d) = Σ wᵢ / (60 + rankᵢ(d))` over every list that ranks `d`, with ranks starting at 1. Each list's weight `wᵢ` is 1, except the folder-name list's, which is 2: a folder named like the query is strong evidence it's what's meant, and at weight 1 it scored like a single code hit and fell past the cut-off (`src/vs/workbench/contrib/debug` for "debugger"). A worked example with the three weight-1 lists: code `[a, b, c]`, summary `[b]`, vector `[c, b]` give
 - `b` = 1/62 + 1/61 + 1/62 ≈ 0.0487,
 - `c` = 1/63 + 1/61 ≈ 0.0323,
 - `a` = 1/61 ≈ 0.0164.

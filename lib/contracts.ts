@@ -320,8 +320,8 @@ export type CodeChunk = {
 
 /* ───────────────────────────── Search ────────────────────────────── */
 
-/** The three ranked lists hybrid search fuses (ADR-027). */
-export type SearchList = "code" | "summary" | "vector";
+/** The ranked lists hybrid search fuses (ADR-027): code, summaries, meaning, and folder names (since V1.3.1). */
+export type SearchList = "code" | "summary" | "vector" | "name";
 
 /** One file or folder in a search result — docs/API_CONTRACTS.md §10 */
 export type SearchHit = {
