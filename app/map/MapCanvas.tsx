@@ -19,12 +19,16 @@ import { portalCaption, portalDirection, portalLinks } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { routeEdges } from "./routes";
+import { boundsOf, initialViewport } from "./viewport";
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
 const edgeTypes: EdgeTypes = { routed: RoutedEdge };
 
-/** A level fits the screen with room around it, and a small level isn't blown up past 100% (VISUAL_REFRESH.md §4). */
+/**
+ * The fit button's fit: the whole level with room around it, never past 100% (VISUAL_REFRESH.md §4). A level opens by
+ * viewport.ts's rule instead, which fits the same way unless that would make it unreadable.
+ */
 const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
 
 /**
@@ -83,14 +87,14 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     );
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
-    const { fitView } = useReactFlow();
-    // the latest fitView and onDrawn, for the fit below: it runs when the level changes, not when they do
-    const fitViewRef = useRef(fitView);
-    const onDrawnRef = useRef(onDrawn);
+    const { setViewport } = useReactFlow();
+    const canvasWidth = useStore((s) => s.width);
+    const canvasHeight = useStore((s) => s.height);
+    // the latest of each, for the opening view below: it runs when the level changes, not when they do
+    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } });
     useEffect(() => {
-        fitViewRef.current = fitView;
-        onDrawnRef.current = onDrawn;
-    }, [fitView, onDrawn]);
+        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } };
+    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight]);
 
     useEffect(() => {
         // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts)
@@ -130,10 +134,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         setEdges(drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge));
     }, [level, byPath, routes, emphasis, hoveredEdge, setEdges]);
 
-    // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
-    // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
-    // level's boxes: fitting sooner frames the previous level's, which is what a level from the cache got. The same
-    // level refetched after the index moved keeps its key, so the user's pan and zoom stay put.
+    // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, unless that would
+    // shrink it past 75%, then from its top), then report it drawn. The boxes reach React Flow a render after the level
+    // does (setNodes runs in an effect), so this waits until `nodes` holds this level's boxes: placing the view sooner
+    // frames the previous level's, which is what a level from the cache got. The same level refetched after the index
+    // moved keeps its key, so the user's pan and zoom stay put.
     // the row width is in the key: a window resized across WIDE_CANVAS lays the level out again, so it's fitted again
     const levelKey = `${level.repo}\n${level.path}\n${level.page}\n${perRow}`;
     const fittedKey = useRef<string | null>(null);
@@ -143,8 +148,9 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         if (!arrived) return;
         const frame = requestAnimationFrame(() => {
             fittedKey.current = levelKey;
-            void fitViewRef.current({ ...FIT, duration: 0 });
-            onDrawnRef.current();
+            const open = openRef.current;
+            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas), { duration: 0 });
+            open.onDrawn();
         });
         return () => cancelAnimationFrame(frame);
     }, [levelKey, nodes, level.nodes]);

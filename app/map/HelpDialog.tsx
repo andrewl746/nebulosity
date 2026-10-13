@@ -47,6 +47,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li><b>Double-click</b> a folder to go inside it.</li>
                         <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button. The repo&apos;s name at the very top goes back to the start.</li>
                         <li>Big folders are split into pages of related boxes: turn the page with the arrows at the sides, the page buttons at the top right, or <Key>←</Key> <Key>→</Key>.</li>
+                        <li>A busy folder opens at a readable size, from its top: drag to see the rest, or press the fit button at the bottom right to see it all.</li>
                         <li>Search files and concepts with <Key>Ctrl K</Key> (<Key>⌘K</Key> on a Mac).</li>
                     </Section>
                     <Section title="Reading the Map">
