@@ -45,14 +45,14 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     <Section title="Getting around">
                         <li><b>Click</b> a box to see what it is, in the panel on the right.</li>
                         <li><b>Double-click</b> a folder to go inside it.</li>
-                        <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button.</li>
-                        <li>Big folders are split into pages of related boxes: turn the page with the arrows at the sides, or <Key>←</Key> <Key>→</Key>.</li>
+                        <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button. The repo&apos;s name at the very top goes back to the start.</li>
+                        <li>Big folders are split into pages of related boxes: turn the page with the bar at the bottom, the arrows at the sides, or <Key>←</Key> <Key>→</Key>.</li>
                         <li>Search files and concepts with <Key>Ctrl K</Key> (<Key>⌘K</Key> on a Mac).</li>
                     </Section>
                     <Section title="Reading the Map">
                         <li>A box is a folder (with how many files it holds) or a file.</li>
-                        <li>A line from A to B means code in A imports code in B. The arrow points at what&apos;s imported.</li>
-                        <li>Hover a box to preview its lines. Hover a line to see how many imports it carries.</li>
+                        <li>A line from A to B means A uses code from B. Arrows <b>out</b> of a box show what it depends on; arrows <b>into</b> it show what uses it.</li>
+                        <li>Hover a box to see its summary and preview its lines. Hover a line to read it as a sentence, like &quot;editor uses base · 12 imports&quot;.</li>
                         <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select. <b>Show all lines</b>, at the top right, brings back the rest.</li>
                         <li>Boxes with no lines at this level sit in a grid to one side.</li>
                         <li>Lines to other pages end at a page&apos;s doorway, a dashed box; double-click it to go there.</li>

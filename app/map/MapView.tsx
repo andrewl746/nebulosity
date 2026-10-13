@@ -214,6 +214,8 @@ function MapScreen(){
     }, [refresh]);
 
     const onDrawn = useCallback(() => measureAfterPaint("map:level"), []);
+    /** The repo's name in the top bar goes back to the top level, like a site's name goes home (three-task test). */
+    const goHome = useCallback(() => open(""), [open]);
     const closeHelp = useCallback(() => setHelpOpen(false), []);
 
     // The help opens by itself the first time this browser opens the Map (owner review). A browser that keeps no
@@ -264,7 +266,7 @@ function MapScreen(){
     return (
         <div className="absolute inset-0 flex flex-col">
             <TopBar
-                repo={repo ? <RepoMenu repo={repo} onSwitched={onSwitched} /> : null}
+                repo={repo ? <RepoMenu repo={repo} onSwitched={onSwitched} onHome={goHome} /> : null}
                 onSearch={() => setPaletteOpen(true)}
                 status={<StatusPill status={status} />}
                 onHelp={() => setHelpOpen(true)}
@@ -286,7 +288,6 @@ function MapScreen(){
                             </button>
                         </span>
                     )}
-                    {level && level.hiddenCount > 0 && <span data-testid="page-note">{pageNote(level)}</span>}
                 </div>
             </div>
             <main className="relative flex-1">
@@ -307,6 +308,7 @@ function MapScreen(){
                     <>
                         {page > 0 && <PageArrow side="left" page={page} pageCount={pageCount} onTurn={turnPage} />}
                         {page < pageCount - 1 && <PageArrow side="right" page={page} pageCount={pageCount} onTurn={turnPage} panelOpen={selected !== null} />}
+                        <PageBar level={level} onTurn={turnPage} panelOpen={selected !== null} />
                     </>
                 )}
                 {!level && !levelError && <p className="absolute inset-0 grid place-items-center text-[13px] text-text-2">Loading the map…</p>}
@@ -341,7 +343,10 @@ function MapScreen(){
 
 type PageArrowProps = { side: "left" | "right"; page: number; pageCount: number; onTurn: (page: number) => void; panelOpen?: boolean };
 
-/** A big arrow on the canvas's edge that turns to the previous or next page of boxes (owner review). */
+/**
+ * A big arrow on the canvas's edge that turns to the previous or next page of boxes (owner review). Solid and light, so
+ * it stands out over boxes and lines: dark on dark, the owner couldn't find it once the panel had pushed it over the Map.
+ */
 function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArrowProps){
     const next = side === "left" ? page - 1 : page + 1;
     const Icon = side === "left" ? IconChevronLeft : IconChevronRight;
@@ -354,10 +359,42 @@ function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArr
             aria-label={`${word} boxes: page ${next + 1} of ${pageCount}`}
             title={`${word} boxes (${side === "left" ? "Left" : "Right"} arrow key)`}
             style={side === "right" ? { right: (panelOpen ? PANEL_WIDTH : 0) + 16 } : { left: 16 }}
-            className="absolute top-1/2 z-[6] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full border border-border bg-surface text-text-2 hover:border-text-2 hover:text-text"
+            className="absolute top-1/2 z-[6] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-text text-canvas hover:bg-text-body"
         >
-            <Icon aria-hidden size={24} stroke={1.75} />
+            <Icon aria-hidden size={24} stroke={2} />
         </button>
+    );
+}
+
+/**
+ * Which page of a big folder is on screen, in big type at the bottom of the canvas, with buttons either side (the
+ * three-task test: the small note in the top bar went unseen). It stays centred on the canvas when the panel opens.
+ */
+function PageBar({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (page: number) => void; panelOpen: boolean }){
+    const step = (side: "left" | "right") => {
+        const next = side === "left" ? level.page - 1 : level.page + 1;
+        const Icon = side === "left" ? IconChevronLeft : IconChevronRight;
+        const off = next < 0 || next >= level.pageCount;
+        return (
+            <button
+                type="button"
+                disabled={off}
+                onClick={() => onTurn(next)}
+                aria-label={`${side === "left" ? "Previous" : "Next"} page`}
+                className="grid h-8 w-8 place-items-center rounded-full text-text hover:bg-border disabled:text-border disabled:hover:bg-transparent"
+            >
+                <Icon aria-hidden size={18} stroke={2} />
+            </button>
+        );
+    };
+    return (
+        <div style={{ right: panelOpen ? PANEL_WIDTH : 0 }} className="pointer-events-none absolute bottom-4 left-0 z-[7] flex justify-center">
+            <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-surface px-2 py-1">
+                {step("left")}
+                <span data-testid="page-note" className="text-[15px] text-text">{pageNote(level)}</span>
+                {step("right")}
+            </div>
+        </div>
     );
 }
 

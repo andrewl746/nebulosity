@@ -11,7 +11,7 @@ import type { LevelResponse } from "@/lib/contracts";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
 import { toBoxNode } from "./flowNodes";
 import { PANEL_WIDTH } from "./DetailPanel";
-import { formatCount } from "./format";
+import { lineLabel } from "./labels";
 import Legend from "./Legend";
 import { FIT_PADDING, layoutLevel } from "./levelLayout";
 import MapBox, { type BoxData, type BoxNode } from "./MapBox";
@@ -38,8 +38,8 @@ const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: 
     preview: { stroke: "var(--text-2)", arrow: "var(--text)", width: 1.5, opacity: 1, layer: 1 },
     selected: { stroke: "var(--select)", arrow: "var(--select)", width: 2, opacity: 1, layer: 2 },
 };
-/** The arrowhead's size in px, whatever the line's width. */
-const ARROW_SIZE = 18;
+/** The arrowhead's size in px, whatever the line's width (26 since the three-task test: 18 was too small to read). */
+const ARROW_SIZE = 26;
 
 type MapCanvasProps = {
     level: LevelResponse;
@@ -65,6 +65,7 @@ type MapCanvasProps = {
  */
 function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines }: MapCanvasProps){
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
+    const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
     // each portal's arrow and "44 boxes · 6 links", worked out once per level rather than on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
         n.path,
@@ -113,7 +114,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 source: edge.source,
                 target: edge.target,
                 focusable: false,
-                label: hoveredEdge === id ? `${formatCount(edge.count)} import${edge.count === 1 ? "" : "s"}` : undefined,
+                // in words ("editor uses base · 12 imports"): the three-task test's tester read an arrow backwards
+                label: hoveredEdge === id ? lineLabel(byPath.get(edge.source)!, byPath.get(edge.target)!, edge.count) : undefined,
                 style: { stroke: look.stroke, strokeWidth: look.width, opacity: look.opacity },
                 // userSpaceOnUse: the arrowhead stays the same size whatever the line's width
                 markerEnd: { type: MarkerType.ArrowClosed, width: ARROW_SIZE, height: ARROW_SIZE, color: look.arrow, markerUnits: "userSpaceOnUse" },
@@ -123,7 +125,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
         // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
         setEdges(drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge));
-    }, [level, routes, emphasis, hoveredEdge, setEdges]);
+    }, [level, byPath, routes, emphasis, hoveredEdge, setEdges]);
 
     // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
     // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this

@@ -14,8 +14,10 @@
 - **Pages (§6, ADR-042):** first by size with a "+N more" box, then grouped by import with portals to the other pages, so every box is drawn on some page. `GET /api/level` gained `page` and `focus`, and the contract went to v3.
 - **Keys (§6):** Backspace, the arrows and ? leave the Map alone while a dialog is open.
 - **Busy levels (§4):** past 60 lines, only the hovered or selected box's lines are drawn, with "Show all lines" to bring the rest back.
+- **From the three-task test (§9):** line sentences on hover, plain-word legend rows for arrows out and in, 26 px arrowheads, 15 px relationship headings, a page bar on the canvas with solid side arrows, the repo name going home, hover summaries on boxes.
 - **The speed fix (§8):** the 5 s `src` panel didn't reproduce (30–141 ms, BENCHMARKS.md Map Benchmark #2); answers are now cached per index version, and the panel says "Refreshing…" while an on-demand summary is on its way.
-- **Still owed:** the three-task test with someone unfamiliar with VS Code (§9), and the owner's sign-off.
+- **The three-task test (§9), run 2026-10-13,** and what it changed: the line sentences, the arrows' wording and size, the page bar, the solid page arrows, the repo name going home, hover summaries, and search without the repo's name.
+- **Still owed:** the owner's sign-off.
 
 ## 1. Principle
 
@@ -129,7 +131,7 @@ It's actionable and structured, not a static card. From top to bottom:
 - **Help:** a "?" button beside the status, the `?` key, and the first visit in a browser open "How to use the Map". It covers getting around, reading the Map, what each color means, the panel, Claude Code's activity and the keyboard.
 - **The status** is a bordered button with a chevron, so it reads as the menu it opens.
 - **Source:** a file's panel offers "View source", a read-only drawer over the canvas with line numbers. A declaration in the panel opens it at that declaration's lines, highlighted (API_CONTRACTS.md §16).
-- **Pages and Back:** a big folder is drawn a page at a time, 44 boxes that import each other, with big arrows at the canvas's sides (or the arrow keys). Lines to boxes on other pages end at **portals**, dashed doorway boxes in `--text-2` with an arrow toward their page ("Page 2", "44 boxes · 6 links"; past 6 linked pages, one "+N pages" box with a stack icon). Double-clicking a portal turns to its page, and its panel lists the boxes on this page linked to it. The note beside the breadcrumb reads "Page 2 of 5 · 44 of 182 boxes". The address bar holds the folder and page, so the browser's Back returns to the previous one (ADR-042).
+- **Pages and Back:** a big folder is drawn a page at a time, 44 boxes that import each other, with big solid arrows at the canvas's sides, a page bar at the bottom of the canvas ("‹ Page 2 of 5 · 44 of 182 boxes ›"), or the arrow keys. Lines to boxes on other pages end at **portals**, dashed doorway boxes in `--text-2` with an arrow toward their page ("Page 2", "44 boxes · 6 links"; past 6 linked pages, one "+N pages" box with a stack icon). Double-clicking a portal turns to its page, and its panel lists the boxes on this page linked to it. The address bar holds the folder and page, so the browser's Back returns to the previous one (ADR-042).
 - **Keys stay put under a dialog:** while the source viewer or the help is open, Backspace, the arrows and ? leave the Map alone, and Escape closes just the dialog.
 - **Feel:** everything clickable shows the hand and answers the hover, the search field shows the text cursor, and scrollbars are thin and in the theme's colors.
 
@@ -156,4 +158,22 @@ Opening the panel for a large folder (`src`) took about 5 s in V1.3. Profile `de
 - S3 (≤ 100 ms interactions, production build) is re-measured and still holds. Opening the `src` panel takes **≤ 300 ms** warm.
 - Screenshots of root, a selection and a drilled-in level go into the slice's PR.
 - **The three-task test:** someone unfamiliar with VS Code finds the folder for a feature, says what depends on it, and explains what the highlighted lines mean. Note where they hesitate and fix what's in scope.
+
+  **Run 2026-10-13** by the owner over a video call, with a tester who has no programming experience (the owner drove, she directed and thought aloud), on the production build:
+  1. **Find the terminal's folder.** She opened `.vscode` first and clicked `microsoft / vscode`, which did nothing. She didn't think search was allowed; when she tried "vscode terminal", it led to an extension's terminal folder, not `src`'s.
+  2. **What depends on it.** She opened a file and was unsure what she was looking at. The arrowheads were too small to read, it took her a while to find "Depends on" in the panel, and she couldn't tell which arrows meant "depends on" and which meant "used by".
+  3. **What the highlighted lines mean.** She read an arrow backwards ("base depends on editor").
+  4. **Pages** (an extra task). The page arrows and the page number in the top bar were hard to find; the owner also lost the right arrow over the boxes once the panel had opened.
+
+  **Fixed in scope:**
+  - A hovered line reads as a sentence ("editor uses base · 12 imports", "github uses boxes on Page 2").
+  - The legend says "A → B: A uses code from B", and that arrows out of a box are what it depends on and arrows into it are what uses it.
+  - Arrowheads went from 18 to 26 px.
+  - The panel's headings are 15 px and say "Arrows out of this box" / "Arrows into this box".
+  - A page bar at the bottom of the canvas ("‹ Page 1 of 3 · 44 of 112 boxes ›", 15 px) replaces the top bar's note, and the side arrows are solid light buttons.
+  - The repo's name goes to the top level (its ▾ switches repos).
+  - Hovering a box shows its one-line summary.
+  - Search drops the repo's own name when other words remain.
+
+  **Not changed:** knowing to start in `src` takes programming knowledge; the hover summaries are the in-scope help. Folder names already count in search since the owner's own try at task 1 the same day (ADR-027, amended).
 - The owner signs off visually before merging.

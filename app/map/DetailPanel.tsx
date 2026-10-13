@@ -293,8 +293,9 @@ function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOp
             <Summary data={data} fresh={fresh} refreshing={refreshing} summaryError={summaryError} onRetry={onRetry} />
 
             <section aria-label="Relationships" className="space-y-4">
-                <Chips title="Depends on" note="by number of imports" items={data.uses} empty="Imports nothing outside itself." onFocus={onFocus} />
-                <Chips title="Used by" note="by number of imports, test files included" items={data.usedBy} empty="Nothing outside it imports it." onFocus={onFocus} />
+                {/* the three-task test's tester took a while to find these and to match them to the arrows: say it */}
+                <Chips title="Depends on" note="Arrows out of this box on the Map · by number of imports" items={data.uses} empty="Imports nothing outside itself." onFocus={onFocus} />
+                <Chips title="Used by" note="Arrows into this box on the Map · by number of imports, test files included" items={data.usedBy} empty="Nothing outside it imports it." onFocus={onFocus} />
             </section>
 
             {data.children && (
@@ -371,10 +372,10 @@ function Rich({ text }: { text: string }){
     );
 }
 
-function SectionTitle({ title, count, note }: { title: string; count: number; note?: string }){
+function SectionTitle({ title, count, note, large = false }: { title: string; count: number; note?: string; large?: boolean }){
     return (
         <div className="mb-2">
-            <h3 className="text-[13px] font-medium text-text">
+            <h3 className={`${large ? "text-[15px]" : "text-[13px]"} font-medium text-text`}>
                 {title} <span className="font-normal text-text-2">{formatCount(count)}</span>
             </h3>
             {note && <p className="text-[12px] text-text-2">{note}</p>}
@@ -390,7 +391,7 @@ function Chips({ title, note, items, empty, onFocus }: ChipsProps){
     const shown = all ? items : items.slice(0, PREVIEW);
     return (
         <div>
-            <SectionTitle title={title} count={items.length} note={note} />
+            <SectionTitle title={title} count={items.length} note={note} large />
             {items.length === 0
                 ? <p className="text-[13px] text-text-2">{empty}</p>
                 : (

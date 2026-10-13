@@ -6,6 +6,7 @@ import { IconArrowLeft, IconArrowRight, IconFile, IconFolder, IconStack2 } from 
 import type { MapNode } from "@/lib/contracts";
 import type { BoxTone } from "./emphasis";
 import { formatCount } from "./format";
+import { boxTitle } from "./labels";
 
 /** What a box carries besides React Flow's own fields. */
 export type BoxData = {
@@ -55,7 +56,7 @@ function MapBox({ data }: NodeProps<BoxNode>){
     const Icon = portal ? PORTAL_ICONS[portal.direction] : box.kind === "folder" ? IconFolder : IconFile;
     const title = portal
         ? `${box.name}: ${portal.caption}. ${portal.direction === "many" ? "Select it to pick a page." : "Double-click to go there."}`
-        : box.path || box.name;
+        : boxTitle(box);
 
     return (
         <div
