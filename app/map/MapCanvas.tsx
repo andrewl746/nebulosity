@@ -32,7 +32,7 @@ const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
  * arrowhead of a quiet line is brighter than the line itself, so the direction reads without the line getting louder
  * (owner review: the arrows were too small to see).
  */
-const EDGE_STYLES: Record<EdgeTone, { stroke: string; arrow: string; width: number; opacity: number; layer: number }> = {
+const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: string; width: number; opacity: number; layer: number }> = {
     normal: { stroke: "var(--neutral-edge)", arrow: "var(--text-2)", width: 1, opacity: 1, layer: 0 },
     faded: { stroke: "var(--neutral-edge)", arrow: "var(--neutral-edge)", width: 1, opacity: 0.35, layer: 0 },
     preview: { stroke: "var(--text-2)", arrow: "var(--text)", width: 1.5, opacity: 1, layer: 1 },
@@ -53,6 +53,8 @@ type MapCanvasProps = {
     onTurnPage: (page: number) => void;
     /** Called once a new level is on screen (S3's measuring point). */
     onDrawn: () => void;
+    /** A busy level: only the hovered or selected box's lines are drawn (emphasis.ts). */
+    quietLines: boolean;
 };
 
 /**
@@ -61,7 +63,7 @@ type MapCanvasProps = {
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines }: MapCanvasProps){
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
     // each portal's arrow and "44 boxes · 6 links", worked out once per level rather than on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
@@ -72,8 +74,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
     const emphasis = useMemo(
-        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox),
-        [level, selected, hoveredBox],
+        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines }),
+        [level, selected, hoveredBox, quietLines],
     );
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
@@ -98,9 +100,12 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     }, [level, positions, portals, emphasis, agent, pulses, setNodes]);
 
     useEffect(() => {
-        const drawn = level.edges.map((edge) => {
+        // a busy level's hidden lines aren't handed to React Flow at all: fewer lines to draw, and none to hover
+        const drawn = level.edges.flatMap((edge) => {
             const id = edgeKey(edge);
-            const look = EDGE_STYLES[emphasis.edges.get(id) ?? "normal"];
+            const tone = emphasis.edges.get(id) ?? "normal";
+            if (tone === "hidden") return [];
+            const look = EDGE_STYLES[tone];
             const drawnEdge: RoutedEdgeType = {
                 id,
                 type: "routed",
@@ -113,7 +118,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 // userSpaceOnUse: the arrowhead stays the same size whatever the line's width
                 markerEnd: { type: MarkerType.ArrowClosed, width: ARROW_SIZE, height: ARROW_SIZE, color: look.arrow, markerUnits: "userSpaceOnUse" },
             };
-            return { layer: look.layer, edge: drawnEdge };
+            return [{ layer: look.layer, edge: drawnEdge }];
         });
         // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
         // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
@@ -177,7 +182,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             maxZoom={2}
             colorMode="dark"
         >
-            <Legend />
+            <Legend quietLines={quietLines} />
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
             <Controls
                 position="bottom-right"

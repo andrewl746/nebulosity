@@ -10,6 +10,8 @@ import DetailPanel, { PANEL_WIDTH } from "./DetailPanel";
 import HelpDialog from "./HelpDialog";
 import ActivityBar from "./ActivityBar";
 import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
+import { isBusyLevel } from "./emphasis";
+import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
 import { mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { boxFor, parentOf } from "./paths";
@@ -63,6 +65,9 @@ function MapScreen(){
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
     const [highlights, setHighlights] = useState<readonly string[]>([]);
+    // a busy level draws only the hovered or selected box's lines, unless the user asks for all of them; the choice
+    // holds across levels until it's turned off (owner, 2026-10-12)
+    const [showAllLines, setShowAllLines] = useState(false);
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
 
     const repo = status?.repo ?? null;
@@ -266,7 +271,23 @@ function MapScreen(){
             />
             <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-hairline bg-canvas px-4">
                 {level && repo ? <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} /> : <span />}
-                {level && level.hiddenCount > 0 && <span data-testid="page-note" className="shrink-0 text-[12px] text-text-2">{pageNote(level)}</span>}
+                <div className="flex shrink-0 items-center gap-4 text-[12px] text-text-2">
+                    {level && isBusyLevel(level.edges.length) && (
+                        <span data-testid="lines-note">
+                            {showAllLines ? `All ${formatCount(level.edges.length)} lines shown` : "Busy folder: lines show on hover"}
+                            {" · "}
+                            <button
+                                type="button"
+                                data-testid="lines-toggle"
+                                onClick={() => setShowAllLines((all) => !all)}
+                                className="text-text underline underline-offset-2 hover:text-text-2"
+                            >
+                                {showAllLines ? "Show on hover only" : "Show all lines"}
+                            </button>
+                        </span>
+                    )}
+                    {level && level.hiddenCount > 0 && <span data-testid="page-note">{pageNote(level)}</span>}
+                </div>
             </div>
             <main className="relative flex-1">
                 {level && (
@@ -279,6 +300,7 @@ function MapScreen(){
                         onOpen={open}
                         onTurnPage={turnPage}
                         onDrawn={onDrawn}
+                        quietLines={!showAllLines && isBusyLevel(level.edges.length)}
                     />
                 )}
                 {level && pageCount > 1 && (

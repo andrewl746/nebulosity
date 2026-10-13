@@ -13,6 +13,7 @@
 - **Added from the owner's first look (§6):** the help, the status as a bordered menu button, the source viewer, Back and the address bar, the feel (cursors, scrollbars), and big folders drawn a page at a time.
 - **Pages (§6, ADR-042):** first by size with a "+N more" box, then grouped by import with portals to the other pages, so every box is drawn on some page. `GET /api/level` gained `page` and `focus`, and the contract went to v3.
 - **Keys (§6):** Backspace, the arrows and ? leave the Map alone while a dialog is open.
+- **Busy levels (§4):** past 60 lines, only the hovered or selected box's lines are drawn, with "Show all lines" to bring the rest back.
 - **The speed fix (§8):** the 5 s `src` panel didn't reproduce (30–141 ms, BENCHMARKS.md Map Benchmark #2); answers are now cached per index version, and the panel says "Refreshing…" while an on-demand summary is on its way.
 - **Still owed:** the three-task test with someone unfamiliar with VS Code (§9), and the owner's sign-off.
 
@@ -83,6 +84,7 @@ Purple is never used just because something is interactive. Links and buttons us
 - Each line leaves its box's bottom, runs along the empty channel under that row, and goes up or down a lane in the gutter between boxes. It then runs along the channel above its target and drops into the target's top, with corners rounded at 8 px.
 - No line crosses a box. React Flow's default curve went straight from box to box and cut through whatever lay between.
 - Lines sharing a lane overlap like a bus. The selection's route stays purple and on top.
+- **Busy levels draw lines on demand** *(owner, after the page portals)*. A level with more than 60 lines (50 of VS Code's 3,793; `src/vs/platform` has 441) draws no lines at rest: hovering a box draws its lines, and selecting it keeps them in purple, portals included, so a portal lights up only when the box picked links to that page. "Show all lines", beside the page note, brings back every line until it's turned off, and the legend says lines show on hover.
 - Popovers (the status menu, the repo picker) sit on `--surface` and close on an outside click or Escape.
 
 **Interaction:**

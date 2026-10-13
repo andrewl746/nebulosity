@@ -53,6 +53,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li>A box is a folder (with how many files it holds) or a file.</li>
                         <li>A line from A to B means code in A imports code in B. The arrow points at what&apos;s imported.</li>
                         <li>Hover a box to preview its lines. Hover a line to see how many imports it carries.</li>
+                        <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select. <b>Show all lines</b>, at the top right, brings back the rest.</li>
                         <li>Boxes with no lines at this level sit in a grid to one side.</li>
                         <li>Lines to other pages end at a page&apos;s doorway, a dashed box; double-click it to go there.</li>
                     </Section>

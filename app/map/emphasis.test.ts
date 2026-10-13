@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge } from "@/lib/contracts";
-import { edgeKey, mapEmphasis, type BoxTone, type EdgeTone } from "./emphasis";
+import { edgeKey, isBusyLevel, mapEmphasis, type BoxTone, type EdgeTone } from "./emphasis";
 
 // boxes a, b, c, d; lines a→b, b→c, d→c (the plan's Task 5 vectors)
 const BOXES = ["a", "b", "c", "d"];
@@ -10,8 +10,8 @@ const EDGES: MapEdge[] = [
     { source: "d", target: "c", count: 2 },
 ];
 
-function tones(selected: string | null, hovered: string | null): { boxes: BoxTone[]; edges: EdgeTone[] } {
-    const result = mapEmphasis(BOXES, EDGES, selected, hovered);
+function tones(selected: string | null, hovered: string | null, quietLines = false): { boxes: BoxTone[]; edges: EdgeTone[] } {
+    const result = mapEmphasis(BOXES, EDGES, selected, hovered, { quietLines });
     return { boxes: BOXES.map((b) => result.boxes.get(b)!), edges: EDGES.map((e) => result.edges.get(edgeKey(e))!) };
 }
 
@@ -38,6 +38,40 @@ describe("mapEmphasis (VISUAL_REFRESH.md §4)", () => {
 
     it("ignores hovering the selected box", () => {
         expect(tones("b", "b")).toEqual(tones("b", null));
+    });
+
+    it("calls a level busy past 60 lines", () => {
+        expect(isBusyLevel(60)).toBe(false);
+        expect(isBusyLevel(61)).toBe(true);
+    });
+
+    describe("on a busy level (quiet lines: only the hovered or selected box's lines are drawn)", () => {
+        it("hides every line at rest, and keeps the boxes plain", () => {
+            expect(tones(null, null, true)).toEqual({ boxes: ["normal", "normal", "normal", "normal"], edges: ["hidden", "hidden", "hidden"] });
+        });
+
+        it("draws only the hovered box's lines", () => {
+            expect(tones(null, "d", true)).toEqual({ boxes: ["normal", "normal", "preview", "preview"], edges: ["hidden", "hidden", "preview"] });
+        });
+
+        it("draws only the selection's lines, in purple, and fades the rest as usual", () => {
+            expect(tones("b", null, true)).toEqual({ boxes: ["linked", "selected", "linked", "faded"], edges: ["selected", "selected", "hidden"] });
+        });
+
+        it("draws the selection's lines and the hovered box's together", () => {
+            expect(tones("b", "d", true)).toEqual({ boxes: ["linked", "selected", "linked", "preview"], edges: ["selected", "selected", "preview"] });
+        });
+
+        it("draws a selected box's line to a portal, so the doorway lights up only when it's linked", () => {
+            const edges: MapEdge[] = [
+                { source: "src/a", target: "src//page-2", count: 4 },
+                { source: "src/b", target: "src//page-3", count: 1 },
+            ];
+            const result = mapEmphasis(["src/a", "src/b", "src//page-2", "src//page-3"], edges, "src/a", null, { quietLines: true });
+            expect([...result.edges]).toEqual([["src/a->src//page-2", "selected"], ["src/b->src//page-3", "hidden"]]);
+            expect(result.boxes.get("src//page-2")).toBe("linked");
+            expect(result.boxes.get("src//page-3")).toBe("faded");
+        });
     });
 
     it("treats a portal like any other box: selecting a box turns its cross-page line purple", () => {

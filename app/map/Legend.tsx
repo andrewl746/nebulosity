@@ -2,10 +2,10 @@
  * What the lines and colors mean (VISUAL_REFRESH.md §4: "label the relationship"), said once in a corner instead of on
  * every line. It never takes a click from the boxes under it.
  */
-export default function Legend(){
+export default function Legend({ quietLines }: { quietLines: boolean }){
     return (
         <div aria-label="Legend" className="pointer-events-none absolute bottom-4 left-4 z-[5] space-y-1 rounded-lg border border-hairline bg-panel px-3 py-2 text-[12px] text-text-2">
-            <Row glyph={<Arrow color="var(--neutral-edge)" />}>A → B: A imports B</Row>
+            <Row glyph={<Arrow color="var(--neutral-edge)" />}>{quietLines ? "A → B: A imports B (hover a box to see its lines)" : "A → B: A imports B"}</Row>
             <Row glyph={<Arrow color="var(--select)" />}>The selected box and its links</Row>
             <Row glyph={<span className="block h-3 w-3 rounded-sm outline-2 outline-agent" />}>What Claude Code is touching</Row>
         </div>

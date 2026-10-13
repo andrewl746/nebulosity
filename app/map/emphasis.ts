@@ -9,8 +9,20 @@ import type { MapEdge } from "@/lib/contracts";
  */
 export type BoxTone = "normal" | "selected" | "linked" | "preview" | "faded";
 
-/** How a line is drawn: the selection's in purple, the hovered box's brighter, the rest quieter while something is selected. */
-export type EdgeTone = "normal" | "selected" | "preview" | "faded";
+/**
+ * How a line is drawn: the selection's in purple, the hovered box's brighter, the rest quieter while something is
+ * selected. On a busy level the rest aren't drawn at all ("hidden").
+ */
+export type EdgeTone = "normal" | "selected" | "preview" | "faded" | "hidden";
+
+/**
+ * A level with more lines than this is busy: it draws only the lines of the box under the pointer or selected, unless
+ * the user asks for all of them (owner, 2026-10-12). On VS Code, 50 of 3,793 levels are busy; src/vs/platform's first
+ * page has 441 lines, which nobody can follow at once.
+ */
+export const BUSY_LINES = 60;
+
+export const isBusyLevel = (lineCount: number): boolean => lineCount > BUSY_LINES;
 
 /** One line's id, the same one React Flow gets. */
 export const edgeKey = (edge: Pick<MapEdge, "source" | "target">): string => `${edge.source}->${edge.target}`;
@@ -29,13 +41,15 @@ function neighbours(edges: readonly MapEdge[], box: string | null): Set<string> 
 /**
  * What to emphasize on a level, given what's selected and what's under the pointer. Pure, so the rules are tested
  * apart from React Flow. The selection always wins over the hover: a box linked to the selection stays linked when a
- * hovered box also touches it. A selection or hover that isn't one of this level's boxes counts as none.
+ * hovered box also touches it. A selection or hover that isn't one of this level's boxes counts as none. With
+ * `quietLines` (a busy level), only the selection's and the hovered box's lines are drawn; the boxes are toned as usual.
  */
 export function mapEmphasis(
     boxes: readonly string[],
     edges: readonly MapEdge[],
     selected: string | null,
     hovered: string | null,
+    options: { quietLines?: boolean } = {},
 ): { boxes: Map<string, BoxTone>; edges: Map<string, EdgeTone> } {
     const onLevel = new Set(boxes);
     const chosen = selected !== null && onLevel.has(selected) ? selected : null;
@@ -56,6 +70,7 @@ export function mapEmphasis(
         const touches = (box: string | null): boolean => box !== null && (edge.source === box || edge.target === box);
         if (touches(chosen)) edgeTones.set(edgeKey(edge), "selected");
         else if (touches(pointed)) edgeTones.set(edgeKey(edge), "preview");
+        else if (options.quietLines) edgeTones.set(edgeKey(edge), "hidden");
         else edgeTones.set(edgeKey(edge), chosen === null ? "normal" : "faded");
     }
 
