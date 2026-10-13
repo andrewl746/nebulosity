@@ -219,8 +219,8 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 - **`level(path, page?, focus?)`**: breadcrumb, at most 50 nodes (a big folder's page of 44 boxes plus up to 6 portals to its other pages, V1.3.1), that page's edges with the far ends folded onto portals, the hidden count, the page and the page count.
 - **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
 - **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
-- **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance.
-- **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path".
+- **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance. *(V1.4, ADR-045: a file or a folder, whose own files are never listed; every answer counts all reached files and the direct ones; entries go nearest first, then most imported, then by path; `limit` and `offset` page them.)*
+- **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path". *(V1.4, ADR-045: from every file of `from` at once, neighbours in path order so the same chain comes back each time; the answer says which way it runs; overlapping places are refused.)*
 - **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
 
 ### 6.2 Registry
@@ -451,6 +451,7 @@ Each v1 slice ends demoable:
 | ADR-042 | The owner's review of V1.3.1: routed lines, pages of related boxes with portals, Back, a source viewer, help, the violet-slate theme |
 | ADR-043 | Shipped for other people's repos: slice V1.6 with a free mode (no API key), and the extras reordered E4 → E5 → E1, with E3 smaller and optional and E2 behind a measurement |
 | ADR-044 | The MCP server opens the database read-only: no pragmas, no migrations, a check that the file is current, recovery once something is indexed |
+| ADR-045 | Import reach: files and folders, exact totals, nearest and most-imported first, paged with an offset; chains in either direction |
 
 ## 16. Doc migration
 

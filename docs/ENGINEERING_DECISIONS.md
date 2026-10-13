@@ -625,3 +625,17 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 **Alternatives:** (a) A normal open plus `pragma query_only`: the open would still set WAL and migrate. (b) Let the MCP server migrate as well: a Claude Code session could change the schema under a running Map. (c) A copy of the database per session: stale at once.
 **Consequences:** A long-lived reader's caches stay correct only because they're keyed on the index version (ADR-036) or the vector stamp; new caches must follow that rule (ADR-045's import index does). After a pull that brings a migration, the tools answer with the update sentence until the Map or the CLI runs once.
 **Revisit when:** the data moves out of the checkout (V1.6's package or the desktop app), so the migrations folder and the database no longer share `NEBULOSITY_HOME`.
+
+## ADR-045 — Import reach: folders as well as files, exact totals, nearest and most-imported first, paged (2026-10-13) — amends PIVOT_SPEC.md §6.1
+
+**Context:** §6.1 asks for `dependents`/`dependencies` (a breadth-first search over an in-memory adjacency list, cached per index version, with an exact total and then the top entries by distance) and `path` (the shortest chain, in either direction, or "no path"). Building them raised four questions: can a target be a folder, how entries at one distance are ordered, how an agent gets more than one answer's worth, and which chain comes back when several are equally short.
+**Decision:**
+- **Targets.** A file or a folder. A folder's files are the start, and none of them is ever listed, so "what imports `src/vs/base`" means files outside it. The whole repo has no outside and is refused.
+- **Totals.** Every answer counts all the files reached and the direct ones, however many are listed.
+- **Order.** Nearest first, then the most imported (in-degree, ADR-010), then by path, so a cut list shows the most central files.
+- **Paging.** `limit` (1–500, default 50) and `offset`. The cut line names the next offset.
+- **Chains.** Breadth-first from every file of `from` at once, neighbours in path order, so the same chain comes back every time. When `from` doesn't reach `to`, the other direction is tried, and the answer says which way the chain runs. Places that overlap are refused.
+- **The index.** Both directions as compressed rows (offsets plus neighbours, in `Int32Array`s), built from the import graph describe already loads once per index version (ADR-036), and kept beside it.
+**Alternatives:** (a) Files only: an agent asking about an area would have to list its files first. (b) Path order within a distance: a cut list of a hub's thousands of importers would show `build/` and `extensions/` first, whatever matters. (c) No paging and a larger cap: Claude Code moves results of 50,000 characters or more to a file, and a complete list is the point of the tool.
+**Consequences:** On VS Code the rows add about 1.4 MB beside the graph, built once per version, and a search over 139,580 imports takes milliseconds (MCP Benchmark #1). Totals are exact for the index, which is as current as the background worker keeps it.
+**Revisit when:** agents ask for a subset (the dependents under one folder): add an `under` filter rather than a bigger page.

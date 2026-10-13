@@ -48,7 +48,7 @@ function lowerBound(paths: readonly string[], key: string): number {
  * The positions [from, to) of the files at or under a target: every file for the repo, one file for a file, and a
  * folder's whole subtree for a folder ("src/" ≤ path < "src0", since "0" comes right after "/").
  */
-export function rangeOf(graph: ImportGraph, targetPath: string, kind: TargetKind): [number, number] {
+export function rangeOf(graph: Pick<ImportGraph, "paths">, targetPath: string, kind: TargetKind): [number, number] {
     if (kind === "repo") return [0, graph.paths.length];
     if (kind === "file"){
         const at = lowerBound(graph.paths, targetPath);
@@ -107,16 +107,27 @@ const cache = new Map<number, Cached>();
 /** A bound on one version's answers, not an LRU: past it the map starts over. */
 const MAX_CACHED_AREAS = 2_000;
 
-/**
- * Area counts for describe(), from a graph loaded once per repo and index version (PIVOT_SPEC.md §6.1: "cached per
- * index version"). About 60 ms to load on VS Code. Each answer is cached per path until the version moves.
- */
-export function cachedAreaCounts(db: Db, repoId: number, version: number, targetPath: string, kind: TargetKind): Areas {
+/** The repo's graph for one index version: loaded once per version (about 60 ms on VS Code) and shared by every query. */
+function entryFor(db: Db, repoId: number, version: number): Cached {
     let entry = cache.get(repoId);
     if (!entry || entry.version !== version){
         entry = { version, graph: buildImportGraph(loadGraphFiles(db, repoId), loadGraphEdges(db, repoId)), areas: new Map() };
         cache.set(repoId, entry);
     }
+    return entry;
+}
+
+/** The import graph for one index version: describe's area counts, and dependents and paths (reach.ts). */
+export function importGraphFor(db: Db, repoId: number, version: number): ImportGraph {
+    return entryFor(db, repoId, version).graph;
+}
+
+/**
+ * Area counts for describe(), from a graph loaded once per repo and index version (PIVOT_SPEC.md §6.1: "cached per
+ * index version"). About 60 ms to load on VS Code. Each answer is cached per path until the version moves.
+ */
+export function cachedAreaCounts(db: Db, repoId: number, version: number, targetPath: string, kind: TargetKind): Areas {
+    const entry = entryFor(db, repoId, version);
 
     const key = `${kind}:${targetPath}`;
     let areas = entry.areas.get(key);
