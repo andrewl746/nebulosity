@@ -53,7 +53,7 @@ export type IndexStatus = {
  */
 export type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
 
-export type MapNodeKind = "folder" | "file" | "more";
+export type MapNodeKind = "folder" | "file" | "more" | "portal";
 
 /** One box on the Map — docs/API_CONTRACTS.md §11 */
 export type MapNode = {
@@ -67,8 +67,14 @@ export type MapNode = {
   tagline?: string;
   /** "skipped" for the "+N more" box, which has no summary of its own. */
   summaryStatus: SummaryStatus;
-  /** "+N more" only: how many boxes it stands for. */
+  /** "+N more" and portals: how many boxes it stands for. */
   hiddenCount?: number;
+  /** A portal to one other page: that page, from 0. Its path is "<level>//page-<page + 1>" (API_CONTRACTS.md §11). */
+  page?: number;
+  /** The merged portal ("+N pages", path "<level>//pages"): the pages it stands for, from 0, ascending. */
+  pages?: number[];
+  /** Portals: the paths of the boxes on the page(s) behind them, in the Map's order, so a path can find its doorway. */
+  members?: string[];
 };
 
 /** Imports from one box to another at one level, each import counted once (PIVOT_SPEC.md §4.2). */
