@@ -64,6 +64,14 @@ export const LAYOUT_MAX_LINES = 100;
 
 /** The fit's padding (MapCanvas's FIT): React Flow fits a level at most this much smaller than the canvas, each way. */
 export const FIT_PADDING = 0.15;
+/**
+ * Room for the divider over the loose boxes ("Not linked to anything on this page", owner's design, 2026-10-13): a grid
+ * below the tiers starts this far under them, three gaps instead of two, with the line halfway; a column beside them
+ * starts this far down, the line in the band above it.
+ */
+export const BELOW_GAP = 3 * GAP;
+export const DIVIDER_BAND = 64;
+
 /** The canvas a level is judged against when choosing where its loose boxes go: a 1440 × 900 screen less the bars. */
 const NOMINAL_CANVAS = { width: 1440, height: 780 };
 
@@ -83,6 +91,11 @@ function grid(count: number, columns: number, left: number, top: number): Positi
 /** How wide (or tall) `k` boxes side by side (or stacked) are, with the gaps between them. */
 const span = (k: number, size: number): number => k * (size + GAP) - GAP;
 
+/** The paths joined by a line to another box at this level; a line from a box to itself joins nothing. */
+function linkedPaths(edges: readonly MapEdge[]): Set<string> {
+    return new Set(edges.filter((e) => e.source !== e.target).flatMap((e) => [e.source, e.target]));
+}
+
 /**
  * Where each box of a level goes (ADR-011, PIVOT_SPEC.md §7): dagre's layers, importers above what they import, from
  * the level's `maxLines` heaviest lines, drawn as centred tiers that wrap past `perRow` (placeTiers). A box with no
@@ -91,6 +104,7 @@ const span = (k: number, size: number): number => k * (size + GAP) - GAP;
  * - beside the tiers, as tall as them: right for a tall chain on a wide screen (VS Code's root: 91% against 68%);
  * - or below them, square-ish and centred: right for a short stack with many loose boxes (2 tiers and 20 loose: 95%
  *   against 42%). A tie stays beside.
+ * Either way they leave room for the divider that says they're not linked (looseDivider, below).
  * A level with no lines at all is one square-ish grid. Pure and deterministic: the same level always draws the same
  * picture. Positions are top-left corners, as React Flow places nodes.
  */
@@ -103,7 +117,7 @@ export function layoutLevel(
     const positions = new Map<string, Position>();
     const lines = edges.filter((e) => e.source !== e.target);
     // a box joined by any line stays in the layers, even when only lighter lines join it
-    const linked = new Set(lines.flatMap((e) => [e.source, e.target]));
+    const linked = linkedPaths(edges);
     const connected = nodes.filter((n) => linked.has(n.path));
     const loose = nodes.filter((n) => !linked.has(n.path));
     // heaviest first; ties by source, then target, so the same level always keeps the same lines
@@ -135,19 +149,51 @@ export function layoutLevel(
     }
     if (loose.length === 0) return positions;
 
-    // beside: as many rows as the tiers are tall, starting two gaps right of them
+    // beside: as many rows as the tiers are tall, starting two gaps right of them and a band down, under the divider
     const besideRows = Math.max(1, Math.floor((bottom + GAP) / (BOX_HEIGHT + GAP)));
     const besideColumns = Math.ceil(loose.length / besideRows);
     const besideWidth = right + 2 * GAP + span(besideColumns, BOX_WIDTH) + right;   // the tiers span -right … right
-    const besideHeight = Math.max(bottom, span(Math.ceil(loose.length / besideColumns), BOX_HEIGHT));
-    // below: square-ish, centred, starting two gaps under the tiers
+    const besideHeight = Math.max(bottom, DIVIDER_BAND + span(Math.ceil(loose.length / besideColumns), BOX_HEIGHT));
+    // below: square-ish, centred, starting BELOW_GAP under the tiers, the divider halfway
     const belowColumns = Math.min(squareColumns, loose.length);
     const belowWidth = Math.max(2 * right, span(belowColumns, BOX_WIDTH));
-    const belowHeight = bottom + 2 * GAP + span(Math.ceil(loose.length / belowColumns), BOX_HEIGHT);
+    const belowHeight = bottom + BELOW_GAP + span(Math.ceil(loose.length / belowColumns), BOX_HEIGHT);
 
     const cells = fitZoom(belowWidth, belowHeight) > fitZoom(besideWidth, besideHeight)
-        ? grid(loose.length, belowColumns, -span(belowColumns, BOX_WIDTH) / 2, bottom + 2 * GAP)
-        : grid(loose.length, besideColumns, right + 2 * GAP, 0);
+        ? grid(loose.length, belowColumns, -span(belowColumns, BOX_WIDTH) / 2, bottom + BELOW_GAP)
+        : grid(loose.length, besideColumns, right + 2 * GAP, DIVIDER_BAND);
     cells.forEach((at, i) => positions.set(loose[i].path, at));
     return positions;
+}
+
+/** Where the divider over a level's loose boxes runs: its left end, its centre line, its length. */
+export type Divider = { x: number; y: number; width: number };
+
+/**
+ * The line with "Not linked to anything on this page" in its middle, between the boxes joined by lines and the loose
+ * ones (owner's design, 2026-10-13: without it the loose grid read as randomly placed cards). Below the tiers it runs
+ * the whole level's width, halfway down BELOW_GAP; over a column beside them it's as wide as the column, centred in
+ * DIVIDER_BAND. No divider when every box is linked or none is: there's nothing to set apart.
+ */
+export function looseDivider(nodes: readonly MapNode[], edges: readonly MapEdge[], positions: ReadonlyMap<string, Position>): Divider | null {
+    const linked = linkedPaths(edges);
+    const boundsOf = (paths: readonly string[]) => {
+        const at = paths.map((p) => positions.get(p)).filter((q): q is Position => q !== undefined);
+        return {
+            left: Math.min(...at.map((q) => q.x)),
+            right: Math.max(...at.map((q) => q.x + BOX_WIDTH)),
+            top: Math.min(...at.map((q) => q.y)),
+            bottom: Math.max(...at.map((q) => q.y + BOX_HEIGHT)),
+        };
+    };
+    const joined = nodes.filter((n) => linked.has(n.path)).map((n) => n.path);
+    const loose = nodes.filter((n) => !linked.has(n.path)).map((n) => n.path);
+    if (joined.length === 0 || loose.length === 0) return null;
+
+    const tiers = boundsOf(joined);
+    const grid = boundsOf(loose);
+    // beside: the grid starts right of the tiers (layoutLevel puts it two gaps past them); below, it's centred under them
+    if (grid.left >= tiers.right) return { x: grid.left, y: grid.top - DIVIDER_BAND / 2, width: grid.right - grid.left };
+    const left = Math.min(tiers.left, grid.left);
+    return { x: left, y: (tiers.bottom + grid.top) / 2, width: Math.max(tiers.right, grid.right) - left };
 }

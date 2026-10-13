@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Background, BackgroundVariant, ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore,
+    Background, BackgroundVariant, ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
     type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -13,7 +13,7 @@ import { toBoxNode } from "./flowNodes";
 import { PANEL_WIDTH } from "./DetailPanel";
 import { lineLabel } from "./labels";
 import Legend from "./Legend";
-import { FIT_PADDING, layoutLevel, perRowFor } from "./levelLayout";
+import { FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider } from "./levelLayout";
 import MapBox, { type BoxData, type BoxNode } from "./MapBox";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
@@ -72,6 +72,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
+    const divider = useMemo(() => looseDivider(level.nodes, level.edges, positions), [level, positions]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
     // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 links", worked out once per level, not on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
@@ -197,6 +198,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         >
             {/* a faint dot grid: texture, so a busy level isn't a void with rectangles in it (VISUAL_REFRESH.md §3) */}
             <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid)" />
+            {divider && (
+                <ViewportPortal>
+                    <LooseDivider divider={divider} />
+                </ViewportPortal>
+            )}
             <Legend quietLines={quietLines} />
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
             <Controls
@@ -211,6 +217,26 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 </ControlButton>
             </Controls>
         </ReactFlow>
+    );
+}
+
+/**
+ * The line over a level's loose boxes with "Not linked to anything on this page" in its middle (levelLayout.ts's
+ * looseDivider; owner's design, 2026-10-13). It lives in the Map's own coordinates, so it pans and zooms with the boxes.
+ * A hairline in the box border's colour, dimmer than the lines and never ending in an arrow, so it can't be read as one.
+ */
+function LooseDivider({ divider }: { divider: Divider }){
+    return (
+        <div
+            data-testid="loose-divider"
+            aria-hidden
+            style={{ position: "absolute", left: divider.x, top: divider.y - 11, width: divider.width, height: 22 }}
+            className="pointer-events-none flex items-center gap-3.5"
+        >
+            <span className="h-px flex-1 bg-border" />
+            <span className="whitespace-nowrap text-[15px] text-text-2">Not linked to anything on this page</span>
+            <span className="h-px flex-1 bg-border" />
+        </div>
     );
 }
 

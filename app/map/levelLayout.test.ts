@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
-import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, perRowFor } from "./levelLayout";
+import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, looseDivider, perRowFor } from "./levelLayout";
 
 const node = (p: string): MapNode => ({ path: p, name: p, kind: "folder", fileCount: 1, summaryStatus: "fresh" });
 
@@ -27,12 +27,15 @@ describe("layoutLevel", () => {
 
     it("lays boxes with no lines in a grid beside the rest, as tall as the layers, in the level's order", () => {
         const at = layoutLevel([node("a"), node("b"), ...["l1", "l2", "l3", "l4"].map(node)], [{ source: "a", target: "b", count: 1 }]);
-        // the layers: a above b, one column, 56 + 64 + 56 = 176 px tall; the grid starts 80 px (two gaps) to their right
+        // the layers: a above b, one column, 56 + 64 + 56 = 176 px tall; the grid starts 80 px (two gaps) to their right,
+        // and 64 px down, under the divider's band ("Not linked to anything on this page", owner's design)
         expect(at.get("a")!.x).toBe(at.get("b")!.x);
         expect(at.get("b")!.y - at.get("a")!.y).toBe(BOX_HEIGHT + 64);
         const left = at.get("a")!.x + BOX_WIDTH + 80;
-        const top = at.get("a")!.y;
-        // 176 px holds floor((176 + 40) / (56 + 40)) = 2 rows, so four loose boxes make 2 × 2, 40 px apart: l1 l2 / l3 l4
+        const top = at.get("a")!.y + 64;
+        // 176 px holds floor((176 + 40) / (56 + 40)) = 2 rows, so four loose boxes make 2 × 2, 40 px apart: l1 l2 / l3 l4.
+        // Beside: 816 × max(176, 64 + 152) = 816 × 216, fits at 1 (capped); below: 504 × (176 + 120 + 152) = 504 × 448, at 1
+        // too; a tie stays beside
         expect(at.get("l1")).toEqual({ x: left, y: top });
         expect(at.get("l2")).toEqual({ x: left + BOX_WIDTH + 40, y: top });
         expect(at.get("l3")).toEqual({ x: left, y: top + BOX_HEIGHT + 40 });
@@ -93,28 +96,30 @@ describe("layoutLevel", () => {
     });
 
     it("puts the loose boxes below a short stack of tiers when that fits the level larger (final review I3)", () => {
-        // a → b and 20 loose boxes. Beside: 2 rows of 10, 2,992 × 176 px, fits a 1440 × 780 canvas at 1440 / (2,992 × 1.15)
-        // ≈ 0.42. Below: ceil(√20) = 5 columns, 4 rows, centred under the tiers: 1,320 × (176 + 80 + 344) = 600 px, fits at
-        // min(1440 / (1,320 × 1.15), 780 / (600 × 1.15)) ≈ 0.95. Below wins.
+        // a → b and 20 loose boxes. Beside: 2 rows of 10, 2,992 × 216 px, fits a 1440 × 780 canvas at 1440 / (2,992 × 1.15)
+        // ≈ 0.42. Below: ceil(√20) = 5 columns, 4 rows, centred under the tiers: 1,320 × (176 + 120 + 344) = 640 px, fits at
+        // min(1440 / (1,320 × 1.15), 780 / (640 × 1.15)) ≈ 0.95. Below wins.
         const loose = Array.from({ length: 20 }, (_, i) => `l${i + 1}`);
         const at = layoutLevel([node("a"), node("b"), ...loose.map(node)], [{ source: "a", target: "b", count: 1 }]);
-        // the grid is 5 × 232 + 4 × 40 = 1,320 wide, centred: from -660; it starts 80 px under b's bottom (176), rows 96 apart
-        expect(at.get("l1")).toEqual({ x: -660, y: 256 });
-        expect(at.get("l5")).toEqual({ x: 428, y: 256 });
-        expect(at.get("l6")).toEqual({ x: -660, y: 352 });
-        expect(at.get("l20")).toEqual({ x: 428, y: 544 });
+        // the grid is 5 × 232 + 4 × 40 = 1,320 wide, centred: from -660; it starts 120 px under b's bottom (176), leaving
+        // room for the divider between them, rows 96 apart
+        expect(at.get("l1")).toEqual({ x: -660, y: 296 });
+        expect(at.get("l5")).toEqual({ x: 428, y: 296 });
+        expect(at.get("l6")).toEqual({ x: -660, y: 392 });
+        expect(at.get("l20")).toEqual({ x: 428, y: 584 });
     });
 
     it("keeps the loose boxes beside a tall chain, where they fit it larger", () => {
         // a chain of 6 is 6 × 56 + 5 × 64 = 656 px tall, which holds floor(696 / 96) = 7 rows, so 4 loose boxes make one
-        // column at x = 116 + 80 = 196. Beside: 544 × 656, fits at 1 (capped). Below: 504 × 888, 780 / (888 × 1.15) ≈ 0.76
+        // column at x = 116 + 80 = 196, from y = 64 (the divider's band). Beside: 544 × 656, fits at 1 (capped). Below:
+        // 504 × (656 + 120 + 152) = 504 × 928, 780 / (928 × 1.15) ≈ 0.73
         const chain = ["c1", "c2", "c3", "c4", "c5", "c6"];
         const at = layoutLevel(
             [...chain, "l1", "l2", "l3", "l4"].map(node),
             chain.slice(1).map((c, i) => ({ source: chain[i], target: c, count: 1 })),
         );
         expect(["l1", "l2", "l3", "l4"].map((l) => at.get(l))).toEqual([
-            { x: 196, y: 0 }, { x: 196, y: 96 }, { x: 196, y: 192 }, { x: 196, y: 288 },
+            { x: 196, y: 64 }, { x: 196, y: 160 }, { x: 196, y: 256 }, { x: 196, y: 352 },
         ]);
     });
 
@@ -134,5 +139,38 @@ describe("layoutLevel", () => {
         const nodes = ["a", "b", "c", "d"].map(node);
         const edges: MapEdge[] = [{ source: "a", target: "c", count: 2 }, { source: "b", target: "c", count: 1 }, { source: "d", target: "a", count: 4 }];
         expect([...layoutLevel(nodes, edges)]).toEqual([...layoutLevel(nodes, edges)]);
+    });
+});
+
+describe("looseDivider (owner's design: a line with \"Not linked to anything on this page\" over the unlinked boxes)", () => {
+    const chain = ["c1", "c2", "c3", "c4", "c5", "c6"];
+    const chainEdges: MapEdge[] = chain.slice(1).map((c, i) => ({ source: chain[i], target: c, count: 1 }));
+
+    it("runs across the whole level, halfway between the linked boxes and a grid below them", () => {
+        // the "below" level above: a and b span x -116 … 116 and end at y = 176; the grid spans -660 … 660 from y = 296.
+        // The line runs from the leftmost box to the rightmost, -660 … 660, at (176 + 296) / 2 = 236
+        const loose = Array.from({ length: 20 }, (_, i) => `l${i + 1}`);
+        const nodes = [node("a"), node("b"), ...loose.map(node)];
+        const edges: MapEdge[] = [{ source: "a", target: "b", count: 1 }];
+        expect(looseDivider(nodes, edges, layoutLevel(nodes, edges))).toEqual({ x: -660, y: 236, width: 1320 });
+    });
+
+    it("sits over a column beside the linked boxes, as wide as the column, in the band above it", () => {
+        // the tall chain above: the column is x 196 … 428 from y = 64, so the line is 232 wide at 64 - 32 = 32
+        const nodes = [...chain, "l1", "l2", "l3", "l4"].map(node);
+        expect(looseDivider(nodes, chainEdges, layoutLevel(nodes, chainEdges))).toEqual({ x: 196, y: 32, width: 232 });
+    });
+
+    it("isn't drawn when every box is linked, or when none is (nothing to set apart)", () => {
+        const linked = chain.map(node);
+        expect(looseDivider(linked, chainEdges, layoutLevel(linked, chainEdges))).toBeNull();
+        const none = ["l1", "l2", "l3", "l4"].map(node);
+        expect(looseDivider(none, [], layoutLevel(none, []))).toBeNull();
+    });
+
+    it("counts a box whose only line is to itself as unlinked, as the layout does", () => {
+        const nodes = [node("a"), node("b"), node("s")];
+        const edges: MapEdge[] = [{ source: "a", target: "b", count: 1 }, { source: "s", target: "s", count: 2 }];
+        expect(looseDivider(nodes, edges, layoutLevel(nodes, edges))).not.toBeNull();
     });
 });
