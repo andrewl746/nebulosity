@@ -44,7 +44,7 @@ function MapBox({ data }: NodeProps<BoxNode>){
             data-box={box.path}
             data-tone={tone}
             title={box.path || box.name}
-            className={`relative flex h-[64px] w-[232px] items-center gap-2 rounded-lg ${TONES[tone]} ${box.kind === "more" ? "border-dashed" : ""} ${agent ? "outline-2 outline-offset-2 outline-agent" : ""}`}
+            className={`relative flex h-[64px] w-[232px] items-center gap-2 rounded-lg ${TONES[tone]} ${box.kind === "portal" ? "border-dashed" : ""} ${agent ? "outline-2 outline-offset-2 outline-agent" : ""}`}
         >
             {pulseKey > 0 && <span key={pulseKey} aria-hidden className="neb-pulse pointer-events-none absolute inset-0 rounded-lg" />}
             <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${box.kind === "folder" ? "text-folder" : "text-text-2"}`} />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "../contracts";
-import { assignPages, buildPageView, mergedPortalPath, portalPath } from "./pages";
+import { assignPages, buildPageView, mergedPortalPath, pageOf, paginateLevel, portalPath } from "./pages";
 
 // Ground truth: docs/plans/2026-10-12-v1-3-1-page-portals.md, "Ground truth (hand-derived)".
 
@@ -186,5 +186,76 @@ describe("buildPageView", () => {
             path: "//page-2", name: "Page 2", kind: "portal", page: 1, fileCount: 7, hiddenCount: 2, summaryStatus: "skipped", members: ["s", "u"],
         });
         expect(view.edges).toEqual([{ source: "r", target: "//page-2", count: 1 }]);
+    });
+});
+
+describe("pageOf", () => {
+    const pages = [["x/a", "x/c", "x/e"], ["x/b", "x/d", "x/f"]];
+
+    it("finds the page holding a box, or the box a deeper path is inside", () => {
+        expect(pageOf(pages, "x/d")).toBe(1);
+        expect(pageOf(pages, "x/a")).toBe(0);
+        expect(pageOf(pages, "x/f/deep/file.ts")).toBe(1);
+    });
+
+    it("finds nothing for a path that isn't on any page, or only shares a prefix with a box", () => {
+        expect(pageOf(pages, "y/a")).toBeNull();
+        expect(pageOf(pages, "x/ab")).toBeNull();
+        expect(pageOf(pages, "x")).toBeNull();
+    });
+});
+
+describe("paginateLevel", () => {
+    const files = (n: number): MapNode[] => Array.from({ length: n }, (_, i) => file(`big/f${String(i).padStart(3, "0")}.ts`));
+
+    it("draws a folder of 50 children as it is: one page, nothing hidden, no portals", () => {
+        const view = paginateLevel("big", files(50), [], {});
+        expect(view.nodes).toEqual(files(50));
+        expect([view.page, view.pageCount, view.hiddenCount]).toEqual([0, 1, 0]);
+    });
+
+    it("sorts the lines of a folder that fits, the way every level's are", () => {
+        const edges: MapEdge[] = [{ source: "x/c", target: "x/a", count: 1 }, { source: "x/a", target: "x/b", count: 2 }];
+        expect(paginateLevel("x", X, edges, {}).edges).toEqual([
+            { source: "x/a", target: "x/b", count: 2 },
+            { source: "x/c", target: "x/a", count: 1 },
+        ]);
+    });
+
+    it("pages 120 children with no lines 44 at a time: f044–f087 on page 1, the other 76 hidden", () => {
+        // ceil(120 / 44) = 3 pages: f000–f043, f044–f087, f088–f119
+        const view = paginateLevel("big", files(120), [], { page: 1 });
+        expect([view.page, view.pageCount, view.hiddenCount]).toEqual([1, 3, 76]);
+        expect(view.nodes).toHaveLength(44);
+        expect([view.nodes[0].path, view.nodes[43].path]).toEqual(["big/f044.ts", "big/f087.ts"]);
+    });
+
+    it("clamps a page past the end to the last, which holds the other 32", () => {
+        const view = paginateLevel("big", files(120), [], { page: 7 });
+        expect([view.page, view.hiddenCount]).toEqual([2, 88]);
+        expect(view.nodes.map((n) => n.path)).toEqual(files(120).slice(88).map((n) => n.path));
+    });
+
+    it("opens the page holding `focus`, over any page asked for", () => {
+        expect(paginateLevel("big", files(120), [], { page: 0, focus: "big/f100.ts" }).page).toBe(2);
+        expect(paginateLevel("big", files(120), [], { focus: "big/f050.ts" }).page).toBe(1);
+    });
+
+    it("falls back to the page asked for when `focus` isn't on this level", () => {
+        expect(paginateLevel("big", files(120), [], { page: 1, focus: "elsewhere/a.ts" }).page).toBe(1);
+    });
+
+    it("draws a paged level's portal and folds its cross-page line onto it", () => {
+        // 51 files, one line f043 → f044. Page 0 seeds f000 and nothing joins it until f043 lands as its 44th box, so
+        // f044 starts page 1 (f044–f050), and the line runs from f043 to page 2's doorway
+        const edges: MapEdge[] = [{ source: "big/f043.ts", target: "big/f044.ts", count: 1 }];
+        const view = paginateLevel("big", files(51), edges, {});
+        expect([view.page, view.pageCount, view.hiddenCount]).toEqual([0, 2, 7]);
+        expect(view.nodes).toHaveLength(45);
+        expect(view.nodes[44]).toEqual({
+            path: "big//page-2", name: "Page 2", kind: "portal", page: 1, fileCount: 7, hiddenCount: 7, summaryStatus: "skipped",
+            members: files(51).slice(44).map((n) => n.path),
+        });
+        expect(view.edges).toEqual([{ source: "big/f043.ts", target: "big//page-2", count: 1 }]);
     });
 });

@@ -24,7 +24,7 @@
  * shapes. Stored data changes only through Drizzle migrations; nothing wipes
  * the database when this moves.
  */
-export const CONTRACTS_VERSION = 2;
+export const CONTRACTS_VERSION = 3;
 
 /* ─────────────────────────── Index status ────────────────────────── */
 
@@ -53,21 +53,24 @@ export type IndexStatus = {
  */
 export type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
 
-export type MapNodeKind = "folder" | "file" | "more" | "portal";
+export type MapNodeKind = "folder" | "file" | "portal";
 
 /** One box on the Map — docs/API_CONTRACTS.md §11 */
 export type MapNode = {
-  /** Repo-relative. The "+N more" box uses its level's path plus "/" ("/" at the root), which no real path can be. */
+  /**
+   * Repo-relative. A portal (a doorway to another page of a big folder) uses "<level>//page-<n>" or "<level>//pages",
+   * which no stored path can be: stored paths never hold "//".
+   */
   path: string;
-  /** "workbench", "lifecycle.ts" or "+12 more". */
+  /** "workbench", "lifecycle.ts", or a portal's "Page 2" / "+3 pages". */
   name: string;
   kind: MapNodeKind;
-  /** Source files inside: 1 for a file; for "+N more", the folded boxes' total. */
+  /** Source files inside: 1 for a file; for a portal, the total of the boxes behind it. */
   fileCount: number;
   tagline?: string;
-  /** "skipped" for the "+N more" box, which has no summary of its own. */
+  /** "skipped" for a portal, which has no summary of its own. */
   summaryStatus: SummaryStatus;
-  /** "+N more" and portals: how many boxes it stands for. */
+  /** Portals: how many boxes they stand for. */
   hiddenCount?: number;
   /** A portal to one other page: that page, from 0. Its path is "<level>//page-<page + 1>" (API_CONTRACTS.md §11). */
   page?: number;
@@ -91,10 +94,11 @@ export type LevelResponse = {
   path: string;
   /** Folder paths from the root down to `path`: ["", "src", "src/vs"]. */
   breadcrumb: string[];
-  /** At most 50 boxes, largest first; "+N more", if any, last. */
+  /** At most 50 boxes: this page's, in the Map's order (largest first), then its portals, if any. */
   nodes: MapNode[];
+  /** Lines between the boxes; one end on another page is folded onto that page's portal. */
   edges: MapEdge[];
-  /** How many children "+N more" stands for (0 when everything fits). */
+  /** How many of the folder's boxes are on other pages (0 when everything fits). */
   hiddenCount: number;
   /** Which page of the folder's boxes this is, from 0, and how many there are (1 when everything fits). Added in V1.3.1. */
   page: number;
@@ -119,7 +123,7 @@ export type DescribeResponse = {
   /** Why the last attempt failed, when summaryStatus is "failed". */
   summaryError?: string;
   stats: { fileCount: number; lineCount: number };
-  /** Folders and the repo: every child, in the Map's order (so the boxes "+N more" folds are the ones after the first 49). */
+  /** Folders and the repo: every child, in the Map's order (the order level() draws them in, page by page). */
   children?: MapNode[];
   /** Files: their declarations, in line order. */
   symbols?: SymbolInfo[];

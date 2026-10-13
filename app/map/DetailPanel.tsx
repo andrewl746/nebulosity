@@ -39,7 +39,7 @@ const KIND_LABELS: Record<DescribeResponse["kind"], string> = { repo: "Repositor
  * nothing leaks from one target to the next.
  */
 function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
-    const more = level.nodes.find((n) => n.path === path && n.kind === "more") ?? null;
+    const more = level.nodes.find((n) => n.path === path && n.kind === "portal") ?? null;
     const isMore = more !== null;
     const target = isMore ? level.path : path;
     const [data, setData] = useState<DescribeResponse | null>(null);

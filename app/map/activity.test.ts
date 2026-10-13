@@ -35,9 +35,12 @@ describe("activityLabel", () => {
 });
 
 describe("agentFocus", () => {
-    // level src: two boxes and "+N more" (src/typings is folded into it)
+    // level src: two boxes and the portal to page 2, where src/typings is
     const box = (path: string, kind: MapNode["kind"]): MapNode => ({ path, name: path, kind, fileCount: 1, summaryStatus: "fresh" });
-    const level = { path: "src", nodes: [box("src/vs", "folder"), box("src/main.ts", "file"), box("src/", "more")] };
+    const level = {
+        path: "src",
+        nodes: [box("src/vs", "folder"), box("src/main.ts", "file"), { ...box("src//page-2", "portal"), page: 1, members: ["src/typings"] }],
+    };
 
     it("outlines the box holding what a tool call touched in the last 30 s", () => {
         expect(agentFocus(level, [event("describe", ["src/vs/base/x.ts"], 1)], [], NOW)).toEqual(new Set(["src/vs"]));
@@ -47,8 +50,8 @@ describe("agentFocus", () => {
         expect(agentFocus(level, [event("describe", ["src/vs/base/x.ts"], 31)], [], NOW)).toEqual(new Set());
     });
 
-    it("outlines show_on_map's highlights, folded ones on +N more", () => {
-        expect(agentFocus(level, [], ["src/typings/a.d.ts"], NOW)).toEqual(new Set(["src/"]));
+    it("outlines show_on_map's highlights, ones on another page on its portal", () => {
+        expect(agentFocus(level, [], ["src/typings/a.d.ts"], NOW)).toEqual(new Set(["src//page-2"]));
     });
 
     it("ignores what's outside the level", () => {

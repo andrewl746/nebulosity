@@ -1,9 +1,12 @@
 import type { MapEdge, MapNode } from "../contracts";
 
+/** No more than this many boxes are ever on screen, portals included (PIVOT_SPEC.md §2, S4). */
+export const MAP_BOX_CAP = 50;
+
 /**
- * Pages of a big folder (V1.3.1, owner review). A folder with more than 50 children is drawn a page at a time, and
- * every child is on some page. A page holds PAGE_SIZE boxes plus at most MAX_PORTALS portals, the doorways to the
- * other pages that its cross-page lines run into, so a page never draws more than 44 + 6 = 50 boxes (S4).
+ * Pages of a big folder (V1.3.1, owner review). A folder with more than MAP_BOX_CAP children is drawn a page at a
+ * time, and every child is on some page. A page holds PAGE_SIZE boxes plus at most MAX_PORTALS portals, the doorways
+ * to the other pages that its cross-page lines run into, so a page never draws more than 44 + 6 = 50 boxes (S4).
  */
 export const PAGE_SIZE = 44;
 export const MAX_PORTALS = 6;
@@ -158,4 +161,36 @@ export function buildPageView(
     }
 
     return { nodes, edges: [...folded.values()].sort((a, b) => compare(a.source, b.source) || compare(a.target, b.target)) };
+}
+
+/**
+ * The page holding `targetPath`: the page of the box it is, or of the box it's inside ("x/f/deep.ts" is inside "x/f").
+ * Null when no box on any page holds it.
+ */
+export function pageOf(pages: readonly string[][], targetPath: string): number | null {
+    for (let p = 0; p < pages.length; p++){
+        if (pages[p].some((member) => targetPath === member || targetPath.startsWith(`${member}/`))) return p;
+    }
+    return null;
+}
+
+export type PagedLevel = { nodes: MapNode[]; edges: MapEdge[]; hiddenCount: number; page: number; pageCount: number };
+
+/**
+ * One level's boxes and lines, paged when the folder is too big to draw at once (API_CONTRACTS.md §11). A folder of
+ * up to MAP_BOX_CAP children is one page drawn as it is. A bigger one is split by assignPages, and the page drawn is
+ * the one holding `focus` when it's on this level, otherwise `page`, a page past the last being the last.
+ * `hiddenCount` counts the boxes on the other pages.
+ */
+export function paginateLevel(
+    levelPath: string,
+    children: readonly MapNode[],
+    edges: readonly MapEdge[],
+    options: { page?: number; focus?: string },
+): PagedLevel {
+    const pages = children.length <= MAP_BOX_CAP ? [children.map((child) => child.path)] : assignPages(children, edges);
+    const focused = options.focus === undefined ? null : pageOf(pages, options.focus);
+    const page = focused ?? Math.min(Math.max(0, Math.floor(options.page ?? 0)), pages.length - 1);
+    const view = buildPageView(levelPath, children, edges, pages, page);
+    return { ...view, hiddenCount: children.length - pages[page].length, page, pageCount: pages.length };
 }

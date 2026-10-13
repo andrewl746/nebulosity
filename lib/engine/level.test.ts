@@ -3,14 +3,14 @@ import path from "path";
 import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
-import type { MapEdge, MapNode } from "../contracts";
+import type { MapNode } from "../contracts";
 import { getDb } from "../db/client";
 import { RepoNotIndexedError } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
 import { runSummaries } from "../index/summarize/run";
-import { breadcrumbOf, foldEdges, foldNodes, level, NotAFolderError, PathNotFoundError, reportedStatus } from "./level";
+import { breadcrumbOf, level, NotAFolderError, PathNotFoundError, reportedStatus } from "./level";
 
 const pending = (p: string, kind: "folder" | "file", fileCount: number): MapNode =>
     ({ path: p, name: p.slice(p.lastIndexOf("/") + 1), kind, fileCount, summaryStatus: "pending" });
@@ -84,85 +84,11 @@ describe("level — the fixture", () => {
         expect(level(root, "")).toMatchObject({ page: 0, pageCount: 1 });
         expect(level(root, "src", { page: 2 })).toMatchObject({ page: 0, pageCount: 1 });
     });
-});
 
-describe("foldNodes", () => {
-    const files = (n: number): MapNode[] => Array.from({ length: n }, (_, i) => {
-        const name = `f${String(i).padStart(3, "0")}.ts`;
-        return { path: `big/${name}`, name, kind: "file", fileCount: 1, summaryStatus: "pending" };
-    });
-
-    it("draws 50 children as they are", () => {
-        const { nodes, hidden } = foldNodes(files(50), "big");
-        expect(nodes).toHaveLength(50);
-        expect(hidden.size).toBe(0);
-    });
-
-    it("folds a 51st child: 49 boxes plus '+2 more', 50 in all", () => {
-        const { nodes, hidden } = foldNodes(files(51), "big");
-        expect(nodes).toHaveLength(50);
-        expect(nodes[48].path).toBe("big/f048.ts");
-        expect(nodes[49]).toEqual({ path: "big/", name: "+2 more", kind: "more", fileCount: 2, summaryStatus: "skipped", hiddenCount: 2 });
-        expect([...hidden]).toEqual(["big/f049.ts", "big/f050.ts"]);
-    });
-
-    it("folds VS Code's biggest folder, 780 files, to 50 boxes ending in '+731 more'", () => {
-        const { nodes } = foldNodes(files(780), "big");
-        expect(nodes).toHaveLength(50);
-        expect(nodes[49]).toMatchObject({ name: "+731 more", fileCount: 731, hiddenCount: 731 });
-    });
-
-    it("pages through a big folder 49 boxes at a time, everything else folded into '+N more' (owner review)", () => {
-        // 120 files make ceil(120 / 49) = 3 pages: f000–f048, f049–f097, f098–f119
-        const second = foldNodes(files(120), "big", 50, 1);
-        expect([second.page, second.pageCount]).toEqual([1, 3]);
-        expect(second.nodes).toHaveLength(50);
-        expect([second.nodes[0].path, second.nodes[48].path]).toEqual(["big/f049.ts", "big/f097.ts"]);
-        // the other two pages' 49 + 22 = 71 boxes are the '+N more' box
-        expect(second.nodes[49]).toEqual({ path: "big/", name: "+71 more", kind: "more", fileCount: 71, summaryStatus: "skipped", hiddenCount: 71 });
-        expect(second.hidden.has("big/f000.ts") && second.hidden.has("big/f119.ts") && !second.hidden.has("big/f049.ts")).toBe(true);
-
-        const last = foldNodes(files(120), "big", 50, 2);
-        expect(last.nodes).toHaveLength(23);
-        expect([last.nodes[0].path, last.nodes[21].path, last.nodes[22].name]).toEqual(["big/f098.ts", "big/f119.ts", "+98 more"]);
-    });
-
-    it("clamps a page past the end to the last, and a folder that fits has one page", () => {
-        expect(foldNodes(files(120), "big", 50, 7).page).toBe(2);
-        expect(foldNodes(files(50), "big", 50, 3)).toMatchObject({ page: 0, pageCount: 1 });
-        expect(foldNodes(files(51), "big").pageCount).toBe(2);
-    });
-
-    it("adds up the files of folded folders, and calls the root's '+N more' box '/'", () => {
-        const children: MapNode[] = [
-            { path: "a", name: "a", kind: "folder", fileCount: 9, summaryStatus: "fresh" },
-            { path: "b", name: "b", kind: "folder", fileCount: 4, summaryStatus: "fresh" },
-            { path: "c", name: "c", kind: "folder", fileCount: 3, summaryStatus: "fresh" },
-        ];
-        expect(foldNodes(children, "", 2).nodes[1]).toEqual({ path: "/", name: "+2 more", kind: "more", fileCount: 7, summaryStatus: "skipped", hiddenCount: 2 });
-    });
-});
-
-describe("foldEdges", () => {
-    it("points folded ends at '+N more', adds up lines that now join the same boxes, and drops lines inside it", () => {
-        const edges: MapEdge[] = [
-            { source: "lvl/a", target: "lvl/x", count: 3 },
-            { source: "lvl/a", target: "lvl/y", count: 1 },
-            { source: "lvl/y", target: "lvl/a", count: 2 },
-            { source: "lvl/x", target: "lvl/y", count: 5 },
-            { source: "lvl/b", target: "lvl/c", count: 1 },
-        ];
-        // "lvl/" sorts before "lvl/a": a prefix comes first
-        expect(foldEdges(edges, new Set(["lvl/x", "lvl/y"]), "lvl/")).toEqual([
-            { source: "lvl/", target: "lvl/a", count: 2 },
-            { source: "lvl/a", target: "lvl/", count: 4 },
-            { source: "lvl/b", target: "lvl/c", count: 1 },
-        ]);
-    });
-
-    it("leaves the lines as they are when nothing is folded", () => {
-        const edges: MapEdge[] = [{ source: "b", target: "a", count: 2 }];
-        expect(foldEdges(edges, new Set(), "/")).toEqual([{ source: "b", target: "a", count: 2 }]);
+    it("draws the page holding `focus`: page 0 of 1 for a file inside src's one page", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        expect(level(root, "src", { focus: "src/core/log.ts" })).toMatchObject({ page: 0, pageCount: 1, hiddenCount: 0 });
     });
 });
 

@@ -32,8 +32,9 @@ export function isInside(targetPath: string, folder: string): boolean {
 }
 
 /**
- * The box on this level that holds `targetPath`: the child on the way down to it, or "+N more" when that child is
- * folded. Null when the path isn't inside this level, or is the level itself. Live pulses and highlights use it.
+ * The box on this level that holds `targetPath`: the child on the way down to it, or, when that child is on another
+ * page, the portal standing for that page. Null when the path isn't inside this level, is the level itself, or is on a
+ * page this one has no portal to. Live pulses and highlights use it.
  */
 export function boxFor(level: Pick<LevelResponse, "path" | "nodes">, targetPath: string): string | null {
     if (!isInside(targetPath, level.path)) return null;
@@ -41,5 +42,5 @@ export function boxFor(level: Pick<LevelResponse, "path" | "nodes">, targetPath:
     const slash = below.indexOf("/");
     const child = slash === -1 ? targetPath : `${level.path === "" ? "" : `${level.path}/`}${below.slice(0, slash)}`;
     if (level.nodes.some((n) => n.path === child)) return child;
-    return level.nodes.find((n) => n.kind === "more")?.path ?? null;
+    return level.nodes.find((n) => n.kind === "portal" && n.members?.includes(child))?.path ?? null;
 }

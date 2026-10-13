@@ -112,7 +112,7 @@ data: {}
 
 These are private, same-repo contracts — no URL versioning. The rule is simpler: **any change to `lib/contracts.ts` must update every consumer in the same commit.** TypeScript enforces most of it; the SSE event names (which are strings) are the one place the compiler can't help, which is why the tables above are exhaustive.
 
-`CONTRACTS_VERSION` (2 since V1.3) names this contract and moves on a breaking change to it. The database evolves through migrations, never through this number (ADR-040).
+`CONTRACTS_VERSION` (2 since V1.3, 3 since V1.3.1's page portals) names this contract and moves on a breaking change to it. The database evolves through migrations, never through this number (ADR-040).
 
 ## 9. GET /api/status (slice V1.2)
 
@@ -157,31 +157,39 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.
 
-## 11. GET /api/level?path=&page= (slice V1.3; pages added in V1.3.1)
+## 11. GET /api/level?path=&page=&focus= (slice V1.3; pages added in V1.3.1, portals and `focus` in contract v3)
 
-One folder of the Map (`lib/engine/level.ts`). `path` is repo-relative; empty or missing means the repo root. `page` is a whole number from 0 (missing means 0).
+One folder of the Map (`lib/engine/level.ts`, paging in `lib/engine/pages.ts`). `path` is repo-relative; empty or missing means the repo root. `page` is a whole number from 0 (missing means 0). `focus`, optional, is a repo-relative path: the answer is then the page holding it.
 
 ```ts
 type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
-type MapNode = { path: string; name: string; kind: "folder" | "file" | "more" | "portal"; fileCount: number;
+type MapNode = { path: string; name: string; kind: "folder" | "file" | "portal"; fileCount: number;
   tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number;
-  page?: number; pages?: number[]; members?: string[] };   // portals only
+  page?: number; pages?: number[]; members?: string[] };   // the last four: portals only
 type MapEdge = { source: string; target: string; count: number };
 type LevelResponse = { repo: string; path: string; breadcrumb: string[]; nodes: MapNode[]; edges: MapEdge[];
   hiddenCount: number; page: number; pageCount: number; indexVersion: number };
 ```
 
 - **Boxes** are the folder's subfolders and the files directly inside it, largest first. A file counts as 1; among equals the more-imported file comes first, then the path decides.
-- **The cap.** With more than 50 children, the first 49 are drawn and the rest fold into one `kind: "more"` box named `+N more`. Its `path` is the level's path plus `/` (`/` at the root), which no stored path can be. Its `fileCount` adds up the folded boxes', `hiddenCount` is N, and its `summaryStatus` is `skipped`, since it has no summary of its own. So `nodes` never holds more than 50 (S4).
-- **Pages** *(V1.3.1, owner review: the folded boxes get drawn too)*. A folder with more than 50 children has `pageCount = ceil(children / 49)` pages. Page `p` draws children `49p … 49p + 48` in the Map's order, and every other child folds into the `+N more` box. A `page` past the last is the last, and the answer's `page` says which one was drawn. A folder that fits has `page: 0, pageCount: 1`. The fields are additive, so `CONTRACTS_VERSION` stays 2.
-- **Portals** *(being built, V1.3.1 page portals; `lib/engine/pages.ts`)*. A portal is a doorway box to another page of the same folder: `kind: "portal"`, path `<level>//page-<n>` (n from 1; `//page-<n>` at the root), name `Page <n>`, and `page` from 0. A page linked to more than 6 others merges the rest into one `+N pages` portal, path `<level>//pages`, with `pages` listing them. `fileCount` adds up the boxes behind it, `hiddenCount` counts them, `members` lists their paths in the Map's order, and `summaryStatus` is `skipped`. Stored paths never hold `//`, so these can't collide. Until `level()` switches to them, the fields are additive.
-- **Lines** are the level's rows of `level_edges` (PIVOT_SPEC.md §4.2): each import is counted once, at the deepest folder holding both files. A folded end points at the `+N more` box, lines that then join the same two boxes are added up, and lines between two folded children are dropped.
+- **Pages** *(V1.3.1, owner review: every box is drawn on some page, and pages hold boxes that import each other)*. A folder with up to 50 children is one page, drawn as it is: `page: 0, pageCount: 1, hiddenCount: 0`, no portals. A bigger folder is split into pages of at most 44 boxes:
+  - A page seeds with the first unplaced child in the Map's order, then repeatedly takes the unplaced child with the most imports to and from the boxes already on it (ties go to the Map's order). When none is linked, the next child in the Map's order goes in, so a folder with no lines pages by size.
+  - Each page lists its boxes in the Map's order. The pages are the same for the same children and lines, so a page number stays put for an index version.
+  - `page` past the last is the last; the answer's `page` says which one was drawn. With `focus`, the page holding that path wins over `page` (the path is a box on this level, or inside one); a `focus` that isn't on this level is ignored.
+  - `hiddenCount` counts the folder's boxes on the other pages.
+- **Portals** are doorway boxes to the other pages, drawn after the page's own boxes:
+  - A page gets a portal for each other page it has lines with: `kind: "portal"`, `path` `<level>//page-<n>` (n from 1; `//page-<n>` at the root), `name` `Page <n>`, and `page` from 0. A page with no lines to another page gets no portal for it; the page arrows still reach every page.
+  - Linked to more than 6 pages, a page keeps its own portal for the 5 most linked (by imports both ways; ties go to the lower page) and merges the rest into one `+N pages` portal: `path` `<level>//pages`, with `pages` listing them, ascending.
+  - `fileCount` adds up the boxes behind a portal, `hiddenCount` counts them, `members` lists their paths in the Map's order (so a client can find the doorway for any path), and `summaryStatus` is `skipped`, since a portal has no summary of its own.
+  - Stored paths never hold `//`, so portal paths can't collide. With at most 44 boxes and 6 portals, `nodes` never holds more than 50 (S4).
+- **Lines** are the level's rows of `level_edges` (PIVOT_SPEC.md §4.2): each import is counted once, at the deepest folder holding both files. A line with one end on another page runs to (or from) that page's portal, and lines that then join the same two boxes are added up. A line with both ends on other pages is dropped. Lines are sorted by source, then target.
 - **`summaryStatus`** is the stored status when the box has text. Without text it's `off` when there's no `ANTHROPIC_API_KEY`, otherwise the stored status, or `pending` when no row exists yet.
 - **`breadcrumb`** lists the folder paths from the root down to `path`.
 - **`indexVersion`** moves whenever anything the Map shows changes (ADR-036). A client caches levels per version and refetches when `GET /api/status` reports a new one.
+- **Contract v3.** Portals replaced V1.3's `kind: "more"` box (`+N more`, path `<level>/`), a breaking change, so `CONTRACTS_VERSION` went 2 → 3 (ADR-040).
 
 **Errors:**
-- `400 BAD_REQUEST`: a path that could leave the repo (`..`, absolute, a drive letter), a file's path (the Map opens folders), or a `page` that isn't a whole number.
+- `400 BAD_REQUEST`: a `path` or `focus` that could leave the repo (`..`, absolute, a drive letter), a file's path (the Map opens folders), or a `page` that isn't a whole number.
 - `404 NOT_FOUND`: nothing indexed at `path`.
 - `404 INDEX_EMPTY`: no active repo yet.
 
@@ -199,7 +207,7 @@ type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | 
   uses: AreaCount[]; usedBy: AreaCount[]; stalePaths: number; indexVersion: number };
 ```
 
-- **`children`** (folders and the repo) lists every child in the Map's order, so the boxes a level folds into "+N more" are exactly those after the first 49. A client shows 20 at a time.
+- **`children`** (folders and the repo) lists every child in the Map's order, the order `level()` draws each page's boxes in. A client shows 20 at a time.
 - **`symbols`** (files) are the top-level declarations and class members in line order, members by qualified name (`Logger.info`). The lines are the declaration's own, for jumping to it.
 - **`uses` / `usedBy`** count imports across the target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2), most first. An area is a folder, or a file when the other file sits directly in the lowest folder both share. Test files count like any other file. A file's summary was written from an "Imported by" line that counts tests apart (RAG_PIPELINE.md), so the numbers in its text can differ; the detail panel labels both.
 - **`summaryStatus`** follows §11's rule. **`summaryError`** says why the last attempt failed, and only appears when the status is `failed`.

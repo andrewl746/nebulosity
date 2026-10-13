@@ -36,9 +36,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     return (await response.json()) as T;
 }
 
-/** Paths go in query strings percent-encoded, so spaces, #, %, + and non-ASCII names survive the trip. */
-export const levelUrl = (folderPath: string, page: number = 0): string =>
-    `/api/level?path=${encodeURIComponent(folderPath)}${page > 0 ? `&page=${page}` : ""}`;
+/**
+ * Paths go in query strings percent-encoded, so spaces, #, %, + and non-ASCII names survive the trip. `focus` asks for
+ * the page holding that path instead (API_CONTRACTS.md §11).
+ */
+export const levelUrl = (folderPath: string, page: number = 0, focus?: string): string =>
+    `/api/level?path=${encodeURIComponent(folderPath)}${page > 0 ? `&page=${page}` : ""}${focus !== undefined ? `&focus=${encodeURIComponent(focus)}` : ""}`;
 export const describeUrl = (targetPath: string): string => `/api/describe?path=${encodeURIComponent(targetPath)}`;
 
 export type SseFrame = { event: string; data: string };
@@ -82,7 +85,8 @@ export async function readSseStream(body: ReadableStream<Uint8Array>, onFrame: (
 }
 
 export const api = {
-    level: (folderPath: string, page: number = 0, signal?: AbortSignal) => request<LevelResponse>(levelUrl(folderPath, page), { signal }),
+    level: (folderPath: string, page: number = 0, signal?: AbortSignal, focus?: string) =>
+        request<LevelResponse>(levelUrl(folderPath, page, focus), { signal }),
     describe: (targetPath: string, signal?: AbortSignal) => request<DescribeResponse>(describeUrl(targetPath), { signal }),
     search: (query: string, limit: number, signal?: AbortSignal) =>
         request<SearchResult>(`/api/search?q=${encodeURIComponent(query)}&limit=${limit}`, { signal }),
