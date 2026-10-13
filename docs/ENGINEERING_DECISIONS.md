@@ -637,7 +637,7 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 - **Chains.** Breadth-first from every file of `from` at once, neighbours in path order, so the same chain comes back every time. When `from` doesn't reach `to`, the other direction is tried, and the answer says which way the chain runs. Places that overlap are refused.
 - **The index.** Both directions as compressed rows (offsets plus neighbours, in `Int32Array`s), built from the import graph describe already loads once per index version (ADR-036), and kept beside it.
 **Alternatives:** (a) Files only: an agent asking about an area would have to list its files first. (b) Path order within a distance: a cut list of a hub's thousands of importers would show `build/` and `extensions/` first, whatever matters. (c) No paging and a larger cap: Claude Code moves results of 50,000 characters or more to a file, and a complete list is the point of the tool.
-**Consequences:** On VS Code the rows add about 1.4 MB beside the graph, built once per version, and a search over 139,580 imports takes milliseconds (MCP Benchmark #1). Totals are exact for the index, which is as current as the background worker keeps it.
+**Consequences:** On VS Code the rows add about 1.3 MB beside the graph, built once per version, and a search over 139,580 imports takes milliseconds (about 2 ms warm; MCP Benchmark #1). Totals are exact for the index, which is as current as the background worker keeps it.
 **Revisit when:** agents ask for a subset (the dependents under one folder): add an `under` filter rather than a bigger page.
 
 ## ADR-046 — An MCP call answers about the repo Claude Code is in, else the Map's repo (2026-10-13)
@@ -650,7 +650,7 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 - Free mode is the stored summaries stage: `off` means no key (ADR-043), so the server never loads `.env.local` or holds the key.
 - An index update in progress or failed is noted after every answer.
 **Alternatives:** (a) Always the Map's repo: Claude Code opened in another indexed repo would get answers about the wrong one, with nothing said. (b) A `repo` argument on every tool: more for the model to get wrong. (c) A repo fixed per registration (`-e`): one registration per repo. (d) A `repo` field on live events, with the Map ignoring others': a contract change for a case this rule already prevents.
-**Consequences:** One user-scope registration serves every indexed repo, and `npm run index` or the Map's repo menu take effect without restarting Claude Code. Each call pays a few small reads (well under a millisecond).
+**Consequences:** One user-scope registration serves every indexed repo, and `npm run index` or the Map's repo menu take effect without restarting Claude Code. Each call pays a few reads (about 39 ms on VS Code, nearly all of it the two row counts behind the embeddings stage: MCP Benchmark #1).
 **Revisit when:** someone runs two Maps on different ports, or wants the Map to follow Claude Code's repo by itself.
 
 ## ADR-047 — One registry entry per tool, answering in compact text (2026-10-13) — amends ADR-030
@@ -675,5 +675,5 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 - It exits when the client closes stdin. On Windows, Claude Code (2.1.296) kills the process tree 300 ms after closing it.
 - One line registers it on every OS: `claude mcp add --scope user --transport stdio nebulosity -- node <checkout>/mcp/launch.mjs`.
 **Alternatives:** (a) `cmd /c npx tsx …/mcp/server.ts`: a Windows-only line, npx's lookup on every start, and tsx found only if the working folder has it. (b) Compile to `dist/` and run plain JavaScript: no tsx at run time, but a build step before every use. V1.6's package decides that.
-**Consequences:** Start-up costs tsx's load plus the engine's first transpile (about 0.5 s; tsx caches it after). The server needs the checkout's `node_modules`, a local tool's normal state.
+**Consequences:** Start-up costs tsx's load plus the engine's first transpile (about 0.7 s, spawn to initialized; tsx caches it after: MCP Benchmark #1). The server needs the checkout's `node_modules`, a local tool's normal state.
 **Revisit when:** V1.6 ships an installable package (a `bin` entry replaces the launcher), or Node runs the engine's TypeScript without tsx.

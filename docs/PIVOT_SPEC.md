@@ -51,7 +51,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S2 | Full summary pass, tiered, via the Batch API | ≤ $15 |
 | S3 | Map interaction (click, zoom, level change → rendered), on the production build (`next build` + `next start`; the dev server is slower on dense levels, docs/BENCHMARKS.md Map Benchmark #1) | ≤ 100 ms; level API ≤ 50 ms |
 | S4 | Boxes on screen at once, counting a page's portals (V1.3.1; V1.3 counted the "+N more" box) | ≤ 50 |
-| S5 | MCP tool latency, warm (after the first call of a session) | ≤ 500 ms |
+| S5 | MCP tool latency, warm (after the first call of a session) *(measured through the MCP server by `npm run bench-mcp`: each tool warm after its own first call of the session, every warm call within the bound; owner's decision D5, V1.4)* | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
 | S7 | Evaluation run and published, losses included | done |
 | S8 | Public repo, README, video, live demo link | done |
