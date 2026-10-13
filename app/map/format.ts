@@ -5,6 +5,25 @@ export function formatCount(n: number): string {
     return n.toLocaleString("en-US");
 }
 
+const UNITS: readonly (readonly [suffix: string, size: number])[] = [["K", 1e3], ["M", 1e6], ["B", 1e9]];
+
+/**
+ * A big count, compactly: 3,395,641 → "3.4M" (VISUAL_REFRESH.md §5's stats line). Below 1,000 it's exact. Otherwise
+ * the unit goes by size and the value keeps one decimal, without a trailing ".0". A value that rounds to 1,000 of a
+ * unit moves up to the next: 999,950 is "1M", not "1000K".
+ */
+export function formatCompact(n: number): string {
+    if (n < 1_000) return String(n);
+    let unit = 0;
+    while (unit < UNITS.length - 1 && n >= UNITS[unit + 1][1]) unit++;
+    let value = Math.round((n / UNITS[unit][1]) * 10) / 10;
+    if (value >= 1_000 && unit < UNITS.length - 1){
+        unit++;
+        value = Math.round((n / UNITS[unit][1]) * 10) / 10;
+    }
+    return `${value}${UNITS[unit][0]}`;
+}
+
 /** How long ago something happened, in words: "just now", "12 s ago", "3 min ago", "2 h ago". */
 export function ago(ms: number): string {
     if (ms < 5_000) return "just now";

@@ -2,57 +2,84 @@
 
 import { memo } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { IconArrowLeft, IconArrowRight, IconFile, IconFolder, IconStack2 } from "@tabler/icons-react";
 import type { MapNode } from "@/lib/contracts";
+import type { BoxTone } from "./emphasis";
 import { formatCount } from "./format";
+import { boxTitle } from "./labels";
 
 /** What a box carries besides React Flow's own fields. */
 export type BoxData = {
     box: MapNode;
-    selected: boolean;
-    highlighted: boolean;
+    tone: BoxTone;
+    /** Claude Code is touching what this box holds right now (VISUAL_REFRESH.md §4: an orange ring). */
+    agent: boolean;
     /** Changes when a tool call touches this box: the pulse ring remounts and plays again. */
     pulseKey: number;
+    /** Portals only: which way the doorway leads, "Lines to page 2", and "44 folders and files · 6 links" under it (portals.ts). */
+    portal?: { direction: "previous" | "next" | "many"; title: string; caption: string };
 };
 
 export type BoxNode = Node<BoxData, "box">;
 
-const PLACEHOLDERS: Partial<Record<MapNode["summaryStatus"], string>> = {
-    pending: "summary pending",
-    failed: "summary failed",
-    off: "no summary (no API key)",
+/**
+ * Fill, border and opacity per tone. The selected box's border is 2 px, so its padding is 1 px less and its content
+ * doesn't shift when it's selected.
+ */
+const TONES: Record<BoxTone, string> = {
+    normal: "border border-border bg-surface px-3",
+    linked: "border border-border bg-surface px-3",
+    preview: "border border-text-2 bg-surface px-3",
+    selected: "border-2 border-select bg-select-fill px-[11px]",
+    faded: "border border-border bg-surface px-3 opacity-60",
 };
 
 /**
- * One box on the Map (PIVOT_SPEC.md §7): its name, how many files it holds, and its tagline, or a quiet placeholder
- * while there's none. An out-of-date tagline is dimmed. "+N more" is drawn dashed; selecting it lists what it folds.
+ * A portal, a doorway to another page, is dashed and unfilled, the dot grid showing through, its border a step brighter
+ * than a box's so it reads as a way out rather than a folder (owner pick, 2026-10-13). Selected, it fills like any box.
+ */
+const PORTAL_TONES: Record<BoxTone, string> = {
+    normal: "border border-dashed border-text-2 bg-transparent px-3",
+    linked: "border border-dashed border-text-2 bg-transparent px-3",
+    preview: "border border-dashed border-text bg-transparent px-3",
+    selected: "border-2 border-dashed border-select bg-select-fill px-[11px]",
+    faded: "border border-dashed border-text-2 bg-transparent px-3 opacity-60",
+};
+
+const PORTAL_ICONS = { previous: IconArrowLeft, next: IconArrowRight, many: IconStack2 } as const;
+
+/**
+ * One box on the Map (VISUAL_REFRESH.md §4): an outline icon, the name, and for folders how many files they hold.
+ * Summaries live in the panel, not here. A portal, the doorway to another page of a big folder, is dashed and unfilled,
+ * titled by where its lines go ("Lines to page 2"), with an arrow toward its page (a stack for several) and how many
+ * boxes and links are behind it; double-clicking it turns to that page.
  */
 function MapBox({ data }: NodeProps<BoxNode>){
-    const { box, selected, highlighted, pulseKey } = data;
-    const more = box.kind === "more";
-    const border = selected ? "border-purple-300 shadow-[0_0_18px_rgba(168,85,247,0.55)]"
-        : highlighted ? "border-cyan-300/80 shadow-[0_0_14px_rgba(34,211,238,0.35)]"
-        : more ? "border-dashed border-purple-400/35"
-        : "border-purple-400/25";
-    const current = Boolean(box.tagline) && box.summaryStatus !== "stale";
+    const { box, tone, agent, pulseKey, portal } = data;
+    const Icon = portal ? PORTAL_ICONS[portal.direction] : box.kind === "folder" ? IconFolder : IconFile;
+    const title = portal
+        ? `${portal.title}: ${portal.caption}. ${portal.direction === "many" ? "Select it to pick a page." : "Double-click to go there."}`
+        : boxTitle(box);
 
     return (
         <div
             data-box={box.path}
-            title={box.path || box.name}
-            className={`relative h-[76px] w-[224px] rounded-sm border bg-black/60 px-3 py-2 font-mono backdrop-blur-md transition-colors ${border}`}
+            data-tone={tone}
+            title={title}
+            className={`relative flex h-[56px] w-[232px] items-center gap-2 rounded-lg ${portal ? PORTAL_TONES[tone] : TONES[tone]} ${agent ? "outline-2 outline-offset-2 outline-agent" : ""}`}
         >
-            {pulseKey > 0 && <span key={pulseKey} aria-hidden className="neb-pulse pointer-events-none absolute inset-0 rounded-sm" />}
-            <div className="flex items-baseline justify-between gap-2">
-                <span className={`truncate text-[12px] ${more ? "text-purple-200/80" : "text-zinc-100"}`}>
-                    {box.name}{box.kind === "folder" ? "/" : ""}
-                </span>
-                <span className="shrink-0 text-[10px] text-zinc-500">{box.kind === "file" ? "file" : `${formatCount(box.fileCount)} files`}</span>
+            {pulseKey > 0 && <span key={pulseKey} aria-hidden className="neb-pulse pointer-events-none absolute inset-0 rounded-lg" />}
+            <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${box.kind === "folder" ? "text-folder" : "text-text-2"}`} />
+            <div className="min-w-0">
+                <div className="truncate text-[15px] font-medium leading-5 text-text">{portal ? portal.title : box.name}</div>
+                {portal && <div className="truncate text-[12px] leading-4 text-text-2">{portal.caption}</div>}
+                {box.kind === "folder" && (
+                    <div className="text-[12px] leading-4 text-text-2">{formatCount(box.fileCount)} {box.fileCount === 1 ? "file" : "files"}</div>
+                )}
             </div>
-            <p className={`mt-1 line-clamp-2 text-[10.5px] leading-snug ${current ? "text-zinc-400" : "italic text-zinc-600"}`}>
-                {more ? "select to list them" : box.tagline ?? PLACEHOLDERS[box.summaryStatus] ?? ""}
-            </p>
-            <Handle type="target" position={Position.Top} className="!h-1 !w-1 !border-0 !bg-purple-400/40" />
-            <Handle type="source" position={Position.Bottom} className="!h-1 !w-1 !border-0 !bg-purple-400/40" />
+            {/* the lines attach here; they carry the direction, so the handles stay out of sight */}
+            <Handle type="target" position={Position.Top} className="!opacity-0" />
+            <Handle type="source" position={Position.Bottom} className="!opacity-0" />
         </div>
     );
 }

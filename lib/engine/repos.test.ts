@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
@@ -47,5 +48,20 @@ describe("repos", () => {
         expect(readConfig()).toEqual({ activeRepo: repoKey(b), port: 4123 });
         expect(() => setActiveRepo("/nowhere")).toThrow(UnknownRepoError);
         expect(readConfig().activeRepo).toBe(repoKey(b));
+    });
+
+    it("carries a repo's origin owner and name when it has one, for the top bar's owner / repo", () => {
+        process.env.NEBULOSITY_HOME = makeTempDir("neb-repos-");
+        const withRemote = copyFixture();
+        const without = copyFixture();
+        indexRepository(withRemote);
+        indexRepository(without);
+        // after indexing: discovery runs git ls-files on a folder with a .git, and this one is only a config file
+        fs.mkdirSync(path.join(withRemote, ".git"));
+        fs.writeFileSync(path.join(withRemote, ".git", "config"), '[remote "origin"]\n\turl = https://github.com/microsoft/vscode.git\n');
+
+        const repos = listRepos().repos;
+        expect(repos.find((r) => r.root === repoKey(withRemote))?.remote).toEqual({ owner: "microsoft", name: "vscode" });
+        expect(repos.find((r) => r.root === repoKey(without))).not.toHaveProperty("remote");
     });
 });

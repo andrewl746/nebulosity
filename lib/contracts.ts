@@ -24,7 +24,7 @@
  * shapes. Stored data changes only through Drizzle migrations; nothing wipes
  * the database when this moves.
  */
-export const CONTRACTS_VERSION = 2;
+export const CONTRACTS_VERSION = 3;
 
 /* ─────────────────────────── Index status ────────────────────────── */
 
@@ -53,22 +53,31 @@ export type IndexStatus = {
  */
 export type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
 
-export type MapNodeKind = "folder" | "file" | "more";
+export type MapNodeKind = "folder" | "file" | "portal";
 
 /** One box on the Map — docs/API_CONTRACTS.md §11 */
 export type MapNode = {
-  /** Repo-relative. The "+N more" box uses its level's path plus "/" ("/" at the root), which no real path can be. */
+  /**
+   * Repo-relative. A portal (a doorway to another page of a big folder) uses "<level>//page-<n>" or "<level>//pages",
+   * which no stored path can be: stored paths never hold "//".
+   */
   path: string;
-  /** "workbench", "lifecycle.ts" or "+12 more". */
+  /** "workbench", "lifecycle.ts", or a portal's "Page 2" / "+3 pages". */
   name: string;
   kind: MapNodeKind;
-  /** Source files inside: 1 for a file; for "+N more", the folded boxes' total. */
+  /** Source files inside: 1 for a file; for a portal, the total of the boxes behind it. */
   fileCount: number;
   tagline?: string;
-  /** "skipped" for the "+N more" box, which has no summary of its own. */
+  /** "skipped" for a portal, which has no summary of its own. */
   summaryStatus: SummaryStatus;
-  /** "+N more" only: how many boxes it stands for. */
+  /** Portals: how many boxes they stand for. */
   hiddenCount?: number;
+  /** A portal to one other page: that page, from 0. Its path is "<level>//page-<page + 1>" (API_CONTRACTS.md §11). */
+  page?: number;
+  /** The merged portal ("+N pages", path "<level>//pages"): the pages it stands for, from 0, ascending. */
+  pages?: number[];
+  /** Portals: the paths of the boxes on the page(s) behind them, in the Map's order, so a path can find its doorway. */
+  members?: string[];
 };
 
 /** Imports from one box to another at one level, each import counted once (PIVOT_SPEC.md §4.2). */
@@ -85,11 +94,15 @@ export type LevelResponse = {
   path: string;
   /** Folder paths from the root down to `path`: ["", "src", "src/vs"]. */
   breadcrumb: string[];
-  /** At most 50 boxes, largest first; "+N more", if any, last. */
+  /** At most 50 boxes: this page's, in the Map's order (largest first), then its portals, if any. */
   nodes: MapNode[];
+  /** Lines between the boxes; one end on another page is folded onto that page's portal. */
   edges: MapEdge[];
-  /** How many children "+N more" stands for (0 when everything fits). */
+  /** How many of the folder's boxes are on other pages (0 when everything fits). */
   hiddenCount: number;
+  /** Which page of the folder's boxes this is, from 0, and how many there are (1 when everything fits). Added in V1.3.1. */
+  page: number;
+  pageCount: number;
   /** Moves whenever anything the Map shows changes: refetch when it does. */
   indexVersion: number;
 };
@@ -110,7 +123,7 @@ export type DescribeResponse = {
   /** Why the last attempt failed, when summaryStatus is "failed". */
   summaryError?: string;
   stats: { fileCount: number; lineCount: number };
-  /** Folders and the repo: every child, in the Map's order (so the boxes "+N more" folds are the ones after the first 49). */
+  /** Folders and the repo: every child, in the Map's order (the order level() draws them in, page by page). */
   children?: MapNode[];
   /** Files: their declarations, in line order. */
   symbols?: SymbolInfo[];
@@ -121,6 +134,20 @@ export type DescribeResponse = {
   /** Files at or under the target whose summary is out of date with their bytes. */
   stalePaths: number;
   indexVersion: number;
+};
+
+/** GET /api/source — docs/API_CONTRACTS.md §16 (added in V1.3.1): an indexed file's text, for the source viewer. */
+export type SourceResponse = {
+  /** The repo's root: absolute, forward slashes. */
+  repo: string;
+  path: string;
+  content: string;
+  /** Lines in `content`, as an editor counts them. */
+  lineCount: number;
+  /** The file was longer than the limit (1 MB) and `content` stops there. */
+  truncated: boolean;
+  /** "typescript", "javascript" or "text". */
+  language: string;
 };
 
 /** POST /api/summarize — docs/API_CONTRACTS.md §13 */
@@ -134,8 +161,17 @@ export type SummarizeResponse = {
   summaryError?: string;
 };
 
+/** Where a repo was cloned from: its origin remote's owner and name ("microsoft" / "vscode") — docs/API_CONTRACTS.md §15 */
+export type RepoRemote = { owner: string; name: string };
+
 /** One repo the Map can show — docs/API_CONTRACTS.md §15 */
-export type RepoSummary = { root: string; name: string; indexedAt: string | null };
+export type RepoSummary = {
+  root: string;
+  name: string;
+  indexedAt: string | null;
+  /** The origin remote, when the repo has one the top bar can show as "owner / repo" (added in V1.3.1). */
+  remote?: RepoRemote;
+};
 
 /** GET /api/repos — docs/API_CONTRACTS.md §15 */
 export type RepoList = { active: string | null; repos: RepoSummary[] };
@@ -284,8 +320,8 @@ export type CodeChunk = {
 
 /* ───────────────────────────── Search ────────────────────────────── */
 
-/** The three ranked lists hybrid search fuses (ADR-027). */
-export type SearchList = "code" | "summary" | "vector";
+/** The ranked lists hybrid search fuses (ADR-027): code, summaries, meaning, and folder names (since V1.3.1). */
+export type SearchList = "code" | "summary" | "vector" | "name";
 
 /** One file or folder in a search result — docs/API_CONTRACTS.md §10 */
 export type SearchHit = {

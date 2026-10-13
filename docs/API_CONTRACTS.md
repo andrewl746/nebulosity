@@ -112,7 +112,7 @@ data: {}
 
 These are private, same-repo contracts — no URL versioning. The rule is simpler: **any change to `lib/contracts.ts` must update every consumer in the same commit.** TypeScript enforces most of it; the SSE event names (which are strings) are the one place the compiler can't help, which is why the tables above are exhaustive.
 
-`CONTRACTS_VERSION` (2 since V1.3) names this contract and moves on a breaking change to it. The database evolves through migrations, never through this number (ADR-040).
+`CONTRACTS_VERSION` (2 since V1.3, 3 since V1.3.1's page portals) names this contract and moves on a breaking change to it. The database evolves through migrations, never through this number (ADR-040).
 
 ## 9. GET /api/status (slice V1.2)
 
@@ -140,11 +140,11 @@ type IndexStatus = { repo: string; stages: Record<StageName, StageStatus>; index
 The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. `GET /api/search?q=&limit=` serves it (V1.3; `limit` 1–50, default 10), and V1.4's MCP `search` tool formats it as text. `400 BAD_REQUEST` without `q`, `404 INDEX_EMPTY` without an active repo.
 
 ```ts
-type SearchList = "code" | "summary" | "vector";
+type SearchList = "code" | "summary" | "vector" | "name";   // "name" since V1.3.1
 type SearchHit = {
   path: string;                 // repo-relative, forward slashes
   kind: "file" | "folder";
-  score: number;                // RRF: Σ 1 / (60 + rank) over the lists that found it
+  score: number;                // weighted RRF: Σ w / (60 + rank) over the lists that found it (w = 2 for "name", else 1)
   matchedBy: SearchList[];
   tagline?: string;             // the target's summary, when it has one
   summary?: string;
@@ -155,30 +155,43 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 
 - **Hits are files and folders**, never chunks: a file's chunks are grouped before ranking, and `code` is its best one. The repo summary is never a hit.
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
+- **Folder names** *(V1.3.1, additive)*: the `name` list ranks folders whose name matches a query word (`RAG_PIPELINE.md` §6) and counts double in the fusion, so searching "terminal" finds the terminal folders. The Map's search palette shows every folder hit first, then every file hit, and asks for 40.
+- **The repo's own name** is dropped from the query before searching when other meaningful words remain ("vscode terminal" searches "terminal" in VS Code). `query` in the answer is still the query as typed.
 - **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.
 
-## 11. GET /api/level?path= (slice V1.3)
+## 11. GET /api/level?path=&page=&focus= (slice V1.3; pages added in V1.3.1, portals and `focus` in contract v3)
 
-One folder of the Map (`lib/engine/level.ts`). `path` is repo-relative; empty or missing means the repo root.
+One folder of the Map (`lib/engine/level.ts`, paging in `lib/engine/pages.ts`). `path` is repo-relative; empty or missing means the repo root. `page` is a whole number from 0 (missing means 0). `focus`, optional, is a repo-relative path: the answer is then the page holding it.
 
 ```ts
 type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
-type MapNode = { path: string; name: string; kind: "folder" | "file" | "more"; fileCount: number;
-  tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number };
+type MapNode = { path: string; name: string; kind: "folder" | "file" | "portal"; fileCount: number;
+  tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number;
+  page?: number; pages?: number[]; members?: string[] };   // the last four: portals only
 type MapEdge = { source: string; target: string; count: number };
 type LevelResponse = { repo: string; path: string; breadcrumb: string[]; nodes: MapNode[]; edges: MapEdge[];
-  hiddenCount: number; indexVersion: number };
+  hiddenCount: number; page: number; pageCount: number; indexVersion: number };
 ```
 
 - **Boxes** are the folder's subfolders and the files directly inside it, largest first. A file counts as 1; among equals the more-imported file comes first, then the path decides.
-- **The cap.** With more than 50 children, the first 49 are drawn and the rest fold into one `kind: "more"` box named `+N more`. Its `path` is the level's path plus `/` (`/` at the root), which no stored path can be. Its `fileCount` adds up the folded boxes', `hiddenCount` is N, and its `summaryStatus` is `skipped`, since it has no summary of its own. So `nodes` never holds more than 50 (S4).
-- **Lines** are the level's rows of `level_edges` (PIVOT_SPEC.md §4.2): each import is counted once, at the deepest folder holding both files. A folded end points at the `+N more` box, lines that then join the same two boxes are added up, and lines between two folded children are dropped.
+- **Pages** *(V1.3.1, owner review: every box is drawn on some page, and pages hold boxes that import each other)*. A folder with up to 50 children is one page, drawn as it is: `page: 0, pageCount: 1, hiddenCount: 0`, no portals. A bigger folder is split into pages of at most 44 boxes:
+  - A page seeds with the first unplaced child in the Map's order, then repeatedly takes the unplaced child with the most imports to and from the boxes already on it (ties go to the Map's order). When none is linked, the next child in the Map's order goes in, so a folder with no lines pages by size.
+  - Each page lists its boxes in the Map's order. The pages are the same for the same children and lines, so a page number stays put for an index version.
+  - `page` past the last is the last; the answer's `page` says which one was drawn. With `focus`, the page holding that path wins over `page` (the path is a box on this level, or inside one); a `focus` that isn't on this level is ignored.
+  - `hiddenCount` counts the folder's boxes on the other pages.
+- **Portals** are doorway boxes to the other pages, drawn after the page's own boxes:
+  - A page gets a portal for each other page it has lines with: `kind: "portal"`, `path` `<level>//page-<n>` (n from 1; `//page-<n>` at the root), `name` `Page <n>` (the Map titles the box "Lines to page <n>" itself, since V1.3.1's second critique; the name is unchanged for other clients), and `page` from 0. A page with no lines to another page gets no portal for it; the page pill and the arrow keys still reach every page.
+  - Linked to more than 6 pages, a page keeps its own portal for the 5 most linked (by imports both ways; ties go to the lower page) and merges the rest into one `+N pages` portal: `path` `<level>//pages`, with `pages` listing them, ascending.
+  - `fileCount` adds up the boxes behind a portal, `hiddenCount` counts them, `members` lists their paths in the Map's order (so a client can find the doorway for any path), and `summaryStatus` is `skipped`, since a portal has no summary of its own.
+  - Stored paths never hold `//`, so portal paths can't collide. With at most 44 boxes and 6 portals, `nodes` never holds more than 50 (S4).
+- **Lines** are the level's rows of `level_edges` (PIVOT_SPEC.md §4.2): each import is counted once, at the deepest folder holding both files. A line with one end on another page runs to (or from) that page's portal, and lines that then join the same two boxes are added up. A line with both ends on other pages is dropped. Lines are sorted by source, then target.
 - **`summaryStatus`** is the stored status when the box has text. Without text it's `off` when there's no `ANTHROPIC_API_KEY`, otherwise the stored status, or `pending` when no row exists yet.
 - **`breadcrumb`** lists the folder paths from the root down to `path`.
 - **`indexVersion`** moves whenever anything the Map shows changes (ADR-036). A client caches levels per version and refetches when `GET /api/status` reports a new one.
+- **Contract v3.** Portals replaced V1.3's `kind: "more"` box (`+N more`, path `<level>/`), a breaking change, so `CONTRACTS_VERSION` went 2 → 3 (ADR-040).
 
 **Errors:**
-- `400 BAD_REQUEST`: a path that could leave the repo (`..`, absolute, a drive letter), or a file's path (the Map opens folders).
+- `400 BAD_REQUEST`: a `path` or `focus` that could leave the repo (`..`, absolute, a drive letter), a file's path (the Map opens folders), or a `page` that isn't a whole number.
 - `404 NOT_FOUND`: nothing indexed at `path`.
 - `404 INDEX_EMPTY`: no active repo yet.
 
@@ -196,11 +209,12 @@ type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | 
   uses: AreaCount[]; usedBy: AreaCount[]; stalePaths: number; indexVersion: number };
 ```
 
-- **`children`** (folders and the repo) lists every child in the Map's order, so the boxes a level folds into "+N more" are exactly those after the first 49. A client shows 20 at a time.
+- **`children`** (folders and the repo) lists every child in the Map's order, the order `level()` draws each page's boxes in. A client shows 20 at a time.
 - **`symbols`** (files) are the top-level declarations and class members in line order, members by qualified name (`Logger.info`). The lines are the declaration's own, for jumping to it.
 - **`uses` / `usedBy`** count imports across the target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2), most first. An area is a folder, or a file when the other file sits directly in the lowest folder both share. Test files count like any other file. A file's summary was written from an "Imported by" line that counts tests apart (RAG_PIPELINE.md), so the numbers in its text can differ; the detail panel labels both.
 - **`summaryStatus`** follows §11's rule. **`summaryError`** says why the last attempt failed, and only appears when the status is `failed`.
 - **`stalePaths`** counts files at or under the target whose summary is out of date with their bytes. It's non-zero between a file's edit and the refresh of its summary (`PIVOT_SPEC.md` §5.6).
+- **Caching.** The server keeps each answer until the index version moves (ADR-036, amended in V1.3.1), so a repeat is about 0.1 ms. The answer doesn't change shape.
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo; `404 NOT_FOUND`; `404 INDEX_EMPTY`.
 
@@ -245,9 +259,27 @@ type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction 
 The repo picker (PIVOT_SPEC.md §7.1).
 
 ```ts
-type RepoSummary = { root: string; name: string; indexedAt: string | null };
+type RepoRemote = { owner: string; name: string };
+type RepoSummary = { root: string; name: string; indexedAt: string | null; remote?: RepoRemote };
 type RepoList = { active: string | null; repos: RepoSummary[] };
 ```
 
 - **`GET`** lists the repos the structure stage has indexed, by root, and the active one.
+- **`remote`** (added in V1.3.1; optional, so `CONTRACTS_VERSION` stays 2) is the origin remote's owner and name, read from `<root>/.git/config` (`lib/engine/git-remote.ts`), so the top bar can say `microsoft / vscode` (VISUAL_REFRESH.md §6). The owner is everything before the last path segment, so a nested GitLab group stays whole. It's left out when there's no origin, when the url is a local path, or when `.git` is a file (a worktree or submodule), and the top bar then shows `name`.
 - **`POST { root }`** makes an indexed repo the active one (`activeRepo` in `.nebulosity/config.json`) and points the background worker at it. It answers with the new `RepoList`. Localhost only. A root that was never indexed gets `404 NOT_FOUND`.
+
+## 16. GET /api/source?path= (slice V1.3.1)
+
+An indexed file's text, for the Map's source viewer (`lib/engine/source.ts`; the owner asked to inspect a file's code on the Map).
+
+```ts
+type SourceResponse = { repo: string; path: string; content: string; lineCount: number; truncated: boolean; language: string };
+```
+
+- **Only indexed files.** The path must be a file the structure stage indexed. So the route can't read anything else in the repo (a `.env`, a key, `.git/config`), and a path that resolves outside the repo through a symlink is refused too.
+- **`content`** is the file's bytes as UTF-8, up to 1 MB (about 25,000 lines of TypeScript). Past that it stops, and `truncated` is `true`. Line endings are left as stored; the viewer shows them as plain line breaks.
+- **`lineCount`** counts the lines in `content` the way an editor does: a final line break doesn't start another line.
+- **`language`** is `typescript`, `javascript` or `text`, by extension, for highlighting.
+- Like every `/api` route, it answers only requests addressed to this machine (ADR-039). It reads and never writes.
+
+**Errors:** `400 BAD_REQUEST` for a path that could leave the repo, or an empty one; `404 NOT_FOUND` for a folder, a file the index doesn't know, or a file deleted since; `404 INDEX_EMPTY`.

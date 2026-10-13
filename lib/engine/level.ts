@@ -1,5 +1,5 @@
 import path from "path";
-import type { LevelResponse, MapEdge, MapNode, SummaryStatus } from "../contracts";
+import type { LevelResponse, MapNode, SummaryStatus } from "../contracts";
 import { getDb, type Db } from "../db/client";
 import type { StoredSummaryStatus } from "../db/schema";
 import {
@@ -8,9 +8,9 @@ import {
 import { requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
 import { repoKey } from "../index/paths";
+import { paginateLevel } from "./pages";
 
-/** No more than this many boxes are ever on screen, the "+N more" box included (PIVOT_SPEC.md §2, S4). */
-export const MAP_BOX_CAP = 50;
+export { MAP_BOX_CAP } from "./pages";
 
 export class PathNotFoundError extends Error {
     constructor(targetPath: string){
@@ -33,6 +33,13 @@ export type MapReadOptions = {
     summariesOff?: boolean;
 };
 
+export type LevelOptions = MapReadOptions & {
+    /** Which page of a big folder to draw, from 0; past the last, the last (V1.3.1, owner review). */
+    page?: number;
+    /** Draw the page holding this path instead (search and the panel's links open the page their target is on). */
+    focus?: string;
+};
+
 /**
  * The status the UI shows for one summary row, or for none. Text on show keeps its stored status (fresh, stale,
  * skipped, or failed with older text still shown). With no text, it's "off" when summaries can't run; otherwise it's
@@ -42,11 +49,6 @@ export function reportedStatus(row: { tagline: string | null; status: StoredSumm
     if (row?.tagline) return row.status;
     if (summariesOff) return "off";
     return row?.status ?? "pending";
-}
-
-/** The "+N more" box's path: its level's path plus "/" ("/" at the root). No stored path ends in "/", so it can't collide. */
-export function moreNodePath(levelPath: string): string {
-    return `${levelPath}/`;
 }
 
 /** The folders from the root down to `folderPath`: "src/vs" → ["", "src", "src/vs"]. */
@@ -92,48 +94,10 @@ export function loadMapChildren(db: Db, repoId: number, folderPath: string, summ
 }
 
 /**
- * Folds the overflow (PIVOT_SPEC.md §7). With more than `cap` children, the first cap − 1 stay as boxes and the rest
- * become one "+N more" box, so exactly `cap` boxes are drawn. The children come in the Map's order, largest first.
+ * GET /api/level (API_CONTRACTS.md §11): one folder of the Map and the lines between its boxes. A big folder is drawn a
+ * page at a time, its pages grouping boxes that import each other, with portals to the other pages (pages.ts).
  */
-export function foldNodes(children: readonly MapNode[], levelPath: string, cap: number = MAP_BOX_CAP): { nodes: MapNode[]; hidden: Set<string> } {
-    if (children.length <= cap) return { nodes: [...children], hidden: new Set() };
-
-    const shown = children.slice(0, cap - 1);
-    const folded = children.slice(cap - 1);
-    const more: MapNode = {
-        path: moreNodePath(levelPath),
-        name: `+${folded.length} more`,
-        kind: "more",
-        fileCount: folded.reduce((sum, n) => sum + n.fileCount, 0),
-        summaryStatus: "skipped",
-        hiddenCount: folded.length,
-    };
-    return { nodes: [...shown, more], hidden: new Set(folded.map((n) => n.path)) };
-}
-
-/**
- * The level's lines once the overflow is folded. A folded end now points at "+N more", lines that end up joining the
- * same two boxes are added up, and a line between two folded children (now inside "+N more") is dropped.
- */
-export function foldEdges(edges: readonly MapEdge[], hidden: ReadonlySet<string>, morePath: string): MapEdge[] {
-    const merged = new Map<string, MapEdge>();
-
-    for (const edge of edges){
-        const source = hidden.has(edge.source) ? morePath : edge.source;
-        const target = hidden.has(edge.target) ? morePath : edge.target;
-        if (source === target) continue;
-
-        const key = `${source}\0${target}`;
-        const existing = merged.get(key);
-        if (existing) existing.count += edge.count;
-        else merged.set(key, { source, target, count: edge.count });
-    }
-
-    return [...merged.values()].sort((a, b) => compare(a.source, b.source) || compare(a.target, b.target));
-}
-
-/** GET /api/level (API_CONTRACTS.md §11): one folder of the Map, its boxes folded to the cap, and the lines between them. */
-export function level(repoRoot: string, folderPath: string, options: MapReadOptions = {}): LevelResponse {
+export function level(repoRoot: string, folderPath: string, options: LevelOptions = {}): LevelResponse {
     const db = getDb();
     const repo = repoKey(path.resolve(repoRoot));
     const repoId = requireRepository(db, repo);
@@ -145,14 +109,21 @@ export function level(repoRoot: string, folderPath: string, options: MapReadOpti
             throw new PathNotFoundError(folderPath);
         }
 
-        const { nodes, hidden } = foldNodes(loadMapChildren(db, repoId, folderPath, options.summariesOff ?? false), folderPath);
+        const { nodes, edges, hiddenCount, page, pageCount } = paginateLevel(
+            folderPath,
+            loadMapChildren(db, repoId, folderPath, options.summariesOff ?? false),
+            loadLevelEdgeRows(db, repoId, folderPath),
+            { page: options.page, focus: options.focus },
+        );
         return {
             repo,
             path: folderPath,
             breadcrumb: breadcrumbOf(folderPath),
             nodes,
-            edges: foldEdges(loadLevelEdgeRows(db, repoId, folderPath), hidden, moreNodePath(folderPath)),
-            hiddenCount: hidden.size,
+            edges,
+            hiddenCount,
+            page,
+            pageCount,
             indexVersion: readIndexVersion(db, repoId),
         };
     });

@@ -4,6 +4,7 @@
 **Date:** 2026-10-11
 **Supersedes:** `VISUALIZATION_DESIGN.md` §1–4 (radial layout, tier plan, and the "Tier XL is a product boundary" decision), ADR-014/015 (native scanner), and roadmap Phases 6 and S. Every other doc stays valid except where its banner points here (§16).
 **Scope:** v1 in full detail; extras E1–E5 at design level. Each extra gets its own implementation plan when it starts.
+**Amended 2026-10-13 (ADR-043):** other people should be able to use Nebulosity on their own repos. v1 gains a slice, V1.6 "Works on your repo", with a free mode that needs no API key (§2, §12), and the extras run E4 → E5 → E1, with E3 smaller and optional and E2 waiting on a measurement (§10).
 
 ---
 
@@ -38,22 +39,25 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 
 ## 2. Goals, non-goals, success criteria
 
-**v1 goals.** G1: index any local TypeScript/JavaScript repo at VS Code scale. G2: the Map UI. G3: the MCP server. G4: a hosted static demo of VS Code's map. G5: an evaluation against Claude Code alone. G6: ship (public repo, README, demo video).
+**v1 goals.** G1: index any local TypeScript/JavaScript repo at VS Code scale. G2: the Map UI. G3: the MCP server. G4: a hosted static demo of VS Code's map. G5: an evaluation against Claude Code alone. G6: ship (public repo, README, demo video). G7 *(added 2026-10-13, ADR-043)*: people install it and use it on their own repos, with or without an Anthropic API key (slice V1.6).
 
 **Non-goals.** Editing code. Replacing Claude Code. Multi-user, SaaS or paid tiers (CLAUDE.md's non-goals stand). Non-TS/JS languages before E4. The native C++ scanner (dropped, ADR-025).
 
-**Success criteria.** v1 is done when every row holds, measured on VS Code at `cc3fec88`:
+**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names:
 
 | # | Criterion | Threshold |
 |---|---|---|
 | S1 | Structure stage (discover → parse → resolve → aggregate → write) | ≤ 60 s |
 | S2 | Full summary pass, tiered, via the Batch API | ≤ $15 |
 | S3 | Map interaction (click, zoom, level change → rendered), on the production build (`next build` + `next start`; the dev server is slower on dense levels, docs/BENCHMARKS.md Map Benchmark #1) | ≤ 100 ms; level API ≤ 50 ms |
-| S4 | Boxes on screen at once, counting the "+N more" box | ≤ 50 |
+| S4 | Boxes on screen at once, counting a page's portals (V1.3.1; V1.3 counted the "+N more" box) | ≤ 50 |
 | S5 | MCP tool latency, warm (after the first call of a session) | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
 | S7 | Evaluation run and published, losses included | done |
 | S8 | Public repo, README, video, live demo link | done |
+| S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux |
+| S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo |
+| S11 | Free mode (V1.6): no API key | the Map, structure and stats, `dependents`/`dependencies`/`path`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed |
 
 ---
 
@@ -212,7 +216,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ## 6. Engine queries and the tool registry
 
 ### 6.1 Queries (pure functions over the store, unit-tested, cached per index version)
-- **`level(path)`**: breadcrumb, at most 50 nodes plus a "+N more" node, that level's edges, and the hidden count.
+- **`level(path, page?, focus?)`**: breadcrumb, at most 50 nodes (a big folder's page of 44 boxes plus up to 6 portals to its other pages, V1.3.1), that page's edges with the far ends folded onto portals, the hidden count, the page and the page count.
 - **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
 - **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance.
@@ -241,33 +245,37 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 ## 7. The Map UI
 
 - **Regions:**
-  - top bar: repo name, a ⌘K search palette, and a lens switcher that shows only the lenses that exist
-  - breadcrumb plus index-status pill
+  - top bar: the Nebulosity mark, the repo as `owner / repo`, the view's title ("Dependency map", where a lens switcher will show the lenses that exist), a ⌘K search field, and the index status *(V1.3.1, `VISUAL_REFRESH.md` §6)*
+  - breadcrumb (`vscode / src / vs`)
   - the canvas
   - a detail panel that opens on selection
-  - a bottom dock: the live Claude Code pill in v1, plus the Guide input in E1
+  - an activity bar along the bottom, always visible: Claude Code's last 3 tool calls in v1, plus the Guide input in E1 *(V1.3.1)*
 - **Levels.** Repo root → folders → files. A leaf folder shows its files and the imports between them. The file panel lists symbols and, from E2, opens a call flow per function.
-- **Moving around.** Click selects a box; double-click opens a folder; the breadcrumb and Backspace go back up.
-- **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), ties going to the more-imported file (ADR-036), and opening it lists them in the panel instead of drawing more boxes.
-- **Boxes** show the name, file count and tagline. While the summary is pending they show a quiet placeholder.
-- **Edges** come from `level_edges`, with thickness ∝ √count. Only the selected box's edges are drawn at full strength; the rest are ghosted. Hovering shows the count.
-- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. It lays out from the level's 100 heaviest lines (every line is still drawn): VS Code's densest level, 50 boxes and 390 lines, takes about 40 ms that way, against 0.6 s with every line (ADR-036, amended).
+- **Moving around.** Click selects a box; double-click opens a folder; the breadcrumb and Backspace go back up. The address bar holds the place (`/?path=src/vs&page=2`), so the browser's Back returns to the previous folder or page, and a reload or a pasted link opens the same place *(V1.3.1)*.
+- **Cap.** At most 50 boxes. A folder of more than 50 children is drawn a page at a time, and every child is on some page *(V1.3.1, owner review; ADR-042)*:
+  - A page holds 44 boxes, grouped by import: it seeds with the first unplaced child in the Map's order (largest first, ADR-036) and takes the unplaced child with the most imports to and from it. A folder with no lines pages by size.
+  - Up to 6 **portals**, dashed doorway boxes ("Lines to page 2" on the Map), stand for the other pages it has lines with, and lines to boxes there end at them. Past 6 linked pages, the rest merge into one "+N pages" portal ("Lines to 12 more pages"). Double-clicking a portal turns to its page; the page pill's buttons (or ← and →) turn it too.
+  - Search, the panel's links and `focus_node` open the page holding their target. *(V1.3 folded the overflow into a "+N more" box instead.)*
+- **Boxes** show an outline icon, the name and, for folders, the file count. Summaries live in the panel, not in boxes *(V1.3.1, `VISUAL_REFRESH.md` §4; V1.3 showed the tagline)*.
+- **Edges** come from `level_edges`. Every one carries a directional arrow (importer → imported) and is routed through the channels and gutters between boxes, never across one (`app/map/routes.ts`). They're 1 px slate normally and 1.5 px purple for the selection's direct links, and a selection fades unrelated boxes to about 60%. Hovering a box previews its links and shows its one-line summary; hovering a line says it in words ("editor uses base · 12 imports"). A busy level (more than 60 lines) draws only the hovered or selected box's lines, with "Show all lines" for the rest *(V1.3.1; V1.3 drew thickness ∝ √count and ghosted the rest)*.
+- **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. It lays out from the level's 100 heaviest lines (every line is still drawn): VS Code's densest level, 50 boxes and 390 lines, takes about 40 ms that way, against 0.6 s with every line (ADR-036, amended). Each dagre layer is drawn as a centred tier that wraps into rows of at most 6, and boxes with no line at the level go in a grid beside or below the tiers, whichever fits the level larger, so a tall chain or a wide fan still fits at a readable zoom *(V1.3.1, ADR-036 amended)*. A line with "Not linked to anything on this page" in its middle sets that grid apart: across the level when it's below, over the column when it's beside *(V1.3.1, owner's design)*.
 - **Lenses, one at a time.** Structure (v1), History (E3), Clusters (E5).
 - **Search.** ⌘K over files, symbols and summaries. Picking a result moves the canvas to that item's level and selects it.
-- **Live.** `GET /api/live/stream` (SSE). Each MCP tool call pulses the box that contains the touched path at the current level and updates the pill. Throttled.
+- **Live.** `GET /api/live/stream` (SSE). Each MCP tool call pulses the box that contains the touched path at the current level, rings it in orange while the call is under 30 s old, and appears in the activity bar. Throttled.
 - **Open in editor.** File panels link to `vscode://file/<absolute path>:<line>`.
-- **Look.** The existing dark amethyst theme and starfield stay; the layout is new (the owner explicitly requested a revamp, overriding the "visual design is frozen" note). React Flow remains the renderer, and 50 nodes is well inside its comfort zone. The StrictMode workaround stays.
-- **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists show 20 entries plus "load more".
+- **Look.** *(Superseded in V1.3.1 by `VISUAL_REFRESH.md`, ADR-041: a flat charcoal canvas, larger boxes, one meaning per color.)* The owner explicitly requested a revamp, overriding the "visual design is frozen" note. React Flow remains the renderer, and 50 nodes is well inside its comfort zone. The StrictMode workaround stays.
+- **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists in the panel show their first 8 entries plus "View all" *(V1.3.1)*.
 - **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it.
 
 ### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` §11–§15 in slice V1.3)
 
 ```ts
-type MapNode = { path: string; name: string; kind: "folder" | "file" | "more";
-  fileCount: number; tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number };
+type MapNode = { path: string; name: string; kind: "folder" | "file" | "portal";
+  fileCount: number; tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number;
+  page?: number; pages?: number[]; members?: string[] };   // portals only (contract v3, V1.3.1)
 type MapEdge = { source: string; target: string; count: number };
 type LevelResponse = { repo: string; path: string; breadcrumb: string[];
-  nodes: MapNode[]; edges: MapEdge[]; hiddenCount: number; indexVersion: number };
+  nodes: MapNode[]; edges: MapEdge[]; hiddenCount: number; page: number; pageCount: number; indexVersion: number };
 type DescribeResponse = { path: string; kind: "repo" | "folder" | "file"; tagline?: string;
   summary?: string; summaryStatus: SummaryStatus; stats: { fileCount: number; lineCount: number };
   children?: MapNode[]; symbols?: { name: string; kind: string; startLine: number; endLine: number }[];
@@ -315,6 +323,8 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 ## 10. Extras, in order (design level; each gets its own plan)
 
+**The order since 2026-10-13 (ADR-043): E4 → E5 → E1,** after V1.6. E4 decides who can use Nebulosity at all (Python first, Go if there's time). E5 suits the big repos Nebulosity is for. E1 serves the owner's learning goal more than users, since Claude Code with the MCP tools already drives the Map. E3 shrinks and is optional, and E2 waits on a measurement (both below). The sections keep their labels so references elsewhere still hold.
+
 **E1 — The Guide (LangGraph).**
 - Orchestration follows `LANGGRAPH_DESIGN.md`, which is still valid: state, ReAct loop, `MemorySaver`, the SSE event translation, and `/api/chat` per `API_CONTRACTS.md` §5.
 - Tools are the registry plus UI tools: `focus`, `highlight`, `set_lens`, `open_call_flow`.
@@ -324,10 +334,10 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 **E2 — Call graph.**
 - The TypeScript type checker (`ts.createProgram` per tsconfig project) resolves call expressions to declarations. That includes dependency-injected services, resolved from interface types to their `implements` classes, labeled `typed`. A name-based heuristic is the fallback, labeled `heuristic`.
-- **Measure first:** type-checking all of VS Code may take several GB. The fallbacks are per-project programs or heuristic only.
+- **Measure first:** type-checking all of VS Code may take several GB. The fallbacks are per-project programs or heuristic only. *(Since ADR-043, E2 is deferred: half a day measuring memory and time comes first, then the owner decides whether to build it.)*
 - Tools: `callers`, `callees`, `call_flow`. UI: a call-flow view (callers ← function → callees, one hop at a time, expandable, ≤ 50 boxes).
 
-**E3 — Git-history overlays.**
+**E3 — Git-history overlays.** *(Optional and smaller since ADR-043: the panel gains "often changes with…" and the first commit, from the repo's own history; the History lens and the dashed coupling lines wait. Users' repos usually have full history, so the unshallow fetch is needed only to show it on VS Code.)*
 - Needs full history (`git fetch --unshallow`, about 1.5 GB). The owner approves that at kickoff.
 - One pass of `git log --numstat` fills `file_history` and `co_changes`, skipping commits that touch more than 50 files and requiring a minimum co-change support of 5.
 - The History lens colors boxes by churn percentile. Hidden coupling (co-change without an import) appears as dashed edges. The panel shows owners and the first commit ("why does this exist").
@@ -335,13 +345,14 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 **E4 — tree-sitter.**
 - `web-tree-sitter` (WASM, which avoids the Windows native-build pain cited in ADR-004) plugs in behind the language adapter interface.
-- Python and Go come first, with per-language query files for definitions, imports and calls, and per-language import resolution.
+- Python first, then Go if there's time (ADR-043), with per-language query files for definitions, imports and calls, and per-language import resolution.
 - TypeScript stays on the compiler API for precision.
 
 **E5 — Clustering.**
 - Louvain (`graphology-communities-louvain`) runs on the undirected, weighted file graph, adding co-change weights when E3 exists.
 - Clusters are summarized with Sonnet 5.5 and named. The Clusters lens regroups the boxes, and a folder-vs-cluster "drift" view shows where they disagree.
 - PageRank replaces degree as the importance measure (ADR-010's revisit trigger). Tool: `clusters`.
+- **A focus view** *(moved here from V1.3.1 by the owner, 2026-10-13)*: a box in the middle, everything that uses it above, everything it uses below, from any folder (`describe`'s `usedBy` and `uses`, up to 12 a side plus "+N more"); double-clicking a box puts it in the middle, and Back returns to the Map. On the Map a box shows only its links inside one folder (`mergeEditor`: 1 of its 17); the panel already lists them all, so this improves something that works, and it belongs with E5's rework of what the Map groups together. A natural target for `show_on_map` too.
 
 ---
 
@@ -378,8 +389,9 @@ Each v1 slice ends demoable:
 | V1.3 Map | level/describe/search APIs, new Map UI (levels, panel, ⌘K, status pill), live channel |
 | V1.4 MCP | tool registry, `mcp/server.ts`, `claude mcp add` instructions, smoke test |
 | V1.5 Ship | static export + hosted demo, eval, README, demo-video script |
+| V1.6 Works on your repo (ADR-043) | an installable package (index, Map and Claude Code setup, one command each); a set of real repos of different shapes; Windows, macOS and Linux; free mode with no API key; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic |
 
-**Target:** v1 by **2026-10-18** (end of reading week), with a slip budget of 2–4 days. The extras follow in order E1 → E5 over about 1–2 weeks, and each one updates the live demo and README. Context: Shopify applications open around late October or early November 2026.
+**Target:** V1.1–V1.5 by **2026-10-18** (end of reading week), with a slip budget of 2–4 days; V1.6 adds about 3–4 days. The extras follow in the order of ADR-043, E4 → E5 → E1 at about 2–4 days each, then E3 (small, optional) and E2 (after its measurement); each one updates the live demo and README. Context: Shopify applications open around late October or early November 2026. *(Until 2026-10-13 the extras ran E1 → E5 in about 1–2 weeks.)*
 
 ---
 
@@ -405,12 +417,16 @@ Each v1 slice ends demoable:
 | Target repo inside the project dir would be swept into `tsc` | target repos live outside the Nebulosity checkout (VS Code is at `../vscode`) |
 | Public-repo hygiene | `CLAUDE.md` is gitignored (verified) and never published. The Phase 2–4 provenance story *does* appear in tracked docs (`IMPLEMENTATION_ROADMAP.md`, `RAG_IMPLEMENTATION_REVIEW.md`, `BUGS_ENCOUNTERED.md`), so the owner reviews `docs/` before release |
 | API cost creep | `inputHash` caching, test files and test-only folders templated, input caps, lazy folder refresh |
+| Other people's repos aren't shaped like VS Code (monorepos, plain JavaScript, path aliases), or run on macOS and Linux (ADR-043) | V1.6 indexes a set of real repos of different shapes, on all three systems (S9, S10) |
+| Claude Code subscribers have no API key | free mode: everything that needs no model works without one (S11) |
+| Claude Code and its rivals get better at big repos | the eval says where Nebulosity still helps, losses included; the Map has no Claude Code equivalent |
+| Users bring issues and support | it comes out of the owner's time; the README says who it's for, so the scope stays narrow |
 
 ---
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, and ADR-036 to ADR-040 during V1.3:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13:
 
 | ADR | Decision |
 |---|---|
@@ -426,11 +442,14 @@ Each v1 slice ends demoable:
 | ADR-033 | Summary runs: bottom-up waves, the Batch API for 100+ requests and the regular API below, batch ids on the summary rows, a circuit breaker and a `summarizing` lock |
 | ADR-034 | Summary prompt v2: Haiku 5.5 for files, 3 to 6 word taglines kept whole up to 8, importers in the prompt but not the hash, whole summaries only (one retry), test-only folders templated |
 | ADR-035 | A spend cap: before each submission, project spent + at Anthropic + this submission + the rest, and stop sending past `--budget` (default $15); batches already at Anthropic are still collected |
-| ADR-036 | The Map reads one level at a time: children in size order, a 50-box fold with a `<level>/` "+N more" box, an index version for caching and refetching, area counts from an in-memory import graph |
+| ADR-036 | The Map reads one level at a time: children in size order, a 50-box fold with a `<level>/` "+N more" box (pages with portals since ADR-042), an index version for caching and refetching, area counts from an in-memory import graph |
 | ADR-037 | Incremental structure updates re-resolve only what can have changed and write only the differences, with level edges moved by ±1 per import |
 | ADR-038 | A forked background worker owns the index while the Map is open: watcher, incremental updates, summary refresh (60 s, ≤ 50 files per 10 minutes), a folder sweep, sliced embeddings |
 | ADR-039 | The live channel: SSE out, a localhost-only POST in (Host and Origin checked), the server bound to loopback |
-| ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2); the version names the API and migrations carry the data |
+| ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2, 3 since V1.3.1's portals); the version names the API and migrations carry the data |
+| ADR-041 | The Map's dark theme refined for readability (V1.3.1, `VISUAL_REFRESH.md`) |
+| ADR-042 | The owner's review of V1.3.1: routed lines, pages of related boxes with portals, Back, a source viewer, help, the violet-slate theme |
+| ADR-043 | Shipped for other people's repos: slice V1.6 with a free mode (no API key), and the extras reordered E4 → E5 → E1, with E3 smaller and optional and E2 behind a measurement |
 
 ## 16. Doc migration
 

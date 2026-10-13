@@ -1,5 +1,6 @@
 import type {
-    DescribeResponse, ErrorCode, ErrorEnvelope, IndexEventMap, IndexStatus, LevelResponse, RepoList, SearchResult, SummarizeResponse,
+    DescribeResponse, ErrorCode, ErrorEnvelope, IndexEventMap, IndexStatus, LevelResponse, RepoList, SearchResult, SourceResponse,
+    SummarizeResponse,
 } from "@/lib/contracts";
 
 /**
@@ -35,8 +36,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     return (await response.json()) as T;
 }
 
-/** Paths go in query strings percent-encoded, so spaces, #, %, + and non-ASCII names survive the trip. */
-export const levelUrl = (folderPath: string): string => `/api/level?path=${encodeURIComponent(folderPath)}`;
+/**
+ * Paths go in query strings percent-encoded, so spaces, #, %, + and non-ASCII names survive the trip. `focus` asks for
+ * the page holding that path instead (API_CONTRACTS.md §11).
+ */
+export const levelUrl = (folderPath: string, page: number = 0, focus?: string): string =>
+    `/api/level?path=${encodeURIComponent(folderPath)}${page > 0 ? `&page=${page}` : ""}${focus !== undefined ? `&focus=${encodeURIComponent(focus)}` : ""}`;
 export const describeUrl = (targetPath: string): string => `/api/describe?path=${encodeURIComponent(targetPath)}`;
 
 export type SseFrame = { event: string; data: string };
@@ -80,11 +85,13 @@ export async function readSseStream(body: ReadableStream<Uint8Array>, onFrame: (
 }
 
 export const api = {
-    level: (folderPath: string, signal?: AbortSignal) => request<LevelResponse>(levelUrl(folderPath), { signal }),
+    level: (folderPath: string, page: number = 0, signal?: AbortSignal, focus?: string) =>
+        request<LevelResponse>(levelUrl(folderPath, page, focus), { signal }),
     describe: (targetPath: string, signal?: AbortSignal) => request<DescribeResponse>(describeUrl(targetPath), { signal }),
     search: (query: string, limit: number, signal?: AbortSignal) =>
         request<SearchResult>(`/api/search?q=${encodeURIComponent(query)}&limit=${limit}`, { signal }),
     status: (signal?: AbortSignal) => request<IndexStatus>("/api/status", { signal }),
+    source: (filePath: string, signal?: AbortSignal) => request<SourceResponse>(`/api/source?path=${encodeURIComponent(filePath)}`, { signal }),
     summarize: (targetPath: string) => request<SummarizeResponse>(`/api/summarize?path=${encodeURIComponent(targetPath)}`, { method: "POST" }),
     repos: () => request<RepoList>("/api/repos"),
     setActiveRepo: (root: string) => request<RepoList>("/api/repos", {

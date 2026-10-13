@@ -1,89 +1,147 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Background, BackgroundVariant, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow,
-    type Edge, type EdgeMouseHandler, type NodeMouseHandler, type NodeTypes,
+    Background, BackgroundVariant, ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
+    type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
-import { edgeOpacity, edgeWidth } from "./edges";
-import { formatCount } from "./format";
-import { BOX_HEIGHT, BOX_WIDTH, layoutLevel } from "./levelLayout";
-import MapBox, { type BoxNode } from "./MapBox";
+import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
+import { toBoxNode } from "./flowNodes";
+import { PANEL_WIDTH } from "./DetailPanel";
+import { lineLabel } from "./labels";
+import Legend from "./Legend";
+import { FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider } from "./levelLayout";
+import MapBox, { type BoxData, type BoxNode } from "./MapBox";
+import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
+import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
+import { routeEdges } from "./routes";
+import { boundsOf, initialViewport } from "./viewport";
 
-// at module scope: a new object per render would make React Flow remount every box
+// at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
+const edgeTypes: EdgeTypes = { routed: RoutedEdge };
+
+/**
+ * The fit button's fit: the whole level with room around it, never past 100% (VISUAL_REFRESH.md §4). A level opens by
+ * viewport.ts's rule instead, which fits the same way unless that would make it unreadable.
+ */
+const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
+
+/**
+ * Each line's look per tone (VISUAL_REFRESH.md §4): 1 px slate normally, 2 px purple for the selection's links. The
+ * arrowhead of a quiet line is brighter than the line itself, so the direction reads without the line getting louder
+ * (owner review: the arrows were too small to see).
+ */
+const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: string; width: number; opacity: number; layer: number }> = {
+    normal: { stroke: "var(--neutral-edge)", arrow: "var(--text-2)", width: 1, opacity: 1, layer: 0 },
+    faded: { stroke: "var(--neutral-edge)", arrow: "var(--neutral-edge)", width: 1, opacity: 0.35, layer: 0 },
+    preview: { stroke: "var(--text-2)", arrow: "var(--text)", width: 1.5, opacity: 1, layer: 1 },
+    // 1.5 px, not 2: a selected box's lines merge into shared tracks, and at 2 px they outshone the box itself
+    selected: { stroke: "var(--select)", arrow: "var(--select)", width: 1.5, opacity: 1, layer: 2 },
+};
+/** The arrowhead's size in px, whatever the line's width (26 since the three-task test: 18 was too small to read). */
+const ARROW_SIZE = 26;
 
 type MapCanvasProps = {
     level: LevelResponse;
     selected: string | null;
-    /** Boxes a show_on_map highlight points at (Task 20). */
-    highlighted: ReadonlySet<string>;
+    /** Boxes Claude Code is touching right now: recent tool calls and show_on_map highlights. */
+    agent: ReadonlySet<string>;
     pulses: ReadonlyMap<string, Pulse>;
     onSelect: (path: string | null) => void;
     onOpen: (folder: string) => void;
+    /** Turn to another page of this folder: a portal was double-clicked. */
+    onTurnPage: (page: number) => void;
     /** Called once a new level is on screen (S3's measuring point). */
     onDrawn: () => void;
+    /** A busy level: only the hovered or selected box's lines are drawn (emphasis.ts). */
+    quietLines: boolean;
 };
 
 /**
- * The canvas (PIVOT_SPEC.md §7): one level's boxes, laid out by dagre, and the lines between them. A click selects
- * and a double-click opens a folder. The selected box's lines are drawn at full strength, the rest ghosted, and
- * hovering a line shows its count. React Flow stays controlled with the StrictMode workaround in next.config.ts.
+ * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
+ * around the boxes (routes.ts). A click selects; a double click opens a folder, or turns to a portal's page. The selection's lines turn purple and unrelated boxes fade;
+ * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
+ * controlled with the StrictMode workaround in next.config.ts.
  */
-export default function MapCanvas({ level, selected, highlighted, pulses, onSelect, onOpen, onDrawn }: MapCanvasProps){
-    const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
-    const maxCount = useMemo(() => Math.max(0, ...level.edges.map((e) => e.count)), [level]);
-    const [hovered, setHovered] = useState<string | null>(null);
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines }: MapCanvasProps){
+    // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
+    const perRow = useStore((s) => perRowFor(s.width));
+    const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
+    const divider = useMemo(() => looseDivider(level.nodes, level.edges, positions), [level, positions]);
+    const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
+    // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 links", worked out once per level, not on every hover
+    const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
+        n.path,
+        { direction: portalDirection(n, level.page), title: portalTitle(n), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
+    ])), [level]);
+    const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
+    const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
+    const [hoveredBox, setHoveredBox] = useState<string | null>(null);
+    const emphasis = useMemo(
+        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines }),
+        [level, selected, hoveredBox, quietLines],
+    );
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-    const { fitView } = useReactFlow();
-    // the latest fitView and onDrawn, for the fit below: it runs when the level changes, not when they do
-    const fitViewRef = useRef(fitView);
-    const onDrawnRef = useRef(onDrawn);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
+    const { setViewport } = useReactFlow();
+    const canvasWidth = useStore((s) => s.width);
+    const canvasHeight = useStore((s) => s.height);
+    // the latest of each, for the opening view below: it runs when the level changes, not when they do
+    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } });
     useEffect(() => {
-        fitViewRef.current = fitView;
-        onDrawnRef.current = onDrawn;
-    }, [fitView, onDrawn]);
+        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } };
+    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight]);
 
     useEffect(() => {
-        setNodes(level.nodes.map((box) => ({
-            id: box.path,
-            type: "box" as const,
-            position: positions.get(box.path) ?? { x: 0, y: 0 },
-            width: BOX_WIDTH,
-            height: BOX_HEIGHT,
-            draggable: false,
-            connectable: false,
-            data: { box, selected: box.path === selected, highlighted: highlighted.has(box.path), pulseKey: pulses.get(box.path)?.key ?? 0 },
+        // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts)
+        setNodes(level.nodes.map((box) => toBoxNode(box, positions.get(box.path) ?? { x: 0, y: 0 }, {
+            box,
+            tone: emphasis.boxes.get(box.path) ?? "normal",
+            agent: agent.has(box.path),
+            pulseKey: pulses.get(box.path)?.key ?? 0,
+            portal: portals.get(box.path),
         })));
-    }, [level, positions, selected, highlighted, pulses, setNodes]);
+    }, [level, positions, portals, emphasis, agent, pulses, setNodes]);
 
     useEffect(() => {
-        setEdges(level.edges.map((edge) => {
-            const id = `${edge.source}->${edge.target}`;
-            const stroke = `rgba(168, 85, 247, ${edgeOpacity(edge, selected)})`;
-            return {
+        // a busy level's hidden lines aren't handed to React Flow at all: fewer lines to draw, and none to hover
+        const drawn = level.edges.flatMap((edge) => {
+            const id = edgeKey(edge);
+            const tone = emphasis.edges.get(id) ?? "normal";
+            if (tone === "hidden") return [];
+            const look = EDGE_STYLES[tone];
+            const drawnEdge: RoutedEdgeType = {
                 id,
+                type: "routed",
+                data: { points: routes.get(id) ?? [] },
                 source: edge.source,
                 target: edge.target,
                 focusable: false,
-                label: hovered === id ? `${formatCount(edge.count)} import${edge.count === 1 ? "" : "s"}` : undefined,
-                labelStyle: { fill: "#e4e4e7", fontSize: 11 },
-                labelBgStyle: { fill: "#0c0716", fillOpacity: 0.9 },
-                style: { stroke, strokeWidth: edgeWidth(edge.count, maxCount) },
-                markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: stroke },
+                // in words ("editor uses base · 12 imports"): the three-task test's tester read an arrow backwards
+                label: hoveredEdge === id ? lineLabel(byPath.get(edge.source)!, byPath.get(edge.target)!, edge.count) : undefined,
+                style: { stroke: look.stroke, strokeWidth: look.width, opacity: look.opacity },
+                // userSpaceOnUse: the arrowhead stays the same size whatever the line's width
+                markerEnd: { type: MarkerType.ArrowClosed, width: ARROW_SIZE, height: ARROW_SIZE, color: look.arrow, markerUnits: "userSpaceOnUse" },
             };
-        }));
-    }, [level, selected, hovered, maxCount, setEdges]);
+            return [{ layer: look.layer, edge: drawnEdge }];
+        });
+        // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
+        // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
+        setEdges(drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge));
+    }, [level, byPath, routes, emphasis, hoveredEdge, setEdges]);
 
-    // A new level (another folder, or another repo): fit it to the screen, then report it drawn. The boxes reach React
-    // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
-    // level's boxes: fitting sooner frames the previous level's, which is what a level from the cache got. The same
-    // level refetched after the index moved keeps its key, so the user's pan and zoom stay put.
-    const levelKey = `${level.repo}\n${level.path}`;
+    // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, unless that would
+    // shrink it past 75%, then from its top), then report it drawn. The boxes reach React Flow a render after the level
+    // does (setNodes runs in an effect), so this waits until `nodes` holds this level's boxes: placing the view sooner
+    // frames the previous level's, which is what a level from the cache got. The same level refetched after the index
+    // moved keeps its key, so the user's pan and zoom stay put.
+    // the row width is in the key: a window resized across WIDE_CANVAS lays the level out again, so it's fitted again
+    const levelKey = `${level.repo}\n${level.path}\n${level.page}\n${perRow}`;
     const fittedKey = useRef<string | null>(null);
     useEffect(() => {
         if (fittedKey.current === levelKey) return;
@@ -91,18 +149,29 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
         if (!arrived) return;
         const frame = requestAnimationFrame(() => {
             fittedKey.current = levelKey;
-            void fitViewRef.current({ padding: 0.12, duration: 0 });
-            onDrawnRef.current();
+            const open = openRef.current;
+            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas), { duration: 0 });
+            open.onDrawn();
         });
         return () => cancelAnimationFrame(frame);
     }, [levelKey, nodes, level.nodes]);
 
     const onNodeClick: NodeMouseHandler<BoxNode> = (_, node) => onSelect(node.id);
     const onNodeDoubleClick: NodeMouseHandler<BoxNode> = (_, node) => {
-        if (node.data.box.kind === "folder") onOpen(node.id);
+        const { box } = node.data;
+        if (box.kind === "folder") onOpen(node.id);
+        // a portal turns to its page; the merged one stands for several, so it stays selected for its panel to pick one
+        else if (box.kind === "portal" && box.page !== undefined) onTurnPage(box.page);
     };
-    const onEdgeMouseEnter: EdgeMouseHandler = (_, edge) => setHovered(edge.id);
-    const onEdgeMouseLeave: EdgeMouseHandler = () => setHovered(null);
+    const onNodeMouseEnter: NodeMouseHandler<BoxNode> = (_, node) => setHoveredBox(node.id);
+    const onNodeMouseLeave: NodeMouseHandler<BoxNode> = () => setHoveredBox(null);
+    const onEdgeMouseEnter: EdgeMouseHandler = (_, edge) => setHoveredEdge(edge.id);
+    const onEdgeMouseLeave: EdgeMouseHandler = () => setHoveredEdge(null);
+    /** Reset focus (§4): let go of the selection and the fade it brings. */
+    const resetFocus = (): void => {
+        setHoveredBox(null);
+        onSelect(null);
+    };
 
     return (
         <ReactFlow
@@ -111,8 +180,11 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
+            onNodeMouseEnter={onNodeMouseEnter}
+            onNodeMouseLeave={onNodeMouseLeave}
             onPaneClick={() => onSelect(null)}
             onEdgeMouseEnter={onEdgeMouseEnter}
             onEdgeMouseLeave={onEdgeMouseLeave}
@@ -122,14 +194,51 @@ export default function MapCanvas({ level, selected, highlighted, pulses, onSele
             minZoom={0.1}
             maxZoom={2}
             colorMode="dark"
-            className="!bg-transparent"
+            proOptions={{ hideAttribution: true }}
         >
-            <Background bgColor="transparent" variant={BackgroundVariant.Lines} gap={48} lineWidth={0.5} color="rgba(157, 80, 221, 0.10)" />
+            {/* a faint dot grid: texture, so a busy level isn't a void with rectangles in it (VISUAL_REFRESH.md §3) */}
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid)" />
+            {divider && (
+                <ViewportPortal>
+                    <LooseDivider divider={divider} />
+                </ViewportPortal>
+            )}
+            <Legend quietLines={quietLines} />
+            {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
             <Controls
                 position="bottom-right"
                 showInteractive={false}
-                className="!rounded-none !border !border-purple-500/20 !bg-[#0c0716]/80 !shadow-none backdrop-blur-xl"
-            />
+                fitViewOptions={FIT}
+                style={selected !== null ? { right: PANEL_WIDTH } : undefined}
+                className="overflow-hidden rounded-lg"
+            >
+                <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
+                    <IconFocusCentered aria-hidden size={16} stroke={1.75} />
+                </ControlButton>
+            </Controls>
         </ReactFlow>
     );
 }
+
+/**
+ * The line over a level's loose boxes with "Not linked to anything on this page" in its middle (levelLayout.ts's
+ * looseDivider; owner's design, 2026-10-13). It lives in the Map's own coordinates, so it pans and zooms with the boxes.
+ * A hairline in the box border's colour, dimmer than the lines and never ending in an arrow, so it can't be read as one.
+ */
+function LooseDivider({ divider }: { divider: Divider }){
+    return (
+        <div
+            data-testid="loose-divider"
+            aria-hidden
+            style={{ position: "absolute", left: divider.x, top: divider.y - 11, width: divider.width, height: 22 }}
+            className="pointer-events-none flex items-center gap-3.5"
+        >
+            <span className="h-px flex-1 bg-border" />
+            <span className="whitespace-nowrap text-[15px] text-text-2">Not linked to anything on this page</span>
+            <span className="h-px flex-1 bg-border" />
+        </div>
+    );
+}
+
+// memo: the Map's clock ticks while Claude Code is active, and the canvas shouldn't redraw for it
+export default memo(MapCanvas);

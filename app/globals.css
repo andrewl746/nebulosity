@@ -1,36 +1,158 @@
 @import "tailwindcss";
 
+/*
+ * The Map's colors (VISUAL_REFRESH.md §2): each token is defined once here and means one thing. Components use the
+ * tokens (bg-surface, text-text-2, border-select, …), never a raw value. The owner's pick of 2026-10-13, "night violet +
+ * cyan", taken from the logo (app/icon.svg): night-violet surfaces instead of violet-grey, lavender names, the selection
+ * still vivid purple, the logo's violet for the overlays and its cyan for everything you click.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #0E0A1C;       /* page and Map background, one flat night violet (the logo tile's dark end) */
+  --surface: #22193F;      /* boxes, inputs, cards: one step brighter than the canvas, so the content leads */
+  --panel: #140E28;        /* the details panel, drawers, dialogs */
+  --hairline: #261B45;     /* dividers */
+  --border: #4B3B85;       /* box and input borders, defined enough that boxes read as objects */
+  --text: #F1EEF8;         /* primary text: names, headings */
+  --text-body: #D3C7EE;    /* paragraphs: summaries, help */
+  --text-2: #B9A9DE;       /* secondary text, counts, labels */
+  --title: #C7B3FF;        /* lavender: a description's title (a summary's tagline, help headings) */
+  --code: #D8CAFF;         /* lavender: code identifiers in text */
+  --code-bg: #2A1B52;      /* the chip behind them */
+  --folder: #A98BEA;       /* lavender: the folder icon, so folders and files part at a glance */
+  --neutral-edge: #7262A6; /* ordinary connections, bright enough to follow on the canvas (3.7:1) */
+  --select: #B58AFF;        /* purple: the selected box, its direct links, its path. Nothing else */
+  --select-fill: #3A2178;  /* the selected box's fill: strong enough that the box, not its lines, is seen first */
+  --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
+  --ok: #4CC38A;            /* green: indexing status only */
+  --danger: #F07A7A;        /* errors and a failed stage */
+  --control: #67E8F9;       /* cyan (the logo's glow): something you click — links, text buttons, the overlays' buttons. Nothing else */
+  --overlay: #2A1F52;       /* raised night violet: every control on the Map (legend, page pill, zoom) */
+  --overlay-line: #3A2D6B;  /* dividers inside an overlay, and a control's hover */
+  --overlay-text-2: #C9BCEB; /* secondary text on an overlay */
+  --grid: #262039;          /* the canvas's faint dot grid, so the Map has texture without competing with boxes */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-hairline: var(--hairline);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-body: var(--text-body);
+  --color-text-2: var(--text-2);
+  --color-title: var(--title);
+  --color-code: var(--code);
+  --color-code-bg: var(--code-bg);
+  --color-folder: var(--folder);
+  --color-neutral-edge: var(--neutral-edge);
+  --color-select: var(--select);
+  --color-select-fill: var(--select-fill);
+  --color-agent: var(--agent);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+  --color-control: var(--control);
+  --color-overlay: var(--overlay);
+  --color-overlay-line: var(--overlay-line);
+  --color-overlay-text-2: var(--overlay-text-2);
+  --color-grid: var(--grid);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
 }
 
-/* A tool call touched this box (PIVOT_SPEC.md §7, "Live"): one ring that grows and fades. */
+/*
+ * Syntax colors, for code only: the source viewer and search's code lines (VISUAL_REFRESH.md §2). They're VS Code's
+ * Dark+ palette, so code reads the way it does in the editor (owner review). Inside code they mean token kinds and
+ * nothing else; nothing on the Map uses them.
+ */
+:root {
+  --syn-text: #D4D4D4;
+  --syn-keyword: #569CD6;    /* const, function, class, true, this */
+  --syn-control: #C586C0;    /* import, export, return, if, await */
+  --syn-string: #CE9178;
+  --syn-number: #B5CEA8;
+  --syn-comment: #6A9955;
+  --syn-type: #4EC9B0;       /* classes, types, built-ins */
+  --syn-function: #DCDCAA;   /* function names, decorators */
+  --syn-variable: #9CDCFE;   /* parameters, properties */
+  --syn-constant: #4FC1FF;
+  --syn-regexp: #D16969;
+}
+
+.syntax { color: var(--syn-text); }
+.syntax .hljs-keyword, .syntax .hljs-literal, .syntax .hljs-variable.language_ { color: var(--syn-keyword); }
+.syntax .hljs-control { color: var(--syn-control); }
+.syntax .hljs-string { color: var(--syn-string); }
+.syntax .hljs-subst { color: var(--syn-text); }
+.syntax .hljs-number { color: var(--syn-number); }
+.syntax .hljs-comment { color: var(--syn-comment); }
+.syntax .hljs-regexp { color: var(--syn-regexp); }
+.syntax .hljs-title.function_, .syntax .hljs-meta { color: var(--syn-function); }
+.syntax .hljs-title.class_, .syntax .hljs-type, .syntax .hljs-built_in { color: var(--syn-type); }
+.syntax .hljs-params, .syntax .hljs-attr, .syntax .hljs-property, .syntax .hljs-variable { color: var(--syn-variable); }
+.syntax .hljs-variable.constant_ { color: var(--syn-constant); }
+
+/*
+ * Anything you can click shows the hand and answers the hover (owner review): Tailwind 4 resets buttons to the plain
+ * arrow. Text fields, and the search field that opens the palette, show the text cursor instead.
+ */
+@layer base {
+  /* in the base layer, so a utility (cursor-text on the search field) still overrides them */
+  button:not(:disabled), [role="button"], a[href], summary, .react-flow__node {
+    cursor: pointer;
+  }
+
+  button, a, [role="button"] {
+    transition: color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out;
+  }
+
+  /* Scrollbars in the theme's colors, thin, with no arrow buttons (owner review) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+/* React Flow's own parts (controls, edge labels) take the same tokens */
+.react-flow {
+  --xy-background-color: var(--canvas);
+  --xy-edge-stroke: var(--neutral-edge);
+  --xy-edge-label-background-color: var(--surface);
+  --xy-edge-label-color: var(--text);
+  /* the zoom controls share the one control style: raised night violet, cyan icons (owner review) */
+  --xy-controls-button-background-color: var(--overlay);
+  --xy-controls-button-background-color-hover: var(--overlay-line);
+  --xy-controls-button-color: var(--control);
+  --xy-controls-button-color-hover: var(--control);
+  --xy-controls-button-border-color: var(--overlay-line);
+  --xy-controls-box-shadow: none;
+}
+
+/*
+ * Claude's focus moved to this box (VISUAL_REFRESH.md §4): one orange ring that steps out and fades. It's the only
+ * motion on the Map, and people who ask for less motion don't get it.
+ */
 @keyframes neb-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.55); }
-  100% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+  0% { outline: 2px solid var(--agent); outline-offset: 0; opacity: 1; }
+  100% { outline: 2px solid var(--agent); outline-offset: 8px; opacity: 0; }
 }
 
 .neb-pulse {
   animation: neb-pulse 0.9s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neb-pulse {
+    animation: none;
+  }
+
+  button, a, [role="button"] {
+    transition: none;
+  }
 }

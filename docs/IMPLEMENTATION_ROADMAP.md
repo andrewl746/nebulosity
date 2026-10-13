@@ -4,20 +4,22 @@
 
 ## Pivot roadmap (current, 2026-10-11)
 
-**Goal:** ship v1 by **2026-10-18**, with a slip budget of 2–4 days, then the extras in order. Every slice ends demoable. "Done" means `PIVOT_SPEC.md` §2's success criteria are measured on VS Code at `cc3fec88`, plus `npx tsc --noEmit && npm run lint && npx vitest run` passing clean. **Working mode:** build-first (`PIVOT_SPEC.md` §13).
+**Goal:** ship V1.1–V1.5 by **2026-10-18**, with a slip budget of 2–4 days, then V1.6 so other people can use Nebulosity on their own repos, then the extras in the order of ADR-043 (2026-10-13): **E4 → E5 → E1**, with E3 smaller and optional and E2 waiting on a measurement. The rows below are in that order; the labels are unchanged. Every slice ends demoable. "Done" means `PIVOT_SPEC.md` §2's success criteria are measured on VS Code at `cc3fec88`, plus `npx tsc --noEmit && npm run lint && npx vitest run` passing clean. **Working mode:** build-first (`PIVOT_SPEC.md` §13).
 
 | Slice | Contents | Acceptance (spec §2) |
 |---|---|---|
 | **V1.1 Engine foundation** — DONE 2026-10-11 (see BENCHMARKS.md) | `NEBULOSITY_HOME` paths; repo config; `git ls-files` discovery; TS adapter (AST imports + class members); resolver (nearest tsconfig); batched store; `folders` + `level_edges`; `npm run index`; benchmark | S1 ≤ 60 s on VS Code; batching regression test passes |
 | **V1.2 Understanding** — DONE 2026-10-12 (see BENCHMARKS.md) | tiered summaries (Batch for the first pass, regular API on demand); summary embeddings; code and summary FTS; hybrid search with RRF; `/api/status` | S2 ≤ $15; day-1 Haiku vs Sonnet side-by-side reviewed by the owner |
 | **V1.3 Map** — DONE 2026-10-12 (see BENCHMARKS.md) | level/describe/search APIs; new Map UI (levels, 50-box cap, panel, ⌘K, status pill); live channel | S3, S4, S6 measured |
+| **V1.3.1 Visual refresh** — DONE 2026-10-13: the three-task test run, two outside critiques taken in, the owner's visual sign-off (plans: `docs/plans/2026-10-12-v1-3-1-visual-refresh.md`, `docs/plans/2026-10-12-v1-3-1-page-portals.md`; BENCHMARKS.md Map Benchmarks #2 and #3) | the refined dark theme of `VISUAL_REFRESH.md` (ADR-041): tokens, a flat canvas, larger boxes, one meaning per color, a structured panel, the top bar and an always-visible activity bar; the `describe` speed fix | S3 re-measured on the production build; the `src` panel ≤ 300 ms warm; the three-task test; the owner's visual sign-off |
 | **V1.4 MCP** | tool registry; `mcp/server.ts` (read-only DB); `claude mcp add` instructions; smoke test | S5; every tool exercised through `claude -p` |
 | **V1.5 Ship** | static export + hosted demo; eval vs Claude Code alone, and search ranking tuned against its query set (folders can't appear in the code list, so RRF under-ranks them: the "integrated terminal" miss, BENCHMARKS.md Summary Benchmark #1); README; demo-video script | S7, S8 |
+| **V1.6 Works on your repo** (ADR-043) | an installable package: one command each to index a repo, open the Map and connect Claude Code (the owner picks the name and license); a set of real repos of different shapes; Windows, macOS and Linux; **free mode**: with no API key the Map, structure, dependency tools, keyword search and `show_on_map` work, and a key adds summaries and meaning-based search; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic | S9, S10, S11 |
+| **E4 tree-sitter** — first extra (ADR-043) | `web-tree-sitter` adapters: Python first, Go if there's time | own plan |
+| **E5 Clustering** | Louvain + cluster summaries + Clusters lens; PageRank importance; a focus view of a box's links across folders (moved from V1.3.1, PIVOT_SPEC §10) | own plan |
 | **E1 Guide** | LangGraph agent per `LANGGRAPH_DESIGN.md`, using registry tools and map tools; owner picks the model at kickoff | own plan |
-| **E2 Call graph** | type-checker resolution (typed vs heuristic), call-flow view, `callers`/`callees`/`call_flow` | own plan; measure memory first |
-| **E3 Git overlays** | needs `git fetch --unshallow` (owner approval); History lens, hidden coupling, ownership | own plan |
-| **E4 tree-sitter** | `web-tree-sitter` adapters for Python + Go | own plan |
-| **E5 Clustering** | Louvain + cluster summaries + Clusters lens; PageRank importance | own plan |
+| **E3 Git overlays** — optional, smaller (ADR-043) | "often changes with…" and the first commit in the panel, from the repo's own history; the History lens and hidden-coupling lines wait. Showing it on VS Code needs `git fetch --unshallow` (owner approval) | own plan |
+| **E2 Call graph** — deferred (ADR-043) | first, half a day measuring the memory and time of type-checking VS Code; then the owner decides. If built: type-checker resolution (typed vs heuristic), call-flow view, `callers`/`callees`/`call_flow` | own plan |
 
 ---
 

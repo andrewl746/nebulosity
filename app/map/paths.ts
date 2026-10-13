@@ -14,14 +14,27 @@ export function nameOf(targetPath: string, repoRoot: string): string {
     return targetPath.slice(targetPath.lastIndexOf("/") + 1);
 }
 
+/** A path's last two segments, "src/vs/platform/files/common" → "files/common": enough to tell areas apart in a chip. */
+export function shortPath(targetPath: string): string {
+    return targetPath.split("/").slice(-2).join("/");
+}
+
+/** The language a path's extension implies, the way GET /api/source names it (the UI can't import lib's copy). */
+export function languageFor(filePath: string): string {
+    if (/\.(ts|tsx|mts|cts)$/.test(filePath)) return "typescript";
+    if (/\.(js|jsx|mjs|cjs)$/.test(filePath)) return "javascript";
+    return "text";
+}
+
 /** Whether `targetPath` is strictly inside `folder` ("" holds everything but itself). */
 export function isInside(targetPath: string, folder: string): boolean {
     return folder === "" ? targetPath !== "" : targetPath.startsWith(`${folder}/`);
 }
 
 /**
- * The box on this level that holds `targetPath`: the child on the way down to it, or "+N more" when that child is
- * folded. Null when the path isn't inside this level, or is the level itself. Live pulses and highlights use it.
+ * The box on this level that holds `targetPath`: the child on the way down to it, or, when that child is on another
+ * page, the portal standing for that page. Null when the path isn't inside this level, is the level itself, or is on a
+ * page this one has no portal to. Live pulses and highlights use it.
  */
 export function boxFor(level: Pick<LevelResponse, "path" | "nodes">, targetPath: string): string | null {
     if (!isInside(targetPath, level.path)) return null;
@@ -29,5 +42,5 @@ export function boxFor(level: Pick<LevelResponse, "path" | "nodes">, targetPath:
     const slash = below.indexOf("/");
     const child = slash === -1 ? targetPath : `${level.path === "" ? "" : `${level.path}/`}${below.slice(0, slash)}`;
     if (level.nodes.some((n) => n.path === child)) return child;
-    return level.nodes.find((n) => n.kind === "more")?.path ?? null;
+    return level.nodes.find((n) => n.kind === "portal" && n.members?.includes(child))?.path ?? null;
 }

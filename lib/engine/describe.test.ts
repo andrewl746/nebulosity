@@ -1,10 +1,11 @@
+import { sql } from "drizzle-orm";
 import { describe as group, expect, it } from "vitest";
 import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../db/client";
 import { requireRepository } from "../db/store/structure";
 import { applyTargetUpdates } from "../db/store/summaries";
-import { readIndexVersion } from "../db/store/version";
+import { bumpIndexVersion, readIndexVersion } from "../db/store/version";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
 import { runSummaries } from "../index/summarize/run";
@@ -91,6 +92,18 @@ group("describe — the fixture", () => {
         await runSummaries(root, { summarizer: stubSummarizer({ failPaths: ["src/index.ts"] }).summarizer, transport: "direct" });
         expect(describe(root, "src/index.ts")).toMatchObject({ summaryStatus: "failed", summaryError: "stub failure" });
         expect(describe(root, "src/index.ts", { summariesOff: true }).summaryError).toBeUndefined();
+    });
+
+    it("answers again from its cache until the index version moves (ADR-036, amended)", () => {
+        const root = copyFixture();
+        const { repoId } = indexRepository(root);
+        const db = getDb();
+        const first = describe(root, "src/core");
+        // a write that skips the version bump (no real writer does): the cached answer still shows
+        db.run(sql`update folders set file_count = 99 where repo_id = ${repoId} and path = 'src/core'`);
+        expect(describe(root, "src/core")).toBe(first);
+        bumpIndexVersion(db, repoId);
+        expect(describe(root, "src/core").stats.fileCount).toBe(99);
     });
 
     it("refuses a path with nothing indexed at it", () => {

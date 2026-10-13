@@ -2,8 +2,8 @@
  * npm run bench-map -- <path-to-repo>
  *
  * S3's server side and S4 (PIVOT_SPEC.md §2). It calls level() for every folder of an indexed repo, and describe() for
- * every folder and about 500 files, in this process (no HTTP), and prints p50, p95 and max for each. It also checks
- * that no level draws more than 50 boxes. It writes nothing.
+ * every folder and about 500 files, in this process (no HTTP), then a repeat of each folder from the per-version cache.
+ * It prints p50, p95 and max for each, and checks that no level or page draws more than 50 boxes. It writes nothing.
  */
 import path from "path";
 import { getDb } from "../lib/db/client";
@@ -42,18 +42,36 @@ function report(label: string, ms: readonly number[]): string {
 // the first describe() loads the import graph, once per index version: timed on its own
 const graphLoad = timed(() => describe(root, ""));
 
-// level(): one pass to warm up, then the measured pass (level() caches nothing)
+// level(): one pass to warm up, every page of a big folder included (S4 holds on each), then the measured pass
+// (level() caches nothing)
 let widest = 0;
-for (const folder of folders) widest = Math.max(widest, level(root, folder).nodes.length);
+let pagedFolders = 0;
+let pageTotal = 0;
+for (const folder of folders){
+    const first = level(root, folder);
+    widest = Math.max(widest, first.nodes.length);
+    if (first.pageCount === 1) continue;
+    pagedFolders++;
+    pageTotal += first.pageCount;
+    for (let page = 1; page < first.pageCount; page++) widest = Math.max(widest, level(root, folder, { page }).nodes.length);
+}
 const levelMs = folders.map((folder) => timed(() => level(root, folder)));
 
 // describe(): one pass each, the way a first click on each target costs (area counts are cached per path)
 const folderMs = folders.map((folder) => timed(() => describe(root, folder)));
 const fileMs = sample.map((file) => timed(() => describe(root, file)));
+// and a second click on each, right after the first: served from the answers cached for this index version (ADR-036,
+// amended in V1.3.1). A whole second sweep would measure misses: 3,793 folders overflow the cache's 2,000-answer bound.
+const cachedMs = folders.map((folder) => {
+    describe(root, folder);
+    return timed(() => describe(root, folder));
+});
 
 console.log(`[bench-map] ${root}: ${folders.length} folders, ${sample.length} of ${files.length} files`);
 console.log(`[bench-map] first describe (loads the import graph): ${graphLoad.toFixed(0)} ms`);
 console.log(`[bench-map] ${report("level", levelMs)}`);
 console.log(`[bench-map] ${report("describe, folders", folderMs)}`);
 console.log(`[bench-map] ${report("describe, files", fileMs)}`);
-console.log(`[bench-map] most boxes on any level: ${widest} (S4, at most ${MAP_BOX_CAP}: ${widest <= MAP_BOX_CAP ? "PASS" : "FAIL"})`);
+console.log(`[bench-map] ${report("describe, folders, repeated (cached)", cachedMs)}`);
+console.log(`[bench-map] paged folders: ${pagedFolders} (${pageTotal} pages in all)`);
+console.log(`[bench-map] most boxes on any level or page: ${widest} (S4, at most ${MAP_BOX_CAP}: ${widest <= MAP_BOX_CAP ? "PASS" : "FAIL"})`);

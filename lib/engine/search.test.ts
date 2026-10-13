@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { copyFixture } from "../../test/helpers/fixture";
+import fs from "fs";
+import path from "path";
+import { copyFixture, FIXTURE } from "../../test/helpers/fixture";
+import { makeTempDir } from "../../test/helpers/temp";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { indexRepository } from "../index/pipeline";
 import { runSummaries } from "../index/summarize/run";
-import { fuseRankings, search, toFtsQuery } from "./search";
+import { dropRepoName, fuseRankings, rankFolderNames, search, toFtsQuery } from "./search";
 
 /**
  * A stand-in for MiniLM where "meaning" is hand-checkable: one dimension per group of
@@ -68,19 +71,113 @@ describe("fuseRankings", () => {
         expect(fused[2].score).toBeCloseTo(1 / 61, 12);
     });
 
+    it("counts the folder-name list double: a folder named like the query outranks a file one list found", () => {
+        // name rank 1 scores 2 / 61; the code list's rank 1 scores 1 / 61
+        const fused = fuseRankings({ code: ["file:a"], name: ["folder:x"] });
+        expect(fused.map((f) => f.key)).toEqual(["folder:x", "file:a"]);
+        expect(fused[0].score).toBeCloseTo(2 / 61, 12);
+        expect(fused[1].score).toBeCloseTo(1 / 61, 12);
+    });
+
     it("breaks ties by key, so the order never depends on luck", () => {
         expect(fuseRankings({ code: ["file:y"], summary: ["file:x"] }).map((f) => f.key)).toEqual(["file:x", "file:y"]);
     });
 });
 
+describe("rankFolderNames", () => {
+    const folder = (p: string, fileCount: number) => ({ path: p, name: p.slice(p.lastIndexOf("/") + 1), fileCount });
+    const FOLDERS = [
+        folder("", 500),
+        folder("a/terminal", 10),
+        folder("b/terminal", 50),
+        folder("a/terminalContrib", 30),
+        folder("ext/terminal-suggest", 4),
+        folder("a/externalTerminal", 5),
+        folder("a/term", 3),
+        folder("a/debug", 8),
+        folder("log/debugger", 2),
+        folder("a/ui", 2),
+        folder("build", 40),
+    ];
+
+    it("ranks exact names, then names starting with the word, then names containing it, then names the word starts with", () => {
+        // exact: b/terminal (50 files) before a/terminal (10); starts with: terminalContrib (30) before terminal-suggest (4);
+        // contains: externalTerminal; the word starts with the name: term
+        expect(rankFolderNames(FOLDERS, "terminal")).toEqual([
+            "b/terminal", "a/terminal", "a/terminalContrib", "ext/terminal-suggest", "a/externalTerminal", "a/term",
+        ]);
+    });
+
+    it("ignores case, the root, common words and words that match nothing", () => {
+        expect(rankFolderNames(FOLDERS, "Where is the Terminal")).toEqual(rankFolderNames(FOLDERS, "terminal"));
+        expect(rankFolderNames(FOLDERS, "")).toEqual([]);
+        expect(rankFolderNames(FOLDERS, "zebra")).toEqual([]);
+    });
+
+    it("counts a name that differs only by an ending of up to 3 letters as exact, so the bigger folder wins", () => {
+        // "debug" + "ger" = "debugger": both a/debug (8 files) and log/debugger (2) are exact, biggest first
+        expect(rankFolderNames(FOLDERS, "debugger")).toEqual(["a/debug", "log/debugger"]);
+        // "terminal" + "s" is exact too; "term" + "inal" (4 letters) stays a weaker match
+        expect(rankFolderNames([folder("x/terminals", 1), folder("x/term", 9)], "terminal")).toEqual(["x/terminals", "x/term"]);
+    });
+
+    it("takes each folder's best match over all the words", () => {
+        // "debug" is exact for a/debug (and log/debugger); "terminal" for both terminals: the three biggest exact names
+        expect(rankFolderNames(FOLDERS, "debug terminal").slice(0, 3)).toEqual(["b/terminal", "a/terminal", "a/debug"]);
+    });
+
+    it("needs 3 letters to match inside a name, and a 4-letter name to match the start of a word", () => {
+        // "ui" is exact for a/ui but mustn't match inside "build"; "deb" starts "debug"; "ab" is too short to start "abc"
+        expect(rankFolderNames(FOLDERS, "ui")).toEqual(["a/ui"]);
+        // too short for the ending rule (under 4 letters): "deb" starts both names, a plain prefix match
+        expect(rankFolderNames(FOLDERS, "deb")).toEqual(["a/debug", "log/debugger"]);
+        expect(rankFolderNames([folder("x/ab", 1)], "abc")).toEqual([]);
+    });
+});
+
+describe("dropRepoName (owner's three-task test: 'vscode terminal' found an extension's terminal)", () => {
+    it("drops the repo's own name when other words remain: every file is in the repo, so it says nothing", () => {
+        expect(dropRepoName("vscode terminal", "vscode")).toBe("terminal");
+        expect(dropRepoName("VSCode API", "vscode")).toBe("API");
+    });
+
+    it("keeps the query as it is when nothing meaningful would be left", () => {
+        expect(dropRepoName("vscode", "vscode")).toBe("vscode");
+        expect(dropRepoName("where is vscode", "vscode")).toBe("where is vscode");
+    });
+
+    it("only drops the whole word, so a name like vscode-dts stays", () => {
+        expect(dropRepoName("vscode-dts types", "vscode")).toBe("vscode-dts types");
+        expect(dropRepoName("terminal", "vscode")).toBe("terminal");
+    });
+});
+
 describe("search", () => {
+    it("searches without the repo's own name, and answers with the query as typed", async () => {
+        // the fixture copied into a repo folder named "app": left in, the word would also find the src/app folder
+        const root = path.join(makeTempDir("neb-named-"), "app");
+        fs.cpSync(FIXTURE, root, { recursive: true });
+        indexRepository(root);
+        const plain = await search(root, "core", { embed: neverEmbed });
+        const named = await search(root, "app core", { embed: neverEmbed });
+        expect(named.hits).toEqual(plain.hits);
+        expect(named.hits.some((h) => h.path === "src/app")).toBe(false);
+        expect(named.query).toBe("app core");
+    });
+
+    it("finds a folder by its name, before any summary exists", async () => {
+        const result = await search(indexedFixture(), "core", { embed: neverEmbed });
+        expect(result.hits.find((h) => h.path === "src/core")).toEqual({ path: "src/core", kind: "folder", score: 2 / 61, matchedBy: ["name"] });
+        expect(result.lists.name).toBe(1);
+    });
+
     it("finds a declaration by name with code keywords alone, before any summary exists", async () => {
         const result = await search(indexedFixture(), "shout", { embed: neverEmbed });
         expect(result.hits[0]).toEqual({
             path: "src/util/strings.ts", kind: "file", score: 1 / 61, matchedBy: ["code"],
             code: { symbol: "shout", startLine: 3, endLine: 6, snippet: expect.stringContaining("shout") },
         });
-        expect(result.lists).toEqual({ code: 3, summary: 0, vector: 0 });
+        expect(result.lists).toEqual({ code: 3, summary: 0, vector: 0, name: 0 });
         expect(result.note).toBe("Summaries aren't ready yet, so results come from code keywords only.");
     });
 
@@ -97,7 +194,7 @@ describe("search", () => {
             path: "src/app/view.tsx", kind: "file", score: 1 / 61, matchedBy: ["vector"],
             tagline: "Draws the app view", summary: "Renders the View component.",
         }]);
-        expect(result.lists).toEqual({ code: 0, summary: 0, vector: 1 });
+        expect(result.lists).toEqual({ code: 0, summary: 0, vector: 1, name: 0 });
     });
 
     it("never throws on FTS5 syntax in the query", async () => {
