@@ -1,6 +1,6 @@
 # VISUAL_REFRESH.md — Refining the Map's dark theme for readability (slice V1.3.1)
 
-**Status:** Approved by the owner, 2026-10-12. **Implemented 2026-10-12, awaiting the owner's visual sign-off** (measured in BENCHMARKS.md, Map Benchmark #2; screenshots in `docs/screenshots/v1-3-1/`). This is the target the V1.3.1 build matches. Decision records: ADR-041, and ADR-042 for the owner-review additions.
+**Status:** Approved by the owner, 2026-10-12. **Implemented 2026-10-12, polished through 2026-10-13 and signed off by the owner on 2026-10-13** (measured in BENCHMARKS.md, Map Benchmarks #2 and #3; screenshots in `docs/screenshots/v1-3-1/`). This is the target the V1.3.1 build matches. Decision records: ADR-041, and ADR-042 for the owner-review additions.
 **Replaces:** the V1.3 look: starfield, purple haze, glowing edges, tiny monospace boxes. An earlier same-day draft of this doc proposed a light theme; it was dropped before implementation.
 **Scope:** presentation and interaction on the existing Map. The engine, the APIs (apart from the describe speed fix in §8), data, the 50-box cap and the level model are unchanged. *(Amended in the build: the owner's review added pages of related boxes with portals, which changed the level model and the contract to v3, and a source endpoint. See the amendments below.)*
 
@@ -22,7 +22,7 @@
 - **Content first (§2–§5), 2026-10-13,** from the owner's review of an outside critique ("the chrome outshouts the content"): brighter boxes (`--surface` `#22193F`, `--border` `#4B3B85`), a stronger selected fill, a faint dot grid on the canvas (`--grid`), selection lines at 1.5 px instead of 2, quiet controls, a summary's lead that really is its first sentence, "folders and files" instead of "boxes", and a tighter layout (56 px boxes, layers 64 apart, 8 a row on canvases 1,700 px and wider), which fits VS Code's busy levels 10–35% larger.
 - **A readable opening size (§4), 2026-10-13:** every level opens at 75% or larger (names at least 11 px); a busy one opens from its top, and the fit button still shows it whole. Measured: every VS Code level checked opens at 0.75–1.0 on 1907 × 998 and 1440 × 900 screens. The owner chose to leave the details panel covering the Map's right edge as it is: moving the Map when the panel opens would be more confusing.
 - **A second outside critique (§4), 2026-10-13:** the owner ran the Map past another critique and picked from options rendered on the real Map. A level too big to fit now opens as wide as the canvas allows instead of at the 75% floor. The big page arrows at the canvas's sides are gone: the page pill's buttons, now 36 px, are the one way to turn the page with the mouse. Doorways read "Lines to page 2", unfilled, instead of "Page 2". The boxes with no line on the page sit under a divider, "Not linked to anything on this page" (§4).
-- **Still owed:** the owner's sign-off.
+- **Signed off** by the owner, 2026-10-13.
 
 ## 1. Principle
 
