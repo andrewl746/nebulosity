@@ -139,7 +139,7 @@ It's actionable and structured, not a static card. From top to bottom:
 - **Help:** a "?" button beside the status, the `?` key, and the first visit in a browser open "How to use the Map". It covers getting around, reading the Map, what each color means, the panel, Claude Code's activity and the keyboard.
 - **The status** is a bordered button with a chevron, so it reads as the menu it opens.
 - **Source:** a file's panel offers "View source", a read-only drawer over the canvas with line numbers. A declaration in the panel opens it at that declaration's lines, highlighted (API_CONTRACTS.md §16).
-- **Pages and Back:** a big folder is drawn a page at a time, 44 boxes that import each other, with big solid arrows at the canvas's sides, a page pill in the canvas's top-right corner ("‹ Page 2 of 5 · 44 of 182 boxes ›"), or the arrow keys. Lines to boxes on other pages end at **portals**, dashed doorway boxes in `--text-2` with an arrow toward their page ("Page 2", "44 boxes · 6 links"; past 6 linked pages, one "+N pages" box with a stack icon). Double-clicking a portal turns to its page, and its panel lists the boxes on this page linked to it. The address bar holds the folder and page, so the browser's Back returns to the previous one (ADR-042).
+- **Pages and Back:** a big folder is drawn a page at a time, 44 boxes that import each other, with big solid arrows at the canvas's sides, a page pill in the canvas's top-right corner ("‹ Page 2 of 5 · 44 of 182 folders and files ›"), or the arrow keys. Lines to boxes on other pages end at **portals**, dashed doorway boxes in `--text-2` with an arrow toward their page ("Page 2", "44 folders and files · 6 links"; past 6 linked pages, one "+N pages" box with a stack icon). Double-clicking a portal turns to its page, and its panel lists the boxes on this page linked to it. The address bar holds the folder and page, so the browser's Back returns to the previous one (ADR-042).
 - **Keys stay put under a dialog:** while the source viewer or the help is open, Backspace, the arrows and ? leave the Map alone, and Escape closes just the dialog.
 - **Feel:** everything clickable shows the hand and answers the hover, the search field shows the text cursor, and scrollbars are thin and in the theme's colors.
 
@@ -178,7 +178,7 @@ Opening the panel for a large folder (`src`) took about 5 s in V1.3. Profile `de
   - The legend says "A → B: A uses B. The arrow points at what's being used." (A first try added rows for "arrows out: what it depends on" and "arrows in: what uses it"; the owner found them abstract.)
   - Arrowheads went from 18 to 26 px.
   - The panel's headings are 15 px, with "What this box uses: its arrows point to these" under Depends on and "What uses this box: their arrows point here" under Used by.
-  - A page pill in the canvas's top-right corner ("‹ Page 1 of 3 · 44 of 112 boxes ›") replaces the top bar's note, and the side arrows are solid light buttons. (A first try put a 15 px bar at the bottom of the canvas; the owner found it loud and, in the boxes' colour, camouflaged.)
+  - A page pill in the canvas's top-right corner ("‹ Page 1 of 3 · 44 of 112 folders and files ›") replaces the top bar's note, and the side arrows are solid light buttons. (A first try put a 15 px bar at the bottom of the canvas; the owner found it loud and, in the boxes' colour, camouflaged.)
   - The repo's name goes to the top level (its ▾ switches repos).
   - Hovering a box shows its one-line summary.
   - Search drops the repo's own name when other words remain.

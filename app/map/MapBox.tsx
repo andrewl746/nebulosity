@@ -16,7 +16,7 @@ export type BoxData = {
     agent: boolean;
     /** Changes when a tool call touches this box: the pulse ring remounts and plays again. */
     pulseKey: number;
-    /** Portals only: which way the doorway leads, and "44 boxes · 6 links" for under its name (portals.ts). */
+    /** Portals only: which way the doorway leads, and "44 folders and files · 6 links" for under its name (portals.ts). */
     portal?: { direction: "previous" | "next" | "many"; caption: string };
 };
 

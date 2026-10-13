@@ -66,7 +66,7 @@ type MapCanvasProps = {
 function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines }: MapCanvasProps){
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
-    // each portal's arrow and "44 boxes · 6 links", worked out once per level rather than on every hover
+    // each portal's arrow and "44 folders and files · 6 links", worked out once per level rather than on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
         n.path,
         { direction: portalDirection(n, level.page), caption: portalCaption(n, portalLinks(level.edges, n.path)) },

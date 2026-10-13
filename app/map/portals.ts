@@ -19,9 +19,9 @@ export function portalLinks(edges: readonly MapEdge[], portalPath: string): numb
 
 const plural = (n: number, one: string, many: string): string => `${formatCount(n)} ${n === 1 ? one : many}`;
 
-/** Under a doorway's name: "44 boxes · 6 links". */
+/** Under a doorway's name: "44 folders and files · 6 links" (the owner's wording; "boxes" read as jargon). */
 export function portalCaption(box: Pick<MapNode, "hiddenCount">, links: number): string {
-    return `${plural(box.hiddenCount ?? 0, "box", "boxes")} · ${plural(links, "link", "links")}`;
+    return `${plural(box.hiddenCount ?? 0, "folder or file", "folders and files")} · ${plural(links, "link", "links")}`;
 }
 
 /**
@@ -40,8 +40,8 @@ export function linkedFrom(level: Pick<LevelResponse, "nodes" | "edges">, portal
         .sort((a, b) => b.count - a.count || (order.get(a.path) ?? 0) - (order.get(b.path) ?? 0));
 }
 
-/** "Page 2 of 5 · 44 of 182 boxes": which page of a big folder is on screen. Portals aren't the folder's boxes. */
+/** "Page 2 of 5 · 44 of 182 folders and files": which page of a big folder is on screen. Portals aren't counted. */
 export function pageNote(level: Pick<LevelResponse, "nodes" | "hiddenCount" | "page" | "pageCount">): string {
     const drawn = level.nodes.filter((n) => n.kind !== "portal").length;
-    return `Page ${level.page + 1} of ${level.pageCount} · ${formatCount(drawn)} of ${formatCount(drawn + level.hiddenCount)} boxes`;
+    return `Page ${level.page + 1} of ${level.pageCount} · ${formatCount(drawn)} of ${formatCount(drawn + level.hiddenCount)} folders and files`;
 }

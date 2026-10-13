@@ -390,7 +390,7 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
             </button>
         );
     };
-    // "Page 2 of 5 · 44 of 182 boxes": the page in the text color, the box count quieter
+    // "Page 2 of 5 · 44 of 182 folders and files": the page in the text color, the count quieter
     const [pagePart, ...rest] = pageNote(level).split(" · ");
     return (
         <div
