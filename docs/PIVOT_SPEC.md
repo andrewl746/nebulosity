@@ -4,6 +4,7 @@
 **Date:** 2026-10-11
 **Supersedes:** `VISUALIZATION_DESIGN.md` §1–4 (radial layout, tier plan, and the "Tier XL is a product boundary" decision), ADR-014/015 (native scanner), and roadmap Phases 6 and S. Every other doc stays valid except where its banner points here (§16).
 **Scope:** v1 in full detail; extras E1–E5 at design level. Each extra gets its own implementation plan when it starts.
+**Amended 2026-10-13 (ADR-043):** other people should be able to use Nebulosity on their own repos. v1 gains a slice, V1.6 "Works on your repo", with a free mode that needs no API key (§2, §12), and the extras run E4 → E5 → E1, with E3 smaller and optional and E2 waiting on a measurement (§10).
 
 ---
 
@@ -38,11 +39,11 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 
 ## 2. Goals, non-goals, success criteria
 
-**v1 goals.** G1: index any local TypeScript/JavaScript repo at VS Code scale. G2: the Map UI. G3: the MCP server. G4: a hosted static demo of VS Code's map. G5: an evaluation against Claude Code alone. G6: ship (public repo, README, demo video).
+**v1 goals.** G1: index any local TypeScript/JavaScript repo at VS Code scale. G2: the Map UI. G3: the MCP server. G4: a hosted static demo of VS Code's map. G5: an evaluation against Claude Code alone. G6: ship (public repo, README, demo video). G7 *(added 2026-10-13, ADR-043)*: people install it and use it on their own repos, with or without an Anthropic API key (slice V1.6).
 
 **Non-goals.** Editing code. Replacing Claude Code. Multi-user, SaaS or paid tiers (CLAUDE.md's non-goals stand). Non-TS/JS languages before E4. The native C++ scanner (dropped, ADR-025).
 
-**Success criteria.** v1 is done when every row holds, measured on VS Code at `cc3fec88`:
+**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names:
 
 | # | Criterion | Threshold |
 |---|---|---|
@@ -54,6 +55,9 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
 | S7 | Evaluation run and published, losses included | done |
 | S8 | Public repo, README, video, live demo link | done |
+| S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux |
+| S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo |
+| S11 | Free mode (V1.6): no API key | the Map, structure and stats, `dependents`/`dependencies`/`path`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed |
 
 ---
 
@@ -319,6 +323,8 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 ## 10. Extras, in order (design level; each gets its own plan)
 
+**The order since 2026-10-13 (ADR-043): E4 → E5 → E1,** after V1.6. E4 decides who can use Nebulosity at all (Python first, Go if there's time). E5 suits the big repos Nebulosity is for. E1 serves the owner's learning goal more than users, since Claude Code with the MCP tools already drives the Map. E3 shrinks and is optional, and E2 waits on a measurement (both below). The sections keep their labels so references elsewhere still hold.
+
 **E1 — The Guide (LangGraph).**
 - Orchestration follows `LANGGRAPH_DESIGN.md`, which is still valid: state, ReAct loop, `MemorySaver`, the SSE event translation, and `/api/chat` per `API_CONTRACTS.md` §5.
 - Tools are the registry plus UI tools: `focus`, `highlight`, `set_lens`, `open_call_flow`.
@@ -328,10 +334,10 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 **E2 — Call graph.**
 - The TypeScript type checker (`ts.createProgram` per tsconfig project) resolves call expressions to declarations. That includes dependency-injected services, resolved from interface types to their `implements` classes, labeled `typed`. A name-based heuristic is the fallback, labeled `heuristic`.
-- **Measure first:** type-checking all of VS Code may take several GB. The fallbacks are per-project programs or heuristic only.
+- **Measure first:** type-checking all of VS Code may take several GB. The fallbacks are per-project programs or heuristic only. *(Since ADR-043, E2 is deferred: half a day measuring memory and time comes first, then the owner decides whether to build it.)*
 - Tools: `callers`, `callees`, `call_flow`. UI: a call-flow view (callers ← function → callees, one hop at a time, expandable, ≤ 50 boxes).
 
-**E3 — Git-history overlays.**
+**E3 — Git-history overlays.** *(Optional and smaller since ADR-043: the panel gains "often changes with…" and the first commit, from the repo's own history; the History lens and the dashed coupling lines wait. Users' repos usually have full history, so the unshallow fetch is needed only to show it on VS Code.)*
 - Needs full history (`git fetch --unshallow`, about 1.5 GB). The owner approves that at kickoff.
 - One pass of `git log --numstat` fills `file_history` and `co_changes`, skipping commits that touch more than 50 files and requiring a minimum co-change support of 5.
 - The History lens colors boxes by churn percentile. Hidden coupling (co-change without an import) appears as dashed edges. The panel shows owners and the first commit ("why does this exist").
@@ -339,7 +345,7 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 **E4 — tree-sitter.**
 - `web-tree-sitter` (WASM, which avoids the Windows native-build pain cited in ADR-004) plugs in behind the language adapter interface.
-- Python and Go come first, with per-language query files for definitions, imports and calls, and per-language import resolution.
+- Python first, then Go if there's time (ADR-043), with per-language query files for definitions, imports and calls, and per-language import resolution.
 - TypeScript stays on the compiler API for precision.
 
 **E5 — Clustering.**
@@ -382,8 +388,9 @@ Each v1 slice ends demoable:
 | V1.3 Map | level/describe/search APIs, new Map UI (levels, panel, ⌘K, status pill), live channel |
 | V1.4 MCP | tool registry, `mcp/server.ts`, `claude mcp add` instructions, smoke test |
 | V1.5 Ship | static export + hosted demo, eval, README, demo-video script |
+| V1.6 Works on your repo (ADR-043) | an installable package (index, Map and Claude Code setup, one command each); a set of real repos of different shapes; Windows, macOS and Linux; free mode with no API key; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic |
 
-**Target:** v1 by **2026-10-18** (end of reading week), with a slip budget of 2–4 days. The extras follow in order E1 → E5 over about 1–2 weeks, and each one updates the live demo and README. Context: Shopify applications open around late October or early November 2026.
+**Target:** V1.1–V1.5 by **2026-10-18** (end of reading week), with a slip budget of 2–4 days; V1.6 adds about 3–4 days. The extras follow in the order of ADR-043, E4 → E5 → E1 at about 2–4 days each, then E3 (small, optional) and E2 (after its measurement); each one updates the live demo and README. Context: Shopify applications open around late October or early November 2026. *(Until 2026-10-13 the extras ran E1 → E5 in about 1–2 weeks.)*
 
 ---
 
@@ -409,12 +416,16 @@ Each v1 slice ends demoable:
 | Target repo inside the project dir would be swept into `tsc` | target repos live outside the Nebulosity checkout (VS Code is at `../vscode`) |
 | Public-repo hygiene | `CLAUDE.md` is gitignored (verified) and never published. The Phase 2–4 provenance story *does* appear in tracked docs (`IMPLEMENTATION_ROADMAP.md`, `RAG_IMPLEMENTATION_REVIEW.md`, `BUGS_ENCOUNTERED.md`), so the owner reviews `docs/` before release |
 | API cost creep | `inputHash` caching, test files and test-only folders templated, input caps, lazy folder refresh |
+| Other people's repos aren't shaped like VS Code (monorepos, plain JavaScript, path aliases), or run on macOS and Linux (ADR-043) | V1.6 indexes a set of real repos of different shapes, on all three systems (S9, S10) |
+| Claude Code subscribers have no API key | free mode: everything that needs no model works without one (S11) |
+| Claude Code and its rivals get better at big repos | the eval says where Nebulosity still helps, losses included; the Map has no Claude Code equivalent |
+| Users bring issues and support | it comes out of the owner's time; the README says who it's for, so the scope stays narrow |
 
 ---
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, and ADR-041 and ADR-042 during V1.3.1:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13:
 
 | ADR | Decision |
 |---|---|
@@ -437,6 +448,7 @@ Each v1 slice ends demoable:
 | ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2, 3 since V1.3.1's portals); the version names the API and migrations carry the data |
 | ADR-041 | The Map's dark theme refined for readability (V1.3.1, `VISUAL_REFRESH.md`) |
 | ADR-042 | The owner's review of V1.3.1: routed lines, pages of related boxes with portals, Back, a source viewer, help, the violet-slate theme |
+| ADR-043 | Shipped for other people's repos: slice V1.6 with a free mode (no API key), and the extras reordered E4 → E5 → E1, with E3 smaller and optional and E2 behind a measurement |
 
 ## 16. Doc migration
 
