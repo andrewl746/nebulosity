@@ -639,3 +639,16 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 **Alternatives:** (a) Files only: an agent asking about an area would have to list its files first. (b) Path order within a distance: a cut list of a hub's thousands of importers would show `build/` and `extensions/` first, whatever matters. (c) No paging and a larger cap: Claude Code moves results of 50,000 characters or more to a file, and a complete list is the point of the tool.
 **Consequences:** On VS Code the rows add about 1.4 MB beside the graph, built once per version, and a search over 139,580 imports takes milliseconds (MCP Benchmark #1). Totals are exact for the index, which is as current as the background worker keeps it.
 **Revisit when:** agents ask for a subset (the dependents under one folder): add an `under` filter rather than a bigger page.
+
+## ADR-046 — An MCP call answers about the repo Claude Code is in, else the Map's repo (2026-10-13)
+
+**Context:** Claude Code starts the MCP server once per session, in whatever project the user opened, and sets `CLAUDE_PROJECT_DIR` to that project's root for the servers it starts. The index can hold several repos; the Map shows one, the config's `activeRepo` (PIVOT_SPEC.md §7.1). Live events carry paths but no repo (API_CONTRACTS.md §14), so an event about one repo lights boxes with the same paths in another.
+**Decision:**
+- Each call reads the indexed repos and the config afresh. It answers about the repo holding the project folder (`CLAUDE_PROJECT_DIR`, else the working folder), the deepest when indexed repos nest. Folders compare by forward-slash spelling without a trailing slash, and case-insensitively on Windows.
+- Otherwise it answers about the Map's repo, and the answer's first line says so, naming both folders. Otherwise it's an error: nothing indexed yet.
+- Live events go to the config's port, read per call, and only when the answering repo is the Map's. `show_on_map` says when the Map shows another repo.
+- Free mode is the stored summaries stage: `off` means no key (ADR-043), so the server never loads `.env.local` or holds the key.
+- An index update in progress or failed is noted after every answer.
+**Alternatives:** (a) Always the Map's repo: Claude Code opened in another indexed repo would get answers about the wrong one, with nothing said. (b) A `repo` argument on every tool: more for the model to get wrong. (c) A repo fixed per registration (`-e`): one registration per repo. (d) A `repo` field on live events, with the Map ignoring others': a contract change for a case this rule already prevents.
+**Consequences:** One user-scope registration serves every indexed repo, and `npm run index` or the Map's repo menu take effect without restarting Claude Code. Each call pays a few small reads (well under a millisecond).
+**Revisit when:** someone runs two Maps on different ports, or wants the Map to follow Claude Code's repo by itself.

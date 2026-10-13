@@ -241,6 +241,8 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 
 **Safety.** Every tool is read-only. Paths are validated against the repo root (today's `safePath`, generalized). The MCP server listens on nothing (stdio), and the live endpoint accepts only localhost.
 
+**Which repo** *(V1.4, ADR-046)*: each call answers about the indexed repo holding Claude Code's project folder (`CLAUDE_PROJECT_DIR`), else the Map's repo, which the answer's first line then names.
+
 ---
 
 ## 7. The Map UI
@@ -304,7 +306,7 @@ type LiveEvent = { tool: string; paths: string[]; at: string };
 
 ## 8. The live channel
 
-An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` with `{ tool, paths, at }`, a 200 ms timeout, and errors ignored. If the Map isn't running, nothing happens. The server fans the event out over SSE to open Map tabs. `show_on_map` reuses the `UIAction` contract (ADR-008): `highlight_nodes`, `focus_node`, `clear_highlights`. The port comes from config.
+An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` with `{ tool, paths, at }`, a 200 ms timeout, and errors ignored. If the Map isn't running, nothing happens. The server fans the event out over SSE to open Map tabs. `show_on_map` reuses the `UIAction` contract (ADR-008): `highlight_nodes`, `focus_node`, `clear_highlights`. The port comes from config. *(V1.4, ADR-046: the port is read per call, and events go out only for the repo the Map shows; `NEBULOSITY_LIVE=off` stops them.)*
 
 ---
 
@@ -453,6 +455,7 @@ Each v1 slice ends demoable:
 | ADR-043 | Shipped for other people's repos: slice V1.6 with a free mode (no API key), and the extras reordered E4 → E5 → E1, with E3 smaller and optional and E2 behind a measurement |
 | ADR-044 | The MCP server opens the database read-only: no pragmas, no migrations, a check that the file is current, recovery once something is indexed |
 | ADR-045 | Import reach: files and folders, exact totals, nearest and most-imported first, paged with an offset; chains in either direction |
+| ADR-046 | An MCP call answers about the indexed repo holding Claude Code's project folder, else the Map's repo (said first); live events only for the Map's repo; free mode from the stored stage |
 
 ## 16. Doc migration
 
