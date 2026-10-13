@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundsOf, initialViewport, MIN_READABLE_ZOOM } from "./viewport";
+import { boundsOf, initialViewport, MIN_READABLE_ZOOM, SIDE_ROOM } from "./viewport";
 
 // a 1907 × 998 window's canvas, less the top bar, the breadcrumb bar and the activity bar
 const CANVAS = { width: 1907, height: 878 };
@@ -31,10 +31,29 @@ describe("initialViewport (owner: open every level at a readable size)", () => {
         expect(view.y).toBeCloseTo(439 - 450 * (878 / 1035), 10);
     });
 
-    it("opens a level too big to read whole at the readable floor, from its top, centred across", () => {
-        // 1000 × 2000 would fit at 878 / 2300 ≈ 0.38: names at 15 × 0.38 ≈ 5.7 px. It opens at 0.75 instead, its top
-        // 64 px under the canvas's top edge, clear of the page pill: y = 64 - 0 × 0.75 = 64; x centres the bounds
-        expect(initialViewport({ x: -500, y: 0, width: 1000, height: 2000 }, CANVAS)).toEqual({ x: 953.5, y: 64, zoom: MIN_READABLE_ZOOM });
+    it("opens a level too big to read whole as wide as the canvas allows, from its top, centred across", () => {
+        // VS Code's contrib, page 2, on a 1907 px screen: 2,136 wide, here 1,500 tall. Whole, it would fit at
+        // min(1907 / 2456.4, 878 / 1725) ≈ 0.51. Instead it fills the width less 72 px each side:
+        // (1907 - 144) / 2136 = 1763 / 2136 ≈ 0.825, the owner's pick (sheet 1, B); its top 64 px under the canvas's
+        // top edge, clear of the page pill: y = 64 - 0 × zoom = 64; the bounds are centred on x = 0, so x = 953.5
+        const view = initialViewport({ x: -1068, y: 0, width: 2136, height: 1500 }, CANVAS);
+        expect(view.zoom).toBeCloseTo(1763 / 2136, 10);
+        expect(view.x).toBeCloseTo(953.5, 10);
+        expect(view.y).toBe(64);
+    });
+
+    it("opens a tall, narrow level at 100%, not larger", () => {
+        // 1000 × 2000: (1907 - 144) / 1000 ≈ 1.76, capped at 1; x = 953.5 - 0 × 1, y = 64 - 0 × 1
+        expect(initialViewport({ x: -500, y: 0, width: 1000, height: 2000 }, CANVAS)).toEqual({ x: 953.5, y: 64, zoom: 1 });
+    });
+
+    it("never opens a level smaller than the readable floor, even one wider than the canvas", () => {
+        // 2600 × 2000: (1907 - 144) / 2600 ≈ 0.68, raised to 0.75; the sides then run off the canvas, as before
+        expect(initialViewport({ x: -1300, y: 0, width: 2600, height: 2000 }, CANVAS)).toEqual({ x: 953.5, y: 64, zoom: MIN_READABLE_ZOOM });
+    });
+
+    it("leaves 72 px of room each side of a level that fills the width", () => {
+        expect(SIDE_ROOM).toBe(72);
     });
 
     it("keeps names at 11 px or more: the floor is 0.75, and 15 px names × 0.75 = 11.25 px", () => {
