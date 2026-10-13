@@ -19,7 +19,7 @@
 - **The speed fix (§8):** the 5 s `src` panel didn't reproduce (30–141 ms, BENCHMARKS.md Map Benchmark #2); answers are now cached per index version, and the panel says "Refreshing…" while an on-demand summary is on its way.
 - **The three-task test (§9), run 2026-10-13,** and what it changed: the line sentences, the arrows' wording and size, the page bar, the solid page arrows, the repo name going home, hover summaries, and search without the repo's name.
 - **Night violet + cyan (§2), 2026-10-13:** the owner found the violet-slate surfaces grey and monotone once the overlays took the logo's colours, and picked option C of four whole-screen renders: the logo's night violet for every surface, its violet for the overlays, and its cyan as the one color for things you click.
-- **Content first (§2–§5), 2026-10-13,** from the owner's review of an outside critique ("the chrome outshouts the content"): brighter boxes (`--surface` `#22193F`, `--border` `#4B3B85`), a stronger selected fill, a faint dot grid on the canvas (`--grid`), selection lines at 1.5 px instead of 2, quiet controls, code names in the panel without a chip behind each, a summary's lead that really is its first sentence, "folders and files" instead of "boxes", and a tighter layout (56 px boxes, layers 64 apart, 8 a row on canvases 1,700 px and wider), which fits VS Code's busy levels 10–35% larger.
+- **Content first (§2–§5), 2026-10-13,** from the owner's review of an outside critique ("the chrome outshouts the content"): brighter boxes (`--surface` `#22193F`, `--border` `#4B3B85`), a stronger selected fill, a faint dot grid on the canvas (`--grid`), selection lines at 1.5 px instead of 2, quiet controls, a summary's lead that really is its first sentence, "folders and files" instead of "boxes", and a tighter layout (56 px boxes, layers 64 apart, 8 a row on canvases 1,700 px and wider), which fits VS Code's busy levels 10–35% larger.
 - **Still owed:** the owner's sign-off.
 
 ## 1. Principle
@@ -115,7 +115,7 @@ It's actionable and structured, not a static card. From top to bottom:
 5. **Key relationships:** "Depends on" and "Used by" as clickable chips. Clicking one focuses that box on the Map.
 6. **Contents:** a list of child folders and files with their counts, plus "View all". Clicking a child folder goes into it; clicking a file selects it.
 
-**Markdown in summaries:** backtick identifiers render as inline code (monospace in `--code` lavender; the chip behind each was dropped on 2026-10-13 as noisy), never as literal backticks. The lead is the tagline plus the first sentence, even when the next sentence starts with code. Body text is 14–15 px sans with a 1.5 line height, not monospace.
+**Markdown in summaries:** backtick identifiers render as inline code (monospace in `--code` lavender on a `--code-bg` chip; the chips were dropped for a few hours on 2026-10-13 and the owner asked for them back), never as literal backticks. The lead is the tagline plus the first sentence, even when the next sentence starts with code. Every expander folds back: "Read full summary" ↔ "Show less", "View all" and "+N more" ↔ "Show fewer". Body text is 14–15 px sans with a 1.5 line height, not monospace.
 
 ## 6. Top bar and activity
 

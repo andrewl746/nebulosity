@@ -325,7 +325,7 @@ function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOp
 
 type SummaryProps = Pick<DetailsProps, "data" | "fresh" | "refreshing" | "summaryError" | "onRetry">;
 
-/** The tagline and the first sentence; "Read full summary" shows the rest. Identifiers in backticks render as code. */
+/** The tagline and the first sentence; "Read full summary" shows the rest and "Show less" folds it back. */
 function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProps){
     const [expanded, setExpanded] = useState(false);
     // a "summarize now" answer is newer than the description it was asked from
@@ -340,9 +340,15 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
                 : <p className="text-text-2">{summaryError?.code === "NOT_READY" ? "Waiting for what's inside to be summarized first." : placeholderFor(shown.summaryStatus)}</p>}
             {lead && <p className="mt-2 text-text-body"><Rich text={lead} /></p>}
             {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2 text-text-body"><Rich text={paragraph} /></p>)}
-            {rest && !expanded && (
-                <button type="button" onClick={() => setExpanded(true)} className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text">
-                    Read full summary
+            {/* it folds back, so a long summary doesn't push the rest of the panel away for good (owner review) */}
+            {rest && (
+                <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => setExpanded((open) => !open)}
+                    className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text"
+                >
+                    {expanded ? "Show less" : "Read full summary"}
                 </button>
             )}
             <div className="mt-2 space-y-1 text-[13px] text-text-2">
@@ -362,14 +368,14 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
 }
 
 /**
- * Prose with its `identifiers` as inline code (VISUAL_REFRESH.md §5): the code font and lavender, without the filled
- * chip, which made a summary with many names noisy (an outside critique the owner agreed with).
+ * Prose with its `identifiers` as inline code (VISUAL_REFRESH.md §5): the code font and lavender on a chip. The chips
+ * were dropped once for an outside critique ("noisy"), and the owner asked for them back: they make names easy to spot.
  */
 function Rich({ text }: { text: string }){
     return (
         <>
             {inlineCode(text).map((part, i) => part.code
-                ? <code key={i} className="font-mono text-[13px] text-code">{part.text}</code>
+                ? <code key={i} className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">{part.text}</code>
                 : <span key={i}>{part.text}</span>)}
         </>
     );
@@ -388,7 +394,7 @@ function SectionTitle({ title, count, note, large = false }: { title: string; co
 
 type ChipsProps = { title: string; note: string; items: readonly AreaCount[]; empty: string; onFocus: (targetPath: string) => void };
 
-/** "Depends on" / "Used by" as chips (§5): each focuses that area on the Map. The first 8, then "+N more". */
+/** "Depends on" / "Used by" as chips (§5): each focuses that area on the Map. The first 8, "+N more", then "Show fewer". */
 function Chips({ title, note, items, empty, onFocus }: ChipsProps){
     const [all, setAll] = useState(false);
     const shown = all ? items : items.slice(0, PREVIEW);
@@ -413,10 +419,15 @@ function Chips({ title, note, items, empty, onFocus }: ChipsProps){
                                 </button>
                             </li>
                         ))}
-                        {!all && items.length > PREVIEW && (
+                        {items.length > PREVIEW && (
                             <li>
-                                <button type="button" onClick={() => setAll(true)} className="rounded-md border border-dashed border-border px-2 py-1 text-[13px] text-text-2 hover:text-text">
-                                    +{formatCount(items.length - PREVIEW)} more
+                                <button
+                                    type="button"
+                                    aria-expanded={all}
+                                    onClick={() => setAll((open) => !open)}
+                                    className="rounded-md border border-dashed border-border px-2 py-1 text-[13px] text-text-2 hover:text-text"
+                                >
+                                    {all ? "Show fewer" : `+${formatCount(items.length - PREVIEW)} more`}
                                 </button>
                             </li>
                         )}
@@ -454,7 +465,7 @@ type RowsProps<T> = {
     empty?: string;
 };
 
-/** A titled list: the first 8, then "View all" shows the rest. */
+/** A titled list: the first 8, then "View all" shows the rest and "Show fewer" folds it back. */
 function Rows<T>({ title, items, render, empty }: RowsProps<T>){
     const [all, setAll] = useState(false);
     if (items.length === 0 && empty === undefined) return null;
@@ -465,9 +476,14 @@ function Rows<T>({ title, items, render, empty }: RowsProps<T>){
             {items.length === 0
                 ? <p className="text-[13px] text-text-2">{empty}</p>
                 : <ul className="-mx-2">{(all ? items : items.slice(0, PREVIEW)).map(render)}</ul>}
-            {!all && items.length > PREVIEW && (
-                <button type="button" onClick={() => setAll(true)} className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text">
-                    View all {formatCount(items.length)}
+            {items.length > PREVIEW && (
+                <button
+                    type="button"
+                    aria-expanded={all}
+                    onClick={() => setAll((open) => !open)}
+                    className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text"
+                >
+                    {all ? "Show fewer" : `View all ${formatCount(items.length)}`}
                 </button>
             )}
         </section>
