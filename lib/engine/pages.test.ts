@@ -60,8 +60,11 @@ describe("assignPages", () => {
         expect(assignPages(X, X_EDGES, 44)).toEqual([["x/a", "x/b", "x/c", "x/d", "x/e", "x/f"]]);
     });
 
-    it("assigns 780 children with 2,000 lines in under 50 ms", () => {
-        // a seeded generator (mulberry32), so the timing case is the same on every run
+    it("assigns 780 children with 2,000 lines without blowing up: well under half a second", () => {
+        // A guard against a slower algorithm, not a stopwatch: alone this takes 5–7 ms (2026-10-13), but the whole suite
+        // runs files in parallel, and a 50 ms bound failed now and then on a busy machine (deferred minor). A step that
+        // went quadratic in the lines on 780 × 2,000 would take seconds, so 500 ms still catches it.
+        // A seeded generator (mulberry32), so the case is the same on every run.
         let seed = 42;
         const random = (): number => {
             seed = (seed + 0x6D2B79F5) | 0;
@@ -82,7 +85,7 @@ describe("assignPages", () => {
 
         expect(pages).toHaveLength(Math.ceil(780 / 44));
         expect(pages.flat().sort()).toEqual(children.map((c) => c.path));
-        expect(elapsed).toBeLessThan(50);
+        expect(elapsed).toBeLessThan(500);
     });
 });
 
