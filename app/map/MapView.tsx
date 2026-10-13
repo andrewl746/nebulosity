@@ -308,7 +308,7 @@ function MapScreen(){
                     <>
                         {page > 0 && <PageArrow side="left" page={page} pageCount={pageCount} onTurn={turnPage} />}
                         {page < pageCount - 1 && <PageArrow side="right" page={page} pageCount={pageCount} onTurn={turnPage} panelOpen={selected !== null} />}
-                        <PageBar level={level} onTurn={turnPage} panelOpen={selected !== null} />
+                        <PagePill level={level} onTurn={turnPage} panelOpen={selected !== null} />
                     </>
                 )}
                 {!level && !levelError && <p className="absolute inset-0 grid place-items-center text-[13px] text-text-2">Loading the map…</p>}
@@ -367,10 +367,12 @@ function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArr
 }
 
 /**
- * Which page of a big folder is on screen, in big type at the bottom of the canvas, with buttons either side (the
- * three-task test: the small note in the top bar went unseen). It stays centred on the canvas when the panel opens.
+ * Which page of a big folder is on screen, in the canvas's top-right corner with a button either side. The three-task
+ * test found the top bar's note went unseen; a bar at the bottom of the canvas then read as loud and, in the boxes'
+ * colour, blended in (owner review). Like the other overlays it's darker than the boxes, with a light border, and it
+ * moves left of the panel when the panel opens.
  */
-function PageBar({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (page: number) => void; panelOpen: boolean }){
+function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (page: number) => void; panelOpen: boolean }){
     const step = (side: "left" | "right") => {
         const next = side === "left" ? level.page - 1 : level.page + 1;
         const Icon = side === "left" ? IconChevronLeft : IconChevronRight;
@@ -381,19 +383,25 @@ function PageBar({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (
                 disabled={off}
                 onClick={() => onTurn(next)}
                 aria-label={`${side === "left" ? "Previous" : "Next"} page`}
-                className="grid h-8 w-8 place-items-center rounded-full text-text hover:bg-border disabled:text-border disabled:hover:bg-transparent"
+                className="grid h-7 w-7 place-items-center rounded-md text-text hover:bg-border disabled:text-border disabled:hover:bg-transparent"
             >
-                <Icon aria-hidden size={18} stroke={2} />
+                <Icon aria-hidden size={16} stroke={2} />
             </button>
         );
     };
+    // "Page 2 of 5 · 44 of 182 boxes": the page in the text color, the box count quieter
+    const [pagePart, ...rest] = pageNote(level).split(" · ");
     return (
-        <div style={{ right: panelOpen ? PANEL_WIDTH : 0 }} className="pointer-events-none absolute bottom-4 left-0 z-[7] flex justify-center">
-            <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-surface px-2 py-1">
-                {step("left")}
-                <span data-testid="page-note" className="text-[15px] text-text">{pageNote(level)}</span>
-                {step("right")}
-            </div>
+        <div
+            style={{ right: (panelOpen ? PANEL_WIDTH : 0) + 16 }}
+            className="absolute top-4 z-[7] flex items-center gap-1 rounded-lg border border-text-2 bg-panel p-1"
+        >
+            {step("left")}
+            <span data-testid="page-note" className="px-1 text-[13px] text-text">
+                {pagePart}
+                {rest.length > 0 && <span className="text-text-2"> · {rest.join(" · ")}</span>}
+            </span>
+            {step("right")}
         </div>
     );
 }

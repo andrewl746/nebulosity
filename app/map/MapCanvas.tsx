@@ -191,7 +191,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 showInteractive={false}
                 fitViewOptions={FIT}
                 style={selected !== null ? { right: PANEL_WIDTH } : undefined}
-                className="overflow-hidden rounded-lg border border-border"
+                className="overflow-hidden rounded-lg border border-text-2"
             >
                 <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
                     <IconFocusCentered aria-hidden size={16} stroke={1.75} />

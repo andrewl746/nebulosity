@@ -114,7 +114,8 @@ body {
   --xy-edge-stroke: var(--neutral-edge);
   --xy-edge-label-background-color: var(--surface);
   --xy-edge-label-color: var(--text);
-  --xy-controls-button-background-color: var(--surface);
+  /* the zoom controls are an overlay: darker than the boxes, like the legend and the page pill (owner review) */
+  --xy-controls-button-background-color: var(--panel);
   --xy-controls-button-background-color-hover: var(--border);
   --xy-controls-button-color: var(--text-2);
   --xy-controls-button-color-hover: var(--text);
