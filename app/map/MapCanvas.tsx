@@ -82,6 +82,16 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
+    // A hover belongs to the level it happened on. Going into a folder unmounts the old boxes before their mouseleave
+    // fires, so the hover outlived the level, and coming back (a cached level, the same object as before) lit that box
+    // up with nothing under the pointer (deferred minor). So it's cleared whenever another level is drawn: React's way
+    // to reset state when a prop changes, during render rather than in an effect, so no frame shows the stale hover.
+    const [drawnLevel, setDrawnLevel] = useState(level);
+    if (drawnLevel !== level){
+        setDrawnLevel(level);
+        setHoveredBox(null);
+        setHoveredEdge(null);
+    }
     const emphasis = useMemo(
         () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines }),
         [level, selected, hoveredBox, quietLines],
