@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
-import { linkedFrom, pageNote, portalCaption, portalDirection, portalLinks } from "./portals";
+import { linkedFrom, pageNote, portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 
 const box = (p: string): MapNode => ({ path: p, name: p.slice(p.lastIndexOf("/") + 1), kind: "file", fileCount: 1, summaryStatus: "fresh" });
 const portal = (p: string, fields: Partial<MapNode>): MapNode => ({ path: p, name: p, kind: "portal", fileCount: 1, summaryStatus: "skipped", ...fields });
@@ -23,6 +23,13 @@ describe("portals", () => {
         expect(portalDirection(BACK, 1)).toBe("previous");
         expect(portalDirection(portal("x//page-4", { page: 3 }), 1)).toBe("next");
         expect(portalDirection(ONWARD, 1)).toBe("many");
+    });
+
+    it("names a doorway by where its lines go: one page counted from 1, or how many more pages (owner pick, sheet 3 B)", () => {
+        expect(portalTitle(BACK)).toBe("Lines to page 1");                 // page 0 is page 1 to people
+        expect(portalTitle(portal("x//page-10", { page: 9 }))).toBe("Lines to page 10");
+        expect(portalTitle(ONWARD)).toBe("Lines to 3 more pages");         // pages 3, 4 and 5
+        expect(portalTitle(portal("x//pages", { pages: [6] }))).toBe("Lines to 1 more page");
     });
 
     it("counts the imports on a doorway's lines, both ways", () => {

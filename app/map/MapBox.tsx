@@ -16,8 +16,8 @@ export type BoxData = {
     agent: boolean;
     /** Changes when a tool call touches this box: the pulse ring remounts and plays again. */
     pulseKey: number;
-    /** Portals only: which way the doorway leads, and "44 folders and files · 6 links" for under its name (portals.ts). */
-    portal?: { direction: "previous" | "next" | "many"; caption: string };
+    /** Portals only: which way the doorway leads, "Lines to page 2", and "44 folders and files · 6 links" under it (portals.ts). */
+    portal?: { direction: "previous" | "next" | "many"; title: string; caption: string };
 };
 
 export type BoxNode = Node<BoxData, "box">;
@@ -34,28 +34,31 @@ const TONES: Record<BoxTone, string> = {
     faded: "border border-border bg-surface px-3 opacity-60",
 };
 
-/** A portal, a doorway to another page, is dashed, its border a step brighter than a box's so it reads as a way out. */
+/**
+ * A portal, a doorway to another page, is dashed and unfilled, the dot grid showing through, its border a step brighter
+ * than a box's so it reads as a way out rather than a folder (owner pick, 2026-10-13). Selected, it fills like any box.
+ */
 const PORTAL_TONES: Record<BoxTone, string> = {
-    normal: "border border-dashed border-text-2 bg-surface px-3",
-    linked: "border border-dashed border-text-2 bg-surface px-3",
-    preview: "border border-dashed border-text bg-surface px-3",
+    normal: "border border-dashed border-text-2 bg-transparent px-3",
+    linked: "border border-dashed border-text-2 bg-transparent px-3",
+    preview: "border border-dashed border-text bg-transparent px-3",
     selected: "border-2 border-dashed border-select bg-select-fill px-[11px]",
-    faded: "border border-dashed border-text-2 bg-surface px-3 opacity-60",
+    faded: "border border-dashed border-text-2 bg-transparent px-3 opacity-60",
 };
 
 const PORTAL_ICONS = { previous: IconArrowLeft, next: IconArrowRight, many: IconStack2 } as const;
 
 /**
  * One box on the Map (VISUAL_REFRESH.md §4): an outline icon, the name, and for folders how many files they hold.
- * Summaries live in the panel, not here. A portal, the doorway to another page of a big folder, is dashed, with an
- * arrow toward its page (a stack for several) and how many boxes and links are behind it; double-clicking it turns
- * to that page.
+ * Summaries live in the panel, not here. A portal, the doorway to another page of a big folder, is dashed and unfilled,
+ * titled by where its lines go ("Lines to page 2"), with an arrow toward its page (a stack for several) and how many
+ * boxes and links are behind it; double-clicking it turns to that page.
  */
 function MapBox({ data }: NodeProps<BoxNode>){
     const { box, tone, agent, pulseKey, portal } = data;
     const Icon = portal ? PORTAL_ICONS[portal.direction] : box.kind === "folder" ? IconFolder : IconFile;
     const title = portal
-        ? `${box.name}: ${portal.caption}. ${portal.direction === "many" ? "Select it to pick a page." : "Double-click to go there."}`
+        ? `${portal.title}: ${portal.caption}. ${portal.direction === "many" ? "Select it to pick a page." : "Double-click to go there."}`
         : boxTitle(box);
 
     return (
@@ -68,7 +71,7 @@ function MapBox({ data }: NodeProps<BoxNode>){
             {pulseKey > 0 && <span key={pulseKey} aria-hidden className="neb-pulse pointer-events-none absolute inset-0 rounded-lg" />}
             <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${box.kind === "folder" ? "text-folder" : "text-text-2"}`} />
             <div className="min-w-0">
-                <div className="truncate text-[15px] font-medium leading-5 text-text">{box.name}</div>
+                <div className="truncate text-[15px] font-medium leading-5 text-text">{portal ? portal.title : box.name}</div>
                 {portal && <div className="truncate text-[12px] leading-4 text-text-2">{portal.caption}</div>}
                 {box.kind === "folder" && (
                     <div className="text-[12px] leading-4 text-text-2">{formatCount(box.fileCount)} {box.fileCount === 1 ? "file" : "files"}</div>

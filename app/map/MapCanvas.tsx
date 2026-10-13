@@ -15,7 +15,7 @@ import { lineLabel } from "./labels";
 import Legend from "./Legend";
 import { FIT_PADDING, layoutLevel, perRowFor } from "./levelLayout";
 import MapBox, { type BoxData, type BoxNode } from "./MapBox";
-import { portalCaption, portalDirection, portalLinks } from "./portals";
+import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { routeEdges } from "./routes";
@@ -73,10 +73,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const perRow = useStore((s) => perRowFor(s.width));
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
-    // each portal's arrow and "44 folders and files · 6 links", worked out once per level rather than on every hover
+    // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 links", worked out once per level, not on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
         n.path,
-        { direction: portalDirection(n, level.page), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
+        { direction: portalDirection(n, level.page), title: portalTitle(n), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
     ])), [level]);
     const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);

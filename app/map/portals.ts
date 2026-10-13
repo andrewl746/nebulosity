@@ -19,6 +19,15 @@ export function portalLinks(edges: readonly MapEdge[], portalPath: string): numb
 
 const plural = (n: number, one: string, many: string): string => `${formatCount(n)} ${n === 1 ? one : many}`;
 
+/**
+ * A doorway's title: where its lines go, "Lines to page 2" or "Lines to 3 more pages". The server names it "Page 2", the
+ * same words as the page pill, which a critique found confusing on a box (owner pick, 2026-10-13).
+ */
+export function portalTitle(box: Pick<MapNode, "page" | "pages">): string {
+    if (box.page !== undefined) return `Lines to page ${box.page + 1}`;
+    return `Lines to ${plural(box.pages?.length ?? 0, "more page", "more pages")}`;
+}
+
 /** Under a doorway's name: "44 folders and files · 6 links" (the owner's wording; "boxes" read as jargon). */
 export function portalCaption(box: Pick<MapNode, "hiddenCount">, links: number): string {
     return `${plural(box.hiddenCount ?? 0, "folder or file", "folders and files")} · ${plural(links, "link", "links")}`;
