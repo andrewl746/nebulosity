@@ -33,6 +33,11 @@ export type MapReadOptions = {
     summariesOff?: boolean;
 };
 
+export type LevelOptions = MapReadOptions & {
+    /** Which page of a big folder to draw, from 0; past the last, the last (V1.3.1, owner review). */
+    page?: number;
+};
+
 /**
  * The status the UI shows for one summary row, or for none. Text on show keeps its stored status (fresh, stale,
  * skipped, or failed with older text still shown). With no text, it's "off" when summaries can't run; otherwise it's
@@ -92,14 +97,25 @@ export function loadMapChildren(db: Db, repoId: number, folderPath: string, summ
 }
 
 /**
- * Folds the overflow (PIVOT_SPEC.md §7). With more than `cap` children, the first cap − 1 stay as boxes and the rest
- * become one "+N more" box, so exactly `cap` boxes are drawn. The children come in the Map's order, largest first.
+ * Folds the overflow (PIVOT_SPEC.md §7), a page at a time. With more than `cap` children, a page draws cap − 1 of
+ * them and folds every other child into one "+N more" box, so at most `cap` boxes are drawn (S4). Page 0 is the
+ * first cap − 1 children (the largest, since they come in the Map's order), page 1 the next cap − 1, and so on; the
+ * owner asked to see the folded boxes on the Map too, not only listed in the panel (V1.3.1). A page past the last is
+ * the last. A folder that fits has one page.
  */
-export function foldNodes(children: readonly MapNode[], levelPath: string, cap: number = MAP_BOX_CAP): { nodes: MapNode[]; hidden: Set<string> } {
-    if (children.length <= cap) return { nodes: [...children], hidden: new Set() };
+export function foldNodes(
+    children: readonly MapNode[],
+    levelPath: string,
+    cap: number = MAP_BOX_CAP,
+    page: number = 0,
+): { nodes: MapNode[]; hidden: Set<string>; page: number; pageCount: number } {
+    if (children.length <= cap) return { nodes: [...children], hidden: new Set(), page: 0, pageCount: 1 };
 
-    const shown = children.slice(0, cap - 1);
-    const folded = children.slice(cap - 1);
+    const perPage = cap - 1;
+    const pageCount = Math.ceil(children.length / perPage);
+    const at = Math.min(Math.max(0, Math.floor(page)), pageCount - 1);
+    const shown = children.slice(at * perPage, (at + 1) * perPage);
+    const folded = [...children.slice(0, at * perPage), ...children.slice((at + 1) * perPage)];
     const more: MapNode = {
         path: moreNodePath(levelPath),
         name: `+${folded.length} more`,
@@ -108,7 +124,7 @@ export function foldNodes(children: readonly MapNode[], levelPath: string, cap: 
         summaryStatus: "skipped",
         hiddenCount: folded.length,
     };
-    return { nodes: [...shown, more], hidden: new Set(folded.map((n) => n.path)) };
+    return { nodes: [...shown, more], hidden: new Set(folded.map((n) => n.path)), page: at, pageCount };
 }
 
 /**
@@ -132,8 +148,11 @@ export function foldEdges(edges: readonly MapEdge[], hidden: ReadonlySet<string>
     return [...merged.values()].sort((a, b) => compare(a.source, b.source) || compare(a.target, b.target));
 }
 
-/** GET /api/level (API_CONTRACTS.md §11): one folder of the Map, its boxes folded to the cap, and the lines between them. */
-export function level(repoRoot: string, folderPath: string, options: MapReadOptions = {}): LevelResponse {
+/**
+ * GET /api/level (API_CONTRACTS.md §11): one folder of the Map, its boxes folded to the cap a page at a time, and the
+ * lines between them.
+ */
+export function level(repoRoot: string, folderPath: string, options: LevelOptions = {}): LevelResponse {
     const db = getDb();
     const repo = repoKey(path.resolve(repoRoot));
     const repoId = requireRepository(db, repo);
@@ -145,7 +164,9 @@ export function level(repoRoot: string, folderPath: string, options: MapReadOpti
             throw new PathNotFoundError(folderPath);
         }
 
-        const { nodes, hidden } = foldNodes(loadMapChildren(db, repoId, folderPath, options.summariesOff ?? false), folderPath);
+        const { nodes, hidden, page, pageCount } = foldNodes(
+            loadMapChildren(db, repoId, folderPath, options.summariesOff ?? false), folderPath, MAP_BOX_CAP, options.page ?? 0,
+        );
         return {
             repo,
             path: folderPath,
@@ -153,6 +174,8 @@ export function level(repoRoot: string, folderPath: string, options: MapReadOpti
             nodes,
             edges: foldEdges(loadLevelEdgeRows(db, repoId, folderPath), hidden, moreNodePath(folderPath)),
             hiddenCount: hidden.size,
+            page,
+            pageCount,
             indexVersion: readIndexVersion(db, repoId),
         };
     });

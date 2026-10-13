@@ -36,7 +36,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** Paths go in query strings percent-encoded, so spaces, #, %, + and non-ASCII names survive the trip. */
-export const levelUrl = (folderPath: string): string => `/api/level?path=${encodeURIComponent(folderPath)}`;
+export const levelUrl = (folderPath: string, page: number = 0): string =>
+    `/api/level?path=${encodeURIComponent(folderPath)}${page > 0 ? `&page=${page}` : ""}`;
 export const describeUrl = (targetPath: string): string => `/api/describe?path=${encodeURIComponent(targetPath)}`;
 
 export type SseFrame = { event: string; data: string };
@@ -80,7 +81,7 @@ export async function readSseStream(body: ReadableStream<Uint8Array>, onFrame: (
 }
 
 export const api = {
-    level: (folderPath: string, signal?: AbortSignal) => request<LevelResponse>(levelUrl(folderPath), { signal }),
+    level: (folderPath: string, page: number = 0, signal?: AbortSignal) => request<LevelResponse>(levelUrl(folderPath, page), { signal }),
     describe: (targetPath: string, signal?: AbortSignal) => request<DescribeResponse>(describeUrl(targetPath), { signal }),
     search: (query: string, limit: number, signal?: AbortSignal) =>
         request<SearchResult>(`/api/search?q=${encodeURIComponent(query)}&limit=${limit}`, { signal }),

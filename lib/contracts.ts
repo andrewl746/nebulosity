@@ -90,6 +90,9 @@ export type LevelResponse = {
   edges: MapEdge[];
   /** How many children "+N more" stands for (0 when everything fits). */
   hiddenCount: number;
+  /** Which page of the folder's boxes this is, from 0, and how many there are (1 when everything fits). Added in V1.3.1. */
+  page: number;
+  pageCount: number;
   /** Moves whenever anything the Map shows changes: refetch when it does. */
   indexVersion: number;
 };

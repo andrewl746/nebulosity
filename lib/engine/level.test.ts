@@ -77,6 +77,13 @@ describe("level — the fixture", () => {
         const { repoId } = indexRepository(root);
         expect(level(root, "").indexVersion).toBe(readIndexVersion(getDb(), repoId));
     });
+
+    it("says which page it drew: the fixture's levels fit on one, so any page asked for is page 0 of 1", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        expect(level(root, "")).toMatchObject({ page: 0, pageCount: 1 });
+        expect(level(root, "src", { page: 2 })).toMatchObject({ page: 0, pageCount: 1 });
+    });
 });
 
 describe("foldNodes", () => {
@@ -103,6 +110,27 @@ describe("foldNodes", () => {
         const { nodes } = foldNodes(files(780), "big");
         expect(nodes).toHaveLength(50);
         expect(nodes[49]).toMatchObject({ name: "+731 more", fileCount: 731, hiddenCount: 731 });
+    });
+
+    it("pages through a big folder 49 boxes at a time, everything else folded into '+N more' (owner review)", () => {
+        // 120 files make ceil(120 / 49) = 3 pages: f000–f048, f049–f097, f098–f119
+        const second = foldNodes(files(120), "big", 50, 1);
+        expect([second.page, second.pageCount]).toEqual([1, 3]);
+        expect(second.nodes).toHaveLength(50);
+        expect([second.nodes[0].path, second.nodes[48].path]).toEqual(["big/f049.ts", "big/f097.ts"]);
+        // the other two pages' 49 + 22 = 71 boxes are the '+N more' box
+        expect(second.nodes[49]).toEqual({ path: "big/", name: "+71 more", kind: "more", fileCount: 71, summaryStatus: "skipped", hiddenCount: 71 });
+        expect(second.hidden.has("big/f000.ts") && second.hidden.has("big/f119.ts") && !second.hidden.has("big/f049.ts")).toBe(true);
+
+        const last = foldNodes(files(120), "big", 50, 2);
+        expect(last.nodes).toHaveLength(23);
+        expect([last.nodes[0].path, last.nodes[21].path, last.nodes[22].name]).toEqual(["big/f098.ts", "big/f119.ts", "+98 more"]);
+    });
+
+    it("clamps a page past the end to the last, and a folder that fits has one page", () => {
+        expect(foldNodes(files(120), "big", 50, 7).page).toBe(2);
+        expect(foldNodes(files(50), "big", 50, 3)).toMatchObject({ page: 0, pageCount: 1 });
+        expect(foldNodes(files(51), "big").pageCount).toBe(2);
     });
 
     it("adds up the files of folded folders, and calls the root's '+N more' box '/'", () => {

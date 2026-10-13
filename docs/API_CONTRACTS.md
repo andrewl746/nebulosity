@@ -157,9 +157,9 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.
 
-## 11. GET /api/level?path= (slice V1.3)
+## 11. GET /api/level?path=&page= (slice V1.3; pages added in V1.3.1)
 
-One folder of the Map (`lib/engine/level.ts`). `path` is repo-relative; empty or missing means the repo root.
+One folder of the Map (`lib/engine/level.ts`). `path` is repo-relative; empty or missing means the repo root. `page` is a whole number from 0 (missing means 0).
 
 ```ts
 type SummaryStatus = "fresh" | "stale" | "pending" | "failed" | "skipped" | "off";
@@ -167,18 +167,19 @@ type MapNode = { path: string; name: string; kind: "folder" | "file" | "more"; f
   tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number };
 type MapEdge = { source: string; target: string; count: number };
 type LevelResponse = { repo: string; path: string; breadcrumb: string[]; nodes: MapNode[]; edges: MapEdge[];
-  hiddenCount: number; indexVersion: number };
+  hiddenCount: number; page: number; pageCount: number; indexVersion: number };
 ```
 
 - **Boxes** are the folder's subfolders and the files directly inside it, largest first. A file counts as 1; among equals the more-imported file comes first, then the path decides.
 - **The cap.** With more than 50 children, the first 49 are drawn and the rest fold into one `kind: "more"` box named `+N more`. Its `path` is the level's path plus `/` (`/` at the root), which no stored path can be. Its `fileCount` adds up the folded boxes', `hiddenCount` is N, and its `summaryStatus` is `skipped`, since it has no summary of its own. So `nodes` never holds more than 50 (S4).
+- **Pages** *(V1.3.1, owner review: the folded boxes get drawn too)*. A folder with more than 50 children has `pageCount = ceil(children / 49)` pages. Page `p` draws children `49p … 49p + 48` in the Map's order, and every other child folds into the `+N more` box. A `page` past the last is the last, and the answer's `page` says which one was drawn. A folder that fits has `page: 0, pageCount: 1`. The fields are additive, so `CONTRACTS_VERSION` stays 2.
 - **Lines** are the level's rows of `level_edges` (PIVOT_SPEC.md §4.2): each import is counted once, at the deepest folder holding both files. A folded end points at the `+N more` box, lines that then join the same two boxes are added up, and lines between two folded children are dropped.
 - **`summaryStatus`** is the stored status when the box has text. Without text it's `off` when there's no `ANTHROPIC_API_KEY`, otherwise the stored status, or `pending` when no row exists yet.
 - **`breadcrumb`** lists the folder paths from the root down to `path`.
 - **`indexVersion`** moves whenever anything the Map shows changes (ADR-036). A client caches levels per version and refetches when `GET /api/status` reports a new one.
 
 **Errors:**
-- `400 BAD_REQUEST`: a path that could leave the repo (`..`, absolute, a drive letter), or a file's path (the Map opens folders).
+- `400 BAD_REQUEST`: a path that could leave the repo (`..`, absolute, a drive letter), a file's path (the Map opens folders), or a `page` that isn't a whole number.
 - `404 NOT_FOUND`: nothing indexed at `path`.
 - `404 INDEX_EMPTY`: no active repo yet.
 

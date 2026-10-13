@@ -118,7 +118,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
     // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
     // level's boxes: fitting sooner frames the previous level's, which is what a level from the cache got. The same
     // level refetched after the index moved keeps its key, so the user's pan and zoom stay put.
-    const levelKey = `${level.repo}\n${level.path}`;
+    const levelKey = `${level.repo}\n${level.path}\n${level.page}`;
     const fittedKey = useRef<string | null>(null);
     useEffect(() => {
         if (fittedKey.current === levelKey) return;
