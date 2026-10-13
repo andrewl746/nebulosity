@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inlineCode, splitSummary } from "./text";
+import { inlineCode, MAX_COLORED_CHARS, splitSummary, tooLargeToColor } from "./text";
 
 const plain = (text: string) => ({ text, code: false });
 const code = (text: string) => ({ text, code: true });
@@ -50,5 +50,14 @@ describe("splitSummary (§5: about two lines, then 'Read full summary')", () => 
         expect(splitSummary("One `a` two ` three. Four.")).toEqual({ lead: "One `a` two ` three.", rest: "Four." });
         // an empty pair is text too (inlineCode keeps it literal)
         expect(splitSummary("Quotes `` here. Next.")).toEqual({ lead: "Quotes `` here.", rest: "Next." });
+    });
+});
+
+describe("tooLargeToColor (deferred minor: coloring a 1 MB file blocked for ~350 ms)", () => {
+    it("colors up to 200,000 characters and leaves anything longer plain", () => {
+        expect(MAX_COLORED_CHARS).toBe(200_000);
+        expect(tooLargeToColor("x".repeat(200_000))).toBe(false);
+        expect(tooLargeToColor("x".repeat(200_001))).toBe(true);
+        expect(tooLargeToColor("")).toBe(false);
     });
 });

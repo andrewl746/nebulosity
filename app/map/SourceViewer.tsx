@@ -7,6 +7,7 @@ import type { SourceResponse } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount } from "./format";
 import { nameOf } from "./paths";
+import { tooLargeToColor } from "./text";
 
 /** Each line's height in px: the gutter, the code and the highlighted range all use it, so they line up. */
 const LINE_HEIGHT = 20;
@@ -85,6 +86,7 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[12px] text-text-2">
                             {source && <span>{formatCount(count)} {count === 1 ? "line" : "lines"}</span>}
                             {source?.truncated && <span>Only the first 1 MB is shown.</span>}
+                            {source && tooLargeToColor(text) && <span data-testid="source-plain">Shown without colors: too large to color quickly.</span>}
                             {lines && <span>Lines {lines.start}–{lines.end} highlighted</span>}
                             {editorLink && (
                                 <a href={editorLink} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
