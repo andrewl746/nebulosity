@@ -116,8 +116,8 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                                         ? <IconFolder aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-folder" />
                                         : <IconFile aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-text-2" />}
                                     <span className="min-w-0 flex-1">
-                                        <span className="block truncate font-mono text-[13px] text-text">{hit.path}</span>
-                                        {hit.tagline && <span className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
+                                        <span title={hit.path} className="block truncate font-mono text-[13px] text-text">{hit.path}</span>
+                                        {hit.tagline && <span title={hit.tagline} className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
                                         {hit.code && (
                                             <span className="block truncate font-mono text-[12px] text-text-2">
                                                 {hit.code.symbol} · lines {hit.code.startLine}–{hit.code.endLine}:{" "}

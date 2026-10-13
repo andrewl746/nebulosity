@@ -12,8 +12,8 @@ export default function Breadcrumb({ repo, trail, onOpen }: BreadcrumbProps){
                 <span key={step || "(root)"} className="flex min-w-0 items-center gap-1">
                     {i > 0 && <span aria-hidden>/</span>}
                     {i === trail.length - 1
-                        ? <span aria-current="page" className="truncate px-1 font-medium text-text">{nameOf(step, repo)}</span>
-                        : <button type="button" onClick={() => onOpen(step)} className="truncate rounded-md px-1 hover:bg-surface hover:text-text">{nameOf(step, repo)}</button>}
+                        ? <span aria-current="page" title={step || nameOf(step, repo)} className="truncate px-1 font-medium text-text">{nameOf(step, repo)}</span>
+                        : <button type="button" onClick={() => onOpen(step)} title={step || nameOf(step, repo)} className="truncate rounded-md px-1 hover:bg-surface hover:text-text">{nameOf(step, repo)}</button>}
                 </span>
             ))}
         </nav>

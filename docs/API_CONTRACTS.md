@@ -251,7 +251,7 @@ type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction 
   - **Localhost only.** The `Host` header must be `localhost`, `127.0.0.1` or `[::1]` (any port), and an `Origin`, if present, must be the Map's own page: the same host and port as the `Host` header. Anything else gets `403 FORBIDDEN`, including a page served from another local port.
   - A body that isn't a live event gets `400 BAD_REQUEST`.
   - At most 20 events a second are passed on; the rest are dropped.
-- **`GET /api/live/stream`** is Server-Sent Events: `ready` (`{}`) once, then `tool` (a `LiveEvent`) per call, and a `: keep-alive` comment every 15 s. It's a GET, so the browser's `EventSource` reads it directly.
+- **`GET /api/live/stream`** is Server-Sent Events: `ready` (`{}`) once, then `tool` (a `LiveEvent`) per call, and a `: keep-alive` comment every 15 s. It's a GET, so the browser's `EventSource` reads it directly. The Map closes its stream when the page is put away (`pagehide`) and opens a new one when it comes back from the back/forward cache (`pageshow`), so a page frozen for Back holds none of the browser's 6 connections to the server (ADR-039, amended).
 - **`postLiveEvent`** (`lib/live/client.ts`) is the poster. It sends one POST to `http://127.0.0.1:<port>/api/live` with a 200 ms timeout and ignores every failure, since no Map being open is the normal case. `port` comes from `.nebulosity/config.json` (default 3000). V1.4's MCP tools call it, and `npm run live -- <tool> [path …] [--highlight | --focus | --clear]` sends one by hand.
 
 ## 15. GET /api/repos, POST /api/repos (slice V1.3)
@@ -265,7 +265,7 @@ type RepoList = { active: string | null; repos: RepoSummary[] };
 ```
 
 - **`GET`** lists the repos the structure stage has indexed, by root, and the active one.
-- **`remote`** (added in V1.3.1; optional, so `CONTRACTS_VERSION` stays 2) is the origin remote's owner and name, read from `<root>/.git/config` (`lib/engine/git-remote.ts`), so the top bar can say `microsoft / vscode` (VISUAL_REFRESH.md §6). The owner is everything before the last path segment, so a nested GitLab group stays whole. It's left out when there's no origin, when the url is a local path, or when `.git` is a file (a worktree or submodule), and the top bar then shows `name`.
+- **`remote`** (added in V1.3.1; optional, so `CONTRACTS_VERSION` stays 2) is the origin remote's owner and name, read from `<root>/.git/config` (`lib/engine/git-remote.ts`), so the top bar can say `microsoft / vscode` (VISUAL_REFRESH.md §6). The owner is everything before the last path segment, so a nested GitLab group stays whole; Azure DevOps's `_git` and `v3` markers are left out (`dev.azure.com/org/project/_git/repo` is `org/project` / `repo`), and scp-style urls may omit the user (`github.com:owner/repo`). A worktree's or submodule's `.git` pointer file is followed to the config that holds its remotes (since 2026-10-13). It's left out when there's no origin, when the url is a local path, or when the pointer leads nowhere, and the top bar then shows `name`.
 - **`POST { root }`** makes an indexed repo the active one (`activeRepo` in `.nebulosity/config.json`) and points the background worker at it. It answers with the new `RepoList`. Localhost only. A root that was never indexed gets `404 NOT_FOUND`.
 
 ## 16. GET /api/source?path= (slice V1.3.1)
@@ -277,7 +277,7 @@ type SourceResponse = { repo: string; path: string; content: string; lineCount: 
 ```
 
 - **Only indexed files.** The path must be a file the structure stage indexed. So the route can't read anything else in the repo (a `.env`, a key, `.git/config`), and a path that resolves outside the repo through a symlink is refused too.
-- **`content`** is the file's bytes as UTF-8, up to 1 MB (about 25,000 lines of TypeScript). Past that it stops, and `truncated` is `true`. Line endings are left as stored; the viewer shows them as plain line breaks.
+- **`content`** is the file's bytes as UTF-8, up to 1 MB (about 25,000 lines of TypeScript). Past that it stops, and `truncated` is `true`. Only the first 1 MB is read, and the cut never splits a character: it backs off to the start of one that would straddle it (2026-10-13). Line endings are left as stored; the viewer shows them as plain line breaks.
 - **`lineCount`** counts the lines in `content` the way an editor does: a final line break doesn't start another line.
 - **`language`** is `typescript`, `javascript` or `text`, by extension, for highlighting.
 - Like every `/api` route, it answers only requests addressed to this machine (ADR-039). It reads and never writes.

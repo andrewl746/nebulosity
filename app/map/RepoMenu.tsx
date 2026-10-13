@@ -10,9 +10,10 @@ type RepoMenuProps = { repo: string; onSwitched: () => void; /** Go to the repo'
 
 /** A repo as the top bar names it: "owner / repo" from its origin, or its folder name (VISUAL_REFRESH.md §6). */
 function RepoName({ entry, fallback }: { entry: RepoSummary | undefined; fallback: string }){
-    if (!entry?.remote) return <span className="truncate text-[15px] font-medium text-text">{fallback}</span>;
+    if (!entry?.remote) return <span title={fallback} className="truncate text-[15px] font-medium text-text">{fallback}</span>;
+    // either half can be cut off on a narrow screen, so the whole name is the hover title
     return (
-        <span className="flex min-w-0 items-baseline gap-1 text-[15px]">
+        <span title={`${entry.remote.owner} / ${entry.remote.name}`} className="flex min-w-0 items-baseline gap-1 text-[15px]">
             <span className="truncate text-text-2">{entry.remote.owner}</span>
             <span aria-hidden className="text-text-2">/</span>
             <span className="truncate font-medium text-text">{entry.remote.name}</span>
@@ -70,7 +71,7 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                         <li key={r.root}>
                             <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-border">
                                 <span className={r.root === repo ? "font-medium text-text" : "text-text"}>{r.remote ? `${r.remote.owner} / ${r.remote.name}` : r.name}</span>
-                                <span className="block truncate font-mono text-[12px] text-text-2">{r.root}</span>
+                                <span title={r.root} className="block truncate font-mono text-[12px] text-text-2">{r.root}</span>
                             </button>
                         </li>
                     ))}

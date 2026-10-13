@@ -1,7 +1,8 @@
-import { Position, type NodeHandle } from "@xyflow/react";
+import { Position, type EdgeMarker, type NodeHandle } from "@xyflow/react";
 import type { MapNode } from "@/lib/contracts";
 import { BOX_HEIGHT, BOX_WIDTH, type Position as Point } from "./levelLayout";
 import type { BoxData, BoxNode } from "./MapBox";
+import type { RoutedEdgeType } from "./RoutedEdge";
 
 /**
  * Where a box's lines attach: a 1 px point in the middle of its top edge (lines arrive) and of its bottom edge (lines
@@ -32,4 +33,39 @@ export function toBoxNode(box: MapNode, position: Point, data: BoxData): BoxNode
         connectable: false,
         data,
     };
+}
+
+/**
+ * The next list of boxes or lines, keeping the previous object for each one that would draw the same (`same`), and the
+ * previous list itself when nothing changed. A hover changes two or three boxes, but the canvas rebuilt every box and
+ * line object on each one, so React Flow and React redrew them all (deferred minor; on src/vs/platform with all 441
+ * lines shown a hover took ~47 ms to paint). React Flow keeps its work for a node whose object is the one it had.
+ */
+export function reuseUnchanged<T extends { id: string }>(previous: readonly T[], next: readonly T[], same: (a: T, b: T) => boolean): T[] {
+    const before = new Map(previous.map((item) => [item.id, item]));
+    let unchanged = previous.length === next.length;
+    const out = next.map((item, i) => {
+        const old = before.get(item.id);
+        if (old !== undefined && same(old, item)){
+            if (previous[i] !== old) unchanged = false;
+            return old;
+        }
+        unchanged = false;
+        return item;
+    });
+    return unchanged ? (previous as T[]) : out;
+}
+
+/** Whether two box nodes draw the same: the same box, place, tone, ring, pulse and doorway caption. */
+export function sameBoxNode(a: BoxNode, b: BoxNode): boolean {
+    return a.position.x === b.position.x && a.position.y === b.position.y
+        && a.data.box === b.data.box && a.data.tone === b.data.tone && a.data.agent === b.data.agent
+        && a.data.pulseKey === b.data.pulseKey && a.data.portal === b.data.portal;
+}
+
+/** Whether two lines draw the same: the same ends, route, label, stroke and arrowhead. */
+export function sameRoutedEdge(a: RoutedEdgeType, b: RoutedEdgeType): boolean {
+    return a.source === b.source && a.target === b.target && a.data?.points === b.data?.points && a.label === b.label
+        && a.style?.stroke === b.style?.stroke && a.style?.strokeWidth === b.style?.strokeWidth && a.style?.opacity === b.style?.opacity
+        && (a.markerEnd as EdgeMarker | undefined)?.color === (b.markerEnd as EdgeMarker | undefined)?.color;
 }

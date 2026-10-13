@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inlineCode, splitSummary } from "./text";
+import { inlineCode, MAX_COLORED_CHARS, splitSummary, tooLargeToColor } from "./text";
 
 const plain = (text: string) => ({ text, code: false });
 const code = (text: string) => ({ text, code: true });
@@ -42,5 +42,22 @@ describe("splitSummary (§5: about two lines, then 'Read full summary')", () => 
             .toEqual({ lead: "This folder is the theming layer.", rest: "`common/` holds the registries. `browser/` turns them into CSS." });
         // but an abbreviation before code still doesn't end one
         expect(splitSummary("Uses e.g. `foo` to log. Second.")).toEqual({ lead: "Uses e.g. `foo` to log.", rest: "Second." });
+    });
+
+    it("reads a backtick with no partner as text, the way inlineCode draws it (deferred minor: nothing after it split)", () => {
+        expect(splitSummary("Pads by 5` of space. Second.")).toEqual({ lead: "Pads by 5` of space.", rest: "Second." });
+        // `a` pairs; the third backtick has no partner after it, so the period after "three" still ends the sentence
+        expect(splitSummary("One `a` two ` three. Four.")).toEqual({ lead: "One `a` two ` three.", rest: "Four." });
+        // an empty pair is text too (inlineCode keeps it literal)
+        expect(splitSummary("Quotes `` here. Next.")).toEqual({ lead: "Quotes `` here.", rest: "Next." });
+    });
+});
+
+describe("tooLargeToColor (deferred minor: coloring a 1 MB file blocked for ~350 ms)", () => {
+    it("colors up to 200,000 characters and leaves anything longer plain", () => {
+        expect(MAX_COLORED_CHARS).toBe(200_000);
+        expect(tooLargeToColor("x".repeat(200_000))).toBe(false);
+        expect(tooLargeToColor("x".repeat(200_001))).toBe(true);
+        expect(tooLargeToColor("")).toBe(false);
     });
 });

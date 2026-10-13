@@ -21,3 +21,15 @@ export function placeFromSearch(search: string): MapPlace {
     const page = params.get("page") ?? "";
     return { path: params.get("path") ?? "", page: /^\d+$/.test(page) && Number(page) >= 1 ? Number(page) - 1 : 0 };
 }
+
+/**
+ * What the address bar needs when the Map moves to `place`: nothing when it already says so; a rewrite when it names the
+ * same place another way (`?path=src%2Fvs`, `?page=1`, `?path=`), so Back doesn't stop at a step that goes nowhere; and
+ * a new history entry for a move to another place. `address` is the path and query string, `/?path=src`.
+ */
+export function historyStep(address: string, place: MapPlace): "none" | "replace" | "push" {
+    if (address === mapUrl(place.path, place.page)) return "none";
+    const query = address.includes("?") ? address.slice(address.indexOf("?")) : "";
+    const named = placeFromSearch(query);
+    return named.path === place.path && named.page === place.page ? "replace" : "push";
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
-import { linkedFrom, pageNote, portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
+import { linkedFrom, pageNote, portalCaption, portalDirection, portalLinks, portalTitle, selectionShown } from "./portals";
 
 const box = (p: string): MapNode => ({ path: p, name: p.slice(p.lastIndexOf("/") + 1), kind: "file", fileCount: 1, summaryStatus: "fresh" });
 const portal = (p: string, fields: Partial<MapNode>): MapNode => ({ path: p, name: p, kind: "portal", fileCount: 1, summaryStatus: "skipped", ...fields });
@@ -37,10 +37,11 @@ describe("portals", () => {
         expect(portalLinks(EDGES, "x//page-1")).toBe(2);
     });
 
-    it("says how many folders and files are behind a doorway and how many links it has, in the singular when it's one", () => {
-        expect(portalCaption(ONWARD, 7)).toBe("135 folders and files · 7 links");
-        expect(portalCaption(portal("x//page-3", { hiddenCount: 1 }), 1)).toBe("1 folder or file · 1 link");
-        expect(portalCaption(portal("x//page-3", { hiddenCount: 1200 }), 0)).toBe("1,200 folders and files · 0 links");
+    it("says how many folders and files are behind a doorway and how many imports its lines carry, in the singular when it's one", () => {
+        // "imports", the word a line's hover sentence uses ("github uses log · 29 imports"); "links" read as a count of lines
+        expect(portalCaption(ONWARD, 7)).toBe("135 folders and files · 7 imports");
+        expect(portalCaption(portal("x//page-3", { hiddenCount: 1 }), 1)).toBe("1 folder or file · 1 import");
+        expect(portalCaption(portal("x//page-3", { hiddenCount: 1200 }), 0)).toBe("1,200 folders and files · 0 imports");
     });
 
     it("lists this page's boxes linked to a doorway, most imports first, ties in the Map's order", () => {
@@ -52,5 +53,17 @@ describe("portals", () => {
         expect(pageNote(LEVEL)).toBe("Page 2 of 5 · 3 of 182 folders and files");
         expect(pageNote({ nodes: Array.from({ length: 44 }, (_, i) => box(`y/${i}`)), hiddenCount: 1236, page: 0, pageCount: 30 }))
             .toBe("Page 1 of 30 · 44 of 1,280 folders and files");
+    });
+
+    it("lets go of a selected doorway that isn't on the page any more (deferred minor: its panel said \"Nothing is indexed\")", () => {
+        // after an index update re-pages the folder, page 2 of x may have no doorway to page 1 left
+        const repaged = { nodes: [box("x/b"), ONWARD] };
+        expect(selectionShown(repaged, "x//page-1")).toBeNull();
+        expect(selectionShown(LEVEL, "x//page-1")).toBe("x//page-1");     // still there: kept
+        expect(selectionShown(repaged, "x//pages")).toBe("x//pages");
+        // a box keeps its selection whatever the level holds (search and the panel select boxes the level has)
+        expect(selectionShown(repaged, "x/d")).toBe("x/d");
+        expect(selectionShown(repaged, null)).toBeNull();
+        expect(selectionShown(null, "x//page-1")).toBe("x//page-1");     // no level yet: nothing to judge by
     });
 });

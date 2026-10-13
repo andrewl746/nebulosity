@@ -26,6 +26,15 @@ describe("highlightCode (owner review: code colored like in VS Code)", () => {
         expect(html).toContain('<span class="hljs-string">&#x27;hi&#x27;</span>');
     });
 
+    it("leaves a very large file plain, escaped but uncolored, so opening it doesn't freeze the Map (deferred minor)", () => {
+        // 3 + 13 × 15,385 = 200,008 characters: past MAX_COLORED_CHARS (200,000), where coloring would block for
+        // tens of ms more (1 MB took ~350 ms)
+        const big = "<b>" + "const x = 1;\n".repeat(15_385);
+        const html = highlightCode(big, "typescript");
+        expect(html.startsWith("&lt;b&gt;const x = 1;")).toBe(true);
+        expect(html).not.toContain("<span");
+    });
+
     it("escapes what it shows, so a file's text can never become markup", () => {
         expect(highlightCode("<script>alert(1)</script>", "text")).toBe("&lt;script&gt;alert(1)&lt;/script&gt;");
         const html = highlightCode('const a = "<b>";', "typescript");

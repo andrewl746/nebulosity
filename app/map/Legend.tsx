@@ -22,7 +22,7 @@ function readOpen(): boolean {
  * color of everything you click.
  * The canvas only renders in the browser, so reading storage on the first render is safe.
  */
-export default function Legend({ quietLines }: { quietLines: boolean }){
+export default function Legend({ quietLines, doorways }: { quietLines: boolean; doorways: boolean }){
     const [open, setOpen] = useState(readOpen);
     const toggle = (): void => {
         const next = !open;
@@ -41,8 +41,10 @@ export default function Legend({ quietLines }: { quietLines: boolean }){
                 <div className="space-y-1.5 border-b border-overlay-line px-3 py-2">
                     {/* one sentence for direction: "arrows out / arrows in" rows read as abstract, even to the owner */}
                     <Row glyph={<Arrow color="var(--text-2)" />}>A → B: A uses B. The arrow points at what&apos;s being used.</Row>
-                    <Row glyph={<Arrow color="var(--select)" />}>Selected box and its links</Row>
+                    <Row glyph={<Arrow color="var(--select)" />}>Selected box and its lines</Row>
                     <Row glyph={<span className="block h-3 w-3 rounded-sm outline-2 outline-agent" />}>What Claude Code is touching</Row>
+                    {/* only where there are doorways: a page of a big folder (deferred minor: the legend had no row for them) */}
+                    {doorways && <Row glyph={<span className="block h-3 w-5 rounded-sm border border-dashed border-text-2" />}>Dashed box: a doorway to another page</Row>}
                     {quietLines && <Row glyph={<span aria-hidden className="text-[14px] leading-none">⋯</span>}>Busy folder: hover a box to see its lines</Row>}
                 </div>
             )}

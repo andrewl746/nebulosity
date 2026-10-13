@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import type { LevelResponse, LiveEvent } from "@/lib/contracts";
@@ -13,10 +13,10 @@ import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
 import { isBusyLevel } from "./emphasis";
 import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
-import { mapUrl, placeFromSearch, type MapPlace } from "./history";
+import { historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { boxFor, parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
-import { pageNote } from "./portals";
+import { pageNote, selectionShown } from "./portals";
 import { mapShortcut } from "./shortcuts";
 import { nextPulses, type Pulse } from "./pulses";
 import RepoMenu from "./RepoMenu";
@@ -35,6 +35,8 @@ type LevelCache = { repo: string; version: number; levels: ReadonlyMap<string, L
 const HELP_SEEN = "nebulosity.helpSeen";
 
 const cacheKey = (place: MapPlace): string => `${place.path}\0${place.page}`;
+/** How long a failed jump's message stays up when nothing else moves the Map. */
+const FOCUS_ERROR_MS = 6_000;
 
 /** The cache with one more level in it: the same repo and version keep what's there, anything newer starts over. */
 const cacheWith = (cache: LevelCache | null, place: MapPlace, level: LevelResponse): LevelCache => ({
@@ -59,6 +61,8 @@ function MapScreen(){
     const levelPath = place.path;
     const [cache, setCache] = useState<LevelCache | null>(null);
     const [levelError, setLevelError] = useState<ApiError | null>(null);
+    // a jump that failed (search, a chip, focus_node), kept with where the Map was, so it shows only until the Map moves
+    const [focusError, setFocusError] = useState<{ error: ApiError; place: string; selected: string | null } | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
     // a path to show that may be on another page: the server says which page holds it (focus(), below)
     const [focusing, setFocusing] = useState<string | null>(null);
@@ -69,6 +73,14 @@ function MapScreen(){
     // holds across levels until it's turned off (owner, 2026-10-12)
     const [showAllLines, setShowAllLines] = useState(false);
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
+
+    // the focus effect's failure handler reads where the Map is when the answer comes back, not when it was asked
+    const placeRef = useRef(place);
+    const selectedRef = useRef(selected);
+    useEffect(() => {
+        placeRef.current = place;
+        selectedRef.current = selected;
+    }, [place, selected]);
 
     const repo = status?.repo ?? null;
     const version = status?.indexVersion ?? null;
@@ -81,7 +93,14 @@ function MapScreen(){
         const controller = new AbortController();
         api.level(place.path, place.page, controller.signal).then(
             (next) => {
-                setCache((c) => cacheWith(c, place, next));
+                // a page past the last (?page=9 of a 3-page folder) is answered with the last one: the place and the
+                // address bar follow the answer, rewritten rather than pushed, since nobody moved
+                const at = { path: place.path, page: next.page };
+                setCache((c) => cacheWith(c, at, next));
+                if (next.page !== place.page){
+                    window.history.replaceState(null, "", mapUrl(at.path, at.page));
+                    setPlace(at);
+                }
                 setLevelError(null);
             },
             (err: unknown) => { if (err instanceof ApiError) setLevelError(err); },
@@ -105,24 +124,35 @@ function MapScreen(){
             },
             (err: unknown) => {
                 if (!(err instanceof ApiError)) return;
-                setLevelError(err);
+                // the Map on screen is still good: say so where the user is, not as a level error over it
+                setFocusError({ error: err, place: cacheKey(placeRef.current), selected: selectedRef.current });
                 setFocusing(null);
             },
         );
         return () => controller.abort();
     }, [focusing, repo]);
+    // the jump's error goes by itself after a few seconds too
+    useEffect(() => {
+        if (focusError === null) return;
+        const timer = setTimeout(() => setFocusError(null), FOCUS_ERROR_MS);
+        return () => clearTimeout(timer);
+    }, [focusError]);
 
     // Every move to another folder or page goes into the browser's history, so Back returns to the previous one
     // (owner review). Back itself only reads the address bar: the place it sets already matches, so nothing is pushed.
+    // A link that names the same place another way (?path=src%2Fvs, ?page=1) is rewritten instead, so Back needs one
+    // press (history.ts).
     useEffect(() => {
-        const url = mapUrl(place.path, place.page);
-        if (window.location.pathname + window.location.search !== url) window.history.pushState(null, "", url);
+        const step = historyStep(window.location.pathname + window.location.search, place);
+        if (step === "push") window.history.pushState(null, "", mapUrl(place.path, place.page));
+        else if (step === "replace") window.history.replaceState(null, "", mapUrl(place.path, place.page));
     }, [place]);
     useEffect(() => {
         const onPop = (): void => {
             markStart("map:level");
             setPlace(placeFromSearch(window.location.search));
             setSelected(null);
+            setFocusing(null);   // a jump still on its way would otherwise land after Back and undo it
         };
         window.addEventListener("popstate", onPop);
         return () => window.removeEventListener("popstate", onPop);
@@ -209,6 +239,7 @@ function MapScreen(){
     const onSwitched = useCallback(() => {
         setPlace({ path: "", page: 0 });
         setSelected(null);
+        setFocusing(null);
         setHighlights([]);
         refresh();
     }, [refresh]);
@@ -261,6 +292,11 @@ function MapScreen(){
         return () => window.removeEventListener("keydown", onKey);
     }, [levelPath, open, page, pageCount, turnPage]);
 
+    // a doorway selected before an index update re-paged the folder may be gone (portals.ts)
+    const shownSelected = selectionShown(level, selected);
+    const jumpError = focusError !== null && focusError.place === cacheKey(place) && focusError.selected === selected ? focusError.error : null;
+    const banner = levelError ?? jumpError;
+
     if (statusError?.code === "INDEX_EMPTY") return <EmptyState />;
 
     return (
@@ -294,7 +330,7 @@ function MapScreen(){
                 {level && (
                     <MapCanvas
                         level={level}
-                        selected={selected}
+                        selected={shownSelected}
                         agent={agent}
                         pulses={pulses}
                         onSelect={select}
@@ -306,15 +342,15 @@ function MapScreen(){
                 )}
                 {level && pageCount > 1 && (
                     <>
-                        <PagePill level={level} onTurn={turnPage} panelOpen={selected !== null} />
+                        <PagePill level={level} onTurn={turnPage} panelOpen={shownSelected !== null} />
                     </>
                 )}
                 {!level && !levelError && <p className="absolute inset-0 grid place-items-center text-[13px] text-text-2">Loading the map…</p>}
-                {levelError && <p className="absolute inset-x-0 top-6 text-center text-[13px] text-danger">{levelError.message}</p>}
-                {selected !== null && level && (
+                {banner && <p className="absolute inset-x-0 top-6 text-center text-[13px] text-danger">{banner.message}</p>}
+                {shownSelected !== null && level && (
                     <DetailPanel
-                        key={selected}
-                        path={selected}
+                        key={shownSelected}
+                        path={shownSelected}
                         level={level}
                         indexVersion={version ?? 0}
                         onFocus={focus}

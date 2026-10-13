@@ -1,6 +1,7 @@
 import hljs from "highlight.js/lib/core";
 import javascript from "highlight.js/lib/languages/javascript";
 import typescript from "highlight.js/lib/languages/typescript";
+import { tooLargeToColor } from "./text";
 
 // only the two languages the index reads, so the rest of highlight.js stays out of the bundle
 hljs.registerLanguage("typescript", typescript);
@@ -21,10 +22,12 @@ const escapeHtml = (text: string): string => text.replace(/&/g, "&amp;").replace
 /**
  * A file's code as HTML with a class on each token (owner review: color code like in VS Code). The colors are VS
  * Code's Dark+ palette, set in globals.css under `.syntax` (VISUAL_REFRESH.md §2, code only). Everything is escaped:
- * a file's text can never become markup. A language it doesn't know comes back as plain escaped text.
+ * a file's text can never become markup. A language it doesn't know, or a file too large to color quickly, comes
+ * back as plain escaped text.
  */
 export function highlightCode(code: string, language: string): string {
-    if (!hljs.getLanguage(language)) return escapeHtml(code);
+    // a very large file stays plain: coloring it would freeze the Map (text.ts)
+    if (!hljs.getLanguage(language) || tooLargeToColor(code)) return escapeHtml(code);
     return hljs.highlight(code, { language, ignoreIllegals: true }).value
         .replace(CONTROL_KEYWORD, '<span class="hljs-keyword hljs-control">$1</span>');
 }

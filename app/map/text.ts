@@ -49,7 +49,10 @@ export function splitSummary(summary: string): { lead: string; rest: string } {
     for (let i = 0; i < text.length; i++){
         const ch = text[i];
         if (ch === "`"){
-            inCode = !inCode;
+            // code opens only where inlineCode would draw it: a partner further on, with something between the two.
+            // A lone backtick is text; counting it as an opening hid every sentence end after it (deferred minor).
+            if (inCode) inCode = false;
+            else if (text[i + 1] !== "`" && text.indexOf("`", i + 2) !== -1) inCode = true;
             continue;
         }
         if (inCode || (ch !== "." && ch !== "!" && ch !== "?")) continue;
@@ -63,4 +66,17 @@ export function splitSummary(summary: string): { lead: string; rest: string } {
         return { lead: text.slice(0, i + 1), rest: text.slice(next) };
     }
     return { lead: text, rest: "" };
+}
+
+/**
+ * Past this many characters the source viewer shows code plain: coloring runs in one go on the main thread, and a 1 MB
+ * file blocked the Map for about 350 ms (deferred minor). Measured on VS Code's own TypeScript (2026-10-13): 50,000
+ * characters color in ~15 ms, 200,000 in 55–70 ms, 400,000 in 100–120 ms, so this keeps a viewer opening inside the
+ * 100 ms an interaction gets (S3). Lives here, not in syntax.ts, so the viewer can say why without loading the
+ * highlighter.
+ */
+export const MAX_COLORED_CHARS = 200_000;
+
+export function tooLargeToColor(code: string): boolean {
+    return code.length > MAX_COLORED_CHARS;
 }

@@ -64,4 +64,21 @@ describe("initialViewport (owner: open every level at a readable size)", () => {
         expect(initialViewport({ x: 0, y: 0, width: 0, height: 0 }, CANVAS)).toEqual({ x: 953.5, y: 439, zoom: 1 });
         expect(initialViewport({ x: 0, y: 0, width: 500, height: 500 }, { width: 0, height: 0 }).zoom).toBe(1);
     });
+
+    it("on a paged level, fits below the page pill's band, so no box opens under the pill (deferred minor)", () => {
+        // 1000 × 500 fits at 1 either way; with 64 px reserved on top it's centred in the 814 px below them:
+        // y = 64 + 814 / 2 - 250 × 1 = 221 (not 189)
+        expect(initialViewport({ x: -500, y: 0, width: 1000, height: 500 }, CANVAS, 64)).toEqual({ x: 953.5, y: 221, zoom: 1 });
+        // 1600 × 900: the band leaves 814 px, so it fits at 814 / 1035 ≈ 0.786 (not 0.848), centred below the band
+        const view = initialViewport({ x: -800, y: 0, width: 1600, height: 900 }, CANVAS, 64);
+        expect(view.zoom).toBeCloseTo(814 / 1035, 10);
+        expect(view.x).toBeCloseTo(953.5, 10);
+        expect(view.y).toBeCloseTo(64 + 407 - 450 * (814 / 1035), 10);
+    });
+
+    it("on a paged level, opens from the top when the band leaves too little room to fit it readably", () => {
+        // 1000 × 1000: 878 / 1150 ≈ 0.76 would fit without the band; with it, 814 / 1150 ≈ 0.71 is under the floor, so
+        // it fills the width ((1907 - 144) / 1000, capped at 1) from 64 px down
+        expect(initialViewport({ x: -500, y: 0, width: 1000, height: 1000 }, CANVAS, 64)).toEqual({ x: 953.5, y: 64, zoom: 1 });
+    });
 });

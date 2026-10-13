@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapUrl, placeFromSearch } from "./history";
+import { historyStep, mapUrl, placeFromSearch } from "./history";
 
 describe("the Map's place in the address bar (owner review: the browser's Back goes to the previous folder)", () => {
     it("writes the folder, and the page past the first counted from 1, readably", () => {
@@ -24,5 +24,26 @@ describe("the Map's place in the address bar (owner review: the browser's Back g
         for (const [path, page] of [["", 0], ["src", 3], ["a b/c#d", 1]] as const){
             expect(placeFromSearch(mapUrl(path, page).slice(1))).toEqual({ path, page });
         }
+    });
+
+    it("pushes a history entry only for a move to another place", () => {
+        expect(historyStep("/?path=src", { path: "src/vs", page: 0 })).toBe("push");
+        expect(historyStep("/?path=src/vs", { path: "src/vs", page: 1 })).toBe("push");
+        expect(historyStep("/", { path: "src", page: 0 })).toBe("push");
+    });
+
+    it("leaves the address bar alone when it already says where the Map is", () => {
+        expect(historyStep("/?path=src/vs", { path: "src/vs", page: 0 })).toBe("none");
+        expect(historyStep("/", { path: "", page: 0 })).toBe("none");
+        expect(historyStep("/?path=src/vscode-dts&page=2", { path: "src/vscode-dts", page: 1 })).toBe("none");
+    });
+
+    it("rewrites, not pushes, the same place spelled another way, so Back needs one press (deferred minor)", () => {
+        // a pasted or typed link: escaped slashes, page 1 spelled out, an empty path; each names the place mapUrl writes
+        // more plainly, and pushing the plain spelling would leave Back a step that goes nowhere
+        expect(historyStep("/?path=src%2Fvs", { path: "src/vs", page: 0 })).toBe("replace");
+        expect(historyStep("/?path=src/vs&page=1", { path: "src/vs", page: 0 })).toBe("replace");
+        expect(historyStep("/?path=", { path: "", page: 0 })).toBe("replace");
+        expect(historyStep("/?page=1&path=src", { path: "src", page: 0 })).toBe("replace");
     });
 });

@@ -9,7 +9,7 @@ import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
-import { toBoxNode } from "./flowNodes";
+import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
 import { PANEL_WIDTH } from "./DetailPanel";
 import { lineLabel } from "./labels";
 import Legend from "./Legend";
@@ -19,7 +19,7 @@ import { portalCaption, portalDirection, portalLinks, portalTitle } from "./port
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { routeEdges } from "./routes";
-import { boundsOf, initialViewport } from "./viewport";
+import { boundsOf, initialViewport, TOP_INSET } from "./viewport";
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
@@ -74,7 +74,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
     const divider = useMemo(() => looseDivider(level.nodes, level.edges, positions), [level, positions]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
-    // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 links", worked out once per level, not on every hover
+    // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 imports", worked out once per level, not on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
         n.path,
         { direction: portalDirection(n, level.page), title: portalTitle(n), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
@@ -82,6 +82,16 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
+    // A hover belongs to the level it happened on. Going into a folder unmounts the old boxes before their mouseleave
+    // fires, so the hover outlived the level, and coming back (a cached level, the same object as before) lit that box
+    // up with nothing under the pointer (deferred minor). So it's cleared whenever another level is drawn: React's way
+    // to reset state when a prop changes, during render rather than in an effect, so no frame shows the stale hover.
+    const [drawnLevel, setDrawnLevel] = useState(level);
+    if (drawnLevel !== level){
+        setDrawnLevel(level);
+        setHoveredBox(null);
+        setHoveredEdge(null);
+    }
     const emphasis = useMemo(
         () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines }),
         [level, selected, hoveredBox, quietLines],
@@ -91,21 +101,25 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const { setViewport } = useReactFlow();
     const canvasWidth = useStore((s) => s.width);
     const canvasHeight = useStore((s) => s.height);
+    // a paged level keeps clear of the page pill at the canvas's top right (viewport.ts)
+    const pillBand = level.pageCount > 1 ? TOP_INSET : 0;
     // the latest of each, for the opening view below: it runs when the level changes, not when they do
-    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } });
+    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight }, pillBand });
     useEffect(() => {
-        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } };
-    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight]);
+        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight }, pillBand };
+    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight, pillBand]);
 
     useEffect(() => {
-        // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts)
-        setNodes(level.nodes.map((box) => toBoxNode(box, positions.get(box.path) ?? { x: 0, y: 0 }, {
+        // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts); a box
+        // that would draw the same keeps its object, so a hover redraws only the boxes it changes
+        const next = level.nodes.map((box) => toBoxNode(box, positions.get(box.path) ?? { x: 0, y: 0 }, {
             box,
             tone: emphasis.boxes.get(box.path) ?? "normal",
             agent: agent.has(box.path),
             pulseKey: pulses.get(box.path)?.key ?? 0,
             portal: portals.get(box.path),
-        })));
+        }));
+        setNodes((previous) => reuseUnchanged(previous, next, sameBoxNode));
     }, [level, positions, portals, emphasis, agent, pulses, setNodes]);
 
     useEffect(() => {
@@ -132,7 +146,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         });
         // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
         // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
-        setEdges(drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge));
+        const next = drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge);
+        setEdges((previous) => reuseUnchanged(previous, next, sameRoutedEdge));
     }, [level, byPath, routes, emphasis, hoveredEdge, setEdges]);
 
     // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, unless that would
@@ -150,7 +165,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         const frame = requestAnimationFrame(() => {
             fittedKey.current = levelKey;
             const open = openRef.current;
-            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas), { duration: 0 });
+            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas, open.pillBand), { duration: 0 });
             open.onDrawn();
         });
         return () => cancelAnimationFrame(frame);
@@ -203,7 +218,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     <LooseDivider divider={divider} />
                 </ViewportPortal>
             )}
-            <Legend quietLines={quietLines} />
+            <Legend quietLines={quietLines} doorways={level.nodes.some((n) => n.kind === "portal")} />
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
             <Controls
                 position="bottom-right"
