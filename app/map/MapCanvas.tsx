@@ -9,7 +9,7 @@ import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
-import { toBoxNode } from "./flowNodes";
+import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
 import { PANEL_WIDTH } from "./DetailPanel";
 import { lineLabel } from "./labels";
 import Legend from "./Legend";
@@ -110,14 +110,16 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight, pillBand]);
 
     useEffect(() => {
-        // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts)
-        setNodes(level.nodes.map((box) => toBoxNode(box, positions.get(box.path) ?? { x: 0, y: 0 }, {
+        // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts); a box
+        // that would draw the same keeps its object, so a hover redraws only the boxes it changes
+        const next = level.nodes.map((box) => toBoxNode(box, positions.get(box.path) ?? { x: 0, y: 0 }, {
             box,
             tone: emphasis.boxes.get(box.path) ?? "normal",
             agent: agent.has(box.path),
             pulseKey: pulses.get(box.path)?.key ?? 0,
             portal: portals.get(box.path),
-        })));
+        }));
+        setNodes((previous) => reuseUnchanged(previous, next, sameBoxNode));
     }, [level, positions, portals, emphasis, agent, pulses, setNodes]);
 
     useEffect(() => {
@@ -144,7 +146,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         });
         // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
         // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
-        setEdges(drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge));
+        const next = drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge);
+        setEdges((previous) => reuseUnchanged(previous, next, sameRoutedEdge));
     }, [level, byPath, routes, emphasis, hoveredEdge, setEdges]);
 
     // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, unless that would
