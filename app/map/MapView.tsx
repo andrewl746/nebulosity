@@ -282,7 +282,7 @@ function MapScreen(){
                                 type="button"
                                 data-testid="lines-toggle"
                                 onClick={() => setShowAllLines((all) => !all)}
-                                className="text-text underline underline-offset-2 hover:text-text-2"
+                                className="text-control underline underline-offset-2 hover:text-text"
                             >
                                 {showAllLines ? "Show on hover only" : "Show all lines"}
                             </button>
@@ -346,6 +346,7 @@ type PageArrowProps = { side: "left" | "right"; page: number; pageCount: number;
 /**
  * A big arrow on the canvas's edge that turns to the previous or next page of boxes (owner review). Solid and light, so
  * it stands out over boxes and lines: dark on dark, the owner couldn't find it once the panel had pushed it over the Map.
+ * Cyan, like everything you click.
  */
 function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArrowProps){
     const next = side === "left" ? page - 1 : page + 1;
@@ -359,7 +360,7 @@ function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArr
             aria-label={`${word} boxes: page ${next + 1} of ${pageCount}`}
             title={`${word} boxes (${side === "left" ? "Left" : "Right"} arrow key)`}
             style={side === "right" ? { right: (panelOpen ? PANEL_WIDTH : 0) + 16 } : { left: 16 }}
-            className="absolute top-1/2 z-[6] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-text text-canvas hover:bg-text-body"
+            className="absolute top-1/2 z-[6] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-control text-canvas hover:bg-text"
         >
             <Icon aria-hidden size={24} stroke={2} />
         </button>
@@ -369,8 +370,8 @@ function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArr
 /**
  * Which page of a big folder is on screen, in the canvas's top-right corner with a button either side. The three-task
  * test found the top bar's note went unseen; a bar at the bottom of the canvas then read as loud and, in the boxes'
- * colour, blended in (owner review). Like the other overlays it's a solid card with no outline, so it reads as neither
- * a box nor a line, and it moves left of the panel when the panel opens.
+ * colour, blended in (owner review). Like the other overlays it's a solid card in the logo's violet with no outline, so
+ * it reads as neither a box nor a line, its buttons cyan; it moves left of the panel when the panel opens.
  */
 function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (page: number) => void; panelOpen: boolean }){
     const step = (side: "left" | "right") => {
@@ -383,7 +384,7 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
                 disabled={off}
                 onClick={() => onTurn(next)}
                 aria-label={`${side === "left" ? "Previous" : "Next"} page`}
-                className="grid h-7 w-7 place-items-center rounded-md text-text hover:bg-surface disabled:opacity-35 disabled:hover:bg-transparent"
+                className="grid h-7 w-7 place-items-center rounded-md text-control hover:bg-overlay-line disabled:opacity-35 disabled:hover:bg-transparent"
             >
                 <Icon aria-hidden size={16} stroke={2} />
             </button>
@@ -394,12 +395,12 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
     return (
         <div
             style={{ right: (panelOpen ? PANEL_WIDTH : 0) + 16 }}
-            className="absolute top-4 z-[7] flex items-center gap-1 rounded-lg bg-border p-1"
+            className="absolute top-4 z-[7] flex items-center gap-1 rounded-lg bg-overlay p-1"
         >
             {step("left")}
             <span data-testid="page-note" className="px-1 text-[13px] text-text">
                 {pagePart}
-                {rest.length > 0 && <span className="text-text-2"> · {rest.join(" · ")}</span>}
+                {rest.length > 0 && <span className="text-overlay-text-2"> · {rest.join(" · ")}</span>}
             </span>
             {step("right")}
         </div>

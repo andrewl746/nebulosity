@@ -211,7 +211,7 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose }: Deta
                                     type="button"
                                     data-go-page={p}
                                     onClick={() => onTurnPage(p)}
-                                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] text-text hover:border-text-2"
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-control/60 px-3 py-1.5 text-[13px] text-control hover:border-control"
                                 >
                                     {p < level.page && <IconArrowLeft aria-hidden size={14} stroke={1.75} />}
                                     {pages.length === 1 ? `Go to page ${p + 1}` : `Page ${p + 1}`}
@@ -258,14 +258,14 @@ function Stats({ data, onOpen, onViewSource }: { data: DescribeResponse; onOpen:
             <span>{size}</span>
             {data.stalePaths > 0 && <span>{formatCount(data.stalePaths)} changed since summarized</span>}
             {data.kind === "folder" && (
-                <button type="button" onClick={() => onOpen(data.path)} className="text-text underline underline-offset-2 hover:text-text-2">Open folder</button>
+                <button type="button" onClick={() => onOpen(data.path)} className="text-control underline underline-offset-2 hover:text-text">Open folder</button>
             )}
             {data.kind === "file" && (
                 <>
-                    <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-text underline underline-offset-2 hover:text-text-2">
+                    <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
                         <IconCode aria-hidden size={14} stroke={1.75} />View source
                     </button>
-                    <a href={editorLink(data)} className="text-text underline underline-offset-2 hover:text-text-2">Open in VS Code</a>
+                    <a href={editorLink(data)} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</a>
                 </>
             )}
         </div>
@@ -341,7 +341,7 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
             {lead && <p className="mt-2 text-text-body"><Rich text={lead} /></p>}
             {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2 text-text-body"><Rich text={paragraph} /></p>)}
             {rest && !expanded && (
-                <button type="button" onClick={() => setExpanded(true)} className="mt-2 text-[13px] text-text underline underline-offset-2 hover:text-text-2">
+                <button type="button" onClick={() => setExpanded(true)} className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text">
                     Read full summary
                 </button>
             )}
@@ -353,7 +353,7 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
                 {failure && (
                     <p className="text-danger">
                         {failure}{" "}
-                        <button type="button" onClick={onRetry} className="underline underline-offset-2">Try again</button>
+                        <button type="button" onClick={onRetry} className="text-control underline underline-offset-2 hover:text-text">Try again</button>
                     </p>
                 )}
             </div>
@@ -463,7 +463,7 @@ function Rows<T>({ title, items, render, empty }: RowsProps<T>){
                 ? <p className="text-[13px] text-text-2">{empty}</p>
                 : <ul className="-mx-2">{(all ? items : items.slice(0, PREVIEW)).map(render)}</ul>}
             {!all && items.length > PREVIEW && (
-                <button type="button" onClick={() => setAll(true)} className="mt-2 text-[13px] text-text underline underline-offset-2 hover:text-text-2">
+                <button type="button" onClick={() => setAll(true)} className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text">
                     View all {formatCount(items.length)}
                 </button>
             )}

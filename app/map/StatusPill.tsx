@@ -61,7 +61,7 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                     ))}
                     <div className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
                         <span className="truncate">{reindex ?? `index version ${status.indexVersion}`}</span>
-                        <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-text underline underline-offset-2 hover:text-text-2">Re-index</button>
+                        <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-control underline underline-offset-2 hover:text-text">Re-index</button>
                     </div>
                 </div>
             )}

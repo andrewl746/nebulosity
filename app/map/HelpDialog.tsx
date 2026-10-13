@@ -60,6 +60,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     <Section title="Colors">
                         <li><Swatch className="border-2 border-select bg-select-fill" /> Purple: the box you selected and its lines. Everything else fades.</li>
                         <li><Swatch className="outline-2 outline-offset-1 outline-agent" /> Orange: what Claude Code is touching right now.</li>
+                        <li><Swatch className="rounded-full bg-control" /> Cyan: something you can click, like a link, the page arrows or the Map&apos;s buttons.</li>
                         <li><Swatch className="rounded-full bg-ok" /> Green: the index is up to date.</li>
                         <li><Swatch className="rounded-full bg-danger" /> Red: something failed.</li>
                     </Section>

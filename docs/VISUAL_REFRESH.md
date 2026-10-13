@@ -15,9 +15,10 @@
 - **Keys (§6):** Backspace, the arrows and ? leave the Map alone while a dialog is open.
 - **Busy levels (§4):** past 60 lines, only the hovered or selected box's lines are drawn, with "Show all lines" to bring the rest back.
 - **From the three-task test (§9):** line sentences on hover, a plain-word legend sentence for direction, 26 px arrowheads, 15 px relationship headings, a page pill on the canvas with solid side arrows, the repo name going home, hover summaries on boxes.
-- **Overlays (§4):** the legend, the page pill and the zoom controls are solid `--border` cards with no outline: lines are never filled, so they can't be mistaken for lines (a light `--text-2` outline was, by the owner), and they're lighter than the boxes' `--surface`, so they don't blend in with boxes. React Flow's attribution label is hidden. The legend is collapsed to a "Legend" button by default, opens as a narrow card of short rows, and remembers in the browser whether it was left open.
+- **Overlays (§4):** the legend, the page pill and the zoom controls are solid `--overlay` cards (the logo's violet) with no outline: lines are never filled, so they can't be mistaken for lines (a light `--text-2` outline was, by the owner), and no box is that colour. Their buttons are `--control` cyan. React Flow's attribution label is hidden. The legend is collapsed to a "Legend" button by default, opens as a narrow card of short rows, and remembers in the browser whether it was left open.
 - **The speed fix (§8):** the 5 s `src` panel didn't reproduce (30–141 ms, BENCHMARKS.md Map Benchmark #2); answers are now cached per index version, and the panel says "Refreshing…" while an on-demand summary is on its way.
 - **The three-task test (§9), run 2026-10-13,** and what it changed: the line sentences, the arrows' wording and size, the page bar, the solid page arrows, the repo name going home, hover summaries, and search without the repo's name.
+- **Night violet + cyan (§2), 2026-10-13:** the owner found the violet-slate surfaces grey and monotone once the overlays took the logo's colours, and picked option C of four whole-screen renders: the logo's night violet for every surface, its violet for the overlays, and its cyan as the one color for things you click.
 - **Still owed:** the owner's sign-off.
 
 ## 1. Principle
@@ -33,34 +34,40 @@ This slice is shaped by what the owner saw on the real V1.3 screen: competing ba
 
 Define these as CSS custom properties in `app/globals.css`. Components use tokens, never raw hex.
 
-*(Revised 2026-10-12 by the owner's picks after the first build, which read as too monotone. A blue "cool slate" pick came first, but it read as too blue for Nebulosity, so the final pick is **violet slate**: purple-tinted surfaces and lavender names, with the selection still vivid purple. The first table's grays are replaced, and the lavender and body-text tokens are new.)*
+*(Revised 2026-10-12 by the owner's picks after the first build, which read as too monotone. A blue "cool slate" pick came first, but it read as too blue for Nebulosity, so the pick became **violet slate**: purple-tinted surfaces and lavender names, with the selection still vivid purple.)*
+
+*(Revised again 2026-10-13: **night violet + cyan**, every color taken from the logo, `app/icon.svg`. The surfaces moved from violet-grey to the logo tile's night violet, which the owner found less grey and monotone. The logo's violet is the overlays' fill, and its cyan glow is the color of everything you click. Contrast, measured: `--text` 15.4–17.0:1 on the surfaces, `--text-2` 8.3–9.1:1, `--control` 12.2–13.4:1 on the surfaces and 7.6:1 on `--overlay`, `--overlay-text-2` 6.2:1 on `--overlay`, `--neutral-edge` 3.7:1 on the canvas.)*
 
 | Token | Hex | One meaning |
 |---|---|---|
-| `--canvas` | `#12101A` | page and Map background, a single flat violet slate |
-| `--surface` | `#1D1A28` | boxes, inputs, cards |
-| `--panel` | `#17141F` | the details panel, drawers, dialogs |
-| `--hairline` | `#272236` | dividers |
-| `--border` | `#3E3752` | box and input borders |
+| `--canvas` | `#0E0A1C` | page and Map background, a single flat night violet (the logo tile's dark end) |
+| `--surface` | `#1B1333` | boxes, inputs, cards |
+| `--panel` | `#140E28` | the details panel, drawers, dialogs |
+| `--hairline` | `#261B45` | dividers |
+| `--border` | `#3A2A66` | box and input borders |
 | `--text` | `#F1EEF8` | primary text: names, headings |
-| `--text-body` | `#CBC4DA` | paragraphs: summaries, help |
-| `--text-2` | `#B3ABC6` | secondary text, counts, labels |
+| `--text-body` | `#D3C7EE` | paragraphs: summaries, help |
+| `--text-2` | `#B9A9DE` | secondary text, counts, labels |
 | `--title` | `#C7B3FF` | **lavender: a description's title** (a summary's tagline, help headings) |
 | `--code` | `#D8CAFF` | **lavender: code identifiers in text** |
-| `--code-bg` | `#2A2240` | the chip behind them |
+| `--code-bg` | `#2A1B52` | the chip behind them |
 | `--folder` | `#A98BEA` | **lavender: the folder icon**, so folders and files part at a glance |
-| `--neutral-edge` | `#6A6285` | ordinary connections, bright enough to follow on the canvas |
+| `--neutral-edge` | `#7262A6` | ordinary connections, bright enough to follow on the canvas |
 | `--select` | `#B58AFF` | **purple: the selected box, its direct links and its dependency path.** Nothing else |
-| `--select-fill` | `#2C2145` | the selected box's fill |
+| `--select-fill` | `#2E1A5C` | the selected box's fill |
 | `--agent` | `#F08A4B` | **orange: what Claude Code is touching right now.** Nothing else |
 | `--ok` | `#4CC38A` | **green: indexing status only** (the "indexed" dot) |
 | `--danger` | `#F07A7A` | error text and a failed stage. *(Added in the V1.3.1 build: the table had no color for errors, and people need to see them.)* |
+| `--control` | `#67E8F9` | **cyan (the logo's glow): something you click** — links, text buttons, the page arrows, the overlays' buttons. Content you select (boxes, chips, rows) keeps its own look |
+| `--overlay` | `#4C1D95` | the logo's violet: the fill of the overlays on the Map (legend, page pill, zoom controls) |
+| `--overlay-line` | `#5B2AA8` | dividers inside an overlay |
+| `--overlay-text-2` | `#D8B4FE` | secondary text on an overlay |
 
 Lavender (soft, on text and icons) is the brand: it marks names and code, what you read to know what something is. Vivid purple, as a box's 2 px border and fill and as its lines, is the selection. They share a hue on purpose, but never a job: lavender never marks state.
 
 **Syntax colors, inside code only** (the source viewer and search's code lines). The owner asked for code colored as in VS Code, so these are VS Code's **Dark+** palette: `--syn-text #D4D4D4`, `--syn-keyword #569CD6` (const, function, class), `--syn-control #C586C0` (import, return, if), `--syn-string #CE9178`, `--syn-number #B5CEA8`, `--syn-comment #6A9955`, `--syn-type #4EC9B0`, `--syn-function #DCDCAA`, `--syn-variable #9CDCFE`, `--syn-constant #4FC1FF`, `--syn-regexp #D16969`. Inside code they mean token kinds; nothing on the Map uses them.
 
-Purple is never used just because something is interactive. Links and buttons use `--text` with an underline or border, not purple.
+Purple is never used just because something is interactive. Links and text buttons are `--control` cyan with an underline; bordered buttons use `--text` or a `--control` border, never purple. *(Cyan for links since 2026-10-13; before, they used `--text`.)*
 
 **Contrast:** `--text` and `--text-2` on `--canvas` and `--surface` meet WCAG AA. Information people need to read is never smaller than 12 px.
 

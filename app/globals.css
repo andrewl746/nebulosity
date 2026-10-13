@@ -2,28 +2,33 @@
 
 /*
  * The Map's colors (VISUAL_REFRESH.md §2): each token is defined once here and means one thing. Components use the
- * tokens (bg-surface, text-text-2, border-select, …), never a raw value. The owner's pick of 2026-10-12, "violet slate":
- * purple-tinted surfaces and lavender names, so the Map looks like Nebulosity, with the selection still vivid purple.
+ * tokens (bg-surface, text-text-2, border-select, …), never a raw value. The owner's pick of 2026-10-13, "night violet +
+ * cyan", taken from the logo (app/icon.svg): night-violet surfaces instead of violet-grey, lavender names, the selection
+ * still vivid purple, the logo's violet for the overlays and its cyan for everything you click.
  */
 :root {
-  --canvas: #12101A;       /* page and Map background, one flat violet slate */
-  --surface: #1D1A28;      /* boxes, inputs, cards */
-  --panel: #17141F;        /* the details panel, drawers, dialogs */
-  --hairline: #272236;     /* dividers */
-  --border: #3E3752;       /* box and input borders */
+  --canvas: #0E0A1C;       /* page and Map background, one flat night violet (the logo tile's dark end) */
+  --surface: #1B1333;      /* boxes, inputs, cards */
+  --panel: #140E28;        /* the details panel, drawers, dialogs */
+  --hairline: #261B45;     /* dividers */
+  --border: #3A2A66;       /* box and input borders */
   --text: #F1EEF8;         /* primary text: names, headings */
-  --text-body: #CBC4DA;    /* paragraphs: summaries, help */
-  --text-2: #B3ABC6;       /* secondary text, counts, labels */
+  --text-body: #D3C7EE;    /* paragraphs: summaries, help */
+  --text-2: #B9A9DE;       /* secondary text, counts, labels */
   --title: #C7B3FF;        /* lavender: a description's title (a summary's tagline, help headings) */
   --code: #D8CAFF;         /* lavender: code identifiers in text */
-  --code-bg: #2A2240;      /* the chip behind them */
+  --code-bg: #2A1B52;      /* the chip behind them */
   --folder: #A98BEA;       /* lavender: the folder icon, so folders and files part at a glance */
-  --neutral-edge: #6A6285; /* ordinary connections, bright enough to follow on the canvas */
+  --neutral-edge: #7262A6; /* ordinary connections, bright enough to follow on the canvas (3.7:1) */
   --select: #B58AFF;        /* purple: the selected box, its direct links, its path. Nothing else */
-  --select-fill: #2C2145;  /* the selected box's fill */
+  --select-fill: #2E1A5C;  /* the selected box's fill */
   --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
   --ok: #4CC38A;            /* green: indexing status only */
   --danger: #F07A7A;        /* errors and a failed stage */
+  --control: #67E8F9;       /* cyan (the logo's glow): something you click — links, text buttons, page arrows. Nothing else */
+  --overlay: #4C1D95;       /* the logo's violet: the overlays on the Map (legend, page pill, zoom controls) */
+  --overlay-line: #5B2AA8;  /* dividers inside an overlay */
+  --overlay-text-2: #D8B4FE; /* secondary text on an overlay */
 }
 
 @theme inline {
@@ -45,6 +50,10 @@
   --color-agent: var(--agent);
   --color-ok: var(--ok);
   --color-danger: var(--danger);
+  --color-control: var(--control);
+  --color-overlay: var(--overlay);
+  --color-overlay-line: var(--overlay-line);
+  --color-overlay-text-2: var(--overlay-text-2);
   --font-sans: var(--font-plex-sans);
   --font-mono: var(--font-plex-mono);
 }
@@ -114,12 +123,12 @@ body {
   --xy-edge-stroke: var(--neutral-edge);
   --xy-edge-label-background-color: var(--surface);
   --xy-edge-label-color: var(--text);
-  /* the zoom controls are an overlay: a solid card with no outline, like the legend and the page pill (owner review) */
-  --xy-controls-button-background-color: var(--border);
-  --xy-controls-button-background-color-hover: var(--surface);
-  --xy-controls-button-color: var(--text);
-  --xy-controls-button-color-hover: var(--text);
-  --xy-controls-button-border-color: var(--surface);
+  /* the zoom controls are an overlay: the logo's violet, their buttons in the control cyan (owner review) */
+  --xy-controls-button-background-color: var(--overlay);
+  --xy-controls-button-background-color-hover: var(--overlay-line);
+  --xy-controls-button-color: var(--control);
+  --xy-controls-button-color-hover: var(--control);
+  --xy-controls-button-border-color: var(--overlay-line);
   --xy-controls-box-shadow: none;
 }
 

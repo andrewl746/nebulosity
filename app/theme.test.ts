@@ -1,27 +1,32 @@
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 
-// VISUAL_REFRESH.md §2, transcribed: each token's one value. The owner's final pick of 2026-10-12, "violet slate"
-// (option 1 of the purple mockups): purple-tinted surfaces, lavender names and code, the selection still vivid purple.
+// VISUAL_REFRESH.md §2, transcribed: each token's one value. The owner's pick of 2026-10-13, "night violet + cyan"
+// (option C of the whole-screen mockups), from the logo's colours: night-violet surfaces, lavender names and code, the
+// selection still vivid purple, the logo's violet for the overlays and its cyan for everything you click.
 const TOKENS: Record<string, string> = {
-    canvas: "#12101A",
-    surface: "#1D1A28",
-    panel: "#17141F",
-    hairline: "#272236",
-    border: "#3E3752",
+    canvas: "#0E0A1C",
+    surface: "#1B1333",
+    panel: "#140E28",
+    hairline: "#261B45",
+    border: "#3A2A66",
     text: "#F1EEF8",
-    "text-body": "#CBC4DA",
-    "text-2": "#B3ABC6",
+    "text-body": "#D3C7EE",
+    "text-2": "#B9A9DE",
     title: "#C7B3FF",
     code: "#D8CAFF",
-    "code-bg": "#2A2240",
+    "code-bg": "#2A1B52",
     folder: "#A98BEA",
-    "neutral-edge": "#6A6285",
+    "neutral-edge": "#7262A6",
     select: "#B58AFF",
-    "select-fill": "#2C2145",
+    "select-fill": "#2E1A5C",
     agent: "#F08A4B",
     ok: "#4CC38A",
     danger: "#F07A7A",
+    control: "#67E8F9",
+    overlay: "#4C1D95",
+    "overlay-line": "#5B2AA8",
+    "overlay-text-2": "#D8B4FE",
 };
 
 const css = readFileSync("app/globals.css", "utf8");

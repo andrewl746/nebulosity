@@ -87,7 +87,7 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
                             {source?.truncated && <span>Only the first 1 MB is shown.</span>}
                             {lines && <span>Lines {lines.start}–{lines.end} highlighted</span>}
                             {editorLink && (
-                                <a href={editorLink} className="inline-flex items-center gap-1 text-text underline underline-offset-2 hover:text-text-2">
+                                <a href={editorLink} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
                                     Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
                                 </a>
                             )}
