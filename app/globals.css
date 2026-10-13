@@ -25,8 +25,8 @@
   --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
   --ok: #4CC38A;            /* green: indexing status only */
   --danger: #F07A7A;        /* errors and a failed stage */
-  --control: #67E8F9;       /* cyan (the logo's glow): something you click — links, text buttons, page arrows. Nothing else */
-  --overlay: #2A1F52;       /* raised night violet: every control on the Map (legend, page pill, zoom, page arrows) */
+  --control: #67E8F9;       /* cyan (the logo's glow): something you click — links, text buttons, the overlays' buttons. Nothing else */
+  --overlay: #2A1F52;       /* raised night violet: every control on the Map (legend, page pill, zoom) */
   --overlay-line: #3A2D6B;  /* dividers inside an overlay, and a control's hover */
   --overlay-text-2: #C9BCEB; /* secondary text on an overlay */
   --grid: #262039;          /* the canvas's faint dot grid, so the Map has texture without competing with boxes */

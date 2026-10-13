@@ -306,8 +306,6 @@ function MapScreen(){
                 )}
                 {level && pageCount > 1 && (
                     <>
-                        {page > 0 && <PageArrow side="left" page={page} pageCount={pageCount} onTurn={turnPage} />}
-                        {page < pageCount - 1 && <PageArrow side="right" page={page} pageCount={pageCount} onTurn={turnPage} panelOpen={selected !== null} />}
                         <PagePill level={level} onTurn={turnPage} panelOpen={selected !== null} />
                     </>
                 )}
@@ -341,38 +339,13 @@ function MapScreen(){
     );
 }
 
-type PageArrowProps = { side: "left" | "right"; page: number; pageCount: number; onTurn: (page: number) => void; panelOpen?: boolean };
-
 /**
- * A big arrow on the canvas's edge that turns to the previous or next page of boxes (owner review). Solid and light, so
- * it stands out over boxes and lines: dark on dark, the owner couldn't find it once the panel had pushed it over the Map.
- * It shares the one control style (raised night violet, a cyan icon) with the legend, page pill and zoom: an outside
- * critique found the big cyan circle read as an onboarding button, not part of the Map.
- */
-function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArrowProps){
-    const next = side === "left" ? page - 1 : page + 1;
-    const Icon = side === "left" ? IconChevronLeft : IconChevronRight;
-    const word = side === "left" ? "Previous" : "Next";
-    return (
-        <button
-            type="button"
-            data-testid={`page-${side === "left" ? "previous" : "next"}`}
-            onClick={() => onTurn(next)}
-            aria-label={`${word} boxes: page ${next + 1} of ${pageCount}`}
-            title={`${word} boxes (${side === "left" ? "Left" : "Right"} arrow key)`}
-            style={side === "right" ? { right: (panelOpen ? PANEL_WIDTH : 0) + 16 } : { left: 16 }}
-            className="absolute top-1/2 z-[6] grid h-10 w-10 -translate-y-1/2 place-items-center rounded-lg bg-overlay text-control hover:bg-overlay-line"
-        >
-            <Icon aria-hidden size={20} stroke={2} />
-        </button>
-    );
-}
-
-/**
- * Which page of a big folder is on screen, in the canvas's top-right corner with a button either side. The three-task
- * test found the top bar's note went unseen; a bar at the bottom of the canvas then read as loud and, in the boxes'
- * colour, blended in (owner review). Like the other overlays it's a solid card in the logo's violet with no outline, so
- * it reads as neither a box nor a line, its buttons cyan; it moves left of the panel when the panel opens.
+ * Which page of a big folder is on screen, in the canvas's top-right corner with a button either side: the one place to
+ * turn the page with the mouse (← and → turn it too). The three-task test found the top bar's note went unseen; a bar at
+ * the bottom of the canvas then read as loud and, in the boxes' colour, blended in (owner review). Big arrows at the
+ * canvas's sides went too, after a second critique: two ways to do one thing, and the right one sat on a box when the
+ * panel was open. Like the other overlays it's a solid card in the logo's violet with no outline, so it reads as neither
+ * a box nor a line, its buttons cyan; it moves left of the panel when the panel opens.
  */
 function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (page: number) => void; panelOpen: boolean }){
     const step = (side: "left" | "right") => {
@@ -382,12 +355,14 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
         return (
             <button
                 type="button"
+                data-testid={`page-${side === "left" ? "previous" : "next"}`}
                 disabled={off}
                 onClick={() => onTurn(next)}
                 aria-label={`${side === "left" ? "Previous" : "Next"} page`}
-                className="grid h-7 w-7 place-items-center rounded-md text-control hover:bg-overlay-line disabled:opacity-35 disabled:hover:bg-transparent"
+                title={`${side === "left" ? "Previous" : "Next"} page (${side === "left" ? "←" : "→"})`}
+                className="grid h-9 w-9 place-items-center rounded-md text-control hover:bg-overlay-line disabled:opacity-35 disabled:hover:bg-transparent"
             >
-                <Icon aria-hidden size={16} stroke={2} />
+                <Icon aria-hidden size={22} stroke={2} />
             </button>
         );
     };
@@ -396,10 +371,10 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
     return (
         <div
             style={{ right: (panelOpen ? PANEL_WIDTH : 0) + 16 }}
-            className="absolute top-4 z-[7] flex items-center gap-1 rounded-lg bg-overlay p-1"
+            className="absolute top-4 z-[7] flex items-center gap-1.5 rounded-lg bg-overlay p-1"
         >
             {step("left")}
-            <span data-testid="page-note" className="px-1 text-[13px] text-text">
+            <span data-testid="page-note" className="px-1 text-[14px] text-text">
                 {pagePart}
                 {rest.length > 0 && <span className="text-overlay-text-2"> · {rest.join(" · ")}</span>}
             </span>

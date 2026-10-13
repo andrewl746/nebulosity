@@ -180,7 +180,7 @@ type LevelResponse = { repo: string; path: string; breadcrumb: string[]; nodes: 
   - `page` past the last is the last; the answer's `page` says which one was drawn. With `focus`, the page holding that path wins over `page` (the path is a box on this level, or inside one); a `focus` that isn't on this level is ignored.
   - `hiddenCount` counts the folder's boxes on the other pages.
 - **Portals** are doorway boxes to the other pages, drawn after the page's own boxes:
-  - A page gets a portal for each other page it has lines with: `kind: "portal"`, `path` `<level>//page-<n>` (n from 1; `//page-<n>` at the root), `name` `Page <n>`, and `page` from 0. A page with no lines to another page gets no portal for it; the page arrows still reach every page.
+  - A page gets a portal for each other page it has lines with: `kind: "portal"`, `path` `<level>//page-<n>` (n from 1; `//page-<n>` at the root), `name` `Page <n>`, and `page` from 0. A page with no lines to another page gets no portal for it; the page pill and the arrow keys still reach every page.
   - Linked to more than 6 pages, a page keeps its own portal for the 5 most linked (by imports both ways; ties go to the lower page) and merges the rest into one `+N pages` portal: `path` `<level>//pages`, with `pages` listing them, ascending.
   - `fileCount` adds up the boxes behind a portal, `hiddenCount` counts them, `members` lists their paths in the Map's order (so a client can find the doorway for any path), and `summaryStatus` is `skipped`, since a portal has no summary of its own.
   - Stored paths never hold `//`, so portal paths can't collide. With at most 44 boxes and 6 portals, `nodes` never holds more than 50 (S4).

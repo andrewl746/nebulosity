@@ -90,7 +90,7 @@ export function assignPages(children: readonly MapNode[], edges: readonly MapEdg
  *
  * - A line with both ends on this page stays. A line with one end on another page now runs to (or from) that page's
  *   portal, and lines that then join the same two boxes are added up. A line with both ends elsewhere is dropped.
- * - A page with no lines to another page gets no portal for it; the page arrows still reach every page.
+ * - A page with no lines to another page gets no portal for it; the page pill and the arrow keys still reach every page.
  * - Linked to more than `maxPortals` pages, the page keeps its own portal for the `maxPortals − 1` most linked
  *   (ties go to the lower page) and merges the rest into one "+N pages" portal, so S4 holds.
  */

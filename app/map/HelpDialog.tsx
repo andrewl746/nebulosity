@@ -46,7 +46,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li><b>Click</b> a box to see what it is, in the panel on the right.</li>
                         <li><b>Double-click</b> a folder to go inside it.</li>
                         <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button. The repo&apos;s name at the very top goes back to the start.</li>
-                        <li>Big folders are split into pages of related boxes: turn the page with the arrows at the sides, the page buttons at the top right, or <Key>←</Key> <Key>→</Key>.</li>
+                        <li>Big folders are split into pages of related boxes: turn the page with the arrows at the top right, or <Key>←</Key> <Key>→</Key>.</li>
                         <li>A busy folder opens at a readable size, from its top: drag to see the rest, or press the fit button at the bottom right to see it all.</li>
                         <li>Search files and concepts with <Key>Ctrl K</Key> (<Key>⌘K</Key> on a Mac).</li>
                     </Section>
@@ -61,7 +61,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     <Section title="Colors">
                         <li><Swatch className="border-2 border-select bg-select-fill" /> Purple: the box you selected and its lines. Everything else fades.</li>
                         <li><Swatch className="outline-2 outline-offset-1 outline-agent" /> Orange: what Claude Code is touching right now.</li>
-                        <li><Swatch className="rounded-full bg-control" /> Cyan: something you can click, like a link, the page arrows or the Map&apos;s buttons.</li>
+                        <li><Swatch className="rounded-full bg-control" /> Cyan: something you can click, like a link or the Map&apos;s buttons.</li>
                         <li><Swatch className="rounded-full bg-ok" /> Green: the index is up to date.</li>
                         <li><Swatch className="rounded-full bg-danger" /> Red: something failed.</li>
                     </Section>
