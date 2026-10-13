@@ -49,7 +49,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S1 | Structure stage (discover → parse → resolve → aggregate → write) | ≤ 60 s |
 | S2 | Full summary pass, tiered, via the Batch API | ≤ $15 |
 | S3 | Map interaction (click, zoom, level change → rendered), on the production build (`next build` + `next start`; the dev server is slower on dense levels, docs/BENCHMARKS.md Map Benchmark #1) | ≤ 100 ms; level API ≤ 50 ms |
-| S4 | Boxes on screen at once, counting the "+N more" box | ≤ 50 |
+| S4 | Boxes on screen at once, counting a page's portals (V1.3.1; V1.3 counted the "+N more" box) | ≤ 50 |
 | S5 | MCP tool latency, warm (after the first call of a session) | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
 | S7 | Evaluation run and published, losses included | done |
@@ -212,7 +212,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ## 6. Engine queries and the tool registry
 
 ### 6.1 Queries (pure functions over the store, unit-tested, cached per index version)
-- **`level(path)`**: breadcrumb, at most 50 nodes plus a "+N more" node, that level's edges, and the hidden count.
+- **`level(path, page?, focus?)`**: breadcrumb, at most 50 nodes (a big folder's page of 44 boxes plus up to 6 portals to its other pages, V1.3.1), that page's edges with the far ends folded onto portals, the hidden count, the page and the page count.
 - **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
 - **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance.
@@ -248,7 +248,10 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
   - an activity bar along the bottom, always visible: Claude Code's last 3 tool calls in v1, plus the Guide input in E1 *(V1.3.1)*
 - **Levels.** Repo root → folders → files. A leaf folder shows its files and the imports between them. The file panel lists symbols and, from E2, opens a call flow per function.
 - **Moving around.** Click selects a box; double-click opens a folder; the breadcrumb and Backspace go back up. The address bar holds the place (`/?path=src/vs&page=2`), so the browser's Back returns to the previous folder or page, and a reload or a pasted link opens the same place *(V1.3.1)*.
-- **Cap.** At most 50 boxes. Overflow folds into "+N more" (the smallest by file count), ties going to the more-imported file (ADR-036), and selecting it lists them in the panel. A big folder is also drawn a page at a time: 49 boxes per page, with big arrows (or ← and →) to turn it *(V1.3.1, owner review)*.
+- **Cap.** At most 50 boxes. A folder of more than 50 children is drawn a page at a time, and every child is on some page *(V1.3.1, owner review; ADR-042)*:
+  - A page holds 44 boxes, grouped by import: it seeds with the first unplaced child in the Map's order (largest first, ADR-036) and takes the unplaced child with the most imports to and from it. A folder with no lines pages by size.
+  - Up to 6 **portals**, dashed doorway boxes, stand for the other pages it has lines with, and lines to boxes there end at them. Past 6 linked pages, the rest merge into one "+N pages" portal. Double-clicking a portal turns to its page; big arrows at the canvas's sides (or ← and →) turn it too.
+  - Search, the panel's links and `focus_node` open the page holding their target. *(V1.3 folded the overflow into a "+N more" box instead.)*
 - **Boxes** show an outline icon, the name and, for folders, the file count. Summaries live in the panel, not in boxes *(V1.3.1, `VISUAL_REFRESH.md` §4; V1.3 showed the tagline)*.
 - **Edges** come from `level_edges`. Every one carries a directional arrow (importer → imported) and is routed through the channels and gutters between boxes, never across one (`app/map/routes.ts`). They're 1 px slate normally and 2 px purple for the selection's direct links, and a selection fades unrelated boxes to about 60%. Hovering a box previews its links; hovering a line shows its count *(V1.3.1; V1.3 drew thickness ∝ √count and ghosted the rest)*.
 - **Layout.** dagre (ADR-011), layered by dependency direction, computed client-side, deterministic. It lays out from the level's 100 heaviest lines (every line is still drawn): VS Code's densest level, 50 boxes and 390 lines, takes about 40 ms that way, against 0.6 s with every line (ADR-036, amended). Each dagre layer is drawn as a centred tier that wraps into rows of at most 6, and boxes with no line at the level go in a grid beside or below the tiers, whichever fits the level larger, so a tall chain or a wide fan still fits at a readable zoom *(V1.3.1, ADR-036 amended)*.
@@ -263,11 +266,12 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 ### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` §11–§15 in slice V1.3)
 
 ```ts
-type MapNode = { path: string; name: string; kind: "folder" | "file" | "more";
-  fileCount: number; tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number };
+type MapNode = { path: string; name: string; kind: "folder" | "file" | "portal";
+  fileCount: number; tagline?: string; summaryStatus: SummaryStatus; hiddenCount?: number;
+  page?: number; pages?: number[]; members?: string[] };   // portals only (contract v3, V1.3.1)
 type MapEdge = { source: string; target: string; count: number };
 type LevelResponse = { repo: string; path: string; breadcrumb: string[];
-  nodes: MapNode[]; edges: MapEdge[]; hiddenCount: number; indexVersion: number };
+  nodes: MapNode[]; edges: MapEdge[]; hiddenCount: number; page: number; pageCount: number; indexVersion: number };
 type DescribeResponse = { path: string; kind: "repo" | "folder" | "file"; tagline?: string;
   summary?: string; summaryStatus: SummaryStatus; stats: { fileCount: number; lineCount: number };
   children?: MapNode[]; symbols?: { name: string; kind: string; startLine: number; endLine: number }[];
@@ -410,7 +414,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, and ADR-036 to ADR-040 during V1.3:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, and ADR-041 and ADR-042 during V1.3.1:
 
 | ADR | Decision |
 |---|---|
@@ -426,11 +430,13 @@ Each v1 slice ends demoable:
 | ADR-033 | Summary runs: bottom-up waves, the Batch API for 100+ requests and the regular API below, batch ids on the summary rows, a circuit breaker and a `summarizing` lock |
 | ADR-034 | Summary prompt v2: Haiku 5.5 for files, 3 to 6 word taglines kept whole up to 8, importers in the prompt but not the hash, whole summaries only (one retry), test-only folders templated |
 | ADR-035 | A spend cap: before each submission, project spent + at Anthropic + this submission + the rest, and stop sending past `--budget` (default $15); batches already at Anthropic are still collected |
-| ADR-036 | The Map reads one level at a time: children in size order, a 50-box fold with a `<level>/` "+N more" box, an index version for caching and refetching, area counts from an in-memory import graph |
+| ADR-036 | The Map reads one level at a time: children in size order, a 50-box fold with a `<level>/` "+N more" box (pages with portals since ADR-042), an index version for caching and refetching, area counts from an in-memory import graph |
 | ADR-037 | Incremental structure updates re-resolve only what can have changed and write only the differences, with level edges moved by ±1 per import |
 | ADR-038 | A forked background worker owns the index while the Map is open: watcher, incremental updates, summary refresh (60 s, ≤ 50 files per 10 minutes), a folder sweep, sliced embeddings |
 | ADR-039 | The live channel: SSE out, a localhost-only POST in (Host and Origin checked), the server bound to loopback |
-| ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2); the version names the API and migrations carry the data |
+| ADR-040 | Renderer-agnostic contracts (`CONTRACTS_VERSION` 2, 3 since V1.3.1's portals); the version names the API and migrations carry the data |
+| ADR-041 | The Map's dark theme refined for readability (V1.3.1, `VISUAL_REFRESH.md`) |
+| ADR-042 | The owner's review of V1.3.1: routed lines, pages of related boxes with portals, Back, a source viewer, help, the violet-slate theme |
 
 ## 16. Doc migration
 

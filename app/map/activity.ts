@@ -42,8 +42,8 @@ export function activityLabel(event: LiveEvent): string {
 
 /**
  * The boxes Claude Code is touching right now (VISUAL_REFRESH.md §4, Claude's focus): the boxes on this level that
- * hold what the recent tool calls touched in the last AGENT_ACTIVE_MS, plus show_on_map's highlights. A folded path
- * lands on "+N more"; a path outside the level outlines nothing.
+ * hold what the recent tool calls touched in the last AGENT_ACTIVE_MS, plus show_on_map's highlights. A path on
+ * another page lands on that page's portal; a path outside the level outlines nothing.
  */
 export function agentFocus(
     level: Pick<LevelResponse, "path" | "nodes">,

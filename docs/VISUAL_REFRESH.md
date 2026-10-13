@@ -115,7 +115,8 @@ It's actionable and structured, not a static card. From top to bottom:
 - **Help:** a "?" button beside the status, the `?` key, and the first visit in a browser open "How to use the Map". It covers getting around, reading the Map, what each color means, the panel, Claude Code's activity and the keyboard.
 - **The status** is a bordered button with a chevron, so it reads as the menu it opens.
 - **Source:** a file's panel offers "View source", a read-only drawer over the canvas with line numbers. A declaration in the panel opens it at that declaration's lines, highlighted (API_CONTRACTS.md §16).
-- **Pages and Back:** a big folder is drawn 49 boxes at a time, with big arrows at the canvas's sides (or the arrow keys). The address bar holds the folder and page, so the browser's Back returns to the previous one.
+- **Pages and Back:** a big folder is drawn a page at a time, 44 boxes that import each other, with big arrows at the canvas's sides (or the arrow keys). Lines to boxes on other pages end at **portals**, dashed doorway boxes in `--text-2` with an arrow toward their page ("Page 2", "44 boxes · 6 links"; past 6 linked pages, one "+N pages" box with a stack icon). Double-clicking a portal turns to its page, and its panel lists the boxes on this page linked to it. The note beside the breadcrumb reads "Page 2 of 5 · 44 of 182 boxes". The address bar holds the folder and page, so the browser's Back returns to the previous one (ADR-042).
+- **Keys stay put under a dialog:** while the source viewer or the help is open, Backspace, the arrows and ? leave the Map alone, and Escape closes just the dialog.
 - **Feel:** everything clickable shows the hand and answers the hover, the search field shows the text cursor, and scrollbars are thin and in the theme's colors.
 
 ## 7. System rules (anti-noise)

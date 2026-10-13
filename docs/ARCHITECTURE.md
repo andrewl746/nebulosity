@@ -123,7 +123,7 @@ nebulosity/
 
 ### Flow A — Opening the Map
 1. The page loads. `MapView` polls `GET /api/status` every 2 s and fetches `GET /api/level?path=` for the root.
-2. The route calls `level()`: three indexed lookups (the children, their summaries, the level's `level_edges`), folded to 50 boxes (ADR-036).
+2. The route calls `level()`: three indexed lookups (the children, their summaries, the level's `level_edges`). A folder of more than 50 children is paged by `lib/engine/pages.ts`: 44 related boxes and up to 6 portals to its other pages (ADR-036, ADR-042).
 3. The canvas lays the boxes out with dagre and draws the lines. A click fetches `describe()` for the panel, and a missing summary is asked for once (`POST /api/summarize`, done by the worker).
 4. When the index version moves (a saved file, a summary landing), the Map refetches what's on screen.
 

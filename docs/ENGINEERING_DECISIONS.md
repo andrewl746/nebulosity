@@ -510,6 +510,7 @@ The root now fits at 91–95%, `viewParts` at 95% and `generated` at 50%. Fifty 
 **Alternatives:** (a) Implement the wipe-and-rebuild: a contract change would throw away paid-for summaries for no gain. (b) Keep the React Flow types next to the new ones: the very coupling the adapter split exists to remove.
 **Consequences:** A static export (V1.5), the MCP server (V1.4) and a desktop shell can all serve the same shapes. The regex scanner's golden vectors (`GRAPH_IMPLEMENTATION_REVIEW.md` PART 3) retire with the code they tested.
 **Revisit when:** a second renderer (a WebGL overview, say) needs layout data the contract doesn't carry; then it becomes a separate, renderer-neutral shape.
+**Amended (2026-10-12, V1.3.1): `CONTRACTS_VERSION` 3.** Portals replaced the `"more"` box kind (ADR-042), a breaking change to `MapNode`, so the version moved 2 → 3. Nothing in the database changed.
 
 ---
 
@@ -543,3 +544,29 @@ Light themes were mocked up in five rounds (pastel paper, then bold technical wi
 **Alternatives:** (a) The light technical theme (the first draft of this ADR): cleaner than V1.3, but it treated the problem as a palette problem. (b) Keep V1.3 as is: unreadable at a glance, which defeats the product's purpose. (c) A collapsible activity panel: hides the demo's differentiator, so it's kept slim and always visible instead.
 **Consequences:** One slice, V1.3.1: tokens in `app/globals.css`, restyled Map components, interaction additions (hover, double click, focus from panel chips, reset), and a `describe` speed fix. S3 must still hold. A three-task test with an unfamiliar user is part of acceptance.
 **Revisit when:** the three-task test shows people still can't tell what an edge means, at which point the problem is the data shown, not the styling.
+
+## ADR-042 — The owner's review of V1.3.1: routed lines, pages of related boxes with portals, Back, a source viewer, help, and the violet-slate theme (2026-10-12) — amends ADR-036, ADR-040 and ADR-041
+
+**Context:** The owner looked at the first V1.3.1 build on VS Code and listed what still got in the way (the ledger's "Polish 1–5" and the page-portals plan):
+- lines cut straight through boxes, and some went missing until the window was touched;
+- a big folder showed 49 boxes and a "+N more" box, so most of `src/vs/platform` (112 children) or the 780 generated protocol files were never drawn; when paging was added by size, boxes on different pages still imported each other, and each page read as an island;
+- the browser's Back left the Map, and a reload forgot the folder;
+- there was no way to read a file's code from the panel;
+- the first look read as monotone gray, and Geist as plain.
+**Decision:** the slice takes these on, and the docs carry them (VISUAL_REFRESH.md §2, §4, §6; API_CONTRACTS.md §11, §16):
+- **Routed lines** (`app/map/routes.ts`, a custom edge): every line leaves its box's bottom, runs along the channel under that row and a lane in the gutter, and drops into its target's top, with 8 px corners. No line crosses a box. Nodes are handed their size and attach points up front (`flowNodes.ts`), so lines never wait for React Flow to measure.
+- **Pages of related boxes, with portals** (`lib/engine/pages.ts`). A folder of more than 50 children is split into pages of 44. A page grows by strongest attachment: it seeds with the first unplaced child in the Map's order and takes the unplaced child with the most imports to and from it, ties by the Map's order; with nothing linked, the next child in order goes in, so a folder with no lines pages by size. Up to 6 **portals** (dashed doorway boxes, `<level>//page-<n>`) stand for the other pages a page has lines with, and the lines to boxes there end at them; past 6 linked pages the 5 most linked keep their own and the rest merge into one `+N pages` portal (`<level>//pages`). So every box is drawn on some page and S4 holds: 44 + 6 = 50. The owner picked this ("A, page portals, plus smart pages") over page badges and a page strip.
+- **Focus finds the page.** `GET /api/level?focus=<path>` answers with the page holding that path, so search, the panel's links and `focus_node` land on the right page with the target selected. The Map moves once, when that answer arrives, so Back undoes the jump in one step (the plan had it load page 0, then replace the page). A target already drawn is just selected.
+- **Portals list their boxes.** A portal carries `members`, the paths behind it, so a live pulse or a highlight on a box on another page lights that page's doorway (`boxFor`).
+- **Keys stay put under a dialog.** While the source viewer or the help is open, Backspace, ← and → and ? leave the Map alone (`app/map/shortcuts.ts`); before, an arrow turned the page and closed the viewer with its panel (second review).
+- **Back and the address bar** (`app/map/history.ts`): `/?path=src/vs&page=2` names the Map's place; every move to another folder or page is a history entry, and a reload or a pasted link opens the same place.
+- **A read-only source viewer** (`GET /api/source`, `SourceViewer.tsx`): only files the index holds, whose real path stays inside the repo, up to 1 MB. A declaration in the panel opens it at its lines. Code is colored with VS Code's Dark+ palette (highlight.js core with TypeScript and JavaScript, loaded on first use).
+- **Help** (`HelpDialog.tsx`): the ? button, the ? key, and a first visit open "How to use the Map".
+- **The look**, by the owner's picks: violet-slate surfaces, lavender names and code, the selection still vivid purple; IBM Plex Sans and Plex Mono; hand cursors on everything clickable; thin themed scrollbars; 18 px arrowheads brighter than quiet lines.
+**Alternatives:** (a) Keep "+N more" and list the folded boxes in the panel (V1.3): most of a big folder is never seen on the Map. (b) Slice pages by size: simpler, but on `x` in the plan's ground truth it crosses 3 lines of weight 6 where grouping crosses 1 of weight 1, and pages read as islands. (c) Page badges on boxes, or a page strip, instead of portals: they say a line leaves the page but not where it goes, and add chrome. (d) Optimal graph partitioning (for example Kernighan–Lin): better cuts, but costlier and harder to explain, and the greedy cut is deterministic and fast (780 children with 2,000 lines in well under 50 ms).
+**Consequences:**
+- `MapNodeKind` swaps `"more"` for `"portal"`, a breaking change, so `CONTRACTS_VERSION` goes 2 → 3 (ADR-040, amended below). Portals carry `page` or `pages`, and `members` (the paths behind them) so a client can find the doorway for any path; that's about 60 KB on the 780-child level.
+- A page's number is stable for an index version, but a change to the imports can move a box to another page; a saved link then opens the same folder on a page that may hold different boxes.
+- Lines between two boxes that are both on other pages aren't drawn on this page, and a page with no lines to another gets no portal for it; the page arrows and the page note still reach every page.
+- On VS Code, 36 folders are paged (111 pages), and no page draws more than 50 boxes.
+**Revisit when:** a folder of many thousands of children makes the greedy step slow, or the three-task test shows people get lost between pages (then badges or a page strip on top of portals).
