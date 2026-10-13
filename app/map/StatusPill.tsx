@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { IconChevronDown } from "@tabler/icons-react";
 import type { IndexStatus, StageName } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount, headline, stageLabel, type Tone } from "./format";
@@ -42,10 +43,13 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                 type="button"
                 data-testid="status-pill"
                 onClick={() => setOpen((o) => !o)}
-                className="flex items-center gap-2 rounded-md px-2 py-1 text-[12px] text-text-2 hover:bg-surface hover:text-text"
+                aria-expanded={open}
+                title="Index status: what's indexed, and re-index"
+                className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-[12px] text-text-2 hover:border-text-2 hover:text-text"
             >
                 <span aria-hidden className={`h-2 w-2 rounded-full ${DOTS[head.tone]}`} />
                 {head.text}
+                <IconChevronDown aria-hidden size={14} stroke={1.75} className={open ? "rotate-180" : ""} />
             </button>
             {open && (
                 <div data-testid="status-menu" className="absolute right-0 top-9 z-30 w-[340px] space-y-3 rounded-lg border border-border bg-surface p-3 text-[12px] text-text-2">

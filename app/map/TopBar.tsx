@@ -41,7 +41,7 @@ export default function TopBar({ repo, onSearch, status }: TopBarProps){
                         type="button"
                         onClick={onSearch}
                         data-testid="search-button"
-                        className="flex w-full max-w-xl items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] text-text-2 hover:border-text-2"
+                        className="flex w-full max-w-xl cursor-text items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] text-text-2 hover:border-text-2"
                     >
                         <IconSearch aria-hidden size={16} stroke={1.75} className="shrink-0" />
                         <span className="flex-1 truncate text-left">Search files and concepts</span>

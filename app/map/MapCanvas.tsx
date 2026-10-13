@@ -25,13 +25,19 @@ const edgeTypes: EdgeTypes = { routed: RoutedEdge };
 /** A level fits the screen with room around it, and a small level isn't blown up past 100% (VISUAL_REFRESH.md §4). */
 const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
 
-/** Each line's look per tone (VISUAL_REFRESH.md §4): 1 px slate normally, 2 px purple for the selection's links. */
-const EDGE_STYLES: Record<EdgeTone, { stroke: string; width: number; opacity: number; layer: number }> = {
-    normal: { stroke: "var(--neutral-edge)", width: 1, opacity: 1, layer: 0 },
-    faded: { stroke: "var(--neutral-edge)", width: 1, opacity: 0.35, layer: 0 },
-    preview: { stroke: "var(--text-2)", width: 1.5, opacity: 1, layer: 1 },
-    selected: { stroke: "var(--select)", width: 2, opacity: 1, layer: 2 },
+/**
+ * Each line's look per tone (VISUAL_REFRESH.md §4): 1 px slate normally, 2 px purple for the selection's links. The
+ * arrowhead of a quiet line is brighter than the line itself, so the direction reads without the line getting louder
+ * (owner review: the arrows were too small to see).
+ */
+const EDGE_STYLES: Record<EdgeTone, { stroke: string; arrow: string; width: number; opacity: number; layer: number }> = {
+    normal: { stroke: "var(--neutral-edge)", arrow: "var(--text-2)", width: 1, opacity: 1, layer: 0 },
+    faded: { stroke: "var(--neutral-edge)", arrow: "var(--neutral-edge)", width: 1, opacity: 0.35, layer: 0 },
+    preview: { stroke: "var(--text-2)", arrow: "var(--text)", width: 1.5, opacity: 1, layer: 1 },
+    selected: { stroke: "var(--select)", arrow: "var(--select)", width: 2, opacity: 1, layer: 2 },
 };
+/** The arrowhead's size in px, whatever the line's width. */
+const ARROW_SIZE = 18;
 
 type MapCanvasProps = {
     level: LevelResponse;
@@ -97,13 +103,9 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
                 target: edge.target,
                 focusable: false,
                 label: hoveredEdge === id ? `${formatCount(edge.count)} import${edge.count === 1 ? "" : "s"}` : undefined,
-                labelStyle: { fill: "var(--text)", fontSize: 12 },
-                labelBgStyle: { fill: "var(--surface)" },
-                labelBgPadding: [6, 3] as [number, number],
-                labelBgBorderRadius: 6,
                 style: { stroke: look.stroke, strokeWidth: look.width, opacity: look.opacity },
                 // userSpaceOnUse: the arrowhead stays the same size whatever the line's width
-                markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: look.stroke, markerUnits: "userSpaceOnUse" },
+                markerEnd: { type: MarkerType.ArrowClosed, width: ARROW_SIZE, height: ARROW_SIZE, color: look.arrow, markerUnits: "userSpaceOnUse" },
             };
             return { layer: look.layer, edge: drawnEdge };
         });

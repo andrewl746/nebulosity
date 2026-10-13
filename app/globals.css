@@ -44,6 +44,27 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/*
+ * Anything you can click shows the hand and answers the hover (owner review): Tailwind 4 resets buttons to the plain
+ * arrow. Text fields, and the search field that opens the palette, show the text cursor instead.
+ */
+@layer base {
+  /* in the base layer, so a utility (cursor-text on the search field) still overrides them */
+  button:not(:disabled), [role="button"], a[href], summary, .react-flow__node {
+    cursor: pointer;
+  }
+
+  button, a, [role="button"] {
+    transition: color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out;
+  }
+
+  /* Scrollbars in the theme's colors, thin, with no arrow buttons (owner review) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
 /* React Flow's own parts (controls, edge labels) take the same tokens */
 .react-flow {
   --xy-background-color: var(--canvas);
@@ -74,5 +95,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .neb-pulse {
     animation: none;
+  }
+
+  button, a, [role="button"] {
+    transition: none;
   }
 }
