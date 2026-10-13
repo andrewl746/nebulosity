@@ -11,10 +11,10 @@ import HelpDialog from "./HelpDialog";
 import ActivityBar from "./ActivityBar";
 import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
 import MapCanvas from "./MapCanvas";
-import { formatCount } from "./format";
 import { mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { boxFor, parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
+import { pageNote } from "./portals";
 import { nextPulses, type Pulse } from "./pulses";
 import RepoMenu from "./RepoMenu";
 import SearchPalette from "./SearchPalette";
@@ -33,6 +33,13 @@ const HELP_SEEN = "nebulosity.helpSeen";
 
 const cacheKey = (place: MapPlace): string => `${place.path}\0${place.page}`;
 
+/** The cache with one more level in it: the same repo and version keep what's there, anything newer starts over. */
+const cacheWith = (cache: LevelCache | null, place: MapPlace, level: LevelResponse): LevelCache => ({
+    repo: level.repo,
+    version: level.indexVersion,
+    levels: new Map(cache !== null && cache.repo === level.repo && cache.version === level.indexVersion ? cache.levels : []).set(cacheKey(place), level),
+});
+
 /** The Map (PIVOT_SPEC.md §7): the page's one client component. */
 export default function MapView(){
     return (
@@ -50,6 +57,8 @@ function MapScreen(){
     const [cache, setCache] = useState<LevelCache | null>(null);
     const [levelError, setLevelError] = useState<ApiError | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
+    // a path to show that may be on another page: the server says which page holds it (focus(), below)
+    const [focusing, setFocusing] = useState<string | null>(null);
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
     const [highlights, setHighlights] = useState<readonly string[]>([]);
@@ -66,17 +75,36 @@ function MapScreen(){
         const controller = new AbortController();
         api.level(place.path, place.page, controller.signal).then(
             (next) => {
-                setCache((c) => ({
-                    repo: next.repo,
-                    version: next.indexVersion,
-                    levels: new Map(c !== null && c.repo === next.repo && c.version === next.indexVersion ? c.levels : []).set(cacheKey(place), next),
-                }));
+                setCache((c) => cacheWith(c, place, next));
                 setLevelError(null);
             },
             (err: unknown) => { if (err instanceof ApiError) setLevelError(err); },
         );
         return () => controller.abort();
     }, [repo, version, place, current]);
+
+    // Showing a path on a big folder's other page: the level is fetched with `focus`, and the server answers with the
+    // page holding it. The place moves once, to that page, so Back has one step to undo, not a page-0 stop on the way.
+    useEffect(() => {
+        if (focusing === null || repo === null) return;
+        const controller = new AbortController();
+        api.level(parentOf(focusing), 0, controller.signal, focusing).then(
+            (next) => {
+                const at = { path: next.path, page: next.page };
+                setCache((c) => cacheWith(c, at, next));
+                setPlace(at);
+                setSelected(focusing);
+                setFocusing(null);
+                setLevelError(null);
+            },
+            (err: unknown) => {
+                if (!(err instanceof ApiError)) return;
+                setLevelError(err);
+                setFocusing(null);
+            },
+        );
+        return () => controller.abort();
+    }, [focusing, repo]);
 
     // Every move to another folder or page goes into the browser's history, so Back returns to the previous one
     // (owner review). Back itself only reads the address bar: the place it sets already matches, so nothing is pushed.
@@ -102,13 +130,15 @@ function MapScreen(){
         if (folder !== levelPath) markStart("map:level");
         setPlace({ path: folder, page: 0 });
         setSelected(null);
+        setFocusing(null);
     }, [levelPath]);
 
-    /** Another page of a big folder (owner review: the folded boxes get drawn too, 49 at a time). */
+    /** Another page of a big folder: the arrows, ← and →, or a portal (owner review: every box is drawn on some page). */
     const turnPage = useCallback((page: number) => {
         markStart("map:level");
         setPlace({ path: levelPath, page });
         setSelected(null);
+        setFocusing(null);
     }, [levelPath]);
 
     const select = useCallback((target: string | null) => {
@@ -116,18 +146,25 @@ function MapScreen(){
         setSelected(target);
     }, []);
 
-    /** Goes to the level that holds a path and selects it there: search results, the panel's links, focus_node. */
+    /**
+     * Goes to the level and page that hold a path and selects it there: search results, the panel's links, focus_node.
+     * A box already drawn is just selected; anything else may sit on another page of a big folder, so the server finds
+     * the page (the effect above).
+     */
     const focus = useCallback((target: string) => {
         if (target === ""){
             open("");
             return;
         }
-        const next = parentOf(target);
-        // a new level is timed as one; a box on the level already showing is a selection (open() says why)
-        markStart(next !== levelPath ? "map:level" : "map:select");
-        setPlace((p) => (p.path === next ? p : { path: next, page: 0 }));
-        setSelected(target);
-    }, [open, levelPath]);
+        // a box on the page already showing is a selection; anything else is timed as a new level (open() says why)
+        if (parentOf(target) === levelPath && level?.nodes.some((n) => n.path === target)){
+            markStart("map:select");
+            setSelected(target);
+            return;
+        }
+        markStart("map:level");
+        setFocusing(target);
+    }, [open, levelPath, level]);
 
 
     /** A tool call from Claude Code (PIVOT_SPEC.md §8): pulse the boxes it touched, and run its UI action. */
@@ -223,11 +260,20 @@ function MapScreen(){
             />
             <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-hairline bg-canvas px-4">
                 {level && repo ? <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} /> : <span />}
-                {level && level.hiddenCount > 0 && <PageNote level={level} />}
+                {level && level.hiddenCount > 0 && <span data-testid="page-note" className="shrink-0 text-[12px] text-text-2">{pageNote(level)}</span>}
             </div>
             <main className="relative flex-1">
                 {level && (
-                    <MapCanvas level={level} selected={selected} agent={agent} pulses={pulses} onSelect={select} onOpen={open} onDrawn={onDrawn} />
+                    <MapCanvas
+                        level={level}
+                        selected={selected}
+                        agent={agent}
+                        pulses={pulses}
+                        onSelect={select}
+                        onOpen={open}
+                        onTurnPage={turnPage}
+                        onDrawn={onDrawn}
+                    />
                 )}
                 {level && pageCount > 1 && (
                     <>
@@ -245,6 +291,7 @@ function MapScreen(){
                         indexVersion={version ?? 0}
                         onFocus={focus}
                         onOpen={open}
+                        onTurnPage={turnPage}
                         onClose={closePanel}
                     />
                 )}
@@ -261,19 +308,6 @@ function MapScreen(){
                 />
             )}
         </div>
-    );
-}
-
-/** "Boxes 50–98 of 182 · page 2 of 4": which of a big folder's boxes are on screen. */
-function PageNote({ level }: { level: LevelResponse }){
-    const drawn = level.nodes.length - 1;
-    const total = drawn + level.hiddenCount;
-    // every page before the last holds the same number of boxes, so the last one's start counts back from the end
-    const start = level.page === level.pageCount - 1 ? total - drawn + 1 : level.page * drawn + 1;
-    return (
-        <span data-testid="page-note" className="shrink-0 text-[12px] text-text-2">
-            Boxes {formatCount(start)}–{formatCount(start + drawn - 1)} of {formatCount(total)} · page {level.page + 1} of {level.pageCount}
-        </span>
     );
 }
 

@@ -46,7 +46,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li><b>Click</b> a box to see what it is, in the panel on the right.</li>
                         <li><b>Double-click</b> a folder to go inside it.</li>
                         <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button.</li>
-                        <li>Big folders show 49 boxes at a time: turn the page with the arrows at the sides, or <Key>←</Key> <Key>→</Key>.</li>
+                        <li>Big folders are split into pages of related boxes: turn the page with the arrows at the sides, or <Key>←</Key> <Key>→</Key>.</li>
                         <li>Search files and concepts with <Key>Ctrl K</Key> (<Key>⌘K</Key> on a Mac).</li>
                     </Section>
                     <Section title="Reading the Map">
@@ -54,7 +54,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li>A line from A to B means code in A imports code in B. The arrow points at what&apos;s imported.</li>
                         <li>Hover a box to preview its lines. Hover a line to see how many imports it carries.</li>
                         <li>Boxes with no lines at this level sit in a grid to one side.</li>
-                        <li>&quot;+N more&quot; stands for the boxes on other pages. Select it to list them.</li>
+                        <li>Lines to other pages end at a page&apos;s doorway, a dashed box; double-click it to go there.</li>
                     </Section>
                     <Section title="Colors">
                         <li><Swatch className="border-2 border-select bg-select-fill" /> Purple: the box you selected and its lines. Everything else fades.</li>

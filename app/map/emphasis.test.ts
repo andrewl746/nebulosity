@@ -40,9 +40,12 @@ describe("mapEmphasis (VISUAL_REFRESH.md §4)", () => {
         expect(tones("b", "b")).toEqual(tones("b", null));
     });
 
-    it("treats the +N more box like any other", () => {
-        const result = mapEmphasis(["src/a", "src/"], [{ source: "src/a", target: "src/", count: 4 }], "src/", null);
-        expect([...result.boxes]).toEqual([["src/a", "linked"], ["src/", "selected"]]);
-        expect([...result.edges]).toEqual([["src/a->src/", "selected"]]);
+    it("treats a portal like any other box: selecting a box turns its cross-page line purple", () => {
+        const boxes = ["src/a", "src/b", "src//page-2"];
+        const edges: MapEdge[] = [{ source: "src/a", target: "src//page-2", count: 4 }];
+        const result = mapEmphasis(boxes, edges, "src/a", null);
+        expect([...result.boxes]).toEqual([["src/a", "selected"], ["src/b", "faded"], ["src//page-2", "linked"]]);
+        expect([...result.edges]).toEqual([["src/a->src//page-2", "selected"]]);
+        expect([...mapEmphasis(boxes, edges, "src//page-2", null).boxes]).toEqual([["src/a", "linked"], ["src/b", "faded"], ["src//page-2", "selected"]]);
     });
 });

@@ -1,18 +1,19 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { IconCode, IconFile, IconFolder, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconCode, IconFile, IconFolder, IconX } from "@tabler/icons-react";
 import type { AreaCount, DescribeResponse, LevelResponse, MapNode, SummarizeResponse, SymbolInfo } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCompact, formatCount } from "./format";
 import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
+import { linkedFrom, portalCaption, portalLinks } from "./portals";
 import { placeholderFor, wantsSummary } from "./summaries";
 import SourceViewer from "./SourceViewer";
 import { inlineCode, splitSummary } from "./text";
 
 type DetailPanelProps = {
-    /** The selection: a file, a folder, the repo, or the level's "+N more" box. */
+    /** The selection: a file, a folder, the repo, or one of the level's portals. */
     path: string;
     level: LevelResponse;
     /** Moves when the index changes; the panel then refetches. */
@@ -20,6 +21,8 @@ type DetailPanelProps = {
     /** Go to the level holding a path and select it there. */
     onFocus: (targetPath: string) => void;
     onOpen: (folder: string) => void;
+    /** Turn to another page of the level on screen. */
+    onTurnPage: (page: number) => void;
     onClose: () => void;
 };
 
@@ -35,13 +38,54 @@ const KIND_LABELS: Record<DescribeResponse["kind"], string> = { repo: "Repositor
  * The details panel (VISUAL_REFRESH.md §5), top to bottom: what kind of thing it is, its name, its size, a short
  * summary that expands, what it depends on and what uses it (chips that focus the Map), and what's inside. A missing
  * or out-of-date summary is asked for once ("summarize now", PIVOT_SPEC.md §5.3), and the panel says so while it's
- * refreshing. Selecting "+N more" lists the boxes it folds. MapView remounts the panel for each selection (key), so
+ * refreshing. A portal gets its own panel (PortalPanel). MapView remounts the panel for each selection (key), so
  * nothing leaks from one target to the next.
  */
-function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
-    const more = level.nodes.find((n) => n.path === path && n.kind === "portal") ?? null;
-    const isMore = more !== null;
-    const target = isMore ? level.path : path;
+function DetailPanel(props: DetailPanelProps){
+    const portal = props.level.nodes.find((n) => n.path === props.path && n.kind === "portal");
+    return portal ? <PortalPanel portal={portal} {...props} /> : <TargetPanel {...props} />;
+}
+
+// memo: the Map's clock ticks each second while Claude Code is active, and an expanded list can hold 1,000 rows
+export default memo(DetailPanel);
+
+type PanelFrameProps = {
+    path: string;
+    kindLabel: string;
+    name: string;
+    title: string;
+    subtitle: string;
+    /** Under the name: the stats line and its actions. */
+    header?: ReactNode;
+    onClose: () => void;
+    children: ReactNode;
+};
+
+/** The panel's frame: the kind, the name, the path under it, a close button, then the header's extras and the body. */
+function PanelFrame({ path, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
+    return (
+        <aside data-panel={path} style={{ width: PANEL_WIDTH }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
+            <header className="border-b border-hairline px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="text-[12px] leading-4 text-text-2">{kindLabel}</div>
+                        <h2 className="mt-1 truncate text-[18px] font-medium leading-6 text-text" title={title}>{name}</h2>
+                        <div className="truncate font-mono text-[12px] leading-4 text-text-2" title={subtitle}>{subtitle}</div>
+                    </div>
+                    <button type="button" onClick={onClose} aria-label="Close the panel" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">
+                        <IconX aria-hidden size={16} stroke={1.75} />
+                    </button>
+                </div>
+                {header}
+            </header>
+            {children}
+        </aside>
+    );
+}
+
+/** A file, a folder or the repo: described by the server (GET /api/describe). */
+function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
+    const target = path;
     const [data, setData] = useState<DescribeResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [fresh, setFresh] = useState<SummarizeResponse | null>(null);
@@ -81,12 +125,12 @@ function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
     // After a NOT_READY answer, once per target: the index moves with every child summary the worker writes, and each
     // move would otherwise ask again for a folder that still isn't ready. Reselecting it asks afresh (a new panel).
     useEffect(() => {
-        if (data === null || isMore || !wantsSummary(data.summaryStatus)) return;
+        if (data === null || !wantsSummary(data.summaryStatus)) return;
         const key = `${data.path}@${data.indexVersion}`;
         if (asked.current.has(data.path) || asked.current.has(key)) return;
         asked.current.add(key);
         summarize(data.path, () => asked.current.add(data.path));
-    }, [data, isMore]);
+    }, [data]);
 
     const retry = (): void => {
         if (data === null) return;
@@ -94,32 +138,26 @@ function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
         summarize(data.path);
     };
 
-    const name = more ? more.name : nameOf(target, level.repo);
-    const kindLabel = more ? "Folded boxes" : data ? KIND_LABELS[data.kind] : "";
+    const name = nameOf(target, level.repo);
+    const kindLabel = data ? KIND_LABELS[data.kind] : "";
     // the source viewer (owner review): closed, open on the whole file, or open on a declaration's lines
     const [viewing, setViewing] = useState<{ lines?: { start: number; end: number } } | null>(null);
     const closeViewer = useCallback(() => setViewing(null), []);
 
     return (
-        <aside data-panel={path} style={{ width: PANEL_WIDTH }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
-            <header className="border-b border-hairline px-4 py-4">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                        <div className="text-[12px] leading-4 text-text-2">{kindLabel}</div>
-                        <h2 className="mt-1 truncate text-[18px] font-medium leading-6 text-text" title={target || name}>{name}</h2>
-                        <div className="truncate font-mono text-[12px] leading-4 text-text-2" title={target}>{target || "(repo root)"}</div>
-                    </div>
-                    <button type="button" onClick={onClose} aria-label="Close the panel" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">
-                        <IconX aria-hidden size={16} stroke={1.75} />
-                    </button>
-                </div>
-                {data && !more && <Stats data={data} onOpen={onOpen} onViewSource={() => setViewing({})} />}
-            </header>
+        <PanelFrame
+            path={path}
+            kindLabel={kindLabel}
+            name={name}
+            title={target || name}
+            subtitle={target || "(repo root)"}
+            header={data && <Stats data={data} onOpen={onOpen} onViewSource={() => setViewing({})} />}
+            onClose={onClose}
+        >
             <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
                 {error && <p className="text-danger">{error.message}</p>}
                 {!data && !error && <p className="text-text-2">Loading…</p>}
-                {data && more && <FoldedList data={data} level={level} onFocus={onFocus} onOpen={onOpen} />}
-                {data && !more && (
+                {data && (
                     <Details
                         data={data}
                         fresh={fresh}
@@ -133,12 +171,83 @@ function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
                 )}
             </div>
             {viewing && data?.kind === "file" && <SourceViewer path={data.path} lines={viewing.lines} onClose={closeViewer} />}
-        </aside>
+        </PanelFrame>
     );
 }
 
-// memo: the Map's clock ticks each second while Claude Code is active, and an expanded list can hold 1,000 rows
-export default memo(DetailPanel);
+type Linked = { path: string; count: number };
+
+/**
+ * A portal selected: the page (or pages) behind it, a way to go there, and which boxes on this page have lines to it,
+ * each a link that selects that box. Everything comes from the level on screen; there's nothing to fetch.
+ */
+function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose }: DetailPanelProps & { portal: MapNode }){
+    const links = portalLinks(level.edges, portal.path);
+    const linked = linkedFrom(level, portal.path);
+    const pages = portal.page !== undefined ? [portal.page] : portal.pages ?? [];
+    const byPath = new Map(level.nodes.map((n) => [n.path, n]));
+
+    useEffect(() => {
+        measureAfterPaint("map:select");
+    }, []);
+
+    return (
+        <PanelFrame
+            path={path}
+            kindLabel={pages.length === 1 ? "Page" : "Pages"}
+            name={portal.name}
+            title={portal.name}
+            subtitle={`${level.path || "(repo root)"} · page ${level.page + 1} of ${level.pageCount}`}
+            header={<p className="mt-3 text-[13px] text-text-2">{portalCaption(portal, links)} with this page</p>}
+            onClose={onClose}
+        >
+            <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
+                <section aria-label="Go to">
+                    {pages.length > 1 && <SectionTitle title="Pages behind this doorway" count={pages.length} />}
+                    <ul className="flex flex-wrap gap-2">
+                        {pages.map((p) => (
+                            <li key={p}>
+                                <button
+                                    type="button"
+                                    data-go-page={p}
+                                    onClick={() => onTurnPage(p)}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] text-text hover:border-text-2"
+                                >
+                                    {p < level.page && <IconArrowLeft aria-hidden size={14} stroke={1.75} />}
+                                    {pages.length === 1 ? `Go to page ${p + 1}` : `Page ${p + 1}`}
+                                    {p > level.page && <IconArrowRight aria-hidden size={14} stroke={1.75} />}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+
+                <Rows title="Linked from this page" items={linked} empty="No lines from this page." render={({ path: boxPath, count }: Linked) => (
+                    <li key={boxPath}>
+                        <button
+                            type="button"
+                            data-linked={boxPath}
+                            title={`${boxPath}: ${formatCount(count)} import${count === 1 ? "" : "s"} with ${portal.name}`}
+                            onClick={() => onFocus(boxPath)}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-surface"
+                        >
+                            <BoxIcon box={byPath.get(boxPath)} />
+                            <span className="min-w-0 flex-1 truncate">{byPath.get(boxPath)?.name ?? boxPath}</span>
+                            <span className="shrink-0 text-[12px] text-text-2">{formatCount(count)}</span>
+                        </button>
+                    </li>
+                )} />
+            </div>
+        </PanelFrame>
+    );
+}
+
+/** A folder's or a file's icon, as on the Map. */
+function BoxIcon({ box }: { box: MapNode | undefined }){
+    const folder = box?.kind === "folder";
+    const Icon = folder ? IconFolder : IconFile;
+    return <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-folder" : "text-text-2"}`} />;
+}
 
 /** "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. */
 function Stats({ data, onOpen, onViewSource }: { data: DescribeResponse; onOpen: (folder: string) => void; onViewSource: () => void }){
@@ -331,17 +440,6 @@ function ChildRow({ child, onFocus, onOpen }: { child: MapNode; onFocus: (target
                 {folder && <span className="shrink-0 text-[12px] text-text-2">{formatCount(child.fileCount)} {child.fileCount === 1 ? "file" : "files"}</span>}
             </button>
         </li>
-    );
-}
-
-/** "+N more" selected: the boxes it folds, from describe(level).children minus the ones drawn. */
-function FoldedList({ data, level, onFocus, onOpen }: { data: DescribeResponse; level: LevelResponse; onFocus: (targetPath: string) => void; onOpen: (folder: string) => void }){
-    const drawn = new Set(level.nodes.map((n) => n.path));
-    const folded = (data.children ?? []).filter((child) => !drawn.has(child.path));
-    return (
-        <Rows title="Folded into this box" items={folded} render={(child: MapNode) => (
-            <ChildRow key={child.path} child={child} onFocus={onFocus} onOpen={onOpen} />
-        )} />
     );
 }
 

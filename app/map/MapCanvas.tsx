@@ -14,7 +14,8 @@ import { PANEL_WIDTH } from "./DetailPanel";
 import { formatCount } from "./format";
 import Legend from "./Legend";
 import { FIT_PADDING, layoutLevel } from "./levelLayout";
-import MapBox, { type BoxNode } from "./MapBox";
+import MapBox, { type BoxData, type BoxNode } from "./MapBox";
+import { portalCaption, portalDirection, portalLinks } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { routeEdges } from "./routes";
@@ -48,19 +49,25 @@ type MapCanvasProps = {
     pulses: ReadonlyMap<string, Pulse>;
     onSelect: (path: string | null) => void;
     onOpen: (folder: string) => void;
+    /** Turn to another page of this folder: a portal was double-clicked. */
+    onTurnPage: (page: number) => void;
     /** Called once a new level is on screen (S3's measuring point). */
     onDrawn: () => void;
 };
 
 /**
  * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
- * around the boxes (routes.ts). A
- * click selects and a double click opens a folder. The selection's lines turn purple and unrelated boxes fade;
+ * around the boxes (routes.ts). A click selects; a double click opens a folder, or turns to a portal's page. The selection's lines turn purple and unrelated boxes fade;
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn }: MapCanvasProps){
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
+    // each portal's arrow and "44 boxes · 6 links", worked out once per level rather than on every hover
+    const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
+        n.path,
+        { direction: portalDirection(n, level.page), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
+    ])), [level]);
     const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
@@ -86,8 +93,9 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
             tone: emphasis.boxes.get(box.path) ?? "normal",
             agent: agent.has(box.path),
             pulseKey: pulses.get(box.path)?.key ?? 0,
+            portal: portals.get(box.path),
         })));
-    }, [level, positions, emphasis, agent, pulses, setNodes]);
+    }, [level, positions, portals, emphasis, agent, pulses, setNodes]);
 
     useEffect(() => {
         const drawn = level.edges.map((edge) => {
@@ -132,7 +140,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
 
     const onNodeClick: NodeMouseHandler<BoxNode> = (_, node) => onSelect(node.id);
     const onNodeDoubleClick: NodeMouseHandler<BoxNode> = (_, node) => {
-        if (node.data.box.kind === "folder") onOpen(node.id);
+        const { box } = node.data;
+        if (box.kind === "folder") onOpen(node.id);
+        // a portal turns to its page; the merged one stands for several, so it stays selected for its panel to pick one
+        else if (box.kind === "portal" && box.page !== undefined) onTurnPage(box.page);
     };
     const onNodeMouseEnter: NodeMouseHandler<BoxNode> = (_, node) => setHoveredBox(node.id);
     const onNodeMouseLeave: NodeMouseHandler<BoxNode> = () => setHoveredBox(null);
