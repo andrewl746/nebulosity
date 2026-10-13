@@ -665,3 +665,15 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 **Alternatives:** (a) JSON answers (`structuredContent`): exact, but larger, and a model skims prose faster. (b) Handlers that post live events themselves: the Guide's in-process adapter would then make HTTP calls to its own server. (c) Markdown: tokens spent on syntax.
 **Consequences:** A new tool is one entry and one builder. The text is a contract (§17), tested on the fixture.
 **Revisit when:** a client wants structured results (an IDE view of a dependents list, say): add an `outputSchema` beside the text.
+
+## ADR-048 — The MCP server starts as `node <checkout>/mcp/launch.mjs` (2026-10-13)
+
+**Context:** Claude Code runs an MCP config's command from the user's project folder. The engine is TypeScript run by tsx, a devDependency that only the checkout has. On Windows, `npx` is a `.cmd` batch file, so a config that starts `npx` needs `cmd /c`.
+**Decision:**
+- A plain-JavaScript launcher, `mcp/launch.mjs`, run by `node`. It sets `NEBULOSITY_HOME` to the checkout it sits in unless that's already set, imports tsx from the checkout (an ESM import resolves next to the importing file, not from the working folder), then runs `mcp/server.ts`'s `main()`.
+- The server speaks MCP over stdio through `@modelcontextprotocol/sdk` 1.32.1, pinned exactly. Before anything else, it sends `console.log`, `info` and `debug` to stderr: stdout carries protocol messages only.
+- It exits when the client closes stdin. On Windows, Claude Code (2.1.296) kills the process tree 300 ms after closing it.
+- One line registers it on every OS: `claude mcp add --scope user --transport stdio nebulosity -- node <checkout>/mcp/launch.mjs`.
+**Alternatives:** (a) `cmd /c npx tsx …/mcp/server.ts`: a Windows-only line, npx's lookup on every start, and tsx found only if the working folder has it. (b) Compile to `dist/` and run plain JavaScript: no tsx at run time, but a build step before every use. V1.6's package decides that.
+**Consequences:** Start-up costs tsx's load plus the engine's first transpile (about 0.5 s; tsx caches it after). The server needs the checkout's `node_modules`, a local tool's normal state.
+**Revisit when:** V1.6 ships an installable package (a `bin` entry replaces the launcher), or Node runs the engine's TypeScript without tsx.

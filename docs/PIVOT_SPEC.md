@@ -82,7 +82,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 1. Core (`lib/`) never imports `app/`, `next` or React. Fix on the way in: `lib/graph.ts` imports types from `app/components/FileNode` today, which breaks this rule.
 2. Adapters are thin. The MCP server, route handlers, static exporter and CLI scripts each validate input, call one engine function, and format the result.
 3. `lib/contracts.ts` becomes renderer-agnostic. React Flow's `Node`/`Edge` types leave the contract, and the UI maps a `LevelResponse` into whatever renderer it uses.
-4. **Paths resolve from the install directory, not `cwd`.** `lib/db/client.ts` opens `.nebulosity/nebulosity.db` and the migrations folder relative to `process.cwd()`. Claude Code launches the MCP server from the *user's* repo, so both must resolve from `NEBULOSITY_HOME`, falling back to `process.cwd()` when it's unset. That fallback is correct for Next.js, the CLI and Vitest, which all run from the checkout. The MCP launcher (V1.4) always sets it.
+4. **Paths resolve from the install directory, not `cwd`.** `lib/db/client.ts` opens `.nebulosity/nebulosity.db` and the migrations folder relative to `process.cwd()`. Claude Code launches the MCP server from the *user's* repo, so both must resolve from `NEBULOSITY_HOME`, falling back to `process.cwd()` when it's unset. That fallback is correct for Next.js, the CLI and Vitest, which all run from the checkout. The MCP launcher (V1.4) always sets it. *(`mcp/launch.mjs` sets it to its own checkout unless it's already set, ADR-048.)*
 5. One database, many repos. The `repositories` table already supports this. WAL lets the MCP server read while the indexer writes. **The MCP server opens the database read-only and never runs migrations.** Only the Next server and CLI own the schema. Running two processes against one database file is exactly ADR-023's revisit trigger, and this is the answer to it. *(V1.4, ADR-044: `openDb(file, "readonly")`, which also refuses a database behind the checkout's migrations and says to start the Map or run `npm run index` once.)*
 
 **Processes.** The Next.js server runs the UI, the API and the live channel, and forks one background worker (ADR-038) that owns every write while the Map is open: the watcher, incremental updates, summary refreshes, the folder sweep and embeddings. The MCP server is spawned once per Claude Code session, is read-only on the database, and posts live events over HTTP. CLI scripts cover index, export, bench and eval.
@@ -457,6 +457,7 @@ Each v1 slice ends demoable:
 | ADR-045 | Import reach: files and folders, exact totals, nearest and most-imported first, paged with an offset; chains in either direction |
 | ADR-046 | An MCP call answers about the indexed repo holding Claude Code's project folder, else the Map's repo (said first); live events only for the Map's repo; free mode from the stored stage |
 | ADR-047 | One registry entry per tool: a handler returns text, the paths it touched and an optional UI action; answers are compact text under 40,000 characters (API_CONTRACTS.md §17) |
+| ADR-048 | The MCP server starts as node <checkout>/mcp/launch.mjs: no npx, no cmd /c, tsx from the checkout, the SDK pinned at 1.32.1, stdout only for the protocol |
 
 ## 16. Doc migration
 

@@ -12,6 +12,7 @@
     "summarize": "tsx scripts/summarize.ts",
     "search": "tsx scripts/search.ts",
     "live": "tsx scripts/live.ts",
+    "mcp": "node mcp/launch.mjs",
     "bench-map": "tsx scripts/bench-map.ts",
     "bench-update": "tsx scripts/bench-update.ts",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
