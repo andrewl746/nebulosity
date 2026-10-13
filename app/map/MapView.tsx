@@ -7,6 +7,7 @@ import type { LevelResponse, LiveEvent } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import Breadcrumb from "./Breadcrumb";
 import DetailPanel, { PANEL_WIDTH } from "./DetailPanel";
+import HelpDialog from "./HelpDialog";
 import ActivityBar from "./ActivityBar";
 import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
 import MapCanvas from "./MapCanvas";
@@ -27,6 +28,9 @@ import { useLive } from "./useLive";
  * the index moves.
  */
 type LevelCache = { repo: string; version: number; levels: ReadonlyMap<string, LevelResponse> };
+/** Set once the help has opened by itself, so it does so only on a first visit. */
+const HELP_SEEN = "nebulosity.helpSeen";
+
 const cacheKey = (place: MapPlace): string => `${place.path}\0${place.page}`;
 
 /** The Map (PIVOT_SPEC.md §7): the page's one client component. */
@@ -47,6 +51,7 @@ function MapScreen(){
     const [levelError, setLevelError] = useState<ApiError | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
     const [paletteOpen, setPaletteOpen] = useState(false);
+    const [helpOpen, setHelpOpen] = useState(false);
     const [highlights, setHighlights] = useState<readonly string[]>([]);
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
 
@@ -166,6 +171,22 @@ function MapScreen(){
     }, [refresh]);
 
     const onDrawn = useCallback(() => measureAfterPaint("map:level"), []);
+    const closeHelp = useCallback(() => setHelpOpen(false), []);
+
+    // The help opens by itself the first time this browser opens the Map (owner review). A browser that keeps no
+    // storage (a private window) just doesn't get it unasked; the ? button still works.
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            try{
+                if (window.localStorage.getItem(HELP_SEEN) !== null) return;
+                window.localStorage.setItem(HELP_SEEN, "1");
+                setHelpOpen(true);
+            } catch{
+                // no storage: nothing to remember the first visit by
+            }
+        }, 0);
+        return () => clearTimeout(timer);
+    }, []);
     const closePanel = useCallback(() => setSelected(null), []);
 
     // Escape lets go of the selection, Backspace goes up a level, the arrow keys turn the page, unless the user is typing
@@ -180,7 +201,8 @@ function MapScreen(){
                 return;
             }
             if (typing) return;
-            if (event.key === "Escape") setSelected(null);
+            if (event.key === "?") setHelpOpen(true);
+            else if (event.key === "Escape") setSelected(null);
             else if (event.key === "Backspace" && levelPath !== "") open(parentOf(levelPath));
             else if (event.key === "ArrowLeft" && page > 0) turnPage(page - 1);
             else if (event.key === "ArrowRight" && page < pageCount - 1) turnPage(page + 1);
@@ -197,6 +219,7 @@ function MapScreen(){
                 repo={repo ? <RepoMenu repo={repo} onSwitched={onSwitched} /> : null}
                 onSearch={() => setPaletteOpen(true)}
                 status={<StatusPill status={status} />}
+                onHelp={() => setHelpOpen(true)}
             />
             <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-hairline bg-canvas px-4">
                 {level && repo ? <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} /> : <span />}
@@ -227,6 +250,7 @@ function MapScreen(){
                 )}
             </main>
             <ActivityBar recent={live.recent} connected={live.connected} />
+            {helpOpen && <HelpDialog onClose={closeHelp} />}
             {paletteOpen && (
                 <SearchPalette
                     onPick={(hit) => {

@@ -100,6 +100,13 @@ It's actionable and structured, not a static card. From top to bottom:
   - The boxes holding what those 3 actions touched keep the `--agent` ring while the action is under 30 s old (the old dock's idle window). show_on_map's highlights keep it until they're cleared.
   - The repo's `owner / repo` comes from its origin remote (`RepoSummary.remote`, API_CONTRACTS.md §15). Without one, it's the folder name.
 
+*(Added in the V1.3.1 build, from the owner's first look.)*
+- **Help:** a "?" button beside the status, the `?` key, and the first visit in a browser open "How to use the Map". It covers getting around, reading the Map, what each color means, the panel, Claude Code's activity and the keyboard.
+- **The status** is a bordered button with a chevron, so it reads as the menu it opens.
+- **Source:** a file's panel offers "View source", a read-only drawer over the canvas with line numbers. A declaration in the panel opens it at that declaration's lines, highlighted (API_CONTRACTS.md §16).
+- **Pages and Back:** a big folder is drawn 49 boxes at a time, with big arrows at the canvas's sides (or the arrow keys). The address bar holds the folder and page, so the browser's Back returns to the previous one.
+- **Feel:** everything clickable shows the hand and answers the hover, the search field shows the text cursor, and scrollbars are thin and in the theme's colors.
+
 ## 7. System rules (anti-noise)
 
 - **One radius:** 8 px for boxes, cards and inputs; 6 px for chips.

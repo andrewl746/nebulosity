@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
-import { IconSearch } from "@tabler/icons-react";
+import { IconHelp, IconSearch } from "@tabler/icons-react";
 
 type TopBarProps = {
     /** The repo as "owner / repo", or the repo picker. */
@@ -11,6 +11,8 @@ type TopBarProps = {
     onSearch?: () => void;
     /** The index-status dot. */
     status?: ReactNode;
+    /** Opens the help (owner review). */
+    onHelp?: () => void;
 };
 
 const noSubscription = () => () => {};
@@ -20,7 +22,7 @@ const noSubscription = () => () => {};
  * view's title, a wide search field, and the index status on the right. Structure is v1's only lens, so the view title
  * stands where PIVOT_SPEC.md §7's lens switcher will go when History (E3) and Clusters (E5) arrive.
  */
-export default function TopBar({ repo, onSearch, status }: TopBarProps){
+export default function TopBar({ repo, onSearch, status, onHelp }: TopBarProps){
     // the server renders "Ctrl K"; a Mac shows "⌘K" once hydrated, without a mismatch
     const isMac = useSyncExternalStore(noSubscription, () => /Mac|iPhone|iPad/.test(navigator.platform), () => false);
 
@@ -49,7 +51,21 @@ export default function TopBar({ repo, onSearch, status }: TopBarProps){
                     </button>
                 )}
             </div>
-            <div className="flex shrink-0 items-center">{status}</div>
+            <div className="flex shrink-0 items-center gap-2">
+                {onHelp && (
+                    <button
+                        type="button"
+                        onClick={onHelp}
+                        data-testid="help-button"
+                        aria-label="How to use the Map"
+                        title="How to use the Map (?)"
+                        className="grid h-7 w-7 place-items-center rounded-md border border-border text-text-2 hover:border-text-2 hover:text-text"
+                    >
+                        <IconHelp aria-hidden size={16} stroke={1.75} />
+                    </button>
+                )}
+                {status}
+            </div>
         </header>
     );
 }
