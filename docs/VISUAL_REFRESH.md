@@ -17,30 +17,32 @@ This slice is shaped by what the owner saw on the real V1.3 screen: competing ba
 
 Define these as CSS custom properties in `app/globals.css`. Components use tokens, never raw hex.
 
-*(Revised 2026-10-12 by the owner's pick after the first build, which read as too monotone: cool slate surfaces (option C) with blue for titles and code (option B). The first table's grays are replaced, and the blue and body-text tokens are new.)*
+*(Revised 2026-10-12 by the owner's picks after the first build, which read as too monotone. A blue "cool slate" pick came first, but it read as too blue for Nebulosity, so the final pick is **violet slate**: purple-tinted surfaces and lavender names, with the selection still vivid purple. The first table's grays are replaced, and the lavender and body-text tokens are new.)*
 
 | Token | Hex | One meaning |
 |---|---|---|
-| `--canvas` | `#0F131A` | page and Map background, a single flat cool slate |
-| `--surface` | `#1A212C` | boxes, inputs, cards |
-| `--panel` | `#141A23` | the details panel, drawers, dialogs |
-| `--hairline` | `#232B38` | dividers |
-| `--border` | `#3A4659` | box and input borders |
-| `--text` | `#EEF2F8` | primary text: names, headings |
-| `--text-body` | `#C3CBD8` | paragraphs: summaries, help |
-| `--text-2` | `#AEB8C8` | secondary text, counts, labels |
-| `--title` | `#9CC4FF` | **blue: a description's title** (a summary's tagline, help headings) |
-| `--code` | `#A9CBFF` | **blue: code identifiers in text** |
-| `--code-bg` | `#1B2940` | the chip behind them |
-| `--folder` | `#7FB2F0` | **blue: the folder icon**, so folders and files part at a glance |
-| `--neutral-edge` | `#5A6680` | ordinary connections, bright enough to follow on the slate |
+| `--canvas` | `#12101A` | page and Map background, a single flat violet slate |
+| `--surface` | `#1D1A28` | boxes, inputs, cards |
+| `--panel` | `#17141F` | the details panel, drawers, dialogs |
+| `--hairline` | `#272236` | dividers |
+| `--border` | `#3E3752` | box and input borders |
+| `--text` | `#F1EEF8` | primary text: names, headings |
+| `--text-body` | `#CBC4DA` | paragraphs: summaries, help |
+| `--text-2` | `#B3ABC6` | secondary text, counts, labels |
+| `--title` | `#C7B3FF` | **lavender: a description's title** (a summary's tagline, help headings) |
+| `--code` | `#D8CAFF` | **lavender: code identifiers in text** |
+| `--code-bg` | `#2A2240` | the chip behind them |
+| `--folder` | `#A98BEA` | **lavender: the folder icon**, so folders and files part at a glance |
+| `--neutral-edge` | `#6A6285` | ordinary connections, bright enough to follow on the canvas |
 | `--select` | `#B58AFF` | **purple: the selected box, its direct links and its dependency path.** Nothing else |
-| `--select-fill` | `#251E36` | the selected box's fill |
+| `--select-fill` | `#2C2145` | the selected box's fill |
 | `--agent` | `#F08A4B` | **orange: what Claude Code is touching right now.** Nothing else |
 | `--ok` | `#4CC38A` | **green: indexing status only** (the "indexed" dot) |
 | `--danger` | `#F07A7A` | error text and a failed stage. *(Added in the V1.3.1 build: the table had no color for errors, and people need to see them.)* |
 
-Blue is for names and code: what you read to know what something is. It never marks state; purple, orange and green keep those.
+Lavender (soft, on text and icons) is the brand: it marks names and code, what you read to know what something is. Vivid purple, as a box's 2 px border and fill and as its lines, is the selection. They share a hue on purpose, but never a job: lavender never marks state.
+
+**Syntax colors, inside code only** (the source viewer and search's code lines). The owner asked for code colored as in VS Code, so these are VS Code's **Dark+** palette: `--syn-text #D4D4D4`, `--syn-keyword #569CD6` (const, function, class), `--syn-control #C586C0` (import, return, if), `--syn-string #CE9178`, `--syn-number #B5CEA8`, `--syn-comment #6A9955`, `--syn-type #4EC9B0`, `--syn-function #DCDCAA`, `--syn-variable #9CDCFE`, `--syn-constant #4FC1FF`, `--syn-regexp #D16969`. Inside code they mean token kinds; nothing on the Map uses them.
 
 Purple is never used just because something is interactive. Links and buttons use `--text` with an underline or border, not purple.
 

@@ -1,24 +1,24 @@
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 
-// VISUAL_REFRESH.md §2, transcribed: each token's one value. The owner's pick of 2026-10-12 (cool slate surfaces from
-// option C, blue titles and code from option B) replaced the first table's grays and added the blue tokens.
+// VISUAL_REFRESH.md §2, transcribed: each token's one value. The owner's final pick of 2026-10-12, "violet slate"
+// (option 1 of the purple mockups): purple-tinted surfaces, lavender names and code, the selection still vivid purple.
 const TOKENS: Record<string, string> = {
-    canvas: "#0F131A",
-    surface: "#1A212C",
-    panel: "#141A23",
-    hairline: "#232B38",
-    border: "#3A4659",
-    text: "#EEF2F8",
-    "text-body": "#C3CBD8",
-    "text-2": "#AEB8C8",
-    title: "#9CC4FF",
-    code: "#A9CBFF",
-    "code-bg": "#1B2940",
-    folder: "#7FB2F0",
-    "neutral-edge": "#5A6680",
+    canvas: "#12101A",
+    surface: "#1D1A28",
+    panel: "#17141F",
+    hairline: "#272236",
+    border: "#3E3752",
+    text: "#F1EEF8",
+    "text-body": "#CBC4DA",
+    "text-2": "#B3ABC6",
+    title: "#C7B3FF",
+    code: "#D8CAFF",
+    "code-bg": "#2A2240",
+    folder: "#A98BEA",
+    "neutral-edge": "#6A6285",
     select: "#B58AFF",
-    "select-fill": "#251E36",
+    "select-fill": "#2C2145",
     agent: "#F08A4B",
     ok: "#4CC38A",
     danger: "#F07A7A",

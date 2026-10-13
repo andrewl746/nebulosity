@@ -19,6 +19,13 @@ export function shortPath(targetPath: string): string {
     return targetPath.split("/").slice(-2).join("/");
 }
 
+/** The language a path's extension implies, the way GET /api/source names it (the UI can't import lib's copy). */
+export function languageFor(filePath: string): string {
+    if (/\.(ts|tsx|mts|cts)$/.test(filePath)) return "typescript";
+    if (/\.(js|jsx|mjs|cjs)$/.test(filePath)) return "javascript";
+    return "text";
+}
+
 /** Whether `targetPath` is strictly inside `folder` ("" holds everything but itself). */
 export function isInside(targetPath: string, folder: string): boolean {
     return folder === "" ? targetPath !== "" : targetPath.startsWith(`${folder}/`);

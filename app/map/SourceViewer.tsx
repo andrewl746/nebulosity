@@ -52,6 +52,18 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
 
     // Windows line endings become plain ones: a carriage return has no business on screen
     const text = source?.content.replace(/\r\n/g, "\n").replace(/\n$/, "") ?? "";
+
+    // VS Code's colors (owner review), from a module loaded only when a viewer opens, so the Map's own bundle doesn't
+    // carry the highlighter. Until it lands the text shows plain.
+    const [highlighted, setHighlighted] = useState<{ text: string; html: string } | null>(null);
+    useEffect(() => {
+        if (!source) return;
+        let live = true;
+        void import("./syntax").then(({ highlightCode }) => {
+            if (live) setHighlighted({ text, html: highlightCode(text, source.language) });
+        });
+        return () => { live = false; };
+    }, [source, text]);
     const count = source?.lineCount ?? 0;
     const editorLink = source ? `vscode://file/${source.repo}/${source.path}${lines ? `:${lines.start}` : ""}` : undefined;
 
@@ -100,7 +112,10 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
                             <pre aria-hidden className="sticky left-0 select-none bg-panel py-3 pl-4 pr-3 text-right text-text-2">
                                 {Array.from({ length: count }, (_, i) => i + 1).join("\n")}
                             </pre>
-                            <pre className="relative py-3 pr-6 text-text">{text}</pre>
+                            {highlighted?.text === text
+                                // highlightCode escapes the file's text, so this HTML is only its spans (syntax.ts)
+                                ? <pre className="syntax relative py-3 pr-6" dangerouslySetInnerHTML={{ __html: highlighted.html }} />
+                                : <pre className="syntax relative py-3 pr-6">{text}</pre>}
                         </div>
                     )}
                 </div>

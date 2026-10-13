@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { IconFile, IconFolder, IconSearch } from "@tabler/icons-react";
 import type { SearchHit, SearchResult } from "@/lib/contracts";
 import { api, ApiError } from "./api";
+import { languageFor } from "./paths";
 
 type SearchPaletteProps = { onPick: (hit: SearchHit) => void; onClose: () => void };
 
@@ -22,9 +23,16 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
     const [error, setError] = useState<ApiError | null>(null);
     const [active, setActive] = useState(0);
     const input = useRef<HTMLInputElement>(null);
+    // the code lines take VS Code's colors once the highlighter loads (owner review); plain until then
+    const [highlight, setHighlight] = useState<((code: string, language: string) => string) | null>(null);
 
     useEffect(() => {
         input.current?.focus();
+        let live = true;
+        void import("./syntax").then((syntax) => {
+            if (live) setHighlight(() => (code: string, language: string) => syntax.highlightCode(code, language));
+        });
+        return () => { live = false; };
     }, []);
 
     useEffect(() => {
@@ -95,7 +103,11 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                                     {hit.tagline && <span className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
                                     {hit.code && (
                                         <span className="block truncate font-mono text-[12px] text-text-2">
-                                            {hit.code.symbol} · lines {hit.code.startLine}–{hit.code.endLine}: {hit.code.snippet}
+                                            {hit.code.symbol} · lines {hit.code.startLine}–{hit.code.endLine}:{" "}
+                                            {highlight
+                                                // highlightCode escapes the snippet, so this HTML is only its spans (syntax.ts)
+                                                ? <span className="syntax" dangerouslySetInnerHTML={{ __html: highlight(hit.code.snippet, languageFor(hit.path)) }} />
+                                                : <span className="syntax">{hit.code.snippet}</span>}
                                         </span>
                                     )}
                                 </span>

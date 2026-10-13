@@ -2,25 +2,25 @@
 
 /*
  * The Map's colors (VISUAL_REFRESH.md §2): each token is defined once here and means one thing. Components use the
- * tokens (bg-surface, text-text-2, border-select, …), never a raw value. The owner picked cool slate surfaces with blue
- * for titles and code on 2026-10-12, after the first build read as too monotone.
+ * tokens (bg-surface, text-text-2, border-select, …), never a raw value. The owner's pick of 2026-10-12, "violet slate":
+ * purple-tinted surfaces and lavender names, so the Map looks like Nebulosity, with the selection still vivid purple.
  */
 :root {
-  --canvas: #0F131A;        /* page and Map background, one flat cool slate */
-  --surface: #1A212C;       /* boxes, inputs, cards */
-  --panel: #141A23;         /* the details panel, drawers, dialogs */
-  --hairline: #232B38;      /* dividers */
-  --border: #3A4659;        /* box and input borders */
-  --text: #EEF2F8;          /* primary text: names, headings */
-  --text-body: #C3CBD8;     /* paragraphs: summaries, help */
-  --text-2: #AEB8C8;        /* secondary text, counts, labels */
-  --title: #9CC4FF;         /* blue: a description's title (a summary's tagline, help headings) */
-  --code: #A9CBFF;          /* blue: code identifiers in text */
-  --code-bg: #1B2940;       /* the chip behind them */
-  --folder: #7FB2F0;        /* blue: the folder icon, so folders and files part at a glance */
-  --neutral-edge: #5A6680;  /* ordinary connections, bright enough to follow on the slate */
+  --canvas: #12101A;       /* page and Map background, one flat violet slate */
+  --surface: #1D1A28;      /* boxes, inputs, cards */
+  --panel: #17141F;        /* the details panel, drawers, dialogs */
+  --hairline: #272236;     /* dividers */
+  --border: #3E3752;       /* box and input borders */
+  --text: #F1EEF8;         /* primary text: names, headings */
+  --text-body: #CBC4DA;    /* paragraphs: summaries, help */
+  --text-2: #B3ABC6;       /* secondary text, counts, labels */
+  --title: #C7B3FF;        /* lavender: a description's title (a summary's tagline, help headings) */
+  --code: #D8CAFF;         /* lavender: code identifiers in text */
+  --code-bg: #2A2240;      /* the chip behind them */
+  --folder: #A98BEA;       /* lavender: the folder icon, so folders and files part at a glance */
+  --neutral-edge: #6A6285; /* ordinary connections, bright enough to follow on the canvas */
   --select: #B58AFF;        /* purple: the selected box, its direct links, its path. Nothing else */
-  --select-fill: #251E36;   /* the selected box's fill */
+  --select-fill: #2C2145;  /* the selected box's fill */
   --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
   --ok: #4CC38A;            /* green: indexing status only */
   --danger: #F07A7A;        /* errors and a failed stage */
@@ -54,6 +54,38 @@ body {
   color: var(--text);
   font-family: var(--font-plex-sans), system-ui, sans-serif;
 }
+
+/*
+ * Syntax colors, for code only: the source viewer and search's code lines (VISUAL_REFRESH.md §2). They're VS Code's
+ * Dark+ palette, so code reads the way it does in the editor (owner review). Inside code they mean token kinds and
+ * nothing else; nothing on the Map uses them.
+ */
+:root {
+  --syn-text: #D4D4D4;
+  --syn-keyword: #569CD6;    /* const, function, class, true, this */
+  --syn-control: #C586C0;    /* import, export, return, if, await */
+  --syn-string: #CE9178;
+  --syn-number: #B5CEA8;
+  --syn-comment: #6A9955;
+  --syn-type: #4EC9B0;       /* classes, types, built-ins */
+  --syn-function: #DCDCAA;   /* function names, decorators */
+  --syn-variable: #9CDCFE;   /* parameters, properties */
+  --syn-constant: #4FC1FF;
+  --syn-regexp: #D16969;
+}
+
+.syntax { color: var(--syn-text); }
+.syntax .hljs-keyword, .syntax .hljs-literal, .syntax .hljs-variable.language_ { color: var(--syn-keyword); }
+.syntax .hljs-control { color: var(--syn-control); }
+.syntax .hljs-string { color: var(--syn-string); }
+.syntax .hljs-subst { color: var(--syn-text); }
+.syntax .hljs-number { color: var(--syn-number); }
+.syntax .hljs-comment { color: var(--syn-comment); }
+.syntax .hljs-regexp { color: var(--syn-regexp); }
+.syntax .hljs-title.function_, .syntax .hljs-meta { color: var(--syn-function); }
+.syntax .hljs-title.class_, .syntax .hljs-type, .syntax .hljs-built_in { color: var(--syn-type); }
+.syntax .hljs-params, .syntax .hljs-attr, .syntax .hljs-property, .syntax .hljs-variable { color: var(--syn-variable); }
+.syntax .hljs-variable.constant_ { color: var(--syn-constant); }
 
 /*
  * Anything you can click shows the hand and answers the hover (owner review): Tailwind 4 resets buttons to the plain
