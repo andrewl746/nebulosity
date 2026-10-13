@@ -55,8 +55,8 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li>A line from A to B means A uses code from B: the arrow points at what&apos;s being used. A box&apos;s panel lists both sides: <b>Depends on</b> (what it uses) and <b>Used by</b> (what uses it).</li>
                         <li>Hover a box to see its summary and preview its lines. Hover a line to read it as a sentence, like &quot;editor uses base · 12 imports&quot;.</li>
                         <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select. <b>Show all lines</b>, at the top right, brings back the rest.</li>
-                        <li>Boxes with no lines at this level sit in a grid to one side.</li>
-                        <li>Lines to other pages end at a page&apos;s doorway, a dashed box; double-click it to go there.</li>
+                        <li>Boxes with no lines on the page sit under a line that says &quot;Not linked to anything on this page&quot;.</li>
+                        <li>Lines to other pages end at a doorway, a dashed box like &quot;Lines to page 2&quot;; double-click it to go there.</li>
                     </Section>
                     <Section title="Colors">
                         <li><Swatch className="border-2 border-select bg-select-fill" /> Purple: the box you selected and its lines. Everything else fades.</li>
