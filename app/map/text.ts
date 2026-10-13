@@ -49,7 +49,10 @@ export function splitSummary(summary: string): { lead: string; rest: string } {
     for (let i = 0; i < text.length; i++){
         const ch = text[i];
         if (ch === "`"){
-            inCode = !inCode;
+            // code opens only where inlineCode would draw it: a partner further on, with something between the two.
+            // A lone backtick is text; counting it as an opening hid every sentence end after it (deferred minor).
+            if (inCode) inCode = false;
+            else if (text[i + 1] !== "`" && text.indexOf("`", i + 2) !== -1) inCode = true;
             continue;
         }
         if (inCode || (ch !== "." && ch !== "!" && ch !== "?")) continue;

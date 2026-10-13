@@ -118,7 +118,7 @@ It's actionable and structured, not a static card. From top to bottom:
 5. **Key relationships:** "Depends on" and "Used by" as clickable chips. Clicking one focuses that box on the Map.
 6. **Contents:** a list of child folders and files with their counts, plus "View all". Clicking a child folder goes into it; clicking a file selects it.
 
-**Markdown in summaries:** backtick identifiers render as inline code (monospace in `--code` lavender on a `--code-bg` chip; the chips were dropped for a few hours on 2026-10-13 and the owner asked for them back), never as literal backticks. The lead is the tagline plus the first sentence, even when the next sentence starts with code. Every expander folds back: "Read full summary" ↔ "Show less", "View all" and "+N more" ↔ "Show fewer". Body text is 14–15 px sans with a 1.5 line height, not monospace.
+**Markdown in summaries:** backtick identifiers render as inline code (monospace in `--code` lavender on a `--code-bg` chip; the chips were dropped for a few hours on 2026-10-13 and the owner asked for them back), never as literal backticks. The lead is the tagline plus the first sentence, even when the next sentence starts with code, and a backtick with no partner is text, not the start of code (2026-10-13). Every expander folds back: "Read full summary" ↔ "Show less", "View all" and "+N more" ↔ "Show fewer". Body text is 14–15 px sans with a 1.5 line height, not monospace.
 
 ## 6. Top bar and activity
 
