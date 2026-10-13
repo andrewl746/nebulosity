@@ -225,7 +225,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 - **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
 
 ### 6.2 Registry
-Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zod input schema, handler }`. Descriptions are written for an LLM: when to use the tool and what it returns. Adapters wrap the entries: MCP registers them in v1, and LangGraph wraps the same entries in E1. Output is compact plain text with repo-relative paths, exact totals, truncation markers ("… 4,231 more") and a freshness note last.
+Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zod input schema, handler }`. Descriptions are written for an LLM: when to use the tool and what it returns. Adapters wrap the entries: MCP registers them in v1, and LangGraph wraps the same entries in E1. Output is compact plain text with repo-relative paths, exact totals, truncation markers ("… 4,231 more") and a freshness note last. *(V1.4, ADR-047: a handler returns `{ text, paths, action? }`; the format's rules are API_CONTRACTS.md §17.)*
 
 | v1 tool | Purpose |
 |---|---|
@@ -456,6 +456,7 @@ Each v1 slice ends demoable:
 | ADR-044 | The MCP server opens the database read-only: no pragmas, no migrations, a check that the file is current, recovery once something is indexed |
 | ADR-045 | Import reach: files and folders, exact totals, nearest and most-imported first, paged with an offset; chains in either direction |
 | ADR-046 | An MCP call answers about the indexed repo holding Claude Code's project folder, else the Map's repo (said first); live events only for the Map's repo; free mode from the stored stage |
+| ADR-047 | One registry entry per tool: a handler returns text, the paths it touched and an optional UI action; answers are compact text under 40,000 characters (API_CONTRACTS.md §17) |
 
 ## 16. Doc migration
 

@@ -178,7 +178,12 @@ describe("search", () => {
             code: { symbol: "shout", startLine: 3, endLine: 6, snippet: expect.stringContaining("shout") },
         });
         expect(result.lists).toEqual({ code: 3, summary: 0, vector: 0, name: 0 });
-        expect(result.note).toBe("Summaries aren't ready yet, so results come from code keywords only.");
+        expect(result.note).toBe("Summaries aren't ready yet, so results come from code and folder names only.");
+    });
+
+    it("says summaries are off, not pending, when there's no key", async () => {
+        const result = await search(indexedFixture(), "shout", { embed: neverEmbed, summariesOff: true });
+        expect(result.note).toBe("Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only.");
     });
 
     it("ranks the file every list agrees on first, and finds the folder through its summary and meaning", async () => {

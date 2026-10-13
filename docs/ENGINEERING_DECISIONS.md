@@ -260,7 +260,7 @@
 
 **Context:** Two agents need the same knowledge. Claude Code connects from outside through MCP, launched from the user's repo; the Guide (E1) runs in-process on LangGraph. `lib/agent/tools.ts` mixes tool logic with LangChain wrappers. `lib/db/client.ts` resolves the database and migrations relative to `process.cwd()`, and when Claude Code launches the MCP server, that directory is the user's repo. ADR-023's multi-process revisit trigger also fires here.
 **Decision:**
-- Each tool is defined once in `lib/tools/registry.ts`: a name, a description written for LLMs, a zod schema, and a handler that calls the engine.
+- Each tool is defined once in `lib/tools/registry.ts`: a name, a description written for LLMs, a zod schema, and a handler that calls the engine. *(Amended 2026-10-13, ADR-047: a handler takes `(input, context)` and returns `{ text, paths, action? }`; adapters post live events or emit UI actions.)*
 - The MCP server registers those entries, and the Guide wraps the same entries as LangChain tools.
 - The database, migrations and config resolve from `NEBULOSITY_HOME`. When it's unset they fall back to `process.cwd()`, which is correct for Next.js, the CLI and Vitest because all three run from the checkout. The MCP launcher (V1.4) always sets it. *(Amended 2026-10-11 in slice V1.1: the original default, the module's own location, breaks under Next.js, which bundles server modules into `.next/`.)*
 - The MCP server opens the database read-only and never migrates.
@@ -652,3 +652,16 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 **Alternatives:** (a) Always the Map's repo: Claude Code opened in another indexed repo would get answers about the wrong one, with nothing said. (b) A `repo` argument on every tool: more for the model to get wrong. (c) A repo fixed per registration (`-e`): one registration per repo. (d) A `repo` field on live events, with the Map ignoring others': a contract change for a case this rule already prevents.
 **Consequences:** One user-scope registration serves every indexed repo, and `npm run index` or the Map's repo menu take effect without restarting Claude Code. Each call pays a few small reads (well under a millisecond).
 **Revisit when:** someone runs two Maps on different ports, or wants the Map to follow Claude Code's repo by itself.
+
+## ADR-047 — One registry entry per tool, answering in compact text (2026-10-13) — amends ADR-030
+
+**Context:** ADR-030 puts each tool in `lib/tools/registry.ts` once, wrapped by MCP now and by LangGraph in E1. Two things weren't settled. What a handler returns, given that the MCP server must also tell the Map (§8) and the Guide will turn UI actions into `ui_action` events (API_CONTRACTS.md §5). And what the answer text looks like: PIVOT_SPEC.md §6.2 asks for compact plain text, exact totals, truncation markers and a freshness note last.
+**Decision:**
+- An entry is `{ name, description, inputSchema (zod), handler(input, context) }`. The context names the repo, says whether summaries are off, and carries any repo or index note (ADR-046). The handler returns `{ text, paths, action? }`: the answer, the paths it touched, and show_on_map's UI action. It never touches the network: the MCP adapter posts the live event, and E1's adapter will emit `ui_action`.
+- The text rules are API_CONTRACTS.md §17: plain text; repo-relative paths, folders ending in "/"; exact counts with separators; lists cut with "… N more" and the next offset where the tool pages; under 40,000 characters; notes last, with the stale-summary note very last, except the repo note, which comes first.
+- Free mode answers everything (ADR-043). Where a summary would go, the answer says summaries are off and what a key adds; search says it used code and folder names.
+- One pure builder per tool (`lib/tools/answers.ts`) turns engine results into text, so the format is tested without a database.
+- `lib/agent/tools.ts` (the owner's Phase 5 tools) stays as it is until E1 replaces it with wrappers over this registry.
+**Alternatives:** (a) JSON answers (`structuredContent`): exact, but larger, and a model skims prose faster. (b) Handlers that post live events themselves: the Guide's in-process adapter would then make HTTP calls to its own server. (c) Markdown: tokens spent on syntax.
+**Consequences:** A new tool is one entry and one builder. The text is a contract (§17), tested on the fixture.
+**Revisit when:** a client wants structured results (an IDE view of a dependents list, say): add an `outputSchema` beside the text.
