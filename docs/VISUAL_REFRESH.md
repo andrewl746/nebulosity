@@ -1,8 +1,20 @@
 # VISUAL_REFRESH.md — Refining the Map's dark theme for readability (slice V1.3.1)
 
-**Status:** Approved by the owner, 2026-10-12. This is the target the V1.3.1 build matches. Decision record: ADR-041.
+**Status:** Approved by the owner, 2026-10-12. **Implemented 2026-10-12, awaiting the owner's visual sign-off** (measured in BENCHMARKS.md, Map Benchmark #2; screenshots in `docs/screenshots/v1-3-1/`). This is the target the V1.3.1 build matches. Decision records: ADR-041, and ADR-042 for the owner-review additions.
 **Replaces:** the V1.3 look: starfield, purple haze, glowing edges, tiny monospace boxes. An earlier same-day draft of this doc proposed a light theme; it was dropped before implementation.
-**Scope:** presentation and interaction on the existing Map. The engine, the APIs (apart from the describe speed fix in §8), data, the 50-box cap and the level model are unchanged.
+**Scope:** presentation and interaction on the existing Map. The engine, the APIs (apart from the describe speed fix in §8), data, the 50-box cap and the level model are unchanged. *(Amended in the build: the owner's review added pages of related boxes with portals, which changed the level model and the contract to v3, and a source endpoint. See the amendments below.)*
+
+**Amendments since approval** (each is marked where it lands):
+- **Colors (§2):** `--danger` for errors; the palette retuned twice by the owner's picks (cool slate, then violet slate with lavender names and code); VS Code's Dark+ colors for code.
+- **Type (§7):** IBM Plex Sans and Plex Mono replace Geist.
+- **Lines (§4):** routed through the channels and gutters between boxes, never across one, instead of curves. They're 1 px slate, or 2 px purple for the selection; V1.3's widths by √count are gone. A legend explains arrows, purple and orange.
+- **Popovers (§4):** the status menu and repo picker sit on `--surface` and close on an outside click or Escape.
+- **Activity (§6):** each tool call reads as a phrase ("Reading build/gulpfile.js"), and the top bar's `owner / repo` comes from the origin remote.
+- **Added from the owner's first look (§6):** the help, the status as a bordered menu button, the source viewer, Back and the address bar, the feel (cursors, scrollbars), and big folders drawn a page at a time.
+- **Pages (§6, ADR-042):** first by size with a "+N more" box, then grouped by import with portals to the other pages, so every box is drawn on some page. `GET /api/level` gained `page` and `focus`, and the contract went to v3.
+- **Keys (§6):** Backspace, the arrows and ? leave the Map alone while a dialog is open.
+- **The speed fix (§8):** the 5 s `src` panel didn't reproduce (30–141 ms, BENCHMARKS.md Map Benchmark #2); answers are now cached per index version, and the panel says "Refreshing…" while an on-demand summary is on its way.
+- **Still owed:** the three-task test with someone unfamiliar with VS Code (§9), and the owner's sign-off.
 
 ## 1. Principle
 
