@@ -14,8 +14,8 @@
 - **Pages (§6, ADR-042):** first by size with a "+N more" box, then grouped by import with portals to the other pages, so every box is drawn on some page. `GET /api/level` gained `page` and `focus`, and the contract went to v3.
 - **Keys (§6):** Backspace, the arrows and ? leave the Map alone while a dialog is open.
 - **Busy levels (§4):** past 60 lines, only the hovered or selected box's lines are drawn, with "Show all lines" to bring the rest back.
-- **From the three-task test (§9):** line sentences on hover, plain-word legend rows for arrows out and in, 26 px arrowheads, 15 px relationship headings, a page pill on the canvas with solid side arrows, the repo name going home, hover summaries on boxes.
-- **Overlays (§4):** the legend, the page pill and the zoom controls sit on `--panel` (darker than the boxes' `--surface`) with a `--text-2` border, so they read as controls on top of the Map rather than as boxes. The legend is collapsed to a "Legend" button by default, opens as a narrow card of short rows, and remembers in the browser whether it was left open.
+- **From the three-task test (§9):** line sentences on hover, a plain-word legend sentence for direction, 26 px arrowheads, 15 px relationship headings, a page pill on the canvas with solid side arrows, the repo name going home, hover summaries on boxes.
+- **Overlays (§4):** the legend, the page pill and the zoom controls are solid `--border` cards with no outline: lines are never filled, so they can't be mistaken for lines (a light `--text-2` outline was, by the owner), and they're lighter than the boxes' `--surface`, so they don't blend in with boxes. React Flow's attribution label is hidden. The legend is collapsed to a "Legend" button by default, opens as a narrow card of short rows, and remembers in the browser whether it was left open.
 - **The speed fix (§8):** the 5 s `src` panel didn't reproduce (30–141 ms, BENCHMARKS.md Map Benchmark #2); answers are now cached per index version, and the panel says "Refreshing…" while an on-demand summary is on its way.
 - **The three-task test (§9), run 2026-10-13,** and what it changed: the line sentences, the arrows' wording and size, the page bar, the solid page arrows, the repo name going home, hover summaries, and search without the repo's name.
 - **Still owed:** the owner's sign-off.
@@ -168,9 +168,9 @@ Opening the panel for a large folder (`src`) took about 5 s in V1.3. Profile `de
 
   **Fixed in scope:**
   - A hovered line reads as a sentence ("editor uses base · 12 imports", "github uses boxes on Page 2").
-  - The legend says "A → B: A uses code from B", and that arrows out of a box are what it depends on and arrows into it are what uses it.
+  - The legend says "A → B: A uses B. The arrow points at what's being used." (A first try added rows for "arrows out: what it depends on" and "arrows in: what uses it"; the owner found them abstract.)
   - Arrowheads went from 18 to 26 px.
-  - The panel's headings are 15 px and say "Arrows out of this box" / "Arrows into this box".
+  - The panel's headings are 15 px, with "What this box uses: its arrows point to these" under Depends on and "What uses this box: their arrows point here" under Used by.
   - A page pill in the canvas's top-right corner ("‹ Page 1 of 3 · 44 of 112 boxes ›") replaces the top bar's note, and the side arrows are solid light buttons. (A first try put a 15 px bar at the bottom of the canvas; the owner found it loud and, in the boxes' colour, camouflaged.)
   - The repo's name goes to the top level (its ▾ switches repos).
   - Hovering a box shows its one-line summary.

@@ -51,7 +51,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     </Section>
                     <Section title="Reading the Map">
                         <li>A box is a folder (with how many files it holds) or a file.</li>
-                        <li>A line from A to B means A uses code from B. Arrows <b>out</b> of a box show what it depends on; arrows <b>into</b> it show what uses it.</li>
+                        <li>A line from A to B means A uses code from B: the arrow points at what&apos;s being used. A box&apos;s panel lists both sides: <b>Depends on</b> (what it uses) and <b>Used by</b> (what uses it).</li>
                         <li>Hover a box to see its summary and preview its lines. Hover a line to read it as a sentence, like &quot;editor uses base · 12 imports&quot;.</li>
                         <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select. <b>Show all lines</b>, at the top right, brings back the rest.</li>
                         <li>Boxes with no lines at this level sit in a grid to one side.</li>

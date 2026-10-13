@@ -294,8 +294,8 @@ function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOp
 
             <section aria-label="Relationships" className="space-y-4">
                 {/* the three-task test's tester took a while to find these and to match them to the arrows: say it */}
-                <Chips title="Depends on" note="Arrows out of this box on the Map · by number of imports" items={data.uses} empty="Imports nothing outside itself." onFocus={onFocus} />
-                <Chips title="Used by" note="Arrows into this box on the Map · by number of imports, test files included" items={data.usedBy} empty="Nothing outside it imports it." onFocus={onFocus} />
+                <Chips title="Depends on" note="What this box uses: its arrows point to these · by number of imports" items={data.uses} empty="Imports nothing outside itself." onFocus={onFocus} />
+                <Chips title="Used by" note="What uses this box: their arrows point here · by number of imports, test files included" items={data.usedBy} empty="Nothing outside it imports it." onFocus={onFocus} />
             </section>
 
             {data.children && (

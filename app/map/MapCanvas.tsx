@@ -183,6 +183,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             minZoom={0.1}
             maxZoom={2}
             colorMode="dark"
+            proOptions={{ hideAttribution: true }}
         >
             <Legend quietLines={quietLines} />
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
@@ -191,7 +192,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 showInteractive={false}
                 fitViewOptions={FIT}
                 style={selected !== null ? { right: PANEL_WIDTH } : undefined}
-                className="overflow-hidden rounded-lg border border-text-2"
+                className="overflow-hidden rounded-lg"
             >
                 <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
                     <IconFocusCentered aria-hidden size={16} stroke={1.75} />

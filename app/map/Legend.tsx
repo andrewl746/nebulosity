@@ -17,8 +17,9 @@ function readOpen(): boolean {
 /**
  * What the lines and colors mean (VISUAL_REFRESH.md §4: "label the relationship"), said once in a corner instead of on
  * every line. Closed, it's a small "Legend" button; open, a narrow card of short rows (owner review, 2026-10-13: the wide
- * block ran into the boxes). Like the other overlays it's darker than the boxes, with a light border, so it never
- * reads as part of the Map. The canvas only renders in the browser, so reading storage on the first render is safe.
+ * block ran into the boxes). Like the other overlays it's a solid card with no outline: lines are never filled, so it
+ * can't be mistaken for one (a light outline was), and it's lighter than the boxes, so it doesn't blend in with them.
+ * The canvas only renders in the browser, so reading storage on the first render is safe.
  */
 export default function Legend({ quietLines }: { quietLines: boolean }){
     const [open, setOpen] = useState(readOpen);
@@ -34,12 +35,11 @@ export default function Legend({ quietLines }: { quietLines: boolean }){
     const Chevron = open ? IconChevronDown : IconChevronUp;
 
     return (
-        <div aria-label="Legend" className={`nopan nodrag nowheel absolute bottom-4 left-4 z-[5] ${open ? "w-[252px]" : ""} rounded-lg border border-text-2 bg-panel text-[12px] text-text-2`}>
+        <div aria-label="Legend" className={`nopan nodrag nowheel absolute bottom-4 left-4 z-[5] ${open ? "w-[252px]" : ""} rounded-lg bg-border text-[12px] text-text-body`}>
             {open && (
-                <div className="space-y-1.5 border-b border-hairline px-3 py-2">
-                    <Row glyph={<Arrow color="var(--neutral-edge)" />}>A → B: A uses code from B</Row>
-                    <Row glyph={<span aria-hidden className="text-[14px] leading-none text-text">↗</span>}>Arrows out: what it depends on</Row>
-                    <Row glyph={<span aria-hidden className="text-[14px] leading-none text-text">↘</span>}>Arrows in: what uses it</Row>
+                <div className="space-y-1.5 border-b border-surface px-3 py-2">
+                    {/* one sentence for direction: "arrows out / arrows in" rows read as abstract, even to the owner */}
+                    <Row glyph={<Arrow color="var(--text-2)" />}>A → B: A uses B. The arrow points at what&apos;s being used.</Row>
                     <Row glyph={<Arrow color="var(--select)" />}>Selected box and its links</Row>
                     <Row glyph={<span className="block h-3 w-3 rounded-sm outline-2 outline-agent" />}>What Claude Code is touching</Row>
                     {quietLines && <Row glyph={<span aria-hidden className="text-[14px] leading-none">⋯</span>}>Busy folder: hover a box to see its lines</Row>}
@@ -50,7 +50,7 @@ export default function Legend({ quietLines }: { quietLines: boolean }){
                 data-testid="legend-toggle"
                 onClick={toggle}
                 aria-expanded={open}
-                className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-[12px] font-medium text-text hover:text-text-2"
+                className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-[12px] font-medium text-text hover:text-text-body"
             >
                 Legend
                 <Chevron aria-hidden size={14} stroke={1.75} />

@@ -369,8 +369,8 @@ function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArr
 /**
  * Which page of a big folder is on screen, in the canvas's top-right corner with a button either side. The three-task
  * test found the top bar's note went unseen; a bar at the bottom of the canvas then read as loud and, in the boxes'
- * colour, blended in (owner review). Like the other overlays it's darker than the boxes, with a light border, and it
- * moves left of the panel when the panel opens.
+ * colour, blended in (owner review). Like the other overlays it's a solid card with no outline, so it reads as neither
+ * a box nor a line, and it moves left of the panel when the panel opens.
  */
 function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (page: number) => void; panelOpen: boolean }){
     const step = (side: "left" | "right") => {
@@ -383,7 +383,7 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
                 disabled={off}
                 onClick={() => onTurn(next)}
                 aria-label={`${side === "left" ? "Previous" : "Next"} page`}
-                className="grid h-7 w-7 place-items-center rounded-md text-text hover:bg-border disabled:text-border disabled:hover:bg-transparent"
+                className="grid h-7 w-7 place-items-center rounded-md text-text hover:bg-surface disabled:opacity-35 disabled:hover:bg-transparent"
             >
                 <Icon aria-hidden size={16} stroke={2} />
             </button>
@@ -394,7 +394,7 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
     return (
         <div
             style={{ right: (panelOpen ? PANEL_WIDTH : 0) + 16 }}
-            className="absolute top-4 z-[7] flex items-center gap-1 rounded-lg border border-text-2 bg-panel p-1"
+            className="absolute top-4 z-[7] flex items-center gap-1 rounded-lg bg-border p-1"
         >
             {step("left")}
             <span data-testid="page-note" className="px-1 text-[13px] text-text">
