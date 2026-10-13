@@ -88,7 +88,7 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                                 className={`flex w-full gap-3 px-4 py-2 text-left ${i === current ? "bg-surface" : ""}`}
                             >
                                 {hit.kind === "folder"
-                                    ? <IconFolder aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-text-2" />
+                                    ? <IconFolder aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-folder" />
                                     : <IconFile aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-text-2" />}
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate font-mono text-[13px] text-text">{hit.path}</span>

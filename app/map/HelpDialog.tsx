@@ -77,7 +77,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     </Section>
                 </div>
 
-                <h3 className="mt-6 text-[13px] font-medium text-text">Keyboard</h3>
+                <h3 className="mt-6 text-[13px] font-medium text-title">Keyboard</h3>
                 <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px] text-text-2">
                     <dt><Key>Ctrl K</Key></dt><dd>Search files and concepts</dd>
                     <dt><Key>Esc</Key></dt><dd>Close what&apos;s open, or let go of the selection</dd>
@@ -94,8 +94,8 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
 function Section({ title, children }: { title: string; children: ReactNode }){
     return (
         <section>
-            <h3 className="text-[13px] font-medium text-text">{title}</h3>
-            <ul className="mt-2 space-y-1.5 text-text-2 [&_b]:font-medium [&_b]:text-text">{children}</ul>
+            <h3 className="text-[13px] font-medium text-title">{title}</h3>
+            <ul className="mt-2 space-y-1.5 text-text-body [&_b]:font-medium [&_b]:text-text">{children}</ul>
         </section>
     );
 }

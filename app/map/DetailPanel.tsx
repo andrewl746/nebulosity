@@ -226,10 +226,10 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
     return (
         <section aria-label="Summary">
             {shown.tagline
-                ? <p className="text-[15px] font-medium leading-snug text-text"><Rich text={shown.tagline} /></p>
+                ? <p className="text-[15px] font-medium leading-snug text-title"><Rich text={shown.tagline} /></p>
                 : <p className="text-text-2">{summaryError?.code === "NOT_READY" ? "Waiting for what's inside to be summarized first." : placeholderFor(shown.summaryStatus)}</p>}
-            {lead && <p className="mt-2"><Rich text={lead} /></p>}
-            {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2"><Rich text={paragraph} /></p>)}
+            {lead && <p className="mt-2 text-text-body"><Rich text={lead} /></p>}
+            {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2 text-text-body"><Rich text={paragraph} /></p>)}
             {rest && !expanded && (
                 <button type="button" onClick={() => setExpanded(true)} className="mt-2 text-[13px] text-text underline underline-offset-2 hover:text-text-2">
                     Read full summary
@@ -256,7 +256,7 @@ function Rich({ text }: { text: string }){
     return (
         <>
             {inlineCode(text).map((part, i) => part.code
-                ? <code key={i} className="rounded-md bg-surface px-1 font-mono text-[13px] text-text">{part.text}</code>
+                ? <code key={i} className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">{part.text}</code>
                 : <span key={i}>{part.text}</span>)}
         </>
     );
@@ -326,7 +326,7 @@ function ChildRow({ child, onFocus, onOpen }: { child: MapNode; onFocus: (target
                 onClick={() => (folder ? onOpen(child.path) : onFocus(child.path))}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-surface"
             >
-                <Icon aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
+                <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-folder" : "text-text-2"}`} />
                 <span className="min-w-0 flex-1 truncate">{child.name}</span>
                 {folder && <span className="shrink-0 text-[12px] text-text-2">{formatCount(child.fileCount)} {child.fileCount === 1 ? "file" : "files"}</span>}
             </button>

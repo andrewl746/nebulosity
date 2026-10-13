@@ -2,22 +2,28 @@
 
 /*
  * The Map's colors (VISUAL_REFRESH.md §2): each token is defined once here and means one thing. Components use the
- * tokens (bg-surface, text-text-2, border-select, …), never a raw value.
+ * tokens (bg-surface, text-text-2, border-select, …), never a raw value. The owner picked cool slate surfaces with blue
+ * for titles and code on 2026-10-12, after the first build read as too monotone.
  */
 :root {
-  --canvas: #111318;        /* page and Map background, one flat charcoal */
-  --surface: #1B1D24;       /* boxes, inputs, cards */
-  --panel: #16181F;         /* the details panel */
-  --hairline: #262933;      /* dividers */
-  --border: #3A3E4A;        /* box and input borders */
-  --text: #F0F1F5;          /* primary text */
-  --text-2: #B1B5C0;        /* secondary text, counts, labels */
-  --neutral-edge: #4A4F5C;  /* ordinary connections */
+  --canvas: #0F131A;        /* page and Map background, one flat cool slate */
+  --surface: #1A212C;       /* boxes, inputs, cards */
+  --panel: #141A23;         /* the details panel, drawers, dialogs */
+  --hairline: #232B38;      /* dividers */
+  --border: #3A4659;        /* box and input borders */
+  --text: #EEF2F8;          /* primary text: names, headings */
+  --text-body: #C3CBD8;     /* paragraphs: summaries, help */
+  --text-2: #AEB8C8;        /* secondary text, counts, labels */
+  --title: #9CC4FF;         /* blue: a description's title (a summary's tagline, help headings) */
+  --code: #A9CBFF;          /* blue: code identifiers in text */
+  --code-bg: #1B2940;       /* the chip behind them */
+  --folder: #7FB2F0;        /* blue: the folder icon, so folders and files part at a glance */
+  --neutral-edge: #5A6680;  /* ordinary connections, bright enough to follow on the slate */
   --select: #B58AFF;        /* purple: the selected box, its direct links, its path. Nothing else */
-  --select-fill: #241D33;   /* the selected box's fill */
+  --select-fill: #251E36;   /* the selected box's fill */
   --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
   --ok: #4CC38A;            /* green: indexing status only */
-  --danger: #F07A7A;        /* errors and a failed stage (added to §2 in V1.3.1) */
+  --danger: #F07A7A;        /* errors and a failed stage */
 }
 
 @theme inline {
@@ -27,21 +33,26 @@
   --color-hairline: var(--hairline);
   --color-border: var(--border);
   --color-text: var(--text);
+  --color-text-body: var(--text-body);
   --color-text-2: var(--text-2);
+  --color-title: var(--title);
+  --color-code: var(--code);
+  --color-code-bg: var(--code-bg);
+  --color-folder: var(--folder);
   --color-neutral-edge: var(--neutral-edge);
   --color-select: var(--select);
   --color-select-fill: var(--select-fill);
   --color-agent: var(--agent);
   --color-ok: var(--ok);
   --color-danger: var(--danger);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
 }
 
 body {
   background: var(--canvas);
   color: var(--text);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
 }
 
 /*

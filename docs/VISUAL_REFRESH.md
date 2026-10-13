@@ -17,21 +17,30 @@ This slice is shaped by what the owner saw on the real V1.3 screen: competing ba
 
 Define these as CSS custom properties in `app/globals.css`. Components use tokens, never raw hex.
 
+*(Revised 2026-10-12 by the owner's pick after the first build, which read as too monotone: cool slate surfaces (option C) with blue for titles and code (option B). The first table's grays are replaced, and the blue and body-text tokens are new.)*
+
 | Token | Hex | One meaning |
 |---|---|---|
-| `--canvas` | `#111318` | page and Map background, a single flat charcoal |
-| `--surface` | `#1B1D24` | boxes, inputs, cards |
-| `--panel` | `#16181F` | the details panel |
-| `--hairline` | `#262933` | dividers |
-| `--border` | `#3A3E4A` | box and input borders |
-| `--text` | `#F0F1F5` | primary text |
-| `--text-2` | `#B1B5C0` | secondary text, counts, labels |
-| `--neutral-edge` | `#4A4F5C` | ordinary connections |
+| `--canvas` | `#0F131A` | page and Map background, a single flat cool slate |
+| `--surface` | `#1A212C` | boxes, inputs, cards |
+| `--panel` | `#141A23` | the details panel, drawers, dialogs |
+| `--hairline` | `#232B38` | dividers |
+| `--border` | `#3A4659` | box and input borders |
+| `--text` | `#EEF2F8` | primary text: names, headings |
+| `--text-body` | `#C3CBD8` | paragraphs: summaries, help |
+| `--text-2` | `#AEB8C8` | secondary text, counts, labels |
+| `--title` | `#9CC4FF` | **blue: a description's title** (a summary's tagline, help headings) |
+| `--code` | `#A9CBFF` | **blue: code identifiers in text** |
+| `--code-bg` | `#1B2940` | the chip behind them |
+| `--folder` | `#7FB2F0` | **blue: the folder icon**, so folders and files part at a glance |
+| `--neutral-edge` | `#5A6680` | ordinary connections, bright enough to follow on the slate |
 | `--select` | `#B58AFF` | **purple: the selected box, its direct links and its dependency path.** Nothing else |
-| `--select-fill` | `#241D33` | the selected box's fill |
+| `--select-fill` | `#251E36` | the selected box's fill |
 | `--agent` | `#F08A4B` | **orange: what Claude Code is touching right now.** Nothing else |
 | `--ok` | `#4CC38A` | **green: indexing status only** (the "indexed" dot) |
 | `--danger` | `#F07A7A` | error text and a failed stage. *(Added in the V1.3.1 build: the table had no color for errors, and people need to see them.)* |
+
+Blue is for names and code: what you read to know what something is. It never marks state; purple, orange and green keep those.
 
 Purple is never used just because something is interactive. Links and buttons use `--text` with an underline or border, not purple.
 
@@ -110,7 +119,7 @@ It's actionable and structured, not a static card. From top to bottom:
 ## 7. System rules (anti-noise)
 
 - **One radius:** 8 px for boxes, cards and inputs; 6 px for chips.
-- **A small type scale:** 18 / 15 / 14 / 13 / 12 px, in two weights (400 and 500). Sans everywhere; monospace only for code identifiers and paths inside text.
+- **A small type scale:** 18 / 15 / 14 / 13 / 12 px, in two weights (400 and 500). Sans everywhere; monospace only for code identifiers and paths inside text. *(The owner picked the faces on 2026-10-12: **IBM Plex Sans** and **IBM Plex Mono**, replacing Geist, which read as plain.)*
 - **One spacing scale:** 4 / 8 / 12 / 16 / 24 px.
 - No shadows, glows or gradients. Motion only for the agent pulse and view transitions.
 
