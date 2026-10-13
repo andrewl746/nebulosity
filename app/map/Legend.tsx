@@ -51,10 +51,10 @@ export default function Legend({ quietLines }: { quietLines: boolean }){
                 data-testid="legend-toggle"
                 onClick={toggle}
                 aria-expanded={open}
-                className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-[12px] font-medium text-control hover:text-text"
+                className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-1.5 text-[12px] font-medium text-control hover:bg-overlay-line"
             >
                 Legend
-                <Chevron aria-hidden size={14} stroke={1.75} />
+                <Chevron aria-hidden size={16} stroke={1.75} />
             </button>
         </div>
     );

@@ -15,10 +15,11 @@
 - **Keys (§6):** Backspace, the arrows and ? leave the Map alone while a dialog is open.
 - **Busy levels (§4):** past 60 lines, only the hovered or selected box's lines are drawn, with "Show all lines" to bring the rest back.
 - **From the three-task test (§9):** line sentences on hover, a plain-word legend sentence for direction, 26 px arrowheads, 15 px relationship headings, a page pill on the canvas with solid side arrows, the repo name going home, hover summaries on boxes.
-- **Overlays (§4):** the legend, the page pill and the zoom controls are solid `--overlay` cards (the logo's violet) with no outline: lines are never filled, so they can't be mistaken for lines (a light `--text-2` outline was, by the owner), and no box is that colour. Their buttons are `--control` cyan. React Flow's attribution label is hidden. The legend is collapsed to a "Legend" button by default, opens as a narrow card of short rows, and remembers in the browser whether it was left open.
+- **Overlays (§4):** the legend, the page pill, the zoom controls and the page arrows share one control style: a solid `--overlay` card (raised night violet) with no outline, an 8 px radius and `--control` cyan icons, hovering to `--overlay-line`. Lines are never filled, so they can't be mistaken for lines (a light `--text-2` outline was, by the owner). The logo's saturated violet was tried first and outshouted the Map. React Flow's attribution label is hidden. The legend is collapsed to a "Legend" button by default, opens as a narrow card of short rows, and remembers in the browser whether it was left open.
 - **The speed fix (§8):** the 5 s `src` panel didn't reproduce (30–141 ms, BENCHMARKS.md Map Benchmark #2); answers are now cached per index version, and the panel says "Refreshing…" while an on-demand summary is on its way.
 - **The three-task test (§9), run 2026-10-13,** and what it changed: the line sentences, the arrows' wording and size, the page bar, the solid page arrows, the repo name going home, hover summaries, and search without the repo's name.
 - **Night violet + cyan (§2), 2026-10-13:** the owner found the violet-slate surfaces grey and monotone once the overlays took the logo's colours, and picked option C of four whole-screen renders: the logo's night violet for every surface, its violet for the overlays, and its cyan as the one color for things you click.
+- **Content first (§2–§5), 2026-10-13,** from the owner's review of an outside critique ("the chrome outshouts the content"): brighter boxes (`--surface` `#22193F`, `--border` `#4B3B85`), a stronger selected fill, a faint dot grid on the canvas (`--grid`), selection lines at 1.5 px instead of 2, quiet controls, code names in the panel without a chip behind each, a summary's lead that really is its first sentence, "folders and files" instead of "boxes", and a tighter layout (56 px boxes, layers 64 apart, 8 a row on canvases 1,700 px and wider), which fits VS Code's busy levels 10–35% larger.
 - **Still owed:** the owner's sign-off.
 
 ## 1. Principle
@@ -41,10 +42,10 @@ Define these as CSS custom properties in `app/globals.css`. Components use token
 | Token | Hex | One meaning |
 |---|---|---|
 | `--canvas` | `#0E0A1C` | page and Map background, a single flat night violet (the logo tile's dark end) |
-| `--surface` | `#1B1333` | boxes, inputs, cards |
+| `--surface` | `#22193F` | boxes, inputs, cards: a step brighter than the canvas, so the content leads |
 | `--panel` | `#140E28` | the details panel, drawers, dialogs |
 | `--hairline` | `#261B45` | dividers |
-| `--border` | `#3A2A66` | box and input borders |
+| `--border` | `#4B3B85` | box and input borders, defined enough that boxes read as objects |
 | `--text` | `#F1EEF8` | primary text: names, headings |
 | `--text-body` | `#D3C7EE` | paragraphs: summaries, help |
 | `--text-2` | `#B9A9DE` | secondary text, counts, labels |
@@ -54,14 +55,15 @@ Define these as CSS custom properties in `app/globals.css`. Components use token
 | `--folder` | `#A98BEA` | **lavender: the folder icon**, so folders and files part at a glance |
 | `--neutral-edge` | `#7262A6` | ordinary connections, bright enough to follow on the canvas |
 | `--select` | `#B58AFF` | **purple: the selected box, its direct links and its dependency path.** Nothing else |
-| `--select-fill` | `#2E1A5C` | the selected box's fill |
+| `--select-fill` | `#3A2178` | the selected box's fill, strong enough that the box is seen before its lines |
 | `--agent` | `#F08A4B` | **orange: what Claude Code is touching right now.** Nothing else |
 | `--ok` | `#4CC38A` | **green: indexing status only** (the "indexed" dot) |
 | `--danger` | `#F07A7A` | error text and a failed stage. *(Added in the V1.3.1 build: the table had no color for errors, and people need to see them.)* |
 | `--control` | `#67E8F9` | **cyan (the logo's glow): something you click** — links, text buttons, the page arrows, the overlays' buttons. Content you select (boxes, chips, rows) keeps its own look |
-| `--overlay` | `#4C1D95` | the logo's violet: the fill of the overlays on the Map (legend, page pill, zoom controls) |
-| `--overlay-line` | `#5B2AA8` | dividers inside an overlay |
-| `--overlay-text-2` | `#D8B4FE` | secondary text on an overlay |
+| `--overlay` | `#2A1F52` | raised night violet: every control on the Map (legend, page pill, zoom controls, page arrows) |
+| `--overlay-line` | `#3A2D6B` | dividers inside an overlay, and a control's hover |
+| `--overlay-text-2` | `#C9BCEB` | secondary text on an overlay |
+| `--grid` | `#262039` | the canvas's faint dot grid |
 
 Lavender (soft, on text and icons) is the brand: it marks names and code, what you read to know what something is. Vivid purple, as a box's 2 px border and fill and as its lines, is the selection. They share a hue on purpose, but never a job: lavender never marks state.
 
@@ -74,7 +76,7 @@ Purple is never used just because something is interactive. Links and text butto
 ## 3. Background
 
 - A flat `--canvas`. No starfield, no purple haze or ambient glow, no gradient.
-- The grid is optional; if kept, it's barely visible (around 4% opacity).
+- The grid is optional; if kept, it's barely visible (around 4% opacity). *(Kept since 2026-10-13: a dot grid every 22 px in `--grid`, so a busy level isn't a void with rectangles in it.)*
 - No glow on anything, anywhere.
 
 ## 4. Map
@@ -83,10 +85,10 @@ Purple is never used just because something is interactive. Links and text butto
 |---|---|
 | Box | `--surface` fill, 1 px `--border`, 8 px radius, a small Tabler outline icon (`ti-folder` or `ti-file`) |
 | Box text | name 14–15 px / 500 in `--text`, count 12 px in `--text-2`. **No description inside boxes**; summaries live in the panel |
-| Selected box | `--select-fill`, 2 px `--select` border |
+| Selected box | `--select-fill`, 2 px `--select` border. 232 × 56 like every box (64 tall until 2026-10-13) |
 | Claude's focus | 2 px `--agent` border, with a brief pulse when it changes (respects `prefers-reduced-motion`) |
 | Unrelated boxes when something is selected | **about 60% opacity** — visible and clickable, but quieter |
-| Edges | **directional arrows on every edge**: 1 px `--neutral-edge` normally, 2 px solid `--select` for the selection's direct links. Where it adds meaning, label the relationship ("imports") |
+| Edges | **directional arrows on every edge**: 1 px `--neutral-edge` normally, 1.5 px solid `--select` for the selection's direct links (2 px until 2026-10-13: merged into shared tracks, they outshone the selected box). Where it adds meaning, label the relationship ("imports") |
 | Hover | highlights that box's direct connections without selecting it |
 | Spacing | more room between boxes, and the level fits the viewport with comfortable padding |
 
@@ -113,7 +115,7 @@ It's actionable and structured, not a static card. From top to bottom:
 5. **Key relationships:** "Depends on" and "Used by" as clickable chips. Clicking one focuses that box on the Map.
 6. **Contents:** a list of child folders and files with their counts, plus "View all". Clicking a child folder goes into it; clicking a file selects it.
 
-**Markdown in summaries:** backtick identifiers render as inline code (monospace on a `--surface` chip), never as literal backticks. Body text is 14–15 px sans with a 1.5 line height, not monospace.
+**Markdown in summaries:** backtick identifiers render as inline code (monospace in `--code` lavender; the chip behind each was dropped on 2026-10-13 as noisy), never as literal backticks. The lead is the tagline plus the first sentence, even when the next sentence starts with code. Body text is 14–15 px sans with a 1.5 line height, not monospace.
 
 ## 6. Top bar and activity
 

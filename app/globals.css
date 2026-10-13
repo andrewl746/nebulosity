@@ -8,10 +8,10 @@
  */
 :root {
   --canvas: #0E0A1C;       /* page and Map background, one flat night violet (the logo tile's dark end) */
-  --surface: #1B1333;      /* boxes, inputs, cards */
+  --surface: #22193F;      /* boxes, inputs, cards: one step brighter than the canvas, so the content leads */
   --panel: #140E28;        /* the details panel, drawers, dialogs */
   --hairline: #261B45;     /* dividers */
-  --border: #3A2A66;       /* box and input borders */
+  --border: #4B3B85;       /* box and input borders, defined enough that boxes read as objects */
   --text: #F1EEF8;         /* primary text: names, headings */
   --text-body: #D3C7EE;    /* paragraphs: summaries, help */
   --text-2: #B9A9DE;       /* secondary text, counts, labels */
@@ -21,14 +21,15 @@
   --folder: #A98BEA;       /* lavender: the folder icon, so folders and files part at a glance */
   --neutral-edge: #7262A6; /* ordinary connections, bright enough to follow on the canvas (3.7:1) */
   --select: #B58AFF;        /* purple: the selected box, its direct links, its path. Nothing else */
-  --select-fill: #2E1A5C;  /* the selected box's fill */
+  --select-fill: #3A2178;  /* the selected box's fill: strong enough that the box, not its lines, is seen first */
   --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
   --ok: #4CC38A;            /* green: indexing status only */
   --danger: #F07A7A;        /* errors and a failed stage */
   --control: #67E8F9;       /* cyan (the logo's glow): something you click — links, text buttons, page arrows. Nothing else */
-  --overlay: #4C1D95;       /* the logo's violet: the overlays on the Map (legend, page pill, zoom controls) */
-  --overlay-line: #5B2AA8;  /* dividers inside an overlay */
-  --overlay-text-2: #D8B4FE; /* secondary text on an overlay */
+  --overlay: #2A1F52;       /* raised night violet: every control on the Map (legend, page pill, zoom, page arrows) */
+  --overlay-line: #3A2D6B;  /* dividers inside an overlay, and a control's hover */
+  --overlay-text-2: #C9BCEB; /* secondary text on an overlay */
+  --grid: #262039;          /* the canvas's faint dot grid, so the Map has texture without competing with boxes */
 }
 
 @theme inline {
@@ -54,6 +55,7 @@
   --color-overlay: var(--overlay);
   --color-overlay-line: var(--overlay-line);
   --color-overlay-text-2: var(--overlay-text-2);
+  --color-grid: var(--grid);
   --font-sans: var(--font-plex-sans);
   --font-mono: var(--font-plex-mono);
 }
@@ -123,7 +125,7 @@ body {
   --xy-edge-stroke: var(--neutral-edge);
   --xy-edge-label-background-color: var(--surface);
   --xy-edge-label-color: var(--text);
-  /* the zoom controls are an overlay: the logo's violet, their buttons in the control cyan (owner review) */
+  /* the zoom controls share the one control style: raised night violet, cyan icons (owner review) */
   --xy-controls-button-background-color: var(--overlay);
   --xy-controls-button-background-color-hover: var(--overlay-line);
   --xy-controls-button-color: var(--control);

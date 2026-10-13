@@ -346,7 +346,8 @@ type PageArrowProps = { side: "left" | "right"; page: number; pageCount: number;
 /**
  * A big arrow on the canvas's edge that turns to the previous or next page of boxes (owner review). Solid and light, so
  * it stands out over boxes and lines: dark on dark, the owner couldn't find it once the panel had pushed it over the Map.
- * Cyan, like everything you click.
+ * It shares the one control style (raised night violet, a cyan icon) with the legend, page pill and zoom: an outside
+ * critique found the big cyan circle read as an onboarding button, not part of the Map.
  */
 function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArrowProps){
     const next = side === "left" ? page - 1 : page + 1;
@@ -360,9 +361,9 @@ function PageArrow({ side, page, pageCount, onTurn, panelOpen = false }: PageArr
             aria-label={`${word} boxes: page ${next + 1} of ${pageCount}`}
             title={`${word} boxes (${side === "left" ? "Left" : "Right"} arrow key)`}
             style={side === "right" ? { right: (panelOpen ? PANEL_WIDTH : 0) + 16 } : { left: 16 }}
-            className="absolute top-1/2 z-[6] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-control text-canvas hover:bg-text"
+            className="absolute top-1/2 z-[6] grid h-10 w-10 -translate-y-1/2 place-items-center rounded-lg bg-overlay text-control hover:bg-overlay-line"
         >
-            <Icon aria-hidden size={24} stroke={2} />
+            <Icon aria-hidden size={20} stroke={2} />
         </button>
     );
 }

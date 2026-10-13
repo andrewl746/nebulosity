@@ -361,12 +361,15 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
     );
 }
 
-/** Prose with its `identifiers` as inline code (VISUAL_REFRESH.md §5). */
+/**
+ * Prose with its `identifiers` as inline code (VISUAL_REFRESH.md §5): the code font and lavender, without the filled
+ * chip, which made a summary with many names noisy (an outside critique the owner agreed with).
+ */
 function Rich({ text }: { text: string }){
     return (
         <>
             {inlineCode(text).map((part, i) => part.code
-                ? <code key={i} className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">{part.text}</code>
+                ? <code key={i} className="font-mono text-[13px] text-code">{part.text}</code>
                 : <span key={i}>{part.text}</span>)}
         </>
     );

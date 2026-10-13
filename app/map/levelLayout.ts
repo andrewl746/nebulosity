@@ -1,26 +1,41 @@
 import dagre from "@dagrejs/dagre";
 import type { MapEdge, MapNode } from "@/lib/contracts";
 
-/** Every box is drawn the same size, so the layout needs no measuring (VISUAL_REFRESH.md §4: larger, roomier boxes). */
+/**
+ * Every box is drawn the same size, so the layout needs no measuring (VISUAL_REFRESH.md §4). 56 tall, not V1.3.1's
+ * first 64, and layers 64 apart, not 72: measured on VS Code's busiest levels, the tighter layout fits them 10–30%
+ * larger (src/vs/platform's names from 8.8 to 11.6 px on a 1907 px screen), while GAP stays 40 so the routed lines
+ * keep their channels.
+ */
 export const BOX_WIDTH = 232;
-export const BOX_HEIGHT = 64;
+export const BOX_HEIGHT = 56;
 export const GAP = 40;
 /** Room between layers: enough for a line's arrowhead to read before it meets the box below. */
-export const RANK_GAP = 72;
+export const RANK_GAP = 64;
 
 export type Position = { x: number; y: number };
 
 /** A layer wider than this wraps into rows: 6 boxes span about 1,600 px, a laptop screen at a readable zoom. */
 export const MAX_PER_ROW = 6;
+/** On a wide canvas a layer wraps at 8 instead (about 2,100 px): fewer rows, so a dense level fits larger. */
+export const WIDE_PER_ROW = 8;
+/** A canvas at least this wide counts as wide. Below it, 8 a row would make levels fit smaller, not larger (measured). */
+export const WIDE_CANVAS = 1700;
+
+/** How many boxes a layer holds per row on a canvas this wide. */
+export function perRowFor(canvasWidth: number): number {
+    return canvasWidth >= WIDE_CANVAS ? WIDE_PER_ROW : MAX_PER_ROW;
+}
 
 /**
  * Dagre's layers, redrawn as centred tiers (VISUAL_REFRESH.md §4: the level fits the viewport). Dagre decides which
  * layer each box is in and their order within it (the order that crosses fewest lines); its x positions are dropped.
  * Left to them, 49 files that all import one barrel make one layer 13,000 px wide, and fitting that to a screen
  * shrinks every box to a sliver. So each layer is centred on x = 0, and one wider than MAX_PER_ROW wraps into rows,
- * balanced so the last isn't left with one box (13 → 5, 5, 3). The tiers stack from y = 0, RANK_GAP apart.
+ * balanced so the last isn't left with one box (13 → 5, 5, 3; at 8 a row, 7 and 6). The tiers stack from y = 0,
+ * RANK_GAP apart.
  */
-function placeTiers(centres: readonly { path: string; x: number; y: number }[]): Map<string, Position> {
+function placeTiers(centres: readonly { path: string; x: number; y: number }[], perRowCap: number): Map<string, Position> {
     const layers = new Map<number, { path: string; x: number }[]>();
     for (const { path, x, y } of centres) layers.set(y, [...(layers.get(y) ?? []), { path, x }]);
 
@@ -28,7 +43,7 @@ function placeTiers(centres: readonly { path: string; x: number; y: number }[]):
     let top = 0;
     for (const y of [...layers.keys()].sort((a, b) => a - b)){
         const layer = layers.get(y)!.sort((a, b) => a.x - b.x || (a.path < b.path ? -1 : 1));
-        const rowCount = Math.ceil(layer.length / MAX_PER_ROW);
+        const rowCount = Math.ceil(layer.length / perRowCap);
         const perRow = Math.ceil(layer.length / rowCount);
         for (let row = 0; row < rowCount; row++){
             const boxes = layer.slice(row * perRow, (row + 1) * perRow);
@@ -70,7 +85,7 @@ const span = (k: number, size: number): number => k * (size + GAP) - GAP;
 
 /**
  * Where each box of a level goes (ADR-011, PIVOT_SPEC.md §7): dagre's layers, importers above what they import, from
- * the level's `maxLines` heaviest lines, drawn as centred tiers that wrap past MAX_PER_ROW (placeTiers). A box with no
+ * the level's `maxLines` heaviest lines, drawn as centred tiers that wrap past `perRow` (placeTiers). A box with no
  * line to any other at this level adds nothing to the layering, so those go in a grid, in the level's order, on the
  * side that lets the whole level fit larger (VISUAL_REFRESH.md §4: readable, fitting the viewport):
  * - beside the tiers, as tall as them: right for a tall chain on a wide screen (VS Code's root: 91% against 68%);
@@ -79,7 +94,12 @@ const span = (k: number, size: number): number => k * (size + GAP) - GAP;
  * A level with no lines at all is one square-ish grid. Pure and deterministic: the same level always draws the same
  * picture. Positions are top-left corners, as React Flow places nodes.
  */
-export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[], maxLines: number = LAYOUT_MAX_LINES): Map<string, Position> {
+export function layoutLevel(
+    nodes: readonly MapNode[],
+    edges: readonly MapEdge[],
+    maxLines: number = LAYOUT_MAX_LINES,
+    perRow: number = MAX_PER_ROW,
+): Map<string, Position> {
     const positions = new Map<string, Position>();
     const lines = edges.filter((e) => e.source !== e.target);
     // a box joined by any line stays in the layers, even when only lighter lines join it
@@ -108,7 +128,7 @@ export function layoutLevel(nodes: readonly MapNode[], edges: readonly MapEdge[]
     // the tiers are centred on x = 0 and start at y = 0
     let bottom = 0;
     let right = 0;
-    for (const [path, at] of placeTiers(connected.map((node) => ({ path: node.path, ...(graph.node(node.path) as { x: number; y: number }) })))){
+    for (const [path, at] of placeTiers(connected.map((node) => ({ path: node.path, ...(graph.node(node.path) as { x: number; y: number }) })), perRow)){
         positions.set(path, at);
         bottom = Math.max(bottom, at.y + BOX_HEIGHT);
         right = Math.max(right, at.x + BOX_WIDTH);

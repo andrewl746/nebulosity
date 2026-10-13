@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow,
+    Background, BackgroundVariant, ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore,
     type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -13,7 +13,7 @@ import { toBoxNode } from "./flowNodes";
 import { PANEL_WIDTH } from "./DetailPanel";
 import { lineLabel } from "./labels";
 import Legend from "./Legend";
-import { FIT_PADDING, layoutLevel } from "./levelLayout";
+import { FIT_PADDING, layoutLevel, perRowFor } from "./levelLayout";
 import MapBox, { type BoxData, type BoxNode } from "./MapBox";
 import { portalCaption, portalDirection, portalLinks } from "./portals";
 import type { Pulse } from "./pulses";
@@ -36,7 +36,8 @@ const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: 
     normal: { stroke: "var(--neutral-edge)", arrow: "var(--text-2)", width: 1, opacity: 1, layer: 0 },
     faded: { stroke: "var(--neutral-edge)", arrow: "var(--neutral-edge)", width: 1, opacity: 0.35, layer: 0 },
     preview: { stroke: "var(--text-2)", arrow: "var(--text)", width: 1.5, opacity: 1, layer: 1 },
-    selected: { stroke: "var(--select)", arrow: "var(--select)", width: 2, opacity: 1, layer: 2 },
+    // 1.5 px, not 2: a selected box's lines merge into shared tracks, and at 2 px they outshone the box itself
+    selected: { stroke: "var(--select)", arrow: "var(--select)", width: 1.5, opacity: 1, layer: 2 },
 };
 /** The arrowhead's size in px, whatever the line's width (26 since the three-task test: 18 was too small to read). */
 const ARROW_SIZE = 26;
@@ -64,7 +65,9 @@ type MapCanvasProps = {
  * controlled with the StrictMode workaround in next.config.ts.
  */
 function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines }: MapCanvasProps){
-    const positions = useMemo(() => layoutLevel(level.nodes, level.edges), [level]);
+    // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
+    const perRow = useStore((s) => perRowFor(s.width));
+    const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
     // each portal's arrow and "44 folders and files · 6 links", worked out once per level rather than on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
@@ -131,7 +134,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     // Flow a render after the level does (setNodes runs in an effect), so the fit waits until `nodes` holds this
     // level's boxes: fitting sooner frames the previous level's, which is what a level from the cache got. The same
     // level refetched after the index moved keeps its key, so the user's pan and zoom stay put.
-    const levelKey = `${level.repo}\n${level.path}\n${level.page}`;
+    // the row width is in the key: a window resized across WIDE_CANVAS lays the level out again, so it's fitted again
+    const levelKey = `${level.repo}\n${level.path}\n${level.page}\n${perRow}`;
     const fittedKey = useRef<string | null>(null);
     useEffect(() => {
         if (fittedKey.current === levelKey) return;
@@ -185,6 +189,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             colorMode="dark"
             proOptions={{ hideAttribution: true }}
         >
+            {/* a faint dot grid: texture, so a busy level isn't a void with rectangles in it (VISUAL_REFRESH.md §3) */}
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid)" />
             <Legend quietLines={quietLines} />
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
             <Controls

@@ -8,35 +8,35 @@ const line = (source: string, target: string): MapEdge => ({ source, target, cou
 
 describe("routeEdges (owner review: no line may pass through a box)", () => {
     it("draws a line between neighbouring rows as one straight drop when the boxes line up", () => {
-        // s's bottom-centre (116, 64) to t's top-centre (116, 136): a straight line
-        const routes = routeEdges(at({ s: { x: 0, y: 0 }, t: { x: 0, y: 136 } }), [line("s", "t")]);
-        expect(routes.get("s->t")).toEqual([{ x: 116, y: 64 }, { x: 116, y: 136 }]);
+        // s's bottom-centre (116, 56) to t's top-centre (116, 120), a layer apart (56 + 64): a straight line
+        const routes = routeEdges(at({ s: { x: 0, y: 0 }, t: { x: 0, y: 120 } }), [line("s", "t")]);
+        expect(routes.get("s->t")).toEqual([{ x: 116, y: 56 }, { x: 116, y: 120 }]);
     });
 
     it("jogs sideways in the channel between neighbouring rows", () => {
-        // the channel between y 64 and y 136 runs at y = 100
-        const routes = routeEdges(at({ s: { x: 0, y: 0 }, t: { x: 272, y: 136 } }), [line("s", "t")]);
-        expect(routes.get("s->t")).toEqual([{ x: 116, y: 64 }, { x: 116, y: 100 }, { x: 388, y: 100 }, { x: 388, y: 136 }]);
+        // the channel between y 56 and y 120 runs at y = 88
+        const routes = routeEdges(at({ s: { x: 0, y: 0 }, t: { x: 272, y: 120 } }), [line("s", "t")]);
+        expect(routes.get("s->t")).toEqual([{ x: 116, y: 56 }, { x: 116, y: 88 }, { x: 388, y: 88 }, { x: 388, y: 120 }]);
     });
 
     it("goes around a box in a row it skips, down a lane in the gutter beside it", () => {
-        // m (0..232 wide, y 136..200) is in the way of s → t; the lanes beside it are 20 px out: x = -20 or 252, and a tie
-        // goes to the lower x. Channels: y 100 under s, y 236 above t
+        // m (0..232 wide, y 120..176) is in the way of s → t; the lanes beside it are 20 px out: x = -20 or 252, and a tie
+        // goes to the lower x. Channels: y (0 + 56 + 120) / 2 = 88 under s, y (120 + 56 + 240) / 2 = 208 above t
         const routes = routeEdges(
-            at({ s: { x: 0, y: 0 }, m: { x: 0, y: 136 }, t: { x: 0, y: 272 } }),
+            at({ s: { x: 0, y: 0 }, m: { x: 0, y: 120 }, t: { x: 0, y: 240 } }),
             [line("s", "m"), line("s", "t")],
         );
         expect(routes.get("s->t")).toEqual([
-            { x: 116, y: 64 }, { x: 116, y: 100 }, { x: -20, y: 100 }, { x: -20, y: 236 }, { x: 116, y: 236 }, { x: 116, y: 272 },
+            { x: 116, y: 56 }, { x: 116, y: 88 }, { x: -20, y: 88 }, { x: -20, y: 208 }, { x: 116, y: 208 }, { x: 116, y: 240 },
         ]);
     });
 
     it("routes a line that points back up around both rows it passes", () => {
-        // s (y 136) imports t (y 0): out under s (y 236, half a rank gap below the last row), up the lane at x = -20 past
-        // both rows, and into t from above (y -36)
-        const routes = routeEdges(at({ t: { x: 0, y: 0 }, s: { x: 0, y: 136 } }), [line("t", "s"), line("s", "t")]);
+        // s (y 120) imports t (y 0): out under s (y 120 + 56 + 32 = 208, half a rank gap below the last row), up the lane
+        // at x = -20 past both rows, and into t from above (y -32)
+        const routes = routeEdges(at({ t: { x: 0, y: 0 }, s: { x: 0, y: 120 } }), [line("t", "s"), line("s", "t")]);
         expect(routes.get("s->t")).toEqual([
-            { x: 116, y: 200 }, { x: 116, y: 236 }, { x: -20, y: 236 }, { x: -20, y: -36 }, { x: 116, y: -36 }, { x: 116, y: 0 },
+            { x: 116, y: 176 }, { x: 116, y: 208 }, { x: -20, y: 208 }, { x: -20, y: -32 }, { x: 116, y: -32 }, { x: 116, y: 0 },
         ]);
     });
 

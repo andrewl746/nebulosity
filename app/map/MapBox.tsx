@@ -63,7 +63,7 @@ function MapBox({ data }: NodeProps<BoxNode>){
             data-box={box.path}
             data-tone={tone}
             title={title}
-            className={`relative flex h-[64px] w-[232px] items-center gap-2 rounded-lg ${portal ? PORTAL_TONES[tone] : TONES[tone]} ${agent ? "outline-2 outline-offset-2 outline-agent" : ""}`}
+            className={`relative flex h-[56px] w-[232px] items-center gap-2 rounded-lg ${portal ? PORTAL_TONES[tone] : TONES[tone]} ${agent ? "outline-2 outline-offset-2 outline-agent" : ""}`}
         >
             {pulseKey > 0 && <span key={pulseKey} aria-hidden className="neb-pulse pointer-events-none absolute inset-0 rounded-lg" />}
             <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${box.kind === "folder" ? "text-folder" : "text-text-2"}`} />

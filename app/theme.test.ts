@@ -3,13 +3,15 @@ import { describe, expect, it } from "vitest";
 
 // VISUAL_REFRESH.md §2, transcribed: each token's one value. The owner's pick of 2026-10-13, "night violet + cyan"
 // (option C of the whole-screen mockups), from the logo's colours: night-violet surfaces, lavender names and code, the
-// selection still vivid purple, the logo's violet for the overlays and its cyan for everything you click.
+// selection still vivid purple, the logo's violet for the overlays and its cyan for everything you click. Then, from
+// the owner's review of an outside critique: content first (brighter boxes, a stronger selected fill, a faint dot grid)
+// and quiet controls (one raised night-violet style for every overlay).
 const TOKENS: Record<string, string> = {
     canvas: "#0E0A1C",
-    surface: "#1B1333",
+    surface: "#22193F",
     panel: "#140E28",
     hairline: "#261B45",
-    border: "#3A2A66",
+    border: "#4B3B85",
     text: "#F1EEF8",
     "text-body": "#D3C7EE",
     "text-2": "#B9A9DE",
@@ -19,14 +21,15 @@ const TOKENS: Record<string, string> = {
     folder: "#A98BEA",
     "neutral-edge": "#7262A6",
     select: "#B58AFF",
-    "select-fill": "#2E1A5C",
+    "select-fill": "#3A2178",
     agent: "#F08A4B",
     ok: "#4CC38A",
     danger: "#F07A7A",
     control: "#67E8F9",
-    overlay: "#4C1D95",
-    "overlay-line": "#5B2AA8",
-    "overlay-text-2": "#D8B4FE",
+    overlay: "#2A1F52",
+    "overlay-line": "#3A2D6B",
+    "overlay-text-2": "#C9BCEB",
+    grid: "#262039",
 };
 
 const css = readFileSync("app/globals.css", "utf8");
