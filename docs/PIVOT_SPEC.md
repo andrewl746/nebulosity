@@ -376,7 +376,7 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - **Existing tests.** Kept where behavior is unchanged. The regex-scanner golden vectors (`GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4) retire with the regex extractor, and that retirement is recorded in the review doc.
 - **Benchmark.** `scripts/bench-index.ts` on VS Code records per-stage timings against S1, S3 and S6.
 - **UI performance.** Click-to-render time measured in the browser on VS Code with the Performance API, and recorded.
-- **MCP smoke test.** `claude -p` exercises every tool once.
+- **MCP smoke test.** `claude -p` exercises every tool once. *(V1.4: one run, every tool once, BENCHMARKS.md MCP Smoke Test #1.)*
 - **Gate for every task:** `npx tsc --noEmit && npm run lint && npx vitest run`, all clean.
 
 ---
