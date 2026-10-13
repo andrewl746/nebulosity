@@ -126,6 +126,20 @@ export type DescribeResponse = {
   indexVersion: number;
 };
 
+/** GET /api/source — docs/API_CONTRACTS.md §16 (added in V1.3.1): an indexed file's text, for the source viewer. */
+export type SourceResponse = {
+  /** The repo's root: absolute, forward slashes. */
+  repo: string;
+  path: string;
+  content: string;
+  /** Lines in `content`, as an editor counts them. */
+  lineCount: number;
+  /** The file was longer than the limit (1 MB) and `content` stops there. */
+  truncated: boolean;
+  /** "typescript", "javascript" or "text". */
+  language: string;
+};
+
 /** POST /api/summarize — docs/API_CONTRACTS.md §13 */
 export type SummarizeResponse = {
   path: string;

@@ -255,3 +255,19 @@ type RepoList = { active: string | null; repos: RepoSummary[] };
 - **`GET`** lists the repos the structure stage has indexed, by root, and the active one.
 - **`remote`** (added in V1.3.1; optional, so `CONTRACTS_VERSION` stays 2) is the origin remote's owner and name, read from `<root>/.git/config` (`lib/engine/git-remote.ts`), so the top bar can say `microsoft / vscode` (VISUAL_REFRESH.md §6). The owner is everything before the last path segment, so a nested GitLab group stays whole. It's left out when there's no origin, when the url is a local path, or when `.git` is a file (a worktree or submodule), and the top bar then shows `name`.
 - **`POST { root }`** makes an indexed repo the active one (`activeRepo` in `.nebulosity/config.json`) and points the background worker at it. It answers with the new `RepoList`. Localhost only. A root that was never indexed gets `404 NOT_FOUND`.
+
+## 16. GET /api/source?path= (slice V1.3.1)
+
+An indexed file's text, for the Map's source viewer (`lib/engine/source.ts`; the owner asked to inspect a file's code on the Map).
+
+```ts
+type SourceResponse = { repo: string; path: string; content: string; lineCount: number; truncated: boolean; language: string };
+```
+
+- **Only indexed files.** The path must be a file the structure stage indexed. So the route can't read anything else in the repo (a `.env`, a key, `.git/config`), and a path that resolves outside the repo through a symlink is refused too.
+- **`content`** is the file's bytes as UTF-8, up to 1 MB (about 25,000 lines of TypeScript). Past that it stops, and `truncated` is `true`. Line endings are left as stored; the viewer shows them as plain line breaks.
+- **`lineCount`** counts the lines in `content` the way an editor does: a final line break doesn't start another line.
+- **`language`** is `typescript`, `javascript` or `text`, by extension, for highlighting.
+- Like every `/api` route, it answers only requests addressed to this machine (ADR-039). It reads and never writes.
+
+**Errors:** `400 BAD_REQUEST` for a path that could leave the repo, or an empty one; `404 NOT_FOUND` for a folder, a file the index doesn't know, or a file deleted since; `404 INDEX_EMPTY`.

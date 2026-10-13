@@ -1,13 +1,14 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { IconFile, IconFolder, IconX } from "@tabler/icons-react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { IconCode, IconFile, IconFolder, IconX } from "@tabler/icons-react";
 import type { AreaCount, DescribeResponse, LevelResponse, MapNode, SummarizeResponse, SymbolInfo } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCompact, formatCount } from "./format";
 import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
 import { placeholderFor, wantsSummary } from "./summaries";
+import SourceViewer from "./SourceViewer";
 import { inlineCode, splitSummary } from "./text";
 
 type DetailPanelProps = {
@@ -95,6 +96,9 @@ function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
 
     const name = more ? more.name : nameOf(target, level.repo);
     const kindLabel = more ? "Folded boxes" : data ? KIND_LABELS[data.kind] : "";
+    // the source viewer (owner review): closed, open on the whole file, or open on a declaration's lines
+    const [viewing, setViewing] = useState<{ lines?: { start: number; end: number } } | null>(null);
+    const closeViewer = useCallback(() => setViewing(null), []);
 
     return (
         <aside data-panel={path} style={{ width: PANEL_WIDTH }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
@@ -109,7 +113,7 @@ function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
                         <IconX aria-hidden size={16} stroke={1.75} />
                     </button>
                 </div>
-                {data && !more && <Stats data={data} onOpen={onOpen} />}
+                {data && !more && <Stats data={data} onOpen={onOpen} onViewSource={() => setViewing({})} />}
             </header>
             <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
                 {error && <p className="text-danger">{error.message}</p>}
@@ -124,9 +128,11 @@ function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
                         onRetry={retry}
                         onFocus={onFocus}
                         onOpen={onOpen}
+                        onViewLines={(start, end) => setViewing({ lines: { start, end } })}
                     />
                 )}
             </div>
+            {viewing && data?.kind === "file" && <SourceViewer path={data.path} lines={viewing.lines} onClose={closeViewer} />}
         </aside>
     );
 }
@@ -135,7 +141,7 @@ function DetailPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
 export default memo(DetailPanel);
 
 /** "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. */
-function Stats({ data, onOpen }: { data: DescribeResponse; onOpen: (folder: string) => void }){
+function Stats({ data, onOpen, onViewSource }: { data: DescribeResponse; onOpen: (folder: string) => void; onViewSource: () => void }){
     const lines = `${formatCompact(data.stats.lineCount)} ${data.stats.lineCount === 1 ? "line" : "lines"}`;
     const size = data.kind === "file" ? lines : `${formatCount(data.stats.fileCount)} ${data.stats.fileCount === 1 ? "file" : "files"} · ${lines}`;
     return (
@@ -146,7 +152,12 @@ function Stats({ data, onOpen }: { data: DescribeResponse; onOpen: (folder: stri
                 <button type="button" onClick={() => onOpen(data.path)} className="text-text underline underline-offset-2 hover:text-text-2">Open folder</button>
             )}
             {data.kind === "file" && (
-                <a href={editorLink(data)} className="text-text underline underline-offset-2 hover:text-text-2">Open in VS Code</a>
+                <>
+                    <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-text underline underline-offset-2 hover:text-text-2">
+                        <IconCode aria-hidden size={14} stroke={1.75} />View source
+                    </button>
+                    <a href={editorLink(data)} className="text-text underline underline-offset-2 hover:text-text-2">Open in VS Code</a>
+                </>
             )}
         </div>
     );
@@ -163,9 +174,11 @@ type DetailsProps = {
     onRetry: () => void;
     onFocus: (targetPath: string) => void;
     onOpen: (folder: string) => void;
+    /** Opens the source viewer on a declaration's lines. */
+    onViewLines: (start: number, end: number) => void;
 };
 
-function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOpen }: DetailsProps){
+function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOpen, onViewLines }: DetailsProps){
     return (
         <>
             <Summary data={data} fresh={fresh} refreshing={refreshing} summaryError={summaryError} onRetry={onRetry} />
@@ -184,10 +197,15 @@ function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOp
             {data.symbols && (
                 <Rows title="Declarations" items={data.symbols} empty="None found." render={(symbol: SymbolInfo) => (
                     <li key={`${symbol.name}:${symbol.startLine}`}>
-                        <a href={editorLink(data, symbol.startLine)} className="flex items-baseline justify-between gap-3 rounded-md px-2 py-1 hover:bg-surface">
+                        <button
+                            type="button"
+                            title={`Show ${symbol.name} in the source`}
+                            onClick={() => onViewLines(symbol.startLine, symbol.endLine)}
+                            className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-1 text-left hover:bg-surface"
+                        >
                             <span className={`truncate font-mono text-[13px] ${symbol.exported ? "text-text" : "text-text-2"}`}>{symbol.name}</span>
                             <span className="shrink-0 text-[12px] text-text-2">{symbol.kind} · line {symbol.startLine}</span>
-                        </a>
+                        </button>
                     </li>
                 )} />
             )}
