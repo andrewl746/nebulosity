@@ -352,6 +352,7 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - Louvain (`graphology-communities-louvain`) runs on the undirected, weighted file graph, adding co-change weights when E3 exists.
 - Clusters are summarized with Sonnet 5.5 and named. The Clusters lens regroups the boxes, and a folder-vs-cluster "drift" view shows where they disagree.
 - PageRank replaces degree as the importance measure (ADR-010's revisit trigger). Tool: `clusters`.
+- **A focus view** *(moved here from V1.3.1 by the owner, 2026-10-13)*: a box in the middle, everything that uses it above, everything it uses below, from any folder (`describe`'s `usedBy` and `uses`, up to 12 a side plus "+N more"); double-clicking a box puts it in the middle, and Back returns to the Map. On the Map a box shows only its links inside one folder (`mergeEditor`: 1 of its 17); the panel already lists them all, so this improves something that works, and it belongs with E5's rework of what the Map groups together. A natural target for `show_on_map` too.
 
 ---
 
