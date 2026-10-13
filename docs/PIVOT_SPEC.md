@@ -83,7 +83,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 2. Adapters are thin. The MCP server, route handlers, static exporter and CLI scripts each validate input, call one engine function, and format the result.
 3. `lib/contracts.ts` becomes renderer-agnostic. React Flow's `Node`/`Edge` types leave the contract, and the UI maps a `LevelResponse` into whatever renderer it uses.
 4. **Paths resolve from the install directory, not `cwd`.** `lib/db/client.ts` opens `.nebulosity/nebulosity.db` and the migrations folder relative to `process.cwd()`. Claude Code launches the MCP server from the *user's* repo, so both must resolve from `NEBULOSITY_HOME`, falling back to `process.cwd()` when it's unset. That fallback is correct for Next.js, the CLI and Vitest, which all run from the checkout. The MCP launcher (V1.4) always sets it.
-5. One database, many repos. The `repositories` table already supports this. WAL lets the MCP server read while the indexer writes. **The MCP server opens the database read-only and never runs migrations.** Only the Next server and CLI own the schema. Running two processes against one database file is exactly ADR-023's revisit trigger, and this is the answer to it.
+5. One database, many repos. The `repositories` table already supports this. WAL lets the MCP server read while the indexer writes. **The MCP server opens the database read-only and never runs migrations.** Only the Next server and CLI own the schema. Running two processes against one database file is exactly ADR-023's revisit trigger, and this is the answer to it. *(V1.4, ADR-044: `openDb(file, "readonly")`, which also refuses a database behind the checkout's migrations and says to start the Map or run `npm run index` once.)*
 
 **Processes.** The Next.js server runs the UI, the API and the live channel, and forks one background worker (ADR-038) that owns every write while the Map is open: the watcher, incremental updates, summary refreshes, the folder sweep and embeddings. The MCP server is spawned once per Claude Code session, is read-only on the database, and posts live events over HTTP. CLI scripts cover index, export, bench and eval.
 
@@ -426,7 +426,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13; ADR-044 onward were added during V1.4:
 
 | ADR | Decision |
 |---|---|
@@ -450,6 +450,7 @@ Each v1 slice ends demoable:
 | ADR-041 | The Map's dark theme refined for readability (V1.3.1, `VISUAL_REFRESH.md`) |
 | ADR-042 | The owner's review of V1.3.1: routed lines, pages of related boxes with portals, Back, a source viewer, help, the violet-slate theme |
 | ADR-043 | Shipped for other people's repos: slice V1.6 with a free mode (no API key), and the extras reordered E4 → E5 → E1, with E3 smaller and optional and E2 behind a measurement |
+| ADR-044 | The MCP server opens the database read-only: no pragmas, no migrations, a check that the file is current, recovery once something is indexed |
 
 ## 16. Doc migration
 

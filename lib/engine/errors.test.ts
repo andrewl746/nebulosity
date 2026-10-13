@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DatabaseMissingError, DatabaseOutdatedError } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { RepoNotIndexedError } from "../db/store/structure";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
@@ -21,6 +22,8 @@ describe("errorResponseFor", () => {
             [new SummariesOffError(), "SUMMARIES_OFF", 409],
             [new SummarizerAuthError("invalid x-api-key"), "UPSTREAM", 502],
             [new RepoSwitchingError("C:/b", "C:/a"), "INDEX_LOCKED", 409],
+            [new DatabaseMissingError("/home/.nebulosity/nebulosity.db"), "INDEX_EMPTY", 404],
+            [new DatabaseOutdatedError(), "NOT_READY", 409],
         ];
         for (const [err, code, status] of cases){
             expect(errorResponseFor(err)).toEqual({ status, error: { code, message: err.message } });

@@ -613,3 +613,15 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 - Users bring issues and support, which comes out of the owner's time.
 
 **Revisit when:** V1.5's eval shows Nebulosity doesn't help Claude Code on big repos (then the positioning is the question, not the order), or users ask for something this order puts last.
+
+## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
+
+**Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
+**Decision:**
+- `openDb(file, "readonly")` opens with better-sqlite3's `readonly` and `fileMustExist`, sets no pragmas and runs no migrations. The file is already in WAL mode (a writer set it, and the mode persists), so it reads while the worker writes, and each query sees the newest commit.
+- It checks the file is current: this checkout's newest migration must be in drizzle's `__drizzle_migrations`. If not, `DatabaseOutdatedError` tells the user to start the Map or run `npm run index` once, since both migrate.
+- No file is `DatabaseMissingError`: nothing indexed yet. A failed open isn't kept, so the server recovers without a restart once something is indexed.
+- The MCP entry point calls `useReadOnlyDatabase()` before anything opens the database. Tests keep their in-memory database.
+**Alternatives:** (a) A normal open plus `pragma query_only`: the open would still set WAL and migrate. (b) Let the MCP server migrate as well: a Claude Code session could change the schema under a running Map. (c) A copy of the database per session: stale at once.
+**Consequences:** A long-lived reader's caches stay correct only because they're keyed on the index version (ADR-036) or the vector stamp; new caches must follow that rule (ADR-045's import index does). After a pull that brings a migration, the tools answer with the update sentence until the Map or the CLI runs once.
+**Revisit when:** the data moves out of the checkout (V1.6's package or the desktop app), so the migrations folder and the database no longer share `NEBULOSITY_HOME`.

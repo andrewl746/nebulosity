@@ -15,7 +15,7 @@ One embedded SQLite database at `.nebulosity/nebulosity.db` under `NEBULOSITY_HO
 | Module | Job |
 |---|---|
 | `lib/db/schema.ts` | Table definitions (Drizzle). The only place persistence shapes live. |
-| `lib/db/client.ts` | The single connection factory (`getDb()`): WAL mode with `synchronous = NORMAL` (§7), foreign keys ON, paths resolved from `NEBULOSITY_HOME` (`lib/home.ts`), connection cached on `globalThis` to survive Next.js hot reload. |
+| `lib/db/client.ts` | The single connection factory (`getDb()`): WAL mode with `synchronous = NORMAL` (§7), foreign keys ON, paths resolved from `NEBULOSITY_HOME` (`lib/home.ts`), connection cached on `globalThis` to survive Next.js hot reload. `openDb(file, mode)`; the MCP server opens read-only, with no pragmas and no migrations, and refuses a file behind the checkout's migrations (ADR-044). |
 | `lib/db/batch.ts` | Splits every bulk insert under SQLite's 32,766-parameter cap (§7). |
 | `lib/db/store/lock.ts` | The shared indexing and summarizing locks. A row names its holder (`<started> pid <pid> on <host>`) and is abandoned at once when that process is gone, or after 30 minutes. |
 | `lib/db/store/structure.ts` | Persistence for one structure run of the V1.1 engine: batched, failure-isolated file writes, the import graph, folders and level edges. |
