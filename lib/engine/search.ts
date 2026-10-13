@@ -56,6 +56,19 @@ export function toFtsQuery(query: string): string | null {
     return terms.length === 0 ? null : terms.map((t) => `"${t}"`).join(" OR ");
 }
 
+/**
+ * The query without the repo's own name, when other meaningful words remain: every file is in the repo, so the word
+ * says nothing, and in VS Code it mostly matched extension code that imports the `vscode` API (the owner's three-task
+ * test: "vscode terminal" found an extension's terminal folder, not VS Code's). Only a whole word goes ("vscode-dts"
+ * stays), and a query with nothing else left is kept as it is.
+ */
+export function dropRepoName(query: string, repoName: string): string {
+    const name = repoName.toLowerCase();
+    const terms = query.trim().split(/\s+/);
+    const kept = terms.filter((term) => term.toLowerCase() !== name);
+    return kept.length < terms.length && toFtsQuery(kept.join(" ")) !== null ? kept.join(" ") : query;
+}
+
 /** The query's words for matching folder names: lowercased, common words dropped. */
 function nameWords(query: string): string[] {
     const words = (query.match(/[\p{L}\p{N}_]+/gu) ?? []).map((w) => w.toLowerCase());
@@ -132,9 +145,11 @@ export function fuseRankings(lists: Partial<Record<SearchList, readonly string[]
  * 3. cosine similarity between the query and every summary vector;
  * 4. folders whose names match the query (rankFolderNames).
  */
-export async function search(repoRoot: string, query: string, options: SearchOptions = {}): Promise<SearchResult> {
+export async function search(repoRoot: string, typed: string, options: SearchOptions = {}): Promise<SearchResult> {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
+    // every list searches without the repo's own name; the answer still carries the query as typed
+    const query = dropRepoName(typed, path.basename(path.resolve(repoRoot)));
     const limit = options.limit ?? 10;
     const embed = options.embed ?? ((texts: string[]) => embedTexts(texts));
     const notes: string[] = [];
@@ -193,7 +208,7 @@ export async function search(repoRoot: string, query: string, options: SearchOpt
     if (fts === null && hits.length === 0) notes.push("The query has only very common words; try more specific ones.");
 
     return {
-        query,
+        query: typed,
         hits,
         lists: { code: code.length, summary: summary.length, vector: vector.length, name: name.length },
         ...(notes.length > 0 ? { note: notes.join(" ") } : {}),

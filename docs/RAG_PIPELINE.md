@@ -154,6 +154,8 @@ Each list contributes at most 50 files or folders.
 
 ### Building the keyword query
 
+*(V1.3.1, the owner's three-task test.)* Every list first drops the repo's own name from the query when other meaningful words remain (`dropRepoName`): every file is in the repo, so the word says nothing, and in VS Code "vscode terminal" mostly matched extension code importing the `vscode` API. Only a whole word goes (`vscode-dts` stays), and the answer still carries the query as typed.
+
 `toFtsQuery` keeps the query's words and drops stopwords and single letters. Each identifier also contributes its parts (`openEditor` adds `open` and `editor`). Every word is quoted, so nothing the user types is read as FTS5 syntax, and the words are ORed. `"Where are editor tabs rendered?"` becomes `"editor" OR "tabs" OR "rendered"`, and porter stemming lets `rendered` match `render`.
 
 ### Reciprocal Rank Fusion

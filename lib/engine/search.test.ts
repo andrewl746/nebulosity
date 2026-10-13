@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { copyFixture } from "../../test/helpers/fixture";
+import fs from "fs";
+import path from "path";
+import { copyFixture, FIXTURE } from "../../test/helpers/fixture";
+import { makeTempDir } from "../../test/helpers/temp";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { indexRepository } from "../index/pipeline";
 import { runSummaries } from "../index/summarize/run";
-import { fuseRankings, rankFolderNames, search, toFtsQuery } from "./search";
+import { dropRepoName, fuseRankings, rankFolderNames, search, toFtsQuery } from "./search";
 
 /**
  * A stand-in for MiniLM where "meaning" is hand-checkable: one dimension per group of
@@ -132,7 +135,36 @@ describe("rankFolderNames", () => {
     });
 });
 
+describe("dropRepoName (owner's three-task test: 'vscode terminal' found an extension's terminal)", () => {
+    it("drops the repo's own name when other words remain: every file is in the repo, so it says nothing", () => {
+        expect(dropRepoName("vscode terminal", "vscode")).toBe("terminal");
+        expect(dropRepoName("VSCode API", "vscode")).toBe("API");
+    });
+
+    it("keeps the query as it is when nothing meaningful would be left", () => {
+        expect(dropRepoName("vscode", "vscode")).toBe("vscode");
+        expect(dropRepoName("where is vscode", "vscode")).toBe("where is vscode");
+    });
+
+    it("only drops the whole word, so a name like vscode-dts stays", () => {
+        expect(dropRepoName("vscode-dts types", "vscode")).toBe("vscode-dts types");
+        expect(dropRepoName("terminal", "vscode")).toBe("terminal");
+    });
+});
+
 describe("search", () => {
+    it("searches without the repo's own name, and answers with the query as typed", async () => {
+        // the fixture copied into a repo folder named "app": left in, the word would also find the src/app folder
+        const root = path.join(makeTempDir("neb-named-"), "app");
+        fs.cpSync(FIXTURE, root, { recursive: true });
+        indexRepository(root);
+        const plain = await search(root, "core", { embed: neverEmbed });
+        const named = await search(root, "app core", { embed: neverEmbed });
+        expect(named.hits).toEqual(plain.hits);
+        expect(named.hits.some((h) => h.path === "src/app")).toBe(false);
+        expect(named.query).toBe("app core");
+    });
+
     it("finds a folder by its name, before any summary exists", async () => {
         const result = await search(indexedFixture(), "core", { embed: neverEmbed });
         expect(result.hits.find((h) => h.path === "src/core")).toEqual({ path: "src/core", kind: "folder", score: 2 / 61, matchedBy: ["name"] });

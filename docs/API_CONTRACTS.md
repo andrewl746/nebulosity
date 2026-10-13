@@ -156,6 +156,7 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **Hits are files and folders**, never chunks: a file's chunks are grouped before ranking, and `code` is its best one. The repo summary is never a hit.
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **Folder names** *(V1.3.1, additive)*: the `name` list ranks folders whose name matches a query word (`RAG_PIPELINE.md` §6) and counts double in the fusion, so searching "terminal" finds the terminal folders. The Map's search palette shows every folder hit first, then every file hit, and asks for 40.
+- **The repo's own name** is dropped from the query before searching when other meaningful words remain ("vscode terminal" searches "terminal" in VS Code). `query` in the answer is still the query as typed.
 - **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.
 
 ## 11. GET /api/level?path=&page=&focus= (slice V1.3; pages added in V1.3.1, portals and `focus` in contract v3)
