@@ -9,10 +9,11 @@ import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
+import { toBoxNode } from "./flowNodes";
 import { PANEL_WIDTH } from "./DetailPanel";
 import { formatCount } from "./format";
 import Legend from "./Legend";
-import { BOX_HEIGHT, BOX_WIDTH, FIT_PADDING, layoutLevel } from "./levelLayout";
+import { FIT_PADDING, layoutLevel } from "./levelLayout";
 import MapBox, { type BoxNode } from "./MapBox";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
@@ -79,15 +80,12 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onDrawn }
     }, [fitView, onDrawn]);
 
     useEffect(() => {
-        setNodes(level.nodes.map((box) => ({
-            id: box.path,
-            type: "box" as const,
-            position: positions.get(box.path) ?? { x: 0, y: 0 },
-            width: BOX_WIDTH,
-            height: BOX_HEIGHT,
-            draggable: false,
-            connectable: false,
-            data: { box, tone: emphasis.boxes.get(box.path) ?? "normal", agent: agent.has(box.path), pulseKey: pulses.get(box.path)?.key ?? 0 },
+        // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts)
+        setNodes(level.nodes.map((box) => toBoxNode(box, positions.get(box.path) ?? { x: 0, y: 0 }, {
+            box,
+            tone: emphasis.boxes.get(box.path) ?? "normal",
+            agent: agent.has(box.path),
+            pulseKey: pulses.get(box.path)?.key ?? 0,
         })));
     }, [level, positions, emphasis, agent, pulses, setNodes]);
 
