@@ -39,9 +39,10 @@ export type Db = ReturnType<typeof connect>;
 /**
  * Opens a database file, or ":memory:" for a throwaway one.
  * - readwrite: WAL, NORMAL sync, foreign keys, then any pending migration (ADR-023).
- * - readonly (the MCP server, ADR-044): the file must exist and be fully migrated, and nothing is written, not even a
- *   pragma. The file is already in WAL mode (a writer set it, and the mode persists in the file), so it reads while the
- *   background worker writes, and every query sees the newest commit.
+ * - readonly (the MCP server, ADR-044): the file must exist and be fully migrated, and the database itself is never
+ *   written: no pragmas, no migrations. SQLite may still create its -wal and -shm side files beside it (its WAL index), so
+ *   the folder must be writable. The file is already in WAL mode (a writer set it, and the mode persists in the file), so
+ *   it reads while the background worker writes, and every query sees the newest commit.
  */
 export function openDb(file: string, mode: DbMode = "readwrite"): Db {
     if (mode === "readonly") return openReadOnly(file);

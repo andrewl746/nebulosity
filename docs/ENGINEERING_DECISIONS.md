@@ -618,7 +618,7 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
 **Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
 **Decision:**
-- `openDb(file, "readonly")` opens with better-sqlite3's `readonly` and `fileMustExist`, sets no pragmas and runs no migrations. The file is already in WAL mode (a writer set it, and the mode persists), so it reads while the worker writes, and each query sees the newest commit.
+- `openDb(file, "readonly")` opens with better-sqlite3's `readonly` and `fileMustExist`, sets no pragmas and runs no migrations. The database itself is never written, but SQLite creates its `-wal` and `-shm` side files beside it when none exist, so the folder must be writable (a read-only folder is the "Revisit when" case). The file is already in WAL mode (a writer set it, and the mode persists), so it reads while the worker writes, and each query sees the newest commit.
 - It checks the file is current: this checkout's newest migration must be in drizzle's `__drizzle_migrations`. If not, `DatabaseOutdatedError` tells the user to start the Map or run `npm run index` once, since both migrate.
 - No file is `DatabaseMissingError`: nothing indexed yet. A failed open isn't kept, so the server recovers without a restart once something is indexed.
 - The MCP entry point calls `useReadOnlyDatabase()` before anything opens the database. Tests keep their in-memory database.
