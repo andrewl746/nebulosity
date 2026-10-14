@@ -53,7 +53,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S4 | Boxes on screen at once, counting a page's portals (V1.3.1; V1.3 counted the "+N more" box) | ≤ 50 |
 | S5 | MCP tool latency, warm (after the first call of a session) *(measured through the MCP server by `npm run bench-mcp`: each tool warm after its own first call of the session, every warm call within the bound; owner's decision D5, V1.4)* | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
-| S7 | Evaluation run and published, losses included | done |
+| S7 | Evaluation run and published, losses included *(done 2026-10-14: docs/EVAL_RESULTS.md, Eval #1)* | done |
 | S8 | Public repo, README, video, live demo link | done |
 | S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux |
 | S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo |
@@ -323,6 +323,8 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - **Conditions:** Claude Code headless (`claude -p --output-format json`) with the same pinned model, with and without the Nebulosity MCP config. Two runs each if usage limits allow.
 - **Metrics:** correctness (rubric score or recall %), input and output tokens, tool calls, wall time.
 - **Output:** `docs/EVAL_RESULTS.md` plus a README table; raw transcripts in `eval/runs/`. **Losses are reported, not hidden.**
+
+*(Run as ADR-050 says: 90 runs in three arms, Sonnet 5.5 at medium effort, Claude Code 2.1.299.)*
 
 ---
 

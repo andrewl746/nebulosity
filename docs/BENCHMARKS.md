@@ -427,3 +427,24 @@ All six runs are published: runs 1–3 are the planned three, and runs 4–6 wer
 Two things to read this with:
 - **Level changes are slower here than in #3 and #4, and the gap was not isolated.** The p50 is a few ms higher (35–42 against 33.5 and 34.5 ms). The level p95 is 82.7–97.0 ms here (runs 1–3), against 62 ms in #2, 55 ms in #3 and about 62 ms in #4, and the `platform` level takes 59.6–77.2 ms to open here (step 13) against 46 ms in #2, and its page turns 50.7–70.8 ms (steps 14–15) against 47 ms each way. No run of the server build's walk was made in the same session: it would have opened the owner's database from a second server, so it wasn't run. The machine was also running the port-3000 server, its worker and other jobs of the session. So whether the extra ~30 ms comes from the machine's state, the static transport or the static build is unexplained. What was measured: in run 6 the whole walk (two passes, 36 level changes) fetched 10 `level/*.json` files at a median of 5.3 ms (max 7.6 ms) and 11 describe bundles at a median of 3.7 ms (max 6.2 ms), and most levels came from the Map's own memory, so the fetches are short. The repeated 83 ms gaps between frames fall at the slow steps and show the main thread busy there; #4 saw 76 ms at its worst.
 - **One run left 3 ms of margin** (run 2: 97.0 ms against 100). The display runs at 144 Hz (the zoom frame interval's median is 6.9–7.0 ms in every run), so 3 ms is under half a frame. It passes, but a slower machine or a busier moment could push a level change over. The static build's tail is the number to watch if the Map's drawing changes.
+
+## 2026 10 14 Eval #1 — Claude Code with and without Nebulosity's MCP server on VS Code (S7)
+
+This is the evaluation `PIVOT_SPEC.md` §9 asks for. The method, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
+- **Target and machine:** VS Code @ `cc3fec88` (`../vscode`), with Nebulosity's engine at `EVAL_ENGINE` (`8d7d485`) and index version 135. It ran on the owner's laptop on 2026-10-14, 17:01–17:47 UTC, with the machine kept quiet.
+- **How:** `npm run eval:run -- --pilot`, then `-- --repeat 1` and `-- --repeat 2`: 15 questions, twice each, in three arms, 90 runs in all. A is Claude Code alone. B adds Nebulosity's MCP server at Claude Code's default tool search, and A against B is the headline. U loads Nebulosity's tools up front. Every run used Claude Code 2.1.299 headless, `claude-sonnet-5-5` at medium effort, and read-only tools. `npm run eval:score` scored the runs; the big-picture answers were graded blind (`eval/grading/`).
+- **Result:** Nebulosity raised no family's score and lowered big-picture's. Its tools were used in 12 of 30 B runs, never on a big-picture question. Where they were used, the connection answers cost about a third of A's estimate and time, at the same score. **S7: done.**
+
+| Family | Arm | Score | Precision | Median input (uncached) | Median cache writes | Median cache reads | Median output | Median tokens, all | Median cost est. | Median wall | Median tool calls |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Big-picture | A | 0.91 | – | 3 | 1,921 | 30,793 | 1,119 | 32,397 | $0.021 | 13.2 s | 1 |
+| Big-picture | B | 0.82 | – | 2 | 2,398 | 21,004 | 1,214 | 22,222 | $0.022 | 13.0 s | 0 |
+| Big-picture | U | 0.77 | – | 2 | 2,154 | 34,074 | 1,150 | 35,271 | $0.023 | 12.7 s | 0 |
+| Complete-list | A | 0.97 | 1.00 | 7 | 12,237 | 77,696 | 2,692 | 92,645 | $0.082 | 24.6 s | 3.5 |
+| Complete-list | B | 0.94 | 1.00 | 6 | 9,455 | 70,777 | 2,572 | 81,696 | $0.067 | 24.5 s | 2.5 |
+| Complete-list | U | 0.97 | 1.00 | 8 | 6,694 | 139,752 | 2,406 | 147,720 | $0.062 | 18.9 s | 4 |
+| Connection | A | 1.00 | – | 11 | 6,572 | 134,509 | 2,413 | 143,958 | $0.065 | 23.2 s | 7 |
+| Connection | B | 1.00 | – | 6 | 2,603 | 62,705 | 405 | 65,150 | $0.020 | 8.4 s | 2 |
+| Connection | U | 1.00 | – | 4 | 1,494 | 67,166 | 313 | 69,073 | $0.016 | 7.1 s | 1 |
+
+Each row covers 10 runs. The score is the mean share of rubric points for big-picture, the mean recall for lists, and the mean chain score for connections. The medians are over the same 10 runs, with halves rounded up. Tokens are summed over every model, the cost is Claude Code's own list-price estimate, and the tool calls include ToolSearch. All 90 runs together came to $4.88 by that estimate.
