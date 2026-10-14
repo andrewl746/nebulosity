@@ -110,7 +110,7 @@ nebulosity/
 ├── lib/
 │   ├── contracts.ts · config.ts · home.ts · embed.ts · chunks.ts
 │   ├── db/                  # schema, client, batch, store/{structure, summaries, summary-vectors, search, stages, lock, map, version}
-│   ├── engine/              # level, describe, graph, freshness, search, rank, staticSearch, status, repos, git-remote, errors
+│   ├── engine/              # level, describe, graph, freshness, search, rank, staticSearch, status, repos, git-remote, errors, reach, impact, architecture, docs
 │   ├── demo/                # export (the static demo's files), privacy (the scanner for paths of this machine)
 │   ├── index/               # discover, languages/, resolve, aggregate, pipeline, update, watch, embed, summarize/
 │   ├── background/          # service, supervisor, protocol, child, start

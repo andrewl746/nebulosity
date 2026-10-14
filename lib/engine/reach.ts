@@ -144,12 +144,12 @@ export function shortestChain(index: ImportIndex, from: [number, number], to: [n
 }
 
 /** What a path is in the index, or null when nothing is indexed there. */
-function kindAt(db: Db, repoId: number, targetPath: string): TargetKind | null {
+export function kindAt(db: Db, repoId: number, targetPath: string): TargetKind | null {
     if (loadFolderInfo(db, repoId, targetPath)) return targetPath === "" ? "repo" : "folder";
     return loadFileInfo(db, repoId, targetPath) ? "file" : null;
 }
 
-function requireKind(db: Db, repoId: number, targetPath: string): TargetKind {
+export function requireKind(db: Db, repoId: number, targetPath: string): TargetKind {
     const kind = kindAt(db, repoId, targetPath);
     if (kind === null) throw new PathNotFoundError(targetPath);
     return kind;

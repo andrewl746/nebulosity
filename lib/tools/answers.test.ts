@@ -1,8 +1,11 @@
+import path from "path";
 import { describe, expect, it } from "vitest";
 import type { DescribeResponse, MapNode, SearchResult } from "../contracts";
+import { architecture } from "../engine/architecture";
+import { indexRepository } from "../index/pipeline";
 import type { Overview } from "../engine/overview";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
-import { chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
+import { architectureAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import { answerText, MAX_ANSWER_CHARS, SUMMARIES_OFF_LINE as S } from "./text";
 
 const off = { summaryStatus: "off" as const };
@@ -338,5 +341,118 @@ describe("impact and root lines (ADR-055)", () => {
         expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
         expect(text.endsWith(after[after.length - 1])).toBe(true);
         expect(text).toContain("… ");
+    });
+});
+
+describe("architectureAnswer, against the arch-repo ground truth", () => {
+    const root = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
+    indexRepository(root);
+    const page = { limit: 50, offset: 0 };
+    const text = (p: string, report: Parameters<typeof architecture>[2], options: { through?: string } = {}): string[] =>
+        answerText(architectureAnswer(architecture(root, p, report, options), page)).split("\n");
+
+    it("layers of src", () => {
+        expect(text("src", "layers")).toEqual([
+            "Layers of src/, bottom first (each uses only the layers below it, except the imports listed after):",
+            "  0  base/",
+            "  1  platform/",
+            "  2  editor/",
+            "  3  app/",
+            "Against that order (1 import):",
+            "  platform/ → editor/  1",
+            "    src/platform/node/storageFile.ts → src/editor/common/model.ts",
+        ]);
+    });
+
+    it("layers of src/base", () => {
+        expect(text("src/base", "layers")).toEqual([
+            "Layers of src/base/, bottom first (each uses only the layers below it, except the imports listed after):",
+            "  0  common/",
+            "  1  browser/, node/, test/",
+            "Against that order: none.",
+        ]);
+    });
+
+    it("conventions of src", () => {
+        expect(text("src", "conventions")).toEqual([
+            "Folder names that recur under src/ (in 3 or more folders): browser (3), common (4), node (3).",
+            "What each one's files import:",
+            "  browser → browser 2, common 2",
+            "  common → browser 1, common 8",
+            "  node → common 4, node 3",
+            "The rarer pairs (3 imports or fewer):",
+            "  browser → browser: src/editor/browser/editorView.ts → src/base/browser/dom.ts; src/platform/browser/storageView.ts → src/base/browser/dom.ts",
+            "  browser → common: src/base/browser/dom.ts → src/base/common/strings.ts; src/editor/browser/editorView.ts → src/editor/common/model.ts",
+            "  common → browser: src/platform/common/storage.ts → src/platform/browser/storageView.ts",
+            "  node → node: src/editor/node/editorFiles.ts → src/base/node/fs.ts; src/editor/node/editorFiles.ts → src/platform/node/storageFile.ts; src/platform/node/storageFile.ts → src/base/node/fs.ts",
+        ]);
+    });
+
+    it("cycles of src", () => {
+        expect(text("src", "cycles")).toEqual([
+            "Import cycles touching src/: 1, holding 3 files in all.",
+            "  3 files: src/editor/common/model.ts, src/editor/common/textModel.ts, src/editor/common/tokens.ts",
+        ]);
+    });
+
+    it("the shortest cycle through model.ts", () => {
+        expect(text("src/editor/common/model.ts", "cycles")).toEqual([
+            "The shortest import cycle through src/editor/common/model.ts (3 steps):",
+            "  src/editor/common/model.ts",
+            '  → src/editor/common/tokens.ts  (import "./tokens")',
+            '  → src/editor/common/textModel.ts  (import "./textModel")',
+            '  → src/editor/common/model.ts  (import "./model")',
+        ]);
+    });
+
+    it("no cycle through storage.ts", () => {
+        expect(text("src/platform/common/storage.ts", "cycles")).toEqual(["src/platform/common/storage.ts is in no import cycle."]);
+    });
+
+    it("files nothing imports, in src and in the repo", () => {
+        expect(text("src", "unused")).toEqual([
+            "Files in src/ that no indexed file imports: 2, not counting 1 test file.",
+            "Named as entry points by a package.json (1):",
+            "  src/app/loader.ts",
+            "Not named anywhere (1):",
+            "  src/app/legacy.ts",
+            "Note: a file nothing imports may still be loaded by name (a build script, a worker, an HTML page, a test runner), so check before deleting it.",
+        ]);
+        const repo = text("", "unused");
+        expect(repo[0]).toBe("Files in the repo that no indexed file imports: 3, not counting 1 test file.");
+        expect(repo.slice(1, 6)).toEqual([
+            "Named as entry points by a package.json (1):",
+            "  src/app/loader.ts",
+            "Not named anywhere (2):",
+            "  src/app/legacy.ts",
+            "  tools/fixtures/legacy-ids.ts",
+        ]);
+    });
+
+    it("the summary of src", () => {
+        expect(text("src", "summary")).toEqual([
+            "src/ — what its imports say about how it's organized:",
+            "Layers, bottom first: base/ · platform/ · editor/ · app/ (1 import against that order)",
+            "Folder conventions: browser, common, node",
+            "Import cycles: 1, the largest 3 files",
+            "Files nothing imports: 2, not counting tests (1 entry point named by a package.json)",
+            'For details, ask again with report "layers", "conventions", "cycles" or "unused".',
+        ]);
+    });
+
+    it("keeps a huge conventions report and a huge cycles report under the answer limit", () => {
+        // 150 recurring names, each importing every name: 22,500 pairs, of which 150 are rare
+        const names = Array.from({ length: 150 }, (_, i) => ({ name: `env${String(i).padStart(3, "0")}`, folders: 3 }));
+        const pairs = names.flatMap((a, i) => names.map((b, j) => ({
+            from: a.name, to: b.name, count: i === j ? 2 : 9_000, examples: i === j ? ([["src/a/" + "x".repeat(100) + ".ts", "src/b/" + "y".repeat(100) + ".ts"]] as [string, string][]) : [],
+        })));
+        const conventions = answerText(architectureAnswer({ path: "src", kind: "folder", report: "conventions", conventions: { names, pairs } }, page));
+        expect(conventions.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(conventions).toContain("… 130 more");
+        // 400 groups of 20 files with 150-character paths
+        const cycles = Array.from({ length: 400 }, (_, g) => ({ size: 20, files: Array.from({ length: 20 }, (_, i) => `${"p".repeat(150)}${g}-${i}.ts`) }));
+        const text = answerText(architectureAnswer({ path: "", kind: "repo", report: "cycles", cycles }, { limit: 400, offset: 0 }));
+        expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(text).toContain("(next page: offset ");
     });
 });

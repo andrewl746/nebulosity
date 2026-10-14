@@ -1,4 +1,5 @@
 import type { AreaCount, DescribeResponse, DocPointer, SearchResult } from "../contracts";
+import { MIN_RECURRING, RARE_PAIR, type ArchitectureAnswer, type Conventions, type Layers, type Part, type Unused } from "../engine/architecture";
 import type { Impact, Roots } from "../engine/impact";
 import type { Overview } from "../engine/overview";
 import { FILE_CHUNK } from "../engine/rank";
@@ -207,4 +208,146 @@ export function chainAnswer(c: ChainAnswer): AnswerParts {
     body.push(`  ${c.files[0]}`);
     for (let i = 1; i < c.files.length; i++) body.push(`  → ${c.files[i]}  (import "${c.specifiers[i - 1]}")`);
     return { body };
+}
+
+// ---- architecture (ADR-055) ----
+
+const NAMES_SHOWN = 20;
+/** Pairs and lines shown in the layers and conventions reports before "… N more": a big repo has hundreds. */
+const PAIR_LINES = 20;
+const CONVENTION_LINES = 40;
+const RARE_LINES = 30;
+
+/** Where a report is about: "src/", or "the repo". */
+const whereOf = (a: ArchitectureAnswer): string => (a.path === "" ? "the repo" : shownPath(a.path, a.kind === "file" ? "file" : "folder"));
+
+/** A part as answers write it: relative to the place, folders with a "/". */
+function partName(a: ArchitectureAnswer, part: Part): string {
+    const prefix = a.path === "" ? "" : `${a.path}/`;
+    return shownPath(part.path.startsWith(prefix) ? part.path.slice(prefix.length) : part.path, part.kind);
+}
+
+const namesList = (names: readonly string[]): string =>
+    names.length <= NAMES_SHOWN ? names.join(", ") : `${names.slice(0, NAMES_SHOWN).join(", ")}, … ${formatCount(names.length - NAMES_SHOWN)} more`;
+
+function layerLines(a: ArchitectureAnswer, layers: Layers): string[] {
+    const name = (p: Part): string => partName(a, p);
+    const lines = [`Layers of ${whereOf(a)}, bottom first (each uses only the layers below it, except the imports listed after):`];
+    layers.levels.forEach((level, n) => lines.push(`  ${n}  ${namesList(level.map(name))}`));
+    if (layers.against.length === 0) lines.push("Against that order: none.");
+    else {
+        const total = layers.against.reduce((sum, x) => sum + x.count, 0);
+        lines.push(`Against that order (${plural(total, "import")}):`);
+        for (const x of layers.against.slice(0, PAIR_LINES)){
+            lines.push(`  ${name(x.from)} → ${name(x.to)}  ${formatCount(x.count)}`);
+            for (const [from, to] of x.examples) lines.push(`    ${from} → ${to}`);
+            if (x.count > x.examples.length) lines.push("    …");
+        }
+        if (layers.against.length > PAIR_LINES) lines.push(`  ${moreLine(layers.against.length - PAIR_LINES)} pairs`);
+    }
+    for (const t of layers.tangled) lines.push(`As many imports each way: ${name(t.a)} ↔ ${name(t.b)}  ${formatCount(t.count)} each`);
+    for (const circle of layers.circles) lines.push(`Using each other in a circle: ${namesList(circle.map(name))}`);
+    if (layers.unlinked.length > 0) lines.push(`Not linked to the others: ${namesList(layers.unlinked.map(name))}`);
+    return lines;
+}
+
+function conventionLines(a: ArchitectureAnswer, c: Conventions): string[] {
+    const where = whereOf(a);
+    if (c.names.length === 0) return [`No folder name recurs in ${MIN_RECURRING} or more folders under ${where}.`];
+    const lines = [
+        `Folder names that recur under ${where} (in ${MIN_RECURRING} or more folders): ${namesList(c.names.map((n) => `${n.name} (${formatCount(n.folders)})`))}.`,
+        "What each one's files import:",
+    ];
+    const byFrom = new Map<string, { to: string; count: number }[]>();
+    for (const p of c.pairs) byFrom.set(p.from, [...(byFrom.get(p.from) ?? []), { to: p.to, count: p.count }]);
+    const froms = [...byFrom];
+    for (const [from, tos] of froms.slice(0, CONVENTION_LINES)){
+        // a long row keeps its biggest targets, still in name order
+        const keep = tos.length <= NAMES_SHOWN ? tos : [...tos].sort((x, y) => y.count - x.count).slice(0, NAMES_SHOWN).sort((x, y) => (x.to < y.to ? -1 : 1));
+        const more = tos.length > keep.length ? `, … ${formatCount(tos.length - keep.length)} more` : "";
+        lines.push(`  ${from} → ${keep.map((t) => `${t.to} ${formatCount(t.count)}`).join(", ")}${more}`);
+    }
+    if (froms.length > CONVENTION_LINES) lines.push(`  ${moreLine(froms.length - CONVENTION_LINES)} names`);
+    const rare = c.pairs.filter((p) => p.examples.length > 0);
+    if (rare.length > 0){
+        lines.push(`The rarer pairs (${RARE_PAIR} imports or fewer):`);
+        for (const p of rare.slice(0, RARE_LINES)) lines.push(`  ${p.from} → ${p.to}: ${p.examples.map(([x, y]) => `${x} → ${y}`).join("; ")}`);
+        if (rare.length > RARE_LINES) lines.push(`  ${moreLine(rare.length - RARE_LINES)} pairs`);
+    }
+    return lines;
+}
+
+function cycleLines(a: ArchitectureAnswer, page: { limit: number; offset: number }): string[] {
+    if (a.through){
+        const t = a.through;
+        if (t.cycle === null) return [`${t.file} is in no import cycle.`];
+        const lines = [`The shortest import cycle through ${t.file} (${plural(t.cycle.length - 1, "step")}):`, `  ${t.cycle[0]}`];
+        for (let i = 1; i < t.cycle.length; i++) lines.push(`  → ${t.cycle[i]}  (import "${t.specifiers[i - 1]}")`);
+        return lines;
+    }
+    const groups = a.cycles ?? [];
+    const where = whereOf(a);
+    if (groups.length === 0) return [`No import cycle touches ${where}.`];
+    const files = groups.reduce((sum, g) => sum + g.size, 0);
+    const lines = [`Import cycles touching ${where}: ${formatCount(groups.length)}, holding ${plural(files, "file")} in all.`];
+    if (page.offset >= groups.length) return [...lines, `Nothing at offset ${page.offset}: there are ${formatCount(groups.length)} groups.`];
+    const rest = groups.slice(page.offset).map((g) => `  ${plural(g.size, "file")}: ${namesList(g.files)}`);
+    const shown = fitting(rest, page.limit, MAX_ANSWER_CHARS - REACH_HEADROOM - lines[0].length);
+    lines.push(...rest.slice(0, shown));
+    const hidden = rest.length - shown;
+    if (hidden > 0) lines.push(moreLine(hidden, page.offset + shown));
+    return lines;
+}
+
+const UNUSED_NOTE = "a file nothing imports may still be loaded by name (a build script, a worker, an HTML page, a test runner), so check before deleting it.";
+
+function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; offset: number }): { lines: string[]; notes: string[] } {
+    const total = u.declared.length + u.others.length;
+    const tests = u.tests > 0 ? `, not counting ${plural(u.tests, "test file")}` : "";
+    const head = `Files in ${whereOf(a)} that no indexed file imports: `;
+    if (total === 0) return { lines: [`${head}none${tests}.`], notes: [] };
+    const lines = [`${head}${formatCount(total)}${tests}.`];
+    if (u.declared.length > 0) lines.push(...listBlock(`Named as entry points by a package.json (${formatCount(u.declared.length)}):`, u.declared));
+    if (u.others.length > 0){
+        lines.push(`Not named anywhere (${formatCount(u.others.length)}):`);
+        const rest = u.others.slice(page.offset);
+        const shown = fitting(rest.map((p) => `  ${p}`), page.limit, MAX_ANSWER_CHARS / 2);
+        lines.push(...rest.slice(0, shown).map((p) => `  ${p}`));
+        if (rest.length > shown) lines.push(`  ${moreLine(rest.length - shown, page.offset + shown)}`);
+    }
+    return { lines, notes: [UNUSED_NOTE] };
+}
+
+function summaryLines(a: ArchitectureAnswer): string[] {
+    const lines = [`${a.path === "" ? "The repo" : whereOf(a)} — what its imports say about how it's organized:`];
+    const l = a.layers!;
+    const order = l.levels.map((level) => level.map((p) => partName(a, p)).join(", ")).join(" · ");
+    const against = l.against.reduce((sum, x) => sum + x.count, 0);
+    lines.push(l.levels.length === 0 ? "Layers: its parts don't import each other."
+        : `Layers, bottom first: ${order}${against > 0 ? ` (${plural(against, "import")} against that order)` : ""}`);
+    const c = a.conventions!;
+    lines.push(c.names.length === 0 ? `Folder conventions: none (no folder name recurs in ${MIN_RECURRING} or more folders)`
+        : `Folder conventions: ${namesList(c.names.map((n) => n.name))}`);
+    const groups = a.cycles ?? [];
+    lines.push(groups.length === 0 ? "Import cycles: none" : `Import cycles: ${formatCount(groups.length)}, the largest ${plural(groups[0].size, "file")}`);
+    const u = a.unused!;
+    const total = u.declared.length + u.others.length;
+    lines.push(total === 0 ? "Files nothing imports: none, not counting tests"
+        : `Files nothing imports: ${formatCount(total)}, not counting tests${u.declared.length > 0 ? ` (${plural(u.declared.length, "entry point")} named by a package.json)` : ""}`);
+    lines.push('For details, ask again with report "layers", "conventions", "cycles" or "unused".');
+    return lines;
+}
+
+/** architecture (ADR-055): one small function per report, each returning lines. */
+export function architectureAnswer(a: ArchitectureAnswer, page: { limit: number; offset: number }): AnswerParts {
+    switch (a.report){
+        case "summary": return { body: summaryLines(a) };
+        case "layers": return { body: layerLines(a, a.layers!) };
+        case "conventions": return { body: conventionLines(a, a.conventions!) };
+        case "cycles": return { body: cycleLines(a, page) };
+        case "unused": {
+            const { lines, notes } = unusedLines(a, a.unused!, page);
+            return { body: lines, notes };
+        }
+    }
 }
