@@ -3,7 +3,6 @@ import type {
     SummarizeResponse,
 } from "@/lib/contracts";
 import { ApiError } from "./apiError";
-import { DEMO } from "./mode";
 import { createStaticApi } from "./staticApi";
 
 export { ApiError } from "./apiError";
@@ -118,7 +117,8 @@ export type MapApi = typeof serverApi;
 /** Where the demo's source links go: a GitHub repo at the indexed commit (ADR-049). */
 export type GitHubSource = { owner: string; name: string; commit: string };
 
-const staticApi = DEMO ? createStaticApi() : null;
+// Written inline, not through DEMO: the bundler drops the demo's transport from the app only when it sees the test itself.
+const staticApi = process.env.NEXT_PUBLIC_NEBULOSITY_DEMO === "1" ? createStaticApi() : null;
 /** The Map's transport: the server's API, or the static demo's files (ADR-049). Chosen at build time. */
 export const api: MapApi = staticApi ?? serverApi;
 /** In the demo, the GitHub repo and commit source links point at; null in the app. */

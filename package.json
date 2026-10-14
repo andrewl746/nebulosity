@@ -22,6 +22,8 @@
     "eval:truth": "tsx scripts/eval/build-truth.ts",
     "eval:score": "tsx scripts/eval/score.ts",
     "export-demo": "tsx scripts/export-demo.ts",
+    "build-demo": "tsx scripts/build-demo.ts",
+    "serve-demo": "tsx scripts/serve-demo.ts",
     "preview-folders": "tsx scripts/preview-folders.ts"
   },
   "dependencies": {
