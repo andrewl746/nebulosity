@@ -2,7 +2,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import {
-    DEMO_FORMAT_VERSION, type DemoDescribeBundle, type DemoManifest, type DemoPageIndex, type DemoSearchIndex, type LevelResponse,
+    DEMO_FORMAT_VERSION, type DemoDescribeBundle, type DemoManifest, type DemoPageIndex, type DemoSearchIndex, type IndexStatus,
+    type LevelResponse, type StageStatus,
 } from "../contracts";
 import { getDb } from "../db/client";
 import { loadExportedNames } from "../db/store/search";
@@ -29,10 +30,10 @@ export type DemoExportReport = {
     files: number; bytes: number; indexVersion: number; leaks: Leak[];
 };
 
-/** The output folder holds something that isn't an earlier export, so it's left alone. */
+/** The output folder is one the export mustn't empty, so it's left alone. */
 export class ExportRefusedError extends Error {
-    constructor(dir: string){
-        super(`${dir} isn't empty and isn't an earlier demo export (no manifest.json), so nothing was written. Pick an empty folder.`);
+    constructor(dir: string, reason: string){
+        super(`${dir} ${reason}, so nothing was written. Pick an empty folder.`);
         this.name = "ExportRefusedError";
     }
 }
@@ -45,19 +46,64 @@ export class IndexChangedError extends Error {
     }
 }
 
-/** Written first and removed last, so an export that died half-way is recognised and replaced next time. */
+/**
+ * Written first and removed last, and only when the scan found nothing, so an export that died half-way or leaked
+ * reads as unfinished and is replaced next time.
+ */
 const IN_PROGRESS = "EXPORTING";
+
+/** A path as one spelling to compare: its real path where the folder exists, and lowercase on Windows, which ignores case in names. */
+function comparable(folder: string): string {
+    const resolved = path.resolve(folder);
+    let real = resolved;
+    try{
+        real = fs.realpathSync.native(resolved);
+    } catch{
+        // not made yet, so there is nothing in it to lose
+    }
+    return process.platform === "win32" ? real.toLowerCase() : real;
+}
+
+/** True when `inner` is `outer` or lies inside it. */
+function isInside(inner: string, outer: string): boolean {
+    const relative = path.relative(outer, inner);
+    return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+/**
+ * Refuses an output folder that is, or holds, the repo, the Nebulosity folder, the home folder or the current folder:
+ * emptying it would delete them. A folder inside any of those (.nebulosity/demo, the default) is fine.
+ */
+function refuseWhatHoldsYours(outDir: string, kept: readonly string[]): void {
+    const out = comparable(outDir);
+    if (kept.some((folder) => isInside(comparable(folder), out))){
+        throw new ExportRefusedError(outDir, "is, or holds, the repo, the Nebulosity folder, your home folder or the current folder");
+    }
+}
+
+/** A folder an earlier run wrote: a manifest.json that reads as a demo's (a numeric format and a list of folders), or the in-progress marker. */
+function isEarlierExport(dir: string): boolean {
+    if (fs.existsSync(path.join(dir, IN_PROGRESS))) return true;
+    try{
+        const manifest = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8")) as { format?: unknown; folders?: unknown } | null;
+        return typeof manifest?.format === "number" && Array.isArray(manifest.folders);
+    } catch{
+        return false;
+    }
+}
 
 /** Empties an earlier export (or an interrupted one); refuses anything else. */
 function prepare(outDir: string): void {
     if (fs.existsSync(outDir) && fs.readdirSync(outDir).length > 0){
-        const earlier = fs.existsSync(path.join(outDir, "manifest.json")) || fs.existsSync(path.join(outDir, IN_PROGRESS));
-        if (!earlier) throw new ExportRefusedError(outDir);
+        if (!isEarlierExport(outDir)) throw new ExportRefusedError(outDir, "isn't empty and isn't an earlier demo export (its manifest.json isn't a demo's, and no export was in progress)");
         fs.rmSync(outDir, { recursive: true, force: true });
     }
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(path.join(outDir, IN_PROGRESS), "");
 }
+
+/** A stage as the demo shows it: its state and counts. The note stays behind, since a failed stage's can hold an error message with a path. */
+const withoutNote = ({ state, done, total }: StageStatus): StageStatus => ({ state, done, total });
 
 /** A page's own boxes (portals stand for other pages, so they're left out). */
 const boxesOf = (page: LevelResponse): string[] => page.nodes.filter((n) => n.kind !== "portal").map((n) => n.path);
@@ -70,11 +116,14 @@ const boxesOf = (page: LevelResponse): string[] => page.nodes.filter((n) => n.ki
  */
 export function exportDemo(repoRoot: string, outDir: string, options: DemoExportOptions = {}): DemoExportReport {
     const root = path.resolve(repoRoot);
+    refuseWhatHoldsYours(outDir, [root, nebulosityHome(), os.homedir(), process.cwd()]);
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     const status = readIndexStatus(root);
     if (status === null) throw new Error(`${root} has no index status; run npm run index -- ${root} first.`);
-    const version = readIndexVersion(db, repoId);
+    // the version and the commit are read first, together; the check at the end says whether the index moved since
+    const version = status.indexVersion;
+    const head = loadIndexedHead(db, repoId);
     const publicName = options.publicName ?? path.basename(root);
     const summariesOff = status.stages.summaries.state === "off";
     prepare(outDir);
@@ -142,18 +191,24 @@ export function exportDemo(repoRoot: string, outDir: string, options: DemoExport
 
     if (readIndexVersion(db, repoId) !== version) throw new IndexChangedError();
     const remote = readRepoRemote(root);
+    const published: IndexStatus = {
+        repo: publicName,
+        stages: { structure: withoutNote(status.stages.structure), summaries: withoutNote(status.stages.summaries), embeddings: withoutNote(status.stages.embeddings) },
+        indexVersion: status.indexVersion,
+    };
     write("manifest.json", {
         format: DEMO_FORMAT_VERSION,
         repo: publicName,
         ...(remote ? { remote } : {}),
-        commit: loadIndexedHead(db, repoId),
+        commit: head,
         exportedAt: (options.now ?? new Date()).toISOString(),
-        status: { ...status, repo: publicName },
+        status: published,
         folders: paths,
         pages,
     } satisfies DemoManifest);
-    fs.rmSync(path.join(outDir, IN_PROGRESS));
 
+    // the marker goes only once the scan is clean; a leaking export stays "unfinished" and is replaced by the next run
     const leaks = scanForLeaks(outDir, leakNeedles({ folders: [root, nebulosityHome(), os.homedir()], email: options.email }));
+    if (leaks.length === 0) fs.rmSync(path.join(outDir, IN_PROGRESS));
     return { folders: paths.length, levelFiles, bundles: bundles.length, pageIndexes, files, bytes, indexVersion: version, leaks };
 }

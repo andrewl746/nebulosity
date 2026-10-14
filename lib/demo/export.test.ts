@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import type { DemoDescribeBundle, DemoManifest, DemoPageIndex, DemoSearchIndex, LevelResponse } from "../contracts";
-import { copyFixture } from "../../test/helpers/fixture";
+import { copyFixture, FIXTURE } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { indexRepository } from "../index/pipeline";
@@ -12,6 +12,8 @@ import { findLeak, leakNeedles } from "./privacy";
 
 const read = <T>(dir: string, rel: string): T => JSON.parse(fs.readFileSync(path.join(dir, rel), "utf8")) as T;
 const NOW = new Date("2026-10-14T00:00:00.000Z");
+/** The least a manifest.json needs to read as an earlier export's. */
+const EARLIER_MANIFEST = JSON.stringify({ format: 1, folders: [""] });
 
 async function exportedFixture(): Promise<{ root: string; out: string; report: ReturnType<typeof exportDemo> }> {
     const root = copyFixture();
@@ -91,5 +93,116 @@ describe("exportDemo", () => {
         fs.writeFileSync(path.join(out, "keep.txt"), "mine");
         expect(() => exportDemo(root, out, { publicName: "mini" })).toThrow(ExportRefusedError);
         expect(fs.readFileSync(path.join(out, "keep.txt"), "utf8")).toBe("mine");
+    });
+
+    it("refuses a folder whose manifest.json isn't a demo manifest, however it fails to be one", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        // a web app's manifest, text that isn't JSON, a manifest without folders, and a format that isn't a number
+        for (const manifest of ['{"name":"my-pwa"}', "not json at all", '{"format":1}', '{"format":"1","folders":[]}']){
+            const out = makeTempDir("neb-not-demo-");
+            fs.writeFileSync(path.join(out, "manifest.json"), manifest);
+            fs.writeFileSync(path.join(out, "index.html"), "<html></html>");
+            expect(() => exportDemo(root, out, { publicName: "mini" })).toThrow(ExportRefusedError);
+            expect(fs.readFileSync(path.join(out, "manifest.json"), "utf8")).toBe(manifest);
+            expect(fs.readFileSync(path.join(out, "index.html"), "utf8")).toBe("<html></html>");
+        }
+    });
+
+    it("replaces an earlier export, whole", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        const out = makeTempDir("neb-earlier-");
+        fs.mkdirSync(path.join(out, "pages"));
+        fs.writeFileSync(path.join(out, "manifest.json"), EARLIER_MANIFEST);
+        fs.writeFileSync(path.join(out, "pages", "9.json"), "{}");
+        exportDemo(root, out, { publicName: "mini", now: NOW });
+        expect(fs.existsSync(path.join(out, "pages", "9.json"))).toBe(false);
+        expect(read<DemoManifest>(out, "manifest.json").folders).toHaveLength(6);
+        expect(fs.existsSync(path.join(out, "EXPORTING"))).toBe(false);
+    });
+
+    it("replaces an export that was interrupted", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        const out = makeTempDir("neb-interrupted-");
+        fs.mkdirSync(path.join(out, "level"));
+        fs.writeFileSync(path.join(out, "EXPORTING"), "");
+        fs.writeFileSync(path.join(out, "level", "7-0.json"), "{}");
+        exportDemo(root, out, { publicName: "mini", now: NOW });
+        expect(fs.existsSync(path.join(out, "level", "7-0.json"))).toBe(false);
+        expect(fs.existsSync(path.join(out, "level", "0-0.json"))).toBe(true);
+        expect(fs.existsSync(path.join(out, "EXPORTING"))).toBe(false);
+    });
+
+    it("refuses an output folder that is the repo, or holds it, though it reads as an earlier export", () => {
+        const parent = makeTempDir("neb-parent-");
+        const root = path.join(parent, "repo");
+        fs.cpSync(FIXTURE, root, { recursive: true });
+        indexRepository(root);
+        for (const out of [root, parent]){
+            fs.writeFileSync(path.join(out, "manifest.json"), EARLIER_MANIFEST);
+            expect(() => exportDemo(root, out, { publicName: "mini" })).toThrow(ExportRefusedError);
+            expect(fs.existsSync(path.join(root, "src", "index.ts"))).toBe(true);
+            expect(fs.existsSync(path.join(out, "manifest.json"))).toBe(true);
+        }
+    });
+
+    it("refuses the Nebulosity folder, though it reads as an earlier export", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        const home = makeTempDir("neb-home-");
+        fs.writeFileSync(path.join(home, "manifest.json"), EARLIER_MANIFEST);
+        vi.stubEnv("NEBULOSITY_HOME", home);
+        try{
+            expect(() => exportDemo(root, home, { publicName: "mini" })).toThrow(ExportRefusedError);
+        } finally{
+            vi.unstubAllEnvs();
+        }
+        expect(fs.existsSync(path.join(home, "manifest.json"))).toBe(true);
+    });
+
+    it.runIf(process.platform === "win32")("compares folders ignoring case on Windows", () => {
+        const root = copyFixture();
+        indexRepository(root);
+        fs.writeFileSync(path.join(root, "manifest.json"), EARLIER_MANIFEST);
+        expect(() => exportDemo(root, root.toUpperCase(), { publicName: "mini" })).toThrow(ExportRefusedError);
+        expect(fs.existsSync(path.join(root, "src", "index.ts"))).toBe(true);
+    });
+
+    it("keeps the in-progress marker when a file holds a machine path, and still returns the leaks", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        const texts = { "src/core/log.ts": { tagline: "Console logging helpers", summary: `Lives in ${root}.` } };
+        await runSummaries(root, { summarizer: stubSummarizer({ texts }).summarizer, transport: "direct" });
+        const out = path.join(makeTempDir("neb-demo-"), "demo");
+        const report = exportDemo(root, out, { publicName: "mini", now: NOW });
+        // the summary reaches search.json (kind, path, tagline, summary) and src/core's describe bundle (id 4)
+        expect(report.leaks.map((leak) => leak.file)).toEqual(expect.arrayContaining(["describe/4.json", "search.json"]));
+        expect(fs.existsSync(path.join(out, "EXPORTING"))).toBe(true);
+        // an export that reads as unfinished is replaced, not refused
+        expect(exportDemo(root, out, { publicName: "mini", now: NOW }).leaks).not.toEqual([]);
+    });
+
+    it("publishes each stage's state and counts, never its note", async () => {
+        const { out } = await exportedFixture();
+        const stages = read<DemoManifest>(out, "manifest.json").status.stages;
+        for (const stage of [stages.structure, stages.summaries, stages.embeddings]) expect(stage).not.toHaveProperty("note");
+    });
+
+    it("exports free mode: text-less targets read off, and a test file keeps its template's status", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        await runSummaries(root, { summarizer: null });
+        const out = path.join(makeTempDir("neb-demo-"), "demo");
+        exportDemo(root, out, { publicName: "mini", now: NOW });
+        // run.test.ts: with no key, 1 of 14 targets (the test file) gets its template and the stage reads off, 1 of 14
+        expect(read<DemoManifest>(out, "manifest.json").status.stages.summaries).toEqual({ state: "off", done: 1, total: 14 });
+        // reportedStatus(): no text and summaries off is "off"; text on show keeps its stored status (the template is "skipped")
+        const core = read<DemoDescribeBundle>(out, "describe/4.json")["src/core/log.ts"];
+        expect(core.summaryStatus).toBe("off");
+        expect(core.tagline).toBeUndefined();
+        expect(read<DemoDescribeBundle>(out, "describe/5.json")["src/util/strings.test.ts"]).toMatchObject({ tagline: "Tests for strings", summaryStatus: "skipped" });
+        expect(read<LevelResponse>(out, "level/4-0.json").nodes.map((n) => n.summaryStatus)).toEqual(["off", "off"]);
     });
 });

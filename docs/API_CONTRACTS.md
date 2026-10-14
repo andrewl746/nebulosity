@@ -340,4 +340,6 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 | `SOURCE-LICENSE.txt` | the indexed repo's own license file, when it has one, since the data is derived from its code |
 
 - **The repo's name.** Every `repo` field (levels, describe answers, the status, the repo list the client builds) holds the public name, never an absolute root. The exporter fails on any file holding a spelling of a local folder or the git email.
+- **The status.** `manifest.status` keeps each stage's state and counts and drops its note: a failed stage's note can hold an error message with a path.
+- **The output folder.** The exporter empties only an earlier export: a `manifest.json` with a numeric `format` and a `folders` list, or the `EXPORTING` marker an unfinished run leaves. It refuses any other non-empty folder, and any folder that is or holds the repo, the Nebulosity folder, the home folder or the current folder. The marker is removed last and only when the scan found nothing, so an export that leaked reads as unfinished.
 - **What isn't here.** No source text (the demo links to GitHub at `commit`), no live events, no summarize or re-index, no code search index and no vectors: search ranks summaries and names only, and says so (`staticSearch.ts`).
