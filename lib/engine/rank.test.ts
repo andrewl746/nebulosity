@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
-import { fuseRankings, queryTerms, rankFileNames, toFtsQuery } from "./rank";
+import { cleanFileChunkSnippet, dampTests, fuseRankings, queryTerms, rankFileNames, testOnlyFolders, toFtsQuery, wantsTests } from "./rank";
 
 /** Files the browser bundles (the static demo, ADR-049) and what each may import: nothing that touches a database or a disk. */
 const BROWSER_SAFE: Record<string, readonly string[]> = {
@@ -62,5 +62,32 @@ describe("fuseRankings with the file list", () => {
         const fused = fuseRankings({ code: ["file:a", "file:b"], file: ["file:b"] });
         expect(fused.map((f) => [f.key, f.matchedBy])).toEqual([["file:b", ["code", "file"]], ["file:a", ["code"]]]);
         expect(fused[0].score).toBeCloseTo(1 / 62 + 2 / 61, 12);
+    });
+});
+
+describe("test damping", () => {
+    it("finds folders holding only tests, never the root", () => {
+        expect(testOnlyFolders([
+            { path: "a/test/x.test.ts", isTest: true }, { path: "a/test/y.spec.ts", isTest: true }, { path: "a/z.ts", isTest: false },
+        ])).toEqual(new Set(["a/test"]));
+        expect(testOnlyFolders(FILES.map((f) => ({ path: f.path, isTest: f.path.includes(".test.") })))).toEqual(new Set());
+    });
+
+    it("halves a test target's score unless the query asks for tests, and re-sorts", () => {
+        const fused = [{ key: "file:a/test/x.test.ts", score: 0.04 }, { key: "file:a/z.ts", score: 0.03 }];
+        const isTest = (key: string) => key === "file:a/test/x.test.ts";
+        expect(dampTests(fused, isTest, "x")).toEqual([{ key: "file:a/z.ts", score: 0.03 }, { key: "file:a/test/x.test.ts", score: 0.02 }]);
+        expect(dampTests(fused, isTest, "x tests")).toEqual(fused);
+        expect(wantsTests("smoke terminal")).toBe(true);
+        expect(wantsTests("terminal")).toBe(false);
+    });
+});
+
+describe("cleanFileChunkSnippet", () => {
+    it("drops an imports listing's File: header and its labels", () => {
+        expect(cleanFileChunkSnippet("File: src/vs/platform/lifecycle/common/lifecycle.ts Imports: import { Event } from")).toBe("import { Event } from");
+        expect(cleanFileChunkSnippet("…src/vs/x/userActivityRegistry.ts Imports: import { InstantiationType")).toBe("…import { InstantiationType");
+        expect(cleanFileChunkSnippet("…import { ChatLocation } from '../../commonTypes.js'")).toBe("…import { ChatLocation } from '../../commonTypes.js'");
+        expect(cleanFileChunkSnippet("… Exports: Foo (class) bar (function)")).toBe("… Foo (class) bar (function)");
     });
 });

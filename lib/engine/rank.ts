@@ -165,3 +165,50 @@ export function fuseRankings(lists: Partial<Record<SearchList, readonly string[]
 
     return [...fused.values()].sort((a, b) => b.score - a.score || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
+
+/** Query words that mean the user is after tests: test targets then keep their whole score. */
+const TEST_WORDS = new Set(["test", "tests", "testing", "spec", "specs", "smoke", "e2e", "fixture", "fixtures", "mock", "mocks"]);
+/** A test target's share of its fused score when the query isn't about tests (ADR-052). */
+export const TEST_DAMPING = 0.5;
+
+export function wantsTests(query: string): boolean {
+    return nameWords(query).some((w) => TEST_WORDS.has(w));
+}
+
+/** Folders with at least one file below them and no file that isn't a test, the root never counted (like summaries' rule). */
+export function testOnlyFolders(files: readonly { path: string; isTest: boolean }[]): Set<string> {
+    const hasTest = new Set<string>();
+    const hasOther = new Set<string>();
+    for (const file of files){
+        for (let at = file.path.lastIndexOf("/"); at > 0; at = file.path.lastIndexOf("/", at - 1)){
+            (file.isTest ? hasTest : hasOther).add(file.path.slice(0, at));
+        }
+    }
+    return new Set([...hasTest].filter((folder) => !hasOther.has(folder)));
+}
+
+/**
+ * Halves the fused score of test files and test-only folders unless the query asks for tests, then sorts again (ties by
+ * key): searching "terminal" shouldn't lead with a smoke-test folder, and "terminal smoke test" still finds it.
+ */
+export function dampTests<T extends { key: string; score: number }>(fused: readonly T[], isTest: (key: string) => boolean, query: string): T[] {
+    if (wantsTests(query)) return [...fused];
+    return fused
+        .map((f) => (isTest(f.key) ? { ...f, score: f.score * TEST_DAMPING } : f))
+        .sort((a, b) => b.score - a.score || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/** The name of a file's imports-and-exports listing chunk (lib/chunks.ts). */
+export const FILE_CHUNK = "(file)";
+
+/**
+ * An imports listing's snippet without the listing's scaffolding: the "File: <path>" line and the "Imports:" and
+ * "Exports:" labels (ADR-052). The snippet is already on one line.
+ */
+export function cleanFileChunkSnippet(snippet: string): string {
+    return snippet
+        .replace(/(^|…)\s*(?:File:\s*)?[^\s…]+\.[cm]?[jt]sx?\s+(?=Imports:|Exports:)/, "$1")   // a path never holds "…", so a leading one survives
+        .replace(/\b(?:Imports|Exports):\s*/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}

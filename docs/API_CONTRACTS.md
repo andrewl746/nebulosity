@@ -148,7 +148,7 @@ type SearchHit = {
   matchedBy: SearchList[];
   tagline?: string;             // the target's summary, when it has one
   summary?: string;
-  code?: { symbol: string; startLine: number; endLine: number; snippet: string };  // best-matching chunk
+  code?: { symbol: string; startLine: number; endLine: number; snippet: string };  // best-matching chunk: a declaration when one matched, else the imports listing ("(file)"), its header removed
 };
 type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList, number>; note?: string };
 ```

@@ -6,7 +6,7 @@ import type { SearchHit, SearchResult } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount } from "./format";
 import { languageFor } from "./paths";
-import { groupHits } from "./searchHits";
+import { codeLabel, groupHits } from "./searchHits";
 
 type SearchPaletteProps = { onPick: (hit: SearchHit) => void; onClose: () => void };
 
@@ -120,7 +120,7 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                                         {hit.tagline && <span title={hit.tagline} className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
                                         {hit.code && (
                                             <span className="block truncate font-mono text-[12px] text-text-2">
-                                                {hit.code.symbol} · lines {hit.code.startLine}–{hit.code.endLine}:{" "}
+                                                {codeLabel(hit.code)}:{" "}
                                                 {highlight
                                                     // highlightCode escapes the snippet, so this HTML is only its spans (syntax.ts)
                                                     ? <span className="syntax" dangerouslySetInnerHTML={{ __html: highlight(hit.code.snippet, languageFor(hit.path)) }} />

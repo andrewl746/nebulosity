@@ -168,6 +168,12 @@ Each list contributes at most 50 files or folders.
 
 Agreement between lists beats a single first place. RRF uses positions only, so bm25 scores and cosines never need to be put on one scale. Ties break by key.
 
+### Tests and snippets
+
+*(V1.5, ADR-052.)* After fusion, a test file or a test-only folder (one with files below it and none that isn't a test, the root never counted) keeps half its score and the list is sorted again (`dampTests`), unless the query asks for tests: test, tests, testing, spec, specs, smoke, e2e, fixture, fixtures, mock or mocks. Before this, "terminal" led with a test helper (`test/automation/src/terminal.ts`) and had put a smoke-test folder second; now the first hits are terminal code, and "terminal smoke test" still leads with the tests.
+
+A file ranks by its best chunk but shows its best-matching declaration when one matched, because its imports-and-exports listing (the chunk named `(file)`) is a poor snippet. When the listing is all that matched, it's shown without the `File: <path>` line and the `Imports:` and `Exports:` labels (`cleanFileChunkSnippet`), and the answers call it "imports and exports" instead of giving a line range.
+
 ### What a hit looks like
 
 `SearchHit` (`API_CONTRACTS.md` §10) carries the path, the kind (file or folder), the score, which lists matched, the summary when there is one, and for code matches the best chunk's symbol, lines and snippet. A `note` says when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or only common words in the query.

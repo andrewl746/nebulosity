@@ -193,6 +193,30 @@ describe("search", () => {
         expect(result.lists.file).toBe(1);
     });
 
+    it("halves a test file's score unless the query asks for tests", async () => {
+        const root = indexedFixture();
+        // only strings.test.ts matches "checks": code rank 1 (1/61) and the file list (2/61), so 3/61 before damping
+        const plain = await search(root, "checks", { embed: neverEmbed });
+        expect(plain.hits[0]).toMatchObject({ path: "src/util/strings.test.ts", matchedBy: ["code", "file"] });
+        expect(plain.hits[0].score).toBeCloseTo(3 / 122, 12);
+        const asked = await search(root, "checks test", { embed: neverEmbed });
+        expect(asked.hits[0].score).toBeCloseTo(3 / 61, 12);
+    });
+
+    it("shows a file's matching declaration rather than its imports listing", async () => {
+        // main.ts matches "log" in its imports listing and in main()'s body (log(shout("main")))
+        const result = await search(indexedFixture(), "log", { embed: neverEmbed });
+        expect(result.hits.find((h) => h.path === "src/app/main.ts")?.code?.symbol).toBe("main");
+    });
+
+    it("cleans an imports listing used as a snippet", async () => {
+        // "react" appears only in view.tsx's imports listing
+        const hit = (await search(indexedFixture(), "react", { embed: neverEmbed })).hits.find((h) => h.path === "src/app/view.tsx");
+        expect(hit?.code?.symbol).toBe("(file)");
+        expect(hit?.code?.snippet).toContain('from "react"');
+        expect(hit?.code?.snippet).not.toMatch(/File:|Imports:/);
+    });
+
     it("loads exported top-level declarations by file, then line", () => {
         const root = indexedFixture();
         const db = getDb();

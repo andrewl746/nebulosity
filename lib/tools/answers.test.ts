@@ -125,7 +125,7 @@ describe("searchAnswer", () => {
                 " 2. src/core/log.ts",
                 "    log, line 2: export function log(message: string): void { console.log(message); }",
                 " 3. src/core/index.ts — Re-exports logging",
-                `    (file), lines 1–3: ${"x".repeat(159)}…`,
+                `    imports and exports: ${"x".repeat(159)}…`,
             ],
             notes: ["Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only."],
         });

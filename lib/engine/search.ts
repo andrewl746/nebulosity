@@ -9,7 +9,10 @@ import { readIndexVersion } from "../db/store/version";
 import { decodeVector, embedTexts } from "../embed";
 import type { EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
-import { dropRepoName, fuseRankings, LIST_DEPTH, rankFileNames, rankFolderNames, toFtsQuery, type Declared, type FileFact } from "./rank";
+import {
+    cleanFileChunkSnippet, dampTests, dropRepoName, FILE_CHUNK, fuseRankings, LIST_DEPTH, rankFileNames, rankFolderNames, testOnlyFolders, toFtsQuery,
+    type Declared, type FileFact,
+} from "./rank";
 
 // The pure ranking lives in rank.ts so the browser can bundle it (ADR-049); the old public names stay importable from here.
 export { dropRepoName, fuseRankings, LIST_DEPTH, LIST_WEIGHTS, rankFolderNames, RRF_K, toFtsQuery } from "./rank";
@@ -36,6 +39,7 @@ export type SearchOptions = {
  * 3. cosine similarity between the query and every summary vector;
  * 4. folders whose names match the query (rankFolderNames);
  * 5. files named like the query, or declaring what it names (rankFileNames).
+ * Test files and test-only folders then keep half their fused score unless the query asks for tests (dampTests).
  */
 export async function search(repoRoot: string, typed: string, options: SearchOptions = {}): Promise<SearchResult> {
     const db = getDb();
@@ -52,13 +56,18 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
         return key;
     };
 
-    // 1. keywords in code: the best chunk of each file stands for the file
+    // 1. keywords in code: a file ranks by its best chunk, and shows its best declaration when one matched, since
+    //    its imports-and-exports listing makes a poor snippet (ADR-052)
     const fts = toFtsQuery(query);
-    const bestChunk = new Map<string, CodeMatch>();
+    const shown = new Map<string, CodeMatch>();
+    const code: string[] = [];
     for (const match of fts ? searchCode(db, repoId, fts, CODE_CHUNKS) : []){
-        if (!bestChunk.has(match.path)) bestChunk.set(match.path, match);
+        const before = shown.get(match.path);
+        if (before === undefined){
+            shown.set(match.path, match);
+            if (code.length < LIST_DEPTH) code.push(remember({ kind: "file", path: match.path }));
+        } else if (before.symbol === FILE_CHUNK && match.symbol !== FILE_CHUNK) shown.set(match.path, match);
     }
-    const code = [...bestChunk.keys()].slice(0, LIST_DEPTH).map((p) => remember({ kind: "file", path: p }));
 
     // 2. keywords in summaries
     const summary = (fts ? searchSummaries(db, repoId, fts, LIST_DEPTH) : [])
@@ -90,17 +99,21 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
             : "Summaries aren't ready yet, so results come from code, folder names and file names only.");
     } else if (index.targets.length === 0) notes.unshift("Summaries aren't embedded yet, so results come from keywords only.");
 
-    const hits: SearchHit[] = fuseRankings({ code, summary, vector, name, file }).slice(0, limit).map(({ key, score, matchedBy }) => {
+    const isTest = (key: string): boolean => {
+        const target = targets.get(key)!;
+        return target.kind === "file" ? facts.testFiles.has(target.path) : facts.testFolders.has(target.path);
+    };
+    const hits: SearchHit[] = dampTests(fuseRankings({ code, summary, vector, name, file }), isTest, query).slice(0, limit).map(({ key, score, matchedBy }) => {
         const target = targets.get(key)!;
         const text = loadSummaryText(db, repoId, target.kind, target.path);
-        const chunk = target.kind === "file" ? bestChunk.get(target.path) : undefined;
+        const chunk = target.kind === "file" ? shown.get(target.path) : undefined;
         return {
             path: target.path,
             kind: target.kind,
             score,
             matchedBy,
             ...(text ? { tagline: text.tagline, summary: text.summary } : {}),
-            ...(chunk ? { code: { symbol: chunk.symbol, startLine: chunk.startLine, endLine: chunk.endLine, snippet: chunk.snippet.replace(/\s+/g, " ").trim() } } : {}),
+            ...(chunk ? { code: { symbol: chunk.symbol, startLine: chunk.startLine, endLine: chunk.endLine, snippet: snippetOf(chunk) } } : {}),
         };
     });
 
@@ -114,18 +127,27 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
     };
 }
 
-/** What the file list needs (and, from Task 6, test damping), loaded once per index version (ADR-036). */
-type NameFacts = { version: number; files: FileFact[]; declared: Declared[] };
+/** A chunk's snippet on one line; an imports listing without its scaffolding. */
+const snippetOf = (chunk: CodeMatch): string => {
+    const flat = chunk.snippet.replace(/\s+/g, " ").trim();
+    return chunk.symbol === FILE_CHUNK ? cleanFileChunkSnippet(flat) : flat;
+};
+
+/** What the file list and test damping need, loaded once per index version (ADR-036). */
+type NameFacts = { version: number; files: FileFact[]; declared: Declared[]; testFiles: Set<string>; testFolders: Set<string> };
 const nameCache = new Map<number, NameFacts>();
 
 function nameFactsFor(db: Db, repoId: number): NameFacts {
     const version = readIndexVersion(db, repoId);
     const cached = nameCache.get(repoId);
     if (cached?.version === version) return cached;
+    const all = loadFileFacts(db, repoId);
     const facts: NameFacts = {
         version,
-        files: loadFileFacts(db, repoId).map((f) => ({ path: f.path, importedBy: f.importedBy })),
+        files: all.map((f) => ({ path: f.path, importedBy: f.importedBy })),
         declared: loadExportedNames(db, repoId),
+        testFiles: new Set(all.filter((f) => f.isTest).map((f) => f.path)),
+        testFolders: testOnlyFolders(all),
     };
     nameCache.set(repoId, facts);
     return facts;
