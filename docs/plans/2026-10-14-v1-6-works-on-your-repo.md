@@ -152,7 +152,7 @@ Every condition below must hold.
   - Each run gets a fresh empty scratch folder outside the repo.
   - Every prompt in both arms ends with the same fixed sentence naming it (R6).
 - **Counts.**
-  - About 40 single questions (VS Code 21, repo 2 19) and 6 sessions, × 2 arms × 3 repeats: about 240 single runs and 36 session runs.
+  - 39 single questions (VS Code 21, repo 2 18) and 6 sessions, × 2 arms × 3 repeats: 234 single runs and 36 session runs.
   - Plus about 20 pilot runs, the dev set's runs (Task 13) and the probes (Tasks 3, 9 and 13).
   - Claude Code's list-price estimate is about $20–40. Eval #1's 90 runs cost $4.88 and took at most 0.16 of one 5-hour window. The pilot measures the real figure, and the owner approves the full count.
 - **Unchanged from Eval #1.**
@@ -230,15 +230,15 @@ You pick from that table. **Recommended going in: AFFiNE**: a current repo with 
   - Task 1's clones: two public repos, shallow, with sizes stated.
   - Task 3's probe: 2 runs.
   - Task 9's session probe: 1 run.
-  - Task 13's dev set: at most 56 runs.
+  - Task 13's dev set: at most 52 runs.
   - Task 18's CI: the Actions minutes.
   - Task 20's summaries: the estimate first.
-  - Task 21's pilot: about 16 runs. The full run: the count you approve.
+  - Task 21's pilot: about 20 runs. The full run: the count you approve.
   - The blind graders are subagents of the controller's session, not `claude -p` runs.
 - **Layering (ARCHITECTURE.md §3):**
   - Nothing under `lib/` imports `app/`, `mcp/`, `scripts/`, `bin/`, `next` or `react`.
   - `lib/engine/rank.ts`, `lib/engine/staticSearch.ts` and `lib/index/identifiers.ts` stay browser-safe.
-  - `scripts/eval/scan.ts`, `scripts/eval/truth.ts`, `scripts/eval/resolve-truth.ts` and `scripts/eval/ts-graph.ts` import nothing from `lib/` (R2). A test pins it with `rank.test.ts`'s `moduleSpecifiers` reader.
+  - `scripts/eval/scan.ts`, `scripts/eval/truth.ts`, `scripts/eval/resolve-truth.ts` and `scripts/eval/ts-graph.ts` import nothing from `lib/` (R2). `scan.test.ts`'s independence pin covers all four.
   - All SQL stays in `lib/db/*`.
 - **Contracts:** `lib/contracts.ts` changes only as `API_CONTRACTS.md` §12 says (R9).
 - **Writing files:** use the Write and Edit tools for any file holding backslashes or `\n`, because Bash heredocs turn `\\` into `\`. In Git Bash, pass paths to `claude -p` as `C:/…`, never `/c/…`.
@@ -291,6 +291,7 @@ Five inputs or conditions most likely to hurt a real user that the spec doesn't 
 | `lib/tools/registry.ts`, `lib/tools/answers.ts`, `lib/tools/text.ts` (+ tests) | modify | six tools, `alwaysLoad` and `searchHint`, new answers, new instructions, the size budget |
 | `mcp/server.ts` (+ test) | modify | each tool's `_meta`; the new tools' live events |
 | `scripts/bench-mcp.ts` | modify | the six tools (MCP Benchmark #3) |
+| `app/map/activity.ts` (+ test) | modify | the activity bar's words for `imports` and `architecture` |
 | `scripts/measure-typecheck.ts` | create | E2's measurement (Typecheck Benchmark #1) |
 | `scripts/eval/definition.ts` (+ test), `eval/eval.json`, `eval2/eval.json` | create | the eval definition: repos, arms, pins, repeats, scripts |
 | `scripts/eval/run-config.ts`, `run.ts`, `validate.ts`, `transcript.ts` (+ tests) | modify | definitions, arms, scripts permission, scratch folders, sessions over stream-json, first-call context |
@@ -1287,7 +1288,7 @@ git add -A -- scripts/measure-typecheck.ts package.json docs/BENCHMARKS.md docs/
 
 **Files:**
 - Create: `scripts/eval/probe.ts`
-- Modify: `scripts/eval/transcript.ts` (+ `transcript.test.ts`), `package.json` (script `eval:probe`), `docs/EVAL_RESULTS.md` (a dated correction), `docs/BENCHMARKS.md` (Eval #1's entry)
+- Modify: `scripts/eval/transcript.ts` (+ `transcript.test.ts`), `scripts/eval/validate.test.ts` and `scripts/eval/score.test.ts` (their hand-built summaries), `package.json` (script `eval:probe`), `docs/EVAL_RESULTS.md` (a dated correction), `docs/BENCHMARKS.md` (Eval #1's entry)
 
 **Interfaces:**
 - Produces: `RunSummary.firstCallContext: number | null`, the first assistant message's input + cache writes + cache reads. Tasks 11 (gate 5b) and 13 use it.
@@ -1339,6 +1340,8 @@ and in `summarizeRun`, before the `return`:
 ```
 
 with `firstCallContext,` added to the returned object after `usage`.
+
+Two tests build a whole `RunSummary` by hand and now need the field: add `firstCallContext: null,` after `usage` in `scripts/eval/validate.test.ts`'s `GOOD` and in `scripts/eval/score.test.ts`'s `summary()` helper.
 
 - [ ] **Step 4: Run it and see it pass**
 
@@ -1425,7 +1428,7 @@ If the measured difference is small (under 5,000 tokens), the claim above is wro
 
 Run: `npx tsc --noEmit && npm run lint && npx vitest run` (916/916). Then:
 ```bash
-git add -A -- scripts/eval/probe.ts scripts/eval/transcript.ts scripts/eval/transcript.test.ts package.json docs/EVAL_RESULTS.md docs/BENCHMARKS.md && git commit -m "fix(eval): the probe and each run's first-call context; Eval #1's up-front tokens were mostly Claude Code's own tools (a dated correction)" -- scripts/eval/probe.ts scripts/eval/transcript.ts scripts/eval/transcript.test.ts package.json docs/EVAL_RESULTS.md docs/BENCHMARKS.md && git push origin pivot/v1
+git add -A -- scripts/eval/probe.ts scripts/eval/transcript.ts scripts/eval/transcript.test.ts scripts/eval/validate.test.ts scripts/eval/score.test.ts package.json docs/EVAL_RESULTS.md docs/BENCHMARKS.md && git commit -m "fix(eval): the probe and each run's first-call context; Eval #1's up-front tokens were mostly Claude Code's own tools (a dated correction)" -- scripts/eval/probe.ts scripts/eval/transcript.ts scripts/eval/transcript.test.ts scripts/eval/validate.test.ts scripts/eval/score.test.ts package.json docs/EVAL_RESULTS.md docs/BENCHMARKS.md && git push origin pivot/v1
 ```
 
 ---
@@ -1436,7 +1439,7 @@ git add -A -- scripts/eval/probe.ts scripts/eval/transcript.ts scripts/eval/tran
 
 **Files:**
 - Create: `test/fixtures/arch-repo/**` (every file in "Ground truth"), `lib/index/workspace.ts`, `lib/index/workspace.test.ts`, `lib/db/store/entries.ts`
-- Modify: `lib/index/discover.ts` (+ `discover.test.ts`), `lib/index/resolve.ts` (+ `resolve.test.ts`), `lib/index/languages/typescript.ts` (+ `typescript.test.ts`), `lib/index/pipeline.ts` (+ `pipeline.test.ts`), `lib/index/update.ts` (+ `update.test.ts`), `lib/db/schema.ts`, `scripts/index.ts` (`--no-activate`), `scripts/report-resolution.ts`, `scripts/resolution.ts`
+- Modify: `lib/index/discover.ts` (+ `discover.test.ts`), `lib/index/watch.ts` (+ `watch.test.ts`), `lib/index/resolve.ts` (+ `resolve.test.ts`), `lib/index/languages/typescript.ts` (+ `typescript.test.ts`), `lib/index/pipeline.ts` (+ `pipeline.test.ts`), `lib/index/update.ts` (+ `update.test.ts`), `lib/db/schema.ts`, `scripts/index.ts` (`--no-activate`), `scripts/report-resolution.ts`, `scripts/resolution.ts`
 - Generate: `lib/db/migrations/0007_v1_6_entry_points.sql` (+ drizzle's meta)
 - Modify: `docs/ENGINEERING_DECISIONS.md` (ADR-053), `docs/PIVOT_SPEC.md` §5.2 step 3, `docs/DATABASE_DESIGN.md` (`entry_points`), `docs/BENCHMARKS.md` (Index Benchmark #4)
 
@@ -1453,7 +1456,7 @@ git add -A -- scripts/eval/probe.ts scripts/eval/transcript.ts scripts/eval/tran
 
 - [ ] **Step 1: Create the fixture**
 
-Write every file of `test/fixtures/arch-repo` exactly as "Ground truth" gives it, with LF line endings: the 21 source files, the 3 package.json files, the 3 tsconfig.json files, and the 4 docs. Run `git status --short test/fixtures/arch-repo` and expect 31 new files.
+Write every file of `test/fixtures/arch-repo` exactly as "Ground truth" gives it, with LF line endings: the 21 source files, the 3 package.json files, the 3 tsconfig.json files, and the 4 docs. Run `git status --short -uall test/fixtures/arch-repo` and expect 31 new files.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1693,6 +1696,16 @@ describe("indexRepository on the architecture fixture", () => {
         const { repoId } = indexRepository(root);
         expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
     });
+});
+```
+
+`lib/index/watch.test.ts`, a new test (the background worker's watcher must report a package.json, or the update below never sees it):
+
+```ts
+it("reports a package.json, which changes what bare specifiers resolve to (ADR-053)", () => {
+    expect(isWatchedFile("packages/ui/package.json")).toBe(true);
+    expect(isWatchedFile("package.json")).toBe(true);
+    expect(isWatchedFile("package-lock.json")).toBe(false);
 });
 ```
 
@@ -2166,6 +2179,8 @@ export function resolvesEverything(changedPath: string): boolean {
 
 `listManifests` costs one `git ls-files` (about 0.1 s on VS Code) per update, which is affordable inside S6's 2 s. If Index Benchmark #4 shows otherwise, cache it per run of the worker.
 
+In `lib/index/watch.ts`, `isWatchedFile` also reports a `package.json` (`|| base === "package.json"`), so the worker hears about one.
+
 - [ ] **Step 10: `--no-activate`, and the report reads the workspace**
 
 In `scripts/index.ts`, accept a second argument `--no-activate`, which skips the `writeConfig(...)` that makes the repo active. The usage line becomes `usage: npm run index -- <path-to-repo> [--no-activate]`. Task 4's index of repo 2 uses it, so the owner's Map keeps showing VS Code.
@@ -2248,14 +2263,14 @@ ADR-053, appended to `docs/ENGINEERING_DECISIONS.md`:
 
 Run: `npx tsc --noEmit && npm run lint && npx vitest run` (about 942/942). Then:
 ```bash
-git add -A -- test/fixtures/arch-repo lib/index/discover.ts lib/index/discover.test.ts lib/index/workspace.ts lib/index/workspace.test.ts lib/index/resolve.ts lib/index/resolve.test.ts lib/index/languages/typescript.ts lib/index/languages/typescript.test.ts lib/index/pipeline.ts lib/index/pipeline.test.ts lib/index/update.ts lib/index/update.test.ts lib/db/schema.ts lib/db/migrations lib/db/store/entries.ts scripts/index.ts scripts/report-resolution.ts scripts/resolution.ts docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md docs/DATABASE_DESIGN.md docs/BENCHMARKS.md && git commit -m "feat(index): workspace packages, module ids and computed import() resolve; package.json entry points stored (ADR-053)" -- test/fixtures/arch-repo lib/index/discover.ts lib/index/discover.test.ts lib/index/workspace.ts lib/index/workspace.test.ts lib/index/resolve.ts lib/index/resolve.test.ts lib/index/languages/typescript.ts lib/index/languages/typescript.test.ts lib/index/pipeline.ts lib/index/pipeline.test.ts lib/index/update.ts lib/index/update.test.ts lib/db/schema.ts lib/db/migrations lib/db/store/entries.ts scripts/index.ts scripts/report-resolution.ts scripts/resolution.ts docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md docs/DATABASE_DESIGN.md docs/BENCHMARKS.md && git push origin pivot/v1
+git add -A -- test/fixtures/arch-repo lib/index/discover.ts lib/index/discover.test.ts lib/index/workspace.ts lib/index/workspace.test.ts lib/index/resolve.ts lib/index/resolve.test.ts lib/index/languages/typescript.ts lib/index/languages/typescript.test.ts lib/index/pipeline.ts lib/index/pipeline.test.ts lib/index/update.ts lib/index/update.test.ts lib/index/watch.ts lib/index/watch.test.ts lib/db/schema.ts lib/db/migrations lib/db/store/entries.ts scripts/index.ts scripts/report-resolution.ts scripts/resolution.ts docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md docs/DATABASE_DESIGN.md docs/BENCHMARKS.md && git commit -m "feat(index): workspace packages, module ids and computed import() resolve; package.json entry points stored (ADR-053)" -- test/fixtures/arch-repo lib/index/discover.ts lib/index/discover.test.ts lib/index/workspace.ts lib/index/workspace.test.ts lib/index/resolve.ts lib/index/resolve.test.ts lib/index/languages/typescript.ts lib/index/languages/typescript.test.ts lib/index/pipeline.ts lib/index/pipeline.test.ts lib/index/update.ts lib/index/update.test.ts lib/index/watch.ts lib/index/watch.test.ts lib/db/schema.ts lib/db/migrations lib/db/store/entries.ts scripts/index.ts scripts/report-resolution.ts scripts/resolution.ts docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md docs/DATABASE_DESIGN.md docs/BENCHMARKS.md && git push origin pivot/v1
 ```
 
 ### Task 5: Docs pointers: which docs talk about which folders (ADR-054)
 
 **Files:**
 - Create: `lib/index/docs.ts`, `lib/index/docs.test.ts`, `lib/db/store/docs.ts`, `lib/engine/docs.ts`, `lib/engine/docs.test.ts`
-- Modify: `lib/db/schema.ts`, `lib/index/pipeline.ts` (+ `pipeline.test.ts`), `lib/engine/describe.ts`, `lib/engine/overview.ts`, `lib/contracts.ts`, `lib/tools/answers.ts` (+ `answers.test.ts`)
+- Modify: `lib/db/schema.ts`, `lib/index/pipeline.ts` (+ `pipeline.test.ts`), `lib/engine/describe.ts`, `lib/engine/overview.ts` (+ `overview.test.ts`), `lib/contracts.ts`, `lib/tools/answers.ts` (+ `answers.test.ts`), and the overview expectations in `lib/tools/registry.test.ts` and `mcp/stdio.test.ts`
 - Generate: `lib/db/migrations/0008_v1_6_docs.sql` (+ meta)
 - Modify: `docs/ENGINEERING_DECISIONS.md` (ADR-054), `docs/API_CONTRACTS.md` §12 and §17, `docs/DATABASE_DESIGN.md`, `docs/PIVOT_SPEC.md` §4.1 and §6.1
 
@@ -2500,9 +2515,15 @@ it("stores the 4 docs with their titles and the 13 links of the ground truth", (
 });
 ```
 
+**Existing tests that see the mini-repo's README.** The mini-repo has a `README.md` (title "mini-repo"). Its only link is the readme link to the root: the one path it mentions, `docs/plans/2026-10-11-v1-1-engine-foundation.md`, isn't indexed there. So no mini-repo folder or file gains docs in `describe`, but the repo-level answers do. Derived by hand:
+- `lib/engine/overview.test.ts`'s first test (`overview(root, { summariesOff: true })`, `toEqual`) expects `docs: [{ path: "README.md", title: "mini-repo" }]` too.
+- `lib/tools/registry.test.ts`'s overview test, and `mcp/stdio.test.ts`'s overview text, gain two lines right after the summary line (`S`): `"Docs to read first:"`, `"  README.md — mini-repo"`.
+- `lib/tools/answers.test.ts` builds an `Overview` by hand (`const o: Overview`); it gains `docs: [],` so tsc passes, and its expected text is unchanged.
+- `describe(root, "")` in `lib/engine/describe.test.ts` uses `toMatchObject`, so it's unchanged.
+
 - [ ] **Step 2: Run them and see them fail**
 
-Run: `npx vitest run lib/index/docs.test.ts lib/engine/docs.test.ts lib/tools/answers.test.ts lib/index/pipeline.test.ts`
+Run: `npx vitest run lib/index/docs.test.ts lib/engine/docs.test.ts lib/tools/answers.test.ts lib/index/pipeline.test.ts lib/engine/overview.test.ts lib/tools/registry.test.ts mcp/stdio.test.ts`
 Expected: FAIL, the modules and fields don't exist.
 
 - [ ] **Step 3: `lib/index/docs.ts`**
@@ -2931,7 +2952,7 @@ Record both lists in the ledger, along with how long the docs pass added to the 
 
 Run the gate (about 962/962). Then:
 ```bash
-git add -A -- lib/index/docs.ts lib/index/docs.test.ts lib/db/store/docs.ts lib/engine/docs.ts lib/engine/docs.test.ts lib/db/schema.ts lib/db/migrations lib/index/pipeline.ts lib/index/pipeline.test.ts lib/engine/describe.ts lib/engine/overview.ts lib/contracts.ts lib/tools/answers.ts lib/tools/answers.test.ts docs/ENGINEERING_DECISIONS.md docs/API_CONTRACTS.md docs/DATABASE_DESIGN.md docs/PIVOT_SPEC.md && git commit -m "feat(engine): docs pointers, which docs talk about which folders, in describe and overview (ADR-054)" -- lib/index/docs.ts lib/index/docs.test.ts lib/db/store/docs.ts lib/engine/docs.ts lib/engine/docs.test.ts lib/db/schema.ts lib/db/migrations lib/index/pipeline.ts lib/index/pipeline.test.ts lib/engine/describe.ts lib/engine/overview.ts lib/contracts.ts lib/tools/answers.ts lib/tools/answers.test.ts docs/ENGINEERING_DECISIONS.md docs/API_CONTRACTS.md docs/DATABASE_DESIGN.md docs/PIVOT_SPEC.md && git push origin pivot/v1
+git add -A -- lib/index/docs.ts lib/index/docs.test.ts lib/db/store/docs.ts lib/engine/docs.ts lib/engine/docs.test.ts lib/db/schema.ts lib/db/migrations lib/index/pipeline.ts lib/index/pipeline.test.ts lib/engine/describe.ts lib/engine/overview.ts lib/engine/overview.test.ts lib/contracts.ts lib/tools/answers.ts lib/tools/answers.test.ts lib/tools/registry.test.ts mcp/stdio.test.ts docs/ENGINEERING_DECISIONS.md docs/API_CONTRACTS.md docs/DATABASE_DESIGN.md docs/PIVOT_SPEC.md && git commit -m "feat(engine): docs pointers, which docs talk about which folders, in describe and overview (ADR-054)" -- lib/index/docs.ts lib/index/docs.test.ts lib/db/store/docs.ts lib/engine/docs.ts lib/engine/docs.test.ts lib/db/schema.ts lib/db/migrations lib/index/pipeline.ts lib/index/pipeline.test.ts lib/engine/describe.ts lib/engine/overview.ts lib/engine/overview.test.ts lib/contracts.ts lib/tools/answers.ts lib/tools/answers.test.ts lib/tools/registry.test.ts mcp/stdio.test.ts docs/ENGINEERING_DECISIONS.md docs/API_CONTRACTS.md docs/DATABASE_DESIGN.md docs/PIVOT_SPEC.md && git push origin pivot/v1
 ```
 
 ### Task 6: Impact, and `within` (ADR-045 amended; ADR-055's first half)
@@ -4084,8 +4105,8 @@ Every eval CLI takes `--eval <dir>` (default `eval`) and reads `loadDefinition(<
 - **`score.ts`:** reads the definition for each repo's path, and writes `<dir>/results.json`.
 - **`grading.ts`:** sheets in `<dir>/grading/sheets`, and the key in `.nebulosity/<dir>/grading-key.json`.
 - **`probe.ts`:**
-  - gains `--eval <dir>` and the configuration `n`: Nebulosity's registration, as the runner writes it, at the default tool search;
-  - `a` and `n` run in each repo of the definition (`--repo <id>`);
+  - gains `--eval <dir>` and two configurations: `a` (no MCP server) and `n` (Nebulosity's registration, as the runner writes it), both at the default tool search, with the definition's pins;
+  - with `--eval`, `--repo` names one of the definition's repos by its id (`--repo vscode`); without it, `--repo` is a path as in Task 3;
   - `a-default` and `a-upfront` stay for Eval #1's check.
 
 `package.json` needs no new scripts.
@@ -4105,7 +4126,7 @@ Any difference stops the task: Eval #1's numbers can't move.
 
 Run the gate (about 1001/1001). Then:
 ```bash
-git add -A -- scripts/eval eval/eval.json eval2/eval.json package.json && git commit -m "feat(eval): eval definitions (repos, arms, pins, repeats, scripts allowed under a scratch folder); Eval #1 re-scores unchanged" -- scripts/eval eval/eval.json eval2/eval.json package.json && git push origin pivot/v1
+git add -A -- scripts/eval eval/eval.json eval2/eval.json eval2/mcp/empty.json package.json && git commit -m "feat(eval): eval definitions (repos, arms, pins, repeats, scripts allowed under a scratch folder); Eval #1 re-scores unchanged" -- scripts/eval eval/eval.json eval2/eval.json eval2/mcp/empty.json package.json && git push origin pivot/v1
 ```
 
 ### Task 9: Task sessions: several questions in one Claude Code process
@@ -4117,7 +4138,7 @@ git add -A -- scripts/eval eval/eval.json eval2/eval.json package.json && git co
 **Interfaces:**
 - Produces:
   - `sessionArgs(...)` (`claudeArgs` plus `--input-format stream-json --replay-user-messages`);
-  - `userMessage(text): string` (one stdin line);
+  - `userMessage(text): string` (one stdin line), and `sessionOutage(jsonl, messagesSent): string | null`;
   - `summarizeSession(jsonl): SessionSummary` (per turn: the final text, the cost, the time, the tool calls; and the totals);
   - `npm run eval:run -- --eval eval2 --sessions [--only <session ids>]`.
   - Tasks 11 and 21–22 use them.
@@ -4146,7 +4167,7 @@ If either permission behaves otherwise, stop and tell the owner. D2's scripts ru
 - `summarizeSession(...).turns` has 2 entries, each with its `finalText`, cost, time and tool calls. If the probe showed cumulative figures, each turn's figure is the difference from the turn before. The test states which, with the numbers taken from the hand-made transcript;
 - the totals: the cost and time of the whole session, and the first call's context;
 - `userMessage("hi")` is exactly `{"type":"user","message":{"role":"user","content":"hi"}}`;
-- a session missing its last `result` is an outage (`infrastructureFailure` on the session's text says so).
+- a session with fewer `result` events than messages sent is an outage: `sessionOutage(jsonl, messagesSent)` says so. `infrastructureFailure` reads only the last `result`, so a turn 1 that succeeded would hide a missing turn 2. `sessionOutage` returns that sentence first, else `infrastructureFailure`'s answer.
 
 - [ ] **Step 3: Run them and see them fail**
 
@@ -4155,13 +4176,13 @@ Expected: FAIL.
 
 - [ ] **Step 4: Implement `scripts/eval/session.ts` and the runner's `--sessions`**
 
-`session.ts` holds the pure parts: `userMessage`, `summarizeSession`, and `SessionSummary = { turns: { finalText: string | null; costUsd: number; durationMs: number; toolCalls: Record<string, number>; nebulosityCalls: number }[]; costUsd: number; durationMs: number; firstCallContext: number | null }`.
+`session.ts` holds the pure parts: `userMessage`, `sessionOutage`, `summarizeSession`, and `SessionSummary = { turns: { finalText: string | null; costUsd: number; durationMs: number; toolCalls: Record<string, number>; nebulosityCalls: number }[]; costUsd: number; durationMs: number; firstCallContext: number | null }`.
 
 The runner's `--sessions` mode reads `<dir>/sessions.json` (`{ sessions: [{ id, repo, title, questions: [<question ids>] }] }`, written in Task 14) and schedules each session × arm × repeat, alternating like single runs. For one session it:
 - spawns `claude` with `sessionArgs` (the session budget `pins.sessionMaxBudgetUsd`, a 60-minute limit);
 - writes the first question's prompt (`promptFor`, with the scratch sentence) as a `userMessage`;
 - polls the raw file until a new `result` event appears (the same polling as the init check), then writes the next, and closes stdin after the last `result`;
-- applies every check a single run gets (init, the repo's `git status`, outage, scrub, leak);
+- applies every check a single run gets (init, the repo's `git status`, scrub, leak), with `sessionOutage(raw, messagesSent)` as its outage check;
 - keeps it as `<dir>/runs/<session>-<arm>-<repeat>.jsonl.gz`, with an index line carrying `session` and each turn's question id.
 
 - [ ] **Step 5: Run the tests and see them pass**
@@ -4199,7 +4220,7 @@ They all run on the arch-repo fixture, whose ground truth gives every expected v
 - `scan.test.ts`:
   - `scanRepo(fixture, { resolveBare })` (it walks when there's no `.git`; see Step 2) gives the 30 edges: the ground truth's 31 without #5;
   - `computedSites` gives `[{ file: "src/app/loader.ts", line: 5, expression: "url" }]`;
-  - the R2 pin reads every specifier form of `scan.ts`, `truth.ts`, `resolve-truth.ts` and `ts-graph.ts` with `rank.test.ts`'s `moduleSpecifiers` reader, and refuses any that reaches `lib/`. It requires that `scan.ts` is seen importing something, so it can't pass by reading nothing. This closes Eval #1's M8.
+  - the independence pin that's already in `scan.test.ts` ("imports nothing from lib/", which closed Eval #1's M8 in V1.5) covers the two new files too: its file list becomes `scan.ts`, `truth.ts`, `resolve-truth.ts` and `ts-graph.ts`, and `resolve-truth.ts` must also be seen importing something.
 - `ts-graph.test.ts`: `preProcessGraph` gives the same 30 edges.
 - `truth.test.ts`, over the 31 edges (the 30 plus the adjudicated #5, written out in the test):
   - `impactByFolders(g, "src/base/common/strings.ts", ["src/app", "src/base", "src/editor", "src/platform"])` = `{ counts: [3, 4, 5, 3], elsewhere: 1, total: 16 }`;
@@ -4407,8 +4428,8 @@ git add -A -- scripts/eval && git commit -m "feat(eval): scores for counts, cycl
 ### Task 12: Six tools, five always loaded, new instructions, a size budget (ADR-056)
 
 **Files:**
-- Modify: `lib/tools/registry.ts` (+ `registry.test.ts`), `mcp/server.ts` (+ `server.test.ts`), `scripts/bench-mcp.ts`
-- Modify: `docs/API_CONTRACTS.md` §17, `docs/ENGINEERING_DECISIONS.md` (ADR-056; ADR-047 amended), `docs/PIVOT_SPEC.md` §6.2, `README.md` (the tool list), `docs/BENCHMARKS.md` (MCP Benchmark #3)
+- Modify: `lib/tools/registry.ts` (+ `registry.test.ts`), `mcp/server.ts` (+ `server.test.ts`, `stdio.test.ts`), `scripts/bench-mcp.ts`, `app/map/activity.ts` (+ `activity.test.ts`: the Map's activity bar names each tool call)
+- Modify: `docs/API_CONTRACTS.md` §17, `docs/ENGINEERING_DECISIONS.md` (ADR-056; ADR-047 amended), `docs/PIVOT_SPEC.md` §6.2, `README.md` (the tool list), `docs/DEMO_VIDEO.md` (prompt 1 expects `imports`), `docs/BENCHMARKS.md` (MCP Benchmark #3)
 
 **Interfaces:**
 - Consumes: `reach`, `importChain`, `impact`, `architecture`, `reachAnswer`, `reachHeader`, `rootLines`, `impactAnswer`, `chainAnswer`, `architectureAnswer` (Tasks 5–7).
@@ -4422,7 +4443,13 @@ git add -A -- scripts/eval && git commit -m "feat(eval): scores for counts, cycl
 - [ ] **Step 1: Write the failing tests**
 
 In `lib/tools/registry.test.ts`:
-- Every existing test of `dependents`, `dependencies` or `path` calls `imports` instead, with `direction` (and `to` for a chain), and expects the same text. The answers' wording didn't change.
+- Every existing test of `dependents`, `dependencies` or `path` calls `imports` instead, with `direction` (and `to` for a chain). It expects the same text, with one exception, derived by hand from the mini-repo. A transitive list of dependents now ends its first page (offset 0) with `rootLines`. For `src/core` and for `src/core/log.ts` the reached files hold 1 test (`src/util/strings.test.ts`) and 1 file nothing imports (`scripts/build.js`; `src/index.ts` is imported by it), and the mini-repo has no package.json. So those expectations gain, at their end (after the "… N more" line where there is one):
+  ```
+  Tests among them: 1.
+  Other files nothing imports that load it (1):
+    scripts/build.js
+  ```
+  The second page of the paging test (`offset: 4`) is unchanged.
 - New tests:
 
 ```ts
@@ -4443,7 +4470,15 @@ it("keeps what every session loads under 7,000 characters: the five definitions 
 - On the arch-repo fixture (indexed with no key, as the file's other tests index theirs), one test per mode of `imports`, each expecting the ground truth's text (Tasks 6 and 7 pinned those texts):
   - `{ path: "src/base/common/strings.ts", transitive: true, group_by: "src" }` gives the impact text;
   - `{ path: "src/editor", within: "src/platform" }` gives the within header;
-  - `{ path: "src/app/loader.ts", to: "src/base/common/strings.ts" }` gives a chain.
+  - `{ path: "src/app/loader.ts", to: "src/base/common/strings.ts" }` gives the chain. Breadth-first with neighbours in path order reaches `strings.ts` first through `dom.ts`:
+    ```
+    src/app/loader.ts reaches src/base/common/strings.ts in 4 steps:
+      src/app/loader.ts
+      → src/app/main.ts  (import "./main.js")
+      → src/editor/browser/editorView.ts  (import "../editor/browser/editorView")
+      → src/base/browser/dom.ts  (import "../../base/browser/dom")
+      → src/base/common/strings.ts  (import "../common/strings")
+    ```
   - `architecture` with `{ path: "src" }` gives the summary text, and with `{ path: "src/editor/common/model.ts", report: "cycles" }` the cycle through it.
 
 In `mcp/server.test.ts`, the first test becomes:
@@ -4460,7 +4495,10 @@ it("serves the registry's six tools, read-only, the five that answer questions m
 });
 ```
 
-Tests that called the old tools through the client move to `imports`, and the live-event tests expect `tool: "imports"` with the same paths.
+Tests that called the old tools through the client move to `imports`, and the live-event tests expect `tool: "imports"` with the same paths. That covers `mcp/server.test.ts` (its refusal of the whole repo, `{ path: "" }`) and `mcp/stdio.test.ts`:
+- its tool list becomes the six names;
+- its three calls become `["imports", { path: "src/core/log.ts", transitive: true }]`, `["imports", { path: "src/app/main.ts", direction: "dependencies" }]` and `["imports", { path: "scripts/build.js", to: "src/core/log.ts" }]`;
+- its sorted event names become `["describe", "imports", "imports", "imports", "overview", "search", "show_on_map"]`.
 
 - [ ] **Step 2: Run them and see them fail**
 
@@ -4534,8 +4572,9 @@ const importsTool: ToolEntry<typeof importsInput> = {
             return { text: finish(impactAnswer(impact(context.repoRoot, target, input.direction, { groupBy, within })), context), paths: [target] };
         }
         if (input.direction === "dependents" && input.transitive){
+            // the tests and the files nothing imports close the first page; later pages are the list's continuation
             const i = impact(context.repoRoot, target, "dependents", { groupBy: null, within });
-            return { text: finish(reachAnswer(i.reach, page, rootLines(i.tests, i.roots)), context), paths: [target] };
+            return { text: finish(reachAnswer(i.reach, page, page.offset === 0 ? rootLines(i.tests, i.roots) : []), context), paths: [target] };
         }
         return { text: finish(reachAnswer(reach(context.repoRoot, target, input.direction, { within }), page), context), paths: [target] };
     },
@@ -4582,6 +4621,19 @@ export function toolMeta(tool: ToolEntry): Record<string, unknown> {
 
 In `createServer`, the `registerTool` config gains `_meta: toolMeta(tool)`. Import the `ToolEntry` type from the registry.
 
+In `app/map/activity.ts`, the activity bar's words follow the tools. A live event carries only the tool and its paths, so a chain is told by having two or more paths. Replace the `dependents`, `dependencies` and `path` cases with:
+
+```ts
+        case "imports": return paths.length >= 2 ? `Tracing ${paths[0]} → ${paths[1]}` : any ? `Following the imports of ${list(paths)}` : "Following imports";
+        case "architecture": return any ? `Reading how ${list(paths)} is organized` : "Reading how the code is organized";
+```
+
+`activity.test.ts`'s three old expectations become:
+- `event("imports", ["x.ts"])` → `"Following the imports of x.ts"`;
+- `event("imports", ["a.ts", "b.ts"])` → `"Tracing a.ts → b.ts"`;
+- `event("architecture", ["src"])` → `"Reading how src is organized"`;
+- `event("architecture", [""])` → `"Reading how the repo is organized"`.
+
 - [ ] **Step 5: Run the tests and see them pass**
 
 Run: `npx vitest run`
@@ -4601,6 +4653,7 @@ Expected: every tool's worst warm call ≤ 500 ms. Record MCP Benchmark #3 in `d
 - `API_CONTRACTS.md` §17: the tool table rewritten for the six tools, each with its input and its answer as the ground truth gives it; the paging rules; `_meta` (always loaded, search hint); and the instructions' cap, now 4,096 characters since Claude Code 2.1.296.
 - `PIVOT_SPEC.md` §6.2's table: the six tools.
 - `README.md`: "Six MCP tools for Claude Code: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports) and `show_on_map`."
+- `docs/DEMO_VIDEO.md`: prompt 1 expects `imports` (with `transitive`) where it said `dependents`.
 - ADR-047, at its end:
 
 ```markdown
@@ -4628,7 +4681,7 @@ Expected: every tool's worst warm call ≤ 500 ms. Record MCP Benchmark #3 in `d
 
 Run the gate (about 1038/1038). Then:
 ```bash
-git add -A -- lib/tools mcp/server.ts mcp/server.test.ts scripts/bench-mcp.ts docs/API_CONTRACTS.md docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md README.md docs/BENCHMARKS.md && git commit -m "feat(tools): six tools, imports and architecture new, five always loaded through _meta, new instructions under a size budget (ADR-056)" -- lib/tools mcp/server.ts mcp/server.test.ts scripts/bench-mcp.ts docs/API_CONTRACTS.md docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md README.md docs/BENCHMARKS.md && git push origin pivot/v1
+git add -A -- lib/tools mcp/server.ts mcp/server.test.ts mcp/stdio.test.ts scripts/bench-mcp.ts app/map/activity.ts app/map/activity.test.ts docs/DEMO_VIDEO.md docs/API_CONTRACTS.md docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md README.md docs/BENCHMARKS.md && git commit -m "feat(tools): six tools, imports and architecture new, five always loaded through _meta, new instructions under a size budget (ADR-056)" -- lib/tools mcp/server.ts mcp/server.test.ts mcp/stdio.test.ts scripts/bench-mcp.ts app/map/activity.ts app/map/activity.test.ts docs/DEMO_VIDEO.md docs/API_CONTRACTS.md docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md README.md docs/BENCHMARKS.md && git push origin pivot/v1
 ```
 
 ### Task 13: The dev set: tool use and per-turn cost, tuned before Eval #2 exists (R1)
@@ -4661,7 +4714,7 @@ None of these targets may appear in Eval #2 (R1), Eval #1's 15 questions include
 
 - [ ] **Step 3: Ask, then round 1**
 
-> Task 13 runs the dev set: 16 runs of Claude Code with Nebulosity (8 per repo), plus 4 one-turn probes (Claude Code alone and with Nebulosity, in each repo) for the per-turn cost. That's 20 runs, about $1–2 at list price. Up to two more rounds of at most 16 runs follow, only if the tools go unused on some questions, after a wording change I'd show you. That makes 56 runs at most. OK?
+> Task 13 runs the dev set: 16 runs of Claude Code with Nebulosity (8 per repo), plus 4 one-turn probes (Claude Code alone and with Nebulosity, in each repo) for the per-turn cost. That's 20 runs, about $1–2 at list price. Up to two more rounds of at most 16 runs follow, only if the tools go unused on some questions, after a wording change I'd show you. That makes 52 runs at most. OK?
 
 On a yes: `npm run eval:run -- --eval eval2 --dev`, then `npm run eval:probe -- --eval eval2 --config a,n --repo vscode` and the same for repo 2.
 
@@ -4794,7 +4847,7 @@ ADR-057, appended:
 - **The ship gate**, fixed before the first run: D1 of V1.6's plan, computed by `scripts/eval/gate.ts`. All of: grep-hard pooled ≥ A + 0.15 and no grep-hard question below A by more than 0.05; no other family below A by more than 0.03 on either repo; graph questions at ≤ 50% of A's median cost and time; other questions at ≤ 115% of A's median cost; sessions at ≤ 60% of A's cost and time with the score within 0.03; tools used in ≥ 90% of list, chain and grep-hard runs; first-call context ≤ A's + 2,500 tokens.
 - Everything else as ADR-050: pinned versions, the isolation and init checks, outages re-run, blind grading with the owner ruling on disagreements, losses published.
 **Alternatives:** (a) Read-only like Eval #1: comparable, but the savings would stay conditioned on a baseline that can't script, Eval #1's own caveat. (b) VS Code only: the model knows it from training and it ships an agent guide; Eval #1 showed both help Claude Code alone. (c) Questions where Nebulosity can't lose: the owner's gate keeps Eval #1's families and requires no loss there. (d) Two repeats: cheaper, and the noise Eval #1 warned about.
-**Consequences:** About 240 single runs and 36 session runs, on the owner's subscription (the pilot measures the share of the windows; the owner approves the count). The results, losses included, go in docs/EVAL_RESULTS.md as Eval #2, and the gate's verdict decides whether S8 (going public) starts.
+**Consequences:** 234 single runs and 36 session runs, on the owner's subscription (the pilot measures the share of the windows; the owner approves the count). The results, losses included, go in docs/EVAL_RESULTS.md as Eval #2, and the gate's verdict decides whether S8 (going public) starts.
 **Revisit when:** the gate passes or fails (the verdict amends this ADR), or a new Claude Code version or model changes the baseline enough to matter for the README's claims.
 ```
 
@@ -4840,7 +4893,7 @@ Everything here lands before the engine freezes for Eval #2 (Task 21), because T
 
 - [ ] **Step 1: Write the failing tests**
 
-`lib/home.test.ts`:
+Add to `lib/home.test.ts` (it already has 3 tests, which stay):
 
 ```ts
 import path from "path";
@@ -4924,7 +4977,9 @@ Then point every data path at it:
 - `lib/config.ts`: `dataPath("config.json")`.
 - `scripts/env.ts`: `loadLocalEnv` reads `nebulosityPath(".env.local")` (a checkout's key, as now), then `dataPath(".env.local")` (an installed copy's), each when it exists.
 - `scripts/export-demo.ts` and `scripts/build-demo.ts`: the default `dataPath("demo")`.
-- `mcp/launch.mjs`: after `await import("tsx")`, when `NEBULOSITY_DATA` is unset and the code root has no `.git`, set it to `userDataDir()` (imported from `../lib/home.ts`). A checkout keeps its `.nebulosity`.
+- `mcp/launch.mjs`: after `await import("tsx")`, when `NEBULOSITY_DATA` is unset and the launcher's own package folder (`path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")`, not `NEBULOSITY_HOME`) has no `.git`, set it to `userDataDir()` (imported from `../lib/home.ts`).
+  - A checkout keeps its `.nebulosity`.
+  - `mcp/stdio.test.ts` points `NEBULOSITY_HOME` at a temp folder with no `.git`, so checking `NEBULOSITY_HOME` would send that test to the user's real data folder.
 
 The eval scripts keep `<checkout>/.nebulosity/…`: they only run from a checkout, where `dataDir()` is the same folder.
 
@@ -5103,7 +5158,7 @@ process.exitCode = await main(process.argv.slice(2));
 ```
 
 - **`scripts/mcp-smoke.mjs`** (plain JavaScript):
-  - an MCP client from the SDK (`Client`, `StdioClientTransport`) starts `node <--launcher>` in `<--repo>`, with `NEBULOSITY_LIVE=off` and `CLAUDE_PROJECT_DIR=<repo>`;
+  - an MCP client from the SDK (`Client`, `StdioClientTransport`) starts `node <--launcher>` in `<--repo>`. Its `env` is the whole `process.env` (values that are strings), plus `NEBULOSITY_LIVE=off` and `CLAUDE_PROJECT_DIR=<the repo's absolute path>`. The SDK passes a child only a short default list plus `env`, so without the whole environment `NEBULOSITY_DATA` wouldn't reach the server, and an installed copy would look in the user's real data folder;
   - it lists the tools and checks the six names and the five `_meta` always-load marks;
   - it calls `overview` and checks the answer names the repo's file count;
   - it prints `mcp-smoke: ok (6 tools, overview answered)` and exits 0, or prints what differed and exits 1.
@@ -5121,23 +5176,7 @@ process.exitCode = await main(process.argv.slice(2));
 Run: `npx vitest run`
 Expected: PASS (about 6 new).
 
-- [ ] **Step 5: Build, pack and install it, in the sandbox worktree and a scratch prefix**
-
-```bash
-git -C ../Nebulosity-build checkout --detach pivot/v1 && cd ../Nebulosity-build && npm ci && npm run build && npm pack --pack-destination ../nebulosity-scratch/pack && cd -
-P=../nebulosity-scratch/prefix && rm -rf "$P" && npm install -g --prefix "$P" ../nebulosity-scratch/pack/nebulosity-0.2.0.tgz
-export NEBULOSITY_DATA=$(cd .. && pwd)/nebulosity-scratch/data
-"$P/nebulosity" --version && "$P/nebulosity" doctor && "$P/nebulosity" index test/fixtures/mini-repo --no-activate
-node scripts/mcp-smoke.mjs --launcher "$P/node_modules/nebulosity/mcp/launch.mjs" --repo test/fixtures/mini-repo
-```
-
-Expected: `0.2.0`; every doctor line OK, or WARN for claude or the key; the fixture indexed; `mcp-smoke: ok`.
-
-Then `"$P/nebulosity" map --port 3123` in the background, `curl -s http://127.0.0.1:3123/api/status`, and stop it. That's this task's own process, never port 3000's.
-
-A module the installed copy can't find means `files` is missing something: add it and repack. Record the tarball's size and its file count (`npm pack --dry-run`).
-
-- [ ] **Step 6: ADR-058, ADR-048 amended, commit, push**
+- [ ] **Step 5: ADR-058, ADR-048 amended, commit, push (before packing: the sandbox worktree checks out the pushed commit)**
 
 ```markdown
 ## ADR-058 — Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (‹today›) — implements ADR-043's V1.6; amends ADR-048
@@ -5165,6 +5204,24 @@ Run the gate (about 1049/1049). Then:
 ```bash
 git add -A -- bin scripts/cli.ts scripts/cli.test.ts scripts/commands scripts/index.ts scripts/summarize.ts scripts/mcp-smoke.mjs package.json package-lock.json mcp/server.ts docs/ENGINEERING_DECISIONS.md && git commit -m "feat(cli): the nebulosity command (index, summarize, map, mcp, setup, doctor) and the package, still private (ADR-058)" -- bin scripts/cli.ts scripts/cli.test.ts scripts/commands scripts/index.ts scripts/summarize.ts scripts/mcp-smoke.mjs package.json package-lock.json mcp/server.ts docs/ENGINEERING_DECISIONS.md && git push origin pivot/v1
 ```
+
+- [ ] **Step 6: Build, pack and install it, in the sandbox worktree and a scratch prefix**
+
+```bash
+git -C ../Nebulosity-build checkout --detach pivot/v1 && cd ../Nebulosity-build && npm ci && npm run build && npm pack --pack-destination ../nebulosity-scratch/pack && cd -
+P=../nebulosity-scratch/prefix && rm -rf "$P" && npm install -g --prefix "$P" ../nebulosity-scratch/pack/nebulosity-0.2.0.tgz
+export NEBULOSITY_DATA=$(cd .. && pwd)/nebulosity-scratch/data
+"$P/nebulosity" --version && "$P/nebulosity" doctor && "$P/nebulosity" index test/fixtures/mini-repo --no-activate
+node scripts/mcp-smoke.mjs --launcher "$P/node_modules/nebulosity/mcp/launch.mjs" --repo test/fixtures/mini-repo
+```
+
+Expected: `0.2.0`; every doctor line OK, or WARN for claude or the key; the fixture indexed; `mcp-smoke: ok`.
+
+Then `"$P/nebulosity" map --port 3123` in the background, `curl -s http://127.0.0.1:3123/api/status`, and stop it. That's this task's own process, never port 3000's.
+
+A module the installed copy can't find means `files` is missing something: add it and repack. Record the tarball's size and its file count (`npm pack --dry-run`).
+
+A fix to `files` (or anything the installed copy shows) is committed and pushed, then the worktree checks out again and the package is packed again.
 
 ### Task 17: Free mode end to end, and nothing spent before a yes (S11; ADR-035 and ADR-038 amended)
 
@@ -5477,7 +5534,7 @@ A run refused by validation stops the pilot: report it verbatim.
 - whether A or N wrote a script, and what it did;
 - the usage windows' change.
 
-Then the extrapolation: the mean usage per run times about 240, plus the sessions' times 36, in 5-hour windows and in the share of the week.
+Then the extrapolation: the mean usage per run times the single runs left (234 less the pilot's), plus the sessions' times the sessions left (36 less 4), in 5-hour windows and in the share of the week.
 
 - [ ] **Step 6: STOP. The owner approves the full count**
 
