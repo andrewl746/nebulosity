@@ -31,6 +31,8 @@ export function tokenize(text: string): string[] {
 type Doc = { key: string; tagline: string; summary: string; counts: Map<string, number>[]; lengths: number[] };
 export type StaticSearch = {
     docs: Doc[];
+    /** The same documents by key, for naming a hit's tagline and summary. */
+    byKey: Map<string, Doc>;
     /** Every word in any field, sorted, for prefix lookups. */
     vocabulary: string[];
     /** Which documents hold each word. */
@@ -51,7 +53,12 @@ export function buildStaticSearch(index: DemoSearchIndex): StaticSearch {
             for (const token of tokens) count.set(token, (count.get(token) ?? 0) + 1);
             return count;
         });
-        for (const word of new Set(fields.flat())) postings.set(word, [...(postings.get(word) ?? []), d]);
+        // Push onto the word's list: copying it for every document made the build quadratic (8 s on VS Code's 18,636).
+        for (const word of new Set(fields.flat())){
+            const list = postings.get(word);
+            if (list) list.push(d);
+            else postings.set(word, [d]);
+        }
         return { key: `${kind === 1 ? "folder" : "file"}:${docPath}`, tagline, summary, counts, lengths: fields.map((f) => f.length) };
     });
     const averages = WEIGHTS.map((_, f) => docs.reduce((sum, doc) => sum + doc.lengths[f], 0) / Math.max(1, docs.length) || 1);
@@ -59,6 +66,7 @@ export function buildStaticSearch(index: DemoSearchIndex): StaticSearch {
     const testFolders = testOnlyFolders(index.files.map(([filePath, , isTest]) => ({ path: filePath, isTest: isTest === 1 })));
     return {
         docs,
+        byKey: new Map(docs.map((doc) => [doc.key, doc])),
         vocabulary: [...postings.keys()].sort(),
         postings,
         averages,
@@ -91,16 +99,27 @@ function matching(vocabulary: readonly string[], term: string): string[] {
 export function bm25Scores(s: StaticSearch, terms: readonly string[]): Map<string, number> {
     const scores = new Map<string, number>();
     for (const term of terms){
-        const words = matching(s.vocabulary, term);
-        const holding = new Set(words.flatMap((w) => s.postings.get(w) ?? []));
-        if (holding.size === 0) continue;
-        const idf = Math.log(1 + (s.docs.length - holding.size + 0.5) / (holding.size + 0.5));
-        for (const d of holding){
+        // Walk each matched word's documents once, adding the word's count in each field to that document's total.
+        // (Asking every holding document about every matched word cost documents x words x fields: 154 ms for "git extension".)
+        const tfs = new Map<number, number[]>();
+        for (const word of matching(s.vocabulary, term)){
+            for (const d of s.postings.get(word) ?? []){
+                let tf = tfs.get(d);
+                if (!tf){
+                    tf = WEIGHTS.map(() => 0);
+                    tfs.set(d, tf);
+                }
+                const counts = s.docs[d].counts;
+                for (let f = 0; f < WEIGHTS.length; f++) tf[f] += counts[f].get(word) ?? 0;
+            }
+        }
+        if (tfs.size === 0) continue;
+        const idf = Math.log(1 + (s.docs.length - tfs.size + 0.5) / (tfs.size + 0.5));
+        for (const [d, tf] of tfs){
             const doc = s.docs[d];
             let sum = 0;
             WEIGHTS.forEach((weight, f) => {
-                const tf = words.reduce((n, w) => n + (doc.counts[f].get(w) ?? 0), 0);
-                if (tf > 0) sum += (weight * tf * (K1 + 1)) / (tf + K1 * (1 - B + (B * doc.lengths[f]) / s.averages[f]));
+                if (tf[f] > 0) sum += (weight * tf[f] * (K1 + 1)) / (tf[f] + K1 * (1 - B + (B * doc.lengths[f]) / s.averages[f]));
             });
             scores.set(doc.key, (scores.get(doc.key) ?? 0) + idf * sum);
         }
@@ -119,13 +138,12 @@ export function searchStatic(s: StaticSearch, typed: string, options: { limit?: 
     const summary = bm25Rank(s, queryTerms(query)).slice(0, LIST_DEPTH);
     const name = rankFolderNames(s.folders, query).slice(0, LIST_DEPTH).map((p) => `folder:${p}`);
     const file = rankFileNames(s.files, s.declared, query).slice(0, LIST_DEPTH).map((p) => `file:${p}`);
-    const texts = new Map(s.docs.map((doc) => [doc.key, doc]));
 
     const hits: SearchHit[] = dampTests(fuseRankings({ summary, name, file }), (key) => s.tests.has(key), query)
         .slice(0, options.limit ?? 10)
         .map(({ key, score, matchedBy }) => {
             const kind = key.startsWith("folder:") ? "folder" : "file";
-            const text = texts.get(key);
+            const text = s.byKey.get(key);
             return { path: key.slice(kind.length + 1), kind, score, matchedBy, ...(text ? { tagline: text.tagline, summary: text.summary } : {}) };
         });
     return { query: typed, hits, lists: { code: 0, summary: summary.length, vector: 0, name: name.length, file: file.length }, note: STATIC_NOTE };

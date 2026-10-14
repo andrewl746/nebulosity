@@ -19,6 +19,15 @@ describe("bm25", () => {
         expect(bm25Scores(s, ["alpha"]).get("file:a.ts")).toBeCloseTo(4 * Math.log(4 / 3), 9);
     });
 
+    it("adds up the occurrences of every word a term begins, in one field, before the saturation", () => {
+        // One document, so idf = ln(4/3) as above. "render" begins two words of the summary, "render" and "renders", so
+        // the summary's tf is 2. The summary has 2 words, its average length, so the length factor is 1 - b + b = 1:
+        // weight 2 * tf 2 * (k1 + 1 = 2.2) / (tf 2 + k1 1.2) = 8.8 / 3.2 = 2.75. Counted word by word (tf 1 twice) it
+        // would be 2 * 2 = 4, and the path "a.ts" and the tagline "Gamma" hold no word beginning "render".
+        const s = buildStaticSearch({ summaries: [[0, "a.ts", "Gamma", "render renders"]], folders: [], files: [], declarations: [] });
+        expect(bm25Scores(s, ["render"]).get("file:a.ts")).toBeCloseTo(2.75 * Math.log(4 / 3), 9);
+    });
+
     it("weighs a tagline over a summary over a path, and matches words a 3+ letter term begins", () => {
         const s = buildStaticSearch(INDEX);
         expect(bm25Rank(s, ["render"])).toEqual(["folder:src/render", "file:src/render/paint.ts"]);
