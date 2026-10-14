@@ -112,6 +112,9 @@ export function reachFrom(index: ImportIndex, targetPath: string, kind: TargetKi
 /**
  * The shortest chain of imports from any file in `from` to any file in `to`, or null (PIVOT_SPEC.md §6.1). Breadth-first
  * from every start at once, neighbours in path order, so equally short chains always resolve to the same one.
+ * Callers must refuse overlapping ranges: a start inside `to` is never matched at depth 0 (a file is tested against `to`
+ * only when an import reaches it, and starts are already seen), so the answer would be a longer chain or none. importChain
+ * refuses them.
  */
 export function shortestChain(index: ImportIndex, from: [number, number], to: [number, number]): string[] | null {
     const parent = new Int32Array(index.paths.length).fill(-2);   // -2 unseen, -1 a start

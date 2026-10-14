@@ -68,7 +68,7 @@ The AI features will need an `ANTHROPIC_API_KEY` in `.env.local` once the agent 
 
 ## Use it from Claude Code
 
-Nebulosity's MCP server gives Claude Code the index: an overview of the repo, what any folder or file is, search, complete dependency lists, import chains, and pointing at things on the Map.
+Nebulosity's MCP server gives Claude Code the index: an overview of the repo, what any folder or file is, search, dependency lists that are exact and complete over the repo's indexed import graph, import chains, and pointing at things on the Map.
 
 1. Index the repo (in this folder): `npm run index -- <path-to-repo>`.
 2. Register the server once. Use forward slashes in the path, also on Windows, and quotes if it has spaces:

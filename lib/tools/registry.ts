@@ -31,12 +31,12 @@ export type ToolEntry<S extends z.ZodObject = z.ZodObject> = {
 
 /** Sent once per session (MCP's `instructions`; Claude Code keeps up to 2,048 characters): when to reach for these tools. */
 export const SERVER_INSTRUCTIONS = [
-    "Nebulosity has already indexed this repository: its folder tree, every file's imports (the complete import graph) and, when summaries are on, a short summary of every file and folder.",
+    "Nebulosity has already indexed this repository: its folder tree, the imports between its files (the import graph) and, when summaries are on, a short summary of every file and folder.",
     "Use these tools before broad Grep/Glob/Read exploration when a question is about structure or connections:",
     "- overview: first, on an unfamiliar repo (its areas, sizes and most-imported files);",
     "- describe: what a folder or file is, what's inside, what it uses and what uses it;",
     "- search: where a feature or concept lives (code, summaries and folder names);",
-    "- dependents / dependencies: exact, complete lists of what imports X or what X imports, directly or through other files (better than grep for impact questions);",
+    "- dependents / dependencies: what imports X or what X imports, directly or through other files; exact and complete over the indexed import graph (imports that resolve to files in the repo), so better than grep for impact questions;",
     "- path: how one file or folder reaches another through imports;",
     "- show_on_map: point the user at files or folders on Nebulosity's Map.",
     'Paths are relative to the repo root, with forward slashes ("" is the root). Read source text with your own Read tool.',
@@ -162,8 +162,8 @@ export const TOOLS: readonly ToolEntry[] = [
     overviewTool,
     describeTool,
     searchTool,
-    reachTool("dependents", "Every file that imports a file or folder: the direct importers, or with transitive: true also every file that reaches it through others. Totals are exact and complete, from the repo's full import graph, so prefer it to grep for \"what uses X?\" and \"what breaks if X changes?\". Lists are nearest first, then the most imported; page long ones with offset."),
-    reachTool("dependencies", "Every file a file or folder imports: directly, or with transitive: true also what those import in turn. Exact, complete totals from the repo's import graph. Packages outside the repo (like react) aren't indexed, so they never appear."),
+    reachTool("dependents", "The files that import a file or folder: the direct importers, or with transitive: true also every file that reaches it through others. Totals are exact and complete over the indexed import graph (imports that resolve to files in the repo), so prefer it to grep for \"what uses X?\" and \"what breaks if X changes?\". Lists are nearest first, then the most imported; page long ones with offset."),
+    reachTool("dependencies", "The files a file or folder imports: directly, or with transitive: true also what those import in turn. Totals are exact and complete over the indexed import graph (imports that resolve to files in the repo). Packages outside the repo (like react) aren't indexed, so they never appear."),
     pathTool,
     showOnMapTool,
 ];

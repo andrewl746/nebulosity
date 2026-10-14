@@ -189,7 +189,7 @@
 **Decision:** Call `migrate()` unconditionally in `createDb`. Drizzle records applied migrations in its own table, so this is idempotent and near-free on an already-current database.
 **Alternatives:** (a) A separate `npm run migrate` step — correct for a deployed multi-instance service, but this is a single-user local tool where a forgotten step is the whole failure mode. (b) `drizzle-kit push` in dev — no versioned history, and it is what let the schema drift in the first place.
 **Consequences:** The schema is now self-healing and migrations are exercised on every run, including by the test suite against a real migration file. `drizzle-kit generate` after a schema edit is still required — the guard against forgetting it is that the tests now fail rather than silently passing.
-**Revisit when:** Nebulosity ever runs as more than one process against one database file, where concurrent migration needs a lock. *(Fired 2026-10-11: the MCP server is a second process. Answered by ADR-030: the MCP server opens read-only and never migrates.)*
+**Revisit when:** Nebulosity ever runs as more than one process against one database file, where concurrent migration needs a lock. *(Fired 2026-10-11: the MCP server is a second process. Answered by ADR-030: the MCP server opens read-only and never migrates.)* *(Amended 2026-10-13 by ADR-044: the MCP server opens read-only and never migrates.)*
 
 ## ADR-024 — Pivot to a code-intelligence companion for massive codebases (2026-10-11)
 
@@ -263,7 +263,7 @@
 - Each tool is defined once in `lib/tools/registry.ts`: a name, a description written for LLMs, a zod schema, and a handler that calls the engine. *(Amended 2026-10-13, ADR-047: a handler takes `(input, context)` and returns `{ text, paths, action? }`; adapters post live events or emit UI actions.)*
 - The MCP server registers those entries, and the Guide wraps the same entries as LangChain tools.
 - The database, migrations and config resolve from `NEBULOSITY_HOME`. When it's unset they fall back to `process.cwd()`, which is correct for Next.js, the CLI and Vitest because all three run from the checkout. The MCP launcher (V1.4) always sets it. *(Amended 2026-10-11 in slice V1.1: the original default, the module's own location, breaks under Next.js, which bundles server modules into `.next/`.)*
-- The MCP server opens the database read-only and never migrates.
+- The MCP server opens the database read-only and never migrates. *(Amended 2026-10-13, ADR-044: the read-only open is `openDb(file, "readonly")`, which also refuses a database behind the checkout's migrations.)*
 - MCP tool calls notify the open Map through a localhost-only live channel, and `show_on_map` reuses the UIAction contract (ADR-008).
 **Alternatives:** (a) Route the Guide through the MCP server too: guaranteed parity, but an extra process and protocol hop for what is an in-process call. (b) A separate tool set per agent: the drift this ADR exists to prevent.
 **Consequences:** Each new capability (call graph, history, clusters) reaches both agents from one definition. The MCP server runs correctly from any working directory because its launcher sets `NEBULOSITY_HOME`, and schema changes have a single owner.
@@ -618,13 +618,13 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
 **Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
 **Decision:**
-- `openDb(file, "readonly")` opens with better-sqlite3's `readonly` and `fileMustExist`, sets no pragmas and runs no migrations. The database itself is never written, but SQLite creates its `-wal` and `-shm` side files beside it when none exist, so the folder must be writable (a read-only folder is the "Revisit when" case). The file is already in WAL mode (a writer set it, and the mode persists), so it reads while the worker writes, and each query sees the newest commit.
+- `openDb(file, "readonly")` opens with better-sqlite3's `readonly` and `fileMustExist`, sets no pragmas and runs no migrations. The database itself is never written, but SQLite creates its `-wal` and `-shm` side files beside it when either is missing, so the folder must be writable at those times (with both already there, SQLite reads without writing anything). The file is already in WAL mode (a writer set it, and the mode persists), so it reads while the worker writes, and each query sees the newest commit.
 - It checks the file is current: this checkout's newest migration must be in drizzle's `__drizzle_migrations`. If not, `DatabaseOutdatedError` tells the user to start the Map (`npm run dev`) or run `npm run index -- <path-to-repo>` once in the Nebulosity folder, since both migrate (the bare command would migrate nothing: the script exits on a missing path before it opens the database). Any other failure of that check (a file that isn't a database, a busy or unreadable file) is rethrown as it is, since "start the Map" would not help.
 - No file is `DatabaseMissingError`: nothing indexed yet. A failed open isn't kept, so the server recovers without a restart once something is indexed.
 - The MCP entry point calls `useReadOnlyDatabase()` before anything opens the database. Tests keep their in-memory database.
 **Alternatives:** (a) A normal open plus `pragma query_only`: the open would still set WAL and migrate. (b) Let the MCP server migrate as well: a Claude Code session could change the schema under a running Map. (c) A copy of the database per session: stale at once.
 **Consequences:** A long-lived reader's caches stay correct only because they're keyed on the index version (ADR-036) or the vector stamp; new caches must follow that rule (ADR-045's import index does). After a pull that brings a migration, the tools answer with the update sentence until the Map or the CLI runs once.
-**Revisit when:** the data moves out of the checkout (V1.6's package or the desktop app), so the migrations folder and the database no longer share `NEBULOSITY_HOME`.
+**Revisit when:** the data moves out of the checkout (V1.6's package or the desktop app), so the migrations folder and the database no longer share `NEBULOSITY_HOME`, or the database folder becomes read-only.
 
 ## ADR-045 — Import reach: folders as well as files, exact totals, nearest and most-imported first, paged (2026-10-13) — amends PIVOT_SPEC.md §6.1
 
@@ -651,7 +651,7 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 - An index update in progress or failed is noted after every answer.
 **Alternatives:** (a) Always the Map's repo: Claude Code opened in another indexed repo would get answers about the wrong one, with nothing said. (b) A `repo` argument on every tool: more for the model to get wrong. (c) A repo fixed per registration (`-e`): one registration per repo. (d) A `repo` field on live events, with the Map ignoring others': a contract change for a case this rule already prevents.
 **Consequences:** One user-scope registration serves every indexed repo, and `npm run index` or the Map's repo menu take effect without restarting Claude Code. Each call pays a few reads (about 39 ms on VS Code, nearly all of it the two row counts behind the embeddings stage: MCP Benchmark #1).
-**Revisit when:** someone runs two Maps on different ports, or wants the Map to follow Claude Code's repo by itself.
+**Revisit when:** someone runs two Maps on different ports, or wants the Map to follow Claude Code's repo by itself, or setupCall's status read dominates a call (it runs the embeddings counts it doesn't use; MCP Benchmark #1: about 39 ms).
 
 ## ADR-047 — One registry entry per tool, answering in compact text (2026-10-13) — amends ADR-030
 
@@ -671,9 +671,9 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 **Context:** Claude Code runs an MCP config's command from the user's project folder. The engine is TypeScript run by tsx, a devDependency that only the checkout has. On Windows, `npx` is a `.cmd` batch file, so a config that starts `npx` needs `cmd /c`.
 **Decision:**
 - A plain-JavaScript launcher, `mcp/launch.mjs`, run by `node`. It sets `NEBULOSITY_HOME` to the checkout it sits in unless that's already set, imports tsx from the checkout (an ESM import resolves next to the importing file, not from the working folder), then runs `mcp/server.ts`'s `main()`.
-- The server speaks MCP over stdio through `@modelcontextprotocol/sdk` 1.32.1, pinned exactly. Before anything else, it sends `console.log`, `info` and `debug` to stderr: stdout carries protocol messages only.
+- The server speaks MCP over stdio through `@modelcontextprotocol/sdk` 1.32.1, pinned exactly. Before anything else, it sends `console.log`, `info`, `debug`, `dir` and `dirxml` to stderr: stdout carries protocol messages only.
 - It exits when the client closes stdin. On Windows, Claude Code (2.1.296) kills the process tree 300 ms after closing it.
 - One line registers it on every OS: `claude mcp add --scope user --transport stdio nebulosity -- node <checkout>/mcp/launch.mjs`.
 **Alternatives:** (a) `cmd /c npx tsx …/mcp/server.ts`: a Windows-only line, npx's lookup on every start, and tsx found only if the working folder has it. (b) Compile to `dist/` and run plain JavaScript: no tsx at run time, but a build step before every use. V1.6's package decides that.
-**Consequences:** Start-up costs tsx's load plus the engine's first transpile (about 0.7 s, spawn to initialized; tsx caches it after: MCP Benchmark #1). The server needs the checkout's `node_modules`, a local tool's normal state.
+**Consequences:** Start-up costs tsx's load plus the engine's transpile: about 0.7 s from spawn to initialized, measured with tsx's cache warm (MCP Benchmark #1). A first-ever start, with a cold tsx cache, wasn't measured. The server needs the checkout's `node_modules`, a local tool's normal state.
 **Revisit when:** V1.6 ships an installable package (a `bin` entry replaces the launcher), or Node runs the engine's TypeScript without tsx.
