@@ -448,3 +448,20 @@ This is the evaluation `PIVOT_SPEC.md` §9 asks for. The method, every run's sco
 | Connection | U | 1.00 | – | 4 | 1,494 | 67,166 | 313 | 69,073 | $0.016 | 7.1 s | 1 |
 
 Each row covers 10 runs. The score is the mean share of rubric points for big-picture, the mean recall for lists, and the mean chain score for connections. The medians are over the same 10 runs, with halves rounded up. Tokens are summed over every model, the cost is Claude Code's own list-price estimate, and the tool calls include ToolSearch. All 90 runs together came to $4.88 by that estimate.
+
+## 2026 10 14 Typecheck Benchmark #1 — E2's measurement: type-checking VS Code
+
+`npm run measure-typecheck -- ../vscode` (scripts/measure-typecheck.ts) on VS Code at `cc3fec88`, the project `src/tsconfig.json`, Node 24.14.0 with a 16 GB heap cap, on the owner's laptop (31.3 GB of RAM).
+
+| What | Result |
+|---|---|
+| Root files / source files in the program | 10,237 / 10,326 |
+| Building the program | 18.2 s |
+| Peak memory (rss) | 5,067 MB |
+| Method calls in VS Code's own files | 778,624 |
+| Sampled, resolved to a declaration | 1,750 of 2,000, 4.74 ms each |
+| …to an interface method (the injected-service case) | 768: one implementing class 114, several 175, none 479 |
+| …to a class method / other / unresolved | 880 / 102 / 250 |
+
+**Limits:** `../vscode` has no `node_modules`, so calls into outside types (Node, Electron) don't resolve. "Implementing class" is counted by name from `implements` clauses, which is what a heuristic fallback would see. The 4.74 ms per call is the whole second phase divided by 2,000 calls, so it includes walking all 10,237 files once and the checker's first-use work; the true cost per call is lower.
+**What it means for E2:** The program for VS Code's main project built in 18.2 s and peaked at 5.1 GB of memory, well under the 16 GB cap and this machine's 31.3 GB, so a type-checked call graph fits here. A full pass over all 778,624 method calls at 4.74 ms each would take about 3,700 s (about 62 minutes); that is an upper estimate, because the per-call figure includes the one-time walk. Of the 2,000 sampled calls, 768 (38%) resolved to an interface method. Of those 768, 114 (15%) have exactly one implementing class by name, 175 (23%) have several, and 479 (62%) have none we could see. So a unique-implementer rule would settle about 6% of all sampled calls (114 of 2,000), and the injected-service calls would mostly need the type-checker's own answer or stay unresolved. Memory of 5 GB is a heavy cost to ask of a user's machine. The owner decides E2's fate after Eval #2 (ADR-043).

@@ -27,7 +27,8 @@
     "build-demo": "tsx scripts/build-demo.ts",
     "serve-demo": "tsx scripts/serve-demo.ts",
     "preview-folders": "tsx scripts/preview-folders.ts",
-    "report-resolution": "tsx scripts/report-resolution.ts"
+    "report-resolution": "tsx scripts/report-resolution.ts",
+    "measure-typecheck": "node --max-old-space-size=16384 --import tsx scripts/measure-typecheck.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
