@@ -620,6 +620,8 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
 **Revisit when:** V1.5's eval shows Nebulosity doesn't help Claude Code on big repos (then the positioning is the question, not the order), or users ask for something this order puts last.
 
+**Amended (2026-10-14, V1.5):** the license was chosen in V1.5, not at V1.6's kickoff, because the repo goes public now: MIT (ADR-051).
+
 ## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
 
 **Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
@@ -750,6 +752,20 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 - The truth is for `cc3fec88` only, and it counts import statements whose specifier is written out. Files loaded by a computed specifier, by a worker's URL or by a forked process's entry path don't count, which is a stated limit and not a hidden one.
 - The threats to validity are written into `docs/EVAL_RESULTS.md` before any result, among them that models, not a person, read the truth.
 **Revisit when:** a new Claude Code version or model changes the baseline enough to matter for the README's claims, the pilot shows the 90 runs won't fit the owner's usage, or V1.6's repos need an evaluation of their own.
+
+## ADR-051 — Going public: MIT, and nothing of the owner's machine in anything published (2026-10-14) — amends ADR-043
+
+**Context:** S8 asks for a public repo, a README, a video and a live demo. The repo has been private with no license; ADR-043 left the license to V1.6's kickoff. V1.5 publishes three kinds of data besides code: the static demo (built from VS Code's index), the eval's transcripts, and the docs, which are written for a reader and record the project's history.
+**Decision:**
+- **MIT**, chosen by the owner at V1.5 (pulled forward from V1.6): the most common license for developer tools, and VS Code's own.
+- **What's published:** the code, the docs as the owner reviewed them (Task 21), the eval's scrubbed transcripts, and the demo's data with VS Code's license file beside it.
+- **What never is:** `CLAUDE.md`, `AGENTS.md`, the `.superpowers` ledgers, `.nebulosity/` (index, config, raw transcripts), `.env*`. All are gitignored, which Task 21 checked.
+- **No machine path.** The leak scanner (`lib/demo/privacy.ts`) gates the demo's export, the built site, and every eval transcript before it's committed.
+- **No critical advisory** in a build that's deployed (Task 1's bump).
+- **The owner does the deploy, the switch to public, and every GitHub setting**, including turning on GitHub's email privacy settings before the switch, because the full history goes public as is.
+**Alternatives:** (a) Apache-2.0: adds a patent grant; longer. (b) No license: readable but not usable, against V1.6. (c) A rewritten or fresh public history: hides the old docs and the commit email, but loses the project's real record (the owner's call, Task 21: full history, as is).
+**Consequences:** Anyone may use, change and redistribute the code with the notice. V1.6's package inherits the license. The history and the commit email become public with the repo.
+**Revisit when:** V1.6 publishes to npm (check the package's `license` field and files list), or the owner wants a different license before the first outside contribution.
 
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
