@@ -311,7 +311,7 @@ All five held. Overall: hit@5 0.88 → 1.00, MRR 0.630 → 0.759, names hit@1 0.
 
 **What got worse.** The questions group's hit@1 fell from 0.70 to 0.60 and its MRR from 0.783 to 0.742, and the features query `diff editor` fell from 2 to 4. The group's hit@5 did rise, from 0.90 to 1.00, because the Electron main process question came back from outside the top 10. Four queries lost a place or two:
 - `where are editor tabs rendered` 2 → 3, `where is the color theme applied` 1 → 2, `how are settings read and written` 3 → 4, and `diff editor` 2 → 4.
-- The cause is the same each time. A common query word equal to a file's name now takes the file list's weight of 2: `where are editor tabs rendered` leads with `src/vs/workbench/browser/editor.ts`, `diff editor` has `src/vs/workbench/common/editor.ts` second, the color theme question leads with `src/vs/workbench/common/theme.ts`, and the settings question has a generated `Settings.ts` second. The folder the query wanted (`parts/editor/`, `widget/diffEditor/`, `services/themes/`, `platform/configuration/`) moves down a place or two behind them.
+- The cause is the same each time. A common query word equal to a file's name now takes the file list's weight of 2: `where are editor tabs rendered` leads with `src/vs/workbench/browser/editor.ts`, `diff editor` has `src/vs/workbench/common/editor.ts` second, the color theme question leads with `src/vs/workbench/common/theme.ts`, and the settings question has a generated `Settings.ts` second. The first result at or inside the folder the query wanted (`parts/editor/`, `widget/diffEditor/`, `services/themes/`, `platform/configuration/`) moves down a place or two behind them.
 - The weight stays 2, as the folder list's is, and nothing was tuned to win these back. The names group's gain is the other side of the same rule.
 
 **Every query whose rank moved** (rank of the first acceptable result; 16 of 32 moved, the other 16 did not):
@@ -345,8 +345,8 @@ Before the changes, two queries were outside the top 10: `Range` and the Electro
 
 **What the file-name list costs.** Its facts (every file's name and importer count, every top-level exported declaration, the test file and test-only folder sets) are read once per index version and cached. Timed with a scratch script that is not committed, read only, the same calls the engine makes on a cache miss, three loads in each of two fresh processes:
 - **first load: 181–204 ms** on VS Code (14,844 files, 44,620 declarations): `loadFileFacts` 101–124 ms, the declarations 65–71 ms, the test sets 9–13 ms. It happens again after every index-version bump, summary-only bumps included, because the cache is keyed to the version (ADR-036).
-- **ranking over the cached facts: 6–19 ms per search** (median 7.5 ms over 20 queries), every search.
-- A whole `search()` with the embedding model switched off took 354–364 ms the first time in a fresh process and 45–60 ms for the next four queries. That first-search difference is the facts (about 190 ms) plus the vector index and cold statements; the part beyond the facts wasn't separated.
+- **ranking over the cached facts: 6–19 ms per search** (about 7–8 ms typically, over 20 queries), every search.
+- A whole `search()` with the embedding model switched off took 354–364 ms the first time in a fresh process and 45–60 ms for the next four queries. That first-search difference is the facts (about 190–230 ms) plus the vector index and cold statements; the part beyond the facts wasn't separated.
 
 ## 2026 10 14 MCP Benchmark #2 — S5 after search tuning, and right after a write
 
@@ -355,7 +355,7 @@ Before the changes, two queries were outside the top 10: `Range` and the Electro
 - **Server start** (spawn → initialized): 788 ms (a second run: 838 ms).
 - **Where the figures come from:** both tables, the server start and the S5 lines are `npm run bench-mcp -- ../vscode --after-write`'s own output, from the first of two runs; the second run's differences are listed below. The name-facts figures are from Search Benchmark #2's scratch script, not from `npm run bench-mcp`. The index run met no lock and took 13.8 s (5.2 s in the second run). It reported 14,844 files, changed 0.
 
-**Before the write** (what MCP Benchmark #1 measured, after Tasks 5–6):
+**Before the write** (the same table as MCP Benchmark #1, measured again after Tasks 5–6):
 
 | Tool | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |
 |---|---|---|---|---|---|---|
@@ -382,10 +382,10 @@ Before the changes, two queries were outside the top 10: `Range` and the Electro
 | `show_on_map` | 57 ms | 20 | 62 ms | 74 ms | 75 ms | 167 |
 
 **S5 after a write (every call ≤ 500 ms, first calls included): PASS (worst 450 ms, the first `search`).** It is informative; the exit code is S5's, which judges the warm calls. Reading it:
-- The first `search` after the write took 450 ms against a 128–144 ms warm p50 (second run: 336 ms). About 190 ms of the extra is the name facts reloading (above); the rest wasn't separated. The margin to 500 ms is 50 ms in the first run and 164 ms in the second, so this is the one number here that could cross the line on a slower machine.
+- The first `search` after the write took 450 ms against a 128–144 ms warm p50 (second run: 336 ms). About 190–230 ms of the extra is the name facts reloading (above); the rest wasn't separated. The margin to 500 ms is 50 ms in the first run and 164 ms in the second, so this is the one number here that could cross the line on a slower machine.
 - The first `overview` after the write took 304 ms (second run: 192 ms), about its first-call cost before the write: the import graph and the reach index rebuild (Benchmark #1: 75.5 ms for the graph and index in process, 336 ms for the first `overview` call).
 - The after-write table runs on a server that already has MiniLM loaded. A server that starts right after a write pays both: about 1 s for the first `search`.
 - The `overview` answer grew from 2,195 to 2,245 characters because the warm index run re-derived the summaries stage and its line now ends "1 out of date (redone when opened)": one of 18,637 summaries is out of date with its file. The second run's tables start at 2,245.
-- A batch of summaries landing in the database also bumps the index version (ADR-036), so while a summary pass runs, a search made after each landing pays the name facts' reload (about 190 ms). That wasn't measured as such.
+- A batch of summaries landing in the database also bumps the index version (ADR-036), so while a summary pass runs, a search made after each landing pays the name facts' reload (about 190–230 ms). That wasn't measured as such.
 
 **Second run** (same command; the tables are in the ledger, `mcp-bench-2-rerun.md`): S5 PASS, worst warm 171 ms (a `search`); first `search` 1,140 ms; after a write PASS, worst 336 ms (the first `search`); every other first call after the write was 192 ms or less.

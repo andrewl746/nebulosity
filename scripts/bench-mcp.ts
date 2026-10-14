@@ -98,7 +98,8 @@ function printTable(rows: string[]): void {
 }
 
 /**
- * A warm structure run edits no file and calls no API; it bumps the index version (ADR-036), so every cache keyed by the
+ * A warm structure run edits no file in the repo and calls no API; it writes the config's activeRepo (scripts/index.ts does,
+ * after its last stage) and bumps the index version (ADR-036), so every cache keyed by the
  * version (the import graph, the reach index, the search's name facts) rebuilds on the server's next call. Its progress
  * lines (carriage-return rewrites) are dropped so the bench's output stays a clean markdown file.
  */
