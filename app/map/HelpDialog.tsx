@@ -3,11 +3,12 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconX } from "@tabler/icons-react";
+import { DEMO } from "./mode";
 
 /**
  * How to use the Map (owner review: "it's kinda confusing at first as to what all of this does"). Opens from the top
  * bar's "?" button or the ? key, and by itself on a first visit. Rendered into the page's body, above everything;
- * Escape or a click outside closes it.
+ * Escape or a click outside closes it. In the static demo it opens with what the demo can't do (ADR-049).
  */
 export default function HelpDialog({ onClose }: { onClose: () => void }){
     useEffect(() => {
@@ -31,6 +32,13 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <h2 className="text-[18px] font-medium text-text">How to use the Map</h2>
+                        {DEMO && (
+                            <p className="mt-1 text-[14px] text-text-2">
+                                This is a static demo of the Map, built from a frozen index. Search covers names and summaries. Source links open
+                                GitHub at the commit the index was built from. Claude Code&apos;s live activity and fresh summaries need Nebulosity
+                                running on your machine.
+                            </p>
+                        )}
                         <p className="mt-1 text-[14px] text-text-2">
                             A map of the repo&apos;s folders and files, and of which code imports which. Open this again with the ? button
                             at the top right, or the ? key.
@@ -69,14 +77,22 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li>A short summary; <b>Read full summary</b> shows the rest.</li>
                         <li><b>Depends on</b> and <b>Used by</b>: click one to jump to it on the Map.</li>
                         <li><b>Contents</b>: click a folder to go in, or a file to select it.</li>
-                        <li>For a file, <b>View source</b> shows its code; click a declaration to jump to it there.</li>
+                        {DEMO
+                            ? <li>For a file, <b>View on GitHub</b> opens its code at the indexed commit; click a declaration to open it there.</li>
+                            : <li>For a file, <b>View source</b> shows its code; click a declaration to jump to it there.</li>}
                     </Section>
                     <Section title="Claude Code">
-                        <li>The bar along the bottom shows Claude Code&apos;s last 3 tool calls, newest first.</li>
-                        <li>Boxes holding what it touched get an orange ring for 30 seconds.</li>
+                        {DEMO
+                            ? <li>In the app, the bar along the bottom shows Claude Code&apos;s last 3 tool calls, and the boxes they touched get an orange ring.</li>
+                            : (
+                                <>
+                                    <li>The bar along the bottom shows Claude Code&apos;s last 3 tool calls, newest first.</li>
+                                    <li>Boxes holding what it touched get an orange ring for 30 seconds.</li>
+                                </>
+                            )}
                     </Section>
                     <Section title="The index">
-                        <li>The status at the top right says whether the index is up to date. Click it for each stage, and to re-index.</li>
+                        <li>The status at the top right says whether the index is up to date. Click it for each stage{DEMO ? "." : ", and to re-index."}</li>
                     </Section>
                 </div>
 

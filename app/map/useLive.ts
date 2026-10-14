@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { LiveEvent } from "@/lib/contracts";
 import { pushActivity } from "./activity";
 import { keepLiveStream } from "./liveConnection";
+import { DEMO } from "./mode";
 
 /**
  * The live channel (PIVOT_SPEC.md §8): every tool call from GET /api/live/stream. `onEvent` runs for each one (pulses,
@@ -21,6 +22,7 @@ export function useLive(onEvent: (event: LiveEvent) => void): { recent: LiveEven
     }, [onEvent]);
 
     useEffect(() => {
+        if (DEMO) return;   // the static demo has no live channel (ADR-049)
         // one stream while the page shows; a page frozen for Back lets go of its connection (liveConnection.ts)
         return keepLiveStream(() => {
             const source = new EventSource("/api/live/stream");

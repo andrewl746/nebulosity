@@ -5,6 +5,7 @@ import { IconChevronDown } from "@tabler/icons-react";
 import type { IndexStatus, StageName } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount, headline, stageLabel, type Tone } from "./format";
+import { DEMO } from "./mode";
 import { useDismiss } from "./useDismiss";
 
 /** Green means indexed and nothing else (VISUAL_REFRESH.md §2); a failure, or nothing indexed, is the error color. No motion. */
@@ -20,7 +21,7 @@ const STAGES: readonly StageName[] = ["structure", "summaries", "embeddings"];
 /**
  * The index status (VISUAL_REFRESH.md §6: a status dot on the right of the top bar): the stage that most needs
  * attention, in one line. Opening it lists every stage with its counts and note, and offers a re-index
- * (POST /api/index) with its progress.
+ * (POST /api/index) with its progress. The static demo's index is frozen, so there it says so instead (ADR-049).
  */
 export default function StatusPill({ status }: { status: IndexStatus | null }){
     const [open, setOpen] = useState(false);
@@ -44,7 +45,7 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                 data-testid="status-pill"
                 onClick={() => setOpen((o) => !o)}
                 aria-expanded={open}
-                title="Index status: what's indexed, and re-index"
+                title={DEMO ? "Index status: what's indexed" : "Index status: what's indexed, and re-index"}
                 className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-[12px] text-text-2 hover:border-text-2 hover:text-text"
             >
                 <span aria-hidden className={`h-2 w-2 rounded-full ${DOTS[head.tone]}`} />
@@ -60,8 +61,14 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                         </div>
                     ))}
                     <div className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
-                        <span className="truncate">{reindex ?? `index version ${status.indexVersion}`}</span>
-                        <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-control underline underline-offset-2 hover:text-text">Re-index</button>
+                        {DEMO
+                            ? <span>A static demo: the index is frozen at export.</span>
+                            : (
+                                <>
+                                    <span className="truncate">{reindex ?? `index version ${status.indexVersion}`}</span>
+                                    <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-control underline underline-offset-2 hover:text-text">Re-index</button>
+                                </>
+                            )}
                     </div>
                 </div>
             )}

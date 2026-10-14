@@ -6,6 +6,7 @@ import { IconExternalLink, IconFile, IconX } from "@tabler/icons-react";
 import type { SourceResponse } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount } from "./format";
+import { editorLink } from "./links";
 import { nameOf } from "./paths";
 import { tooLargeToColor } from "./text";
 
@@ -66,7 +67,7 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
         return () => { live = false; };
     }, [source, text]);
     const count = source?.lineCount ?? 0;
-    const editorLink = source ? `vscode://file/${source.repo}/${source.path}${lines ? `:${lines.start}` : ""}` : undefined;
+    const editorHref = source ? editorLink(source, lines?.start) : undefined;
 
     return createPortal(
         <div data-source-viewer={path} className="fixed inset-0 z-40 bg-canvas/60" onClick={onClose}>
@@ -88,8 +89,8 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
                             {source?.truncated && <span>Only the first 1 MB is shown.</span>}
                             {source && tooLargeToColor(text) && <span data-testid="source-plain">Shown without colors: too large to color quickly.</span>}
                             {lines && <span>Lines {lines.start}–{lines.end} highlighted</span>}
-                            {editorLink && (
-                                <a href={editorLink} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                            {editorHref && (
+                                <a href={editorHref} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
                                     Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
                                 </a>
                             )}
