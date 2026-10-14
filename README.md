@@ -71,14 +71,14 @@ The AI features will need an `ANTHROPIC_API_KEY` in `.env.local` once the agent 
 Nebulosity's MCP server gives Claude Code the index: an overview of the repo, what any folder or file is, search, dependency lists that are exact and complete over the repo's indexed import graph, import chains, and pointing at things on the Map.
 
 1. Index the repo (in this folder): `npm run index -- <path-to-repo>`.
-2. Register the server once. Use forward slashes in the path, also on Windows, and quotes if it has spaces:
+2. Register the server for that repo: run this in the repo's folder (the one you indexed). Use forward slashes in the path, also on Windows, and quotes if it has spaces:
 
    ```bash
-   claude mcp add --scope user --transport stdio nebulosity -- node /path/to/Nebulosity/mcp/launch.mjs
+   claude mcp add --scope local --transport stdio nebulosity -- node /path/to/Nebulosity/mcp/launch.mjs
    ```
 
-   No `npx`, so Windows needs no `cmd /c` wrapper. `--scope local` registers it for the current project only.
-3. Check: `claude mcp list` shows `nebulosity` as connected.
+   `--scope local` keeps it to that project; do this once for each repo you index. Don't use `--scope user`: it would start the server in every project, including ones Nebulosity hasn't indexed, whose sessions would get answers about the repo the Map shows. No `npx`, so Windows needs no `cmd /c` wrapper.
+3. Check, in the same folder: `claude mcp list` shows `nebulosity` as connected.
 
 The server answers about the indexed repo that holds the folder Claude Code runs in, or else the repo the Map shows. It only reads the index, so keep the Map running (`npm run dev`) to have changes picked up as files change. To keep tool calls off the Map, add `-e NEBULOSITY_LIVE=off` before `--transport`.
 
