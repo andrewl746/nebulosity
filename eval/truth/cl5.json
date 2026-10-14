@@ -60,6 +60,28 @@
     "src/vs/workbench/test/electron-browser/treeSitterTokenizationFeature.test.ts",
     "src/vs/workbench/workbench.common.main.ts"
   ],
-  "verified": false,
-  "notes": []
+  "verified": true,
+  "notes": [
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/fix/issue-7544/notebookMulticursor.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L35 'vs/platform/undoRedo/common/undoRedo'. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/tests/in-suite-issue-3701/notebookFolding.test.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L9 'vs/platform/undoRedo/common/undoRedo'. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+    },
+    {
+      "path": "src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "One 1.4 MB string literal (a recorded TypeScript server response) that names hundreds of source paths: data, not an import."
+    }
+  ]
 }

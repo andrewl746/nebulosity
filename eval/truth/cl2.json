@@ -43,6 +43,70 @@
     "src/vs/workbench/workbench.desktop.main.ts",
     "src/vs/workbench/workbench.web.main.ts"
   ],
-  "verified": false,
-  "notes": []
+  "verified": true,
+  "notes": [
+    {
+      "path": "extensions/copilot/src/extension/prompts/node/test/fixtures/extHost.api.impl.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L96 'vs/workbench/contrib/debug/common/debug'. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"src/extension/prompts/node/test/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/vscode/extHost.api.impl.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L96 'vs/workbench/contrib/debug/common/debug'. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/doc/issue-6406/debugModel.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L25-29 'vs/workbench/contrib/debug/common/{debug,debugSource,debugStorage,debugVisualizers,disassemblyViewInput}'. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/codeMapper/notebookEditorWidget.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L50 '../../debug/browser/debugColors.js' resolves to extensions/copilot/test/simulation/fixtures/debug/browser/debugColors.js, which doesn't exist. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+    },
+    {
+      "path": "src/vs/platform/telemetry/node/customEndpointTelemetryService.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L45 VSCODE_ESM_ENTRYPOINT: 'vs/workbench/contrib/debug/node/telemetryApp' is an environment variable naming the entry point of a forked child process (bootstrap-fork loads it), not an import statement of this file."
+    },
+    {
+      "path": "build/next/index.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L105 'vs/workbench/contrib/debug/node/telemetryApp' is an entry in the bundler's desktopEntryPoints list, a string, not an import."
+    },
+    {
+      "path": "build/next/resources.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L75 'vs/workbench/contrib/debug/browser/media/*.png' is a resource glob for the build, not an import."
+    },
+    {
+      "path": "eslint.config.js",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L393-398 and L744-761 list contrib/debug files in lint rule scopes; strings, not imports."
+    },
+    {
+      "path": "src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "One 1.4 MB string literal (a recorded TypeScript server response) that names hundreds of source paths: data, not an import."
+    }
+  ]
 }

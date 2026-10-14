@@ -27,6 +27,42 @@
     "src/vs/workbench/contrib/searchEditor/browser/searchEditor.contribution.ts",
     "src/vs/workbench/contrib/searchEditor/browser/searchEditor.ts"
   ],
-  "verified": false,
-  "notes": []
+  "verified": true,
+  "notes": [
+    {
+      "path": "src/vs/workbench/services/agentHost/common/agentHostFileSearchProvider.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L17 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/agentHost/common/agentHostFileSystemService.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L16 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/agentHost/test/common/agentHostFileSearchProvider.test.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L19 imports '../../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/extensions/common/workspaceContains.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L13 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/history/browser/historyService.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L20 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    }
+  ]
 }

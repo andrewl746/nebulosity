@@ -5,44 +5,44 @@
     {
       "id": "BP3.1",
       "text": "most services are defined in `platform`",
-      "check": "",
-      "holds": null,
-      "note": ""
+      "check": "Counted createDecorator< (one per service identifier) in the non-test files of src/vs: 699 in all. src/vs/platform 256 (36.6%); src/vs/workbench 364 (52.1%: contrib 219, services 99, api 43, browser 2, common 1); src/vs/sessions 48; src/vs/editor 28; src/vs/server 3.",
+      "holds": false,
+      "note": "Not borne out at cc3fec88: platform is the biggest single folder, but it defines about a third of the service identifiers, and the workbench defines more of them than platform. Read as 'most of the services that aren't a contribution's own', platform has 256 of 480 (53%), so the point survives only that narrower reading: owner's call."
     },
     {
       "id": "BP3.2",
       "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)",
-      "check": "",
-      "holds": null,
+      "check": "src/vs/platform/instantiation/common/instantiation.ts L109: export function createDecorator<T>(serviceId: string): ServiceIdentifier<T>. Example: src/vs/editor/common/services/model.ts L14 export const IModelService = createDecorator<IModelService>('modelService'), beside export interface IModelService.",
+      "holds": true,
       "note": ""
     },
     {
       "id": "BP3.3",
       "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)",
-      "check": "",
-      "holds": null,
+      "check": "src/vs/editor/browser/services/editorWorkerService.ts L73: @IModelService modelService: IModelService, in a constructor. 125 files in src (tests included) declare a constructor parameter with @IModelService.",
+      "holds": true,
       "note": ""
     },
     {
       "id": "BP3.4",
       "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them",
-      "check": "",
-      "holds": null,
+      "check": "instantiation.ts L59-60: IInstantiationService.createInstance(descriptor) and createInstance(ctor, ...args). src/vs/workbench/common/contributions.ts L381: instantiationService.createInstance(contribution.ctor), so registered contributions are built for them. 2,167 calls of instantiationService.createInstance( in the non-test .ts files of src (5,349 with tests).",
+      "holds": true,
       "note": ""
     },
     {
       "id": "BP3.5",
       "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`",
-      "check": "",
-      "holds": null,
+      "check": "git grep -n \"export function registerSingleton\" -- src/vs/platform/instantiation/common/extensions.ts: L25 registerSingleton<T, Services>(id: ServiceIdentifier<T>, ctor: new (...services: Services) => T, supportsDelayedInstantiation: InstantiationType): void (L26 is an overload taking a SyncDescriptor). InstantiationType is { Eager = 0, Delayed = 1 }.",
+      "holds": true,
       "note": ""
     },
     {
       "id": "BP3.6",
       "text": "that call runs at module scope, so it happens at startup",
-      "check": "",
-      "holds": null,
-      "note": ""
+      "check": "730 of the 735 registerSingleton( calls in the non-test .ts files of src start at column 0, at module scope; the other 5 sit in an if block at module scope (customizationMarketplace.contribution.ts L31) or in helpers called at module scope (search.common.contribution.ts L18-19 calls two; platform/ipc/electron-browser/services.ts L57 and L91). extensions.ts pushes each into a module-level _registry; src/vs/workbench/browser/workbench.ts L187 reads getSingletonServiceDescriptors() when the workbench starts, and L179 says 'Please do NOT register services here. Use registerSingleton()'.",
+      "holds": true,
+      "note": "Registration happens when the module is loaded; the service itself is created lazily (InstantiationType.Delayed) unless it is registered Eager."
     }
   ]
 }

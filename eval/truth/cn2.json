@@ -13,6 +13,11 @@
     "src/vs/workbench/contrib/debug/browser/debugService.ts",
     "src/vs/workbench/contrib/debug/browser/debugSession.ts"
   ],
-  "verified": false,
-  "notes": []
+  "verified": true,
+  "notes": [
+    {
+      "check": "Each step read in its source (L16, L288, L68, L7, L60). Nebulosity's importChain returned the same 5-step chain; the widened graph also gives 5.",
+      "decision": "Truth kept: 5 steps, example as built. No alternative recorded."
+    }
+  ]
 }

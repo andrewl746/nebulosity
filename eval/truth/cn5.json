@@ -11,6 +11,11 @@
     "src/vs/editor/common/model.ts",
     "src/vs/platform/undoRedo/common/undoRedo.ts"
   ],
-  "verified": false,
-  "notes": []
+  "verified": true,
+  "notes": [
+    {
+      "check": "Each step read in its source (L15, L18, L26). Nebulosity's importChain returned the same 3-step chain; the widened graph also gives 3.",
+      "decision": "Truth kept: 3 steps, example as built. No alternative recorded."
+    }
+  ]
 }

@@ -68,6 +68,70 @@
     "src/vs/workbench/workbench.web.main.internal.ts",
     "src/vs/workbench/workbench.web.main.ts"
   ],
-  "verified": false,
-  "notes": []
+  "verified": true,
+  "notes": [
+    {
+      "path": "src/vs/code/electron-browser/workbench/workbench.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "Ruling (owner to confirm): L510-517 load the desktop workbench with `await import(workbenchUrl)`, where workbenchUrl is computed at run time (new URL(`vs/workbench/workbench.desktop.main.js`, baseUrl).href into out/, or '../../../workbench/workbench.desktop.main.js' in dev). The import() has no literal specifier that names a file, so by the eval's definition (a statement whose specifier resolves to the file) it isn't counted; VS Code's own import lint (.eslint-plugin-local/utils.ts, createImportRuleListener) also checks only string-literal specifiers. Counting computed imports would add this file, src/vs/sessions/electron-browser/sessions.ts and build/vite/workbench-electron.ts (CL4 would be 66)."
+    },
+    {
+      "path": "src/vs/sessions/electron-browser/sessions.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "Same ruling: L123-130 `await import(workbenchUrl)` with workbenchUrl = new URL(`vs/sessions/sessions.desktop.main.js`, baseUrl).href (or './sessions.desktop.main.js' in dev), a computed specifier."
+    },
+    {
+      "path": "build/vite/workbench-electron.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L6 imports '../../src/vs/code/electron-browser/workbench/workbench' (a real import), but that file is not a dependent under the computed-import ruling above, so this one isn't either. It joins only if the ruling flips."
+    },
+    {
+      "path": "build/gulpfile.vscode.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L139 and L144 'vs/workbench/workbench.desktop.main.js', 'vs/sessions/sessions.desktop.main.js': strings in a build list, not imports."
+    },
+    {
+      "path": "build/next/index.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L103-104, L122, L162-198: entry-point lists of the bundler ('vs/workbench/workbench.desktop.main', 'vs/code/browser/workbench/workbench', ...), strings, not imports."
+    },
+    {
+      "path": "build/next/test/resources.test.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L62 'vs/workbench/workbench.desktop.main.js' is an element of a test's array of output names, not an import."
+    },
+    {
+      "path": "eslint.config.js",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "Lint rule targets and patterns name the workbench and sessions main files and some markers/output files; strings, not imports."
+    },
+    {
+      "path": "src/vs/platform/telemetry/test/browser/telemetryService.test.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L959-1155 const codePath = 'out/vs/workbench/workbench.desktop.main.js': stack-trace fixture strings, not imports."
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/edit/issue-8129/optimize.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L347 compares a name with 'vs/workbench/workbench.web.main' inside a Copilot test fixture (excluded from compilation): a string, not an import."
+    }
+  ]
 }
