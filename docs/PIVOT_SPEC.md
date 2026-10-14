@@ -433,7 +433,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13; ADR-044 onward were added during V1.4:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13; ADR-044 to ADR-048 were added during V1.4; ADR-049 onward were added during V1.5:
 
 | ADR | Decision |
 |---|---|
@@ -462,6 +462,10 @@ Each v1 slice ends demoable:
 | ADR-046 | An MCP call answers about the indexed repo holding Claude Code's project folder, else the Map's repo (said first); live events only for the Map's repo; free mode from the stored stage |
 | ADR-047 | One registry entry per tool: a handler returns text, the paths it touched and an optional UI action; answers are compact text under 40,000 characters (API_CONTRACTS.md §17) |
 | ADR-048 | The MCP server starts as node <checkout>/mcp/launch.mjs: no npx, no cmd /c, tsx from the checkout, the SDK pinned at 1.32.1, stdout only for the protocol |
+| ADR-049 | The static demo: exported answers read through the Map's own transport, nothing of this machine in it |
+| ADR-050 | The evaluation's method: 15 questions in three families, hand-checked truths, three arms, blind grading of the big-picture answers |
+| ADR-051 | Going public: MIT, and nothing of the owner's machine in anything published |
+| ADR-052 | Search finds files by their names and declarations, damps tests, and shows declarations before imports (amends ADR-027) |
 
 ## 16. Doc migration
 
