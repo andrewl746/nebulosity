@@ -389,3 +389,41 @@ Before the changes, two queries were outside the top 10: `Range` and the Electro
 - A batch of summaries landing in the database also bumps the index version (ADR-036), so while a summary pass runs, a search made after each landing pays the name facts' reload (about 190–230 ms). That wasn't measured as such.
 
 **Second run** (same command; the tables are in the ledger, `mcp-bench-2-rerun.md`): S5 PASS, worst warm 171 ms (a `search`); first `search` 1,140 ms; after a write PASS, worst 336 ms (the first `search`); every other first call after the write was 192 ms or less.
+
+## 2026 10 14 Map Benchmark #5 — S3 on the static demo
+
+- **Why:** the static demo (ADR-049) draws the same Map from exported files. S3's 100 ms limit has to hold there too, and its transport is new: files fetched once and kept in the page, a lookup in the manifest for every folder, and search built in the browser.
+- **Target and machine:** VS Code @ `cc3fec88`, the provisional export (7,700 files, 75.5 MB, index version 133; made before the refresh of two summaries, so `test/` still reads "Tests for test"), built with `npm run build-demo` in a separate worktree at commit `90e12c8`, on the owner's laptop. Other jobs of the same session (reviewers) were running on the machine during the runs.
+- **How:** `npm run serve-demo` on 127.0.0.1:3200, headless Chrome (`--headless=new`) at 1907 × 998 over the DevTools protocol, one browser per run. The walk is #2–#4's, unchanged: 18 level changes, 10 clicks, the `src` panel 10 times and 20 wheel zoom steps, a warm-up pass and then the measured pass. Three runs, then three more to see the tail. The files load from loopback, so this measures the Map, not the network.
+
+| Run | level change p50 / p95 | click p50 / p95 | the `src` panel p50 / p95 | zoom p50 / p95 | longest frame gap |
+|---|---|---|---|---|---|
+| 1 | 41.4 / 88.3 ms | 20.6 / 21.5 ms | 13.6 / 15.2 ms | 6.9 / 7.3 ms | 83.3 ms |
+| 2 | 38.4 / 97.0 ms | 19.3 / 20.8 ms | 13.7 / 16.5 ms | 7.0 / 13.9 ms | 83.3 ms |
+| 3 | 35.3 / 82.7 ms | 19.5 / 23.8 ms | 18.6 / 19.4 ms | 7.0 / 13.8 ms | 97.3 ms |
+| 4 (extra) | 41.7 / 83.2 ms | 20.5 / 25.9 ms | 13.8 / 20.4 ms | 7.0 / 7.5 ms | 83.3 ms |
+| 5 (extra) | 39.2 / 84.6 ms | 20.6 / 26.5 ms | 13.8 / 20.4 ms | 6.9 / 7.3 ms | 83.3 ms |
+| 6 (extra) | 41.4 / 89.9 ms | 16.5 / 26.4 ms | 13.4 / 21.3 ms | 7.0 / 7.1 ms | 76.3 ms |
+
+**S3 (≤ 100 ms per interaction): PASS** in all six runs. In the three runs the slowest level change was 97.0 ms (run 2) and the slowest click 23.8 ms; the three extra runs stayed within 89.9 and 26.5 ms. With 18 level changes and 10 clicks, p95 is the slowest sample. **The `src` panel (≤ 300 ms warm): PASS** at 21.3 ms at worst. The same level changes are the slow ones in every run: the `contrib` level (77–88 ms), going Back from `chat` (66–86 ms), the `platform` pages (59–77 ms) and `src/vs/editor/common` (69–97 ms).
+
+**The build** (`npm run build-demo`, 22.6 s, exit 0; limits 14,000 files and 95 MB, the host's being 15,000 and 100 MB): its output gives the sizes, and the file counts are of the finished `out/`.
+
+| Folder | Files | Size |
+|---|---|---|
+| `demo/` (the exported data) | 7,700 | 75.5 MB |
+| `_next/` (scripts, styles, fonts) | 32 | 1.2 MB |
+| the site's root files (`index.html`, `404.html`, icons, five unused template SVGs) | 15 | 0.1 MB |
+| `_not-found/` | 3 | 0.0 MB |
+| `out/` | 7,750 | 76.8 MB |
+
+`demo/` holds 3,868 level pages (8.5 MB), 3,793 describe bundles (53.1 MB), 36 page indexes (0.3 MB), `search.json` (13.4 MB), `manifest.json` (0.2 MB) and the repo's license. The build made `/` and no `/api` route, and the leak scan found nothing.
+
+**Load and first search** (headless Chrome at 1907 × 998, a `MutationObserver` for the first drawn box, the Network log for requests):
+- **First level drawn:** 163–166 ms after navigation on a first load in a fresh browser, 57–70 ms on four repeat loads, and 112–203 ms for a deep link to `src/vs/platform` (46 boxes). The manifest and the root level had both arrived by about 47 ms.
+- **First ⌘K search** ("lifecycle", from typing to the first hit drawn, so it includes the palette's 150 ms debounce): 1,616 and 1,633 ms in two runs. `search.json` arrived in 49–52 ms from loopback; the other 1.4 s or so is parsing it, building the index and the query. The palette shows an empty list meanwhile, with no loading sign. A second search ("terminal") took 188–191 ms, the debounce plus about 40 ms. In Node the index builds in 909 ms and each search takes 8–27 ms (8.2 s to build before the posting lists were built in one pass).
+- **Requests in the six-check session:** 28, all GETs: the page, `/_next/*`, `/demo/*.json` and the icon. No `/api` request, no `EventSource`, no console message.
+
+Two things to read this with:
+- **Level changes are about 30 ms slower here than on the server build** (82.7–97.0 ms, against 55–63 ms in #3 and #4, and 62 in #2), though the transport isn't the cause. In run 6 the whole walk (two passes, 36 level changes) fetched 10 `level/*.json` files at a median of 5.3 ms (max 7.6 ms) and 11 describe bundles at a median of 3.7 ms (max 6.2 ms), and most levels came from the Map's own memory. The repeated 83 ms gaps between frames at the slow steps show the main thread busy there; #4 saw 76 ms at its worst. The runs shared the machine with other jobs, and a run of the server build in the same session, which would show whether the 30 ms is the machine or the build, was not made. So the gap is measured and not explained.
+- **One run left 3 ms of margin** (run 2: 97.0 ms against 100). It passes, but a slower machine or a busier moment could push a level change over. The static build's tail is the number to watch if the Map's drawing changes.

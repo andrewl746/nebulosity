@@ -78,6 +78,8 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
   MCP client               E1, in-process)          (no API calls)
 ```
 
+The static Map reads those files through `app/map/staticApi.ts` (ADR-049).
+
 **Rules.** ARCHITECTURE.md §3 still holds and matters more now that several adapters depend on it.
 1. Core (`lib/`) never imports `app/`, `next` or React. Fix on the way in: `lib/graph.ts` imports types from `app/components/FileNode` today, which breaks this rule.
 2. Adapters are thin. The MCP server, route handlers, static exporter and CLI scripts each validate input, call one engine function, and format the result.
@@ -268,7 +270,7 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 - **Open in editor.** File panels link to `vscode://file/<absolute path>:<line>`.
 - **Look.** *(Superseded in V1.3.1 by `VISUAL_REFRESH.md`, ADR-041: a flat charcoal canvas, larger boxes, one meaning per color.)* The owner explicitly requested a revamp, overriding the "visual design is frozen" note. React Flow remains the renderer, and 50 nodes is well inside its comfort zone. The StrictMode workaround stays.
 - **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists in the panel show their first 8 entries plus "View all" *(V1.3.1)*.
-- **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it.
+- **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it. *(V1.5, ADR-049: describe answers bundled per folder, a page index, search over summaries and names in the browser, the repo named not rooted, source on GitHub at the indexed commit; `npm run export-demo -- <repo>`, `npm run build-demo`, `npm run serve-demo`.)*
 
 ### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` §11–§15 in slice V1.3)
 

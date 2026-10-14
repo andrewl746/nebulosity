@@ -47,6 +47,8 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
 
 The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout>/mcp/launch.mjs` (ADR-048) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
 
+The static demo (ADR-049) is two more adapters, and runs no server. `scripts/export-demo.ts` reads the database without writing and writes the Map's answers for every folder to files, with the repo named instead of rooted, then scans them for any path of this machine. `app/map/staticApi.ts` is the Map's transport in the demo build: it answers the same calls as the HTTP client from those files, searches them in the browser with `lib/engine/staticSearch.ts`, and is chosen in place of `app/map/api.ts`'s HTTP calls when `npm run build-demo` builds the site.
+
 ---
 
 ## 3. The three layers and the dependency rule
@@ -71,7 +73,7 @@ Rules an implementer MUST follow:
 
 1. **Core files never import from `app/` or `next`.** `lib/scan.ts` previously imported the `server-only` package as a defensive guard; it was removed 2026-07-13 while setting up F1's test harness, which surfaced the exact problem `ENGINEERING_DECISIONS.md`'s inherited-debt note predicted — the package throws when imported from any non-Next.js Node context, which includes a Vitest run. The original plan was to relocate the guard to the adapter layer instead of deleting it, but that turned out to be the wrong fix: this project's core is meant to be reusable from *multiple* future adapters (a web route handler, a CLI, an Electron main process), and none of those are "a real Next.js server" as far as `server-only` is concerned — it would have broken the CLI/Electron targets identically. The guard added no protection the architecture doesn't already provide (rule 3 below already forbids the UI from calling core directly), so it was deleted outright rather than moved.
 2. **Route handlers contain no business logic.** They validate input, call one core function, and shape the response. If a route handler grows past ~50 lines, logic is leaking into the adapter.
-3. **The UI never calls core directly.** Today `app/page.tsx` (a server component) calls `scanProject()` directly — that was expedient for the MVP and is scheduled to move behind `GET /api/graph` in Phase 1. After that, the UI's only knowledge of the backend is the contract types. *(Amended 2026-10-14, V1.5, ADR-052 and ADR-049: the UI may also import `lib/` modules that are pure and browser-safe, meaning they never touch a database, a disk or the network. Today that is `lib/engine/rank.ts`, which the search palette uses to name a hit's code, and the static demo's `lib/engine/staticSearch.ts`. The import-line test in `lib/engine/rank.test.ts` pins what each may import. Everything else under `lib/` stays behind the API.)*
+3. **The UI never calls core directly.** Today `app/page.tsx` (a server component) calls `scanProject()` directly — that was expedient for the MVP and is scheduled to move behind `GET /api/graph` in Phase 1. After that, the UI's only knowledge of the backend is the contract types. *(Amended 2026-10-14, V1.5, ADR-052 and ADR-049: the UI may also import `lib/` modules that are pure and browser-safe, meaning they never touch a database, a disk or the network. Today that is `lib/engine/rank.ts`, which the search palette uses to name a hit's code and the static demo's search ranks with, and `lib/engine/staticSearch.ts`, the static demo's search, which its transport `app/map/staticApi.ts` calls. The import-line test in `lib/engine/rank.test.ts` pins what each may import. Everything else under `lib/` stays behind the API.)*
 4. **Shared request/response types live in `lib/contracts.ts`** — one file, imported by both UI and adapters, so the two sides cannot drift apart silently. Persistence shapes are the one exception: they live in `lib/db/schema.ts` (ADR-013), because the database schema is its own compiler-enforced contract.
 5. **Only `lib/db/*` touches the database; only `lib/scanner-bridge.ts` chooses a scan engine.** The native C++ scanner (ADR-014) is an optional accelerator behind the same `ScannedFile[]` contract as the Node scanner — nothing above the bridge knows or cares which engine ran.
 
@@ -99,7 +101,8 @@ nebulosity/
 ├── app/
 │   ├── api/                 # adapters: level, describe, search, status, summarize, index, repos, live, live/stream; _lib/respond.ts
 │   ├── map/                 # the Map: MapView, MapCanvas, MapBox, Legend, DetailPanel, SearchPalette, StatusPill,
-│   │                        #   ActivityBar, TopBar, Breadcrumb, RepoMenu, the api.ts client, and pure helpers
+│   │                        #   ActivityBar, TopBar, Breadcrumb, RepoMenu, the api.ts client (staticApi.ts in the demo
+│   │                        #   build, ADR-049), and pure helpers
 │   │                        #   (levelLayout, emphasis, activity, text, paths, format, pulses, summaries)
 │   └── layout.tsx · page.tsx · globals.css (the color tokens, VISUAL_REFRESH.md §2)
 ├── instrumentation.ts       # starts the background worker with the server
@@ -107,12 +110,14 @@ nebulosity/
 ├── lib/
 │   ├── contracts.ts · config.ts · home.ts · embed.ts · chunks.ts
 │   ├── db/                  # schema, client, batch, store/{structure, summaries, summary-vectors, search, stages, lock, map, version}
-│   ├── engine/              # level, describe, graph, freshness, search, status, repos, git-remote, errors
+│   ├── engine/              # level, describe, graph, freshness, search, rank, staticSearch, status, repos, git-remote, errors
+│   ├── demo/                # export (the static demo's files), privacy (the scanner for paths of this machine)
 │   ├── index/               # discover, languages/, resolve, aggregate, pipeline, update, watch, embed, summarize/
 │   ├── background/          # service, supervisor, protocol, child, start
 │   ├── live/                # hub, event, sse, local, client
 │   └── agent/               # E1: tools.ts (ported in V1.3), state.ts
-├── scripts/                 # index, summarize, search, live, background (the worker), bench-map, bench-update, …
+├── scripts/                 # index, summarize, search, live, background (the worker), bench-map, bench-update,
+│                            #   export-demo, build-demo, serve-demo (the static demo), …
 ├── test/                    # fixtures/mini-repo, helpers
 └── docs/
 ```
