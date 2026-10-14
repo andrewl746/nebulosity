@@ -18,6 +18,7 @@
     "bench-update": "tsx scripts/bench-update.ts",
     "bench-search": "tsx scripts/bench-search.ts",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
+    "eval:run": "tsx scripts/eval/run.ts",
     "preview-folders": "tsx scripts/preview-folders.ts"
   },
   "dependencies": {
