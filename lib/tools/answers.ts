@@ -1,4 +1,5 @@
 import type { AreaCount, DescribeResponse, DocPointer, SearchResult } from "../contracts";
+import type { Impact, Roots } from "../engine/impact";
 import type { Overview } from "../engine/overview";
 import { FILE_CHUNK } from "../engine/rank";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
@@ -111,18 +112,29 @@ export function searchAnswer(r: SearchResult): AnswerParts {
 
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
 
-export function reachAnswer(a: ReachAnswer, page: ReachPage): AnswerParts {
+/** The first line of a dependents or dependencies answer; with `within`, it says which folder is counted. */
+export function reachHeader(a: ReachAnswer): string {
     const target = shownPath(a.path, a.kind);
-    const total = a.reached.length;
-    if (total === 0){
-        return { body: [a.direction === "dependents"
+    if (a.reached.length === 0){
+        if (a.within !== undefined){
+            return a.direction === "dependents" ? `No file inside ${a.within}/ imports ${target}.` : `${target} imports no file inside ${a.within}/.`;
+        }
+        return a.direction === "dependents"
             ? (a.kind === "folder" ? `Nothing outside ${target} imports it.` : `Nothing imports ${target}.`)
-            : (a.kind === "folder" ? `${target} imports nothing outside it.` : `${target} imports no other indexed file.`)] };
+            : (a.kind === "folder" ? `${target} imports nothing outside it.` : `${target} imports no other indexed file.`);
     }
-
-    const body = [a.direction === "dependents"
+    const total = a.reached.length;
+    const header = a.direction === "dependents"
         ? `${target} is imported${a.kind === "folder" ? " from outside it" : ""} by ${plural(a.direct, "file")} directly and ${plural(total, "file")} in all, counting files that reach it through others.`
-        : `${target} imports ${plural(a.direct, "file")}${a.kind === "folder" ? " outside it" : ""} directly and ${plural(total, "file")} in all, counting what those import in turn.`];
+        : `${target} imports ${plural(a.direct, "file")}${a.kind === "folder" ? " outside it" : ""} directly and ${plural(total, "file")} in all, counting what those import in turn.`;
+    return a.within !== undefined ? `${header} Only files inside ${a.within}/ are counted.` : header;
+}
+
+/** `after` is appended at the very end of the body (rootLines, for dependents); its size is taken out of the list's budget. */
+export function reachAnswer(a: ReachAnswer, page: ReachPage, after: readonly string[] = []): AnswerParts {
+    const total = a.reached.length;
+    const body = [reachHeader(a)];
+    if (total === 0) return { body };
 
     // reached is nearest first, so the direct files lead it
     const listed = page.transitive ? a.reached : a.reached.slice(0, a.direct);
@@ -133,7 +145,8 @@ export function reachAnswer(a: ReachAnswer, page: ReachPage): AnswerParts {
 
     const rest = listed.slice(page.offset);
     const lines = rest.map((r) => `  ${r.path}`);
-    const shown = fitting(lines, page.limit, MAX_ANSWER_CHARS - REACH_HEADROOM - body[0].length);
+    const afterChars = after.reduce((sum, line) => sum + line.length + 1, 0);
+    const shown = fitting(lines, page.limit, MAX_ANSWER_CHARS - REACH_HEADROOM - afterChars - body[0].length);
     if (page.offset > 0) body.push(`Showing ${formatCount(page.offset + 1)}–${formatCount(page.offset + shown)} of ${formatCount(listed.length)}.`);
 
     const atDistance = new Map<number, number>();
@@ -149,6 +162,36 @@ export function reachAnswer(a: ReachAnswer, page: ReachPage): AnswerParts {
 
     const hidden = listed.length - page.offset - shown;
     if (hidden > 0) body.push(moreLine(hidden, page.offset + shown));
+    body.push(...after);
+    return { body };
+}
+
+/** How many of a list's files are shown before "… N more": a list of areas, or of files nothing imports. */
+const LIST_SHOWN = 50;
+
+function listBlock(header: string, paths: readonly string[]): string[] {
+    const shown = paths.slice(0, LIST_SHOWN).map((p) => `  ${p}`);
+    return [header, ...shown, ...(paths.length > LIST_SHOWN ? [`  ${moreLine(paths.length - LIST_SHOWN)}`] : [])];
+}
+
+/** The lines after a count or list of dependents (ADR-055): the tests among them, and the files nothing imports that load the target. */
+export function rootLines(tests: number, roots: Roots | null): string[] {
+    const lines: string[] = [];
+    if (tests > 0) lines.push(`Tests among them: ${formatCount(tests)}.`);
+    if (roots && roots.declared.length > 0) lines.push(...listBlock(`Entry points a package.json names that load it (${formatCount(roots.declared.length)}):`, roots.declared));
+    if (roots && roots.others.length > 0) lines.push(...listBlock(`Other files nothing imports that load it (${formatCount(roots.others.length)}):`, roots.others));
+    return lines;
+}
+
+/** imports with group_by (ADR-055): the counts by area in place of the list. */
+export function impactAnswer(i: Impact): AnswerParts {
+    const body = [reachHeader(i.reach)];
+    if (i.reach.reached.length === 0) return { body };
+    body.push(i.groupBy === null ? "By area:" : i.groupBy === "" ? "By area (the repo's top level):" : `By area (inside ${i.groupBy}/):`);
+    for (const a of i.areas.slice(0, LIST_SHOWN)) body.push(`  ${shownPath(a.path, a.kind)}  ${formatCount(a.count)}`);
+    if (i.areas.length > LIST_SHOWN) body.push(`  ${moreLine(i.areas.length - LIST_SHOWN)} areas`);
+    if (i.elsewhere > 0) body.push(`  elsewhere (outside ${i.groupBy}/)  ${formatCount(i.elsewhere)}`);
+    body.push(...rootLines(i.tests, i.roots));
     return { body };
 }
 

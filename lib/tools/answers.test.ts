@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DescribeResponse, MapNode, SearchResult } from "../contracts";
 import type { Overview } from "../engine/overview";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
-import { chainAnswer, describeAnswer, overviewAnswer, reachAnswer, searchAnswer } from "./answers";
+import { chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import { answerText, MAX_ANSWER_CHARS, SUMMARIES_OFF_LINE as S } from "./text";
 
 const off = { summaryStatus: "off" as const };
@@ -254,5 +254,89 @@ describe("chainAnswer", () => {
         expect(chainAnswer(none).body).toEqual(["No chain of imports joins src/app/view.tsx and src/util/strings.test.ts, in either direction."]);
         const folders: ChainAnswer = { from: "src/app", fromKind: "folder", to: "src/core", toKind: "folder", found: "forward", files: ["src/app/main.ts", "src/core/log.ts"], specifiers: ["../core/log"] };
         expect(chainAnswer(folders).body).toEqual(["src/app/ reaches src/core/ in 1 step:", "  src/app/main.ts", '  → src/core/log.ts  (import "../core/log")']);
+    });
+});
+
+describe("impact and root lines (ADR-055)", () => {
+    const strings: ReachAnswer = {
+        path: "src/base/common/strings.ts", kind: "file", direction: "dependents", direct: 6, indexVersion: 1,
+        reached: [
+            ["src/base/browser/dom.ts", 1], ["src/base/common/arrays.ts", 1], ["src/editor/common/textModel.ts", 1], ["src/app/legacy.ts", 1],
+            ["src/base/test/common/strings.test.ts", 1], ["tools/fixtures/legacy-ids.ts", 1],
+            ["src/base/node/fs.ts", 2], ["src/platform/common/storage.ts", 2], ["src/editor/browser/editorView.ts", 2], ["src/editor/common/tokens.ts", 2],
+            ["src/editor/node/editorFiles.ts", 2], ["src/platform/browser/storageView.ts", 2],
+            ["src/editor/common/model.ts", 3], ["src/platform/node/storageFile.ts", 3], ["src/app/main.ts", 3],
+            ["src/app/loader.ts", 4],
+        ].map(([p, d]) => ({ path: p as string, distance: d as number })),
+    };
+    const roots = { declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts", "tools/fixtures/legacy-ids.ts"] };
+
+    it("impact counts by area, then tests and the files nothing imports that load it (ADR-055)", () => {
+        const text = answerText(impactAnswer({
+            reach: strings, groupBy: "src", elsewhere: 1, tests: 1, roots,
+            areas: [{ path: "src/editor", kind: "folder", count: 5 }, { path: "src/base", kind: "folder", count: 4 },
+                { path: "src/app", kind: "folder", count: 3 }, { path: "src/platform", kind: "folder", count: 3 }],
+        }));
+        expect(text).toBe([
+            "src/base/common/strings.ts is imported by 6 files directly and 16 files in all, counting files that reach it through others.",
+            "By area (inside src/):",
+            "  src/editor/  5",
+            "  src/base/  4",
+            "  src/app/  3",
+            "  src/platform/  3",
+            "  elsewhere (outside src/)  1",
+            "Tests among them: 1.",
+            "Entry points a package.json names that load it (1):",
+            "  src/app/loader.ts",
+            "Other files nothing imports that load it (2):",
+            "  src/app/legacy.ts",
+            "  tools/fixtures/legacy-ids.ts",
+        ].join("\n"));
+    });
+
+    it("a transitive list of dependents ends with the same lines", () => {
+        const lines = answerText(reachAnswer(strings, { transitive: true, limit: 50, offset: 0 }, rootLines(1, roots))).split("\n");
+        expect(lines.slice(0, 2)).toEqual([
+            "src/base/common/strings.ts is imported by 6 files directly and 16 files in all, counting files that reach it through others.",
+            "Distance 1 (6):",
+        ]);
+        expect(lines.slice(-6)).toEqual([
+            "Tests among them: 1.",
+            "Entry points a package.json names that load it (1):",
+            "  src/app/loader.ts",
+            "Other files nothing imports that load it (2):",
+            "  src/app/legacy.ts",
+            "  tools/fixtures/legacy-ids.ts",
+        ]);
+    });
+
+    it("a list within a folder says so in its first line", () => {
+        const text = answerText(reachAnswer({
+            path: "src/editor", kind: "folder", direction: "dependents", direct: 1, indexVersion: 1, within: "src/platform",
+            reached: [{ path: "src/platform/node/storageFile.ts", distance: 1 }],
+        }, { transitive: false, limit: 50, offset: 0 }));
+        expect(text.split("\n")[0]).toBe("src/editor/ is imported from outside it by 1 file directly and 1 file in all, counting files that reach it through others. Only files inside src/platform/ are counted.");
+    });
+
+    it("an empty list within a folder says which folder", () => {
+        const base = { path: "src/editor", kind: "folder" as const, reached: [], direct: 0, indexVersion: 1, within: "src/app" };
+        expect(reachAnswer({ ...base, direction: "dependents" }, { transitive: false, limit: 50, offset: 0 }).body)
+            .toEqual(["No file inside src/app/ imports src/editor/."]);
+        expect(reachAnswer({ ...base, direction: "dependencies" }, { transitive: false, limit: 50, offset: 0 }).body)
+            .toEqual(["src/editor/ imports no file inside src/app/."]);
+    });
+
+    it("a page whose root lines are long still fits the answer limit (F24)", () => {
+        // 100 root paths of about 150 characters: about 15,000 characters after the list, which the list's budget must leave room for
+        const long = (tag: string): string[] => Array.from({ length: 50 }, (_, i) => `${tag.repeat(145)}${String(i).padStart(3, "0")}.ts`);
+        const after = rootLines(0, { declared: long("d"), others: long("o") });
+        expect(after.join("\n").length).toBeGreaterThan(15_000);
+        // 400 reached files of about 310 characters: the list alone would be about 125,000, so it must be cut
+        const reached = Array.from({ length: 400 }, (_, i) => ({ path: `${"p".repeat(300)}${String(i).padStart(3, "0")}.ts`, distance: 1 }));
+        const a: ReachAnswer = { path: "x.ts", kind: "file", direction: "dependents", direct: 400, indexVersion: 1, reached };
+        const text = answerText(reachAnswer(a, { transitive: true, limit: 500, offset: 0 }, after));
+        expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(text.endsWith(after[after.length - 1])).toBe(true);
+        expect(text).toContain("… ");
     });
 });

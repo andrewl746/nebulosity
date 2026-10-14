@@ -656,6 +656,8 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 **Consequences:** On VS Code the rows add about 1.3 MB beside the graph, built once per version, and a search over 139,580 imports takes milliseconds (about 2 ms warm; MCP Benchmark #1). Totals are exact for the index, which is as current as the background worker keeps it.
 **Revisit when:** agents ask for a subset (the dependents under one folder): add an `under` filter rather than a bigger page.
 
+**Amended (2026-10-14, V1.6): `within`.** The revisit this ADR named ("agents ask for a subset … add an `under` filter") came with V1.6's layering questions: which files in `platform` import `editor`? `dependents` and `dependencies` take `within`, a folder; only files inside it are listed and counted, and the answer's first line says so. A file as `within` is refused ("within takes a folder."). ADR-055 (V1.6, Task 7) builds on it: impact by area and the entry points that load a file.
+
 ## ADR-046 — An MCP call answers about the repo Claude Code is in, else the Map's repo (2026-10-13)
 
 **Context:** Claude Code starts the MCP server once per session, in whatever project the user opened, and sets `CLAUDE_PROJECT_DIR` to that project's root for the servers it starts. The index can hold several repos; the Map shows one, the config's `activeRepo` (PIVOT_SPEC.md §7.1). Live events carry paths but no repo (API_CONTRACTS.md §14), so an event about one repo lights boxes with the same paths in another.
