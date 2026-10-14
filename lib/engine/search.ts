@@ -86,8 +86,8 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
     if (isCodeSearchDeferred(db)) notes.push("Code search is still being built after a large index run, so code results may be missing.");
     if (countEmbeddable(db, repoId) === 0){
         notes.unshift(options.summariesOff
-            ? "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."
-            : "Summaries aren't ready yet, so results come from code and folder names only.");
+            ? "Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only."
+            : "Summaries aren't ready yet, so results come from code, folder names and file names only.");
     } else if (index.targets.length === 0) notes.unshift("Summaries aren't embedded yet, so results come from keywords only.");
 
     const hits: SearchHit[] = fuseRankings({ code, summary, vector, name, file }).slice(0, limit).map(({ key, score, matchedBy }) => {

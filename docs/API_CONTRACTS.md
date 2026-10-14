@@ -158,7 +158,7 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **Folder names** *(V1.3.1, additive)*: the `name` list ranks folders whose name matches a query word (`RAG_PIPELINE.md` §6) and counts double in the fusion, so searching "terminal" finds the terminal folders. The Map's search palette shows every folder hit first, then every file hit, and asks for 40.
 - **File names** *(V1.5, additive)*: the `file` list ranks files whose name is a query word (or that word plus an ending of up to 3 letters), or that export a top-level declaration named exactly like one, most imported first. It counts double, like folder names (ADR-052).
 - **The repo's own name** is dropped from the query before searching when other meaningful words remain ("vscode terminal" searches "terminal" in VS Code). `query` in the answer is still the query as typed.
-- **`note`** is set when something limits the results: no summaries yet, summaries off (no `ANTHROPIC_API_KEY`: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."), no vectors yet, the embedding model unavailable, or a query made only of very common words.
+- **`note`** is set when something limits the results: no summaries yet, summaries off (no `ANTHROPIC_API_KEY`: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only."), no vectors yet, the embedding model unavailable, or a query made only of very common words.
 
 ## 11. GET /api/level?path=&page=&focus= (slice V1.3; pages added in V1.3.1, portals and `focus` in contract v3)
 

@@ -15,10 +15,10 @@ const LIMIT = 40;
 const DEBOUNCE_MS = 150;
 
 /**
- * ⌘K (PIVOT_SPEC.md §7): hybrid search over files, symbols, summaries and folder names (GET /api/search). Folders come
- * first, then files, each under a heading with its count (searchHits.ts). Arrow keys move through both, Enter picks,
- * Escape closes. Picking moves the Map to the result's level and selects it. MapView mounts it only while open, so
- * each opening starts empty.
+ * ⌘K (PIVOT_SPEC.md §7): hybrid search over files, symbols, summaries, folder names and file names (GET /api/search).
+ * Folders come first, then files, each under a heading with its count (searchHits.ts). Arrow keys move through both,
+ * Enter picks, Escape closes. Picking moves the Map to the result's level and selects it. MapView mounts it only while
+ * open, so each opening starts empty.
  */
 export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
     const [query, setQuery] = useState("");

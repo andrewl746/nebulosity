@@ -116,7 +116,7 @@ describe("searchAnswer", () => {
                 { path: "src/core/index.ts", kind: "file", score: 0.01, matchedBy: ["code"], tagline: "Re-exports logging", code: { symbol: "(file)", startLine: 1, endLine: 3, snippet: "x".repeat(200) } },
             ],
             lists: { code: 2, summary: 0, vector: 0, name: 1, file: 0 },
-            note: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only.",
+            note: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only.",
         };
         expect(searchAnswer(r)).toEqual({
             body: [
@@ -127,7 +127,7 @@ describe("searchAnswer", () => {
                 " 3. src/core/index.ts — Re-exports logging",
                 `    (file), lines 1–3: ${"x".repeat(159)}…`,
             ],
-            notes: ["Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."],
+            notes: ["Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only."],
         });
     });
 

@@ -327,7 +327,7 @@ export type SearchList = "code" | "summary" | "vector" | "name" | "file";
 export type SearchHit = {
   path: string;
   kind: "file" | "folder";
-  /** Reciprocal Rank Fusion: Σ 1 / (60 + rank) over the lists that found it. */
+  /** Weighted Reciprocal Rank Fusion: Σ w / (60 + rank) over the lists that found it (w = 2 for "name" and "file", else 1). */
   score: number;
   matchedBy: SearchList[];
   tagline?: string;

@@ -20,7 +20,7 @@ summaries: npm run summarize                                 lib/index/summarize
    ▼
 summary vectors (MiniLM, local)                              lib/index/embed.ts
    ▼
-search(query) = RRF(code_fts, summary_fts, cosine, folder names)           lib/engine/search.ts
+search(query) = RRF(code_fts, summary_fts, cosine, folder names, file names)   lib/engine/search.ts
 ```
 
 Every stage is incremental and records its status in `meta` (`GET /api/status`). Each leaves the earlier stages usable: keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive.

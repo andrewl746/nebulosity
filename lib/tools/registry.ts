@@ -35,7 +35,7 @@ export const SERVER_INSTRUCTIONS = [
     "Use these tools before broad Grep/Glob/Read exploration when a question is about structure or connections:",
     "- overview: first, on an unfamiliar repo (its areas, sizes and most-imported files);",
     "- describe: what a folder or file is, what's inside, what it uses and what uses it;",
-    "- search: where a feature or concept lives (code, summaries and folder names);",
+    "- search: where a feature or concept lives (code, summaries, folder and file names, exported declarations);",
     "- dependents / dependencies: what imports X or what X imports, directly or through other files; exact and complete over the indexed import graph (imports that resolve to files in the repo), so better than grep for impact questions;",
     "- path: how one file or folder reaches another through imports;",
     "- show_on_map: point the user at files or folders on Nebulosity's Map.",
@@ -83,7 +83,7 @@ const searchInput = z.object({
 });
 const searchTool: ToolEntry<typeof searchInput> = {
     name: "search",
-    description: "Find where a feature or concept lives, by keywords or meaning. Searches code (identifiers and text), the summaries of every file and folder, and folder names, and returns the best-matching files and folders, each with its one-line summary and its best-matching code. Use it for \"where is X handled?\"; use Grep for an exact string.",
+    description: "Find where a feature or concept lives, by keywords or meaning. Searches code (identifiers and text), the summaries of every file and folder, folder and file names, and exported declaration names, and returns the best-matching files and folders, each with its one-line summary and its best-matching code. Use it for \"where is X handled?\"; use Grep for an exact string.",
     inputSchema: searchInput,
     async handler({ query, limit }, context){
         const result = await search(context.repoRoot, query, { limit, summariesOff: context.summariesOff });
