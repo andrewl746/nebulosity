@@ -5,15 +5,54 @@ import { cleanFileChunkSnippet, dampTests, fuseRankings, queryTerms, rankFileNam
 /** Files the browser bundles (the static demo, ADR-049) and what each may import: nothing that touches a database or a disk. */
 const BROWSER_SAFE: Record<string, readonly string[]> = {
     "lib/engine/rank.ts": ["../contracts", "../index/identifiers"],
+    "lib/engine/staticSearch.ts": ["../contracts", "../index/identifiers", "./rank"],
     "lib/index/identifiers.ts": [],
 };
+
+/**
+ * Every module a source names, in the order it names them: the from clause of an import or export (either quote, the
+ * clause may span lines), a side-effect import, import("x") and require("x"). A dynamic import or require whose
+ * argument isn't a plain string can't be read, so it counts as "<dynamic>", which no list allows. Comments aren't
+ * stripped (a quote or "/*" inside a string would make that unsafe), so a commented-out import counts too: the check
+ * can only get stricter.
+ */
+function moduleSpecifiers(source: string): string[] {
+    const found: { at: number; specifier: string }[] = [];
+    const collect = (pattern: RegExp, read: (m: RegExpMatchArray) => string): void => {
+        for (const m of source.matchAll(pattern)) found.push({ at: m.index ?? 0, specifier: read(m) });
+    };
+    collect(/\b(?:import|export)\b[^"';]*?\bfrom\s*(["'])([^"']+)\1/g, (m) => m[2]);
+    collect(/\bimport\s*(["'])([^"']+)\1/g, (m) => m[2]);
+    collect(/\b(?:import|require)\s*\(\s*(?:(["'])([^"']+)\1\s*\))?/g, (m) => m[2] ?? "<dynamic>");
+    return found.sort((a, b) => a.at - b.at).map((f) => f.specifier);
+}
 
 describe("the ranking core", () => {
     it("imports only what the browser can bundle", () => {
         for (const [file, allowed] of Object.entries(BROWSER_SAFE)){
-            const imports = [...fs.readFileSync(file, "utf8").matchAll(/^import\s.*?from\s+"([^"]+)";?\s*$/gm)].map((m) => m[1]);
-            expect({ file, imports: imports.filter((i) => !allowed.includes(i)) }).toEqual({ file, imports: [] });
+            const specifiers = moduleSpecifiers(fs.readFileSync(file, "utf8"));
+            expect({ file, outside: specifiers.filter((s) => !allowed.includes(s)) }).toEqual({ file, outside: [] });
+            // A reader that stopped matching would pass the check above for any file, so a file allowed to import must be seen importing.
+            if (allowed.length > 0) expect({ file, found: specifiers.length > 0 }).toEqual({ file, found: true });
         }
+    });
+
+    it("reads every way a source names a module", () => {
+        const source = [
+            "import type { A } from 'one';",
+            "import {",
+            "    b,",
+            "    c,",
+            '} from "two";',
+            'export * from "three";',
+            "export { d } from 'four';",
+            'import "five";',
+            'const e = await import("six");',
+            "const f = require('seven');",
+        ].join("\n");
+        expect(moduleSpecifiers(source)).toEqual(["one", "two", "three", "four", "five", "six", "seven"]);
+        expect(moduleSpecifiers('const g = require(name);\nconst h = import("./" + x);\nexport const i = 1;')).toEqual(["<dynamic>", "<dynamic>"]);
+        expect(moduleSpecifiers('const from = "not a module";')).toEqual([]);
     });
 
     it("gives the words an FTS query quotes", () => {
