@@ -52,4 +52,19 @@ describe("openDb, read-only (ADR-044)", () => {
         new Database(file).close();
         expect(() => openDb(file, "readonly")).toThrow(DatabaseOutdatedError);
     });
+
+    it("lets any other failure through: a file that isn't a database is not 'out of date'", () => {
+        const file = tempDatabase();
+        fs.writeFileSync(file, "x".repeat(4_096));
+        // SQLite's documented text for SQLITE_NOTADB is "file is not a database"; "start the Map" would not help here
+        let thrown: unknown;
+        try{
+            openDb(file, "readonly");
+        } catch (err){
+            thrown = err;
+        }
+        expect(thrown).toBeInstanceOf(Error);
+        expect((thrown as Error).message).toMatch(/not a database/);
+        expect(thrown).not.toBeInstanceOf(DatabaseOutdatedError);
+    });
 });

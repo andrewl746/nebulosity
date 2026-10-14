@@ -24,7 +24,7 @@ export class DatabaseMissingError extends Error {
  */
 export class DatabaseOutdatedError extends Error {
     constructor(){
-        super("Nebulosity's index is older than this version of Nebulosity. Start the Map (npm run dev) or run npm run index once in the Nebulosity folder to update it, then try again.");
+        super("Nebulosity's index is older than this version of Nebulosity. Start the Map (npm run dev) or run npm run index -- <path-to-repo> once in the Nebulosity folder to update it, then try again.");
         this.name = "DatabaseOutdatedError";
     }
 }
@@ -92,8 +92,10 @@ function assertMigrated(sqlite: Database.Database): void {
     try{
         const row = sqlite.prepare("select max(created_at) as at from __drizzle_migrations").get() as { at: number | string | null };
         applied = row.at === null ? null : Number(row.at);
-    } catch{
-        // no such table: this file was never migrated
+    } catch (err){
+        // Only a missing table means "never migrated". Anything else (not a database, SQLITE_BUSY, an I/O error, an
+        // unwritable -shm) is a different problem, and "start the Map" would not fix it: let it through.
+        if (!/no such table/.test(err instanceof Error ? err.message : String(err))) throw err;
     }
     if (applied === null || applied < newest) throw new DatabaseOutdatedError();
 }
