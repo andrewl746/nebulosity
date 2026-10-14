@@ -26,7 +26,8 @@
     "export-demo": "tsx scripts/export-demo.ts",
     "build-demo": "tsx scripts/build-demo.ts",
     "serve-demo": "tsx scripts/serve-demo.ts",
-    "preview-folders": "tsx scripts/preview-folders.ts"
+    "preview-folders": "tsx scripts/preview-folders.ts",
+    "report-resolution": "tsx scripts/report-resolution.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
