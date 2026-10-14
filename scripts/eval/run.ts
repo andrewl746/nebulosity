@@ -30,34 +30,45 @@ import path from "path";
 import zlib from "zlib";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
 import { gitEmail } from "../git-email";
+import { getDb, useReadOnlyDatabase } from "../../lib/db/client";
+import { readIndexVersion } from "../../lib/db/store/version";
+import { requireRepository } from "../../lib/db/store/structure";
+import { repoKey } from "../../lib/index/paths";
+import { loadDefinition, type EvalDefinition } from "./definition";
 import {
-    PINS, QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, rawFileName, runName, schedule, scrub, utilizationCheck,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scrub, utilizationCheck,
     type RunId,
 } from "./run-config";
 import { summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
-const VSCODE_COMMIT = "cc3fec88";
-const CLAUDE_VERSION = "2.1.299";
-const PILOT = ["bp4", "cl2", "cn3"];
 const TIMEOUT_MS = 30 * 60 * 1000;
 const VERSION_TIMEOUT_MS = 30 * 1000;
 const INIT_POLL_MS = 500;
 /** The init message is among a transcript's first lines; a run still without one after this many bytes is left to the end-of-run check. */
 const INIT_SEARCH_BYTES = 1024 * 1024;
 /** Claude Code's Explore subagent runs on Haiku, so Haiku answering is expected; any other model is noted. */
-const ALLOWED_MODELS = [PINS.model, "claude-haiku-5-5"];
-const PLACEHOLDER_PROMPT = "<placeholder: eval/questions.json comes in Task 17>";
+const EXPLORE_MODEL = "claude-haiku-5-5";
+const PLACEHOLDER_PROMPT = "<placeholder: the questions file doesn't exist yet>";
 
 const forward = (p: string): string => p.replace(/\\/g, "/");
 const CHECKOUT = forward(path.resolve(__dirname, "..", ".."));
-const VSCODE = forward(path.resolve(CHECKOUT, "..", "vscode"));
-const QUESTIONS_FILE = `${CHECKOUT}/eval/questions.json`;
-const EMPTY_MCP = `${CHECKOUT}/eval/mcp/empty.json`;
-const RUNS_DIR = `${CHECKOUT}/eval/runs`;
-const WORK_DIR = `${CHECKOUT}/.nebulosity/eval`;
-const RAW_DIR = `${WORK_DIR}/raw`;
-const NEBULOSITY_MCP = `${WORK_DIR}/mcp-nebulosity.json`;
+
+/** Where one eval keeps its files (`--eval <dir>`, default eval): the tracked folder, and the untracked work folder under .nebulosity. */
+type Paths = { dir: string; name: string; questions: string; emptyMcp: string; runs: string; work: string; raw: string; nebulosityMcp: string; scratch: string };
+function pathsFor(definition: EvalDefinition): Paths {
+    const dir = forward(definition.dir);
+    const name = path.basename(dir);
+    const work = `${CHECKOUT}/.nebulosity/${name}`;
+    return { dir, name, questions: `${dir}/questions.json`, emptyMcp: `${dir}/mcp/empty.json`, runs: `${dir}/runs`, work, raw: `${work}/raw`, nebulosityMcp: `${work}/mcp-nebulosity.json`, scratch: `${work}/scratch` };
+}
+// set once by main(), before anything reads them
+let P!: Paths;
+let DEF!: EvalDefinition;
+/** A repo of the definition, its checkout resolved against this one's. */
+type Repo = { id: string; root: string; commit: string };
+const repoRoot = (id: string): string => forward(path.resolve(CHECKOUT, DEF.repos[id].path));
+const repoOf = (id: string): Repo => ({ id, root: repoRoot(id), commit: DEF.repos[id].commit });
 
 /** A reason to stop, said in a sentence, with the exit code from the header. */
 class Stop extends Error {
@@ -68,13 +79,13 @@ class Stop extends Error {
 
 type Options = {
     pilot: boolean; only: string[] | null; repeat: number | null; limit: number;
-    sevenDay: number; fiveHour: number; configDir: string | null; dryRun: boolean;
+    sevenDay: number; fiveHour: number; configDir: string | null; dryRun: boolean; evalDir: string;
 };
 
-const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2 (default 2: all remaining runs)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--dry-run]";
+const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--dry-run]";
 
 function parseArgs(argv: string[]): Options {
-    const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false };
+    const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false, evalDir: "eval" };
     for (let i = 0; i < argv.length; i++){
         const arg = argv[i];
         const value = (): string => {
@@ -95,7 +106,7 @@ function parseArgs(argv: string[]): Options {
         }
         else if (arg === "--repeat"){
             const n = Number(value());
-            if (n !== 1 && n !== 2) throw new Stop(1, `--repeat takes 1 or 2. ${USAGE}`);
+            if (n !== 1 && n !== 2 && n !== 3) throw new Stop(1, `--repeat takes 1, 2 or 3. ${USAGE}`);
             options.repeat = n;
         } else if (arg === "--limit"){
             const n = Number(value());
@@ -104,43 +115,54 @@ function parseArgs(argv: string[]): Options {
         } else if (arg === "--stop-at-seven-day") options.sevenDay = fraction();
         else if (arg === "--stop-at-five-hour") options.fiveHour = fraction();
         else if (arg === "--config-dir") options.configDir = forward(path.resolve(value()));
+        else if (arg === "--eval") options.evalDir = value();
         else throw new Stop(1, `unknown argument ${arg}. ${USAGE}`);
     }
-    if (options.pilot && options.only) throw new Stop(1, `--pilot already names its questions (${PILOT.join(", ")}), so it can't be combined with --only.`);
+    if (options.pilot && options.only) throw new Stop(1, "--pilot already names its questions (the definition's), so it can't be combined with --only.");
     if (options.pilot && options.repeat !== null) throw new Stop(1, "--pilot is one run of each pilot question, so it can't be combined with --repeat.");
     return options;
 }
 
-type Question = { id: string; family: string; prompt: string };
+/** A question may name the repo it asks about; Eval #1's don't, and get the definition's only repo. */
+type Question = { id: string; family: string; prompt: string; repo?: string };
 type QuestionFile = { formats: Record<string, string>; questions: Question[] };
 
-/** What a dry run asks until Task 17 writes eval/questions.json: the three pilot ids, with no real prompt. */
-const PLACEHOLDER: QuestionFile = {
-    formats: { bigPicture: "<placeholder: the big-picture format line>", list: "<placeholder: the list format line>", chain: "<placeholder: the chain format line>" },
-    questions: [
-        { id: "bp4", family: "bigPicture", prompt: PLACEHOLDER_PROMPT },
-        { id: "cl2", family: "list", prompt: PLACEHOLDER_PROMPT },
-        { id: "cn3", family: "chain", prompt: PLACEHOLDER_PROMPT },
-    ],
-};
+/** What a dry run asks until the questions file exists: the definition's pilot ids (else bp4, cl2, cn3), with no real prompt. */
+function placeholderFile(): QuestionFile {
+    const ids = DEF.pilot.length > 0 ? DEF.pilot : ["bp4", "cl2", "cn3"];
+    const repo = Object.keys(DEF.repos)[0];
+    return {
+        formats: { bigPicture: "<placeholder: the big-picture format line>", list: "<placeholder: the list format line>", chain: "<placeholder: the chain format line>" },
+        questions: ids.map((id) => ({ id, family: id.includes("bp") ? "bigPicture" : id.includes("cn") ? "chain" : "list", prompt: PLACEHOLDER_PROMPT, repo })),
+    };
+}
+
+/** The repo a question asks about: the one it names, else the definition's only repo. */
+function questionRepo(question: Question): Repo {
+    const ids = Object.keys(DEF.repos);
+    const id = question.repo ?? (ids.length === 1 ? ids[0] : undefined);
+    if (id === undefined) throw new Stop(1, `${P.name}/questions.json: question ${question.id} names no repo, and ${P.name}/eval.json has several (${ids.join(", ")}).`);
+    if (!(id in DEF.repos)) throw new Stop(1, `${P.name}/questions.json: question ${question.id} names the repo ${id}, which ${P.name}/eval.json doesn't list.`);
+    return repoOf(id);
+}
 
 function loadQuestions(dryRun: boolean): { file: QuestionFile; placeholder: boolean } {
-    if (!fs.existsSync(QUESTIONS_FILE)){
-        if (dryRun) return { file: PLACEHOLDER, placeholder: true };
-        throw new Stop(1, "eval/questions.json doesn't exist yet (Task 17 writes it), so there is nothing to ask. Nothing was run.");
+    if (!fs.existsSync(P.questions)){
+        if (dryRun) return { file: placeholderFile(), placeholder: true };
+        throw new Stop(1, `${P.name}/questions.json doesn't exist yet, so there is nothing to ask. Nothing was run.`);
     }
     let parsed: Partial<QuestionFile> | null;
     try{
-        parsed = JSON.parse(fs.readFileSync(QUESTIONS_FILE, "utf8")) as Partial<QuestionFile> | null;
+        parsed = JSON.parse(fs.readFileSync(P.questions, "utf8")) as Partial<QuestionFile> | null;
     } catch(e){
-        throw new Stop(1, `eval/questions.json isn't valid JSON: ${(e as Error).message}`);
+        throw new Stop(1, `${P.name}/questions.json isn't valid JSON: ${(e as Error).message}`);
     }
     if (!parsed || typeof parsed.formats !== "object" || parsed.formats === null || !Array.isArray(parsed.questions)){
-        throw new Stop(1, 'eval/questions.json needs a "formats" object and a "questions" list.');
+        throw new Stop(1, `${P.name}/questions.json needs a "formats" object and a "questions" list.`);
     }
     for (const q of parsed.questions){
         if (typeof q?.id !== "string" || typeof q.prompt !== "string" || typeof q.family !== "string" || typeof parsed.formats[q.family] !== "string"){
-            throw new Stop(1, `eval/questions.json: question ${JSON.stringify(q?.id)} needs an id, a prompt, and a family that has a line in "formats".`);
+            throw new Stop(1, `${P.name}/questions.json: question ${JSON.stringify(q?.id)} needs an id, a prompt, and a family that has a line in "formats".`);
         }
     }
     return { file: parsed as QuestionFile, placeholder: false };
@@ -149,7 +171,7 @@ function loadQuestions(dryRun: boolean): { file: QuestionFile; placeholder: bool
 /** What a failed git call stops the runner with: before the first run it's a check that failed; after a run, the repo's state is unknown. */
 type GitFailure = { code: number; what: string };
 const BEFORE_RUNS: GitFailure = { code: 1, what: "a check before the first run failed" };
-const AFTER_A_RUN: GitFailure = { code: 6, what: "git could not say whether ../vscode changed during the run, so it must be treated as changed until the owner looks" };
+const AFTER_A_RUN: GitFailure = { code: 6, what: "git could not say whether the repo changed during the run, so it must be treated as changed until the owner looks" };
 
 function git(args: string[], failure: GitFailure = BEFORE_RUNS): string {
     try{
@@ -159,8 +181,24 @@ function git(args: string[], failure: GitFailure = BEFORE_RUNS): string {
     }
 }
 
-/** Paths `git status` names in ../vscode: anything there means a run changed the repo. It takes no lock, so it never writes there. */
-const vscodeChanges = (failure?: GitFailure): string[] => parsePorcelain(git(["--no-optional-locks", "-C", VSCODE, "status", "--porcelain"], failure));
+/** Paths `git status` names in a repo: anything there means a run changed it. It takes no lock, so it never writes there. */
+const repoChanges = (root: string, failure?: GitFailure): string[] => parsePorcelain(git(["--no-optional-locks", "-C", root, "status", "--porcelain"], failure));
+
+let readOnlyDb = false;
+/** The index version of a repo, read from Nebulosity's database without ever writing it (null when the repo isn't indexed or there is no database). */
+function indexVersionOf(root: string): number | null {
+    try{
+        if (!readOnlyDb){
+            // eslint-disable-next-line react-hooks/rules-of-hooks -- a database mode switch, not a React hook (ADR-044)
+            useReadOnlyDatabase();
+            readOnlyDb = true;
+        }
+        const db = getDb();
+        return readIndexVersion(db, requireRepository(db, repoKey(path.resolve(root))));
+    } catch{
+        return null;
+    }
+}
 
 /** The keys of ~/.claude/settings.json's enabledPlugins ("superpowers@claude-plugins-official"): the owner's plugins, which no run may load. */
 function ownerPluginKeys(): string[] {
@@ -203,7 +241,7 @@ function readHead(file: string): string {
  * run it faults is killed with its whole process tree there and then (the problems come back in `initProblems`).
  */
 async function runClaude(
-    claude: string, args: string[], env: Record<string, string>, prompt: string, rawFile: string, errFile: string,
+    claude: string, args: string[], env: Record<string, string>, prompt: string, cwd: string, rawFile: string, errFile: string,
     checkInit: (init: RunSummary) => string[],
 ): Promise<{ timedOut: boolean; initProblems: string[] }> {
     const out = fs.openSync(rawFile, "w");
@@ -214,7 +252,7 @@ async function runClaude(
         let timedOut = false;
         let initProblems: string[] = [];
         // childEnv's plain record, cast: Next's types make NODE_ENV a required ProcessEnv key (as in run-config.ts)
-        const child = spawn(claude, args, { cwd: VSCODE, env: env as NodeJS.ProcessEnv, stdio: ["pipe", out, err], windowsHide: true });
+        const child = spawn(claude, args, { cwd, env: env as NodeJS.ProcessEnv, stdio: ["pipe", out, err], windowsHide: true });
         running = child;
         if (!child.stdin){   // "pipe" always gives one
             killTree(child.pid);
@@ -265,23 +303,31 @@ type Context = {
 const fixed = (x: number | null): string => (x === null ? "n/a" : x.toFixed(2));
 
 /** The files in the raw folder: none on a first run. */
-const rawFiles = (): string[] => (fs.existsSync(RAW_DIR) ? fs.readdirSync(RAW_DIR) : []);
+const rawFiles = (): string[] => (fs.existsSync(P.raw) ? fs.readdirSync(P.raw) : []);
 
 /** One run, start to finish: the claude process, the checks that can stop the batch, then scrubbed and kept. */
 async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     const name = runName(run);
     const question = ctx.questions.questions.find((q) => q.id === run.question)!;
-    const prompt = `${question.prompt}\n\n${ctx.questions.formats[question.family]}`;
+    const repo = questionRepo(question);
+    // with scripts on, a fresh empty scratch folder per run, named in the prompt (R6)
+    const scratch = DEF.scripts ? `${P.scratch}/${name}` : undefined;
+    if (scratch !== undefined){
+        fs.rmSync(scratch, { recursive: true, force: true });
+        fs.mkdirSync(scratch, { recursive: true });
+    }
+    const prompt = promptFor(question, ctx.questions.formats, scratch);
+    const indexVersion = indexVersionOf(repo.root);
     const startedAt = new Date();
     // one raw file per attempt, named by its start time, so a re-run after an outage keeps the earlier evidence
     const attempt = attemptsSoFar(name, rawFiles()) + 1;
-    const rawFile = `${RAW_DIR}/${rawFileName(name, startedAt, "jsonl")}`;
-    const errFile = `${RAW_DIR}/${rawFileName(name, startedAt, "stderr.txt")}`;
-    console.log(`${name}: attempt ${attempt}${attempt > 1 ? ` (${attempt - 1} earlier raw transcript${attempt > 2 ? "s" : ""} kept in ${RAW_DIR})` : ""}`);
+    const rawFile = `${P.raw}/${rawFileName(name, startedAt, "jsonl")}`;
+    const errFile = `${P.raw}/${rawFileName(name, startedAt, "stderr.txt")}`;
+    console.log(`${name}: attempt ${attempt}${attempt > 1 ? ` (${attempt - 1} earlier raw transcript${attempt > 2 ? "s" : ""} kept in ${P.raw})` : ""}`);
 
     const env = childEnv(process.env, { gitBash: ctx.gitBash, toolSearch: run.toolSearch, configDir: ctx.options.configDir ?? undefined });
-    const expected = { arm: run.arm, model: PINS.model, claudeVersion: CLAUDE_VERSION, forbiddenPlugins: ctx.forbiddenPlugins };
-    const { timedOut, initProblems } = await runClaude(ctx.claude, claudeArgs(run.arm, ctx.mcp), env, prompt, rawFile, errFile, (init) => validateInit(init, expected));
+    const expected = { arm: run.arm, model: DEF.pins.model, claudeVersion: DEF.claudeVersion, forbiddenPlugins: ctx.forbiddenPlugins, scripts: DEF.scripts };
+    const { timedOut, initProblems } = await runClaude(ctx.claude, claudeArgs(run.arm, ctx.mcp, DEF.pins, { scratch }), env, prompt, repo.root, rawFile, errFile, (init) => validateInit(init, expected));
     const endedAt = new Date();
 
     // 0. the init message was judged the moment it appeared, and a run that differed was killed there
@@ -298,8 +344,8 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     if (problems.length > 0) throw new Stop(2, `${name}: the run differs from the agreed setup:\n  - ${problems.join("\n  - ")}\nThe raw transcript is ${rawFile}. Nothing was kept.`);
 
     // 2. the repo, which no run may change. Never restored automatically.
-    const changed = vscodeChanges(AFTER_A_RUN);
-    if (changed.length > 0) throw new Stop(3, `${name}: git status in ${VSCODE} names changes:\n  ${changed.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
+    const changed = repoChanges(repo.root, AFTER_A_RUN);
+    if (changed.length > 0) throw new Stop(3, `${name}: git status in ${repo.root} names changes:\n  ${changed.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
 
     // 3. an outage is re-run later (it counts toward the 6 re-runs), not scored. Its raw transcript stays.
     if (outage !== null){
@@ -313,7 +359,7 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     if (leak !== null) throw new Stop(4, `${name}: the scrubbed transcript still holds "${leak}". The raw transcript is ${rawFile}. Nothing was kept.`);
 
     // finalText stays in the transcript only: undefined leaves JSON.stringify's output
-    const entry = { name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, ALLOWED_MODELS) };
+    const entry = { name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, [DEF.pins.model, EXPLORE_MODEL]), repo: repo.id, indexVersion };
     const indexLine = JSON.stringify(entry);
     const indexLeak = findLeak(indexLine, ctx.needles);
     if (indexLeak !== null) throw new Stop(4, `${name}: its index line holds "${indexLeak}". The raw transcript is ${rawFile}. Nothing was kept.`);
@@ -321,10 +367,10 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     // The .gz is written as .tmp, the index line appended, and only then the .tmp renamed: a run that is skipped as done
     // always has its index line. A crash between the append and the rename leaves a .tmp and a line that a re-run repeats;
     // score.ts takes the last line per name.
-    fs.mkdirSync(RUNS_DIR, { recursive: true });
-    const gz = `${RUNS_DIR}/${name}.jsonl.gz`;
+    fs.mkdirSync(P.runs, { recursive: true });
+    const gz = `${P.runs}/${name}.jsonl.gz`;
     fs.writeFileSync(`${gz}.tmp`, zlib.gzipSync(Buffer.from(scrubbed, "utf8")));
-    fs.appendFileSync(`${RUNS_DIR}/index.jsonl`, `${indexLine}\n`);
+    fs.appendFileSync(`${P.runs}/index.jsonl`, `${indexLine}\n`);
     fs.renameSync(`${gz}.tmp`, gz);
 
     const u = summary.usage;
@@ -337,15 +383,14 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
 
 async function main(): Promise<void> {
     const options = parseArgs(process.argv.slice(2));
+    try{
+        DEF = loadDefinition(path.resolve(CHECKOUT, options.evalDir));
+    } catch(e){
+        throw new Stop(1, `${options.evalDir}: ${(e as Error).message}`);
+    }
+    P = pathsFor(DEF);
     const dry = options.dryRun;
-    console.log(dry ? "Dry run: nothing is started, written or changed." : "Eval run.");
-
-    // The checks before the first run (all read-only)
-    const head = git(["-C", VSCODE, "rev-parse", "HEAD"]).trim();
-    if (!head.startsWith(VSCODE_COMMIT)) throw new Stop(1, `${VSCODE} is at ${head}, not ${VSCODE_COMMIT}: the eval's ground truth is for that commit.`);
-    const dirty = vscodeChanges();
-    if (dirty.length > 0) throw new Stop(1, `git status in ${VSCODE} names changes (${dirty.slice(0, 5).join(", ")}${dirty.length > 5 ? ", ..." : ""}). Nothing was run; ask the owner before restoring.`);
-    console.log(`${VSCODE}: HEAD ${head}, git status clean`);
+    console.log(`${dry ? "Dry run: nothing is started, written or changed. " : ""}${DEF.name} (${P.name}).`);
 
     const claude = forward(process.env.CLAUDE_BIN ?? path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "npm", "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe"));
     if (!fs.existsSync(claude)) throw new Stop(1, `claude isn't at ${claude}. Set CLAUDE_BIN to claude.exe if it lives elsewhere.`);
@@ -360,7 +405,7 @@ async function main(): Promise<void> {
     if (options.configDir && !fs.existsSync(options.configDir)) throw new Stop(1, `--config-dir ${options.configDir} doesn't exist.`);
 
     const { file: questions, placeholder } = loadQuestions(dry);
-    console.log(placeholder ? `eval/questions.json: missing (Task 17 writes it); the dry run uses placeholder prompts for ${questions.questions.map((q) => q.id).join(", ")}` : `eval/questions.json: ${questions.questions.length} questions`);
+    console.log(placeholder ? `${P.name}/questions.json: missing; the dry run uses placeholder prompts for ${questions.questions.map((q) => q.id).join(", ")}` : `${P.name}/questions.json: ${questions.questions.length} questions`);
 
     const keys = ownerPluginKeys();
     const plugins = [...new Set(keys.map((key) => key.split("@")[0]))];
@@ -380,33 +425,46 @@ async function main(): Promise<void> {
     console.log("check: apart from the pins, no CLAUDE*, ANTHROPIC_* or MCP_* variable (nor any other stripped name) is left in a child's environment");
 
     // The questions and the runs
-    const ids = options.pilot ? PILOT : options.only;
+    if (options.pilot && DEF.pilot.length === 0) throw new Stop(1, `${P.name}/eval.json lists no pilot questions.`);
+    const ids = options.pilot ? DEF.pilot : options.only;
     const unknown = (ids ?? []).filter((id) => !questions.questions.some((q) => q.id === id));
     if (unknown.length > 0) throw new Stop(1, `no such question: ${unknown.join(", ")}. The questions are ${questions.questions.map((q) => q.id).join(", ")}.`);
     const chosen = questions.questions.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
     // which arm goes first comes from a question's place in the whole list (D2's order for the placeholders), however few are asked
-    const order = placeholder ? QUESTION_ORDER : questions.questions.map((q) => q.id);
-    const planned: RunId[] = schedule(chosen, options.pilot ? 1 : options.repeat ?? 2, order);
-    const isDone = (run: RunId): boolean => fs.existsSync(`${RUNS_DIR}/${runName(run)}.jsonl.gz`);
+    const order = placeholder && chosen.every((id) => QUESTION_ORDER.includes(id)) ? QUESTION_ORDER : questions.questions.map((q) => q.id);
+    const planned: RunId[] = schedule(chosen, options.pilot ? 1 : options.repeat ?? DEF.repeats, order, { upfront: DEF.arms.includes("nebulosity-upfront") });
+    const isDone = (run: RunId): boolean => fs.existsSync(`${P.runs}/${runName(run)}.jsonl.gz`);
     const todo = planned.filter((run) => !isDone(run));
     const batch = todo.slice(0, options.limit);
 
-    const mcp = { empty: EMPTY_MCP, nebulosity: NEBULOSITY_MCP };
+    // every repo the batch touches: HEAD at its commit, git status clean (all read-only)
+    const touched = [...new Set(batch.map((run) => questionRepo(questions.questions.find((q) => q.id === run.question)!).id))];
+    for (const id of touched){
+        const repo = repoOf(id);
+        const head = git(["-C", repo.root, "rev-parse", "HEAD"]).trim();
+        if (head !== repo.commit) throw new Stop(1, `${repo.root} is at ${head}, not ${repo.commit}: the eval's ground truth is for that commit.`);
+        const dirty = repoChanges(repo.root);
+        if (dirty.length > 0) throw new Stop(1, `git status in ${repo.root} names changes (${dirty.slice(0, 5).join(", ")}${dirty.length > 5 ? ", ..." : ""}). Nothing was run; ask the owner before restoring.`);
+        console.log(`${repo.root}: HEAD ${head}, git status clean`);
+    }
+
+    const mcp = { empty: P.emptyMcp, nebulosity: P.nebulosityMcp };
     const mcpNebulosity = { mcpServers: { nebulosity: { command: "node", args: [`${CHECKOUT}/mcp/launch.mjs`], env: { NEBULOSITY_LIVE: "off" } } } };
     const text = `${JSON.stringify(mcpNebulosity, null, 2)}\n`;
-    console.log(`MCP config for A: ${EMPTY_MCP}`);
-    console.log(`schedule: ${planned.length} runs, ${planned.length - todo.length} already in eval/runs, ${batch.length} to start${todo.length > batch.length ? ` (--limit ${options.limit}; ${todo.length - batch.length} more after)` : ""}`);
+    console.log(`MCP config for A: ${P.emptyMcp}`);
+    console.log(`schedule: ${planned.length} runs, ${planned.length - todo.length} already in ${P.name}/runs, ${batch.length} to start${todo.length > batch.length ? ` (--limit ${options.limit}; ${todo.length - batch.length} more after)` : ""}`);
 
     if (dry){
-        console.log(`MCP config for B, which a real run writes to ${NEBULOSITY_MCP}:\n${text.trimEnd()}`);
+        console.log(`MCP config for B, which a real run writes to ${P.nebulosityMcp}:\n${text.trimEnd()}`);
         for (const run of batch){
             const pins = childEnv({}, { gitBash, toolSearch: run.toolSearch, configDir: options.configDir ?? undefined });
             const q = questions.questions.find((x) => x.id === run.question)!;
-            const stdin = `${q.prompt}\n\n${questions.formats[q.family]}`;
+            const scratch = DEF.scripts ? `${P.scratch}/${runName(run)}` : undefined;
+            const stdin = promptFor(q, questions.formats, scratch);
             const attempt = attemptsSoFar(runName(run), rawFiles()) + 1;
             console.log(`\n${runName(run)} (attempt ${attempt})`);
-            console.log(`  command: ${quote(claude)} ${claudeArgs(run.arm, mcp).map(quote).join(" ")}`);
-            console.log(`  cwd: ${VSCODE}`);
+            console.log(`  command: ${quote(claude)} ${claudeArgs(run.arm, mcp, DEF.pins, { scratch }).map(quote).join(" ")}`);
+            console.log(`  cwd: ${questionRepo(q).root}`);
             console.log(`  stdin (${stdin.length} characters): ${JSON.stringify(stdin)}`);
             console.log(`  environment: ${Object.entries(pins).map(([k, v]) => `set ${k}=${v}`).join("; ")}; remove the ${stripped.length} names listed above`);
         }
@@ -415,26 +473,27 @@ async function main(): Promise<void> {
     }
 
     if (batch.length === 0){
-        console.log("Nothing to run: every run in this schedule is already in eval/runs.");
+        console.log("Nothing to run: every run in this schedule is already in ${P.name}/runs.");
         return;
     }
-    if (!fs.existsSync(EMPTY_MCP)) throw new Stop(1, `${EMPTY_MCP} is missing (it is committed).`);
+    if (!fs.existsSync(P.emptyMcp)) throw new Stop(1, `${P.emptyMcp} is missing (it is committed).`);
     // 30 s at most: nothing here may hang the runner
     const probe = spawnSync(claude, ["--version"], { encoding: "utf8", timeout: VERSION_TIMEOUT_MS });
     if (probe.error) throw new Stop(1, `claude --version didn't answer within ${VERSION_TIMEOUT_MS / 1000} s: ${probe.error.message}`);
     const version = probe.stdout?.trim().split(/\s+/)[0];
-    if (version !== CLAUDE_VERSION) throw new Stop(1, `claude --version is ${version ?? "unknown"}, not ${CLAUDE_VERSION}: the eval pins the version.`);
+    if (version !== DEF.claudeVersion) throw new Stop(1, `claude --version is ${version ?? "unknown"}, not ${DEF.claudeVersion}: the eval pins the version.`);
     console.log(`claude --version: ${version}`);
-    fs.mkdirSync(RAW_DIR, { recursive: true });
-    fs.writeFileSync(NEBULOSITY_MCP, text);
+    fs.mkdirSync(P.raw, { recursive: true });
+    fs.writeFileSync(P.nebulosityMcp, text);
 
     const home = forward(os.homedir());
     // null when no email is set (the folders are still checked); a warning when git couldn't say
     const email = gitEmail("eval:run", CHECKOUT);
     const ctx: Context = {
         options, questions, claude, gitBash, forbiddenPlugins, mcp,
-        replacements: [{ folder: VSCODE, with: "<vscode>" }, { folder: CHECKOUT, with: "<nebulosity>" }, { folder: home, with: "~" }],
-        needles: leakNeedles({ folders: [home, CHECKOUT, VSCODE], email }),
+        // each repo's folder becomes <its id> (<vscode> stays <vscode>), the checkout <nebulosity>, home ~
+        replacements: [...Object.keys(DEF.repos).map((id) => ({ folder: repoRoot(id), with: `<${id}>` })), { folder: CHECKOUT, with: "<nebulosity>" }, { folder: home, with: "~" }],
+        needles: leakNeedles({ folders: [home, CHECKOUT, ...Object.keys(DEF.repos).map(repoRoot)], email }),
     };
 
     process.on("exit", () => killTree(running?.pid));
@@ -457,7 +516,7 @@ async function main(): Promise<void> {
         }
         if (check.stop !== null) console.log(`Note: ${check.stop}. Wait before starting more runs.`);
     }
-    console.log(`Done: ${started} runs kept in eval/runs. ${todo.length - started} runs are left in this schedule.`);
+    console.log(`Done: ${started} runs kept in ${P.name}/runs. ${todo.length - started} runs are left in this schedule.`);
 }
 
 main().catch((e: unknown) => {

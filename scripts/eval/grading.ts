@@ -16,6 +16,7 @@
  */
 import crypto from "crypto";
 import fs from "fs";
+import { loadDefinition } from "./definition";
 import path from "path";
 import zlib from "zlib";
 import { parseRunName, type Rubric, type RunGrade } from "./score";
@@ -113,12 +114,12 @@ const writeJson = (file: string, value: unknown): void => {
 
 type QuestionsFile = { questions: { id: string; family: string; prompt: string; rubric?: string }[] };
 
-function sheets(checkout: string): void {
-    const keyFile = `${checkout}/.nebulosity/eval/grading-key.json`;
+function sheets(checkout: string, evalName: string): void {
+    const keyFile = `${checkout}/.nebulosity/${evalName}/grading-key.json`;
     const key: Key = fs.existsSync(keyFile) ? readJson<Key>(keyFile) : {};
-    const sheetsDir = `${checkout}/eval/grading/sheets`;
-    const bigPicture = readJson<QuestionsFile>(`${checkout}/eval/questions.json`).questions.filter((q) => q.family === "bigPicture");
-    const runsDir = `${checkout}/eval/runs`;
+    const sheetsDir = `${checkout}/${evalName}/grading/sheets`;
+    const bigPicture = readJson<QuestionsFile>(`${checkout}/${evalName}/questions.json`).questions.filter((q) => q.family === "bigPicture");
+    const runsDir = `${checkout}/${evalName}/runs`;
     const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith(".jsonl.gz")).sort() : [];
     const hasSheet = new Set(Object.values(key));
     let made = 0;
@@ -128,7 +129,7 @@ function sheets(checkout: string): void {
         const q = bigPicture.find((b) => b.id === parseRunName(name)?.question);
         if (q === undefined || hasSheet.has(name)) continue;
         if (q.rubric === undefined){
-            console.error(`${q.id} has no rubric field in eval/questions.json`);
+            console.error(`${q.id} has no rubric field in ${evalName}/questions.json`);
             process.exit(1);
         }
         const answer = summarizeRun(zlib.gunzipSync(fs.readFileSync(`${runsDir}/${file}`)).toString("utf8")).finalText ?? "";
@@ -151,8 +152,8 @@ function sheets(checkout: string): void {
     if (empty > 0) console.log(`${empty} of the new answers have no final text; their sheets carry an empty answer.`);
 }
 
-function merge(checkout: string): void {
-    const keyFile = `${checkout}/.nebulosity/eval/grading-key.json`;
+function merge(checkout: string, evalName: string): void {
+    const keyFile = `${checkout}/.nebulosity/${evalName}/grading-key.json`;
     if (!fs.existsSync(keyFile)){
         console.error(`${keyFile} not found: run sheets first`);
         process.exit(1);
@@ -161,8 +162,8 @@ function merge(checkout: string): void {
     const problems: string[] = [];
     const replies: Record<string, Reply> = {};
     for (const id of Object.keys(key).sort()){
-        const sheetFile = `${checkout}/eval/grading/sheets/${id}.json`;
-        const replyFile = `${checkout}/eval/grading/${id}.json`;
+        const sheetFile = `${checkout}/${evalName}/grading/sheets/${id}.json`;
+        const replyFile = `${checkout}/${evalName}/grading/${id}.json`;
         if (!fs.existsSync(sheetFile)){
             problems.push(`${id}: its sheet is missing`);
             continue;
@@ -188,7 +189,7 @@ function merge(checkout: string): void {
     }
     let grades = mergeGrades(key, replies);
     let reviewNote = "";
-    const reviewFile = `${checkout}/eval/grading/review.json`;
+    const reviewFile = `${checkout}/${evalName}/grading/review.json`;
     if (fs.existsSync(reviewFile)){
         const review = readJson<Review>(reviewFile);
         const applied = applyReview(grades, review, key);
@@ -199,19 +200,21 @@ function merge(checkout: string): void {
         grades = applied.grades;
         reviewNote = `owner's review: ${review.rulings.length} rulings, ${applied.changed} changed grades`;
     }
-    writeJson(`${checkout}/eval/grading/grades.json`, grades);
-    writeJson(`${checkout}/eval/grading/key.json`, Object.fromEntries(Object.entries(key).sort(([a], [b]) => a.localeCompare(b))));
+    writeJson(`${checkout}/${evalName}/grading/grades.json`, grades);
+    writeJson(`${checkout}/${evalName}/grading/key.json`, Object.fromEntries(Object.entries(key).sort(([a], [b]) => a.localeCompare(b))));
     if (reviewNote !== "") console.log(reviewNote.trim());
-    console.log(`${Object.keys(grades).length} runs graded -> eval/grading/grades.json; the key is published as eval/grading/key.json`);
+    console.log(`${Object.keys(grades).length} runs graded -> ${evalName}/grading/grades.json; the key is published as ${evalName}/grading/key.json`);
 }
 
 function main(): void {
     const checkout = forward(path.resolve(__dirname, "..", ".."));
     const command = process.argv[2];
-    if (command === "sheets") sheets(checkout);
-    else if (command === "merge") merge(checkout);
+    const given = process.argv.indexOf("--eval");
+    const evalName = path.basename(loadDefinition(path.resolve(checkout, given >= 0 ? process.argv[given + 1] ?? "" : "eval")).dir);
+    if (command === "sheets") sheets(checkout, evalName);
+    else if (command === "merge") merge(checkout, evalName);
     else{
-        console.error("usage: npm run eval:grading -- sheets | merge");
+        console.error("usage: npm run eval:grading -- sheets | merge [--eval <dir> (default eval)]");
         process.exit(1);
     }
 }

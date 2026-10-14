@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
-import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, rawFileName, runName, schedule, scrub, utilizationCheck } from "./run-config";
+import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchRule, scrub, utilizationCheck } from "./run-config";
 
 describe("claudeArgs", () => {
     it("pins the model and effort, drops user settings, allows read-only tools, and differs between arms only in the MCP config", () => {
@@ -181,5 +181,40 @@ describe("parsePorcelain and scrub", () => {
         const out = scrub("projects/C--Users-Ann-code-vscode/memory and C--Users-Ann/x", both);
         expect(out).toBe("projects/<vscode>/memory and ~/x");
         expect(findLeak(out, leakNeedles({ folders: ["C:/Users/Ann", "C:/Users/Ann/code/vscode"] }))).toBeNull();
+    });
+});
+
+describe("scripts allowed (Eval #2)", () => {
+    const mcp = { empty: "e.json", nebulosity: "n.json" };
+
+    it("allows node scripts and edits under the run's scratch folder when scripts are on, and denies edits otherwise", () => {
+        const scratch = "C:/Users/Ann/Nebulosity/.nebulosity/eval2/scratch/vscode-cn1-baseline-1";
+        const args = claudeArgs("baseline", mcp, undefined, { scratch });
+        const allowed = args[args.indexOf("--allowedTools") + 1].split(",");
+        expect(allowed).toContain("Bash(node:*)");
+        expect(allowed).toContain("Edit(//c/Users/Ann/Nebulosity/.nebulosity/eval2/scratch/vscode-cn1-baseline-1/**)");
+        expect(args[args.indexOf("--disallowedTools") + 1].split(",")).toEqual(["NotebookEdit", "WebFetch", "WebSearch", "Skill", "PowerShell", "Monitor"]);
+        expect(args.slice(args.indexOf("--add-dir"), args.indexOf("--add-dir") + 2)).toEqual(["--add-dir", scratch]);
+        expect(claudeArgs("baseline", mcp)).not.toContain("--add-dir");
+    });
+
+    it("writes a rule's absolute path as // and the path, with a Windows drive as its letter", () => {
+        expect(scratchRule("C:/a b/scratch")).toBe("//c/a b/scratch/**");
+        expect(scratchRule("/home/ann/scratch/")).toBe("//home/ann/scratch/**");
+    });
+
+    it("adds the scratch sentence after the format line (R6)", () => {
+        expect(promptFor({ prompt: "Q?", family: "chain" }, { chain: "End with ANSWER." }, "C:/s")).toBe(
+            "Q?\n\nEnd with ANSWER.\n\nYou may write and run Node.js scripts in C:/s (and nowhere else); don't change any file in the repository.");
+        expect(promptFor({ prompt: "Q?", family: "chain" }, { chain: "End with ANSWER." })).toBe("Q?\n\nEnd with ANSWER.");
+    });
+
+    it("schedules two arms without the up-front run when asked, alternating which goes first over three repeats", () => {
+        const runs = schedule(["a", "b"], 3, ["a", "b"], { upfront: false }).map(runName);
+        expect(runs).toEqual([
+            "a-baseline-1", "a-nebulosity-1", "b-nebulosity-1", "b-baseline-1",
+            "a-nebulosity-2", "a-baseline-2", "b-baseline-2", "b-nebulosity-2",
+            "a-baseline-3", "a-nebulosity-3", "b-nebulosity-3", "b-baseline-3",
+        ]);
     });
 });

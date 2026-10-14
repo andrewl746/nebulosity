@@ -24,6 +24,7 @@ import path from "path";
 import zlib from "zlib";
 import type { ChainTruthFile, ListTruthFile } from "./build-truth";
 import { answerSection, extractPaths, isNone, scoreChain, scoreList } from "./answer";
+import { loadDefinition } from "./definition";
 import type { Arm, RunId } from "./run-config";
 import { scanRepo } from "./scan";
 import { summarizeRun, type RunSummary } from "./transcript";
@@ -295,8 +296,8 @@ export function cleanlinessLine(c: Cleanliness): string | null {
 }
 
 /** Where the results are written: --out, else (when the runs come from somewhere else, as in a try-out) a temp file, else eval/results.json. */
-export function resultsFile(given: { runs: string | null; out: string | null }, checkout: string, tmp: string): string {
-    return given.out ?? (given.runs !== null ? `${tmp}/nebulosity-eval-results.json` : `${checkout}/eval/results.json`);
+export function resultsFile(given: { runs: string | null; out: string | null }, checkout: string, tmp: string, dir = "eval"): string {
+    return given.out ?? (given.runs !== null ? `${tmp}/nebulosity-eval-results.json` : `${checkout}/${dir}/results.json`);
 }
 
 export function renderTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
@@ -378,7 +379,7 @@ export function loadRuns(dir: string): { runs: LoadedRun[]; warnings: string[] }
 // ---- the command
 
 const forward = (p: string): string => p.replace(/\\/g, "/");
-const USAGE = "usage: npm run eval:score [-- --only <ids>] [--runs <dir>] [--out <file>]";
+const USAGE = "usage: npm run eval:score [-- --only <ids>] [--runs <dir>] [--out <file>] [--eval <dir> (default eval)]";
 
 class Stop extends Error {}
 
@@ -396,6 +397,7 @@ function main(): void {
     let only: string[] | null = null;
     let runsGiven: string | null = null;
     let outGiven: string | null = null;
+    let evalDir = "eval";
     for (let i = 0; i < args.length; i++){
         const value = (): string => {
             const v = args[++i];
@@ -405,12 +407,19 @@ function main(): void {
         if (args[i] === "--only") only = value().split(",").map((id) => id.trim().toLowerCase()).filter(Boolean);
         else if (args[i] === "--runs") runsGiven = forward(path.resolve(value()));
         else if (args[i] === "--out") outGiven = forward(path.resolve(value()));
+        else if (args[i] === "--eval") evalDir = value();
         else throw new Stop(`unknown argument ${args[i]}. ${USAGE}`);
     }
-    const runsDir = runsGiven ?? `${checkout}/eval/runs`;
-    const outFile = resultsFile({ runs: runsGiven, out: outGiven }, checkout, forward(os.tmpdir()));
+    const definition = loadDefinition(path.resolve(checkout, evalDir));
+    const dir = forward(definition.dir);
+    const name = path.basename(dir);
+    // one repo per scoring run so far (Eval #1's); the per-repo scoring of Eval #2 comes with its kinds
+    const [repoId] = Object.keys(definition.repos);
+    const repoPath = forward(path.resolve(checkout, definition.repos[repoId].path));
+    const runsDir = runsGiven ?? `${dir}/runs`;
+    const outFile = resultsFile({ runs: runsGiven, out: outGiven }, checkout, forward(os.tmpdir()), name);
 
-    const file = readJson<{ commit: string; questions: { id: string; family: Family; truth?: string; rubric?: string }[] }>(`${checkout}/eval/questions.json`);
+    const file = readJson<{ commit: string; questions: { id: string; family: Family; truth?: string; rubric?: string }[] }>(`${dir}/questions.json`);
     const unknown = (only ?? []).filter((id) => !file.questions.some((q) => q.id === id));
     if (unknown.length > 0 || only?.length === 0) throw new Stop(`no such question: ${unknown.join(", ") || "(none given)"}. The questions are ${file.questions.map((q) => q.id).join(", ")}.`);
     const questions: QuestionData[] = file.questions.filter((q) => only === null || only.includes(q.id)).map((q) => ({
@@ -419,23 +428,22 @@ function main(): void {
         ...(q.rubric ? { rubric: readJson<Rubric>(`${checkout}/${q.rubric}`) } : {}),
     }));
     const order = questions.map((q) => q.id);
-    const adjudicated = fs.existsSync(`${checkout}/eval/truth/adjudicated.json`) ? readJson<Adjudicated[]>(`${checkout}/eval/truth/adjudicated.json`) : [];
-    const grades = fs.existsSync(`${checkout}/eval/grading/grades.json`) ? readJson<Record<string, RunGrade>>(`${checkout}/eval/grading/grades.json`) : {};
+    const adjudicated = fs.existsSync(`${dir}/truth/adjudicated.json`) ? readJson<Adjudicated[]>(`${dir}/truth/adjudicated.json`) : [];
+    const grades = fs.existsSync(`${dir}/grading/grades.json`) ? readJson<Record<string, RunGrade>>(`${dir}/grading/grades.json`) : {};
 
     const loaded = loadRuns(runsDir);
     const warnings = [...loaded.warnings];
     const wanted = loaded.runs.filter((r) => order.includes(parseRunName(r.name)!.question));
-    for (const r of loaded.runs) if (!file.questions.some((q) => q.id === parseRunName(r.name)!.question)) warnings.push(`${r.name} is for a question that isn't in eval/questions.json; ignored`);
+    for (const r of loaded.runs) if (!file.questions.some((q) => q.id === parseRunName(r.name)!.question)) warnings.push(`${r.name} is for a question that isn't in ${name}/questions.json; ignored`);
 
     let results: RunResult[] = [];
     let edges: [string, string][] = [];
     if (wanted.length > 0){
-        const vscode = forward(path.resolve(checkout, "..", "vscode"));
-        const head = execFileSync("git", ["-C", vscode, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-        if (!head.startsWith(file.commit.slice(0, 8))) throw new Stop(`${vscode} is at ${head}, not ${file.commit}: the truth is for that commit.`);
-        const g = scanRepo(vscode);
+        const head = execFileSync("git", ["-C", repoPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+        if (!head.startsWith(file.commit.slice(0, 8))) throw new Stop(`${repoPath} is at ${head}, not ${file.commit}: the truth is for that commit.`);
+        const g = scanRepo(repoPath);
         edges = g.edges;
-        const ctx: ScoreContext = { repoRoot: "<vscode>", known: new Set(g.files), imports: makeImports(g.edges, adjudicated) };
+        const ctx: ScoreContext = { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicated) };
         results = wanted.map((r) => {
             const id = parseRunName(r.name)!;
             return scoreRun(r, id, questions.find((q) => q.id === id.question)!, ctx, grades[r.name]);
@@ -464,11 +472,11 @@ function main(): void {
     } else if (results.length > 0) console.log("--only: the results file was not written.");
 
     if (toRead.length > 0){
-        console.log(`\n## Chain steps to read\n\nThese steps of scored chains are the scanner's alone and are not steps of the truth's own chain, which was read by hand. They count as imports; read each in the source, and add a verdict to eval/truth/adjudicated.json if the scanner is wrong. They do not stop the scorer.\n\n${toRead.map((t) => `- ${t.step[0]} → ${t.step[1]} (${t.runs.join(", ")})`).join("\n")}`);
+        console.log(`\n## Chain steps to read\n\nThese steps of scored chains are the scanner's alone and are not steps of the truth's own chain, which was read by hand. They count as imports; read each in the source, and add a verdict to ${name}/truth/adjudicated.json if the scanner is wrong. They do not stop the scorer.\n\n${toRead.map((t) => `- ${t.step[0]} → ${t.step[1]} (${t.runs.join(", ")})`).join("\n")}`);
     }
     const steps = pendingSteps(results);
     if (steps.length > 0){
-        console.log(`\n## Chain steps to adjudicate\n\nRead the source for each step and add {"from", "to", "imports", "note"} to eval/truth/adjudicated.json:\n\n${steps.map(([a, b]) => `- ${a} → ${b}`).join("\n")}`);
+        console.log(`\n## Chain steps to adjudicate\n\nRead the source for each step and add {"from", "to", "imports", "note"} to ${name}/truth/adjudicated.json:\n\n${steps.map(([a, b]) => `- ${a} → ${b}`).join("\n")}`);
         process.exitCode = 1;
     }
 }

@@ -50,3 +50,5 @@ CLAUDE.md
 
 # the eval runner's half-written transcripts (a .gz is written as .tmp and renamed once its index line is in)
 eval/runs/*.tmp
+eval2/runs/*.tmp
+eval2/dev/runs/*.tmp

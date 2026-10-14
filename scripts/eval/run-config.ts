@@ -16,7 +16,11 @@ export const ALLOWED_TOOLS = [
 export const DENIED_TOOLS = ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "PowerShell", "Monitor"];
 
 /** The claude -p arguments; the prompt goes on stdin. The two arms differ only in the MCP config file. */
-export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS): string[] {
+export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: { scratch?: string } = {}): string[] {
+    const scratch = options.scratch;
+    // with scripts on, node and edits under the run's scratch folder are allowed, and Edit and Write leave the deny list (a deny would beat the path rule)
+    const allowed = scratch === undefined ? ALLOWED_TOOLS : [...ALLOWED_TOOLS, "Bash(node:*)", `Edit(${scratchRule(scratch)})`];
+    const denied = scratch === undefined ? DENIED_TOOLS : DENIED_TOOLS.filter((tool) => tool !== "Edit" && tool !== "Write");
     return [
         "-p", "--output-format", "stream-json", "--verbose",
         "--model", pins.model, "--effort", pins.effort,
@@ -24,10 +28,24 @@ export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string },
         "--setting-sources", "project,local",
         "--strict-mcp-config", "--mcp-config", arm === "nebulosity" ? mcp.nebulosity : mcp.empty,
         "--permission-mode", "dontAsk", "--permission-prompts", "none",
-        "--allowedTools", ALLOWED_TOOLS.join(","),
-        "--disallowedTools", DENIED_TOOLS.join(","),
+        "--allowedTools", allowed.join(","),
+        "--disallowedTools", denied.join(","),
+        ...(scratch === undefined ? [] : ["--add-dir", scratch]),
         "--no-session-persistence",
     ];
+}
+
+/** A permission rule's absolute path (code.claude.com permissions: "//" then the path, a Windows drive as /c): everything under the folder. */
+export function scratchRule(absPath: string): string {
+    const slashed = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
+    const drive = /^([A-Za-z]):\/(.*)$/.exec(slashed);
+    return drive ? `//${drive[1].toLowerCase()}/${drive[2]}/**` : `/${slashed}/**`;
+}
+
+/** The text a run sends: the question, its family's format line, and with scripts on the scratch sentence (R6). */
+export function promptFor(question: { prompt: string; family: string }, formats: Record<string, string>, scratch?: string): string {
+    const base = `${question.prompt}\n\n${formats[question.family]}`;
+    return scratch === undefined ? base : `${base}\n\nYou may write and run Node.js scripts in ${scratch} (and nowhere else); don't change any file in the repository.`;
 }
 
 /** Names that would bill an API key instead of the subscription, or override a pin. Windows ignores their case. */
@@ -81,7 +99,7 @@ export const QUESTION_ORDER = [
  * "By question" is the question's place in `order` (the whole list, which is `questions` itself unless only some of
  * them are asked), so the pilot and --only give a question the arm order the full run will give it.
  */
-export function schedule(questions: readonly string[], repeats: number, order: readonly string[] = questions): RunId[] {
+export function schedule(questions: readonly string[], repeats: number, order: readonly string[] = questions, options: { upfront: boolean } = { upfront: true }): RunId[] {
     const runs: RunId[] = [];
     for (let repeat = 1; repeat <= repeats; repeat++){
         for (const question of questions){
@@ -89,7 +107,7 @@ export function schedule(questions: readonly string[], repeats: number, order: r
             if (place < 0) throw new Error(`question ${question} is not in the order (${order.join(", ")})`);
             const arms: Arm[] = (place + repeat - 1) % 2 === 0 ? ["baseline", "nebulosity"] : ["nebulosity", "baseline"];
             for (const arm of arms) runs.push({ question, arm, repeat, toolSearch: true });
-            runs.push({ question, arm: "nebulosity", repeat, toolSearch: false });
+            if (options.upfront) runs.push({ question, arm: "nebulosity", repeat, toolSearch: false });
         }
     }
     return runs;

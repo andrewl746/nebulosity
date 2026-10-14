@@ -13,10 +13,10 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { loadDefinition } from "./definition";
 import { importSpecifiers, resolveRelative, scanRepo } from "./scan";
 import { directImporters, outsideImporters, shortestChain, transitiveDependents, type Graph } from "./truth";
 
-const VSCODE_COMMIT = "cc3fec88";
 
 export type ListSpec = { id: string; kind: "list"; target: string; scope: "direct" | "outside" | "transitive"; planning: string };
 export type ChainSpec = { id: string; kind: "chain"; from: string; to: string; planning: string };
@@ -188,22 +188,38 @@ function isHandChecked(file: string): boolean {
     return old.verified === true || (old.notes ?? []).length > 0;
 }
 
-const USAGE = "usage: npm run eval:truth -- <path to the vscode checkout> [--force]";
+const USAGE = "usage: npm run eval:truth -- <path to the repo's checkout> [--force] [--eval <dir> (default eval)]";
 
 function main(): void {
     const args = process.argv.slice(2);
     const force = args.includes("--force");
-    const paths = args.filter((a) => !a.startsWith("--"));
+    const given = args.indexOf("--eval");
+    const evalDir = given >= 0 ? args[given + 1] : "eval";
+    const paths = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--eval");
+    if (evalDir === undefined || evalDir.startsWith("--")){
+        console.error(USAGE);
+        process.exitCode = 1;
+        return;
+    }
     if (paths.length !== 1){
         console.error(USAGE);
         process.exitCode = 1;
         return;
     }
     const checkout = forward(path.resolve(__dirname, "..", ".."));
+    const definition = loadDefinition(path.resolve(checkout, evalDir));
+    const evalName = path.basename(definition.dir);
     const root = forward(path.resolve(paths[0]));
     const head = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    if (!head.startsWith(VSCODE_COMMIT)){
-        console.error(`${root} is at ${head}, not ${VSCODE_COMMIT}: the eval's ground truth is for that commit.`);
+    // the commit the definition pins for the repo at this path
+    const repo = Object.values(definition.repos).find((r) => forward(path.resolve(checkout, r.path)) === root);
+    if (repo === undefined){
+        console.error(`${root} is none of the repos of ${evalName}/eval.json (${Object.values(definition.repos).map((r) => r.path).join(", ")}).`);
+        process.exitCode = 1;
+        return;
+    }
+    if (head !== repo.commit){
+        console.error(`${root} is at ${head}, not ${repo.commit}: the eval's ground truth is for that commit.`);
         process.exitCode = 1;
         return;
     }
@@ -212,7 +228,7 @@ function main(): void {
     const known = new Set(g.files);
     console.log(`scanned ${root} at ${head.slice(0, 8)}: ${g.files.length} code files, ${g.edges.length} edges, ${((Date.now() - started) / 1000).toFixed(1)} s`);
 
-    const truthDir = `${checkout}/eval/truth`;
+    const truthDir = `${checkout}/${evalName}/truth`;
     fs.mkdirSync(truthDir, { recursive: true });
     const sheet: string[] = [
         `# Truth evidence for VS Code ${head.slice(0, 8)}`, "",
@@ -238,7 +254,7 @@ function main(): void {
     const adjudicated = `${truthDir}/adjudicated.json`;
     if (!fs.existsSync(adjudicated)) fs.writeFileSync(adjudicated, "[]\n");
 
-    const evidenceFile = `${checkout}/.nebulosity/eval/truth-evidence.md`;
+    const evidenceFile = `${checkout}/.nebulosity/${evalName}/truth-evidence.md`;
     fs.mkdirSync(path.dirname(evidenceFile), { recursive: true });
     fs.writeFileSync(evidenceFile, `${sheet.join("\n")}\n`);
     for (const r of rows) console.log(`${r.id}: ${r.size} (planning scan: ${r.planning})${r.example.length ? `\n    ${r.example.join("\n    ")}` : ""}`);
