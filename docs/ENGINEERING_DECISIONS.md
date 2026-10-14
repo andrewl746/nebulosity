@@ -825,7 +825,7 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
   - **readme:** a README's own folder.
   - **mentions:** each path of two or more segments the text names: an indexed folder or file, or a folder tail only one folder ends with.
 - `describe` names up to 5 docs linked to the place or its folders above it (the root left out). Each doc is shown by its strongest link, ranked by kind, deeper target, plain-folder glob, a name about architecture, count, then path.
-- `describe` of the repo and `overview` name up to 5 docs to read first: the root README, then docs named for architecture, then docs that apply to folders.
+- `describe` of the repo and `overview` name up to 5 docs to read first: the root README, then docs named for architecture, then docs that apply to folders. Within the architecture tier, a doc that also has an `applies` link to a non-root folder comes before the others (shallower path first after that, then more places mentioned, then path): without it, VS Code's five were README.md, AGENTS.md, CONTRIBUTING.md, .github/copilot-instructions.md and cli/CONTRIBUTING.md, and `source-code-organization.instructions.md`, the doc that motivated this ADR, never reached them.
 - No model is involved, so it all works in free mode.
 - Docs refresh with full runs only (R7): the worker's warm full run at start redoes them.
 - The row types (`DocFacts`, `DocLinkRow`, `DocLinkKind`) are declared in `lib/db/schema.ts`, so the store never imports from `lib/index/` (ARCHITECTURE.md §3, rule 4).

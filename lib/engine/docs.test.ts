@@ -2,6 +2,7 @@ import path from "path";
 import { describe as group, expect, it } from "vitest";
 import { describe } from "./describe";
 import { overview } from "./overview";
+import { rankDocsToReadFirst } from "./docs";
 import { indexRepository } from "../index/pipeline";
 
 const root = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
@@ -35,6 +36,30 @@ group("docs to read first, in overview", () => {
             { path: "README.md", title: "arch-repo" },
             { path: "docs/architecture.md", title: "Architecture" },
             { path: ".github/instructions/editor.instructions.md", title: "Editor rules", reason: { kind: "applies", target: "src/editor", detail: "src/editor/**", count: 1 } },
+        ]);
+    });
+});
+
+group("rankDocsToReadFirst's architecture tier", () => {
+    it("puts a doc that also applies to a non-root folder ahead of path depth, then keeps depth, mentions and path", () => {
+        const docs = [
+            { path: "README.md", title: "R" },
+            { path: "ARCHITECTURE.md", title: "A" },
+            { path: "docs/design.md", title: "D" },
+            { path: ".github/instructions/structure.instructions.md", title: "S" },
+            { path: "x/y/overview.md", title: "O" },
+        ];
+        const applies = (docPath: string, targetPath: string) => ({ docPath, targetPath, kind: "applies" as const, count: 1, detail: `${targetPath}/**` });
+        const out = rankDocsToReadFirst(docs, [
+            applies(".github/instructions/structure.instructions.md", "src/vs"),
+            applies("docs/design.md", ""),   // a root glob does not count
+        ]);
+        expect(out.map((p) => p.path)).toEqual([
+            "README.md",
+            ".github/instructions/structure.instructions.md",
+            "ARCHITECTURE.md",
+            "docs/design.md",
+            "x/y/overview.md",
         ]);
     });
 });

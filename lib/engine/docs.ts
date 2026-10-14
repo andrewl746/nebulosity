@@ -59,7 +59,7 @@ export function rankDocsAbout(links: readonly DocLinkRow[], titles: ReadonlyMap<
 
 /**
  * The docs to read first about the whole repo (ADR-054): the root README; docs named for architecture (shallower first,
- * then more places mentioned, then path); docs that apply to a folder (the shallowest folder, a plain-folder glob, path).
+ * then more places mentioned, then path; one that also applies to a non-root folder goes before all of them); docs that apply to a folder (the shallowest folder, a plain-folder glob, path).
  */
 export function rankDocsToReadFirst(docs: readonly { path: string; title: string }[], links: readonly DocLinkRow[], limit = DOCS_SHOWN): DocPointer[] {
     const out: DocPointer[] = [];
@@ -71,8 +71,9 @@ export function rankDocsToReadFirst(docs: readonly { path: string; title: string
 
     const readme = docs.find((d) => /^readme\.mdx?$/i.test(d.path));
     if (readme) add({ path: readme.path, title: readme.title });
+    const appliesToFolder = new Set(links.filter((l) => l.kind === "applies" && l.targetPath !== "").map((l) => l.docPath));
     docs.filter((d) => hasArchitectureWord(d.path))
-        .sort((a, b) => depth(a.path) - depth(b.path) || (mentioned.get(b.path) ?? 0) - (mentioned.get(a.path) ?? 0) || compare(a.path, b.path))
+        .sort((a, b) => Number(appliesToFolder.has(b.path)) - Number(appliesToFolder.has(a.path)) || depth(a.path) - depth(b.path) || (mentioned.get(b.path) ?? 0) - (mentioned.get(a.path) ?? 0) || compare(a.path, b.path))
         .forEach((d) => add({ path: d.path, title: d.title }));
     const titles = new Map(docs.map((d) => [d.path, d.title]));
     links.filter((l) => l.kind === "applies")
