@@ -5,9 +5,10 @@ import type { RunSummary } from "./transcript";
 const REQUIRED_TOOLS = ["Bash", "Read", "Grep", "Glob"];
 const FORBIDDEN_TOOLS = ["WebFetch", "WebSearch", "Skill", "PowerShell", "Edit", "Write"];
 
-export function validateInit(run: RunSummary, expect: { arm: Arm; model: string; forbiddenPlugins: readonly string[] }): string[] {
+export function validateInit(run: RunSummary, expect: { arm: Arm; model: string; claudeVersion: string; forbiddenPlugins: readonly string[] }): string[] {
     const problems: string[] = [];
     if (run.model !== expect.model) problems.push(`model is ${run.model}, not ${expect.model}`);
+    if (run.claudeVersion !== expect.claudeVersion) problems.push(`Claude Code is ${run.claudeVersion}, not ${expect.claudeVersion}`);
     if (run.permissionMode !== "dontAsk") problems.push(`permission mode is ${run.permissionMode}, not dontAsk`);
     if (run.apiKeySource !== null && run.apiKeySource !== "none") problems.push(`an API key is in use (${run.apiKeySource}), not the subscription`);
     const servers = run.mcpServers.map((s) => `${s.name}:${s.status}`);

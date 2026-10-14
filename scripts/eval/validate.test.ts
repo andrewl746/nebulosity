@@ -3,19 +3,23 @@ import type { RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
 const GOOD: RunSummary = {
-    model: "claude-sonnet-5-5", claudeVersion: "2.1.296", apiKeySource: "none", permissionMode: "dontAsk",
+    model: "claude-sonnet-5-5", claudeVersion: "2.1.299", apiKeySource: "none", permissionMode: "dontAsk",
     tools: ["Bash", "Read", "Grep", "Glob", "Agent", "ToolSearch"], mcpServers: [{ name: "nebulosity", status: "connected" }],
     plugins: ["cc-plugin-agents-md"], skills: 0, finalText: "x", subtype: "success", isError: false, turns: 3, durationMs: 1, apiMs: 1, costUsd: 0.1,
     usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 },
     models: { "claude-sonnet-5-5": { costUsd: 0.1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
     toolCalls: {}, nestedToolCalls: {}, toolErrors: 0, toolSearchCalls: 0, nebulosityCalls: 0, utilization: { fiveHour: 0.4, sevenDay: 0.6 },
 };
-const EXPECT = { arm: "nebulosity" as const, model: "claude-sonnet-5-5", forbiddenPlugins: ["superpowers", "context7"] };
+const EXPECT = { arm: "nebulosity" as const, model: "claude-sonnet-5-5", claudeVersion: "2.1.299", forbiddenPlugins: ["superpowers", "context7"] };
 
 describe("validateInit", () => {
     it("accepts the agreed setup", () => {
         expect(validateInit(GOOD, EXPECT)).toEqual([]);
         expect(validateInit({ ...GOOD, mcpServers: [] }, { ...EXPECT, arm: "baseline" })).toEqual([]);
+    });
+
+    it("refuses a run on a different Claude Code version", () => {
+        expect(validateInit({ ...GOOD, claudeVersion: "2.1.300" }, EXPECT)).toEqual(["Claude Code is 2.1.300, not 2.1.299"]);
     });
 
     it("names every way a run differs from the agreed setup", () => {

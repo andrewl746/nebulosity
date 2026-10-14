@@ -37,7 +37,7 @@ import { summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
 const VSCODE_COMMIT = "cc3fec88";
-const CLAUDE_VERSION = "2.1.296";
+const CLAUDE_VERSION = "2.1.299";
 const PILOT = ["bp4", "cl2", "cn3"];
 const TIMEOUT_MS = 30 * 60 * 1000;
 const VERSION_TIMEOUT_MS = 30 * 1000;
@@ -279,7 +279,7 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     console.log(`${name}: attempt ${attempt}${attempt > 1 ? ` (${attempt - 1} earlier raw transcript${attempt > 2 ? "s" : ""} kept in ${RAW_DIR})` : ""}`);
 
     const env = childEnv(process.env, { gitBash: ctx.gitBash, toolSearch: run.toolSearch, configDir: ctx.options.configDir ?? undefined });
-    const expected = { arm: run.arm, model: PINS.model, forbiddenPlugins: ctx.forbiddenPlugins };
+    const expected = { arm: run.arm, model: PINS.model, claudeVersion: CLAUDE_VERSION, forbiddenPlugins: ctx.forbiddenPlugins };
     const { timedOut, initProblems } = await runClaude(ctx.claude, claudeArgs(run.arm, ctx.mcp), env, prompt, rawFile, errFile, (init) => validateInit(init, expected));
     const endedAt = new Date();
 

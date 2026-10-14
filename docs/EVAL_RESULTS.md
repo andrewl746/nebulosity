@@ -20,7 +20,7 @@ The arms differ only in the MCP config file. Prompts are identical and never men
 
 | What | Value |
 |---|---|
-| Claude Code | 2.1.296, run as `claude -p --output-format stream-json --verbose`. The runner refuses to start if `claude --version` says anything else. |
+| Claude Code | 2.1.299, run as `claude -p --output-format stream-json --verbose`. The runner refuses to start if `claude --version` says anything else, and refuses any run whose init message reports another version. |
 | Model | `claude-sonnet-5-5` (the full id; the `sonnet` alias has moved between versions) |
 | Effort | `medium`, Claude Code's own default for Sonnet 5.5 |
 | Repo | VS Code at `cc3fec8846d0e678357e476fa611774da26d7e24`, a shallow clone at `../vscode`. The runner stops if its HEAD is anything else. |
@@ -58,7 +58,7 @@ claude -p --output-format stream-json --verbose
 
 - **On in both arms:** Read, Grep, Glob, the Agent tool, and Bash for read-only commands. D3 named `git grep`, `git ls-files`, `rg`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq` and `find`; the runner also allows `git log`, `git show` and `grep`. The Agent tool brings Explore and the other built-in subagents, which are how Claude Code explores a big repo by default. The runner expects `claude-haiku-5-5` for Claude Code's Explore subagent and notes any other model that answers; the pilot shows which models answer. `mcp__nebulosity` is allowed everywhere, but the tools exist only where the server runs.
 - **Off in both:** Edit, Write and NotebookEdit (nothing may change `../vscode`); WebFetch and WebSearch (the web holds the very wiki page the rubric comes from); Skill; PowerShell (`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`, so both arms use the same Bash shell); Monitor.
-- **Permissions:** `dontAsk` refuses anything outside the allowed set, and `--permission-prompts none` tells the model not to retry. Whether Claude Code 2.1.296 reads a rule like `Bash(git grep:*)` as intended shows in the pilot's `permission_denials`.
+- **Permissions:** `dontAsk` refuses anything outside the allowed set, and `--permission-prompts none` tells the model not to retry. Whether Claude Code 2.1.299 reads a rule like `Bash(git grep:*)` as intended shows in the pilot's `permission_denials`.
 - **Tool search:** the full run uses Claude Code's default, under which every MCP tool is deferred and loaded on demand through ToolSearch. That is what a user who follows the README gets. The pilot adds three B runs with `ENABLE_TOOL_SEARCH=false` (tools loaded up front, named `nebulosity-upfront`) to measure what deferral costs. If deferral clearly hurts, the fix is a product change (V1.6: `alwaysLoad` in the README's registration), reported as such, not a different eval setting. Each transcript records its ToolSearch calls.
 - **Limits per run:** 80 turns and $4 (Claude Code's own estimate), and a 30-minute wall-clock limit. A run that hits the turn or budget limit scores 0 and is reported. A run killed at 30 minutes is an outage (below).
 
