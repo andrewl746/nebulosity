@@ -16,6 +16,7 @@
     "bench-mcp": "tsx scripts/bench-mcp.ts",
     "bench-map": "tsx scripts/bench-map.ts",
     "bench-update": "tsx scripts/bench-update.ts",
+    "bench-search": "tsx scripts/bench-search.ts",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
     "preview-folders": "tsx scripts/preview-folders.ts"
   },
