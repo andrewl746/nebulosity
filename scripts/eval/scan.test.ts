@@ -61,11 +61,48 @@ describe("resolveRelative", () => {
     });
 });
 
+// Every way a source names a module: import/export ... from (one or many lines, either quote), a bare import, import() and require().
+// The same reader as lib/engine/rank.test.ts, so a single-line, double-quoted import is not the only form the pin can see.
+function moduleSpecifiers(source: string): string[] {
+    const found: { at: number; specifier: string }[] = [];
+    const collect = (pattern: RegExp, read: (m: RegExpMatchArray) => string): void => {
+        for (const m of source.matchAll(pattern)) found.push({ at: m.index ?? 0, specifier: read(m) });
+    };
+    collect(/\b(?:import|export)\b[^"';]*?\bfrom\s*(["'])([^"']+)\1/g, (m) => m[2]);
+    collect(/\bimport\s*(["'])([^"']+)\1/g, (m) => m[2]);
+    collect(/\b(?:import|require)\s*\(\s*(?:(["'])([^"']+)\1\s*\))?/g, (m) => m[2] ?? "<dynamic>");
+    return found.sort((a, b) => a.at - b.at).map((f) => f.specifier);
+}
+
+// A specifier reaches lib/ when it is relative and climbs into a lib folder, or goes through the @/ alias, or names lib/ itself.
+const reachesLib = (specifier: string): boolean => /(^|\/)lib(\/|$)/.test(specifier) || specifier.startsWith("@/");
+
 describe("the scanner's independence (R3)", () => {
+    it("reads every specifier form and flags the ones that reach lib/", () => {
+        const source = [
+            "import { a } from './a';",
+            "import {",
+            "    b,",
+            "} from '../../lib/b';",
+            'export * from "@/lib/c";',
+            'import "../lib/d";',
+            'const e = await import("../../lib/e");',
+            "const f = require('../../lib/f');",
+            'const g = require("../../lib/x");',
+            'import fs from "fs";',
+        ].join("\n");
+        expect(moduleSpecifiers(source).filter(reachesLib)).toEqual([
+            "../../lib/b", "@/lib/c", "../lib/d", "../../lib/e", "../../lib/f", "../../lib/x",
+        ]);
+        expect(moduleSpecifiers('import { execFileSync } from "child_process";').filter(reachesLib)).toEqual([]);
+    });
+
     it("imports nothing from lib/", () => {
         for (const file of ["scripts/eval/scan.ts", "scripts/eval/truth.ts"]){
-            const imports = [...fs.readFileSync(file, "utf8").matchAll(/^import\s.*?from\s+"([^"]+)";?\s*$/gm)].map((m) => m[1]);
-            expect({ file, fromLib: imports.filter((i) => i.includes("lib/")) }).toEqual({ file, fromLib: [] });
+            const specifiers = moduleSpecifiers(fs.readFileSync(file, "utf8"));
+            expect({ file, fromLib: specifiers.filter(reachesLib) }).toEqual({ file, fromLib: [] });
+            // A reader that stopped matching would pass the check above for any file, so scan.ts must be seen importing (truth.ts imports nothing).
+            if (file.endsWith("scan.ts")) expect({ file, found: specifiers.length > 0 }).toEqual({ file, found: true });
         }
     });
 });
