@@ -67,9 +67,22 @@ describe("isWatchedFile", () => {
         for (const rel of ["src/a.ts", "a.tsx", "b.mjs", "tsconfig.json", "packages/p/tsconfig.base.json", ".gitignore", "src/.gitignore"]){
             expect(isWatchedFile(rel)).toBe(true);
         }
-        for (const rel of ["README.md", "package.json", "src", "src/styles.css"]){
+        for (const rel of ["README.md", "src", "src/styles.css"]){
             expect(isWatchedFile(rel)).toBe(false);
         }
+    });
+
+    it("reports a package.json, which changes what bare specifiers resolve to (ADR-053)", () => {
+        expect(isWatchedFile("packages/ui/package.json")).toBe(true);
+        expect(isWatchedFile("package.json")).toBe(true);
+        expect(isWatchedFile("package-lock.json")).toBe(false);
+    });
+
+    it("reports the root's workspace declarations, pnpm-workspace.yaml and lerna.json, and nothing of those names below it", () => {
+        expect(isWatchedFile("pnpm-workspace.yaml")).toBe(true);
+        expect(isWatchedFile("lerna.json")).toBe(true);
+        expect(isWatchedFile("packages/p/pnpm-workspace.yaml")).toBe(false);
+        expect(isWatchedFile("packages/p/lerna.json")).toBe(false);
     });
 });
 

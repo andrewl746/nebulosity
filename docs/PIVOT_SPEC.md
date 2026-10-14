@@ -159,7 +159,7 @@ For every import edge `a → b`, take `L = LCA(dir(a), dir(b))`, the deepest fol
 Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree, skipping `node_modules`, `.git`, `.next` and `.nebulosity` (skipped in git mode too), plus `dist`, `out`, `build` and `coverage` (skipped only when walking: in a git repo `.gitignore` decides, and a tracked `build/` can be real source, as in VS Code). Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. Files larger than 1 MB are recorded as skipped. The scan is no longer limited to `app/` and `lib/`.
 
 ### 5.2 Structure (blocking; target S1 ≤ 60 s)
-1. Hash every file and skip unchanged ones (ADR-022's contentHash rule).
+1. Hash every file and skip unchanged ones (ADR-022's contentHash rule), unless an older version of the adapter parsed the repo: then every file is parsed again once (ADR-053).
 2. Parse changed files with the **TypeScript adapter** (`ts.createSourceFile`, no type checker):
    - **Chunks.** The existing chunker, keeping ADR-018/019/020.
    - **Symbols.** Top-level declarations plus class members.
@@ -170,6 +170,7 @@ Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; ot
    - `tsconfig` `paths`, read from the **nearest** `tsconfig.json` up the tree so monorepos work
    - NodeNext `.js → .ts`
    - `index` files
+   - workspace packages, module ids, computed import() and compiled → source paths (ADR-053)
 4. Write files, symbols, chunks, imports and FTS rows in batched transactions (§4.3).
 5. Aggregate: rebuild `folders` and `level_edges` in full each run (cheap at VS Code scale), then compute in-degree for importance.
 6. Mark the stage `ready`. **The Map is usable from this point.**

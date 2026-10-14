@@ -6,6 +6,13 @@ import type { SymbolKind, SymbolRow } from "../../db/schema";
 /** Every extension this adapter claims (TypeScript parses JavaScript too). */
 export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
+/**
+ * What this adapter reads from a file, versioned. Bump it whenever a change gives an unchanged file different imports,
+ * symbols or chunks: a full run then parses every file again once, where it would otherwise keep what the older
+ * adapter stored for every file whose bytes haven't changed (ADR-053). 1: V1.1–V1.5. 2: computed import() (ADR-053).
+ */
+export const ADAPTER_VERSION = 2;
+
 /** files.language for a path this adapter claims. TypeScript's parser reads both languages. */
 export function languageOf(filePath: string): "typescript" | "javascript" {
     return /\.(js|jsx|mjs|cjs)$/.test(filePath) ? "javascript" : "typescript";
@@ -62,6 +69,8 @@ function collectImports(sourceFile: ts.SourceFile): string[] {
 
             if ((isDynamicImport || isRequire) && ts.isStringLiteralLike(arg)){
                 found.push(arg.text);                                    // import("x") · require("x")
+            } else if (isDynamicImport && ts.isIdentifier(arg)){
+                found.push(...literalsAssignedTo(arg));                  // import(url): the literals url is given (ADR-053)
             }
         }
 
@@ -70,6 +79,47 @@ function collectImports(sourceFile: ts.SourceFile): string[] {
 
     visit(sourceFile);
     return [...new Set(found)];
+}
+
+/**
+ * The strings a variable is sure to hold when `import(variable)` reads it, in source order: its initializer and every
+ * plain assignment to it inside the same function (or file). A literal, a template without ${…}, and
+ * `new URL("<literal>", …)` (with .href or .toString()) count. A parameter, a template with ${…} or a call gives
+ * nothing: the code doesn't name the file (Review Focus 2).
+ */
+function literalsAssignedTo(name: ts.Identifier): string[] {
+    let scope: ts.Node = name;
+    while (scope.parent && !ts.isFunctionLike(scope) && !ts.isSourceFile(scope)) scope = scope.parent;
+    const found: string[] = [];
+    const visit = (node: ts.Node): void => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name.text && node.initializer){
+            const text = literalOf(node.initializer);
+            if (text !== null) found.push(text);
+        } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            && ts.isIdentifier(node.left) && node.left.text === name.text){
+            const text = literalOf(node.right);
+            if (text !== null) found.push(text);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(scope);
+    return found;
+}
+
+/** A string an expression is sure to hold, or null. */
+function literalOf(expression: ts.Expression): string | null {
+    if (ts.isParenthesizedExpression(expression)) return literalOf(expression.expression);
+    if (ts.isStringLiteralLike(expression)) return expression.text;
+    if (ts.isNewExpression(expression) && ts.isIdentifier(expression.expression) && expression.expression.text === "URL"){
+        const first = expression.arguments?.[0];
+        return first !== undefined && ts.isStringLiteralLike(first) ? first.text : null;
+    }
+    if (ts.isPropertyAccessExpression(expression) && expression.name.text === "href") return literalOf(expression.expression);
+    if (ts.isCallExpression(expression) && expression.arguments.length === 0 && ts.isPropertyAccessExpression(expression.expression)
+        && expression.expression.name.text === "toString"){
+        return literalOf(expression.expression.expression);
+    }
+    return null;
 }
 
 function collectSymbols(sourceFile: ts.SourceFile): SymbolRow[] {

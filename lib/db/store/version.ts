@@ -14,6 +14,22 @@ export function readIndexVersion(db: Db, repoId: number): number {
     return row ? Number(row.value) : 0;
 }
 
+const adapterKey = (repoId: number): string => `adapterVersion:${repoId}`;
+
+/** The language adapter's version (ADAPTER_VERSION) the repo's last full run parsed its files with; 0 when none recorded one (ADR-053). */
+export function readAdapterVersion(db: Db, repoId: number): number {
+    const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, adapterKey(repoId))).get();
+    return row ? Number(row.value) : 0;
+}
+
+export function writeAdapterVersion(db: Db, repoId: number, version: number): void {
+    const updatedAt = new Date();
+    db.insert(meta)
+        .values({ key: adapterKey(repoId), value: String(version), updatedAt })
+        .onConflictDoUpdate({ target: meta.key, set: { value: String(version), updatedAt } })
+        .run();
+}
+
 /** Adds one and returns the new value. One statement, so two processes bumping at once can't lose a bump. */
 export function bumpIndexVersion(db: Db, repoId: number): number {
     const updatedAt = new Date();

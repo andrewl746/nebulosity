@@ -1,9 +1,10 @@
 /**
- * npm run index -- <path-to-repo>
+ * npm run index -- <path-to-repo> [--no-activate]
  *
  * Runs the structure stage on a repository, prints what it found and how long each
  * step took (the numbers recorded in docs/BENCHMARKS.md), and makes that repo the
- * active one for the Map and the MCP server.
+ * active one for the Map and the MCP server. --no-activate indexes it and leaves the
+ * active repo as it was (a second repo indexed beside the one the Map shows).
  */
 import path from "path";
 import { indexRepository, RepoNotFoundError } from "../lib/index/pipeline";
@@ -16,9 +17,11 @@ import { hasAnthropicKey, loadLocalEnv } from "./env";
 loadLocalEnv();
 
 const target = process.argv[2];
+const extra = process.argv.slice(3);
+const activate = !extra.includes("--no-activate");
 
-if (!target){
-    console.error("usage: npm run index -- <path-to-repo>");
+if (!target || target.startsWith("--") || extra.some((arg) => arg !== "--no-activate")){
+    console.error("usage: npm run index -- <path-to-repo> [--no-activate]");
     process.exit(1);
 }
 
@@ -53,8 +56,12 @@ try{
         console.log(`[index] summaries: ${summaries.state} ${summaries.done}/${summaries.total}${summaries.note ? ` (${summaries.note})` : ""}`);
     }
 
-    writeConfig({ ...readConfig(), activeRepo: repoKey(root) });
-    console.log(`[index] active repo → ${repoKey(root)}`);
+    if (activate){
+        writeConfig({ ...readConfig(), activeRepo: repoKey(root) });
+        console.log(`[index] active repo → ${repoKey(root)}`);
+    } else{
+        console.log(`[index] active repo unchanged (--no-activate)`);
+    }
 } catch (err){
     if (err instanceof RepoNotFoundError){
         // exits before writeConfig, so a typo never becomes the active repo

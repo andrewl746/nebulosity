@@ -134,3 +134,22 @@ describe("gitIgnored", () => {
         expect(gitIgnored(dir, []).size).toBe(0);
     });
 });
+
+describe("discoverFiles on the architecture fixture", () => {
+    const root = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
+    const found = discoverFiles(root, { extensions: TS_EXTENSIONS });
+
+    it("finds the 21 source files", () => {
+        expect(found.files).toHaveLength(21);
+    });
+
+    it("lists the package.json and tsconfig files apart, sorted", () => {
+        expect(found.manifests).toEqual([
+            "package.json", "packages/core/package.json", "packages/core/tsconfig.json", "packages/ui/package.json", "src/tsconfig.json", "tools/tsconfig.json",
+        ]);
+    });
+
+    it("lists the markdown docs apart, sorted, the .github folder included", () => {
+        expect(found.docs.map((d) => d.path)).toEqual([".github/instructions/editor.instructions.md", "README.md", "docs/architecture.md", "src/app/README.md"]);
+    });
+});

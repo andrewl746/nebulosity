@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
 import { getDb } from "../db/client";
+import { replaceEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
 import { fillCodeSearch, isCodeSearchDeferred } from "../db/store/search";
 import { writeStage } from "../db/store/stages";
@@ -13,11 +14,12 @@ import {
 import { pruneSummaries } from "../db/store/summaries";
 import { bumpIndexVersion, readIndexVersion } from "../db/store/version";
 import { buildFolders, levelEdgeDeltas } from "./aggregate";
-import { DEFAULT_MAX_FILE_BYTES, gitIgnored, isExcludedPath, readGitHead } from "./discover";
+import { DEFAULT_MAX_FILE_BYTES, gitIgnored, isExcludedPath, listManifests, readGitHead } from "./discover";
 import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript";
 import { normalizeSlashes, repoKey } from "./paths";
 import { toFileRecord } from "./pipeline";
-import { createResolver, edgesFrom } from "./resolve";
+import { createResolver, createSourceFinder, edgesFrom } from "./resolve";
+import { declaredEntries, readWorkspace } from "./workspace";
 
 export type FileChangeResult = {
     repoId: number;
@@ -28,7 +30,7 @@ export type FileChangeResult = {
     /** Paths that needed nothing: the same bytes, or never a source file. */
     unchanged: number;
     errors: FileError[];
-    /** Every file's imports were re-resolved: the file set changed, or a tsconfig did (ADR-037). */
+    /** Every file's imports were re-resolved: the file set changed, or a tsconfig, a package.json or a workspace declaration did (ADR-037, ADR-053). */
     resolvedAll: boolean;
     edgesAdded: number;
     edgesRemoved: number;
@@ -37,15 +39,23 @@ export type FileChangeResult = {
     indexVersion: number;
 };
 
-/** A tsconfig decides what bare specifiers resolve to everywhere below it, so changing one re-resolves every file. */
-const TSCONFIG = /(^|\/)tsconfig[^/]*\.json$/;
+/**
+ * A tsconfig or a package.json decides what bare specifiers resolve to everywhere below it, and the root's
+ * pnpm-workspace.yaml or lerna.json which packages may be named (ADR-053).
+ */
+const RESOLUTION_INPUT = /(^|\/)(tsconfig[^/]*|package)\.json$|^(pnpm-workspace\.yaml|lerna\.json)$/;
+
+/** Whether a changed path re-resolves every file's imports: a tsconfig, a package.json or a workspace declaration changed. */
+export function resolvesEverything(changedPath: string): boolean {
+    return RESOLUTION_INPUT.test(changedPath);
+}
 
 /**
  * The incremental structure update (PIVOT_SPEC.md §5.6, ADR-037): what the background worker runs for the paths a
  * watcher reported, as repo-relative paths. Each path is looked at as it is now.
  * - An edited file is re-parsed and its own imports re-resolved.
- * - A created or deleted file, or a changed tsconfig, re-resolves every file's imports in memory: a new file can be what
- *   "../core" now means.
+ * - A created or deleted file, or a changed tsconfig, package.json or workspace declaration, re-resolves every file's
+ *   imports in memory: a new file can be what "../core" now means. The declared entry points are re-read then too.
  * Either way only the differences are written (import rows, level-edge counts, folder counts), so the result is what a
  * full run would store, without rewriting VS Code's 139,580 unchanged imports.
  */
@@ -114,11 +124,15 @@ export function applyFileChanges(repoRoot: string, changedPaths: readonly string
         const deleted = deleteFiles(db, repoId, gone);
 
         const fileSetChanged = changed.some((p) => !stored.has(p)) || deleted.length > 0;
-        const resolvedAll = fileSetChanged || paths.some((p) => TSCONFIG.test(p));
+        const resolvedAll = fileSetChanged || paths.some(resolvesEverything);
         const current = loadStoredFiles(db, repoId);
-        const resolve = createResolver(root, new Set(current.keys()));
+        const fileSet = new Set(current.keys());
+        // read on every update, not only when everything re-resolves: an edited file's workspace, module-id and
+        // computed edges need it as much as a full run's do (one git ls-files, about 0.1 s on VS Code)
+        const workspace = readWorkspace(root, listManifests(root));
+        const resolve = createResolver(root, fileSet, { workspace });
 
-        // the imports as they are now against as they were: every file's when the file set or a tsconfig changed,
+        // the imports as they are now against as they were: every file's when the file set or a resolution input changed,
         // else only the changed files' own (a file that failed keeps its old row and old edges, ADR-022)
         const sources = resolvedAll ? [...current.keys()] : changed;
         const before = resolvedAll ? loadImportEdges(db, repoId) : loadImportEdgesFrom(db, repoId, changed);
@@ -126,6 +140,7 @@ export function applyFileChanges(repoRoot: string, changedPaths: readonly string
         const { removed, added } = diffEdges(before, after);
 
         applyEdgeChanges(db, repoId, removed, added, levelEdgeDeltas([...removed, ...cascaded], added));
+        if (resolvedAll) replaceEntryPoints(db, repoId, declaredEntries(workspace, createSourceFinder(fileSet, workspace)));
         if (fileSetChanged){
             syncFolders(db, repoId, buildFolders([...current.keys()], path.basename(root)));
             pruneSummaries(db, repoId);   // a deleted file, or a folder left empty, takes its summary with it

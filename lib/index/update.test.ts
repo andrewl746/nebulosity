@@ -3,18 +3,19 @@ import { execFileSync } from "child_process";
 import { and, eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
-import { copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { folders, levelEdges } from "../db/schema";
+import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { loadImportEdges } from "../db/store/structure";
 import { loadFileFacts, loadFolderFacts, loadSummaries } from "../db/store/summaries";
 import { readIndexVersion } from "../db/store/version";
 import { indexRepository } from "./pipeline";
 import { runSummaries } from "./summarize/run";
-import { applyFileChanges } from "./update";
+import { applyFileChanges, resolvesEverything } from "./update";
 
 const write = (root: string, rel: string, text: string): void => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -159,5 +160,42 @@ describe("applyFileChanges", () => {
         } finally{
             releaseIndexLock(db);
         }
+    });
+});
+
+describe("what re-resolves every file, and the workspace on every update (ADR-053)", () => {
+    it("re-resolves every file when a package.json changes, as for a tsconfig (ADR-053)", () => {
+        expect(resolvesEverything("packages/ui/package.json")).toBe(true);
+        expect(resolvesEverything("package.json")).toBe(true);
+        expect(resolvesEverything("src/tsconfig.base.json")).toBe(true);
+        expect(resolvesEverything("src/package-lock.json")).toBe(false);
+        expect(resolvesEverything("src/app/main.ts")).toBe(false);
+    });
+
+    it("re-resolves every file when the root's workspace declarations change", () => {
+        expect(resolvesEverything("pnpm-workspace.yaml")).toBe(true);
+        expect(resolvesEverything("lerna.json")).toBe(true);
+        expect(resolvesEverything("packages/p/lerna.json")).toBe(false);
+    });
+
+    it("keeps a workspace edge when an edit re-resolves only the edited file", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        write(root, "src/platform/node/storageFile.ts", fs.readFileSync(path.join(root, "src/platform/node/storageFile.ts"), "utf8") + "// touched\n");
+
+        // a comment changes no import: the file's four edges (#27-#30) are re-resolved and come back the same
+        expect(applyFileChanges(root, ["src/platform/node/storageFile.ts"]))
+            .toMatchObject({ changed: ["src/platform/node/storageFile.ts"], deleted: [], resolvedAll: false, edgesAdded: 0, edgesRemoved: 0 });
+        expect(tables(repoId).imports).toContain("src/platform/node/storageFile.ts -> packages/core/src/index.ts (@arch/core)");
+        expect(tables(repoId)).toEqual(fullRunOf(root));
+    });
+
+    it("a changed package.json replaces the entry points", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        write(root, "package.json", JSON.stringify({ name: "arch-repo", private: true, main: "src/app/main.ts", workspaces: ["packages/*"] }));
+
+        expect(applyFileChanges(root, ["package.json"])).toMatchObject({ changed: [], deleted: [], resolvedAll: true, edgesAdded: 0, edgesRemoved: 0 });
+        expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/main.ts"]);
     });
 });

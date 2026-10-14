@@ -1,0 +1,6 @@
+{
+  "name": "arch-repo",
+  "private": true,
+  "main": "src/app/loader.ts",
+  "workspaces": ["packages/*"]
+}

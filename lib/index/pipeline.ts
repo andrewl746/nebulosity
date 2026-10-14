@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import type { IndexStage } from "../contracts";
 import { getDb, type Db } from "../db/client";
+import { replaceEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
 import { deferCodeSearch, fillCodeSearch, isCodeSearchDeferred } from "../db/store/search";
 import { writeStage } from "../db/store/stages";
@@ -11,13 +12,14 @@ import {
     type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
 import { pruneSummaries } from "../db/store/summaries";
-import { bumpIndexVersion } from "../db/store/version";
+import { bumpIndexVersion, readAdapterVersion, writeAdapterVersion } from "../db/store/version";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
-import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
+import { ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
 import { repoKey } from "./paths";
-import { createResolver, edgesFrom } from "./resolve";
+import { createResolver, createSourceFinder, edgesFrom } from "./resolve";
+import { declaredEntries, readWorkspace } from "./workspace";
 
 export type { IndexStage };
 
@@ -102,7 +104,9 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         options.onProgress?.("discover", discovered.files.length, discovered.files.length);
         writeStage(db, repoId, "structure", { state: "running", done: 0, total: discovered.files.length });
 
-        const toParse = discovered.files.filter((f) => (stored.get(f.path)?.contentHash ?? "") === "").length;
+        // files an older adapter parsed are parsed again whatever their hash: what it stored may lack what this one reads
+        const reparseAll = readAdapterVersion(db, repoId) !== ADAPTER_VERSION;
+        const toParse = reparseAll ? discovered.files.length : discovered.files.filter((f) => (stored.get(f.path)?.contentHash ?? "") === "").length;
         const deferred = toParse >= (options.bulkSearchThreshold ?? 2_000);
         if (deferred) deferCodeSearch(db);
 
@@ -128,8 +132,8 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
                 const contentHash = createHash("sha256").update(text).digest("hex");
 
-                // ADR-022: the hash means "the indexer last processed exactly these bytes"
-                if (stored.get(file.path)?.contentHash === contentHash){
+                // ADR-022: the hash means "the indexer last processed exactly these bytes" (with this adapter, ADR-053)
+                if (!reparseAll && stored.get(file.path)?.contentHash === contentHash){
                     unchanged++;
                     continue;
                 }
@@ -158,12 +162,14 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const deleted = deleteFilesNotIn(db, repoId, new Set(discovered.files.map((f) => f.path)));
         const current = loadStoredFiles(db, repoId);
         const fileSet = new Set(current.keys());
-        const resolve = createResolver(root, fileSet);
+        const workspace = readWorkspace(root, discovered.manifests);
+        const resolve = createResolver(root, fileSet, { workspace });
         const edges: ImportEdge[] = [];
 
         for (const [source, file] of current) edges.push(...edgesFrom(resolve, source, file.importSpecifiers));
 
         const edgeCount = replaceImports(db, repoId, edges);
+        replaceEntryPoints(db, repoId, declaredEntries(workspace, createSourceFinder(fileSet, workspace)));
         timingsMs.resolve = performance.now() - t;
         options.onProgress?.("resolve", fileSet.size, fileSet.size);
 
@@ -178,6 +184,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         const indexedHead = readGitHead(root);
         markIndexed(db, repoId, indexedHead);
+        writeAdapterVersion(db, repoId, ADAPTER_VERSION);
         writeStage(db, repoId, "structure", {
             state: "ready",
             done: fileSet.size,

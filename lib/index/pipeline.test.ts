@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
-import { copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
+import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/search";
 import { readStages, type StoredStage } from "../db/store/stages";
-import { findRepository, upsertRepository, writeFileRecords } from "../db/store/structure";
+import { findRepository, loadImportEdges, upsertRepository, writeFileRecords } from "../db/store/structure";
+import { writeAdapterVersion } from "../db/store/version";
+import { ADAPTER_VERSION } from "./languages/typescript";
 import { repoKey } from "./paths";
 import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
 
@@ -229,5 +232,66 @@ describe("indexRepository — code search deferred for a bulk run (ADR-031, amen
         indexRepository(copyFixture());   // any later run repairs first
         expect(isCodeSearchDeferred(db)).toBe(false);
         expect(searchCode(db, crashed, '"crashed"', 10).map((m) => m.path)).toEqual(["crashed.ts"]);
+    });
+});
+
+describe("indexRepository on the architecture fixture", () => {
+    const root = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
+
+    it("resolves the 31 imports of the ground truth", () => {
+        const result = indexRepository(root);
+        expect(result.files).toBe(21);
+        const db = getDb();
+        const edges = loadImportEdges(db, result.repoId).map((e) => `${e.source} -> ${e.target} (${e.specifier})`).sort();
+        expect(edges).toEqual([
+            "packages/core/src/index.ts -> packages/core/src/log.ts (./log)",
+            "packages/ui/src/button.ts -> packages/core/src/log.ts (@arch/core/lib/log)",
+            "packages/ui/src/index.ts -> packages/ui/src/button.ts (./button)",
+            "src/app/legacy.ts -> src/base/common/strings.ts (../base/common/strings)",
+            "src/app/loader.ts -> src/app/main.ts (./main.js)",
+            "src/app/main.ts -> packages/ui/src/index.ts (@arch/ui)",
+            "src/app/main.ts -> src/editor/browser/editorView.ts (../editor/browser/editorView)",
+            "src/app/main.ts -> src/editor/node/editorFiles.ts (../editor/node/editorFiles)",
+            "src/app/main.ts -> src/platform/node/storageFile.ts (../platform/node/storageFile)",
+            "src/base/browser/dom.ts -> src/base/common/strings.ts (../common/strings)",
+            "src/base/common/arrays.ts -> src/base/common/strings.ts (./strings)",
+            "src/base/node/fs.ts -> src/base/common/arrays.ts (../common/arrays)",
+            "src/base/test/common/strings.test.ts -> src/base/common/strings.ts (../../common/strings)",
+            "src/editor/browser/editorView.ts -> src/base/browser/dom.ts (../../base/browser/dom)",
+            "src/editor/browser/editorView.ts -> src/editor/common/model.ts (../common/model)",
+            "src/editor/common/model.ts -> src/editor/common/tokens.ts (./tokens)",
+            "src/editor/common/model.ts -> src/platform/common/storage.ts (../../platform/common/storage)",
+            "src/editor/common/textModel.ts -> src/base/common/strings.ts (../../base/common/strings)",
+            "src/editor/common/textModel.ts -> src/editor/common/model.ts (./model)",
+            "src/editor/common/tokens.ts -> src/editor/common/textModel.ts (./textModel)",
+            "src/editor/node/editorFiles.ts -> src/base/node/fs.ts (../../base/node/fs)",
+            "src/editor/node/editorFiles.ts -> src/editor/common/textModel.ts (../common/textModel)",
+            "src/editor/node/editorFiles.ts -> src/platform/node/storageFile.ts (../../platform/node/storageFile)",
+            "src/platform/browser/storageView.ts -> src/base/browser/dom.ts (../../base/browser/dom)",
+            "src/platform/common/storage.ts -> src/base/common/arrays.ts (../../base/common/arrays)",
+            "src/platform/common/storage.ts -> src/platform/browser/storageView.ts (../browser/storageView)",
+            "src/platform/node/storageFile.ts -> packages/core/src/index.ts (@arch/core)",
+            "src/platform/node/storageFile.ts -> src/base/node/fs.ts (../../base/node/fs)",
+            "src/platform/node/storageFile.ts -> src/editor/common/model.ts (../../editor/common/model)",
+            "src/platform/node/storageFile.ts -> src/platform/common/storage.ts (../common/storage)",
+            "tools/fixtures/legacy-ids.ts -> src/base/common/strings.ts (base/common/strings)",
+        ]);
+    });
+
+    it("stores the three entry points the package.json files name", () => {
+        const { repoId } = indexRepository(root);
+        expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
+    });
+
+    it("re-parses every file once when an older adapter parsed them, so unchanged files gain what this one reads", () => {
+        const copy = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(copy);
+        const db = getDb();
+        // as an index written before computed import(): loader.ts's stored imports lack its two literals, so edge #5 is gone
+        db.update(files).set({ importSpecifiers: "[]" }).where(and(eq(files.repoId, repoId), eq(files.path, "src/app/loader.ts"))).run();
+        writeAdapterVersion(db, repoId, ADAPTER_VERSION - 1);
+
+        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 21, unchanged: 0, edges: 31 });
+        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 0, unchanged: 21, edges: 31 });
     });
 });

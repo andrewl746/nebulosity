@@ -465,3 +465,55 @@ Each row covers 10 runs. The score is the mean share of rubric points for big-pi
 
 **Limits:** `../vscode` has no `node_modules`, so calls into outside types (Node, Electron) don't resolve. "Implementing class" is counted by name from `implements` clauses, which is what a heuristic fallback would see. The 4.74 ms per call is the whole second phase divided by 2,000 calls, so it includes walking all 10,237 files once and the checker's first-use work; the true cost per call is lower.
 **What it means for E2:** The program for VS Code's main project built in 18.2 s and peaked at 5.1 GB of memory, well under the 16 GB cap and this machine's 31.3 GB, so a type-checked call graph fits here. A full pass over all 778,624 method calls at 4.74 ms each would take about 3,700 s (about 62 minutes); that is an upper estimate, because the per-call figure includes the one-time walk. Of the 2,000 sampled calls, 768 (38%) resolved to an interface method. Of those 768, 114 (15%) have exactly one implementing class by name, 175 (23%) have several, and 479 (62%) have none we could see. So a unique-implementer rule would settle about 6% of all sampled calls (114 of 2,000), and the injected-service calls would mostly need the type-checker's own answer or stay unresolved. Memory of 5 GB is a heavy cost to ask of a user's machine. The owner decides E2's fate after Eval #2 (ADR-043).
+
+## 2026 10 14 Index Benchmark #4 — the structure stage with V1.6's resolution
+
+- **Targets and machine:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6da` (repo 2), the owner's laptop, Node 24.14.0.
+- **Commands:**
+  - S1, cold: `NEBULOSITY_HOME=<scratch folder holding only the migrations> npx tsx scripts/index.ts ../vscode`, three runs with ADR-053 in, and one with the code before it (`0656955`, run from a `git archive` copy) in the same session.
+  - The owner's index: `npm run index -- ../vscode`, then `npm run index -- ../affine --no-activate`, then `npm run report-resolution -- <repo>` for each.
+  - The lists: a read-only script in the V1.6 ledger that compares `reach()` on the owner's index with Eval #1's `eval/truth/cl1.json` … `cl5.json`.
+
+| Run | Edges | discover | parse | write | resolve | aggregate | **structure (S1)** | code search fill |
+|---|---|---|---|---|---|---|---|---|
+| before (`0656955`) | 139580 | 0.7 s | 18.2 s | 12.5 s | 1.6 s | 0.5 s | **33.6 s** | 3.7 s |
+| after, 1 | 140248 | 0.7 s | 16.0 s | 11.1 s | 2.0 s | 0.6 s | **30.4 s** | 3.5 s |
+| after, 2 | 140248 | 0.7 s | 16.8 s | 11.5 s | 1.9 s | 0.6 s | **31.5 s** | 3.4 s |
+| after, 3 | 140248 | 0.7 s | 16.7 s | 11.8 s | 1.9 s | 0.5 s | **31.8 s** | 3.5 s |
+
+**S1 (≤ 60 s): PASS at 31.8 s worst of three.**
+- Resolving costs 0.3–0.4 s more than before. Every bare specifier that no alias or package explains is now tried as a module id against VS Code's 65 tsconfig folders.
+- The machine was faster this session than for #3 (parse 16–18 s against 31 s), so these totals don't compare with #3's; the before row does.
+- Three earlier cold runs, made before the adapter version (below) was added, took 33.6, 36.4 and 35.4 s, with the same edges.
+
+**Edges.** VS Code went from 139,580 to 140,248: 668 added, none removed, no specifier changed.
+- 665 are module ids (`vs/…`) from 35 Copilot test and fixture files, under `extensions/copilot/src/extension/prompts/node/test/fixtures/` and `extensions/copilot/test/simulation/fixtures/`.
+- 3 come from computed `import()` loaders: `src/vs/code/electron-browser/workbench/workbench.ts` and `src/vs/sessions/electron-browser/sessions.ts` load their desktop mains, and `src/vs/code/node/cli.ts` loads `cliProcessMain.ts`. The adapter found 5 computed sites. The other two name npm packages (`@vscode/vsce-sign`, `vsda`) and stay unresolved.
+- Entry points stored: 50 for VS Code (its extensions' and test packages' mains), 100 for AFFiNE.
+
+**Eval #1's lists**, on the owner's re-indexed VS Code:
+
+| List | Target | Truth | Index | Result |
+|---|---|---|---|---|
+| CL1 | dependents (direct) of `src/vs/workbench/contrib/search/common/search.ts` | 22 | 22 | match |
+| CL2 | `src/vs/workbench/contrib/debug`, direct | 41 | 41 | match |
+| CL3 | `src/vs/editor/standalone`, direct | 3 | 3 | match |
+| CL4 | transitive dependents of `src/vs/workbench/contrib/markers/common/markers.ts` | 66 | 66 | match |
+| CL5 | `src/vs/platform/undoRedo`, direct | 57 | 57 | match |
+
+**Package names resolve only for declared workspaces.** VS Code declares no workspaces, so only its root package resolves by name. No edge comes from a `@vscode/prompt-tsx` specifier into `extensions/copilot/test/simulation/fixtures/codeMapper/`, a test fixture whose package.json carries that name, and none goes from `build/` into `extensions/gulp/`.
+
+**report-resolution:**
+
+| Repo | relative, before | relative, after | bare, before | bare, after |
+|---|---|---|---|---|
+| VS Code | 138,690/140,249 (98.9%) | 138,692/140,253 (98.9%) | 891/11,278 (7.9%) | 1,558/11,282 (13.8%) |
+| AFFiNE | 14,471/15,108 (95.8%) | 14,471/15,108 (95.8%) | 2,202/20,665 (10.7%) | 11,790/20,665 (57.1%) |
+
+- VS Code's before is the code before this change on a cold scratch index. AFFiNE's is V1.6 Task 1's probe.
+- VS Code's totals grew by the computed literals the adapter now reads.
+- AFFiNE's index went from 16,667 edges to 26,254. Its biggest unresolved names are now all outside packages (`lit` 1,637, `react` 924, `@toeverything/theme` 719, `@blocksuite/icons` 606). `@toeverything/infra`, `@blocksuite/affine`, `@blocksuite/std` and `@affine/component`, among the biggest misses before, are the repo's own packages and now resolve.
+
+**The owner's index.** The first `npm run index -- ../vscode` ran warm (6.0 s) and kept 140,245 edges. Its files were unchanged, so their stored specifiers were kept and the three loaders' computed literals were never read; CL4 found 63 of 66. ADR-053's adapter version fixes that. The next run parsed every file once (70.9 s: discover 1.0, parse 20.0, write 46.9, resolve 2.3, aggregate 0.7; it writes over every existing row) and stored 140,248 edges, as the cold runs did. Summaries stayed ready (18,637/18,637). AFFiNE indexed in 9.8 s (6,986 files, 26,254 edges, 1,982 folders), and the active repo stayed VS Code.
+
+**The incremental update's fixed cost** (`applyFileChanges` on an unchanged VS Code file, six runs in scratch homes): 66–104 ms before, 346–401 ms after. Each update now lists the manifests (`git ls-files`, about 0.26 s on VS Code) and reads the workspace (about 30 ms). ADR-053 discusses what that means for S6.

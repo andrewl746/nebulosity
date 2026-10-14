@@ -1,3 +1,5 @@
+import { packageNameOf } from "../lib/index/workspace";
+
 /**
  * How much of a repo's import specifiers the index resolves (S10, PIVOT_SPEC.md §2): relative ones, which should all
  * resolve, and bare ones, which resolve only when they name the repo's own code (a workspace package, an alias, a
@@ -10,11 +12,8 @@ export type ResolutionReport = {
     unresolvedBare: { name: string; count: number }[];
 };
 
-/** The package a bare specifier names: "@scope/name" with its scope, else the first segment. */
-export function packageNameOf(specifier: string): string {
-    const parts = specifier.split("/");
-    return specifier.startsWith("@") && parts.length > 1 ? `${parts[0]}/${parts[1]}` : parts[0];
-}
+/** The package a bare specifier names (shared with the resolver, ADR-053). */
+export { packageNameOf };
 
 const isRelative = (s: string): boolean => s === "." || s === ".." || s.startsWith("./") || s.startsWith("../");
 

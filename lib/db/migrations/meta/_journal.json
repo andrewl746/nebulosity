@@ -50,6 +50,13 @@
       "when": 1791831490270,
       "tag": "0006_v1_3_deferred_code_search",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792016019541,
+      "tag": "0007_v1_6_entry_points",
+      "breakpoints": true
     }
   ]
 }

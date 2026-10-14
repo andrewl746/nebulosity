@@ -3,7 +3,10 @@ import fs from "fs";
 import path from "path";
 import { FIXTURE } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
+import { discoverFiles } from "./discover";
+import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript";
 import { createResolver } from "./resolve";
+import { readWorkspace } from "./workspace";
 
 const FIXTURE_FILES = new Set([
     "scripts/build.js", "src/app/main.ts", "src/app/view.tsx", "src/core/index.ts",
@@ -63,5 +66,47 @@ describe("createResolver — tsconfig edge cases", () => {
         const resolve = createResolver(dir, new Set(["a.ts", "b.ts"]));
         expect(resolve("a.ts", "./b")).toBe("b.ts");
         expect(resolve("a.ts", "@x/y")).toBeNull();
+    });
+});
+
+describe("createResolver with the workspace (ADR-053)", () => {
+    const root = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
+    const found = discoverFiles(root, { extensions: TYPESCRIPT_EXTENSIONS });
+    const files = new Set(found.files.map((f) => f.path));
+    const resolve = createResolver(root, files, { workspace: readWorkspace(root, found.manifests) });
+
+    it("resolves a workspace package through its main, compiled path mapped to source", () => {
+        expect(resolve("src/platform/node/storageFile.ts", "@arch/core")).toBe("packages/core/src/index.ts");
+    });
+
+    it("resolves a workspace subpath through the package's outDir → rootDir", () => {
+        expect(resolve("packages/ui/src/button.ts", "@arch/core/lib/log")).toBe("packages/core/src/log.ts");
+    });
+
+    it("resolves a package's '.' export and a '*' pattern export", () => {
+        expect(resolve("src/app/main.ts", "@arch/ui")).toBe("packages/ui/src/index.ts");
+        expect(resolve("src/app/main.ts", "@arch/ui/button")).toBe("packages/ui/src/button.ts");
+    });
+
+    it("reads a module id against the one folder holding a tsconfig that has the file (R3)", () => {
+        expect(resolve("tools/fixtures/legacy-ids.ts", "base/common/strings")).toBe("src/base/common/strings.ts");
+        expect(resolve("src/app/loader.ts", "app/main.js")).toBe("src/app/main.ts");
+    });
+
+    it("leaves externals, one-segment names, scoped names that aren't packages and protocols unresolved", () => {
+        expect(resolve("src/app/main.ts", "react")).toBeNull();
+        expect(resolve("src/app/main.ts", "@other/thing/x")).toBeNull();
+        expect(resolve("src/app/main.ts", "node:fs/promises")).toBeNull();
+    });
+
+    it("refuses a module id two roots both hold", () => {
+        const both = createResolver("/repo", new Set(["a/lib/x.ts", "b/lib/x.ts", "c/main.ts"]), {
+            workspace: { byName: new Map(), packages: [], idRoots: ["a", "b"], outDirs: [] },
+        });
+        expect(both("c/main.ts", "lib/x")).toBeNull();
+    });
+
+    it("still resolves relative imports first, as before", () => {
+        expect(resolve("src/app/main.ts", "../editor/node/editorFiles")).toBe("src/editor/node/editorFiles.ts");
     });
 });

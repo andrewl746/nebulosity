@@ -1,0 +1,7 @@
+{
+  "name": "@arch/ui",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  }
+}

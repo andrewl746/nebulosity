@@ -102,3 +102,38 @@ describe("languageOf", () => {
         expect(["a.ts", "a.tsx", "a.mts", "a.cts"].map(languageOf)).toEqual(["typescript", "typescript", "typescript", "typescript"]);
     });
 });
+
+describe("computed import() (ADR-053)", () => {
+    const importsOf = (text: string): string[] => parseTypeScriptFile("x.ts", text).imports;
+
+    it("reads the literals assigned to the variable an import() is given, in source order", () => {
+        const loader = [
+            "export async function load(dev: boolean): Promise<unknown> {",
+            "    let url: string;",
+            '    if (dev) url = "./main.js";',
+            '    else url = new URL("app/main.js", import.meta.url).href;',
+            "    return import(url);",
+            "}",
+        ].join("\n");
+        expect(importsOf(loader)).toEqual(["./main.js", "app/main.js"]);
+    });
+
+    it("reads a const initializer, a template without ${}, and new URL(...).toString()", () => {
+        expect(importsOf("const a = `./a.js`;\nimport(a);")).toEqual(["./a.js"]);
+        expect(importsOf('function f() { const u = new URL("./b.js", base).toString(); return import(u); }')).toEqual(["./b.js"]);
+    });
+
+    it("gives nothing for a parameter, a template with ${}, or a value from a call", () => {
+        expect(importsOf("export function f(name: string) { return import(name); }")).toEqual([]);
+        expect(importsOf("function f(lang: string) { const p = `./locales/${lang}.js`; return import(p); }")).toEqual([]);
+        expect(importsOf('function f() { const p = pick("./x.js"); return import(p); }')).toEqual([]);
+    });
+
+    it("gives nothing for a call given straight to import() (Review Focus 2)", () => {
+        expect(importsOf('function f() { return import(getUrl()); }')).toEqual([]);
+    });
+
+    it("keeps a plain string import() as before", () => {
+        expect(importsOf('import("./c.js");')).toEqual(["./c.js"]);
+    });
+});

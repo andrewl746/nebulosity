@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import { dirOf, joinRepoPath, normalizeSlashes } from "./paths";
+import { EMPTY_WORKSPACE, packageNameOf, type Workspace, type WorkspacePackage } from "./workspace";
 import type { ImportEdge } from "../db/store/structure";
 
 /** Tried, in order, after a specifier that names no file directly. */
@@ -23,7 +24,80 @@ type PathsConfig = { baseDir: string | null; patterns: PathPattern[] };
 /** importer + specifier → the repo file it points at, or null (a package, outside the repo, or missing). */
 export type Resolver = (importer: string, specifier: string) => string | null;
 
-export function createResolver(repoRoot: string, fileSet: ReadonlySet<string>): Resolver {
+export type ResolverOptions = { workspace?: Workspace };
+
+/** A path as written to the file it names: itself, NodeNext .js → .ts, an added extension, or a folder's index file. */
+function findFile(fileSet: ReadonlySet<string>, base: string): string | null {
+    if (fileSet.has(base)) return base;
+
+    for (const [js, tsExtensions] of Object.entries(JS_TO_TS)){
+        if (!base.endsWith(js)) continue;
+        const stem = base.slice(0, -js.length);
+        for (const ext of tsExtensions) if (fileSet.has(stem + ext)) return stem + ext;
+    }
+
+    for (const ext of EXTENSIONS) if (fileSet.has(base + ext)) return base + ext;
+
+    const indexPrefix = base === "" ? "index" : `${base}/index`;
+    for (const ext of EXTENSIONS) if (fileSet.has(indexPrefix + ext)) return indexPrefix + ext;
+
+    return null;
+}
+
+/**
+ * A path as written (an import's target, a package.json's main) to the source file the repo has for it: the path
+ * itself (with extensions, NodeNext .js → .ts, index files), else its compiled folder mapped to the source folder
+ * (packages/core/lib/log → packages/core/src/log) through the workspace's outDir mappings (ADR-053).
+ */
+export function createSourceFinder(fileSet: ReadonlySet<string>, workspace: Workspace = EMPTY_WORKSPACE): (base: string) => string | null {
+    return (base) => {
+        const direct = findFile(fileSet, base);
+        if (direct !== null) return direct;
+        for (const { outDir, rootDir } of workspace.outDirs){
+            if (base === outDir || base.startsWith(`${outDir}/`)) return findFile(fileSet, rootDir + base.slice(outDir.length));
+        }
+        return null;
+    };
+}
+
+/** The paths a bare specifier can mean inside a workspace package: its exports, then its main fields or its own folders. */
+function packageCandidates(workspace: Workspace, specifier: string): string[] {
+    const name = packageNameOf(specifier);
+    const pkg = workspace.byName.get(name);
+    if (!pkg) return [];
+    const sub = specifier.slice(name.length).replace(/^\//, "");
+    const at = (target: string): string[] => {
+        const joined = joinRepoPath(pkg.dir, target);
+        return joined === null ? [] : [joined];
+    };
+    const key = sub === "" ? "." : `./${sub}`;
+    const candidates = [...exportTargets(pkg, key).flatMap(at)];
+    if (sub === "") candidates.push(...pkg.mains.flatMap((m) => at(m.target)), ...at("src/index"), ...at("index"));
+    else candidates.push(...at(sub), ...at(`src/${sub}`));
+    return candidates;
+}
+
+/** An exports key's targets: the exact key, else the first "*" pattern it fits, with the star filled in. */
+function exportTargets(pkg: WorkspacePackage, key: string): string[] {
+    const exact = pkg.exports.get(key);
+    if (exact) return exact;
+    for (const [pattern, targets] of pkg.exports){
+        const star = pattern.indexOf("*");
+        if (star === -1) continue;
+        const prefix = pattern.slice(0, star);
+        const suffix = pattern.slice(star + 1);
+        if (key.startsWith(prefix) && key.endsWith(suffix) && key.length >= prefix.length + suffix.length){
+            const middle = key.slice(prefix.length, key.length - suffix.length);
+            return targets.map((t) => t.replace("*", middle));
+        }
+    }
+    return [];
+}
+
+export function createResolver(repoRoot: string, fileSet: ReadonlySet<string>, options: ResolverOptions = {}): Resolver {
+    const workspace = options.workspace ?? EMPTY_WORKSPACE;
+    const sourceFor = createSourceFinder(fileSet, workspace);
+
     // nearest-tsconfig lookups are cached per directory: VS Code has ~15k files but few tsconfigs
     const configByDir = new Map<string, PathsConfig | null>();
 
@@ -40,21 +114,18 @@ export function createResolver(repoRoot: string, fileSet: ReadonlySet<string>): 
         return config;
     };
 
-    const findFile = (base: string): string | null => {
-        if (fileSet.has(base)) return base;
-
-        for (const [js, tsExtensions] of Object.entries(JS_TO_TS)){
-            if (!base.endsWith(js)) continue;
-            const stem = base.slice(0, -js.length);
-            for (const ext of tsExtensions) if (fileSet.has(stem + ext)) return stem + ext;
+    /** A module id read against the folders that hold a tsconfig (R3): the one file exactly one of them holds, or null. */
+    const moduleId = (importer: string, specifier: string): string | null => {
+        if (specifier.startsWith("@") || /^[a-z][a-z0-9+.-]*:/i.test(specifier) || !specifier.includes("/")) return null;
+        let found: string | null = null;
+        for (const root of workspace.idRoots){
+            const base = joinRepoPath(root, specifier);
+            const hit = base === null ? null : findFile(fileSet, base);
+            if (hit === null || hit === importer || hit === found) continue;
+            if (found !== null) return null;   // two roots hold it: not one file the id can mean
+            found = hit;
         }
-
-        for (const ext of EXTENSIONS) if (fileSet.has(base + ext)) return base + ext;
-
-        const indexPrefix = base === "" ? "index" : `${base}/index`;
-        for (const ext of EXTENSIONS) if (fileSet.has(indexPrefix + ext)) return indexPrefix + ext;
-
-        return null;
+        return found;
     };
 
     return (importer, rawSpecifier) => {
@@ -68,14 +139,15 @@ export function createResolver(repoRoot: string, fileSet: ReadonlySet<string>): 
         } else{
             const config = nearestConfig(dirOf(importer));
             if (config) candidates.push(...aliasCandidates(config, specifier));
+            candidates.push(...packageCandidates(workspace, specifier));
         }
 
         for (const base of candidates){
-            const hit = findFile(base);
+            const hit = sourceFor(base);
             if (hit !== null && hit !== importer) return hit;   // a file importing itself is no edge
         }
 
-        return null;
+        return isRelative ? null : moduleId(importer, specifier);
     };
 }
 

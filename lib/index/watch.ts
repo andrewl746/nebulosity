@@ -47,10 +47,14 @@ export function createBatcher(onFlush: (items: string[]) => void, timing: { quie
     };
 }
 
-/** What a watcher reports: source files, plus the files that change which sources exist or what they resolve to. */
+/**
+ * What a watcher reports: source files, plus the files that change which sources exist or what they resolve to: a
+ * tsconfig, a .gitignore, a package.json, and the root's workspace declarations (ADR-053).
+ */
 export function isWatchedFile(rel: string): boolean {
     const base = rel.slice(rel.lastIndexOf("/") + 1);
-    return TYPESCRIPT_EXTENSIONS.some((ext) => rel.endsWith(ext)) || /^tsconfig[^/]*\.json$/.test(base) || base === ".gitignore";
+    return TYPESCRIPT_EXTENSIONS.some((ext) => rel.endsWith(ext)) || /^tsconfig[^/]*\.json$/.test(base) || base === ".gitignore"
+        || base === "package.json" || rel === "pnpm-workspace.yaml" || rel === "lerna.json";
 }
 
 /**

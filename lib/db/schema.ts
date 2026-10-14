@@ -186,6 +186,16 @@ export const summaryUsage = sqliteTable("summary_usage", {
     uniqueIndex("summary_usage_unique").on(t.repoId, t.model, t.transport)
 ]);
 
+/** The files a package.json names as entry points (ADR-053, R8): main, module, types, bin, the "." export. */
+export const entryPoints = sqliteTable("entry_points", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    declaredBy: text("declared_by").notNull()   // "packages/core/package.json main"
+}, (t) => [
+    uniqueIndex("entry_points_repo_path_unique").on(t.repoId, t.path)
+]);
+
 /** A symbol as the language adapter produces it and the store writes it: every column but the ids. */
 export type SymbolRow = Omit<typeof symbols.$inferSelect, "id" | "fileId">;
 /** A folder as the aggregator builds it and the store writes it. */

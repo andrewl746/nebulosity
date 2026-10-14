@@ -5,7 +5,23 @@ import { normalizeSlashes } from "./paths";
 
 export type DiscoveredFile = { path: string; sizeBytes: number };
 export type SkippedFile = { path: string; reason: string };
-export type DiscoveryResult = { files: DiscoveredFile[]; skipped: SkippedFile[]; usedGit: boolean };
+export type DiscoveryResult = {
+    files: DiscoveredFile[];
+    skipped: SkippedFile[];
+    usedGit: boolean;
+    /** package.json and tsconfig*.json files: what resolving bare specifiers reads (ADR-053). Sorted. */
+    manifests: string[];
+    /** Markdown docs under the size cap: what the docs pointers read (ADR-054). Sorted. */
+    docs: DiscoveredFile[];
+};
+
+/** A package.json or a tsconfig*.json (tsconfig.json, tsconfig.base.json, …). */
+export const MANIFEST = /(^|\/)(package\.json|tsconfig[^/]*\.json)$/;
+
+/** The docs' extensions: Markdown, MDX, and Cursor's rule files. */
+export const DOC_EXTENSIONS: readonly string[] = [".md", ".mdx", ".mdc"];
+
+const byPath = (a: { path: string }, b: { path: string }): number => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
 /** Bigger than this is almost always generated or minified code, not something to read. */
 export const DEFAULT_MAX_FILE_BYTES = 1_000_000;
@@ -40,11 +56,22 @@ export function discoverFiles(
     const candidates = usedGit ? listWithGit(repoRoot) : listByWalking(repoRoot, skipped);
     const maxBytes = opts.maxBytes ?? DEFAULT_MAX_FILE_BYTES;
     const files: DiscoveredFile[] = [];
+    const manifests: string[] = [];
+    const docs: DiscoveredFile[] = [];
 
     for (const rel of candidates){
         const base = rel.slice(rel.lastIndexOf("/") + 1);
 
         if (base.startsWith(".env")) continue; // never index secrets, whatever the extension
+        if (MANIFEST.test(rel)){
+            manifests.push(rel);
+            continue;
+        }
+        if (DOC_EXTENSIONS.some((ext) => rel.toLowerCase().endsWith(ext))){
+            const docSize = sizeOf(path.join(repoRoot, rel));
+            if (docSize !== null && docSize <= maxBytes) docs.push({ path: rel, sizeBytes: docSize });
+            continue;
+        }
         if (!opts.extensions.some((ext) => rel.endsWith(ext))) continue;
 
         let size: number;
@@ -65,8 +92,23 @@ export function discoverFiles(
     }
 
     // plain code-unit order: deterministic on every OS and locale
-    files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-    return { files, skipped, usedGit };
+    files.sort(byPath);
+    return { files, skipped, usedGit, manifests: manifests.sort(), docs: docs.sort(byPath) };
+}
+
+/** The repo's package.json and tsconfig*.json files now, as discoverFiles lists them (one git call or one walk). */
+export function listManifests(repoRoot: string): string[] {
+    const usedGit = fs.existsSync(path.join(repoRoot, ".git"));
+    const candidates = usedGit ? listWithGit(repoRoot) : listByWalking(repoRoot, []);
+    return candidates.filter((rel) => MANIFEST.test(rel)).sort();
+}
+
+function sizeOf(absolute: string): number | null {
+    try{
+        return fs.statSync(absolute).size;
+    } catch{
+        return null;
+    }
 }
 
 function listWithGit(repoRoot: string): string[] {
