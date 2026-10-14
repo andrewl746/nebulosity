@@ -170,7 +170,7 @@ Agreement between lists beats a single first place. RRF uses positions only, so 
 
 ### Tests and snippets
 
-*(V1.5, ADR-052.)* After fusion, a test file or a test-only folder (one with files below it and none that isn't a test, the root never counted) keeps half its score and the list is sorted again (`dampTests`), unless the query asks for tests: test, tests, testing, spec, specs, smoke, e2e, fixture, fixtures, mock or mocks. Before this, "terminal" led with a test helper (`test/automation/src/terminal.ts`) and had put a smoke-test folder second; now the first hits are terminal code, and "terminal smoke test" still leads with the tests.
+*(V1.5, ADR-052.)* After fusion, a test file or a test-only folder (one with files below it and none that isn't a test, the root never counted) keeps half its score and the list is sorted again (`dampTests`), unless the query asks for tests: test, tests, testing, spec, specs, smoke, e2e, fixture, fixtures, mock or mocks. In V1.5's planning probe, "terminal" put a smoke-test folder second; after the file-name list it led with a test helper (`test/automation/src/terminal.ts`); with damping, its top 3 are the terminal contribution's own files, and "terminal smoke test" still leads with the tests.
 
 A file ranks by its best chunk but shows its best-matching declaration when one matched, because its imports-and-exports listing (the chunk named `(file)`) is a poor snippet. When the listing is all that matched, it's shown without the `File: <path>` line and the `Imports:` and `Exports:` labels (`cleanFileChunkSnippet`), and the answers call it "imports and exports" instead of giving a line range.
 

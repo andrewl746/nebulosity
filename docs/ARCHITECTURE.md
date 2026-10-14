@@ -55,7 +55,7 @@ This is the most important idea in the architecture. There are exactly three lay
 
 ```
 UI (app/components, app/page.tsx)
-  │  may import: contracts types, api-client helpers
+  │  may import: contracts types, api-client helpers, pure browser-safe lib/ modules (rule 3)
   ▼
 ADAPTERS (app/api/*/route.ts)
   │  may import: core, contracts
@@ -71,7 +71,7 @@ Rules an implementer MUST follow:
 
 1. **Core files never import from `app/` or `next`.** `lib/scan.ts` previously imported the `server-only` package as a defensive guard; it was removed 2026-07-13 while setting up F1's test harness, which surfaced the exact problem `ENGINEERING_DECISIONS.md`'s inherited-debt note predicted — the package throws when imported from any non-Next.js Node context, which includes a Vitest run. The original plan was to relocate the guard to the adapter layer instead of deleting it, but that turned out to be the wrong fix: this project's core is meant to be reusable from *multiple* future adapters (a web route handler, a CLI, an Electron main process), and none of those are "a real Next.js server" as far as `server-only` is concerned — it would have broken the CLI/Electron targets identically. The guard added no protection the architecture doesn't already provide (rule 3 below already forbids the UI from calling core directly), so it was deleted outright rather than moved.
 2. **Route handlers contain no business logic.** They validate input, call one core function, and shape the response. If a route handler grows past ~50 lines, logic is leaking into the adapter.
-3. **The UI never calls core directly.** Today `app/page.tsx` (a server component) calls `scanProject()` directly — that was expedient for the MVP and is scheduled to move behind `GET /api/graph` in Phase 1. After that, the UI's only knowledge of the backend is the contract types.
+3. **The UI never calls core directly.** Today `app/page.tsx` (a server component) calls `scanProject()` directly — that was expedient for the MVP and is scheduled to move behind `GET /api/graph` in Phase 1. After that, the UI's only knowledge of the backend is the contract types. *(Amended 2026-10-14, V1.5, ADR-052 and ADR-049: the UI may also import `lib/` modules that are pure and browser-safe, meaning they never touch a database, a disk or the network. Today that is `lib/engine/rank.ts`, which the search palette uses to name a hit's code, and the static demo's `lib/engine/staticSearch.ts`. The import-line test in `lib/engine/rank.test.ts` pins what each may import. Everything else under `lib/` stays behind the API.)*
 4. **Shared request/response types live in `lib/contracts.ts`** — one file, imported by both UI and adapters, so the two sides cannot drift apart silently. Persistence shapes are the one exception: they live in `lib/db/schema.ts` (ADR-013), because the database schema is its own compiler-enforced contract.
 5. **Only `lib/db/*` touches the database; only `lib/scanner-bridge.ts` chooses a scan engine.** The native C++ scanner (ADR-014) is an optional accelerator behind the same `ScannedFile[]` contract as the Node scanner — nothing above the bridge knows or cares which engine ran.
 

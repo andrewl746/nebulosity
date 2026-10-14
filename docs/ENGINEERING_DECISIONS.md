@@ -669,7 +669,7 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 **Decision:**
 - An entry is `{ name, description, inputSchema (zod), handler(input, context) }`. The context names the repo, says whether summaries are off, and carries any repo or index note (ADR-046). The handler returns `{ text, paths, action? }`: the answer, the paths it touched, and show_on_map's UI action. It never touches the network: the MCP adapter posts the live event, and E1's adapter will emit `ui_action`.
 - The text rules are API_CONTRACTS.md §17: plain text; repo-relative paths, folders ending in "/"; exact counts with separators; lists cut with "… N more" and the next offset where the tool pages; under 40,000 characters; notes last, with the stale-summary note very last, except the repo note, which comes first.
-- Free mode answers everything (ADR-043). Where a summary would go, the answer says summaries are off and what a key adds; search says it used code, folder names and file names.
+- Free mode answers everything (ADR-043). Where a summary would go, the answer says summaries are off and what a key adds; search says it used code and folder names. *(Amended 2026-10-14, ADR-052: the note also names file names.)*
 - One pure builder per tool (`lib/tools/answers.ts`) turns engine results into text, so the format is tested without a database.
 - `lib/agent/tools.ts` (the owner's Phase 5 tools) stays as it is until E1 replaces it with wrappers over this registry.
 **Alternatives:** (a) JSON answers (`structuredContent`): exact, but larger, and a model skims prose faster. (b) Handlers that post live events themselves: the Guide's in-process adapter would then make HTTP calls to its own server. (c) Markdown: tokens spent on syntax.

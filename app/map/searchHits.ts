@@ -1,5 +1,5 @@
 import type { SearchHit } from "@/lib/contracts";
-import { FILE_CHUNK } from "../../lib/engine/rank";
+import { FILE_CHUNK } from "@/lib/engine/rank";
 
 /** How the palette names a hit's best code: the declaration and its lines, or an imports listing (ADR-052). */
 export function codeLabel(code: NonNullable<SearchHit["code"]>): string {

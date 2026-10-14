@@ -332,7 +332,7 @@ export type SearchHit = {
   matchedBy: SearchList[];
   tagline?: string;
   summary?: string;
-  /** The best-matching chunk, when the code list found this file. */
+  /** The best-matching chunk, when the code list found this file: a declaration when one matched, else the imports listing ("(file)") with its header removed. */
   code?: { symbol: string; startLine: number; endLine: number; snippet: string };
 };
 
