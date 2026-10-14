@@ -5,24 +5,31 @@ export const EMBEDDING_DIM = 384;
 
 const BATCH_SIZE = 16;
 
-// lazy loaded embedding pipeline (model loads on first call, not at module import time)
-let pipelineInstance: FeatureExtractionPipeline | null = null;
+// lazy loaded embedding pipeline (model loads on first call, not at module import time).
+// The cache holds the loading PROMISE, not the finished pipeline: the pipeline only exists after an await, so two calls
+// that start together (Claude Code sends tool calls in parallel) would each see an empty cache and each load the model.
+let pipelineLoading: Promise<FeatureExtractionPipeline> | null = null;
 
-async function getPipeline(){
-    if (!pipelineInstance){
-        // dynamic import so the module can be imported without loading the model
-        const { pipeline } = await import("@huggingface/transformers");
+function getPipeline(): Promise<FeatureExtractionPipeline> {
+    pipelineLoading ??= loadPipeline().catch((err) => {
+        pipelineLoading = null;   // a failed load isn't kept, so the next call tries again
+        throw err;
+    });
 
-        // the model is ~25 MB and is fetched from huggingface.co the first time
-        // it is used, then cached under node_modules/.cache. Without this line a
-        // cold first index looks like a hang.
-        // stderr, not stdout: V1.4's MCP server speaks JSON-RPC over stdout, and one stray line there breaks the protocol.
-        console.error(`[embed] loading ${EMBEDDING_MODEL} (first run downloads ~25 MB)…`);
+    return pipelineLoading;
+}
 
-        pipelineInstance = await pipeline("feature-extraction", EMBEDDING_MODEL);
-    }
+async function loadPipeline(): Promise<FeatureExtractionPipeline> {
+    // dynamic import so the module can be imported without loading the model
+    const { pipeline } = await import("@huggingface/transformers");
 
-    return pipelineInstance;
+    // the model is ~25 MB and is fetched from huggingface.co the first time
+    // it is used, then cached under node_modules/.cache. Without this line a
+    // cold first index looks like a hang.
+    // stderr, not stdout: V1.4's MCP server speaks JSON-RPC over stdout, and one stray line there breaks the protocol.
+    console.error(`[embed] loading ${EMBEDDING_MODEL} (first run downloads ~25 MB)…`);
+
+    return pipeline("feature-extraction", EMBEDDING_MODEL);
 }
 
 /**
