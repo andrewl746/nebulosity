@@ -1,13 +1,13 @@
 # 2026 10 14 Eval #1 — Claude Code with and without Nebulosity on VS Code
 
-**Status: the method is fixed and the ground truth is hand-verified. No run has happened yet.** The results section is empty until the runs are done. Two calls on the questions wait for the owner (see "Open questions for the owner").
+**Status: the method is drafted and checked, and the owner's review of the questions and their truth is pending. No run has happened yet.** Claude models read the ground truth in the source and re-checked it; no person has yet (see "How the ground truth was made and checked"). The results section is empty until the runs are done. Two calls on the questions wait for the owner (see "Open questions for the owner").
 
 This is the evaluation `PIVOT_SPEC.md` §9 asks for. It asks one thing: does Claude Code answer questions about a big repo better with Nebulosity's MCP server than without it? "Better" means more correct, and at what cost in tokens, tool calls and time. Losses are reported beside wins. The reasons behind each choice are in ADR-050. The plan is `docs/plans/2026-10-13-v1-5-ship.md` (D2, D3 and D4).
 
 Where things are:
 - Questions, formats: `eval/questions.json`. Ground truth: `eval/truth/<id>.json`. Rubrics: `eval/rubric/<id>.json`.
 - The truth builder, the scanner it uses, the runner and the scorer: `scripts/eval/`.
-- Kept transcripts (scrubbed, scanned, gzipped): `eval/runs/`. Raw ones stay in `.nebulosity/eval/raw/`, which git ignores.
+- Kept transcripts (scrubbed, leak-scanned, gzipped): `eval/runs/`, with one summary line per run in `eval/runs/index.jsonl`. Raw ones stay in `.nebulosity/eval/raw/`, which git ignores.
 
 ## The two arms
 
@@ -56,7 +56,7 @@ claude -p --output-format stream-json --verbose
 
 ### What is on, what is off, and why
 
-- **On in both arms:** Read, Grep, Glob, the Agent tool, and Bash for read-only commands. D3 named `git grep`, `git ls-files`, `rg`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq` and `find`; the runner also allows `git log`, `git show` and `grep`. The Agent tool brings Explore and the other built-in subagents, which are how Claude Code explores a big repo by default. Explore runs on Haiku; the runner expects `claude-haiku-5-5` there and notes any other model that answers. `mcp__nebulosity` is allowed everywhere, but the tools exist only where the server runs.
+- **On in both arms:** Read, Grep, Glob, the Agent tool, and Bash for read-only commands. D3 named `git grep`, `git ls-files`, `rg`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq` and `find`; the runner also allows `git log`, `git show` and `grep`. The Agent tool brings Explore and the other built-in subagents, which are how Claude Code explores a big repo by default. The runner expects `claude-haiku-5-5` for Claude Code's Explore subagent and notes any other model that answers; the pilot shows which models answer. `mcp__nebulosity` is allowed everywhere, but the tools exist only where the server runs.
 - **Off in both:** Edit, Write and NotebookEdit (nothing may change `../vscode`); WebFetch and WebSearch (the web holds the very wiki page the rubric comes from); Skill; PowerShell (`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`, so both arms use the same Bash shell); Monitor.
 - **Permissions:** `dontAsk` refuses anything outside the allowed set, and `--permission-prompts none` tells the model not to retry. Whether Claude Code 2.1.296 reads a rule like `Bash(git grep:*)` as intended shows in the pilot's `permission_denials`.
 - **Tool search:** the full run uses Claude Code's default, under which every MCP tool is deferred and loaded on demand through ToolSearch. That is what a user who follows the README gets. The pilot adds three B runs with `ENABLE_TOOL_SEARCH=false` (tools loaded up front, named `nebulosity-upfront`) to measure what deferral costs. If deferral clearly hurts, the fix is a product change (V1.6: `alwaysLoad` in the README's registration), reported as such, not a different eval setting. Each transcript records its ToolSearch calls.
@@ -93,11 +93,11 @@ The runs use the owner's subscription, not an API key. Nothing of the owner's se
 
 ## The runs planned
 
-- **The pilot, 9 runs:** BP4, CL2 and CN3 in both arms (6), plus those three in B with tool search off (3). They also prove the isolation checks on real transcripts. Then each run's usage and the extrapolation are reported, and **the owner approves the full count.**
+- **The pilot, 9 runs:** BP4, CL2 and CN3 in both arms (6), plus those three in B with tool search off (3). They are also the first test of the isolation checks on real transcripts. Then each run's usage and the extrapolation are reported, and **the owner approves the full count.**
 - **The full run, 54 more:** the other 12 questions in both arms (24), then a second run of all 15 in both arms (30). The pilot's 6 two-arm runs count as first runs.
 - **Total:** 63 runs, plus at most 6 re-runs, only for infrastructure failures, never for a bad answer.
 - **If 63 won't fit** in the owner's usage: one run per question (30), plus the pilot's 3 tool-search runs.
-- **Expected usage:** Claude Code's estimate for V1.4's smoke run (8 turns, no exploring) was $0.05. An exploring run on VS Code should land between $0.30 and $1.50 at list prices, so roughly $20–90 for the 63. On a subscription that is a share of the 5-hour and 7-day windows, not a bill, and the pilot measures the share. About 20 runs fit in a sitting.
+- **Expected usage:** Claude Code's estimate for V1.4's smoke run (8 turns, no exploring) was $0.05. An exploring run on VS Code should land between $0.30 and $1.50 at list prices, so roughly $20–90 for the 63. On a subscription that is a share of the 5-hour and 7-day windows, not a bill, and the pilot measures the share. D4 estimated about 20 runs per sitting.
 
 ## The questions
 
@@ -144,16 +144,23 @@ A "step" is one import, so a chain of 4 steps names 5 files.
 
 The truth never comes from Nebulosity's index, or the eval would be circular.
 
+**Who checked it.** Claude models did, and the owner's review is still pending.
+- A Claude model (Opus, a subagent of the session that built the eval) read all 238 evidence lines, and every rubric point, in the source at `cc3fec88`.
+- The session spot-checked a sample: three of CL1's entries, CN5's chain and one of CL4's computed loaders.
+- A second model (Sonnet) then re-checked about 50 list entries, every chain step and every rubric point. It also built an independent graph from TypeScript's own tokenizer (14,847 files, 139,664 edges), which gave the same file sets for CL1–CL5 and the same chain lengths.
+- Where this section says something was read, a model read it. No person has read the truth yet. The owner reviews the questions and their truth before any run.
+
 - **An independent scanner.** `scripts/eval/scan.ts` reads import specifiers with a regex and resolves relative paths itself. It imports nothing from `lib/`, and a test pins that. On VS Code it reads 14,849 code files and 139,020 import edges in about 3 seconds. The truth builder (`npm run eval:truth -- ../vscode`) computes each list with the scanner's edges, and each chain by breadth-first search. It also writes an evidence sheet that lists the import line behind every edge.
-- **Every edge read by hand.** The evidence sheet holds 238 edges (each list entry, each step of each example chain). Each was printed with the lines around it and read in the source. All 238 are top-level import declarations: 197 `import … from`, 40 side-effect imports and 1 `import type`. None sits in a comment, a string or a template literal. The TypeScript parser was used as a reading aid, to say what starts on each line.
+- **Every edge read in the source.** The evidence sheet holds 238 import lines: 218 behind the 181 list entries (an entry can rest on more than one line), 16 chain steps, and 4 in CN4's start file. Each was printed with the lines around it and read in the source. All 238 are top-level import declarations: 197 `import … from`, 40 side-effect imports and 1 `import type`. None sits in a comment, a string or a template literal. The TypeScript parser was used as a reading aid, to say what starts on each line.
 - **Misses looked for two ways.** First `git grep` for each target's path, each folder's environment subfolders and CL1's namesake. Then a wider sweep: every quoted string in every tracked code file, comments and template literals included, which also catches an `import` split across lines and a `vs/…` module id. Each hit that was not already an entry was read.
-- **Nebulosity's index consulted only for candidates.** Read-only, through `reach` and `importChain`. It agrees with the hand-checked truth on all 181 list entries, on all 63 distances in CL4 and on all five chains. That is 0 bugs found in the index.
+- **Nebulosity's index consulted only for candidates.** Read-only, through `reach` and `importChain`. It agrees with the checked truth on all 181 list entries, on all 63 distances in CL4 and on all five chains. That is 0 bugs found in the index.
 - **Chains.** Every step of every example chain was read. A widened graph (the scanner's edges plus 1,618 edges that exist only as quoted strings) gives the same shortest lengths, so no missed written-out specifier can make a chain shorter. For CN4, `strings.ts` reaches 68 files: 67 in `src/vs/base/common`, plus `src/vs/nls.ts`, which imports nothing. Every one's imports were read, and none is in `src/vs/workbench`.
-- **The result:** 0 false hits dropped, 0 misses added, 0 chains changed. The sizes are exactly the planning scan's. `eval/truth/adjudicated.json` is empty. 30 candidates were read and ruled out; each is recorded in its truth's `notes`:
+- **The result:** 0 false hits dropped, 0 misses added, 0 chains changed. The sizes are exactly the planning scan's. `eval/truth/adjudicated.json` is empty. 30 candidates were read and left out, three of them pending the owner's call (open question 1); each is recorded in its truth's `notes`:
   - paths that only look alike (CL1: five files under `src/vs/workbench/services` import a namesake `search/common/search.ts`; CL3: `editor/common/standalone` is not `editor/standalone`);
   - Copilot test fixtures (old VS Code source kept as text; `extensions/copilot/tsconfig.json` excludes their folders);
-  - build entry-point lists and a file glob, lint scopes in `eslint.config.js`, and one 1.4 MB string of recorded data.
-- **Rubric points.** Each of the 34 was checked against `cc3fec88`: the files and folders exist, the functions have the stated signatures, the entry files import each other. 33 hold. BP3.1 does not (open question 2). Five points in BP4 (BP4.3, BP4.5, BP4.6, BP4.7, BP4.8) are documented rules the code breaks. For example, nothing outside `contrib` should depend on it, yet `src/vs/sessions` has 391 files that import `contrib`, `workbench/api` 113 and `workbench/test` 67; 36 of 101 contributions have more than one `.contribution.ts`. They stay in the rubric as "states the rule", and each point's `note` says how the code breaks it.
+  - build entry-point lists and a file glob, lint scopes in `eslint.config.js`, and one 1.4 MB string of recorded data;
+  - the three behind open question 1: two computed `import()` loaders (`src/vs/code/electron-browser/workbench/workbench.ts` and `src/vs/sessions/electron-browser/sessions.ts`) and `build/vite/workbench-electron.ts`, which imports the first.
+- **Rubric points.** Opus checked each of the 34 against `cc3fec88`, and Sonnet re-checked all 34: the files and folders exist, the functions have the stated signatures, the entry files import each other. 33 hold. BP3.1 does not (open question 2). Four points in BP4 (BP4.5–BP4.8) are documented rules the code breaks. For example, nothing outside `contrib` should depend on it, yet `src/vs/sessions` has 391 files that import `contrib`, `workbench/api` 113 and `workbench/test` 67; 36 of 101 contributions have more than one `.contribution.ts`. A fifth, BP4.3 (`services` holds core services, not ones only a contribution uses), is a rule the code mostly keeps: 3 of 95 service folders serve a single contribution. All five stay in the rubric as "states the rule", and each point's `note` says how the code breaks or keeps it.
 
 ## Scoring
 
@@ -173,7 +180,7 @@ Lists and chains are scored by `npm run eval:score`. Big-picture answers are gra
 
 **What is reported per run:**
 - the score;
-- tokens, summed over every model the run used, subagents included, with uncached input, cache writes, cache reads and output apart (the main conversation's tokens are shown apart too, because the baseline explores through subagents);
+- tokens, summed over every model the run used, subagents included, with uncached input, cache writes, cache reads and output apart (the main conversation's tokens are shown apart too, because the baseline may explore through subagents);
 - Claude Code's cost estimate (`total_cost_usd`, at list prices, not the owner's bill);
 - turns; tool calls by tool, top-level and inside subagents apart; wall time;
 - the 5-hour and 7-day utilization from the run's `rate_limit_event`;
@@ -184,14 +191,15 @@ Lists and chains are scored by `npm run eval:score`. Big-picture answers are gra
 ## Threats to validity
 
 - **VS Code ships its own overview for agents.** `AGENTS.md` points to `.github/copilot-instructions.md`, a 158-line architecture overview, and both arms can read it. It may help A as much as B.
-- **The wiki page is public.** The rubric comes from it, and the model may know it from training. Both arms share that, and it narrows any gap on the big-picture family.
+- **The wiki page is public.** The rubric comes from it, and the model may know it from training. Both arms share that, and it may narrow any gap on the big-picture family.
 - **Nebulosity's summaries were written by Claude models** (Haiku for files, Sonnet for folders and the repo), the same family that answers in both arms.
+- **The ground truth was read by models, and no person has read it yet.** A Claude model (Opus) read every edge and rubric point in the source, and a second (Sonnet) re-checked a sample of the entries, every chain step and every rubric point. A misreading shared by the models is possible. The owner's review comes before any run.
 - **The rubric is graded by a model**, with the owner's review of every grade, against one wiki page.
 - **Two runs per question is a small sample.** Repeats of one arm differ. The tables show every run, and the results make no claim a sample this small can't carry.
 - **No shared prompt cache between arms** (their tool lists differ), so a pair's first arm may meet a colder cache or an earlier hour. The arms alternate for that reason.
-- **The search tuning set includes words BP3 asks for.** Search Benchmark #2 (32 queries set by hand, `docs/BENCHMARKS.md`) includes `registerSingleton` and `createDecorator`. BP3's rubric asks answers to name those. None of the 32 names a file or folder that a list or chain question scores.
-- **The runner has never run Claude Code yet.** Its tests use hand-built transcripts, and its reading of a transcript was checked against the one real smoke-run transcript from V1.4. The isolation checks are proven on real transcripts by the pilot, and a failed check stops the batch.
-- **BP4's rule points measure repeating the wiki, not following the code.** BP4.3 and BP4.5–BP4.8 are documented rules the code breaks, and they count as "states the rule".
+- **The search tuning set overlaps the eval's topics.** Search Benchmark #2 (32 queries set by hand, `docs/BENCHMARKS.md`) includes `registerSingleton` and `createDecorator`, and BP3's rubric asks answers to name those. It also includes `extension host`, a BP1 topic, and `integrated terminal`, which shares CN1's topic (terminal code). The expected answers of those two include `src/vs/workbench/api/` (where CN3's first file lives) and `src/vs/workbench/contrib/terminal/` (where CN1's last file lives). No query names a file or folder that a list or chain question scores.
+- **The runner has never run Claude Code yet.** Its tests use hand-built transcripts, and its reading of a transcript was checked against the one real smoke-run transcript from V1.4. The isolation checks will first be proven on real transcripts by the pilot, and a failed check stops the batch.
+- **BP4's rule points measure repeating the wiki, not following the code.** BP4.5–BP4.8 are documented rules the code breaks, and BP4.3 is one it mostly keeps. All five count as "states the rule".
 - **The truth and the index could share a blind spot.** The scanner and the index both read written-out specifiers. The two other nets (the parse of every evidence line, and the quoted-string sweep) found nothing, but files loaded by a computed specifier (open question 1), by a worker's URL or by a forked process's entry path are outside the definition on purpose.
 - **Models may list files that aren't in the truth**, such as the Copilot test fixtures (CL2, CL5) or `build/vite/workbench-electron.ts` (CL4). Lists score by recall, so that costs precision only.
 - **Deferred tools may weaken B.** Under Claude Code's default, B's tools load on demand. The pilot's up-front runs measure what that costs.
