@@ -5,11 +5,11 @@
  * reads the database, so it runs while the Map is open. Exits 1 when any file holds a path of this machine or the git
  * email; the demo must never publish one (D7).
  */
-import { execFileSync } from "child_process";
 import path from "path";
 import { useReadOnlyDatabase } from "../lib/db/client";
 import { exportDemo, ExportRefusedError, IndexChangedError } from "../lib/demo/export";
 import { nebulosityPath } from "../lib/home";
+import { gitEmail } from "./git-email";
 
 const args = process.argv.slice(2);
 const USAGE = "usage: npm run export-demo -- <path-to-repo> [--out <folder>] [--name <public name>]";
@@ -20,14 +20,6 @@ const flag = (name: string): string | undefined => {
 // a flag with no value, or with another flag where its value belongs (--out --name x), is a mistake, not a default
 const missingValue = ["--out", "--name"].some((name) => args.includes(name) && (flag(name) === undefined || flag(name)!.startsWith("--")));
 const target = args.find((arg, i) => !arg.startsWith("--") && args[i - 1] !== "--out" && args[i - 1] !== "--name");
-
-function gitEmail(): string | null {
-    try{
-        return execFileSync("git", ["config", "user.email"], { encoding: "utf8" }).trim() || null;
-    } catch{
-        return null;
-    }
-}
 
 if (!target || missingValue){
     console.error(USAGE);
@@ -40,7 +32,7 @@ const out = path.resolve(flag("--out") ?? nebulosityPath(".nebulosity", "demo"))
 const started = performance.now();
 let report: ReturnType<typeof exportDemo>;
 try{
-    report = exportDemo(path.resolve(target), out, { publicName: flag("--name"), email: gitEmail() });
+    report = exportDemo(path.resolve(target), out, { publicName: flag("--name"), email: gitEmail("export-demo") });
 } catch (err){
     // the two failures with a plain remedy are one line, not a stack trace
     if (err instanceof ExportRefusedError || err instanceof IndexChangedError){

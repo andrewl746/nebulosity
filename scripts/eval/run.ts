@@ -28,6 +28,7 @@ import os from "os";
 import path from "path";
 import zlib from "zlib";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
+import { gitEmail } from "../git-email";
 import {
     PINS, QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, rawFileName, runName, schedule, scrub, utilizationCheck,
     type RunId,
@@ -429,12 +430,8 @@ async function main(): Promise<void> {
     fs.writeFileSync(NEBULOSITY_MCP, text);
 
     const home = forward(os.homedir());
-    let email: string | null = null;
-    try{
-        email = git(["-C", CHECKOUT, "config", "user.email"]).trim() || null;
-    } catch{
-        // no email configured: the folders are still checked
-    }
+    // null when no email is set (the folders are still checked); a warning when git couldn't say
+    const email = gitEmail("eval:run", CHECKOUT);
     const ctx: Context = {
         options, questions, claude, gitBash, forbiddenPlugins, mcp,
         replacements: [{ folder: VSCODE, with: "<vscode>" }, { folder: CHECKOUT, with: "<nebulosity>" }, { folder: home, with: "~" }],
