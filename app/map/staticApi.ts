@@ -33,7 +33,40 @@ export function createStaticApi(base: string = "/demo/", fetcher: typeof fetch =
         }
         if (response.status === 404) throw new ApiError(404, "NOT_FOUND", `The demo has no ${rel}.`);
         if (!response.ok) throw new ApiError(response.status, "INTERNAL", `The demo's ${rel} didn't load (HTTP ${response.status}).`);
-        return (await response.json()) as T;
+        try{
+            return (await response.json()) as T;
+        } catch (err){
+            if (err instanceof DOMException && err.name === "AbortError") throw err;
+            // a host that answers 200 with an HTML page for a missing file, or a body cut off mid-way
+            throw new ApiError(500, "INTERNAL", `The demo's ${rel} didn't load (it isn't JSON). Reload the page.`);
+        }
+    }
+
+    /** A folder's describe bundle, fetched once and kept; a failed fetch leaves the cache so the next call tries again. */
+    function bundleOf(id: number): Promise<DemoDescribeBundle> {
+        let bundle = bundles.get(id);
+        if (bundle === undefined){
+            const fetched = file<DemoDescribeBundle>(describeFile(id));
+            bundle = fetched;
+            bundles.set(id, fetched);
+            // only its own entry: the cap may have evicted this request and a newer one taken its place
+            fetched.catch(() => { if (bundles.get(id) === fetched) bundles.delete(id); });
+            if (bundles.size > MAX_BUNDLES) bundles.delete(bundles.keys().next().value!);
+        }
+        return bundle;
+    }
+
+    /**
+     * What to say about a path that isn't a folder: the server calls a file a file (400), since the Map opens folders and
+     * selects files inside them; anything else is not indexed (404). A bundle names a folder's files, and only its own keys.
+     */
+    async function notAFolder(at: DemoIndex, targetPath: string): Promise<ApiError> {
+        const holder = bundleIdFor(at, targetPath);
+        if (holder !== null && Object.hasOwn(await bundleOf(holder), targetPath)){
+            const folder = targetPath.includes("/") ? targetPath.slice(0, targetPath.lastIndexOf("/")) : "";
+            return new ApiError(400, "BAD_REQUEST", `"${targetPath}" is a file. Open its folder ("${folder}") and select it there.`);
+        }
+        return notIndexed(targetPath);
     }
 
     const index = (): Promise<DemoIndex> => (manifest ??= file<DemoManifest>("manifest.json").then((m) => {
@@ -50,7 +83,7 @@ export function createStaticApi(base: string = "/demo/", fetcher: typeof fetch =
         async level(folderPath: string, page: number = 0, signal?: AbortSignal, focus?: string): Promise<LevelResponse> {
             const at = await index();
             const id = at.ids.get(folderPath);
-            if (id === undefined) throw notIndexed(folderPath);
+            if (id === undefined) throw await notAFolder(at, folderPath);
             const count = pageCountOf(at, id);
             let wanted = clampPage(page, count);
             // the page holding the focus wins, as on the server; a focus outside this folder is ignored
@@ -61,16 +94,9 @@ export function createStaticApi(base: string = "/demo/", fetcher: typeof fetch =
         async describe(targetPath: string): Promise<DescribeResponse> {
             const id = bundleIdFor(await index(), targetPath);
             if (id === null) throw notIndexed(targetPath);
-            let bundle = bundles.get(id);
-            if (bundle === undefined){
-                bundle = file<DemoDescribeBundle>(describeFile(id));
-                bundles.set(id, bundle);
-                bundle.catch(() => bundles.delete(id));
-                if (bundles.size > MAX_BUNDLES) bundles.delete(bundles.keys().next().value!);
-            }
-            const answer = (await bundle)[targetPath];
-            if (answer === undefined) throw notIndexed(targetPath);
-            return answer;
+            const bundle = await bundleOf(id);
+            if (!Object.hasOwn(bundle, targetPath)) throw notIndexed(targetPath);
+            return bundle[targetPath];
         },
         async search(query: string, limit: number) {
             const at = await index();
