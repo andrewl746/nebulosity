@@ -11,7 +11,31 @@ const file = read("eval/questions.json");
 
 const DEFINITION = "Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.";
 
+// D2's question texts, copied by hand from the plan's D2 tables (not from questions.json), so a changed word fails here
+const STEMS: Record<string, string> = {
+    bp1: "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+    bp2: "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+    bp3: "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+    bp4: "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+    bp5: "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+    cl1: "List every file that directly imports `src/vs/workbench/contrib/search/common/search.ts`.",
+    cl2: "List every file outside `src/vs/workbench/contrib/debug` that directly imports a file inside it.",
+    cl3: "List every file outside `src/vs/editor/standalone` that directly imports a file inside it.",
+    cl4: "List every file that depends on `src/vs/workbench/contrib/markers/common/markers.ts`, directly or through other files.",
+    cl5: "List every file outside `src/vs/platform/undoRedo` that directly imports a file inside it.",
+    cn1: "How does `src/vs/workbench/workbench.desktop.main.ts` end up loading `src/vs/workbench/contrib/terminal/browser/terminalInstance.ts`? Give the shortest chain of imports.",
+    cn2: "Give the shortest chain of imports from `src/vs/workbench/workbench.web.main.ts` to `src/vs/workbench/contrib/debug/browser/debugSession.ts`.",
+    cn3: "Does `src/vs/workbench/api/common/extHost.api.impl.ts` depend on `src/vs/editor/common/model/textModel.ts`, directly or through other files? If it does, give the shortest chain of imports.",
+    cn4: "Does `src/vs/base/common/strings.ts` depend on any file in `src/vs/workbench`, directly or through other files? If it does, give the chain.",
+    cn5: "Give the shortest chain of imports from `src/vs/workbench/contrib/scm/browser/scmViewPane.ts` to `src/vs/platform/undoRedo/common/undoRedo.ts`.",
+};
+
 describe("eval/questions.json", () => {
+    it("asks D2's questions word for word, the list ones followed by the definition of an import after one space", () => {
+        expect(Object.keys(STEMS)).toEqual(QUESTION_ORDER);
+        for (const q of file.questions) expect(q.prompt, q.id).toBe(q.family === "list" ? `${STEMS[q.id]} ${DEFINITION}` : STEMS[q.id]);
+    });
+
     it("holds the fifteen questions in D2's order, for microsoft/vscode at cc3fec88", () => {
         expect(file.questions.map((q: { id: string }) => q.id)).toEqual(QUESTION_ORDER);
         expect(file.repo).toBe("microsoft/vscode");

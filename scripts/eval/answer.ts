@@ -66,9 +66,12 @@ export type ChainScore = { score: 0 | 0.5 | 1 | null; valid: boolean; steps: num
 
 /**
  * 1 for a valid chain of the shortest length or a right "none", 0.5 for a valid longer chain, 0 otherwise (D2). `to`
- * may be a folder. `imports` says whether one file imports another: true, false, or null when nobody knows yet. A null
- * step leaves the score null until it's adjudicated by reading the source (R4). Where no chain exists, saying "none"
- * is the whole answer: files named alongside it ("none: d never imports a") don't take the point away.
+ * may be a folder. `imports` says whether one file imports another: true, false, or null when nobody knows yet. Every
+ * step is checked before the score is decided: a step known false makes it 0 (the first such step is the problem),
+ * even after an unknown one, since nothing the unknown step turns out to be can save the chain. Only a chain with no
+ * false step and an unknown one waits, its score null until the first unknown step is adjudicated by reading the
+ * source (R4). Where no chain exists, saying "none" is the whole answer: files named alongside it ("none: d never
+ * imports a") don't take the point away.
  */
 export function scoreChain(answer: { none: boolean; files: readonly string[] }, truth: ChainTruth, imports: (a: string, b: string) => boolean | null): ChainScore {
     if (!truth.connected){
@@ -81,11 +84,13 @@ export function scoreChain(answer: { none: boolean; files: readonly string[] }, 
     const steps = f.length - 1;
     const reaches = (p: string): boolean => p === truth.to || p.startsWith(`${truth.to}/`);
     if (f[0] !== truth.from || !reaches(f[f.length - 1])) return { score: 0, valid: false, steps, problem: "doesn't run from the first file to the last" };
+    let unknown: [string, string] | undefined;
     for (let i = 0; i < steps; i++){
         const known = imports(f[i], f[i + 1]);
-        if (known === null) return { score: null, valid: false, steps, unknown: [f[i], f[i + 1]] };
-        if (!known) return { score: 0, valid: false, steps, problem: `${f[i]} doesn't import ${f[i + 1]}` };
+        if (known === false) return { score: 0, valid: false, steps, problem: `${f[i]} doesn't import ${f[i + 1]}` };
+        if (known === null && unknown === undefined) unknown = [f[i], f[i + 1]];
     }
+    if (unknown !== undefined) return { score: null, valid: false, steps, unknown };
     if (truth.shortest !== null && steps < truth.shortest) return { score: 1, valid: true, steps, problem: "shorter than the truth's shortest: recheck the truth" };
     return { score: steps === truth.shortest ? 1 : 0.5, valid: true, steps };
 }

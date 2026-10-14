@@ -5,18 +5,19 @@ import zlib from "zlib";
 import { describe, expect, it } from "vitest";
 import { runName } from "./run-config";
 import {
-    contradictions, familyArmRows, lastPerName, loadRuns, makeImports, median, parseRunName, pendingSteps, questionArmRows, renderTable, scoreAnswer, scoreRun,
-    sumTokens, type QuestionData, type RunResult, type ScoreContext,
+    cleanliness, cleanlinessLine, familyArmRows, lastPerName, loadRuns, makeImports, median, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable,
+    renderQuestionTable, renderTable, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, sumTokens, type FamilyArmRow, type QuestionArmRow, type QuestionData,
+    type RunResult, type ScoreContext,
 } from "./score";
 import type { RunSummary } from "./transcript";
 
 const A = "src/vs/a.ts", B = "src/vs/b.ts", C = "src/vs/c.ts", D = "src/vs/d.ts", E = "src/vs/e.ts", X = "src/vs/x.ts";
 const known = new Set([A, B, C, D, E, X]);
-// a → b → c → d, and the longer way a → x → b. Anything going to e.ts is unknown (nobody has read it yet).
+// a → b → c → d, and the longer way a → x → b. Anything going to or from e.ts is unknown (nobody has read it yet).
 const EDGES: [string, string][] = [[A, B], [B, C], [C, D], [A, X], [X, B]];
 const ctx: ScoreContext = {
     repoRoot: "<vscode>", known,
-    imports: (a, b) => (b === E ? null : EDGES.some(([x, y]) => x === a && y === b)),
+    imports: (a, b) => (a === E || b === E ? null : EDGES.some(([x, y]) => x === a && y === b)),
 };
 
 const listQ: QuestionData = {
@@ -92,6 +93,11 @@ describe("scoreAnswer: chains", () => {
         expect(s.unknown).toEqual([A, E]);
     });
 
+    it("scores 0 without waiting when a step that is known false follows an unknown one", () => {
+        // a -> e and e -> b are unknown, but b -> d is not an import, so the chain is wrong whatever e turns out to be
+        expect(scoreAnswer(answer(A, E, B, D), chainQ(3), ctx)).toMatchObject({ score: 0, pending: null, unknown: null, problem: `${B} doesn't import ${D}` });
+    });
+
     it("gives 0 for none when a chain exists, and 1 for none when none does", () => {
         expect(scoreAnswer(answer("none"), chainQ(3), ctx)).toMatchObject({ score: 0, problem: "no chain given" });
         expect(scoreAnswer(answer("none"), chainQ(null, false, D, A), ctx)).toMatchObject({ score: 1, none: true, flags: [] });
@@ -102,6 +108,13 @@ describe("scoreAnswer: chains", () => {
         expect(s.score).toBe(1);
         expect(s.files).toEqual([B]);
         expect(s.flags).toEqual(["none, but names files"]);
+    });
+
+    it("flags a chain that also names a path that isn't a file, such as a made-up hop dropped from it", () => {
+        const s = scoreAnswer(answer(A, "src/vs/made/up.ts", B, C, D), chainQ(3), ctx);
+        expect(s).toMatchObject({ score: 1, valid: true, steps: 3, files: [A, B, C, D], notFiles: ["src/vs/made/up.ts"], flags: ["names non-files"] });
+        // both flags, in the order they are found: the none first
+        expect(scoreAnswer(answer("none", B, "src/vs/q/z.ts"), chainQ(null, false, D, A), ctx).flags).toEqual(["none, but names files", "names non-files"]);
     });
 
     it("flags a valid chain shorter than the truth's shortest, which means the truth is wrong", () => {
@@ -131,24 +144,27 @@ describe("scoreAnswer: big-picture", () => {
     });
 });
 
-describe("makeImports and contradictions", () => {
+describe("makeImports and overrides", () => {
     const adjudicated = [
         { from: A, to: E, imports: true, note: "read it: line 3" },
         { from: B, to: E, imports: false, note: "only in a comment" },
-        { from: A, to: B, imports: false, note: "a wrong entry: the scanner has this edge" },
+        { from: A, to: B, imports: false, note: "read it: only in a comment, a false hit of the scanner's" },
     ];
 
-    it("takes the scanner's edge, else the adjudicated verdict, else null", () => {
+    it("takes the adjudicated verdict first (reading the source beats the scanner), else the scanner's edge, else null", () => {
         const imports = makeImports(EDGES, adjudicated);
-        expect(imports(A, B)).toBe(true);    // the scanner's edge wins over the entry that says false
+        expect(imports(A, B)).toBe(false);   // the scanner has this edge, the owner's reading says it is not an import: the reading wins
         expect(imports(A, E)).toBe(true);    // adjudicated true
         expect(imports(B, E)).toBe(false);   // adjudicated false
+        expect(imports(B, C)).toBe(true);    // the scanner's edge, not adjudicated
         expect(imports(C, E)).toBeNull();    // nobody knows
         expect(imports(D, A)).toBeNull();    // not an edge, not adjudicated: unknown, not false
     });
 
-    it("lists the entries that say a scanner edge isn't there, so a wrong one is noticed", () => {
-        expect(contradictions(EDGES, adjudicated)).toEqual([adjudicated[2]]);
+    it("lists the adjudicated verdicts that overturn a scanner edge, so the ruling is shown and not silent", () => {
+        // A -> E true is a step the scanner lacks and B -> E false overturns nothing; only A -> B overturns an edge
+        expect(overrides(EDGES, adjudicated)).toEqual([adjudicated[2]]);
+        expect(overrides(EDGES, [])).toEqual([]);
     });
 });
 
@@ -254,40 +270,44 @@ function result(name: string, over: Partial<RunResult>): RunResult {
         ...over,
     };
 }
-const total = (n: number): RunResult["tokens"] => ({ input: 0, cacheWrite: 0, cacheRead: 0, output: n, total: n });
+const tok = (input: number, cacheWrite: number, cacheRead: number, output: number): RunResult["tokens"] =>
+    ({ input, cacheWrite, cacheRead, output, total: input + cacheWrite + cacheRead + output });
 
 describe("the tables", () => {
     const results: RunResult[] = [
-        result("cl1-baseline-1", { score: 0.5, recall: 0.5, precision: 1, tokens: total(1000), costUsd: 0.125, wallMs: 10000, toolCalls: 4 }),
-        result("cl1-baseline-2", { score: 1, recall: 1, precision: 0.5, tokens: total(3000), costUsd: 0.375, wallMs: 30000, toolCalls: 8 }),
-        result("cl1-nebulosity-1", { score: 1, recall: 1, precision: 1, tokens: total(500), costUsd: 0.0625, wallMs: 5000, toolCalls: 2 }),
-        result("cl2-baseline-1", { score: 0, recall: 0, precision: 0, tokens: total(2000), costUsd: 0.25, wallMs: 20000, toolCalls: 6 }),
-        result("cn1-baseline-1", { family: "chain", score: 1, tokens: total(100), costUsd: 0.25, wallMs: 1000, toolCalls: 1 }),
-        result("cn1-baseline-2", { family: "chain", score: null, pending: "chain step to adjudicate", unknown: [A, E], tokens: total(300), costUsd: 0.75, wallMs: 3000, toolCalls: 3 }),
+        result("cl1-baseline-1", { score: 0.5, recall: 0.5, precision: 1, tokens: tok(10, 100, 1000, 5), costUsd: 0.125, wallMs: 10000, toolCalls: 4 }),
+        result("cl1-baseline-2", { score: 1, recall: 1, precision: 0.5, tokens: tok(30, 300, 3000, 15), costUsd: 0.375, wallMs: 30000, toolCalls: 8 }),
+        result("cl1-nebulosity-1", { score: 1, recall: 1, precision: 1, tokens: tok(5, 50, 400, 45), costUsd: 0.0625, wallMs: 5000, toolCalls: 2 }),
+        result("cl2-baseline-1", { score: 0, recall: 0, precision: 0, tokens: tok(20, 200, 2000, 10), costUsd: 0.25, wallMs: 20000, toolCalls: 6 }),
+        result("cn1-baseline-1", { family: "chain", score: 1, tokens: tok(1, 9, 80, 10), costUsd: 0.25, wallMs: 1000, toolCalls: 1 }),
+        result("cn1-baseline-2", { family: "chain", score: null, pending: "chain step to adjudicate", unknown: [A, E], tokens: tok(3, 27, 240, 30), costUsd: 0.75, wallMs: 3000, toolCalls: 3 }),
     ];
     const order = ["bp1", "cl1", "cl2", "cn1"];
 
     it("gives each question and arm its scores by repeat, their mean, and the lists' mean recall and precision", () => {
         expect(questionArmRows(results, order)).toEqual([
-            { question: "cl1", family: "list", arm: "baseline", runs: 2, scores: [0.5, 1], mean: 0.75, recall: 0.75, precision: 0.75 },
-            { question: "cl1", family: "list", arm: "nebulosity", runs: 1, scores: [1], mean: 1, recall: 1, precision: 1 },
-            { question: "cl2", family: "list", arm: "baseline", runs: 1, scores: [0], mean: 0, recall: 0, precision: 0 },
-            { question: "cn1", family: "chain", arm: "baseline", runs: 2, scores: [1, null], mean: 1, recall: null, precision: null },
+            { question: "cl1", family: "list", arm: "baseline", runs: 2, repeats: [1, 2], scores: [0.5, 1], mean: 0.75, recall: 0.75, precision: 0.75 },
+            { question: "cl1", family: "list", arm: "nebulosity", runs: 1, repeats: [1], scores: [1], mean: 1, recall: 1, precision: 1 },
+            { question: "cl2", family: "list", arm: "baseline", runs: 1, repeats: [1], scores: [0], mean: 0, recall: 0, precision: 0 },
+            { question: "cn1", family: "chain", arm: "baseline", runs: 2, repeats: [1, 2], scores: [1, null], mean: 1, recall: null, precision: null },
         ]);
     });
 
-    it("gives each family and arm its mean score over the scored runs, and the medians of tokens, cost, wall time and tool calls", () => {
+    it("gives each family and arm its mean score over the scored runs, and the medians of each kind of token, cost, wall time and tool calls", () => {
         const rows = familyArmRows(results);
-        // list, baseline: runs cl1-1, cl1-2, cl2-1. Scores .5, 1, 0; tokens 1000, 3000, 2000; cost .125, .375, .25; wall 10, 30, 20 s; calls 4, 8, 6
+        // list, baseline: runs cl1-1, cl1-2, cl2-1. Scores .5, 1, 0; cost .125, .375, .25; wall 10, 30, 20 s; calls 4, 8, 6
+        // tokens (uncached input, cache writes, cache reads, output): 10, 100, 1000, 5 / 30, 300, 3000, 15 / 20, 200, 2000, 10; totals 1115, 3345, 2230
         expect(rows[0]).toEqual({
             family: "list", arm: "baseline", runs: 3, scored: 3, mean: 0.5, recall: 0.5, precision: 0.5,
-            medianTokens: 2000, medianCostUsd: 0.25, medianWallMs: 20000, medianToolCalls: 6,
+            medianInput: 20, medianCacheWrite: 200, medianCacheRead: 2000, medianOutput: 10, medianTokens: 2230,
+            medianCostUsd: 0.25, medianWallMs: 20000, medianToolCalls: 6,
         });
-        expect(rows[1]).toMatchObject({ family: "list", arm: "nebulosity", runs: 1, scored: 1, mean: 1, medianTokens: 500 });
-        // chain, baseline: two runs, one still to adjudicate, so one scored; medians still cover both runs: tokens 100, 300
+        expect(rows[1]).toMatchObject({ family: "list", arm: "nebulosity", runs: 1, scored: 1, mean: 1, medianInput: 5, medianOutput: 45, medianTokens: 500 });
+        // chain, baseline: two runs, one still to adjudicate, so one scored; medians still cover both runs: tokens 1, 9, 80, 10 / 3, 27, 240, 30; totals 100, 300
         expect(rows[2]).toEqual({
             family: "chain", arm: "baseline", runs: 2, scored: 1, mean: 1, recall: null, precision: null,
-            medianTokens: 200, medianCostUsd: 0.5, medianWallMs: 2000, medianToolCalls: 2,
+            medianInput: 2, medianCacheWrite: 18, medianCacheRead: 160, medianOutput: 20, medianTokens: 200,
+            medianCostUsd: 0.5, medianWallMs: 2000, medianToolCalls: 2,
         });
         expect(rows).toHaveLength(3);
     });
@@ -301,6 +321,86 @@ describe("the tables", () => {
     it("renders a Markdown table, escaping a pipe, and just the header for no rows", () => {
         expect(renderTable(["A", "B"], [["1", "x|y"]])).toBe("| A | B |\n| --- | --- |\n| 1 | x\\|y |");
         expect(renderTable(["A", "B"], [])).toBe("| A | B |\n| --- | --- |");
+    });
+});
+
+describe("rendering the question and family tables", () => {
+    it("labels every score with its repeat, so a missing first repeat isn't read as the first", () => {
+        const rows: QuestionArmRow[] = [
+            { question: "cl1", family: "list", arm: "baseline", runs: 2, repeats: [1, 2], scores: [0.5, 1], mean: 0.75, recall: 0.75, precision: 0.75 },
+            { question: "cl3", family: "list", arm: "nebulosity", runs: 1, repeats: [2], scores: [0.5], mean: 0.5, recall: 0.5, precision: 1 },
+            { question: "cn1", family: "chain", arm: "baseline", runs: 2, repeats: [1, 2], scores: [1, null], mean: 1, recall: null, precision: null },
+        ];
+        expect(renderQuestionTable(rows)).toBe([
+            "| Question | Arm | Scores (by repeat) | Mean | Recall | Precision |",
+            "| --- | --- | --- | --- | --- | --- |",
+            "| cl1 | baseline | r1: 0.50, r2: 1.00 | 0.75 | 0.75 | 0.75 |",
+            "| cl3 | nebulosity | r2: 0.50 | 0.50 | 0.50 | 1.00 |",
+            "| cn1 | baseline | r1: 1.00, r2: open | 1.00 | n/a | n/a |",
+        ].join("\n"));
+    });
+
+    it("shows the family's tokens apart (uncached input, cache writes, cache reads, output) and then the total", () => {
+        const row: FamilyArmRow = {
+            family: "list", arm: "baseline", runs: 3, scored: 3, mean: 0.5, recall: 0.5, precision: 0.5,
+            medianInput: 20, medianCacheWrite: 200, medianCacheRead: 2000, medianOutput: 10, medianTokens: 2230,
+            medianCostUsd: 0.25, medianWallMs: 20000, medianToolCalls: 6,
+        };
+        expect(renderFamilyTable([row])).toBe([
+            "| Family | Arm | Runs (scored / all) | Mean score | Recall | Precision | Median input (uncached) | Median cache writes | Median cache reads | Median output | Median total tokens | Median cost est. | Median wall | Median tool calls |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| Complete-list | baseline | 3 / 3 | 0.50 | 0.50 | 0.50 | 20 | 200 | 2,000 | 10 | 2,230 | $0.25 | 20 s | 6 |",
+        ].join("\n"));
+    });
+});
+
+describe("scannerOnlySteps", () => {
+    const chainRun = (name: string, files: string[], over: Partial<RunResult> = {}): RunResult =>
+        result(name, { family: "chain", files, valid: true, steps: files.length - 1, score: 1, ...over });
+    const examples = new Map<string, string[] | null>([["cn1", [A, B, C, D]], ["cn2", [A, B, C, D]], ["cn3", [A, B, C, D]], ["cn4", null]]);
+    const adjudicated = [{ from: A, to: E, imports: true, note: "read it" }];
+
+    it("lists the steps of valid chains that only the scanner vouches for and that the truth's own chain doesn't have, with the runs that used them", () => {
+        const results = [
+            chainRun("cn1-baseline-1", [A, B, C, D]),                            // exactly the truth's steps: already read
+            chainRun("cn1-baseline-2", [A, X, B, C, D], { score: 0.5 }),         // a -> x and x -> b are the scanner's alone
+            chainRun("cn1-nebulosity-1", [A, X, B, C, D], { score: 0.5 }),       // the same two steps again
+            chainRun("cn2-baseline-1", [A, E], { score: 0.5 }),                  // a -> e was decided by reading: not the scanner's
+            chainRun("cn3-baseline-1", [A, X, B], { score: 0, valid: false }),   // not a valid chain: no step was credited
+            chainRun("cn4-baseline-1", [B], { steps: null }),                    // "none" naming a file: no steps
+            result("cl1-baseline-1", { files: [A, X] }),                         // a list
+        ];
+        expect(scannerOnlySteps(results, examples, EDGES, adjudicated)).toEqual([
+            { step: [A, X], runs: ["cn1-baseline-2", "cn1-nebulosity-1"] },
+            { step: [X, B], runs: ["cn1-baseline-2", "cn1-nebulosity-1"] },
+        ]);
+        expect(scannerOnlySteps([], examples, EDGES, adjudicated)).toEqual([]);
+    });
+});
+
+describe("cleanliness", () => {
+    const unverified: QuestionData = { ...listQ, truth: { ...(listQ.truth as NonNullable<QuestionData["truth"]>), verified: false } };
+
+    it("says whether every truth is hand-verified and how many rubric points are still unchecked", () => {
+        // bpQ: BP1.2 has holds: null, so one point is unchecked
+        expect(cleanliness([listQ, chainQ(3), bpQ])).toEqual({ truthsVerified: true, unverified: [], uncheckedPoints: 1 });
+        expect(cleanliness([unverified, chainQ(3)])).toEqual({ truthsVerified: false, unverified: ["cl1"], uncheckedPoints: 0 });
+        expect(cleanliness([])).toEqual({ truthsVerified: true, unverified: [], uncheckedPoints: 0 });
+    });
+
+    it("has a header line only when something is not clean, naming both", () => {
+        expect(cleanlinessLine({ truthsVerified: true, unverified: [], uncheckedPoints: 0 })).toBeNull();
+        expect(cleanlinessLine({ truthsVerified: true, unverified: [], uncheckedPoints: 1 })).toBe("Truths hand-verified: yes. Rubric points still unchecked: 1.");
+        expect(cleanlinessLine({ truthsVerified: false, unverified: ["cl1", "cl2"], uncheckedPoints: 0 })).toBe("Truths hand-verified: no (cl1, cl2). Rubric points still unchecked: 0.");
+    });
+});
+
+describe("resultsFile", () => {
+    it("writes the real eval/results.json only when neither --runs nor --out is given", () => {
+        expect(resultsFile({ runs: null, out: null }, "/repo", "/tmp")).toBe("/repo/eval/results.json");
+        expect(resultsFile({ runs: "/fake/runs", out: null }, "/repo", "/tmp")).toBe("/tmp/nebulosity-eval-results.json");
+        expect(resultsFile({ runs: "/fake/runs", out: "/x/out.json" }, "/repo", "/tmp")).toBe("/x/out.json");
+        expect(resultsFile({ runs: null, out: "/x/out.json" }, "/repo", "/tmp")).toBe("/x/out.json");
     });
 });
 

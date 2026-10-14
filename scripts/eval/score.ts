@@ -6,16 +6,20 @@
  * Task 19 writes them) and the kept runs (eval/runs/*.jsonl.gz, with the index line for each), and scores every run:
  *   lists:        recall against the truth (precision reported beside it)
  *   chains:       1 for a valid chain of the shortest length or a right "none", 0.5 for a valid longer one, 0 otherwise.
- *                 A step is real when the scanner has the edge, else when eval/truth/adjudicated.json says so, else unknown
+ *                 A step is real by eval/truth/adjudicated.json (reading the source beats the scanner, either way), else
+ *                 when the scanner has the edge, else unknown
  *   big-picture:  the mean of the grades over the rubric points that hold (not scored until the grades exist)
- * It prints the Markdown tables Task 20 uses and writes eval/results.json (not under --only, and not for zero runs).
+ * It prints the Markdown tables Task 20 uses and writes eval/results.json (not under --only, not for zero runs, and with
+ * --runs but no --out to a temp file, never over the real one).
  *
- * It exits 1 while any chain step is unknown, printing each `a -> b` to adjudicate by reading the source, or when it can't
- * run at all (a missing file, ../vscode not at the commit the questions are for). With no runs it prints empty tables and
- * exits 0, without scanning ../vscode.
+ * It exits 1 while any chain step is unknown, printing each `a → b` to adjudicate by reading the source, or when it can't
+ * run at all (a missing file, ../vscode not at the commit the questions are for). It also lists the scanner-only steps
+ * of the scored chains that the truth's own chain doesn't have, to be read too; those are scored as imports, so they
+ * don't stop it. With no runs it prints empty tables and exits 0, without scanning ../vscode.
  */
 import { execFileSync } from "child_process";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import zlib from "zlib";
 import type { ChainTruthFile, ListTruthFile } from "./build-truth";
@@ -40,18 +44,18 @@ export type ScoreContext = {
 const SEP = "\u0000";
 
 /**
- * Whether one file imports another: the scanner's edge, else the adjudicated verdict (a step the scanner lacks, decided by
- * reading the source: R4), else null for nobody knows yet. The scanner's edge wins over an adjudicated "false": see
- * `contradictions`, which reports those so a wrong entry is noticed.
+ * Whether one file imports another: the adjudicated verdict first (a reading of the source beats the scanner's regex,
+ * whichever way they differ: R4), else the scanner's edge, else null for nobody knows yet. A verdict that overturns a
+ * scanner edge is listed by `overrides`, so the ruling shows in the output.
  */
 export function makeImports(edges: readonly (readonly [string, string])[], adjudicated: readonly Adjudicated[]): (a: string, b: string) => boolean | null {
     const scanned = new Set(edges.map(([a, b]) => `${a}${SEP}${b}`));
     const verdicts = new Map(adjudicated.map((j) => [`${j.from}${SEP}${j.to}`, j.imports]));
-    return (a, b) => (scanned.has(`${a}${SEP}${b}`) ? true : verdicts.get(`${a}${SEP}${b}`) ?? null);
+    return (a, b) => verdicts.get(`${a}${SEP}${b}`) ?? (scanned.has(`${a}${SEP}${b}`) ? true : null);
 }
 
-/** Adjudicated entries that say "doesn't import" for an edge the scanner has. */
-export function contradictions(edges: readonly (readonly [string, string])[], adjudicated: readonly Adjudicated[]): Adjudicated[] {
+/** Adjudicated entries that say "doesn't import" for an edge the scanner has: the scanner's false hits the owner has ruled out. */
+export function overrides(edges: readonly (readonly [string, string])[], adjudicated: readonly Adjudicated[]): Adjudicated[] {
     const scanned = new Set(edges.map(([a, b]) => `${a}${SEP}${b}`));
     return adjudicated.filter((j) => !j.imports && scanned.has(`${j.from}${SEP}${j.to}`));
 }
@@ -114,7 +118,7 @@ export type AnswerScore = {
     files: string[]; notFiles: string[];
     recall: number | null; precision: number | null; hits: number | null; missed: string[]; extra: string[];
     steps: number | null; valid: boolean | null; problem: string | null; unknown: [string, string] | null;
-    /** Things the owner should look at: no ANSWER: line, "none" with files named, a chain shorter than the truth's. */
+    /** Things the owner should look at: no ANSWER: line, "none" with files named, a chain naming non-files, one shorter than the truth's. */
     flags: string[];
 };
 
@@ -144,6 +148,7 @@ export function scoreAnswer(finalText: string | null, q: QuestionData, ctx: Scor
     if (section === null) return { ...out, score: 0, valid: false, problem: NO_ANSWER_LINE };
     const c = scoreChain({ none: out.none, files: named.files }, q.truth as ChainTruthFile, ctx.imports);
     if (out.none && named.files.length > 0) out.flags.push("none, but names files");
+    if (named.notFiles.length > 0) out.flags.push("names non-files");
     if (c.problem?.startsWith("shorter than")) out.flags.push(c.problem);
     return {
         ...out, score: c.score, pending: c.score === null ? "chain step to adjudicate" : null,
@@ -203,7 +208,9 @@ function groups<T>(items: readonly T[], key: (item: T) => string): Map<string, T
 }
 
 export type QuestionArmRow = {
-    question: string; family: Family; arm: string; runs: number; scores: (number | null)[]; mean: number | null; recall: number | null; precision: number | null;
+    question: string; family: Family; arm: string; runs: number;
+    /** The repeat each score belongs to, in order, so a missing repeat isn't read as the first. */
+    repeats: number[]; scores: (number | null)[]; mean: number | null; recall: number | null; precision: number | null;
 };
 
 /** One row per question and arm: the scores of its repeats in order, their mean, and a list's mean recall and precision. */
@@ -211,7 +218,7 @@ export function questionArmRows(results: readonly RunResult[], order: readonly s
     const rows = [...groups(results, (r) => `${r.question}${SEP}${r.arm}`).values()].map((group) => {
         const runs = [...group].sort((a, b) => a.repeat - b.repeat);
         return {
-            question: runs[0].question, family: runs[0].family, arm: runs[0].arm, runs: runs.length, scores: runs.map((r) => r.score),
+            question: runs[0].question, family: runs[0].family, arm: runs[0].arm, runs: runs.length, repeats: runs.map((r) => r.repeat), scores: runs.map((r) => r.score),
             mean: mean(runs.map((r) => r.score)), recall: mean(runs.map((r) => r.recall)), precision: mean(runs.map((r) => r.precision)),
         };
     });
@@ -220,7 +227,9 @@ export function questionArmRows(results: readonly RunResult[], order: readonly s
 
 export type FamilyArmRow = {
     family: Family; arm: string; runs: number; scored: number; mean: number | null; recall: number | null; precision: number | null;
-    medianTokens: number | null; medianCostUsd: number | null; medianWallMs: number | null; medianToolCalls: number | null;
+    /** Medians of each kind of token apart (D2), and of the total. */
+    medianInput: number | null; medianCacheWrite: number | null; medianCacheRead: number | null; medianOutput: number | null; medianTokens: number | null;
+    medianCostUsd: number | null; medianWallMs: number | null; medianToolCalls: number | null;
 };
 
 /** One row per family and arm: the mean score over the scored runs, and the medians over all the runs. */
@@ -228,6 +237,8 @@ export function familyArmRows(results: readonly RunResult[]): FamilyArmRow[] {
     const rows = [...groups(results, (r) => `${r.family}${SEP}${r.arm}`).values()].map((runs) => ({
         family: runs[0].family, arm: runs[0].arm, runs: runs.length, scored: runs.filter((r) => r.score !== null).length,
         mean: mean(runs.map((r) => r.score)), recall: mean(runs.map((r) => r.recall)), precision: mean(runs.map((r) => r.precision)),
+        medianInput: median(runs.map((r) => r.tokens.input)), medianCacheWrite: median(runs.map((r) => r.tokens.cacheWrite)),
+        medianCacheRead: median(runs.map((r) => r.tokens.cacheRead)), medianOutput: median(runs.map((r) => r.tokens.output)),
         medianTokens: median(runs.map((r) => r.tokens.total)), medianCostUsd: median(runs.map((r) => r.costUsd)),
         medianWallMs: median(runs.map((r) => r.wallMs)), medianToolCalls: median(runs.map((r) => r.toolCalls)),
     }));
@@ -241,6 +252,53 @@ export function pendingSteps(results: readonly RunResult[]): [string, string][] 
     return [...steps.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, step]) => step);
 }
 
+/**
+ * The steps of the valid chains that only the scanner vouches for (no adjudicated verdict) and that the truth's own chain
+ * doesn't have: the truth's chain was read by hand, these were not. Each comes with the runs that used it, to be read in
+ * the source so a false scanner edge in a model's chain is found, not trusted. A chain that scored 0 credited no step.
+ */
+export function scannerOnlySteps(
+    results: readonly RunResult[], examples: ReadonlyMap<string, readonly string[] | null>,
+    edges: readonly (readonly [string, string])[], adjudicated: readonly Adjudicated[],
+): { step: [string, string]; runs: string[] }[] {
+    const scanned = new Set(edges.map(([a, b]) => `${a}${SEP}${b}`));
+    const decided = new Set(adjudicated.map((j) => `${j.from}${SEP}${j.to}`));
+    const found = new Map<string, { step: [string, string]; runs: string[] }>();
+    for (const r of results){
+        if (r.family !== "chain" || r.valid !== true || r.steps === null) continue;
+        const example = examples.get(r.question) ?? [];
+        const own = new Set(example.slice(1).map((file, i) => `${example[i]}${SEP}${file}`));
+        for (let i = 0; i + 1 < r.files.length; i++){
+            const key = `${r.files[i]}${SEP}${r.files[i + 1]}`;
+            if (!scanned.has(key) || decided.has(key) || own.has(key)) continue;
+            const entry = found.get(key) ?? { step: [r.files[i], r.files[i + 1]] as [string, string], runs: [] };
+            if (!entry.runs.includes(r.name)) entry.runs.push(r.name);
+            found.set(key, entry);
+        }
+    }
+    return [...found.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, e]) => ({ step: e.step, runs: [...e.runs].sort() }));
+}
+
+export type Cleanliness = { truthsVerified: boolean; unverified: string[]; uncheckedPoints: number };
+
+/** Whether every truth is hand-verified, and how many rubric points are still unchecked (`holds: null`), over the questions asked. */
+export function cleanliness(questions: readonly QuestionData[]): Cleanliness {
+    const unverified = questions.filter((q) => q.truth !== undefined && !q.truth.verified).map((q) => q.id);
+    const uncheckedPoints = questions.reduce((n, q) => n + (q.rubric?.points ?? []).filter((p) => p.holds === null).length, 0);
+    return { truthsVerified: unverified.length === 0, unverified, uncheckedPoints };
+}
+
+/** The header line for results that rest on unchecked truths or rubric points, or null when everything is clean. */
+export function cleanlinessLine(c: Cleanliness): string | null {
+    if (c.truthsVerified && c.uncheckedPoints === 0) return null;
+    return `Truths hand-verified: ${c.truthsVerified ? "yes" : `no (${c.unverified.join(", ")})`}. Rubric points still unchecked: ${c.uncheckedPoints}.`;
+}
+
+/** Where the results are written: --out, else (when the runs come from somewhere else, as in a try-out) a temp file, else eval/results.json. */
+export function resultsFile(given: { runs: string | null; out: string | null }, checkout: string, tmp: string): string {
+    return given.out ?? (given.runs !== null ? `${tmp}/nebulosity-eval-results.json` : `${checkout}/eval/results.json`);
+}
+
 export function renderTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
     const cell = (s: string): string => s.replace(/\|/g, "\\|");
     const line = (cells: readonly string[]): string => `| ${cells.map(cell).join(" | ")} |`;
@@ -248,7 +306,7 @@ export function renderTable(headers: readonly string[], rows: readonly (readonly
 }
 
 const n2 = (x: number | null): string => (x === null ? "n/a" : x.toFixed(2));
-const count = (x: number | null): string => (x === null ? "n/a" : Math.round(x).toLocaleString("en-US"));
+const count = (x: number | null): string => (x === null ? "n/a" : x.toLocaleString("en-US", { maximumFractionDigits: 1 }));
 const usd = (x: number | null): string => (x === null ? "n/a" : `$${x.toFixed(2)}`);
 const seconds = (ms: number | null): string => (ms === null ? "n/a" : `${Math.round(ms / 1000)} s`);
 const shownScore = (score: number | null, pending: RunResult["pending"]): string => (score !== null ? n2(score) : pending === "ungraded" ? "ungraded" : "to adjudicate");
@@ -270,16 +328,20 @@ export function renderRunTable(results: readonly RunResult[], order: readonly st
 export function renderQuestionTable(rows: readonly QuestionArmRow[]): string {
     return renderTable(
         ["Question", "Arm", "Scores (by repeat)", "Mean", "Recall", "Precision"],
-        rows.map((r) => [r.question, r.arm, r.scores.map((s) => (s === null ? "open" : n2(s))).join(" / "), n2(r.mean), n2(r.recall), n2(r.precision)]),
+        rows.map((r) => [r.question, r.arm, r.scores.map((s, i) => `r${r.repeats[i]}: ${s === null ? "open" : n2(s)}`).join(", "), n2(r.mean), n2(r.recall), n2(r.precision)]),
     );
 }
 
 export function renderFamilyTable(rows: readonly FamilyArmRow[]): string {
     return renderTable(
-        ["Family", "Arm", "Runs (scored / all)", "Mean score", "Recall", "Precision", "Median tokens", "Median cost est.", "Median wall", "Median tool calls"],
+        [
+            "Family", "Arm", "Runs (scored / all)", "Mean score", "Recall", "Precision", "Median input (uncached)", "Median cache writes", "Median cache reads",
+            "Median output", "Median total tokens", "Median cost est.", "Median wall", "Median tool calls",
+        ],
         rows.map((r) => [
             FAMILY_LABEL[r.family], r.arm, `${r.scored} / ${r.runs}`, n2(r.mean), n2(r.recall), n2(r.precision),
-            count(r.medianTokens), usd(r.medianCostUsd), seconds(r.medianWallMs), r.medianToolCalls === null ? "n/a" : String(r.medianToolCalls),
+            count(r.medianInput), count(r.medianCacheWrite), count(r.medianCacheRead), count(r.medianOutput), count(r.medianTokens),
+            usd(r.medianCostUsd), seconds(r.medianWallMs), count(r.medianToolCalls),
         ]),
     );
 }
@@ -332,8 +394,8 @@ function main(): void {
     const checkout = forward(path.resolve(__dirname, "..", ".."));
     const args = process.argv.slice(2);
     let only: string[] | null = null;
-    let runsDir = `${checkout}/eval/runs`;
-    let outFile = `${checkout}/eval/results.json`;
+    let runsGiven: string | null = null;
+    let outGiven: string | null = null;
     for (let i = 0; i < args.length; i++){
         const value = (): string => {
             const v = args[++i];
@@ -341,10 +403,12 @@ function main(): void {
             return v;
         };
         if (args[i] === "--only") only = value().split(",").map((id) => id.trim().toLowerCase()).filter(Boolean);
-        else if (args[i] === "--runs") runsDir = forward(path.resolve(value()));
-        else if (args[i] === "--out") outFile = forward(path.resolve(value()));
+        else if (args[i] === "--runs") runsGiven = forward(path.resolve(value()));
+        else if (args[i] === "--out") outGiven = forward(path.resolve(value()));
         else throw new Stop(`unknown argument ${args[i]}. ${USAGE}`);
     }
+    const runsDir = runsGiven ?? `${checkout}/eval/runs`;
+    const outFile = resultsFile({ runs: runsGiven, out: outGiven }, checkout, forward(os.tmpdir()));
 
     const file = readJson<{ commit: string; questions: { id: string; family: Family; truth?: string; rubric?: string }[] }>(`${checkout}/eval/questions.json`);
     const unknown = (only ?? []).filter((id) => !file.questions.some((q) => q.id === id));
@@ -378,27 +442,33 @@ function main(): void {
         });
         if (JSON.stringify(results.map((r) => r.name)) !== JSON.stringify([...new Set(results.map((r) => r.name))])) warnings.push("two runs share a name");
     }
-    for (const j of contradictions(edges, adjudicated)) warnings.push(`eval/truth/adjudicated.json says ${j.from} doesn't import ${j.to}, but the scanner has that edge; the scanner's edge counts. Fix the entry or the truth.`);
-    for (const q of questions){
-        if (q.truth && !q.truth.verified) warnings.push(`${q.id}: the truth is not hand-verified yet (verified: false)`);
-        const unchecked = (q.rubric?.points ?? []).filter((p) => p.holds === null).length;
-        if (unchecked > 0) warnings.push(`${q.id}: ${unchecked} rubric points are not checked against the code yet (holds: null); they count as holding`);
-    }
+    const notes = overrides(edges, adjudicated).map((j) => `adjudicated overrides the scanner: ${j.from} → ${j.to} (false)`);
+    const clean = cleanliness(questions);
+    // an unchecked rubric point counts as holding, and says so in the header line that carries it
+    const examples = new Map(questions.map((q) => [q.id, q.truth?.kind === "chain" ? q.truth.example : null] as const));
+    const toRead = scannerOnlySteps(results, examples, edges, adjudicated);
 
-    console.log(results.length === 0 ? `No runs of ${order.join(", ")} in ${runsDir}.\n` : `${results.length} runs scored from ${runsDir}.\n`);
-    console.log(`## Runs\n\n${renderRunTable(results, order)}\n`);
+    console.log(results.length === 0 ? `No runs of ${order.join(", ")} in ${runsDir}.` : `${results.length} runs scored from ${runsDir}.`);
+    const line = cleanlinessLine(clean);
+    if (line !== null) console.log(`${line} Unchecked points count as holding.`);
+    console.log(`\n## Runs\n\n${renderRunTable(results, order)}\n`);
     console.log(`## Per question and arm\n\n${renderQuestionTable(questionArmRows(results, order))}\n`);
     console.log(`## Per family and arm\n\n${renderFamilyTable(familyArmRows(results))}\n`);
     if (warnings.length > 0) console.log(`## Warnings\n\n${warnings.map((w) => `- ${w}`).join("\n")}\n`);
+    if (notes.length > 0) console.log(`## Notes\n\n${notes.map((n) => `- ${n}`).join("\n")}\n`);
 
     if (results.length > 0 && only === null){
-        fs.writeFileSync(outFile, `${JSON.stringify({ commit: file.commit, runs: results }, null, 2)}\n`);
+        fs.mkdirSync(path.dirname(outFile), { recursive: true });
+        fs.writeFileSync(outFile, `${JSON.stringify({ commit: file.commit, truthsVerified: clean.truthsVerified, uncheckedPoints: clean.uncheckedPoints, runs: results }, null, 2)}\n`);
         console.log(`Wrote ${outFile}.`);
     } else if (results.length > 0) console.log("--only: the results file was not written.");
 
+    if (toRead.length > 0){
+        console.log(`\n## Chain steps to read\n\nThese steps of scored chains are the scanner's alone and are not steps of the truth's own chain, which was read by hand. They count as imports; read each in the source, and add a verdict to eval/truth/adjudicated.json if the scanner is wrong. They do not stop the scorer.\n\n${toRead.map((t) => `- ${t.step[0]} → ${t.step[1]} (${t.runs.join(", ")})`).join("\n")}`);
+    }
     const steps = pendingSteps(results);
     if (steps.length > 0){
-        console.log(`\n## Chain steps to adjudicate\n\nRead the source for each step and add {"from", "to", "imports", "note"} to eval/truth/adjudicated.json:\n\n${steps.map(([a, b]) => `- ${a} -> ${b}`).join("\n")}`);
+        console.log(`\n## Chain steps to adjudicate\n\nRead the source for each step and add {"from", "to", "imports", "note"} to eval/truth/adjudicated.json:\n\n${steps.map(([a, b]) => `- ${a} → ${b}`).join("\n")}`);
         process.exitCode = 1;
     }
 }

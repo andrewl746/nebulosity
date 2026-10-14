@@ -72,6 +72,18 @@ describe("scores", () => {
         expect(scoreChain({ none: false, files: ["d", "a"] }, none, imports)).toMatchObject({ score: 0 });
     });
 
+    it("checks every step before it decides: a step known false makes the answer 0 even after an unknown step", () => {
+        const edges = new Set(["a>b", "b>c", "c>d"]);
+        const imports = (x: string, y: string): boolean | null => (edges.has(`${x}>${y}`) ? true : x === "q" || y === "q" ? null : false);
+        const truth = { from: "a", to: "d", connected: true, shortest: 3 };
+        // a -> q and q -> b are unknown, b -> d is not an import: wrong whatever q turns out to be, so nothing waits for an adjudication
+        expect(scoreChain({ none: false, files: ["a", "q", "b", "d"] }, truth, imports)).toEqual({ score: 0, valid: false, steps: 3, problem: "b doesn't import d" });
+        // with no false step, the first unknown one is the one to adjudicate
+        expect(scoreChain({ none: false, files: ["a", "q", "d"] }, truth, imports)).toEqual({ score: null, valid: false, steps: 2, unknown: ["a", "q"] });
+        // two false steps: the first is reported
+        expect(scoreChain({ none: false, files: ["a", "c", "d", "b", "d"] }, { ...truth, shortest: 4 }, imports)).toMatchObject({ score: 0, problem: "a doesn't import c" });
+    });
+
     it("scores a right none 1 even when the same section names the files it talks about", () => {
         // "ANSWER:\nnone\nsrc/d.ts never imports src/a.ts" reads as none: true with both files extracted
         const none = { from: "d", to: "a", connected: false, shortest: null };
