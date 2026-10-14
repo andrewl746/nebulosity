@@ -1,5 +1,6 @@
 import type { AreaCount, DescribeResponse, SearchResult } from "../contracts";
 import type { Overview } from "../engine/overview";
+import { FILE_CHUNK } from "../engine/rank";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
 import { plural } from "../index/summarize/prompts";
 import { fitting, formatCount, MAX_ANSWER_CHARS, moreLine, shownPath, summaryLine, type AnswerParts } from "./text";
@@ -87,7 +88,8 @@ export function searchAnswer(r: SearchResult): AnswerParts {
         body.push(`${String(i + 1).padStart(2)}. ${shownPath(hit.path, hit.kind)}${hit.tagline ? ` — ${hit.tagline}` : ""}`);
         if (hit.code){
             const lines = hit.code.startLine === hit.code.endLine ? `line ${hit.code.startLine}` : `lines ${hit.code.startLine}–${hit.code.endLine}`;
-            body.push(`    ${hit.code.symbol}, ${lines}: ${clip(hit.code.snippet, SNIPPET_CHARS)}`);
+            const where = hit.code.symbol === FILE_CHUNK ? "imports and exports" : `${hit.code.symbol}, ${lines}`;
+            body.push(`    ${where}: ${clip(hit.code.snippet, SNIPPET_CHARS)}`);
         }
     });
     return { body, notes };

@@ -6,6 +6,8 @@ export async function register(): Promise<void> {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
     // next build loads this file too, and a file watcher has no business running during a build
     if (process.env.NEXT_PHASE === "phase-production-build") return;
+    // a server started only to measure (S3, the demo) must not fork a second writer beside the Map's (ADR-038, amended)
+    if (process.env.NEBULOSITY_WORKER === "off") return;
     const { backgroundSupervisor } = await import("./lib/background/start");
     backgroundSupervisor();
 }

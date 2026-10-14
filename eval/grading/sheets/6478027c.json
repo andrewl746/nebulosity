@@ -1,0 +1,39 @@
+{
+  "id": "6478027c",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "VS Code's `src/vs` is split into layers. This is from my knowledge of the codebase, and I didn't check it against the current tree.\n\n## Layers (lowest to highest)\n\n1. **`base`**\n   - Holds general utilities and UI building blocks: strings, arrays, events, lifecycle, URI, async helpers, and DOM widgets.\n   - It has no knowledge of editors or workbenches.\n   - It's organized into `common`, `browser`, `node`, `electron-*` and `worker` folders.\n\n2. **`platform`**\n   - Provides the dependency-injection infrastructure and the **services** shared by the whole product. Examples are files, configuration, storage, telemetry, log, and the `instantiation` layer.\n   - Each service typically has an `IFooService` interface and implementations per environment.\n\n3. **`editor`**\n   - The Monaco text editor, packaged as a standalone component.\n   - It covers the text model, the view, the language features, and the diff editor.\n   - `editor/standalone` is the public Monaco API.\n   - `editor/contrib` holds the editor features, such as find, folding, suggest, and hover.\n\n4. **`workbench`**\n   - The full application UI and its features. It has four sub-areas:\n     - `workbench/browser` holds the layout and parts.\n     - `workbench/services` holds the higher-level services.\n     - `workbench/contrib` holds the feature contributions, such as debug, SCM, search, terminal, and chat.\n     - `workbench/api` implements the extension host API.\n\n5. **`code`**\n   - The desktop (Electron) application entry point: the main process, the shared process, and window and bootstrap code.\n\n6. **`server`**\n   - The remote/web server entry point, which hosts the remote extension host and related services.\n\nOther top-level folders include the following:\n- `sessions` is the agent-sessions window, which sits on top of the workbench.\n- `amdX.ts` and `loader` handle module loading.\n- `nls` handles localization.\n\n## Dependency rules\n\nDependencies point downward only:\n\n```\nserver / code  →  workbench  →  editor  →  platform  →  base\n```\n\n- **`base`** depends on nothing above it.\n- **`platform`** may use `base` only.\n- **`editor`** may use `base` and `platform`. It must not use `workbench`.\n- **`workbench`** may use `base`, `platform` and `editor`.\n- **`code`** and **`server`** are entry points that can use everything below them.\n\n## Environment restrictions inside each layer\n\nFolders are also split by target environment, with these allowed imports:\n\n| Folder | May import |\n|---|---|\n| `common` | `common` only |\n| `browser` | `common`, `browser` |\n| `node` | `common`, `node` |\n| `electron-browser` | `common`, `browser`, `electron-browser` |\n| `electron-main` | `common`, `node`, `electron-main` |\n\nFurther rules apply to feature code:\n- **Workbench contributions** (`workbench/contrib`) should not depend on one another directly. They should go through services or `workbench/services` instead.\n- **Extension host code** can't use `browser`.\n- The `editor/contrib` features shouldn't be imported by the core editor code.\n\nESLint rules such as `local/code-import-patterns` enforce all of this (`.eslint-plugin-local/`), so the rules are checked at lint time."
+}

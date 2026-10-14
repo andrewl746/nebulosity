@@ -3,8 +3,10 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { IconArrowLeft, IconArrowRight, IconCode, IconFile, IconFolder, IconX } from "@tabler/icons-react";
 import type { AreaCount, DescribeResponse, LevelResponse, MapNode, SummarizeResponse, SymbolInfo } from "@/lib/contracts";
-import { api, ApiError } from "./api";
+import { api, ApiError, demoGithub, type GitHubSource } from "./api";
 import { formatCompact, formatCount } from "./format";
+import { editorLink, githubLink } from "./links";
+import { DEMO } from "./mode";
 import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
 import { linkedFrom, portalCaption, portalLinks } from "./portals";
@@ -93,6 +95,12 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
     const [refreshing, setRefreshing] = useState(false);
     // keys already asked for: "<path>@<index version>", or the bare path once the server answered NOT_READY
     const asked = useRef(new Set<string>());
+    // the demo's source links go to GitHub at the commit the index was built from (ADR-049)
+    const [github, setGithub] = useState<GitHubSource | null>(null);
+
+    useEffect(() => {
+        if (DEMO) demoGithub().then(setGithub, () => {});
+    }, []);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -124,8 +132,9 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
     // "summarize now", once per target and index version: the server joins a request already running (ADR-033).
     // After a NOT_READY answer, once per target: the index moves with every child summary the worker writes, and each
     // move would otherwise ask again for a folder that still isn't ready. Reselecting it asks afresh (a new panel).
+    // The static demo has no server to ask, so it never does (ADR-049).
     useEffect(() => {
-        if (data === null || !wantsSummary(data.summaryStatus)) return;
+        if (DEMO || data === null || !wantsSummary(data.summaryStatus)) return;
         const key = `${data.path}@${data.indexVersion}`;
         if (asked.current.has(data.path) || asked.current.has(key)) return;
         asked.current.add(key);
@@ -151,7 +160,7 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
             name={name}
             title={target || name}
             subtitle={target || "(repo root)"}
-            header={data && <Stats data={data} onOpen={onOpen} onViewSource={() => setViewing({})} />}
+            header={data && <Stats data={data} github={github} onOpen={onOpen} onViewSource={() => setViewing({})} />}
             onClose={onClose}
         >
             <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
@@ -166,7 +175,9 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
                         onRetry={retry}
                         onFocus={onFocus}
                         onOpen={onOpen}
-                        onViewLines={(start, end) => setViewing({ lines: { start, end } })}
+                        onViewLines={DEMO
+                            ? (start, end) => { if (github) window.open(githubLink(github, data.path, { start, end }), "_blank", "noreferrer"); }
+                            : (start, end) => setViewing({ lines: { start, end } })}
                     />
                 )}
             </div>
@@ -249,8 +260,13 @@ function BoxIcon({ box }: { box: MapNode | undefined }){
     return <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-folder" : "text-text-2"}`} />;
 }
 
-/** "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. */
-function Stats({ data, onOpen, onViewSource }: { data: DescribeResponse; onOpen: (folder: string) => void; onViewSource: () => void }){
+type StatsProps = { data: DescribeResponse; github: GitHubSource | null; onOpen: (folder: string) => void; onViewSource: () => void };
+
+/**
+ * "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. For a
+ * file, the app offers its source and the editor; the demo has neither, so it links to GitHub at the indexed commit.
+ */
+function Stats({ data, github, onOpen, onViewSource }: StatsProps){
     const lines = `${formatCompact(data.stats.lineCount)} ${data.stats.lineCount === 1 ? "line" : "lines"}`;
     const size = data.kind === "file" ? lines : `${formatCount(data.stats.fileCount)} ${data.stats.fileCount === 1 ? "file" : "files"} · ${lines}`;
     return (
@@ -260,7 +276,12 @@ function Stats({ data, onOpen, onViewSource }: { data: DescribeResponse; onOpen:
             {data.kind === "folder" && (
                 <button type="button" onClick={() => onOpen(data.path)} className="text-control underline underline-offset-2 hover:text-text">Open folder</button>
             )}
-            {data.kind === "file" && (
+            {data.kind === "file" && DEMO && github && (
+                <a href={githubLink(github, data.path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                    <IconCode aria-hidden size={14} stroke={1.75} />View on GitHub
+                </a>
+            )}
+            {data.kind === "file" && !DEMO && (
                 <>
                     <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
                         <IconCode aria-hidden size={14} stroke={1.75} />View source
@@ -271,9 +292,6 @@ function Stats({ data, onOpen, onViewSource }: { data: DescribeResponse; onOpen:
         </div>
     );
 }
-
-const editorLink = (data: Pick<DescribeResponse, "repo" | "path">, line?: number): string =>
-    `vscode://file/${data.repo}/${data.path}${line ? `:${line}` : ""}`;
 
 type DetailsProps = {
     data: DescribeResponse;

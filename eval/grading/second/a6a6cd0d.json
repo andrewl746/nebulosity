@@ -1,0 +1,8 @@
+{ "id": "a6a6cd0d", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports the common set plus the `electron-browser` and `node`-backed services and contributions." },
+  { "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` imports the common set plus web-specific implementations, such as the web file system provider, web workers, and the web extension host." },
+  { "id": "BP5.3", "score": 1, "quote": "`workbench.common.main.ts` holds the shared set of services and contributions. It's imported by both entry points." },
+  { "id": "BP5.4", "score": 0.5, "quote": "Where the platforms differ, they usually share an interface (`IFooService`). Each platform then registers its own implementation, so features use the same API on both." },
+  { "id": "BP5.5", "score": 1, "quote": "If an entry point doesn't import a feature, the bundler never includes it. This is the main gate." },
+  { "id": "BP5.6", "score": 0.5, "quote": "Most features are side-effect imports like `import './contrib/foo/browser/foo.contribution.js'`." }
+] }

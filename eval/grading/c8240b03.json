@@ -1,0 +1,8 @@
+{ "id": "c8240b03", "points": [
+{ "id": "BP2.1", "score": 1, "quote": "| `common` | Basic JavaScript only, with no DOM or Node | Only other `common` code |" },
+{ "id": "BP2.2", "score": 1, "quote": "| `browser` | Web and DOM APIs | `common` |" },
+{ "id": "BP2.3", "score": 1, "quote": "| `node` | Node.js APIs | `common` |" },
+{ "id": "BP2.4", "score": 1, "quote": "| `electron-browser` | Browser plus limited Electron IPC (the renderer) | `common`, `browser` |" },
+{ "id": "BP2.5", "score": 1, "quote": "| `electron-utility` | Electron utility process | `common`, `node` |" },
+{ "id": "BP2.6", "score": 1, "quote": "| `electron-main` | Electron main process | `common`, `node`, `electron-utility` |" }
+] }

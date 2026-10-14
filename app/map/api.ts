@@ -1,20 +1,16 @@
 import type {
-    DescribeResponse, ErrorCode, ErrorEnvelope, IndexEventMap, IndexStatus, LevelResponse, RepoList, SearchResult, SourceResponse,
+    DescribeResponse, ErrorEnvelope, IndexEventMap, IndexStatus, LevelResponse, RepoList, SearchResult, SourceResponse,
     SummarizeResponse,
 } from "@/lib/contracts";
+import { ApiError } from "./apiError";
+import { createStaticApi } from "./staticApi";
+
+export { ApiError } from "./apiError";
 
 /**
- * The Map's one door to the server (ARCHITECTURE.md §3, rule 3). Every request goes through here, so a desktop build,
- * or V1.5's static demo, swaps the transport in this one file.
+ * The Map's one door to the server (ARCHITECTURE.md §3, rule 3). Every request goes through here, so a desktop build
+ * swaps the transport in this one file, and the static demo already does (staticApi.ts).
  */
-
-/** A request that failed: the server's error code, or NETWORK when no answer came back at all. */
-export class ApiError extends Error {
-    constructor(readonly status: number, readonly code: ErrorCode | "NETWORK", message: string){
-        super(message);
-        this.name = "ApiError";
-    }
-}
 
 async function failure(response: Response): Promise<ApiError> {
     const body = (await response.json().catch(() => null)) as ErrorEnvelope | null;
@@ -84,7 +80,7 @@ export async function readSseStream(body: ReadableStream<Uint8Array>, onFrame: (
     }
 }
 
-export const api = {
+export const serverApi = {
     level: (folderPath: string, page: number = 0, signal?: AbortSignal, focus?: string) =>
         request<LevelResponse>(levelUrl(folderPath, page, focus), { signal }),
     describe: (targetPath: string, signal?: AbortSignal) => request<DescribeResponse>(describeUrl(targetPath), { signal }),
@@ -116,3 +112,14 @@ export const api = {
         return outcome.done;
     },
 };
+
+export type MapApi = typeof serverApi;
+/** Where the demo's source links go: a GitHub repo at the indexed commit (ADR-049). */
+export type GitHubSource = { owner: string; name: string; commit: string };
+
+// Written inline, not through DEMO: the bundler drops the demo's transport from the app only when it sees the test itself.
+const staticApi = process.env.NEXT_PUBLIC_NEBULOSITY_DEMO === "1" ? createStaticApi() : null;
+/** The Map's transport: the server's API, or the static demo's files (ADR-049). Chosen at build time. */
+export const api: MapApi = staticApi ?? serverApi;
+/** In the demo, the GitHub repo and commit source links point at; null in the app. */
+export const demoGithub = (): Promise<GitHubSource | null> => staticApi?.github() ?? Promise.resolve(null);

@@ -1,4 +1,11 @@
 import type { SearchHit } from "@/lib/contracts";
+import { FILE_CHUNK } from "@/lib/engine/rank";
+
+/** How the palette names a hit's best code: the declaration and its lines, or an imports listing (ADR-052). */
+export function codeLabel(code: NonNullable<SearchHit["code"]>): string {
+    if (code.symbol === FILE_CHUNK) return "imports and exports";
+    return `${code.symbol} · ${code.startLine === code.endLine ? `line ${code.startLine}` : `lines ${code.startLine}–${code.endLine}`}`;
+}
 
 /**
  * The search palette's two groups (owner review, 2026-10-13): every folder hit first, then every file hit, each in the

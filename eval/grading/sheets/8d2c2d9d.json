@@ -1,0 +1,39 @@
+{
+  "id": "8d2c2d9d",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "Under `src/vs`, the layers run from the bottom up like this. The rules come from `.github/copilot-instructions.md` and the directory listing. I didn't read the layer-check config.\n\n## Layers\n\n- **`base/`** holds foundation utilities with no knowledge of the application. That includes collections, events, lifecycle and disposables, strings, URIs, async helpers and basic DOM and UI widgets. It is split into `common`, `browser`, `node` and so on by target environment.\n- **`platform/`** holds platform services and the dependency-injection infrastructure. Each service (files, configuration, storage, log, telemetry and others) is defined as an interface plus a decorator, and implemented per environment. It knows nothing about editors or the workbench UI.\n- **`editor/`** is the Monaco text editor: the model, view, languages, and standalone editor APIs. It is meant to be usable on its own.\n- **`workbench/`** is the VS Code application shell. It contains the parts (editor groups, sidebar, panel), contributions, services, and the extension host and extension API. Features such as search, debug, SCM and chat live here.\n- **`sessions/`** is the agent-sessions window, a dedicated workbench-style layer for agentic workflows. It sits alongside `workbench`.\n- **`code/`** holds the desktop (Electron) entry points. It covers the main process, the shared process, the CLI and the window bootstrap.\n- **`server/`** holds the remote and server entry points. This is the remote server for remote development and web.\n\nThe loose files `nls.ts` (localization) and `amdX.ts` (module loading helper) are small shared utilities. `monaco.d.ts` is the generated public editor API typing.\n\n## Dependency rules\n\nDependencies point downward only, and a layer may import only from layers below it:\n\n```\ncode / server  →  sessions  →  workbench  →  editor  →  platform  →  base\n```\n\n- `base` imports nothing above it.\n- `platform` may use `base`.\n- `editor` may use `platform` and `base`.\n- `workbench` may use `editor`, `platform` and `base`.\n- `sessions` may import from `workbench`, but `workbench` must never import from `sessions`.\n- `code` and `server` are top-level entry points that compose the lower layers, and nothing imports from them.\n\nWithin each layer, code is also separated by environment: `common` is the shared part, `browser` may use DOM APIs, `node` may use Node APIs, and `electron-*` may use Electron. Each environment may depend on `common` but not on the others. `npm run valid-layers-check` enforces these rules."
+}

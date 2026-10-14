@@ -1,0 +1,31 @@
+{
+  "id": "2434e3c3",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Nothing here was checked against the current tree. It comes from my knowledge of the VS Code layout.\n\n**Sharing**\n\n- **Layers.** Code lives under `src/vs/{base,platform,editor,workbench}`. Each layer can only import from layers below it. ESLint rules (`code-layering`, `code-import-patterns`) enforce this.\n- **Environment folders.** Within each layer, folder names say where the code can run:\n  - `common`: runs anywhere.\n  - `browser`: needs the DOM. Web and desktop renderers both use it.\n  - `node`: needs Node APIs.\n  - `electron-sandbox`: the desktop renderer only.\n  - `electron-main`: the desktop main process only.\n- **Shared core.** Most workbench code sits in `common` and `browser`, so web and desktop run the same implementation. Environment-specific parts are behind service interfaces:\n  - Interfaces are declared with `createDecorator` and implemented separately.\n  - Files, storage, clipboard, the extension host and similar services have web and desktop implementations.\n  - The implementation is picked at registration time.\n\n**What decides whether code loads**\n\n1. **Entry points.** Roughly:\n   - `workbench.common.main.ts` imports everything shared.\n   - `workbench.desktop.main.ts` imports the common file plus the `electron-sandbox` and `node` pieces.\n   - `workbench.web.main.ts` imports the common file plus the web-only pieces.\n\n   A feature's code is only in a build if one of these files imports it. Features are usually pulled in by side-effect imports of their `*.contribution.ts` files, which are listed in these entry points.\n2. **Registration.** Imports run `registerSingleton(...)` for services and the registries for contributions, commands, views and so on. The web and desktop entry points register different implementations of the same interface. A desktop-only feature, such as native terminal or shared-process features, is imported only from the desktop entry point, so the web bundle never contains it.\n3. **Bundling.** The build starts from those entry points, so anything not reachable from them is left out of that target.\n\n**Loaded but deferred**\n\nInclusion in a bundle isn't the same as running:\n\n- Services registered with `InstantiationType.Delayed` are created on first use.\n- Workbench contributions are assigned a lifecycle phase (`WorkbenchPhase.BlockStartup`, `BlockRestore`, `AfterRestored` or `Eventually`). The phase decides when each one is instantiated.\n- Context keys and `when` clauses gate whether UI is shown.\n- Extensions are separate code. They are activated lazily by activation events and run in a Node extension host on desktop or a web-worker host on web. The manifest's `extensionKind` and `browser` or `main` entry points decide whether an extension can run in each environment."
+}

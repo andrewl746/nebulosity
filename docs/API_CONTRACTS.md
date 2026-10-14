@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools.
+> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools. §18 holds V1.5's static demo files.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -140,15 +140,15 @@ type IndexStatus = { repo: string; stages: Record<StageName, StageStatus>; index
 The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. `GET /api/search?q=&limit=` serves it (V1.3; `limit` 1–50, default 10), and V1.4's MCP `search` tool formats it as text. `400 BAD_REQUEST` without `q`, `404 INDEX_EMPTY` without an active repo.
 
 ```ts
-type SearchList = "code" | "summary" | "vector" | "name";   // "name" since V1.3.1
+type SearchList = "code" | "summary" | "vector" | "name" | "file";   // "name" since V1.3.1, "file" since V1.5
 type SearchHit = {
   path: string;                 // repo-relative, forward slashes
   kind: "file" | "folder";
-  score: number;                // weighted RRF: Σ w / (60 + rank) over the lists that found it (w = 2 for "name", else 1)
+  score: number;                // weighted RRF: Σ w / (60 + rank) over the lists that found it (w = 2 for "name" and "file", else 1)
   matchedBy: SearchList[];
   tagline?: string;             // the target's summary, when it has one
   summary?: string;
-  code?: { symbol: string; startLine: number; endLine: number; snippet: string };  // best-matching chunk
+  code?: { symbol: string; startLine: number; endLine: number; snippet: string };  // best-matching chunk: a declaration when one matched, else the imports listing ("(file)"), its header removed
 };
 type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList, number>; note?: string };
 ```
@@ -156,8 +156,9 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **Hits are files and folders**, never chunks: a file's chunks are grouped before ranking, and `code` is its best one. The repo summary is never a hit.
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **Folder names** *(V1.3.1, additive)*: the `name` list ranks folders whose name matches a query word (`RAG_PIPELINE.md` §6) and counts double in the fusion, so searching "terminal" finds the terminal folders. The Map's search palette shows every folder hit first, then every file hit, and asks for 40.
+- **File names** *(V1.5, additive)*: the `file` list ranks files whose name is a query word (or that word plus an ending of up to 3 letters), or that export a top-level declaration named exactly like one, most imported first. It counts double, like folder names (ADR-052).
 - **The repo's own name** is dropped from the query before searching when other meaningful words remain ("vscode terminal" searches "terminal" in VS Code). `query` in the answer is still the query as typed.
-- **`note`** is set when something limits the results: no summaries yet, summaries off (no `ANTHROPIC_API_KEY`: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."), no vectors yet, the embedding model unavailable, or a query made only of very common words.
+- **`note`** is set when something limits the results: no summaries yet, summaries off (no `ANTHROPIC_API_KEY`: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only."), no vectors yet, the embedding model unavailable, or a query made only of very common words.
 
 ## 11. GET /api/level?path=&page=&focus= (slice V1.3; pages added in V1.3.1, portals and `focus` in contract v3)
 
@@ -324,3 +325,30 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 **Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; dependents and dependencies the target; path `from`, `to`, then the chain between; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
 
 **Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 2,048 characters), are `SERVER_INSTRUCTIONS` in the registry.
+
+## 18. The static demo's files (slice V1.5)
+
+`npm run export-demo -- <repo>` writes these under `.nebulosity/demo/`, and `npm run build-demo` copies them to the built site's `demo/` (ADR-049). The Map's static transport (`app/map/staticApi.ts`) reads them in place of the HTTP API; the shapes are in `lib/contracts.ts`.
+
+| File | Holds |
+|---|---|
+| `manifest.json` | `DemoManifest`: the format (`DEMO_FORMAT_VERSION`, 1), the repo's public name, its origin, the indexed commit, the status, every folder in path order (a folder's id is its position, the root 0) and the page counts of paged folders |
+| `level/<id>-<page>.json` | the `LevelResponse` for that folder and page (§11), one per page |
+| `pages/<id>.json` | `DemoPageIndex`: the box paths on each page of a paged folder, so a focus finds its page without the server |
+| `describe/<id>.json` | `DemoDescribeBundle`: the `DescribeResponse` (§12) of the folder and of each file directly inside it, by path |
+| `search.json` | `DemoSearchIndex`: summaries, folders, files with importer counts and test flags, and exported declaration names |
+| `SOURCE-LICENSE.txt` | the indexed repo's own license file, when it has one, since the data is derived from its code |
+
+- **The repo's name.** Every `repo` field (levels, describe answers, the status, the repo list the client builds) holds the public name, never an absolute root. The exporter fails on any file holding a spelling of a local folder or the git email.
+- **The status.** `manifest.status` keeps each stage's state and counts and drops its note: a failed stage's note can hold an error message with a path.
+- **The output folder.** The exporter empties only an earlier export: a `manifest.json` with a numeric `format` and a `folders` list, or the `EXPORTING` marker an unfinished run leaves. It refuses any other non-empty folder, and any folder that is or holds the repo, the Nebulosity folder, the home folder or the current folder. The marker is removed last and only when the scan found nothing, so an export that leaked reads as unfinished.
+- **Errors.** The transport answers as §11 and §12 do: `404 NOT_FOUND` for a path nothing is indexed at, and `400 BAD_REQUEST` for a level asked of a file (the same message as the server's). A file that can't be read rejects with an `ApiError`. Each error case listed here shows the Map a message and never leaves it on "Loading…", except two: an aborted fetch (silent by design: the next request replaces it) and a file of the wrong shape (the last bullet). `<file>` is its path under `demo/`:
+  - the host has no such file (HTTP 404): `404 NOT_FOUND`, "The demo has no `<file>`."
+  - any other HTTP error: `INTERNAL`, "The demo's `<file>` didn't load (HTTP `<status>`)." It has no reload hint.
+  - the request fails (offline, blocked): `NETWORK`, a message that says to check the connection and reload.
+  - the body isn't JSON (a host answering a missing file with an HTML page, or a body cut off): `INTERNAL`, a message that says to reload.
+  - a manifest of another `format`: `INTERNAL`, a message that says to reload.
+  - a call that needs a server (the source viewer, summarize, switching repos, re-index): `404 NOT_FOUND`, "… isn't part of the static demo; it needs Nebulosity running on your machine."
+  - a fetch the caller aborted rejects with the browser's `DOMException` named `AbortError`, not an `ApiError`.
+  - a valid-JSON file of the wrong shape isn't checked. A `null` or malformed manifest or describe bundle makes the call reject with a plain `TypeError` (`index()` and `describe()` in `staticApi.ts`), and a `null` level file resolves and then throws inside the Map's own handler (`app/map/MapView.tsx`). Either way no `ApiError` reaches the Map's handlers, which show an error only for an `ApiError` (`MapView.tsx`, `DetailPanel.tsx`, `SourceViewer.tsx`, `SearchPalette.tsx`), so the Map stays on "Loading the map…".
+- **What isn't here.** No source text (the demo links to GitHub at `commit`), no live events, no summarize or re-index, no code search index and no vectors: search ranks summaries and names only, and says so (`staticSearch.ts`).

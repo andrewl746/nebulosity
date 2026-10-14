@@ -1,0 +1,31 @@
+{
+  "id": "02685239",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Each folder under a layer in `src/vs` (`base`, `platform`, `editor`, `workbench`, and so on) is named for the runtime its code targets. I'm answering from memory of VS Code's layering conventions, not from a check of this checkout. Code can import from its own environment and from the environments below it.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any runtime. It uses only plain JS/TS and ES built-ins, with no DOM and no Node. | `common` only |\n| `browser` | A browser, or a renderer with DOM access. It can use DOM APIs. | `common`, `browser` |\n| `node` | Node.js. It can use Node built-ins and native modules. | `common`, `node` |\n| `electron-browser` | The Electron renderer (sandboxed). It has DOM plus the Electron renderer bridge. Older code and docs call this `electron-sandbox`. | `common`, `browser`, `electron-browser` |\n| `electron-main` | The Electron main process. It can use Electron main-process APIs and Node. | `common`, `node`, `electron-main` |\n| `worker` | Web workers. | `common`, `worker` |\n| `test` | Unit and integration tests. | The code under test, which may be any environment. |\n\nSome layers also have other environment folders, such as `electron-utility` or `server`. They follow the same pattern.\n\n**Rules that follow from this**\n- **Isolation:** `browser` and `node` must not import each other, because one has the DOM and the other has Node. `common` must not import anything environment-specific. Shared logic goes in `common`, and the environment-specific parts are injected through services or interfaces.\n- **Layering:** a layer can only import from layers below it. The order is `base` → `platform` → `editor` → `workbench`. `workbench` code can use `platform` and `editor`, but `platform` must never import `workbench`.\n- **Combined rule:** a file must respect both its layer and its environment. For example, `workbench/.../browser` may import `base/common`, `platform/*/common`, `platform/*/browser` and `editor/*/browser`.\n- **Enforcement:** the ESLint rules (`local/code-layering` and `local/code-import-patterns`) and the layer checks in the build enforce all of this.\n\nFor the exact current allow-lists, check `.eslint-plugin-local/` (the `code-layering` and `code-import-patterns` rules) or the `.eslint-plugin-local` config. I haven't opened them in this session."
+}

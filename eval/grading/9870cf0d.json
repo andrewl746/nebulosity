@@ -1,0 +1,8 @@
+{ "id": "9870cf0d", "points": [
+{ "id": "BP5.1", "score": 1, "quote": "Desktop-only features, such as native terminals, are imported only from the desktop entry." },
+{ "id": "BP5.2", "score": 1, "quote": "Web-only services are imported only from the web entry." },
+{ "id": "BP5.3", "score": 1, "quote": "Each imports the shared `workbench.common.main.ts`, then its own list of services and contributions." },
+{ "id": "BP5.4", "score": 0.5, "quote": "Platform differences sit behind service interfaces. ... Each platform then registers its own implementation" },
+{ "id": "BP5.5", "score": 1, "quote": "Anything not imported (transitively) from an entry point is never bundled or run." },
+{ "id": "BP5.6", "score": 0.5, "quote": "Features register themselves on import ... The entry-point imports therefore effectively act as the feature manifest." }
+] }

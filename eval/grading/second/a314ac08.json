@@ -1,0 +1,7 @@
+{ "id": "a314ac08", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "`createDecorator` (in `instantiation.ts`) returns a function that works as a parameter decorator and is also the service ID. The convention is that the interface and the identifier share the same name, with an `I` prefix." },
+  { "id": "BP3.3", "score": 1, "quote": "Constructor parameter decorators declare the dependency: ... `@IFooService private readonly fooService: IFooService,`" },
+  { "id": "BP3.4", "score": 1, "quote": "Instantiate such classes with `instantiationService.createInstance(MyClass, staticArg)`. The service arguments are filled in from the collection." },
+  { "id": "BP3.5", "score": 1, "quote": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed)` is in `extensions.ts`." },
+  { "id": "BP3.6", "score": 1, "quote": "It is called at module top level, typically in `*.contribution.ts` or `workbench.common.main.ts`-style files." }
+] }

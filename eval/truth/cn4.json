@@ -1,0 +1,20 @@
+{
+  "id": "cn4",
+  "kind": "chain",
+  "from": "src/vs/base/common/strings.ts",
+  "to": "src/vs/workbench",
+  "connected": false,
+  "shortest": null,
+  "example": null,
+  "verified": true,
+  "notes": [
+    {
+      "check": "strings.ts imports cache, charCode, lazy and uint (L6-9). Its forward closure is 68 files, every one's import lines read: 67 in src/vs/base/common (including observableInternal) and src/vs/nls.ts, which imports nothing. None is in src/vs/workbench; the widened graph reaches the same 68. Nebulosity's importChain finds no forward chain (it reports only the reverse, src/vs/workbench/api/browser/mainThreadChatAgents2.ts importing strings.ts).",
+      "decision": "Truth kept: none."
+    },
+    {
+      "check": "Owner's rule ('refers to', 2026-10-14) applied: every non-relative `vs/…` module id in an import-like statement anywhere in the repo (781 specifiers, 682 edges the scanner lacks) and the 8 computed loaders read in the source (10 edges) were added to the graph. strings.ts still reaches the same 68 files, none in src/vs/workbench.",
+      "decision": "Truth kept: none."
+    }
+  ]
+}

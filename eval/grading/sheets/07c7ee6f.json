@@ -1,0 +1,27 @@
+{
+  "id": "07c7ee6f",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses a decorator-based dependency injection system. It lives in `src/vs/platform/instantiation/common/`. This is from my knowledge of the codebase, not a fresh read of the files.\n\n**1. Define the service**\n- Declare an interface and give it a brand: `export const IFooService = createDecorator<IFooService>('fooService');`. The `I` prefix is the convention.\n- The interface and the const share one name. The const is both the service identifier and a parameter decorator.\n- The interface carries `readonly _serviceBrand: undefined;`. This makes the type nominal, so unrelated interfaces can't match structurally.\n- `createDecorator` (in `instantiation.ts`) records the ID string and returns a decorator function.\n\n**2. Implement it**\n- The implementation is a class like `FooService implements IFooService`. Convention is to declare `declare readonly _serviceBrand: undefined;` on it.\n- Services are usually `Disposable` subclasses.\n- Its own dependencies are injected through constructor parameter decorators: `constructor(@IBarService private readonly barService: IBarService) {}`.\n- When the class is used with the service collection, the decorators write to a static `$di$dependencies` list. They do this via `storeServiceDependency`.\n- Non-service constructor arguments must come first, before the injected ones. These are called static args.\n\n**3. Make it available**\n- `registerSingleton(IFooService, FooService, InstantiationType.Delayed | Eager)` in `extensions.ts` registers it. `Delayed` returns a proxy that is created lazily on first use. `Eager` creates it at startup.\n- Workbench services are usually registered this way in `workbench.common.main.ts` or the matching `*.main.ts` files.\n- Platform/bootstrap services are instead added directly to a `ServiceCollection`, e.g. `services.set(IFooService, new SyncDescriptor(FooService))` or `services.set(IFooService, instance)`. Examples are `main.ts`, `serverServices.ts` and the workbench's `initServices`.\n- `SyncDescriptor` wraps a class plus its static arguments. `getSingletonServiceDescriptors()` collects the registered singletons.\n\n**4. Get it into consumers**\n- Constructors declare dependencies with `@IFooService private readonly fooService: IFooService`.\n- `InstantiationService` (`instantiationService.ts`) does the construction:\n  - `createInstance(Ctor, ...staticArgs)` builds an object and resolves the decorated params from its `ServiceCollection`.\n  - `invokeFunction(accessor => accessor.get(IFooService))` gives temporary access to services in a callback. Command handlers and actions use this a lot.\n  - `createChild(services)` makes a scoped child container. Lookups fall back to the parent.\n- On construction, `_createInstance` reads `_util.getServiceDependencies(ctor)`. It sorts them by parameter index and resolves each ID with `_getOrCreateServiceInstance`. A graph and cycle check means circular dependencies throw.\n- Contributions, such as `IWorkbenchContribution`s registered through `registerWorkbenchContribution2`, are created with `instantiationService.createInstance`, so they get injection too.\n\nThe result is that consumers depend only on the interface and the decorator. The concrete class is chosen at registration time, which makes it easy to swap per platform (browser, electron, or a test `TestInstantiationService`)."
+}

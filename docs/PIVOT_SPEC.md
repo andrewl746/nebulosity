@@ -53,7 +53,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S4 | Boxes on screen at once, counting a page's portals (V1.3.1; V1.3 counted the "+N more" box) | ≤ 50 |
 | S5 | MCP tool latency, warm (after the first call of a session) *(measured through the MCP server by `npm run bench-mcp`: each tool warm after its own first call of the session, every warm call within the bound; owner's decision D5, V1.4)* | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
-| S7 | Evaluation run and published, losses included | done |
+| S7 | Evaluation run and published, losses included *(done 2026-10-14: docs/EVAL_RESULTS.md, Eval #1)* | done |
 | S8 | Public repo, README, video, live demo link | done |
 | S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux |
 | S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo |
@@ -77,6 +77,8 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
   Claude Code, any         people (+ the Guide,     hosted static demo
   MCP client               E1, in-process)          (no API calls)
 ```
+
+The static Map reads those files through `app/map/staticApi.ts` (ADR-049).
 
 **Rules.** ARCHITECTURE.md §3 still holds and matters more now that several adapters depend on it.
 1. Core (`lib/`) never imports `app/`, `next` or React. Fix on the way in: `lib/graph.ts` imports types from `app/components/FileNode` today, which breaks this rule.
@@ -219,7 +221,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 - **`level(path, page?, focus?)`**: breadcrumb, at most 50 nodes (a big folder's page of 44 boxes plus up to 6 portals to its other pages, V1.3.1), that page's edges with the far ends folded onto portals, the hidden count, the page and the page count.
 - **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
 - **`overview()`** *(V1.4)*: the repo's describe answer, plus each top-level area's lines and the 10 most-imported files (ADR-010's in-degree), for the `overview` tool.
-- **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
+- **`search(query, opts)`**: hybrid. Five ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, cosine similarity over `summary_vectors`, folder names (V1.3.1) and file names (V1.5, ADR-052). They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ wᵢ / (60 + rankᵢ(d))` (wᵢ is 2 for the folder-name and file-name lists, else 1), then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance. *(V1.4, ADR-045: a file or a folder, whose own files are never listed; every answer counts all reached files and the direct ones; entries go nearest first, then most imported, then by path; `limit` and `offset` page them.)*
 - **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path". *(V1.4, ADR-045: from every file of `from` at once, neighbours in path order so the same chain comes back each time; the answer says which way it runs; overlapping places are refused.)*
 - **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
@@ -268,7 +270,7 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 - **Open in editor.** File panels link to `vscode://file/<absolute path>:<line>`.
 - **Look.** *(Superseded in V1.3.1 by `VISUAL_REFRESH.md`, ADR-041: a flat charcoal canvas, larger boxes, one meaning per color.)* The owner explicitly requested a revamp, overriding the "visual design is frozen" note. React Flow remains the renderer, and 50 nodes is well inside its comfort zone. The StrictMode workaround stays.
 - **Performance budget.** Click, zoom or level change ≤ 100 ms, measured in the browser on VS Code. The level API takes ≤ 50 ms. Long lists in the panel show their first 8 entries plus "View all" *(V1.3.1)*.
-- **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it.
+- **Static demo mode.** A build-time flag switches the data source to JSON exported per level and per path (`scripts/export-demo.ts`). Search uses a lazy-loaded compact index (paths, taglines, summaries). There's no live channel and no Guide. It's hosted on Vercel, and the owner deploys it. *(V1.5, ADR-049: describe answers bundled per folder, a page index, search over summaries and names in the browser, the repo named not rooted, source on GitHub at the indexed commit; `npm run export-demo -- <repo>`, `npm run build-demo`, `npm run serve-demo`.)*
 
 ### 7.1 Contract sketch (finalized in `API_CONTRACTS.md` §11–§15 in slice V1.3)
 
@@ -321,6 +323,8 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - **Conditions:** Claude Code headless (`claude -p --output-format json`) with the same pinned model, with and without the Nebulosity MCP config. Two runs each if usage limits allow.
 - **Metrics:** correctness (rubric score or recall %), input and output tokens, tool calls, wall time.
 - **Output:** `docs/EVAL_RESULTS.md` plus a README table; raw transcripts in `eval/runs/`. **Losses are reported, not hidden.**
+
+*(Run as ADR-050 says: 90 runs in three arms, Sonnet 5.5 at medium effort, Claude Code 2.1.299.)*
 
 ---
 
@@ -404,7 +408,7 @@ Each v1 slice ends demoable:
 - Claude implements and verifies by running things: `tsc`, lint, tests, benchmarks, the browser.
 - The owner reviews demos, makes the product calls, records the video, and deploys.
 - Learning comes after shipping. The owner writes a detailed public explainer, and lessons or quizzes happen on request.
-- This overrides CLAUDE.md's default "coach, don't write" for the duration of the sprint. Coaching resumes when the owner asks for it.
+- During the sprint the assistant implements and the owner reviews; the coached mode resumes when the owner asks for it.
 
 ---
 
@@ -429,7 +433,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13; ADR-044 onward were added during V1.4:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13; ADR-044 to ADR-048 were added during V1.4; ADR-049 onward were added during V1.5:
 
 | ADR | Decision |
 |---|---|
@@ -458,6 +462,10 @@ Each v1 slice ends demoable:
 | ADR-046 | An MCP call answers about the indexed repo holding Claude Code's project folder, else the Map's repo (said first); live events only for the Map's repo; free mode from the stored stage |
 | ADR-047 | One registry entry per tool: a handler returns text, the paths it touched and an optional UI action; answers are compact text under 40,000 characters (API_CONTRACTS.md §17) |
 | ADR-048 | The MCP server starts as node <checkout>/mcp/launch.mjs: no npx, no cmd /c, tsx from the checkout, the SDK pinned at 1.32.1, stdout only for the protocol |
+| ADR-049 | The static demo: exported answers read through the Map's own transport, nothing of this machine in it |
+| ADR-050 | The evaluation's method: 15 questions in three families, hand-checked truths, three arms, blind grading of the big-picture answers |
+| ADR-051 | Going public: MIT, and nothing of the owner's machine in anything published |
+| ADR-052 | Search finds files by their names and declarations, damps tests, and shows declarations before imports (amends ADR-027) |
 
 ## 16. Doc migration
 

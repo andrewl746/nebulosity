@@ -1,6 +1,7 @@
 import type { LevelResponse } from "@/lib/contracts";
 
-// The UI imports nothing from lib/ but types (ARCHITECTURE.md §3), so these few lines mirror lib/index/paths.ts.
+// The UI imports from lib/ only types and the few pure, browser-safe modules ARCHITECTURE.md §3 names, and
+// lib/index/paths.ts isn't one of them, so these few lines mirror it.
 
 /** The folder that holds a path ("" for something at the root). */
 export function parentOf(targetPath: string): string {

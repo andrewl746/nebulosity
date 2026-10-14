@@ -2,17 +2,30 @@ import { fork } from "child_process";
 import { readConfig } from "../config";
 import { getDb } from "../db/client";
 import { nebulosityHome, nebulosityPath } from "../home";
-import type { ChildMessage } from "./protocol";
+import type { ApiFailure, ChildMessage } from "./protocol";
 import { createSupervisor, type ChildLike, type Supervisor } from "./supervisor";
 
 // on globalThis so a hot reload in development keeps its one worker instead of forking another
 const globalForBackground = globalThis as unknown as { nebulosityBackground?: Supervisor };
 
+const WORKER_OFF: ApiFailure["error"] = { code: "INTERNAL", message: "This server was started with NEBULOSITY_WORKER=off, so it has no background worker." };
+
+/** The "supervisor" of a server started only to measure (ADR-038, amended): it forks nothing and refuses what needs a worker. */
+const noWorker: Supervisor = {
+    setRepo(){},
+    summarize: async () => ({ ok: false, error: WORKER_OFF }),
+    index: async () => ({ ok: false, error: WORKER_OFF }),
+    stop(){},
+};
+
 /**
  * The server's one background worker (ADR-038), started on first use. The database is opened (and migrated) here
- * first, so the worker never races the server through a new migration.
+ * first, so the worker never races the server through a new migration. With NEBULOSITY_WORKER=off there is none: the
+ * routes that tell the supervisor the repo (status, repos, index, summarize) would otherwise start one on first use,
+ * whatever instrumentation.ts skipped.
  */
 export function backgroundSupervisor(): Supervisor {
+    if (process.env.NEBULOSITY_WORKER === "off") return noWorker;
     if (!globalForBackground.nebulosityBackground){
         getDb();
         const supervisor = createSupervisor(spawnWorker);

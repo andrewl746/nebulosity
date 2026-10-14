@@ -1,0 +1,39 @@
+{
+  "id": "363c8e90",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "## Organization of `src/vs/workbench`\n\nI checked the directory and the repo's `.github/instructions/source-code-organization.instructions.md`.\n\n**Top-level folders**\n- `common/`, `browser/` and `electron-browser/` hold the minimal workbench core. Each folder matches a runtime environment: `common` is plain JavaScript, `browser` can use DOM APIs, and `electron-browser` adds limited Electron IPC.\n- `api/` provides the `vscode.d.ts` extension API, including the extension host side.\n- `services/` holds core services that aren't specific to one feature.\n- `contrib/` holds the feature contributions: git, debug, search, chat, notebook, terminal, scm, mcp, and so on. Each feature has its own subfolder.\n- `test/` holds tests.\n\n**Entry points**\n- `workbench.common.main.ts` holds the shared dependencies.\n- `workbench.desktop.main.ts` holds the desktop-only ones.\n- `workbench.web.main.ts` holds the web-only ones. There is also a `workbench.web.main.internal.ts`.\n- Only code reachable from these files gets loaded.\n\n**Where it sits in the layers**\n- Layers can only import from layers below them. The order is `base`, `platform`, `editor`, `workbench`, then `code` and `server`.\n- `sessions` also sits above `workbench`. It may import from `workbench`, but `workbench` must never import from it.\n\n## Rules for `contrib/`\n\n1. **Nothing outside `contrib/` may depend on `contrib/`.** Core, services and the API layer can't import from it.\n2. **Each contribution has a single `.contribution.ts` entry point.** It registers the feature, for example with registries, actions and `registerSingleton(...)`.\n3. **A contribution exposes its internal API from one common file.**\n4. **Cross-contribution dependencies go through that common API.** Never reach into another contribution's internals.\n\n**Dependency injection**\n- Services are consumed through constructor injection, like `@IMyService private readonly myService: IMyService`.\n- Non-service constructor parameters come before the service parameters.\n- Injected parameters must use the canonical service interface. Don't define local subset interfaces or `Pick<...>` types in production code to make tests easier. Keep partial stubs in test code.\n- Services are registered with `registerSingleton(IMyService, Impl, InstantiationType.Delayed)`.\n\nThe wider architecture follows a contribution model: features add to registries and extension points. Platform-specific code is kept behind abstractions."
+}

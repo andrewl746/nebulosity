@@ -1,0 +1,39 @@
+{
+  "id": "a3c2d829",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "`src/vs/workbench` is the workbench application. It has about 4,600 files, and most of them are in `contrib/`.\n\n## Organization\n\n- **`browser/`** (130 files): the shell, layout, parts and core actions.\n- **`common/`** (34 files): shared contracts and models.\n- **`electron-browser/`** (10 files): the desktop entry layer.\n- **`services/`** (660 files): the injected service layer.\n- **`api/`** (355 files): bridges between the extension host and the main thread, plus the VS Code API implementation.\n- **`contrib/`** (3,269 files): feature modules such as chat, notebook, debug, terminal, SCM, search and extensions.\n- **`test/`**: tests.\n- **Entry points:** `workbench.common.main.ts`, `workbench.desktop.main.ts` and `workbench.web.main.ts` wire everything together through side-effect imports and `registerSingleton` calls. `workbench.web.main.internal.ts` exposes the public web embedder API.\n\nThe workbench imports from `base/`, `platform/`, `editor/` and `nls`. `src/vs/sessions/` is the main consumer of the workbench, with about 2,700 imports. `server/` and `code/` import it much less.\n\n## Rules for `contrib/`\n\nI found no contrib-specific rules file. There is no `README` in `contrib/`, and `.github/copilot-instructions.md` mentions the folder in one line. These conventions come from the general project guidance and from the layout.\n\n- **Contribution model:** features plug in by contributing to registries and extension points. They are not hard-wired into the shell. Each is activated by a side-effect import from the `workbench.*.main.ts` entry files.\n- **Dependency injection:** services come in through constructor parameters. Any non-service parameters must come before the service parameters.\n- **Cross-platform separation:** each feature is split into layers, such as `browser/`, `common/`, `electron-browser/` and `test/`. The abstractions keep platform-specific code out of `common` and `browser`.\n- **Ownership:** `.github/CODENOTIFY` assigns owners per contrib folder, for example `terminal/**`, `scm/**` and `preferences/**`. Contributors adding a new contribution are expected to add themselves there.\n- **Area-specific instructions:** `.github/instructions/*.instructions.md` files apply to paths such as `contrib/chat/browser/aiCustomization/**` and the agent-host paths.\n\nI didn't check whether lint rules, such as layering checks, enforce the contrib import boundaries. Look in the eslint config if you need that."
+}

@@ -47,3 +47,6 @@ CLAUDE.md
 
 # nebulosity generated data (derived, always rebuildable)
 .nebulosity/
+
+# the eval runner's half-written transcripts (a .gz is written as .tmp and renamed once its index line is in)
+eval/runs/*.tmp

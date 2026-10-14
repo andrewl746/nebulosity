@@ -1,0 +1,11 @@
+{
+  "id": "61e22919",
+  "points": [
+    { "id": "BP2.1", "score": 1, "quote": "Any environment. It uses only core JavaScript, with no DOM and no Node." },
+    { "id": "BP2.2", "score": 1, "quote": "A browser or renderer, with DOM and Web APIs. | `common`, `browser`" },
+    { "id": "BP2.3", "score": 1, "quote": "Node.js, with Node built-ins. | `common`, `node`" },
+    { "id": "BP2.4", "score": 1, "quote": "The sandboxed Electron renderer, with DOM plus the preload-exposed Electron bridge. It was formerly `electron-browser`. | `common`, `browser`, `electron-sandbox`" },
+    { "id": "BP2.5", "score": 1, "quote": "there are also variants such as `electron-utility`, for utility processes. These follow the same pattern, importing `common` and `node` plus their own folder." },
+    { "id": "BP2.6", "score": 0.5, "quote": "The Electron main process, with Node plus Electron main APIs. | `common`, `node`, `electron-main`" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "b2af21e8",
+  "points": [
+    { "id": "BP2.1", "score": 1, "quote": "Only basic JavaScript and ECMAScript APIs. It has no DOM and no Node. It can import only other `common` code." },
+    { "id": "BP2.2", "score": 1, "quote": "DOM and Web APIs. It can import `common` and other `browser` code." },
+    { "id": "BP2.3", "score": 1, "quote": "Node.js APIs. It can import `common` and other `node` code." },
+    { "id": "BP2.4", "score": 1, "quote": "Electron renderer APIs, such as the `ipcRenderer` exposed through the preload. It can import `common`, `browser` and other `electron-browser` code." },
+    { "id": "BP2.5", "score": 0, "quote": "none" },
+    { "id": "BP2.6", "score": 0.5, "quote": "Electron main-process APIs. It can import `common`, `node` and other `electron-main` code." }
+  ]
+}

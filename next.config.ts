@@ -1,11 +1,24 @@
 import type { NextConfig } from "next";
 
+// The static demo (ADR-049): `npm run build-demo` builds with NEBULOSITY_DEMO=1. Route handlers, proxy.ts and
+// instrumentation.ts are .ts files, and Next resolves those by page extension, so "tsx" alone leaves the server out:
+// the Map (page.tsx, layout.tsx) is all that's built, and it reads the exported files instead of /api.
+const demo = process.env.NEBULOSITY_DEMO === "1";
+
 const nextConfig: NextConfig = {
   // React Flow v12's controlled-mode node measurement can be dropped by
   // Strict Mode's dev-only double-invoke, leaving nodes hidden/unmeasured
   // (no edges, no fitView). Disable the double-invoke. Production is
   // unaffected (it never double-invokes).
   reactStrictMode: false,
+  // Set in both builds ("0" for the app): Next inlines a NEXT_PUBLIC_ value only when it is set, and an unset one
+  // would leave the demo's transport in the app's bundle (app/map/api.ts).
+  env: { NEXT_PUBLIC_NEBULOSITY_DEMO: demo ? "1" : "0" },
+  ...(demo ? {
+    output: "export",
+    pageExtensions: ["tsx"],
+    images: { unoptimized: true },
+  } : {}),
 };
 
 export default nextConfig;

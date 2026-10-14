@@ -1,0 +1,27 @@
+{
+  "id": "69c73e87",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses its own constructor-based dependency injection, in `src/vs/platform/instantiation/common/`. I'm answering from my knowledge of that code and haven't opened the files in this checkout.\n\n**1. Defining a service**\n- Write an interface, conventionally `IFooService`, with a `readonly _serviceBrand: undefined;` marker. The marker keeps the interface nominally distinct.\n- Create the identifier with `createDecorator<IFooService>('fooService')`, exported under the same name as the interface (`export const IFooService = createDecorator<IFooService>('fooService')`). The interface and the const share one name. The result is both a type and a parameter decorator.\n- Service interfaces and identifiers usually live in a `common/` folder (for example `src/vs/platform/<name>/common/<name>.ts`). Implementations live in `browser/`, `node/`, `electron-main/` and so on.\n\n**2. Implementing it**\n- The class is usually `FooService implements IFooService` and also declares `declare readonly _serviceBrand: undefined;`.\n- Its own dependencies are injected the same way, as constructor parameters decorated with other service identifiers.\n\n**3. Registering it**\n- Use `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`platform/instantiation/common/extensions.ts`).\n  - `InstantiationType.Delayed` creates the service lazily, behind a proxy, on first use.\n  - `InstantiationType.Eager` creates it at startup.\n- Registrations are collected via `getSingletonServiceDescriptors()` and loaded by the workbench's `*.services.ts` files (for example `workbench.common.main.ts` imports).\n- Services that must be built by hand are added in the entry points, such as `Workbench.initServices`, with `ServiceCollection.set(IFooService, instanceOrSyncDescriptor)`. They are wrapped in `new SyncDescriptor(FooService, args, supportsDelayedInstantiation)` when constructed lazily.\n- `new InstantiationService(serviceCollection, strict)` builds the container.\n\n**4. Consuming it**\n- Add the identifier as a decorated constructor parameter: `constructor(@IFooService private readonly fooService: IFooService) {}`.\n- The decorator records the dependency in a static `$di$dependencies` list on the class, with the parameter index. This is done through `storeServiceDependency`.\n- Parameters with no decorator (static args) must come first, and services come last.\n- `InstantiationService.createInstance(Ctor, ...staticArgs)` resolves the services through `_getOrCreateServiceInstance`, using a dependency graph that detects cycles. It then constructs the class.\n- Inside a class you can call `this.instantiationService.createInstance(...)`. Code with no constructor can use `IInstantiationService.invokeFunction(accessor => accessor.get(IFooService))`, which gives a `ServicesAccessor`. Actions use this form in `run(accessor)`.\n\n**Related conventions**\n- Optional dependencies use `@optional(IFoo)`.\n- Parent and child services are layered through `InstantiationService.createChild`.\n- Browser and desktop code often have separate `*.contribution` and `*.services` registrations.\n- Disposables are tracked by the container."
+}

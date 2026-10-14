@@ -1,0 +1,31 @@
+{
+  "id": "61e22919",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Under `src/vs`, each layer (`base`, `platform`, `editor`, `workbench`, plus `code` and `server`) is split by target environment. I'm answering from my knowledge of the repo's conventions and haven't re-checked it against the source. The rule is that a folder may import from its own environment and from the environments it builds on, never from ones that have APIs it lacks.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any environment. It uses only core JavaScript, with no DOM and no Node. | `common` only |\n| `browser` | A browser or renderer, with DOM and Web APIs. | `common`, `browser` |\n| `node` | Node.js, with Node built-ins. | `common`, `node` |\n| `electron-sandbox` | The sandboxed Electron renderer, with DOM plus the preload-exposed Electron bridge. It was formerly `electron-browser`. | `common`, `browser`, `electron-sandbox` |\n| `electron-main` | The Electron main process, with Node plus Electron main APIs. | `common`, `node`, `electron-main` |\n| `worker` | Web Workers, with no DOM. | `common`, `worker` |\n\nNotes:\n- **No sideways imports:** `browser` and `node` must never import each other, because neither environment has the other's APIs. `electron-main` can't import `browser` or `electron-sandbox`, and `electron-sandbox` can't import `node` or `electron-main`.\n- **`test`:** these folders sit next to the code they test and follow the same environment rules, so a test in `browser/` is a browser test.\n- **Other variants:** there are also variants such as `electron-utility`, for utility processes. These follow the same pattern, importing `common` and `node` plus their own folder.\n- **Layering:** this is a second axis on top of the environment rule. Code may only import from the same layer or lower ones, in the order `base` < `platform` < `editor` < `workbench`, with `code` and `server` on top. For example, `platform/**/browser` can import `base/**/browser` and `base/**/common`, but never anything from `workbench`.\n- **Enforcement:** ESLint rules (`local/code-import-patterns` and `local/code-layering`) check these constraints. A violation fails the lint step.\n\nIf you need the exact allow-lists, they live in the `code-import-patterns` configuration in `eslint.config.js`. I can open it and quote the details if that would help."
+}

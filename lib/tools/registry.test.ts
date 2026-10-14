@@ -102,7 +102,7 @@ describe("overview, describe and search with no API key", () => {
         const result = await call("search", { query: "banner" }, freeFixture());
         expect(lines(result)[0]).toBe('Search "banner": 1 best match.');
         expect(result.text).toContain("\n 1. src/core/log.ts\n");
-        expect(lines(result).at(-1)).toBe("Note: Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only.");
+        expect(lines(result).at(-1)).toBe("Note: Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only.");
         expect(result.paths).toEqual(["src/core/log.ts"]);
     });
 });

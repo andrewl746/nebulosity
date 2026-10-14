@@ -1,0 +1,39 @@
+{
+  "id": "141e069d",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "VS Code's core under `src/vs` is organized into layers. This comes from my knowledge of the codebase and the project's documented conventions, not from a check of the current tree.\n\n## Layers (lowest to highest)\n\n1. **`base`** holds general utilities and UI building blocks: strings, arrays, events, lifecycle, URI, async helpers, and basic DOM and widgets. It has no VS Code-specific concepts.\n2. **`platform`** provides dependency-injected services shared across the app, such as files, configuration, storage, instantiation, log, telemetry, and the command, keybinding, and context-key services. It defines service interfaces and their implementations.\n3. **`editor`** is the Monaco text editor: model, view, languages, and standalone editor APIs. Its `contrib` folder holds editor features such as find, suggest, and folding.\n4. **`workbench`** is the full application shell:\n   - `browser`, `electron-browser`, `services`, and `api` contain the parts, layout, and extension host API.\n   - `contrib` holds the feature contributions: SCM, debug, terminal, chat, and so on.\n   - `common` holds code shared across the workbench.\n5. **`code`** is the desktop entry point for Electron (main process, shared process, CLI).\n6. **`server`** is the entry point for remote and web server hosting.\n7. **`sessions`** and **`agentHost`** are newer agent-related layers. I'm not certain of their exact placement in the rules, so check the layering config before relying on them.\n\n## Target environments\n\nWithin each layer, folders are split by runtime environment:\n- `common`: runs anywhere. It can only use other `common` code.\n- `browser`: needs the DOM. It can use `common` and `browser`.\n- `node`: needs Node.js. It can use `common` and `node`.\n- `electron-browser`: renderer with Node and Electron. It can use `common`, `browser`, `node`, and `electron-browser`.\n- `electron-main`: Electron main process. It can use `common`, `node`, and `electron-main`.\n- `worker`: web worker. It can use `common` and `worker`.\n\n## Dependency rules\n\n- Dependencies go downward only: `workbench` → `editor` → `platform` → `base`. Lower layers never import from higher ones.\n- `workbench/contrib` modules should not depend on each other directly. Cross-feature access goes through `workbench/services` or a well-defined API. Each contrib has an entry point, and other code may only import it through that.\n- `editor/contrib` features can use the editor core, but the editor core must not depend on its contribs.\n- `code` and `server` sit on top and may use `workbench`, `platform`, and `base`.\n- `extensions/` (outside `src/vs`) can only reach core through the `vscode.d.ts` API.\n\n## Enforcement\n\nThese rules are enforced by ESLint rules (`local/code-import-patterns`, `code-layering`) and by the `.eslint-plugin-local` configuration. Run `npm run valid-layers-check` to verify them."
+}

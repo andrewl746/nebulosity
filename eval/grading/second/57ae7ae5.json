@@ -1,0 +1,10 @@
+{ "id": "57ae7ae5", "points": [
+  { "id": "BP4.1", "score": 0.5, "quote": "**`browser/`**: the core workbench UI, meaning parts, layout and actions." },
+  { "id": "BP4.2", "score": 1, "quote": "**`api/`**: the extension host and the VS Code API implementation." },
+  { "id": "BP4.3", "score": 0.5, "quote": "**`services/`**: service implementations." },
+  { "id": "BP4.4", "score": 0.5, "quote": "**`contrib/`**: feature contributions. It has about 101 subfolders, including `debug`, `chat`, `terminal`, `git`, `search`, `extensions`, `mcp`, `markers` and `comments`." },
+  { "id": "BP4.5", "score": 0.5, "quote": "each feature plugs into registries and extension points instead of being hard-wired into the core." },
+  { "id": "BP4.6", "score": 0, "quote": "none" },
+  { "id": "BP4.7", "score": 0, "quote": "none" },
+  { "id": "BP4.8", "score": 0.5, "quote": "Never use another component's storage keys to change it. Add a proper API instead." }
+] }

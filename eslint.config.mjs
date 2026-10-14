@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Sample repositories the indexer tests read as data (they use require(), JSX, aliases…)
     "test/fixtures/**",
+    // Planning and review scratch (gitignored, never shipped)
+    ".superpowers/**",
   ]),
 ]);
 

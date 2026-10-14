@@ -1,0 +1,7 @@
+{ "id": "6bbf41de", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create the identifier with `createDecorator<IFooService>('fooService')`, exported under the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`." },
+  { "id": "BP3.3", "score": 1, "quote": "The decorator `@IFooService` is applied to the parameter. By convention, services come last, after any static arguments." },
+  { "id": "BP3.4", "score": 1, "quote": "**Creating the class:** `instantiationService.createInstance(MyClass, staticArg1, ...)`. The instantiation service reads the dependency metadata and resolves each service from its collection." },
+  { "id": "BP3.5", "score": 1, "quote": "**Singleton registration (the usual route):** `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`." },
+  { "id": "BP3.6", "score": 1, "quote": "This is in `extensions.ts`, and it is typically called at module top level in a `*.contribution.ts` or service file." }
+] }

@@ -1,0 +1,68 @@
+{
+  "id": "cl1",
+  "kind": "list",
+  "target": "src/vs/workbench/contrib/search/common/search.ts",
+  "scope": "direct",
+  "files": [
+    "src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts",
+    "src/vs/workbench/api/browser/mainThreadNotebook.ts",
+    "src/vs/workbench/api/common/extHost.protocol.ts",
+    "src/vs/workbench/api/common/extHostApiCommands.ts",
+    "src/vs/workbench/api/common/extHostNotebook.ts",
+    "src/vs/workbench/api/common/extHostTypeConverters.ts",
+    "src/vs/workbench/api/test/browser/extHostLanguageFeatures.test.ts",
+    "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/chatInlineAnchorWidget.ts",
+    "src/vs/workbench/contrib/chat/browser/widget/chatFind/chatFindContent.ts",
+    "src/vs/workbench/contrib/chat/common/chatService/chatService.ts",
+    "src/vs/workbench/contrib/notebook/common/notebookService.ts",
+    "src/vs/workbench/contrib/search/browser/anythingQuickAccess.ts",
+    "src/vs/workbench/contrib/search/browser/notebookSearch/notebookSearchService.ts",
+    "src/vs/workbench/contrib/search/browser/quickTextSearch/textSearchQuickAccess.ts",
+    "src/vs/workbench/contrib/search/browser/search.common.contribution.ts",
+    "src/vs/workbench/contrib/search/browser/search.contribution.ts",
+    "src/vs/workbench/contrib/search/browser/searchActionsTopBar.ts",
+    "src/vs/workbench/contrib/search/browser/searchView.ts",
+    "src/vs/workbench/contrib/search/browser/symbolsQuickAccess.ts",
+    "src/vs/workbench/contrib/search/test/common/extractRange.test.ts",
+    "src/vs/workbench/contrib/searchEditor/browser/searchEditor.contribution.ts",
+    "src/vs/workbench/contrib/searchEditor/browser/searchEditor.ts"
+  ],
+  "verified": true,
+  "notes": [
+    {
+      "path": "src/vs/workbench/services/agentHost/common/agentHostFileSearchProvider.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L17 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/agentHost/common/agentHostFileSystemService.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L16 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/agentHost/test/common/agentHostFileSearchProvider.test.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L19 imports '../../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/extensions/common/workspaceContains.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L13 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    },
+    {
+      "path": "src/vs/workbench/services/history/browser/historyService.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L20 imports '../../search/common/search.js', which from inside src/vs/workbench/services resolves to the namesake src/vs/workbench/services/search/common/search.ts, not the target."
+    }
+  ]
+}

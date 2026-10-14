@@ -195,6 +195,11 @@ export function markIndexed(db: Db, repoId: number, indexedHead: string | null):
     db.update(repositories).set({ lastIndexAt: now, lastScanAt: now, indexedHead }).where(eq(repositories.id, repoId)).run();
 }
 
+/** The git commit the repo's index was built from (PIVOT_SPEC.md §4.1), or null outside git. */
+export function loadIndexedHead(db: Db, repoId: number): string | null {
+    return db.select({ head: repositories.indexedHead }).from(repositories).where(eq(repositories.id, repoId)).get()?.head ?? null;
+}
+
 /** Paths per IN (…) list: far under the parameter cap, with room for the other bound values. */
 const IN_LIST = 900;
 

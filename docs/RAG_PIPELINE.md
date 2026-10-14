@@ -20,7 +20,7 @@ summaries: npm run summarize                                 lib/index/summarize
    ▼
 summary vectors (MiniLM, local)                              lib/index/embed.ts
    ▼
-search(query) = RRF(code_fts, summary_fts, cosine, folder names)           lib/engine/search.ts
+search(query) = RRF(code_fts, summary_fts, cosine, folder names, file names)   lib/engine/search.ts
 ```
 
 Every stage is incremental and records its status in `meta` (`GET /api/status`). Each leaves the earlier stages usable: keyword search works seconds after the structure stage, and results improve as summaries and their vectors arrive.
@@ -75,7 +75,7 @@ type CodeChunk = {
 - **Files** go to `claude-haiku-5-5`. The prompt is the file's generated imports/exports listing (the file-summary chunk), its line count, who imports it, and its source cut to about 6k tokens (20,000 characters, at a line break). "Who imports it" is one line from the import graph, for example `Imported by: 10 files: src/vs/workbench (3), src/vs/base/browser (2), build.js (1), and 4 files elsewhere, plus 1 test file`: the total, then the 3 biggest groups with their importer counts, then a count of the files in the rest, then `, plus 1 test file` if there are any. Importers are grouped by area with the rule of `PIVOT_SPEC.md` §4.2 (the same `lcaFolder` and `childToward` that build the Map's level edges): an importer's group is the child of the lowest common folder of the two files, toward the importer, or the importer itself when it sits directly in that folder, so a sibling in the file's own folder is a group of its own and a top-level file is named by its path. Groups are ordered by count, then by path in code-point order, and counts are written with thousands separators like the total (`src/vs/workbench (1,840)`). Test files are left out of the total, the groups and the examples because on VS Code a central file's biggest importer folders are test folders, which would skew how its use looks; when tests are the only importers the line is `Imported by: only 3 test files`. A file nothing imports gets `Imported by: no other indexed file`. The model uses it to say how widely, and where, the file is used.
 - **Folders** go to `claude-sonnet-5-5`, written bottom-up from their children's taglines and summaries. The 50 largest children are listed (by lines of code), plus "…and N smaller items".
 - **The repo** goes to `claude-sonnet-5-5`, from its top-level folders and files.
-- **Test files, and folders that hold only test files,** skip the model and get a template (`Tests for strings`, `Tests for folding`; status `skipped`). A folder qualifies when its subtree holds at least one file and no non-test file; the repo never does. The template is settled at once, so the parent folder goes out in the first folder wave.
+- **Test files, and folders that hold only test files,** skip the model and get a template (`Tests for strings`, `Tests for folding`; status `skipped`). A top-level test folder takes the repo's name (`Tests for vscode`), since it tests the whole repo (V1.5). A folder qualifies when its subtree holds at least one file and no non-test file; the repo never does. The template is settled at once, so the parent folder goes out in the first folder wave.
 
 **Settings.** Effort `low` and adaptive thinking (the models' default). Structured outputs force `{ tagline, summary }`. `max_tokens` is 4,096, and 8,192 (`RETRY_MAX_OUTPUT_TOKENS`) for the one retry of a cut-off answer.
 
@@ -143,12 +143,13 @@ Model-written summaries only, as `tagline \n summary \n path` (`summaryEmbedding
 
 ## 6. Search
 
-### The four lists
+### The five lists
 
 1. **Code keywords:** bm25 over `code_fts` (path 2, name 10, name_split 6, text 1). The top 200 chunks are grouped by file, and a file's best chunk stands for it.
 2. **Summary keywords:** bm25 over `summary_fts` (path 1, tagline 4, summary 2), over files and folders. The repo summary is never a hit.
 3. **Meaning:** cosine similarity between the query's MiniLM vector and every summary vector, held in memory as one flat matrix and reloaded only when the set of vectors changes. Matches below 0.25 are dropped.
 4. **Folder names** *(V1.3.1, owner review)*: folders whose name matches a word of the query (`rankFolderNames`). Best first: the name is the word, or differs from it by an ending of up to 3 letters (`debug` for "debugger"); then the name starts with the word (`terminalContrib`); then it contains it (`externalTerminal`, words of 3+ letters); then the word starts with the name (`term` for "terminal", names of 4+ letters). Ties go to the folder with more files. Before this list, searching "terminal" ranked VS Code's terminal folder 57th: folders only competed through their summaries, against hundreds of files.
+5. **File names** *(V1.5)*: files whose own name is a query word (the folder rule's first tier: `lifecycle.ts` for "lifecycle", `debug.ts` for "debugger"), or that export a top-level declaration named exactly like one (`registerSingleton`). Most imported first, then by path. Before this list, "lifecycle" and "Disposable" left `src/vs/base/common/lifecycle.ts`, VS Code's most imported file, outside the top 8.
 
 Each list contributes at most 50 files or folders.
 
@@ -160,12 +161,18 @@ Each list contributes at most 50 files or folders.
 
 ### Reciprocal Rank Fusion
 
-`score(d) = Σ wᵢ / (60 + rankᵢ(d))` over every list that ranks `d`, with ranks starting at 1. Each list's weight `wᵢ` is 1, except the folder-name list's, which is 2: a folder named like the query is strong evidence it's what's meant, and at weight 1 it scored like a single code hit and fell past the cut-off (`src/vs/workbench/contrib/debug` for "debugger"). A worked example with the three weight-1 lists: code `[a, b, c]`, summary `[b]`, vector `[c, b]` give
+`score(d) = Σ wᵢ / (60 + rankᵢ(d))` over every list that ranks `d`, with ranks starting at 1. Each list's weight `wᵢ` is 1, except the folder-name and file-name lists', which are 2: a folder named like the query is strong evidence it's what's meant, and at weight 1 it scored like a single code hit and fell past the cut-off (`src/vs/workbench/contrib/debug` for "debugger"). A worked example with the three weight-1 lists: code `[a, b, c]`, summary `[b]`, vector `[c, b]` give
 - `b` = 1/62 + 1/61 + 1/62 ≈ 0.0487,
 - `c` = 1/63 + 1/61 ≈ 0.0323,
 - `a` = 1/61 ≈ 0.0164.
 
 Agreement between lists beats a single first place. RRF uses positions only, so bm25 scores and cosines never need to be put on one scale. Ties break by key.
+
+### Tests and snippets
+
+*(V1.5, ADR-052.)* After fusion, a test file or a test-only folder (one with files below it and none that isn't a test, the root never counted) keeps half its score and the list is sorted again (`dampTests`), unless the query asks for tests: test, tests, testing, spec, specs, smoke, e2e, fixture, fixtures, mock or mocks. In V1.5's planning probe, "terminal" put a smoke-test folder second; after the file-name list it led with a test helper (`test/automation/src/terminal.ts`); with damping, its top 3 are the terminal contribution's own files and folder, and "terminal smoke test" still leads with the tests.
+
+A file ranks by its best chunk but shows its best-matching declaration when one matched, because its imports-and-exports listing (the chunk named `(file)`) is a poor snippet. When the listing is all that matched, it's shown without the `File: <path>` line and the `Imports:` and `Exports:` labels (`cleanFileChunkSnippet`), and the answers call it "imports and exports" instead of giving a line range.
 
 ### What a hit looks like
 

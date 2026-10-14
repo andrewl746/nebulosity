@@ -4,7 +4,11 @@ import path from "path";
 import { copyFixture, FIXTURE } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
 import { stubSummarizer } from "../../test/helpers/summarizer";
+import { getDb } from "../db/client";
+import { loadExportedNames } from "../db/store/search";
+import { requireRepository } from "../db/store/structure";
 import { embedSummaries, type EmbedFn } from "../index/embed";
+import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
 import { runSummaries } from "../index/summarize/run";
 import { dropRepoName, fuseRankings, rankFolderNames, search, toFtsQuery } from "./search";
@@ -174,16 +178,58 @@ describe("search", () => {
     it("finds a declaration by name with code keywords alone, before any summary exists", async () => {
         const result = await search(indexedFixture(), "shout", { embed: neverEmbed });
         expect(result.hits[0]).toEqual({
-            path: "src/util/strings.ts", kind: "file", score: 1 / 61, matchedBy: ["code"],
+            path: "src/util/strings.ts", kind: "file", score: 1 / 61 + 2 / 61, matchedBy: ["code", "file"],
             code: { symbol: "shout", startLine: 3, endLine: 6, snippet: expect.stringContaining("shout") },
         });
-        expect(result.lists).toEqual({ code: 3, summary: 0, vector: 0, name: 0 });
-        expect(result.note).toBe("Summaries aren't ready yet, so results come from code and folder names only.");
+        expect(result.lists).toEqual({ code: 3, summary: 0, vector: 0, name: 0, file: 1 });
+        expect(result.note).toBe("Summaries aren't ready yet, so results come from code, folder names and file names only.");
+    });
+
+    it("finds a file by its name: the file list counts double", async () => {
+        const result = await search(indexedFixture(), "log", { embed: neverEmbed });
+        // log.ts is the only file named "log" and the only one declaring it: 2/61 from the file list, plus its code rank
+        expect(result.hits[0]).toMatchObject({ path: "src/core/log.ts", kind: "file" });
+        expect(result.hits[0].matchedBy).toContain("file");
+        expect(result.lists.file).toBe(1);
+    });
+
+    it("halves a test file's score unless the query asks for tests", async () => {
+        const root = indexedFixture();
+        // only strings.test.ts matches "checks": code rank 1 (1/61) and the file list (2/61), so 3/61 before damping
+        const plain = await search(root, "checks", { embed: neverEmbed });
+        expect(plain.hits[0]).toMatchObject({ path: "src/util/strings.test.ts", matchedBy: ["code", "file"] });
+        expect(plain.hits[0].score).toBeCloseTo(3 / 122, 12);
+        const asked = await search(root, "checks test", { embed: neverEmbed });
+        expect(asked.hits[0].score).toBeCloseTo(3 / 61, 12);
+    });
+
+    it("shows a file's matching declaration rather than its imports listing", async () => {
+        // main.ts matches "log" in its imports listing and in main()'s body (log(shout("main")))
+        const result = await search(indexedFixture(), "log", { embed: neverEmbed });
+        expect(result.hits.find((h) => h.path === "src/app/main.ts")?.code?.symbol).toBe("main");
+    });
+
+    it("cleans an imports listing used as a snippet", async () => {
+        // "react" appears only in view.tsx's imports listing
+        const hit = (await search(indexedFixture(), "react", { embed: neverEmbed })).hits.find((h) => h.path === "src/app/view.tsx");
+        expect(hit?.code?.symbol).toBe("(file)");
+        expect(hit?.code?.snippet).toContain('from "react"');
+        expect(hit?.code?.snippet).not.toMatch(/File:|Imports:/);
+    });
+
+    it("loads exported top-level declarations by file, then line", () => {
+        const root = indexedFixture();
+        const db = getDb();
+        expect(loadExportedNames(db, requireRepository(db, repoKey(root))).map((d) => [d.name, d.path])).toEqual([
+            ["main", "src/app/main.ts"], ["render", "src/app/view.tsx"], ["View", "src/app/view.tsx"],
+            ["log", "src/core/log.ts"], ["Logger", "src/core/log.ts"], ["banner", "src/core/log.ts"],
+            ["start", "src/index.ts"], ["checks", "src/util/strings.test.ts"], ["shout", "src/util/strings.ts"],
+        ]);
     });
 
     it("says summaries are off, not pending, when there's no key", async () => {
         const result = await search(indexedFixture(), "shout", { embed: neverEmbed, summariesOff: true });
-        expect(result.note).toBe("Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only.");
+        expect(result.note).toBe("Summaries are off (no ANTHROPIC_API_KEY), so results come from code, folder names and file names only.");
     });
 
     it("ranks the file every list agrees on first, and finds the folder through its summary and meaning", async () => {
@@ -199,7 +245,7 @@ describe("search", () => {
             path: "src/app/view.tsx", kind: "file", score: 1 / 61, matchedBy: ["vector"],
             tagline: "Draws the app view", summary: "Renders the View component.",
         }]);
-        expect(result.lists).toEqual({ code: 0, summary: 0, vector: 1, name: 0 });
+        expect(result.lists).toEqual({ code: 0, summary: 0, vector: 1, name: 0, file: 0 });
     });
 
     it("never throws on FTS5 syntax in the query", async () => {

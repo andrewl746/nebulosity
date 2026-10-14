@@ -1,0 +1,31 @@
+{
+  "id": "1e3b210e",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "The sharing comes from folder layering and from which entry point imports a file.\n\n**Layering by environment**\n\nUnder `src/vs/` the layers are `base`, `platform`, `editor` and `workbench`, and each layer is split by the environment its code can run in:\n\n- `common`: pure TypeScript with no DOM or Node. Both builds use it.\n- `browser`: needs the DOM. Both builds use it, because desktop is also a browser renderer.\n- `node`: needs Node APIs.\n- `electron-browser` (now `electron-sandbox`): the desktop renderer.\n- `electron-main`: the desktop main process.\n\nA folder can only import from folders its environment allows, so `common` can't pull in `browser` or `node`. ESLint layering and import-pattern rules enforce this. Most workbench code lives in `common` and `browser`, which is why the two builds share it.\n\n**What decides whether code loads**\n\n1. **The entry point's import graph.** This is the main factor.\n   - `workbench.common.main.ts` imports the contributions and services both builds share.\n   - `workbench.desktop.main.ts` adds the `electron-sandbox` and node-backed pieces.\n   - `workbench.web.main.ts` adds the web-specific ones, such as the web worker extension host and browser-based file and storage services.\n\n   The bundler only includes files reachable from the entry it builds. A feature that is never imported from an entry isn't loaded at all. Contributions under `workbench/contrib/<feature>/` register themselves through side-effect imports, such as `import './contrib/foo/browser/foo.contribution.js'`. Services are registered with `registerSingleton`, and each build supplies its own implementation of the platform-specific ones.\n\n2. **Lazy loading inside a build.** Code that is bundled is not necessarily run at startup.\n   - Workbench contributions have lifecycle phases, such as `Restored` and `Eventually`.\n   - Services registered with `InstantiationType.Delayed` are only created when first used.\n   - Some features use dynamic `import()` or lazy view and editor descriptors.\n   - Commands, menus and views use `when` clauses.\n\n3. **Extensions.** Extensions are separate from the workbench bundle.\n   - Their manifests declare `main` (Node extension host) and/or `browser` (web worker extension host), so web only runs extensions that ship a browser entry.\n   - `capabilities` such as `virtualWorkspaces` and `untrustedWorkspaces` can disable them further.\n   - `activationEvents` decide when they actually load.\n\nI answered from my knowledge of the repo layout and didn't open the files in this session. The exact entry file names and folder names are worth a quick check against `src/vs/workbench/` if you need them precisely."
+}

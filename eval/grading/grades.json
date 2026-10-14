@@ -1,0 +1,854 @@
+{
+  "bp1-baseline-1": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "**`base`** holds general utilities and UI building blocks: collections, events, lifecycle and disposables, strings, paths, async helpers, and DOM widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "**`platform`** provides services and their dependency-injection infrastructure: files, configuration, storage, instantiation, log, telemetry, and theme."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "**`editor`** is the Monaco text editor: model, view, language features, and standalone editor APIs."
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "**`workbench`** is the full application UI: parts such as the sidebar, panel, and status bar, plus the contributions, services, and features built on them."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "**`code`** is the Electron desktop entry point (main process, shared process, and so on)."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "**`server`** is the remote and web server entry point."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Dependencies point downward only: `base` ← `platform` ← `editor` ← `workbench` ← `code`/`server`."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "Extensions live outside `src/vs` and talk to the workbench only through the `vscode` API (`workbench/api`)."
+    }
+  },
+  "bp1-baseline-2": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "`base/` holds foundation utilities with no knowledge of the application. That includes collections, events, lifecycle and disposables, strings, URIs, async helpers and basic DOM and UI widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "`platform/` holds platform services and the dependency-injection infrastructure. ... It knows nothing about editors or the workbench UI."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "`editor/` is the Monaco text editor: the model, view, languages, and standalone editor APIs."
+    },
+    "BP1.4": {
+      "score": 1,
+      "sentence": "`workbench/` is the VS Code application shell. It contains the parts (editor groups, sidebar, panel), contributions, services, and the extension host and extension API."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "`code/` holds the desktop (Electron) entry points. It covers the main process, the shared process, the CLI and the window bootstrap."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "`server/` holds the remote and server entry points. This is the remote server for remote development and web."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Dependencies point downward only, and a layer may import only from layers below it: code / server → sessions → workbench → editor → platform → base"
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "It contains the parts ..., contributions, services, and the extension host and extension API."
+    }
+  },
+  "bp1-nebulosity-1": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "Holds general utilities and UI building blocks: strings, arrays, events, lifecycle, URI, async helpers, and DOM widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "Provides the dependency-injection infrastructure and the **services** shared by the whole product."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "The Monaco text editor, packaged as a standalone component."
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "The full application UI and its features. ... `workbench/browser` holds the layout and parts."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "The desktop (Electron) application entry point: the main process, the shared process, and window and bootstrap code."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "The remote/web server entry point, which hosts the remote extension host and related services."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "server / code  →  workbench  →  editor  →  platform  →  base ... Dependencies point downward only"
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "`workbench/api` implements the extension host API."
+    }
+  },
+  "bp1-nebulosity-2": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "Generic utilities and UI building blocks, with no knowledge of VS Code itself."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "The dependency-injection infrastructure and the services shared by every layer."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "The Monaco text editor, which also ships standalone."
+    },
+    "BP1.4": {
+      "score": 1,
+      "sentence": "The full IDE shell. It provides the layout (parts such as the sidebar, panel, and status bar), the services for editors, views, and extensions, and the built-in features under `contrib/`."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "The desktop application entry points. It runs the Electron main process, the shared process, and the CLI."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "The remote server (node) entry point."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "`platform` → `base`; `editor` → `base`, `platform`; `workbench` → `base`, `platform`, `editor`; Lower layers must never import from higher ones."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "It also contains the extension host and the extension API implementation (`api/`)."
+    }
+  },
+  "bp1-nebulosity-upfront-1": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "**`base`** holds general utilities and UI building blocks: strings, arrays, events, lifecycle, URI, async helpers, and basic DOM and widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "**`platform`** provides dependency-injected services shared across the app, such as files, configuration, storage, instantiation, log, telemetry"
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "**`editor`** is the Monaco text editor: model, view, languages, and standalone editor APIs."
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "**`workbench`** is the full application shell: ... `contrib` holds the feature contributions: SCM, debug, terminal, chat, and so on."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "**`code`** is the desktop entry point for Electron (main process, shared process, CLI)."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "**`server`** is the entry point for remote and web server hosting."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Dependencies go downward only: `workbench` → `editor` → `platform` → `base`. Lower layers never import from higher ones."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "`extensions/` (outside `src/vs`) can only reach core through the `vscode.d.ts` API."
+    }
+  },
+  "bp1-nebulosity-upfront-2": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "Foundation utilities with no product knowledge: data structures, events, lifecycle and disposables, strings, paths, async helpers, and generic UI widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "The dependency-injection infrastructure and the services shared across the product: files, configuration, storage, log, instantiation, and so on."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "The Monaco text editor: model, view, language features, and standalone editor APIs. It does not know about the workbench."
+    },
+    "BP1.4": {
+      "score": 1,
+      "sentence": "The full IDE shell: parts (editor area, sidebar, panel), `services/`, `contrib/` features, and `api/` (the extension host and the VS Code API implementation)."
+    },
+    "BP1.5": {
+      "score": 0.5,
+      "sentence": "The Electron main process (windows, app startup)."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "The server and remote entry points."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Dependencies point downward: `base` ← `platform` ← `editor` ← `workbench`. A layer may import from the layers below it but never from those above."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "`api/` (the extension host and the VS Code API implementation)"
+    }
+  },
+  "bp2-baseline-1": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "| `common` | Basic JavaScript only, with no DOM or Node | Only other `common` code |"
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "| `browser` | Web and DOM APIs | `common` |"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "| `node` | Node.js APIs | `common` |"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "| `electron-browser` | Browser plus limited Electron IPC (the renderer) | `common`, `browser` |"
+    },
+    "BP2.5": {
+      "score": 1,
+      "sentence": "| `electron-utility` | Electron utility process | `common`, `node` |"
+    },
+    "BP2.6": {
+      "score": 1,
+      "sentence": "| `electron-main` | Electron main process | `common`, `node`, `electron-utility` |"
+    }
+  },
+  "bp2-baseline-2": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "| `common` | Any environment. It uses only basic JavaScript, with no DOM or Node APIs. | `common` only |"
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "| `browser` | A web page or renderer, with DOM and Web APIs. | `common` |"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "| `node` | Node.js. | `common` |"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "| `electron-browser` | The Electron renderer, which is browser code plus limited Electron IPC. | `common`, `browser` |"
+    },
+    "BP2.5": {
+      "score": 1,
+      "sentence": "| `electron-utility` | The Electron utility process. | `common`, `node` |"
+    },
+    "BP2.6": {
+      "score": 1,
+      "sentence": "| `electron-main` | The Electron main process. | `common`, `node`, `electron-utility` |"
+    }
+  },
+  "bp2-nebulosity-1": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "Any environment: browser, Node, Electron, worker | Only other `common` code. It can't use the DOM or Node APIs."
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "A browser or renderer with a DOM, including the web build | `common` and `browser`"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "A Node.js process: extension host, server, shared process, CLI | `common` and `node`"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "The sandboxed Electron renderer window | `common`, `browser` and `electron-browser`. It has no direct Node access and reaches the main process through IPC or preload globals."
+    },
+    "BP2.5": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP2.6": {
+      "score": 0.5,
+      "sentence": "The Electron main process | `common`, `node` and `electron-main`, plus the `electron` API"
+    }
+  },
+  "bp2-nebulosity-2": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "Any runtime. It uses only plain JS/TS and ES built-ins, with no DOM and no Node."
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "A browser, or a renderer with DOM access. It can use DOM APIs. | `common`, `browser`"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "Node.js. It can use Node built-ins and native modules. | `common`, `node`"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "The Electron renderer (sandboxed). It has DOM plus the Electron renderer bridge. ... | `common`, `browser`, `electron-browser`"
+    },
+    "BP2.5": {
+      "score": 0.5,
+      "sentence": "Some layers also have other environment folders, such as `electron-utility` or `server`. They follow the same pattern."
+    },
+    "BP2.6": {
+      "score": 0.5,
+      "sentence": "The Electron main process. It can use Electron main-process APIs and Node. | `common`, `node`, `electron-main`"
+    }
+  },
+  "bp2-nebulosity-upfront-1": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "Any environment. It uses only core JavaScript, with no DOM and no Node."
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "A browser or renderer, with DOM and Web APIs. | `common`, `browser`"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "Node.js, with Node built-ins. | `common`, `node`"
+    },
+    "BP2.4": {
+      "score": 0.5,
+      "sentence": "| `electron-sandbox` | The sandboxed Electron renderer, with DOM plus the preload-exposed Electron bridge. It was formerly `electron-browser`. | `common`, `browser`, `electron-sandbox` |"
+    },
+    "BP2.5": {
+      "score": 1,
+      "sentence": "there are also variants such as `electron-utility`, for utility processes. These follow the same pattern, importing `common` and `node` plus their own folder."
+    },
+    "BP2.6": {
+      "score": 0.5,
+      "sentence": "The Electron main process, with Node plus Electron main APIs. | `common`, `node`, `electron-main`"
+    }
+  },
+  "bp2-nebulosity-upfront-2": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "Only basic JavaScript and ECMAScript APIs. It has no DOM and no Node. It can import only other `common` code."
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "DOM and Web APIs. It can import `common` and other `browser` code."
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "Node.js APIs. It can import `common` and other `node` code."
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "Electron renderer APIs, such as the `ipcRenderer` exposed through the preload. It can import `common`, `browser` and other `electron-browser` code."
+    },
+    "BP2.5": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP2.6": {
+      "score": 0.5,
+      "sentence": "Electron main-process APIs. It can import `common`, `node` and other `electron-main` code."
+    }
+  },
+  "bp3-baseline-1": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Create the identifier with `createDecorator<IFooService>('fooService')`, exported under the same name as the interface"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "Add the identifier as a decorated constructor parameter: `constructor(@IFooService private readonly fooService: IFooService) {}`."
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "`InstantiationService.createInstance(Ctor, ...staticArgs)` resolves the services through `_getOrCreateServiceInstance`"
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "Use `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`"
+    },
+    "BP3.6": {
+      "score": 0.5,
+      "sentence": "Registrations are collected via `getSingletonServiceDescriptors()` and loaded by the workbench's `*.services.ts` files (for example `workbench.common.main.ts` imports)."
+    }
+  },
+  "bp3-baseline-2": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Create the identifier with `createDecorator<IFooService>('fooService')`, which is in `instantiation.ts`. It is exported under the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`."
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "Declare it as a constructor parameter with the decorator: `constructor(arg1: string, @IFooService private readonly fooService: IFooService) {}`."
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "`instantiationService.createInstance(Ctor, ...nonServiceArgs)` creates a class with injected services. ... Contributions, such as workbench contributions, are registered with `registerWorkbenchContribution2` and constructed this way."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "Register it with `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`."
+    },
+    "BP3.6": {
+      "score": 1,
+      "sentence": "it is typically called at module level in a `*.contribution.ts` or in the service's own file."
+    }
+  },
+  "bp3-nebulosity-1": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Create the decorator with `createDecorator<IFooService>('fooService')`, and give it the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`. The interface and the const share one identifier"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "put the service parameter after any non-service arguments and mark it with the decorator: constructor(arg: string, @IFooService private readonly fooService: IFooService)"
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "call `instantiationService.createInstance(MyClass, arg)`. Pass only the static arguments, and the service arguments are supplied for you."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "Registering a singleton: `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`."
+    },
+    "BP3.6": {
+      "score": 1,
+      "sentence": "Singleton registration is a side-effect import, so the file must be pulled in by an entry-point `import`."
+    }
+  },
+  "bp3-nebulosity-2": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Create the identifier with `createDecorator<IFooService>('fooService')`, exported under the same name as the interface"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "The decorator `@IFooService` is applied to the parameter. By convention, services come last, after any static arguments."
+    },
+    "BP3.4": {
+      "score": 0.5,
+      "sentence": "`instantiationService.createInstance(MyClass, staticArg1, ...)`. The instantiation service reads the dependency metadata and resolves each service from its collection."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed)`"
+    },
+    "BP3.6": {
+      "score": 1,
+      "sentence": "it is typically called at module top level in a `*.contribution.ts` or service file"
+    }
+  },
+  "bp3-nebulosity-upfront-1": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Declare an interface and give it a brand: `export const IFooService = createDecorator<IFooService>('fooService');`. ... The interface and the const share one name. The const is both the service identifier and a parameter decorator."
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "Constructors declare dependencies with `@IFooService private readonly fooService: IFooService`."
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "`createInstance(Ctor, ...staticArgs)` builds an object and resolves the decorated params from its `ServiceCollection`. ... Contributions ... are created with `instantiationService.createInstance`, so they get injection too."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed | Eager)` in `extensions.ts` registers it."
+    },
+    "BP3.6": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "bp3-nebulosity-upfront-2": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "`createDecorator` (in `instantiation.ts`) returns a function that works as a parameter decorator and is also the service ID. The convention is that the interface and the identifier share the same name, with an `I` prefix."
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "Constructor parameter decorators declare the dependency: constructor(private readonly arg: string, @IFooService private readonly fooService: IFooService)"
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "Instantiate such classes with `instantiationService.createInstance(MyClass, staticArg)`. The service arguments are filled in from the collection."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed)` is in `extensions.ts`."
+    },
+    "BP3.6": {
+      "score": 1,
+      "sentence": "It is called at module top level, typically in `*.contribution.ts` or `workbench.common.main.ts`-style files."
+    }
+  },
+  "bp4-baseline-1": {
+    "BP4.1": {
+      "score": 1,
+      "sentence": "`common/`, `browser/` and `electron-browser/` hold the minimal workbench core."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "`api/` provides the `vscode.d.ts` extension API, including the extension host side."
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/` holds core services that aren't specific to one feature."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "`contrib/` holds the feature contributions: git, debug, search, chat, notebook, terminal, scm, mcp, and so on."
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "Nothing outside `contrib/` may depend on `contrib/`."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "Each contribution has a single `.contribution.ts` entry point."
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "A contribution exposes its internal API from one common file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "Cross-contribution dependencies go through that common API. Never reach into another contribution's internals."
+    }
+  },
+  "bp4-baseline-2": {
+    "BP4.1": {
+      "score": 1,
+      "sentence": "`common/`, `browser/`, `electron-browser/` hold the minimal workbench core."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "`api/` provides the `vscode.d.ts` API. It contains the extension host implementation and the main-thread counterparts"
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/` holds core services that aren't specific to one feature."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "`contrib/` holds feature contributions. It has about 101 folders"
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "Nothing outside `contrib/` may depend on code inside it."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "Each contribution has a single `.contribution.ts` file that registers it."
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "A contribution exposes its internal API from a single `common` file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "Other contributions must depend on that common API, not on another contribution's internals."
+    }
+  },
+  "bp4-nebulosity-1": {
+    "BP4.1": {
+      "score": 0.5,
+      "sentence": "`browser/`: core workbench UI, meaning the parts, layout and actions. `common/`: code shared across environments. `electron-browser/`: desktop-specific code."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "`api/`: the extension host and the implementation of the VS Code extension API."
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/`: core service implementations that aren't tied to one feature."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "`contrib/`: feature contributions such as `git`, `debug`, `search`, `terminal`... There are roughly 100 of these folders."
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "Nothing outside `contrib/` may depend on code inside `contrib/`."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "Each contribution has a single `.contribution.ts` file."
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "A contribution exposes its internal API from a single `common` file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "When one contribution depends on another, it uses that other contribution's common API."
+    }
+  },
+  "bp4-nebulosity-2": {
+    "BP4.1": {
+      "score": 0.5,
+      "sentence": "**`browser/`**: the core workbench UI, meaning parts, layout and actions."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "**`api/`**: the extension host and the VS Code API implementation."
+    },
+    "BP4.3": {
+      "score": 0.5,
+      "sentence": "**`services/`**: service implementations."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "**`contrib/`**: feature contributions. It has about 101 subfolders"
+    },
+    "BP4.5": {
+      "score": 0.5,
+      "sentence": "each feature plugs into registries and extension points instead of being hard-wired into the core."
+    },
+    "BP4.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP4.7": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP4.8": {
+      "score": 0.5,
+      "sentence": "Never use another component's storage keys to change it. Add a proper API instead."
+    }
+  },
+  "bp4-nebulosity-upfront-1": {
+    "BP4.1": {
+      "score": 0.5,
+      "sentence": "**`browser/`** (130 files): the shell, layout, parts and core actions. **`common/`** (34 files): shared contracts and models. **`electron-browser/`** (10 files): the desktop entry layer."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "**`api/`** (355 files): bridges between the extension host and the main thread, plus the VS Code API implementation."
+    },
+    "BP4.3": {
+      "score": 0.5,
+      "sentence": "**`services/`** (660 files): the injected service layer."
+    },
+    "BP4.4": {
+      "score": 1,
+      "sentence": "It has about 4,600 files, and most of them are in `contrib/`."
+    },
+    "BP4.5": {
+      "score": 0.5,
+      "sentence": "features plug in by contributing to registries and extension points. They are not hard-wired into the shell."
+    },
+    "BP4.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP4.7": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP4.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "bp4-nebulosity-upfront-2": {
+    "BP4.1": {
+      "score": 0.5,
+      "sentence": "`browser/` is the shell: layout, parts and core actions. `common/` holds shared contracts and models. `electron-browser/` is the desktop entry layer."
+    },
+    "BP4.2": {
+      "score": 0.5,
+      "sentence": "`api/` bridges the extension host to the main thread (`mainThread*` and `extHost*`)."
+    },
+    "BP4.3": {
+      "score": 0.5,
+      "sentence": "`services/` is the injected service layer, with about 660 files."
+    },
+    "BP4.4": {
+      "score": 1,
+      "sentence": "`contrib/` holds the feature modules, with about 3,270 files."
+    },
+    "BP4.5": {
+      "score": 0.5,
+      "sentence": "Features are not hard-wired into the shell."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "Each `*.contribution.ts` file registers a feature's actions, views, editors, settings and singleton services."
+    },
+    "BP4.7": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP4.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "bp5-baseline-1": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts`: desktop-only features"
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "`workbench.web.main.ts`: web-only features"
+    },
+    "BP5.3": {
+      "score": 0.5,
+      "sentence": "`workbench.common.main.ts`: features for every platform"
+    },
+    "BP5.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "Nothing is loaded unless it is imported, directly or transitively, from one of these files."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "A contribution file such as `foo.contribution.ts` runs its registrations on import"
+    }
+  },
+  "bp5-baseline-2": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "Desktop-only features, such as native terminals, are imported only from the desktop entry."
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "Web-only services are imported only from the web entry."
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "Each imports the shared `workbench.common.main.ts`, then its own list of services and contributions."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "Platform differences sit behind service interfaces. ... Each platform then registers its own implementation"
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "Anything not imported (transitively) from an entry point is never bundled or run."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "Features register themselves on import ... The entry-point imports therefore effectively act as the feature manifest."
+    }
+  },
+  "bp5-nebulosity-1": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` imports the common set plus the `electron-browser` and `node`-backed services and contributions."
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "`workbench.web.main.ts` imports the common set plus web-specific implementations, such as the web file system provider, web workers, and the web extension host."
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "`workbench.common.main.ts` holds the shared set of services and contributions. It's imported by both entry points."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "Where the platforms differ, they usually share an interface (`IFooService`). Each platform then registers its own implementation, so features use the same API on both."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "If an entry point doesn't import a feature, the bundler never includes it. This is the main gate."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "Most features are side-effect imports like `import './contrib/foo/browser/foo.contribution.js'`."
+    }
+  },
+  "bp5-nebulosity-2": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` adds the `electron-sandbox` and node-backed pieces."
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "`workbench.web.main.ts` adds the web-specific ones, such as the web worker extension host and browser-based file and storage services."
+    },
+    "BP5.3": {
+      "score": 0.5,
+      "sentence": "`workbench.common.main.ts` imports the contributions and services both builds share."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "each build supplies its own implementation of the platform-specific ones."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "The bundler only includes files reachable from the entry it builds. A feature that is never imported from an entry isn't loaded at all."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "Contributions under `workbench/contrib/<feature>/` register themselves through side-effect imports, such as `import './contrib/foo/browser/foo.contribution.js'`."
+    }
+  },
+  "bp5-nebulosity-upfront-1": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` imports the common file plus the `electron-sandbox` and `node` pieces."
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "`workbench.web.main.ts` imports the common file plus the web-only pieces."
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "`workbench.common.main.ts` imports everything shared."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "The web and desktop entry points register different implementations of the same interface."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "A feature's code is only in a build if one of these files imports it."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "Features are usually pulled in by side-effect imports of their `*.contribution.ts` files, which are listed in these entry points."
+    }
+  },
+  "bp5-nebulosity-upfront-2": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "A feature that only works on desktop, such as the terminal's pty host or native menus, is imported from `workbench.desktop.main.ts` only."
+    },
+    "BP5.2": {
+      "score": 0.5,
+      "sentence": "Each platform adds its own entry file on top: `workbench.desktop.main.ts` or `workbench.web.main.ts`."
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "Both builds share `workbench.common.main.ts`, which pulls in the workbench core and the contributions that work everywhere."
+    },
+    "BP5.4": {
+      "score": 1,
+      "sentence": "A contribution that needs a service with no web implementation either gets a web stub or stays out of the web entry."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "The bundler follows imports, so a module nobody imports isn't in the bundle."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "Contributions register themselves when their module runs (`registerWorkbenchContribution2`, `registerSingleton`, `registerAction2`). If the module is never imported, it never registers."
+    }
+  }
+}

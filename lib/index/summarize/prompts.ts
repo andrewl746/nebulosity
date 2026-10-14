@@ -194,12 +194,13 @@ export function testFileSummary(filePath: string, lineCount: number): SummaryTex
 /**
  * Folders that hold only test files skip the model too (PIVOT_SPEC.md §5.3). The subject is the area the
  * tests cover: the segment just before the first test/tests/__tests__ segment ("folding" for
- * ".../folding/test/browser"), else the folder's own name.
+ * ".../folding/test/browser"). A top-level test folder covers the whole repo, so it takes the repo's name
+ * ("Tests for vscode", not "Tests for test"); anything else takes the folder's own name.
  */
-export function testFolderSummary(folderPath: string, testFileCount: number): SummaryText {
+export function testFolderSummary(folderPath: string, testFileCount: number, repoName: string): SummaryText {
     const segments = folderPath.split("/");
     const at = segments.findIndex((segment) => segment === "test" || segment === "tests" || segment === "__tests__");
-    const subject = at > 0 ? segments[at - 1] : segments[segments.length - 1];
+    const subject = at > 0 ? segments[at - 1] : at === 0 && segments.length === 1 ? repoName : segments[segments.length - 1];
     return {
         tagline: `Tests for ${subject}`,
         summary: `Test code (${plural(testFileCount, "test file")}) for ${subject}. Test-only folders get this template instead of a model-written summary.`,

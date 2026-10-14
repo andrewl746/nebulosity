@@ -1,0 +1,35 @@
+{
+  "id": "1e3b210e",
+  "points": [
+    {
+      "id": "BP5.1",
+      "score": 0.5,
+      "quote": "`workbench.desktop.main.ts` adds the `electron-sandbox` and node-backed pieces."
+    },
+    {
+      "id": "BP5.2",
+      "score": 1,
+      "quote": "`workbench.web.main.ts` adds the web-specific ones, such as the web worker extension host and browser-based file and storage services."
+    },
+    {
+      "id": "BP5.3",
+      "score": 0.5,
+      "quote": "`workbench.common.main.ts` imports the contributions and services both builds share."
+    },
+    {
+      "id": "BP5.4",
+      "score": 0.5,
+      "quote": "each build supplies its own implementation of the platform-specific ones."
+    },
+    {
+      "id": "BP5.5",
+      "score": 1,
+      "quote": "The bundler only includes files reachable from the entry it builds. A feature that is never imported from an entry isn't loaded at all."
+    },
+    {
+      "id": "BP5.6",
+      "score": 1,
+      "quote": "Contributions under `workbench/contrib/<feature>/` register themselves through side-effect imports, such as `import './contrib/foo/browser/foo.contribution.js'`."
+    }
+  ]
+}

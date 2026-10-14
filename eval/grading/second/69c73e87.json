@@ -1,0 +1,7 @@
+{ "id": "69c73e87", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create the identifier with `createDecorator<IFooService>('fooService')`, exported under the same name as the interface (`export const IFooService = createDecorator<IFooService>('fooService')`)." },
+  { "id": "BP3.3", "score": 1, "quote": "Add the identifier as a decorated constructor parameter: `constructor(@IFooService private readonly fooService: IFooService) {}`." },
+  { "id": "BP3.4", "score": 1, "quote": "`InstantiationService.createInstance(Ctor, ...staticArgs)` resolves the services through `_getOrCreateServiceInstance`, using a dependency graph that detects cycles. It then constructs the class." },
+  { "id": "BP3.5", "score": 1, "quote": "Use `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`platform/instantiation/common/extensions.ts`)." },
+  { "id": "BP3.6", "score": 0.5, "quote": "Registrations are collected via `getSingletonServiceDescriptors()` and loaded by the workbench's `*.services.ts` files (for example `workbench.common.main.ts` imports)." }
+] }

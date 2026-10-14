@@ -258,3 +258,193 @@ The first `describe()` loads the import graph: 101 ms, once per index version. *
 The model issued all seven calls in one parallel batch, then wrote one reply, so the server answered seven concurrent calls on one stdio connection (the MiniLM load included). "ok" means the server returned no error; the answers weren't graded. "8 turns" is Claude Code's `num_turns` for the run. The token and cost figures include the owner's own plugins, skills and hooks in the prompt, so $0.05 isn't Nebulosity's cost alone.
 
 8 turns; token usage as the run's result reported it: input 4, cache creation 10,596, cache read 6,221, output 748; wall time 6.2 s; Claude Code's estimate $0.05 (0.0504941). Runs used: 1 of the 1–2 the owner approved (no retry needed). No live run: the owner declined it.
+
+## 2026 10 14 Search Benchmark #2 — the V1.5 tuning set
+
+- **Target and machine:** VS Code @ `cc3fec88`, on the owner's laptop, every summary written (Summary Benchmark #1: structure, summaries and embeddings all `ready`). The Map's server stayed up on port 3000; the benchmark only reads the database.
+- **Command:** `npm run bench-search -- ../vscode` (`scripts/bench-search.ts`, queries in `scripts/bench-search-queries.json`). It runs the real engine, the meaning list included, asks for the top 10 and records where the first acceptable result lands. A folder target (ending in `/`) accepts itself or anything inside it. The tables are hit@1/3/5 and MRR@10 (mean of 1/rank, 0 outside the top 10) per group.
+- **How the expectations were set:** by hand, from VS Code's tree at `cc3fec88` (every one of the 32 distinct expected paths checked with `git ls-files`), in the commit that added the set (`9421fdc`), before any search change was measured; the file has not changed since. None names a file or folder the eval scores. Two names queries, `registerSingleton` and `createDecorator`, are words BP3's rubric asks answers to name (ADR-052). The set has 10 names queries (identifiers and file words), 12 features queries (the five of V1.2's checks plus seven more) and 10 questions in plain language.
+- **Three runs, one engine each:**
+  - **before:** `9421fdc`, search as V1.3.1 left it (code, summary, meaning and folder-name lists);
+  - **after C1:** `70cdfff`, a fifth list of file names and exported declaration names, weight 2 (ADR-052);
+  - **after C2:** `6ed73db`, tests damped to half their score unless the query asks for them, and declaration snippets. A last run at `acf3d9f`, the engine as it freezes for the eval, is byte-identical to this one.
+- **A caution about the set.** The changes were designed after a planning probe on a few of these queries (`lifecycle`, `Disposable`, `registerSingleton`, `terminal`), and the same 32 queries judge them. There is no held-out set, and one query is 0.1 of a 10-query group's hit rate. Read the table as "did the changes do what they were for", not as a forecast of a new repo.
+
+**Before** (`search-before`):
+
+| Group | Queries | hit@1 | hit@3 | hit@5 | MRR@10 |
+|---|---|---|---|---|---|
+| names | 10 | 0.30 | 0.50 | 0.70 | 0.451 |
+| features | 12 | 0.42 | 0.83 | 1.00 | 0.653 |
+| questions | 10 | 0.70 | 0.90 | 0.90 | 0.783 |
+| all | 32 | 0.47 | 0.75 | 0.88 | 0.630 |
+
+**After C1** (the file-name list):
+
+| Group | Queries | hit@1 | hit@3 | hit@5 | MRR@10 |
+|---|---|---|---|---|---|
+| names | 10 | 0.50 | 0.90 | 1.00 | 0.687 |
+| features | 12 | 0.75 | 0.83 | 1.00 | 0.833 |
+| questions | 10 | 0.60 | 0.90 | 1.00 | 0.742 |
+| all | 32 | 0.63 | 0.88 | 1.00 | 0.759 |
+
+**After C2** (tests damped, declaration snippets): the same numbers as C1, digit for digit, and the same top 3 for all 32 queries.
+
+| Group | Queries | hit@1 | hit@3 | hit@5 | MRR@10 |
+|---|---|---|---|---|---|
+| names | 10 | 0.50 | 0.90 | 1.00 | 0.687 |
+| features | 12 | 0.75 | 0.83 | 1.00 | 0.833 |
+| questions | 10 | 0.60 | 0.90 | 1.00 | 0.742 |
+| all | 32 | 0.63 | 0.88 | 1.00 | 0.759 |
+
+**V1.2's five checks** (each must stay in the top 5; rank of the first acceptable result):
+
+| Query | Before | After C1 | After C2 |
+|---|---|---|---|
+| integrated terminal | 2 | 2 | 2 |
+| editor tabs | 4 | 4 | 4 |
+| extension host | 1 | 1 | 1 |
+| file watcher | 2 | 1 | 1 |
+| keybinding resolution | 1 | 1 | 1 |
+
+All five held. Overall: hit@5 0.88 → 1.00, MRR 0.630 → 0.759, names hit@1 0.30 → 0.50, names MRR 0.451 → 0.687, features hit@1 0.42 → 0.75.
+
+**What got worse.** The questions group's hit@1 fell from 0.70 to 0.60 and its MRR from 0.783 to 0.742, and the features query `diff editor` fell from 2 to 4. The group's hit@5 did rise, from 0.90 to 1.00, because the Electron main process question came back from outside the top 10. Four queries lost a place or two:
+- `where are editor tabs rendered` 2 → 3, `where is the color theme applied` 1 → 2, `how are settings read and written` 3 → 4, and `diff editor` 2 → 4.
+- The cause is the same each time. A common query word equal to a file's name now takes the file list's weight of 2: `where are editor tabs rendered` leads with `src/vs/workbench/browser/editor.ts`, `diff editor` has `src/vs/workbench/common/editor.ts` second, the color theme question leads with `src/vs/workbench/common/theme.ts`, and the settings question has a generated `Settings.ts` second. The first result at or inside the folder the query wanted (`parts/editor/`, `widget/diffEditor/`, `services/themes/`, `platform/configuration/`) moves down a place or two behind them.
+- The weight stays 2, as the folder list's is, and nothing was tuned to win these back. The names group's gain is the other side of the same rule.
+
+**Every query whose rank moved** (rank of the first acceptable result; 16 of 32 moved, the other 16 did not):
+
+| Query | Before | After C1 | After C2 |
+|---|---|---|---|
+| `lifecycle` | 9 | 3 | 3 |
+| `Disposable` | 9 | 2 | 2 |
+| `registerSingleton` | 2 | 1 | 1 |
+| `URI` | 4 | 2 | 2 |
+| `Emitter` | 5 | 3 | 3 |
+| `Range` | outside the top 10 | 5 | 5 |
+| `IConfigurationService` | 3 | 1 | 1 |
+| `file watcher` | 2 | 1 | 1 |
+| `quick pick` | 4 | 1 | 1 |
+| `telemetry` | 3 | 1 | 1 |
+| `git extension` | 2 | 1 | 1 |
+| `how does the desktop app start in the electron main process` | outside the top 10 | 3 | 3 |
+| `diff editor` | 2 | 4 | 4 |
+| `where are editor tabs rendered` | 2 | 3 | 3 |
+| `where is the color theme applied` | 1 | 2 | 2 |
+| `how are settings read and written` | 3 | 4 | 4 |
+
+Before the changes, two queries were outside the top 10: `Range` and the Electron main process question. After them, none is: all 32 first expected results are in the top 5.
+
+**What C2 and C3 did and did not change.**
+- **C2 (tests damped) and C3 (snippets) do not move this set's numbers.** No query asks for tests, and none of the 32 top-3 lists contained a path in a `test/` directory or a `.test.` or `.spec.` file. Snippets change what a hit shows, not its rank. So the set cannot show either change; its evidence is elsewhere.
+- **C2's evidence is `terminal`,** the query that motivated it. In V1.5's planning probe a smoke-test folder (`test/smoke/src/areas/terminal`) was second. After C1 the top 3 were `test/automation/src/terminal.ts` (a test helper), `src/vs/workbench/contrib/terminal/common/terminal.ts` and `src/vs/workbench/contrib/terminal`. After C2 they are `contrib/terminal/common/terminal.ts`, `contrib/terminal` and `contrib/terminal/common/remote/terminal.ts`: no test file or test folder in the top 10. A query that asks for tests still finds them: `terminal smoke test` leads with `test/smoke/src/areas/terminal/terminal.test.ts`. VS Code has 4,432 test files of 14,844 and 1,266 test-only folders.
+- **Fixture folders are not test targets,** so they are not damped. `Disposable` still leads with a Copilot fixture's `disposable.ts` (`extensions/copilot/.../fixtures/context/testbed/src/disposable.ts`), and `URI` and `Emitter` still show a chat-simulation fixture in their top 3 (`scripts/chat-simulation/fixtures/_chatperf_uri.ts`, `_chatperf_event.ts`). Copilot's copy of `uri.ts` (`extensions/copilot/src/util/vs/base/common/uri.ts`) still ranks above the core `uri.ts` for `URI`, and for `Emitter` the core `event.ts` is third, behind another Copilot `event.ts` and that fixture.
+- **C3 (snippets),** checked by eye in Task 6 on `lifecycle`, `registerSingleton`, `editor tabs`, `file watcher` and `Disposable`: they now show declarations (for example `ILifecycleService`, `registerSingleton`); where only a file's imports listing matched, the snippet reads "imports and exports". In that sample 8 of 39 snippets were still listings.
+
+**What the file-name list costs.** Its facts (every file's name and importer count, every top-level exported declaration, the test file and test-only folder sets) are read once per index version and cached. Timed with a scratch script that is not committed, read only, the same calls the engine makes on a cache miss, three loads in each of two fresh processes:
+- **first load: 181–204 ms in the first timing, up to 227 ms in a re-run, so about 190–230 ms,** on VS Code (14,844 files, 44,620 declarations): `loadFileFacts` 101–124 ms, the declarations 65–71 ms, the test sets 9–13 ms. It happens again after every index-version bump, summary-only bumps included, because the cache is keyed to the version (ADR-036).
+- **ranking over the cached facts: 6–19 ms per search** (about 7–8 ms typically, over 20 queries), every search.
+- A whole `search()` with the embedding model switched off took 354–364 ms the first time in a fresh process and 45–60 ms for the next four queries. That first-search difference is the facts (about 190–230 ms) plus the vector index and cold statements; the part beyond the facts wasn't separated.
+
+## 2026 10 14 MCP Benchmark #2 — S5 after search tuning, and right after a write
+
+- **Target and machine:** VS Code @ `cc3fec88`, on the owner's laptop, every summary written, the engine as frozen for the eval (`acf3d9f` plus this commit's bench and docs only). The Map's server was up on port 3000 with its background worker; the bench reads, apart from the one warm index run below.
+- **Command:** `npm run bench-mcp -- ../vscode --after-write`. The first table is MCP Benchmark #1's, unchanged: the SDK's stdio client starts `node mcp/launch.mjs` in VS Code's folder with `NEBULOSITY_LIVE=off`, times each call from request to answer, reports each tool's first call apart and then 20 warm calls. `--after-write` then runs `npm run index -- ../vscode` once more (a warm structure run: it edits no file in the repo and calls no API; it writes the config's activeRepo and bumps the index version, ADR-036) and measures the whole table again against the same running server. Each tool's first call there is its first after the write: the import graph, the reach index and the search's name facts rebuild for the new version.
+- **Server start** (spawn → initialized): 788 ms (a second run: 838 ms).
+- **Where the figures come from:** both tables, the server start and the S5 lines are `npm run bench-mcp -- ../vscode --after-write`'s own output, from the first of two runs; the second run's differences are listed below. The name-facts figures are from Search Benchmark #2's scratch script, not from `npm run bench-mcp`. The index run met no lock and took 13.8 s (5.2 s in the second run). It reported 14,844 files, changed 0.
+
+**Before the write** (the same table as MCP Benchmark #1, measured again after Tasks 5–6):
+
+| Tool | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |
+|---|---|---|---|---|---|---|
+| `overview` | 303 ms | 20 | 61 ms | 64 ms | 65 ms | 2,195 |
+| `describe` | 63 ms | 20 | 51 ms | 61 ms | 66 ms | 3,403 |
+| `search` | 1011 ms | 20 | 132 ms | 168 ms | 192 ms | 2,440 |
+| `dependents` | 58 ms | 20 | 49 ms | 54 ms | 55 ms | 3,811 |
+| `dependencies` | 46 ms | 20 | 48 ms | 52 ms | 52 ms | 2,491 |
+| `path` | 54 ms | 20 | 61 ms | 71 ms | 73 ms | 323 |
+| `show_on_map` | 57 ms | 20 | 51 ms | 61 ms | 62 ms | 167 |
+
+**S5 (every warm call ≤ 500 ms): PASS (worst 192 ms, a `search`).** MCP Benchmark #1's worst was 261 ms. The first `search` (1,011 ms; #1: 1,676 ms) loads the MiniLM model inside the server. Between the two benchmarks `npm audit fix` moved `onnxruntime-node` from 1.24.3 to 1.30.0 under `@huggingface/transformers` 4.3.1 (V1.5 Task 1); the load took 1,011 ms in the first run and 1,140 ms in the second, against #1's single 1,676 ms, but two runs on a laptop don't show the upgrade made it faster. The warm `search` p50 is 128–132 ms against #1's 170 ms. The fifth list adds 6–19 ms to every search, so the drop isn't the tuning's; I didn't find its cause (a quieter machine and the onnxruntime upgrade are both possible), and the other tools' p50s moved both ways.
+
+**After a write** (a warm `npm run index` between the tables):
+
+| Tool | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |
+|---|---|---|---|---|---|---|
+| `overview` | 304 ms | 20 | 90 ms | 99 ms | 102 ms | 2,245 |
+| `describe` | 90 ms | 20 | 60 ms | 76 ms | 91 ms | 3,403 |
+| `search` | 450 ms | 20 | 144 ms | 181 ms | 187 ms | 2,440 |
+| `dependents` | 68 ms | 20 | 59 ms | 64 ms | 64 ms | 3,811 |
+| `dependencies` | 59 ms | 20 | 54 ms | 62 ms | 62 ms | 2,491 |
+| `path` | 53 ms | 20 | 57 ms | 68 ms | 86 ms | 323 |
+| `show_on_map` | 57 ms | 20 | 62 ms | 74 ms | 75 ms | 167 |
+
+**S5 after a write (every call ≤ 500 ms, first calls included): PASS (worst 450 ms, the first `search`).** It is informative; the exit code is S5's, which judges the warm calls. Reading it:
+- The first `search` after the write took 450 ms against a 128–144 ms warm p50 (second run: 336 ms). About 190–230 ms of the extra is the name facts reloading (above); the rest wasn't separated. The margin to 500 ms is 50 ms in the first run and 164 ms in the second, so this is the one number here that could cross the line on a slower machine.
+- The first `overview` after the write took 304 ms (second run: 192 ms), about its first-call cost before the write: the import graph and the reach index rebuild (Benchmark #1: 75.5 ms for the graph and index in process, 336 ms for the first `overview` call).
+- The after-write table runs on a server that already has MiniLM loaded. A server that starts right after a write pays both: about 1 s for the first `search`.
+- The `overview` answer grew from 2,195 to 2,245 characters because the warm index run re-derived the summaries stage and its line now ends "1 out of date (redone when opened)": one of 18,637 summaries is out of date with its file. The second run's tables start at 2,245.
+- A batch of summaries landing in the database also bumps the index version (ADR-036), so while a summary pass runs, a search made after each landing pays the name facts' reload (about 190–230 ms). That wasn't measured as such.
+
+**Second run** (same command; the tables are in the working notes, kept locally and not published): S5 PASS, worst warm 171 ms (a `search`); first `search` 1,140 ms; after a write PASS, worst 336 ms (the first `search`); every other first call after the write was 192 ms or less.
+
+## 2026 10 14 Map Benchmark #5 — S3 on the static demo
+
+- **Why:** the static demo (ADR-049) draws the same Map from exported files. S3's 100 ms limit has to hold there too, and its transport is new: files fetched once and kept in the page, a lookup in the manifest for every folder, and search built in the browser.
+- **Target and machine:** VS Code @ `cc3fec88`, the provisional export (7,700 files, 75.5 MB, index version 133; made before the refresh of two summaries, so `test/` still reads "Tests for test"; the final export of 2026-10-14, index version 135, `test/` "Tests for vscode", differs by 37 bytes, and S3 was not re-run on it), built with `npm run build-demo` in a separate worktree at commit `90e12c8`, on the owner's laptop. Other jobs of the same session (reviewers) were running on the machine during the runs.
+- **How:** `npm run serve-demo` on 127.0.0.1:3200, headless Chrome (`--headless=new`) at 1907 × 998 over the DevTools protocol, one browser per run. The walk is #2–#4's, unchanged: 18 level changes, 10 clicks, the `src` panel 10 times and 20 wheel zoom steps, a warm-up pass and then the measured pass. Three runs, then three more to see the tail. The files load from loopback, so this measures the Map, not the network. The measured pass is warm: the warm-up pass ran first, so the files the walk needs are already fetched. It does not measure a first visit's fetch latency on a real host; the first-visit figures are the first level and first search below. The harness's "p95" is `sorted[min(n − 1, floor(0.95 × n))]`, which is the last, slowest sample at these sizes (n = 18 level changes, n = 10 clicks, n = 10 `src` panel opens): those three p95s are worst cases. The zoom column has 133–156 frames a run, so its p95 is a true p95 (run 1: 7.3 ms against a 13.8 ms maximum).
+
+| Run | level change p50 / p95 | click p50 / p95 | the `src` panel p50 / p95 | zoom p50 / p95 | longest frame gap |
+|---|---|---|---|---|---|
+| 1 | 41.4 / 88.3 ms | 20.6 / 21.5 ms | 13.6 / 15.2 ms | 6.9 / 7.3 ms | 83.3 ms |
+| 2 | 38.4 / 97.0 ms | 19.3 / 20.8 ms | 13.7 / 16.5 ms | 7.0 / 13.9 ms | 83.3 ms |
+| 3 | 35.3 / 82.7 ms | 19.5 / 23.8 ms | 18.6 / 19.4 ms | 7.0 / 13.8 ms | 97.3 ms |
+| 4 (extra) | 41.7 / 83.2 ms | 20.5 / 25.9 ms | 13.8 / 20.4 ms | 7.0 / 7.5 ms | 83.3 ms |
+| 5 (extra) | 39.2 / 84.6 ms | 20.6 / 26.5 ms | 13.8 / 20.4 ms | 6.9 / 7.3 ms | 83.3 ms |
+| 6 (extra) | 41.4 / 89.9 ms | 16.5 / 26.4 ms | 13.4 / 21.3 ms | 7.0 / 7.1 ms | 76.3 ms |
+
+All six runs are published: runs 1–3 are the planned three, and runs 4–6 were added to see the tail. **S3 (≤ 100 ms per interaction): PASS** in all six. In the planned three the slowest level change was 97.0 ms (run 2) and the slowest click 23.8 ms; the three extra runs stayed within 89.9 and 26.5 ms, so over all six the worst level change is 97.0 ms and the worst click 26.5 ms. **The `src` panel (≤ 300 ms warm): PASS** at 21.3 ms at worst. The same level changes are the slow ones in every run: the `contrib` level (77–88 ms), going Back from `chat` (66–86 ms), the `platform` level (step 13, 60–77 ms), its page turns (steps 14–15, 51–71 ms) and `src/vs/editor/common` (69–97 ms).
+
+**The build** (`npm run build-demo`, 22.6 s, exit 0; limits 14,000 files and 95 MB, the host's being 15,000 and 100 MB): its output gives the sizes, and the file counts are of the finished `out/`.
+
+| Folder | Files | Size |
+|---|---|---|
+| `demo/` (the exported data) | 7,700 | 75.5 MB |
+| `_next/` (scripts, styles, fonts) | 32 | 1.2 MB |
+| the site's root files (`index.html`, `404.html`, icons, five unused template SVGs) | 15 | 0.1 MB |
+| `_not-found/` | 3 | 0.0 MB |
+| `out/` | 7,750 | 76.8 MB |
+
+`demo/` holds 3,868 level pages (8.5 MB), 3,793 describe bundles (53.1 MB), 36 page indexes (0.3 MB), `search.json` (13.4 MB), `manifest.json` (0.2 MB) and the repo's license. The build made `/` and no `/api` route, and the leak scan found nothing.
+
+**Load and first search** (headless Chrome at 1907 × 998, a `MutationObserver` for the first drawn box, the Network log for requests). These are the first-visit figures, which the warm walk above doesn't give: the first level at 163 ms and the first search at 1.6 s, both with the files coming from loopback and not from a real host.
+- **First level drawn:** 163 ms after navigation on a first load in a fresh browser, 57–62 ms on four repeat loads (cache disabled), and 112–203 ms for a deep link to `src/vs/platform` (46 boxes). The manifest and the root level had both arrived by about 47 ms.
+- **First ⌘K search** ("lifecycle", from typing to the first hit drawn, so it includes the palette's 150 ms debounce): 1,616 and 1,633 ms in two runs. `search.json` arrived in 49–52 ms from loopback; the other 1.4 s or so is parsing it, building the index and the query. The palette shows an empty list meanwhile, with no loading sign. A second search ("terminal") took 188–191 ms, the debounce plus about 40 ms. In Node the index builds in 909 ms and each search takes 8–27 ms (8.2 s to build before the posting lists were built in one pass).
+- **Requests in the six-check session:** 28, all GETs: the page, `/_next/*`, `/demo/*.json` and the icon. No `/api` request, no `EventSource`, no console message. That is a statement about requests, not about text: the demo's script still holds the HTTP client's `/api/…` strings as dead code (`api.ts` falls back to it, `staticApi ?? serverApi`), and nothing runs them.
+
+Two things to read this with:
+- **Level changes are slower here than in #3 and #4, and the gap was not isolated.** The p50 is a few ms higher (35–42 against 33.5 and 34.5 ms). The level p95 is 82.7–97.0 ms here (runs 1–3), against 62 ms in #2, 55 ms in #3 and about 62 ms in #4, and the `platform` level takes 59.6–77.2 ms to open here (step 13) against 46 ms in #2, and its page turns 50.7–70.8 ms (steps 14–15) against 47 ms each way. No run of the server build's walk was made in the same session: it would have opened the owner's database from a second server, so it wasn't run. The machine was also running the port-3000 server, its worker and other jobs of the session. So whether the extra ~30 ms comes from the machine's state, the static transport or the static build is unexplained. What was measured: in run 6 the whole walk (two passes, 36 level changes) fetched 10 `level/*.json` files at a median of 5.3 ms (max 7.6 ms) and 11 describe bundles at a median of 3.7 ms (max 6.2 ms), and most levels came from the Map's own memory, so the fetches are short. The repeated 83 ms gaps between frames fall at the slow steps and show the main thread busy there; #4 saw 76 ms at its worst.
+- **One run left 3 ms of margin** (run 2: 97.0 ms against 100). The display runs at 144 Hz (the zoom frame interval's median is 6.9–7.0 ms in every run), so 3 ms is under half a frame. It passes, but a slower machine or a busier moment could push a level change over. The static build's tail is the number to watch if the Map's drawing changes.
+
+## 2026 10 14 Eval #1 — Claude Code with and without Nebulosity's MCP server on VS Code (S7)
+
+This is the evaluation `PIVOT_SPEC.md` §9 asks for. The method, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
+- **Target and machine:** VS Code @ `cc3fec88` (`../vscode`), with Nebulosity's engine at `EVAL_ENGINE` (`8d7d485`) and index version 135. It ran on the owner's laptop on 2026-10-14, 17:01–17:47 UTC, with the machine kept quiet.
+- **How:** `npm run eval:run -- --pilot`, then `-- --repeat 1` and `-- --repeat 2`: 15 questions, twice each, in three arms, 90 runs in all. A is Claude Code alone. B adds Nebulosity's MCP server at Claude Code's default tool search, and A against B is the headline. U loads Nebulosity's tools up front. Every run used Claude Code 2.1.299 headless, `claude-sonnet-5-5` at medium effort, and read-only tools. `npm run eval:score` scored the runs; the big-picture answers were graded blind (`eval/grading/`).
+- **Result:** Nebulosity raised no family's score; it lowered big-picture's (0.82 against 0.91) and, through one run, the complete lists' (0.94 against 0.97). Its tools were used in 12 of 30 B runs, never on a big-picture question. Where they were used, the connection answers cost about a third of A's estimate and time, at the same score. **S7: done.**
+
+| Family | Arm | Score | Precision | Median input (uncached) | Median cache writes | Median cache reads | Median output | Median tokens, all | Median cost est. | Median wall | Median tool calls |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Big-picture | A | 0.91 | – | 3 | 1,921 | 30,793 | 1,119 | 32,397 | $0.021 | 13.2 s | 1 |
+| Big-picture | B | 0.82 | – | 2 | 2,398 | 21,004 | 1,214 | 22,222 | $0.022 | 13.0 s | 0 |
+| Big-picture | U | 0.77 | – | 2 | 2,154 | 34,074 | 1,150 | 35,271 | $0.023 | 12.7 s | 0 |
+| Complete-list | A | 0.97 | 1.00 | 7 | 12,237 | 77,696 | 2,692 | 92,645 | $0.082 | 24.6 s | 3.5 |
+| Complete-list | B | 0.94 | 1.00 | 6 | 9,455 | 70,777 | 2,572 | 81,696 | $0.067 | 24.5 s | 2.5 |
+| Complete-list | U | 0.97 | 1.00 | 8 | 6,694 | 139,752 | 2,406 | 147,720 | $0.062 | 18.9 s | 4 |
+| Connection | A | 1.00 | – | 11 | 6,572 | 134,509 | 2,413 | 143,958 | $0.065 | 23.2 s | 7 |
+| Connection | B | 1.00 | – | 6 | 2,603 | 62,705 | 405 | 65,150 | $0.020 | 8.4 s | 2 |
+| Connection | U | 1.00 | – | 4 | 1,494 | 67,166 | 313 | 69,073 | $0.016 | 7.1 s | 1 |
+
+Each row covers 10 runs. The score is the mean share of rubric points for big-picture, the mean recall for lists, and the mean chain score for connections. The medians are over the same 10 runs, with halves rounded up. Tokens are summed over every model, the cost is Claude Code's own list-price estimate, and the tool calls include ToolSearch. All 90 runs together came to $4.88 by that estimate.

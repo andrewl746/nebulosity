@@ -1,0 +1,42 @@
+{
+  "id": "cl3",
+  "kind": "list",
+  "target": "src/vs/editor/standalone",
+  "scope": "outside",
+  "files": [
+    "build/vite/setup-dev.ts",
+    "src/vs/editor/editor.api.ts",
+    "src/vs/editor/editor.main.ts"
+  ],
+  "verified": true,
+  "notes": [
+    {
+      "path": "src/vs/editor/common/services/editorBaseApi.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L14 imports '../standalone/standaloneEnums.js', which resolves to src/vs/editor/common/standalone/standaloneEnums.ts: a namesake folder inside editor/common, not src/vs/editor/standalone."
+    },
+    {
+      "path": "build/monaco/monaco.d.ts.recipe",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "Not a code file: the monaco.d.ts generator's recipe, whose #include(vs/editor/standalone/...) lines are directives, not imports."
+    },
+    {
+      "path": "eslint.config.js",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L639-665 and L1841-1881 name src/vs/editor/standalone in lint rule scopes; strings, not imports."
+    },
+    {
+      "path": "src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "One 1.4 MB string literal (a recorded TypeScript server response) that names hundreds of source paths: data, not an import."
+    }
+  ]
+}

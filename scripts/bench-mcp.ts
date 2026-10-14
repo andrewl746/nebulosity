@@ -1,11 +1,16 @@
 /**
- * npm run bench-mcp -- [path-to-repo]   (default ../vscode)
+ * npm run bench-mcp -- [path-to-repo] [--after-write]   (default ../vscode)
  *
  * S5 (PIVOT_SPEC.md §2): every tool's latency through the real MCP server, as a client sees it. The SDK's stdio client
  * starts `node mcp/launch.mjs` in the repo's folder with live events off, and times each call from request to answer.
  * Each tool's first call is reported apart (it may load the import graph or the embedding model); S5 judges the 20 warm
  * calls after it: every one ≤ 500 ms (D5 in docs/plans/2026-10-13-v1-4-mcp.md).
+ *
+ * --after-write then runs a warm `npm run index` (no file edited, no API called) and measures the whole table again, first
+ * calls included: the caches keyed by the index version rebuild on each tool's first call after the write (V1.5, ADR-052).
+ * It's informative; the exit code stays S5's, which judges the warm calls of the first table.
  */
+import { spawnSync } from "child_process";
 import path from "path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -65,8 +70,53 @@ async function timed(client: Client, name: string, args: Record<string, unknown>
     return { ms: took, chars: text.length };
 }
 
+/**
+ * One pass over every tool: its first call, then WARM_CALLS warm ones. Returns the table's rows, the worst warm call
+ * (what S5 judges) and the worst call of any kind, first calls included (what the after-a-write line judges).
+ */
+async function table(client: Client): Promise<{ rows: string[]; worst: number; worstAny: number }> {
+    const rows: string[] = [];
+    let worst = 0;
+    let worstAny = 0;
+    for (const [name, inputs] of CALLS){
+        const first = await timed(client, name, inputs[0]);
+        const warm: { ms: number; chars: number }[] = [];
+        for (let i = 0; i < WARM_CALLS; i++) warm.push(await timed(client, name, inputs[(i + 1) % inputs.length]));
+        const sorted = warm.map((w) => w.ms).sort((a, b) => a - b);
+        const largest = Math.max(first.chars, ...warm.map((w) => w.chars));
+        worst = Math.max(worst, sorted[sorted.length - 1]);
+        worstAny = Math.max(worstAny, first.ms, sorted[sorted.length - 1]);
+        rows.push(`| \`${name}\` | ${ms(first.ms)} | ${WARM_CALLS} | ${ms(percentile(sorted, 0.5))} | ${ms(percentile(sorted, 0.95))} | ${ms(sorted[sorted.length - 1])} | ${largest.toLocaleString("en-US")} |`);
+    }
+    return { rows, worst, worstAny };
+}
+
+function printTable(rows: string[]): void {
+    console.log("| Tool | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |");
+    console.log("|---|---|---|---|---|---|---|");
+    for (const row of rows) console.log(row);
+}
+
+/**
+ * A warm structure run edits no file in the repo and calls no API; it writes the config's activeRepo (scripts/index.ts does,
+ * after its last stage) and bumps the index version (ADR-036), so every cache keyed by the
+ * version (the import graph, the reach index, the search's name facts) rebuilds on the server's next call. Its progress
+ * lines (carriage-return rewrites) are dropped so the bench's output stays a clean markdown file.
+ */
+function warmIndex(repo: string): string[] {
+    const indexed = spawnSync(process.execPath, ["--import", "tsx", nebulosityPath("scripts", "index.ts"), repo], {
+        stdio: ["ignore", "pipe", "inherit"],
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+        env: { ...process.env, NEBULOSITY_LIVE: "off" },
+    });
+    if (indexed.status !== 0) throw new Error("npm run index failed; the after-write table wasn't measured");
+    return indexed.stdout.split(/[\r\n]+/).filter((line) => line.startsWith("[index]") && !/^\[index\] \w+ \d+\/\d+\s*$/.test(line));
+}
+
 async function main(): Promise<void> {
-    const repo = path.resolve(process.argv[2] ?? path.join("..", "vscode"));
+    const repo = path.resolve(process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join("..", "vscode"));
+    const afterWrite = process.argv.includes("--after-write");
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
 
@@ -81,25 +131,23 @@ async function main(): Promise<void> {
     }));
     const startupMs = performance.now() - started;
 
-    const rows: string[] = [];
-    let worst = 0;
-    for (const [name, inputs] of CALLS){
-        const first = await timed(client, name, inputs[0]);
-        const warm: { ms: number; chars: number }[] = [];
-        for (let i = 0; i < WARM_CALLS; i++) warm.push(await timed(client, name, inputs[(i + 1) % inputs.length]));
-        const sorted = warm.map((w) => w.ms).sort((a, b) => a - b);
-        const largest = Math.max(first.chars, ...warm.map((w) => w.chars));
-        worst = Math.max(worst, sorted[sorted.length - 1]);
-        rows.push(`| \`${name}\` | ${ms(first.ms)} | ${WARM_CALLS} | ${ms(percentile(sorted, 0.5))} | ${ms(percentile(sorted, 0.95))} | ${ms(sorted[sorted.length - 1])} | ${largest.toLocaleString("en-US")} |`);
+    const warm = await table(client);
+    console.log(`Server start (spawn → initialized): ${ms(startupMs)}\n`);
+    printTable(warm.rows);
+    const pass = warm.worst <= S5_MS;
+    console.log(`\nS5 (every warm call ≤ ${S5_MS} ms): ${pass ? "PASS" : "FAIL"} (worst ${ms(warm.worst)})`);
+
+    if (afterWrite){
+        // the server keeps running across the write, as it would in a session while the owner's worker updates the index
+        const indexLines = warmIndex(repo);
+        console.log("\nAfter a write (a warm npm run index bumped the index version):\n");
+        for (const line of indexLines) console.log(line);
+        console.log("");
+        const written = await table(client);
+        printTable(written.rows);
+        console.log(`\nS5 after a write (every call ≤ ${S5_MS} ms, first calls included): ${written.worstAny <= S5_MS ? "PASS" : "FAIL"} (worst ${ms(written.worstAny)})`);
     }
     await client.close();
-
-    console.log(`Server start (spawn → initialized): ${ms(startupMs)}\n`);
-    console.log("| Tool | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |");
-    console.log("|---|---|---|---|---|---|---|");
-    for (const row of rows) console.log(row);
-    const pass = worst <= S5_MS;
-    console.log(`\nS5 (every warm call ≤ ${S5_MS} ms): ${pass ? "PASS" : "FAIL"} (worst ${ms(worst)})`);
     process.exit(pass ? 0 : 1);
 }
 

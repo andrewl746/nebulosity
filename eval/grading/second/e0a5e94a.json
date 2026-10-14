@@ -1,0 +1,10 @@
+{ "id": "e0a5e94a", "points": [
+  { "id": "BP1.1", "score": 1, "quote": "Foundation utilities with no product knowledge: data structures, events, lifecycle and disposables, strings, paths, async helpers, and generic UI widgets." },
+  { "id": "BP1.2", "score": 1, "quote": "The dependency-injection infrastructure and the services shared across the product: files, configuration, storage, log, instantiation, and so on." },
+  { "id": "BP1.3", "score": 1, "quote": "The Monaco text editor: model, view, language features, and standalone editor APIs. It does not know about the workbench." },
+  { "id": "BP1.4", "score": 1, "quote": "The full IDE shell: parts (editor area, sidebar, panel), `services/`, `contrib/` features, and `api/` (the extension host and the VS Code API implementation)." },
+  { "id": "BP1.5", "score": 0.5, "quote": "The Electron main process (windows, app startup)." },
+  { "id": "BP1.6", "score": 1, "quote": "The server and remote entry points." },
+  { "id": "BP1.7", "score": 1, "quote": "Dependencies point downward: `base` ← `platform` ← `editor` ← `workbench`. A layer may import from the layers below it but never from those above." },
+  { "id": "BP1.8", "score": 0.5, "quote": "`api/` (the extension host and the VS Code API implementation)" }
+] }

@@ -1,0 +1,13 @@
+{
+  "id": "51129b19",
+  "points": [
+    {"id": "BP1.1", "score": 1, "quote": "Generic utilities and UI building blocks, with no knowledge of VS Code itself."},
+    {"id": "BP1.2", "score": 1, "quote": "The dependency-injection infrastructure and the services shared by every layer."},
+    {"id": "BP1.3", "score": 1, "quote": "The Monaco text editor, which also ships standalone."},
+    {"id": "BP1.4", "score": 1, "quote": "The full IDE shell. It provides the layout (parts such as the sidebar, panel, and status bar), the services for editors, views, and extensions, and the built-in features under `contrib/`."},
+    {"id": "BP1.5", "score": 1, "quote": "The desktop application entry points. It runs the Electron main process, the shared process, and the CLI."},
+    {"id": "BP1.6", "score": 1, "quote": "The remote server (node) entry point."},
+    {"id": "BP1.7", "score": 1, "quote": "`platform` → `base`; `editor` → `base`, `platform`; `workbench` → `base`, `platform`, `editor`; Lower layers must never import from higher ones."},
+    {"id": "BP1.8", "score": 0.5, "quote": "It also contains the extension host and the extension API implementation (`api/`)."}
+  ]
+}

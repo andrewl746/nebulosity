@@ -1,0 +1,25 @@
+{
+  "id": "cn5",
+  "kind": "chain",
+  "from": "src/vs/workbench/contrib/scm/browser/scmViewPane.ts",
+  "to": "src/vs/platform/undoRedo/common/undoRedo.ts",
+  "connected": true,
+  "shortest": 3,
+  "example": [
+    "src/vs/workbench/contrib/scm/browser/scmViewPane.ts",
+    "src/vs/workbench/browser/labels.ts",
+    "src/vs/editor/common/model.ts",
+    "src/vs/platform/undoRedo/common/undoRedo.ts"
+  ],
+  "verified": true,
+  "notes": [
+    {
+      "check": "Each step read in its source (L15, L18, L26). Nebulosity's importChain returned the same 3-step chain; the widened graph also gives 3.",
+      "decision": "Truth kept: 3 steps, example as built. No alternative recorded."
+    },
+    {
+      "check": "Owner's rule ('refers to', 2026-10-14) applied: every non-relative `vs/…` module id in an import-like statement anywhere in the repo (781 specifiers, 682 edges the scanner lacks) and the 8 computed loaders read in the source (10 edges) were added to the graph. The shortest length stays 3 and the example is still a shortest chain.",
+      "decision": "Truth kept: 3 steps, example as built."
+    }
+  ]
+}

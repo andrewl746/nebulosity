@@ -1,0 +1,31 @@
+{
+  "id": "0bf53250",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "This comes from my knowledge of the VS Code layout. I haven't checked it against your checkout.\n\n## Sharing code\n\nThe `src/vs` tree is layered, and the folder names set what each folder may import:\n\n- `base` and `platform` hold shared utilities and services.\n- `editor` is the editor.\n- `workbench` is the application shell.\n- `code` is the Electron entry point.\n- `server` is the remote and web server.\n\nInside each layer, folders are named for the environment they target:\n\n- `common` is pure JS/TS with no DOM or Node APIs.\n- `browser` may use DOM APIs.\n- `node` may use Node APIs.\n- `electron-browser`, `electron-main` and similar names are Electron-specific.\n- `worker` is for web workers.\n\nThe import rules are strict. `common` can't import `browser` or `node`, and `browser` can't import `node`. ESLint rules enforce this (`local/code-import-patterns`, `code-layering`).\n\nMost of the workbench is therefore written once, in `common` and `browser`. It is the same code on desktop and web.\n\nThe two builds differ in their entry points and in a small set of platform-specific files:\n\n- **Desktop** uses `workbench/electron-browser/desktop.main.ts`, which registers Electron and Node implementations of services such as native file system access, the native host, and the shared process.\n- **Web** uses `workbench/browser/web.main.ts` with `web.factory`. It registers browser implementations: IndexedDB or HTTP file providers, web workers for extension hosts, and so on.\n\nBoth entry points construct the same `Workbench` class in `workbench/browser/workbench.ts`. They differ only in which services they pass in.\n\nServices are registered by interface, with `registerSingleton(IFoo, FooImpl, ...)`, so feature code depends on the interface and the entry point picks the implementation.\n\n## What decides whether a feature loads\n\nLoading is decided by which entry point imports it.\n\n- Each platform has an aggregating \"main\" file that imports the contributions to include:\n  - `workbench.common.main.ts`: features for every platform\n  - `workbench.desktop.main.ts`: desktop-only features\n  - `workbench.web.main.ts`: web-only features\n- Nothing is loaded unless it is imported, directly or transitively, from one of these files. A contribution file such as `foo.contribution.ts` runs its registrations on import: commands, views, services, configuration and workbench contributions.\n- A feature that should run on only one platform is imported only from that platform's main file. Its implementation sits in a `browser`, `electron-browser` or `node` folder to match.\n- Code that runs only in the extension host or server is bundled separately and loaded in those processes.\n- There are also runtime gates. These include context keys and `when` clauses, configuration, `isWeb` and `isNative` checks, and workbench contributions with lifecycle phases (`Eventually`, `Restored`). Phased contributions are lazy-instantiated, so they load only once their phase or trigger is reached.\n\nIn short, the folder naming rules decide what may be shared. The main-file imports decide what ships in each build. Context keys and lifecycle phases then decide what runs and when."
+}

@@ -185,17 +185,28 @@ describe("testFileSummary", () => {
 
 describe("testFolderSummary", () => {
     it("names the area above the first test segment", () => {
-        expect(testFolderSummary("src/vs/editor/contrib/folding/test/browser", 6)).toEqual({
+        expect(testFolderSummary("src/vs/editor/contrib/folding/test/browser", 6, "vscode")).toEqual({
             tagline: "Tests for folding",
             summary: "Test code (6 test files) for folding. Test-only folders get this template instead of a model-written summary.",
         });
-        expect(testFolderSummary("src/vs/platform/configuration/test", 8).tagline).toBe("Tests for configuration");
+        expect(testFolderSummary("src/vs/platform/configuration/test", 8, "vscode").tagline).toBe("Tests for configuration");
     });
 
     it("falls back to the folder's own name when no segment is a test folder", () => {
-        expect(testFolderSummary("src/fixtures", 1)).toEqual({
+        expect(testFolderSummary("src/fixtures", 1, "vscode")).toEqual({
             tagline: "Tests for fixtures",
             summary: "Test code (1 test file) for fixtures. Test-only folders get this template instead of a model-written summary.",
         });
+    });
+
+    it("names a top-level test folder after the repo: it tests the whole thing", () => {
+        expect(testFolderSummary("test", 12, "vscode")).toEqual({
+            tagline: "Tests for vscode",
+            summary: "Test code (12 test files) for vscode. Test-only folders get this template instead of a model-written summary.",
+        });
+        // below a top-level test folder, today's rule stands: the folder's own name
+        expect(testFolderSummary("test/smoke", 4, "vscode").tagline).toBe("Tests for smoke");
+        // the segment before the first test segment still names the area
+        expect(testFolderSummary("src/vs/editor/contrib/folding/test/browser", 3, "vscode").tagline).toBe("Tests for folding");
     });
 });

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { LiveEvent } from "@/lib/contracts";
 import { activityLabel } from "./activity";
 import { ago } from "./format";
+import { DEMO } from "./mode";
 
 /**
  * The activity bar (VISUAL_REFRESH.md §6): a slim strip along the bottom, always there, with Claude Code's last 3
@@ -18,6 +19,11 @@ export default function ActivityBar({ recent, connected }: { recent: readonly Li
         return () => clearInterval(timer);
     }, []);
 
+    // the static demo never connects: say why the bar is empty, instead of "Not connected" (ADR-049)
+    const empty = DEMO
+        ? "In the app, Claude Code's tool calls show up here as it works. This static demo has no live channel."
+        : connected ? "No tool calls yet" : "Not connected";
+
     return (
         <footer data-testid="activity-bar" className="relative z-20 flex h-8 shrink-0 items-center gap-4 border-t border-hairline bg-panel px-4 text-[13px]">
             <span className="flex shrink-0 items-center gap-2 text-text-2" title={connected ? "Connected to the live channel" : "Not connected to the live channel"}>
@@ -25,7 +31,7 @@ export default function ActivityBar({ recent, connected }: { recent: readonly Li
                 Claude Code
             </span>
             {recent.length === 0
-                ? <span className="text-text-2">{connected ? "No tool calls yet" : "Not connected"}</span>
+                ? <span className="min-w-0 truncate text-text-2" title={DEMO ? empty : undefined}>{empty}</span>
                 : (
                     <ol aria-label="Claude Code's last actions" className="flex min-w-0 flex-1 items-center gap-6">
                         {recent.map((event, i) => (

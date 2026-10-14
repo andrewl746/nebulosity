@@ -1,0 +1,27 @@
+{
+  "id": "a314ac08",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses a hand-rolled dependency injection system, in `src/vs/platform/instantiation/common/`. I'm answering from knowledge of the codebase rather than from reading the files this session.\n\n**1. Defining a service**\n- Declare an interface with a branded identifier:\n  ```ts\n  export const IFooService = createDecorator<IFooService>('fooService');\n  export interface IFooService { readonly _serviceBrand: undefined; ... }\n  ```\n- `createDecorator` (in `instantiation.ts`) returns a function that works as a parameter decorator and is also the service ID. The convention is that the interface and the identifier share the same name, with an `I` prefix.\n- `_serviceBrand: undefined` is a type-only marker. It keeps structurally similar interfaces from being interchangeable.\n- Service interfaces usually live in `common/` and implementations in `browser/`, `node/` or `electron-*/`, depending on the layer.\n\n**2. Making an implementation available**\n- `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` is in `extensions.ts`. It is called at module top level, typically in `*.contribution.ts` or `workbench.common.main.ts`-style files.\n  - `InstantiationType.Eager` creates the service at startup.\n  - `InstantiationType.Delayed` wraps it in an idle-value proxy and creates it on first use.\n- You can also pass a `SyncDescriptor<T>` or an instance directly. Entry points build a `ServiceCollection` with `services.set(IFooService, instanceOrDescriptor)`. Examples are `src/vs/code/electron-main/main.ts` and `src/vs/workbench/browser/web.main.ts`/`desktop.main.ts`. These entry points then create an `InstantiationService` from the collection.\n- `InstantiationService` (`instantiationService.ts`) resolves `SyncDescriptor`s lazily. It builds a dependency graph, detects cycles, and caches the created instances.\n\n**3. Getting it into consumers**\n- Constructor parameter decorators declare the dependency:\n  ```ts\n  constructor(\n    private readonly arg: string,\n    @IFooService private readonly fooService: IFooService,\n  ) { super(); }\n  ```\n- Convention: non-service (static) arguments come first, and injected services come last. The decorator stores the dependency metadata on the class through `_util.storeServiceDependency`.\n- Instantiate such classes with `instantiationService.createInstance(MyClass, staticArg)`. The service arguments are filled in from the collection. Never use `new` for these classes.\n- To resolve ad-hoc, use `instantiationService.invokeFunction(accessor => accessor.get(IFooService))`. Actions and commands receive a `ServicesAccessor` this way in `run(accessor)`.\n- `SyncDescriptor` can carry static args. `registerSingleton` can also supply a service that has no constructor args.\n- Child scopes use `instantiationService.createChild(serviceCollection)`. A child can override or add services and falls back to its parent.\n\n**Related conventions**\n- Extension-host and renderer services are often registered through `registerMainProcessRemoteService` or `ProxyChannel`. Those return proxies to services living in another process.\n- Test code uses `TestInstantiationService` or `ServiceCollection` to stub services."
+}

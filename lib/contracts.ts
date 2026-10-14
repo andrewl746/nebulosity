@@ -320,19 +320,19 @@ export type CodeChunk = {
 
 /* ───────────────────────────── Search ────────────────────────────── */
 
-/** The ranked lists hybrid search fuses (ADR-027): code, summaries, meaning, and folder names (since V1.3.1). */
-export type SearchList = "code" | "summary" | "vector" | "name";
+/** The ranked lists hybrid search fuses (ADR-027): code, summaries, meaning, folder names (since V1.3.1) and file names (since V1.5). */
+export type SearchList = "code" | "summary" | "vector" | "name" | "file";
 
 /** One file or folder in a search result — docs/API_CONTRACTS.md §10 */
 export type SearchHit = {
   path: string;
   kind: "file" | "folder";
-  /** Reciprocal Rank Fusion: Σ 1 / (60 + rank) over the lists that found it. */
+  /** Weighted Reciprocal Rank Fusion: Σ w / (60 + rank) over the lists that found it (w = 2 for "name" and "file", else 1). */
   score: number;
   matchedBy: SearchList[];
   tagline?: string;
   summary?: string;
-  /** The best-matching chunk, when the code list found this file. */
+  /** The best-matching chunk, when the code list found this file: a declaration when one matched, else the imports listing ("(file)") with its header removed. */
   code?: { symbol: string; startLine: number; endLine: number; snippet: string };
 };
 
@@ -344,6 +344,50 @@ export type SearchResult = {
   lists: Record<SearchList, number>;
   /** Set when something limits the results, e.g. no summaries yet. */
   note?: string;
+};
+
+/* ───────────────────────── The static demo ───────────────────────── */
+
+/**
+ * The static demo's files (API_CONTRACTS.md §18, ADR-049): written by scripts/export-demo.ts, read by
+ * app/map/staticApi.ts. Every answer in them names the repo by its public name, never its absolute root.
+ */
+
+/** Bumped on any change to the files below; the demo's page refuses data of another format. */
+export const DEMO_FORMAT_VERSION = 1;
+
+/** manifest.json: what the demo shows, and the folder ids every other file is named by. */
+export type DemoManifest = {
+  format: number;
+  /** The repo's public name ("vscode"), standing in for its root wherever an answer names the repo. */
+  repo: string;
+  remote?: RepoRemote;
+  /** The commit the index was built from; source links point at it. Null outside git. */
+  commit: string | null;
+  exportedAt: string;
+  status: IndexStatus;
+  /** Every folder, in path order; a folder's id is its position ("" is the root, id 0). */
+  folders: string[];
+  /** Page counts by folder id, for folders drawn on more than one page. */
+  pages: Record<string, number>;
+};
+
+/** pages/<id>.json: the boxes on each page of a paged folder, page by page. */
+export type DemoPageIndex = { boxes: string[][] };
+
+/** describe/<id>.json: describe answers for a folder and for each file directly inside it, by path. */
+export type DemoDescribeBundle = Record<string, DescribeResponse>;
+
+/** search.json: what the demo's search ranks (lib/engine/staticSearch.ts). */
+export type DemoSearchIndex = {
+  /** [kind (1 folder, 0 file), path, tagline, summary] for every file and folder with a summary; never the repo. */
+  summaries: [number, string, string, string][];
+  /** [path, fileCount] for every folder but the root. */
+  folders: [string, number][];
+  /** [path, importedBy, isTest (1 or 0)] for every file, in path order. */
+  files: [string, number, number][];
+  /** [name, position in files] for every exported top-level declaration, by file, then line. */
+  declarations: [string, number][];
 };
 
 /* ──────────────────────────── Persistence ────────────────────────── */

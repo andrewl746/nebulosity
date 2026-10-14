@@ -1,0 +1,39 @@
+{
+  "id": "20776c93",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "`src/vs/workbench` sits near the top of VS Code's layering (`base` → `platform` → `editor` → `workbench`). I read the repo's `.github/copilot-instructions.md`, `.github/instructions/source-code-organization.instructions.md` and `eslint.config.js`, and listed the folders. I didn't read the contrib code itself.\n\n## Organization\n\n- **`api/`**: the extension host and the implementation of the VS Code extension API.\n- **`browser/`**: core workbench UI, meaning the parts, layout and actions.\n- **`common/`**: code shared across environments.\n- **`electron-browser/`**: desktop-specific code.\n- **`services/`**: core service implementations that aren't tied to one feature.\n- **`contrib/`**: feature contributions such as `git`, `debug`, `search`, `terminal`, `chat`, `extensions`, `scm`, `notebook` and `testing`. There are roughly 100 of these folders.\n- **`test/`**: tests.\n- **Entry points**: `workbench.common.main.ts`, `workbench.desktop.main.ts`, `workbench.web.main.ts` and `workbench.web.main.internal.ts`. These assemble the web and desktop builds.\n\n`src/vs/sessions/` is a separate workbench layer for the agent sessions window. It may import from `vs/workbench`, but `vs/workbench` must not import from it.\n\n## Rules for `contrib/`\n\nThe contribution rules are in the source-code-organization instructions:\n\n1. **No inward dependencies.** Nothing outside `contrib/` may depend on code inside `contrib/`. Core code, `services` and `api` stay free of feature code.\n2. **One entry point.** Each contribution has a single `.contribution.ts` file. It registers the feature with the workbench's registries and extension points.\n3. **One public API file.** A contribution exposes its internal API from a single `common` file.\n4. **No reaching into internals.** When one contribution depends on another, it uses that other contribution's common API.\n\n`eslint.config.js` enforces these rules with import-pattern restrictions. For example, `vs/workbench/contrib/*/~` patterns limit what each contribution may import. Terminal has special-case export files (`terminalContribExports*`, `terminalContribChatExports*`) that let `terminalContrib/*` modules and others reach terminal in a controlled way.\n\nEach contribution is typically split by environment into `browser/`, `common/` and sometimes `electron-browser/`, plus `test/`. Services are wired through dependency injection."
+}

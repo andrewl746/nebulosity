@@ -1,0 +1,11 @@
+{
+  "id": "2434e3c3",
+  "points": [
+    { "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports the common file plus the `electron-sandbox` and `node` pieces." },
+    { "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` imports the common file plus the web-only pieces." },
+    { "id": "BP5.3", "score": 1, "quote": "`workbench.common.main.ts` imports everything shared." },
+    { "id": "BP5.4", "score": 0.5, "quote": "The web and desktop entry points register different implementations of the same interface." },
+    { "id": "BP5.5", "score": 1, "quote": "A feature's code is only in a build if one of these files imports it." },
+    { "id": "BP5.6", "score": 1, "quote": "Features are usually pulled in by side-effect imports of their `*.contribution.ts` files, which are listed in these entry points." }
+  ]
+}
