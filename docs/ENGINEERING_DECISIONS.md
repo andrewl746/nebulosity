@@ -770,6 +770,7 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 **Alternatives:** (a) Apache-2.0: adds a patent grant; longer. (b) No license: readable but not usable, against V1.6. (c) A rewritten or fresh public history: hides the old docs and the commit email, but loses the project's real record (the owner's call, Task 21: full history, as is).
 **Consequences:** Anyone may use, change and redistribute the code with the notice. V1.6's package inherits the license. The history and the commit email become public with the repo.
 **Revisit when:** V1.6 publishes to npm (check the package's `license` field and files list), or the owner wants a different license before the first outside contribution.
+**Amended (2026-10-14, after Eval #1):** going public waits. The owner's decision: the repo stays private and the demo undeployed until Nebulosity shows better measured results and efficiency than Eval #1 did (its tools didn't raise accuracy, and at Claude Code's default tool search they were loaded in 12 of 30 runs). V1.5 merges to `main` as usual; the deploy, the public switch and the video follow a re-measured eval in V1.6. Everything this ADR prepared (the license, the leak scanner, the reviewed docs) stays in place for then.
 
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
