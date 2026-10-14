@@ -1,4 +1,4 @@
-import type { AreaCount, DescribeResponse, SearchResult } from "../contracts";
+import type { AreaCount, DescribeResponse, DocPointer, SearchResult } from "../contracts";
 import type { Overview } from "../engine/overview";
 import { FILE_CHUNK } from "../engine/rank";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
@@ -15,10 +15,23 @@ const REACH_HEADROOM = 2_000;
 /** dependents and dependencies list a page: everything reached, or only the direct files. */
 export type ReachPage = { transitive: boolean; limit: number; offset: number };
 
+/** "Docs about it:" or "Docs to read first:": one line per doc, its path, its title, and why (ADR-054). */
+function docLines(header: string, docs: readonly DocPointer[] | undefined, here: { path: string; kind: "repo" | "folder" | "file" }): string[] {
+    if (!docs || docs.length === 0) return [];
+    const why = (r: NonNullable<DocPointer["reason"]>): string => {
+        if (r.kind === "applies") return `applies to ${r.detail ?? `${r.target}/`}`;
+        if (r.kind === "readme") return r.target === here.path ? "this folder's README" : r.target === "" ? "the repo's README" : `README of ${r.target}/`;
+        const shown = r.target === here.path && here.kind === "file" ? r.target : `${r.target}/`;
+        return `mentions ${shown}${r.count > 1 ? ` (${r.count} times)` : ""}`;
+    };
+    return [header, ...docs.map((d) => `  ${d.path} — ${d.title}${d.reason ? ` (${why(d.reason)})` : ""}`)];
+}
+
 export function overviewAnswer(o: Overview): AnswerParts {
     const body = [
         `${o.name}: ${plural(o.stats.fileCount, "file")}, ${plural(o.stats.lineCount, "line")}, ${plural(o.stats.importCount, "import")} between files.`,
         summaryLine(o),
+        ...docLines("Docs to read first:", o.docs, { path: "", kind: "repo" }),
     ];
     if (o.areas.length > 0){
         body.push("Areas, largest first:");
@@ -42,6 +55,7 @@ export function describeAnswer(d: DescribeResponse, repoName: string): AnswerPar
             : d.kind === "folder" ? `${d.path}/ — folder: ${size}.`
             : `${d.path} — file: ${plural(d.stats.lineCount, "line")}.`,
         summaryLine(d),
+        ...docLines(d.kind === "repo" ? "Docs to read first:" : "Docs about it:", d.docs, { path: d.path, kind: d.kind }),
     ];
 
     if (d.children){

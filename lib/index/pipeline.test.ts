@@ -6,6 +6,7 @@ import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
+import { loadAllDocLinks, loadDocs } from "../db/store/docs";
 import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/search";
@@ -281,6 +282,32 @@ describe("indexRepository on the architecture fixture", () => {
     it("stores the three entry points the package.json files name", () => {
         const { repoId } = indexRepository(root);
         expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
+    });
+
+    it("stores the 4 docs with their titles and the 13 links of the ground truth", () => {
+        const { repoId } = indexRepository(root);
+        const db = getDb();
+        expect(loadDocs(db, repoId)).toEqual([
+            { path: ".github/instructions/editor.instructions.md", title: "Editor rules" },
+            { path: "README.md", title: "arch-repo" },
+            { path: "docs/architecture.md", title: "Architecture" },
+            { path: "src/app/README.md", title: "The app" },
+        ]);
+        expect(loadAllDocLinks(db, repoId).map((l) => `${l.docPath} ${l.targetPath || "(root)"} ${l.kind} ${l.count}`)).toEqual([
+            ".github/instructions/editor.instructions.md src/editor applies 1",
+            "README.md (root) readme 1",
+            "README.md packages/core mentions 1",
+            "README.md packages/ui mentions 1",
+            "README.md src/app mentions 1",
+            "docs/architecture.md src/app mentions 1",
+            "docs/architecture.md src/base mentions 1",
+            "docs/architecture.md src/editor mentions 2",
+            "docs/architecture.md src/editor/browser mentions 1",
+            "docs/architecture.md src/editor/common mentions 1",
+            "docs/architecture.md src/platform mentions 2",
+            "src/app/README.md src/app readme 1",
+            "src/app/README.md src/app/loader.ts mentions 1",
+        ]);
     });
 
     it("re-parses every file once when an older adapter parsed them, so unchanged files gain what this one reads", () => {

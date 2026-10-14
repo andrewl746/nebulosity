@@ -132,6 +132,7 @@ Persistence shapes live in `lib/db/schema.ts` (ADR-013). The spec fixes their me
 | `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (3–6 words asked for; up to 8 kept whole), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped; `off` is reported, never stored), `error`, and `batchId`/`pendingHash` so a Batch run can resume (§5.3) |
 | `summary_vectors` | new | one embedding per model-written summary (encode/decode pair, ADR-017) |
 | `summary_usage` | new | API tokens per repo, model and transport (direct, batch); S2 is measured from it |
+| `docs`, `doc_links` | V1.6 | the repo's Markdown docs (path, title) and which folders and files each applies to, is the README of, or mentions (`kind`, `count`, the glob); read at index time with no model (ADR-054) |
 | `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks; kept in sync by triggers (ADR-031) |
 | `summary_fts` | new (FTS5) | `path`, `tagline`, `summary`; kept in sync by triggers (ADR-031) |
 | E2 `calls` | later | `callerSymbolId`, `calleeSymbolId`, `count`, `resolution` (typed, heuristic) |
@@ -220,7 +221,7 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 
 ### 6.1 Queries (pure functions over the store, unit-tested, cached per index version)
 - **`level(path, page?, focus?)`**: breadcrumb, at most 50 nodes (a big folder's page of 44 boxes plus up to 6 portals to its other pages, V1.3.1), that page's edges with the far ends folded onto portals, the hidden count, the page and the page count.
-- **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
+- **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness, and the docs about it (ADR-054).
 - **`overview()`** *(V1.4)*: the repo's describe answer, plus each top-level area's lines and the 10 most-imported files (ADR-010's in-degree), for the `overview` tool.
 - **`search(query, opts)`**: hybrid. Five ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, cosine similarity over `summary_vectors`, folder names (V1.3.1) and file names (V1.5, ADR-052). They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ wᵢ / (60 + rankᵢ(d))` (wᵢ is 2 for the folder-name and file-name lists, else 1), then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance. *(V1.4, ADR-045: a file or a folder, whose own files are never listed; every answer counts all reached files and the direct ones; entries go nearest first, then most imported, then by path; `limit` and `offset` page them.)*

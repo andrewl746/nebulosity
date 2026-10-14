@@ -5,6 +5,7 @@ import { loadFileInfo, loadFileSymbols, loadFolderInfo, loadSummaryState, sumLin
 import { requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
 import { repoKey } from "../index/paths";
+import { docsAbout, docsToReadFirst } from "./docs";
 import { stalePaths } from "./freshness";
 import { cachedAreaCounts, type TargetKind } from "./graph";
 import { loadMapChildren, PathNotFoundError, reportedStatus, type MapReadOptions } from "./level";
@@ -61,6 +62,7 @@ function describeUncached(db: Db, repo: string, repoId: number, version: number,
     const row = loadSummaryState(db, repoId, kind, targetPath);
     const summaryStatus = reportedStatus(row, summariesOff);
     const { uses, usedBy } = cachedAreaCounts(db, repoId, version, targetPath, kind);
+    const docs = kind === "repo" ? docsToReadFirst(db, repoId) : docsAbout(db, repoId, targetPath);
 
     return {
         repo,
@@ -69,6 +71,7 @@ function describeUncached(db: Db, repo: string, repoId: number, version: number,
         ...(row?.tagline ? { tagline: row.tagline, summary: row.summary ?? "" } : {}),
         summaryStatus,
         ...(summaryStatus === "failed" && row?.error ? { summaryError: row.error } : {}),
+        ...(docs.length > 0 ? { docs } : {}),
         stats: folder
             ? { fileCount: folder.fileCount, lineCount: sumLinesInside(db, repoId, targetPath) }
             : { fileCount: 1, lineCount: file!.lineCount },

@@ -29,6 +29,7 @@ describe("overviewAnswer", () => {
                 { path: "src/app/main.ts", importedBy: 3 }, { path: "src/core/log.ts", importedBy: 3 }, { path: "src/util/strings.ts", importedBy: 2 },
                 { path: "src/app/view.tsx", importedBy: 1 }, { path: "src/core/index.ts", importedBy: 1 }, { path: "src/index.ts", importedBy: 1 },
             ],
+            docs: [],
             stalePaths: 0, indexVersion: 1,
         };
         expect(overviewAnswer(o)).toEqual({ stale: 0, body: [
@@ -49,6 +50,40 @@ describe("overviewAnswer", () => {
 });
 
 describe("describeAnswer", () => {
+    it("describe shows the docs about a folder after its summary line (ADR-054)", () => {
+        const text = answerText(describeAnswer({
+            repo: "/r", path: "src/editor/common", kind: "folder", summaryStatus: "off", stats: { fileCount: 3, lineCount: 22 },
+            children: [], uses: [], usedBy: [], stalePaths: 0, indexVersion: 1,
+            docs: [
+                { path: ".github/instructions/editor.instructions.md", title: "Editor rules", reason: { kind: "applies", target: "src/editor", detail: "src/editor/**", count: 1 } },
+                { path: "docs/architecture.md", title: "Architecture", reason: { kind: "mentions", target: "src/editor/common", count: 1 } },
+                { path: "docs/more.md", title: "More", reason: { kind: "mentions", target: "src/editor", count: 2 } },
+            ],
+        }, "r"));
+        expect(text.split("\n").slice(2, 6)).toEqual([
+            "Docs about it:",
+            "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
+            "  docs/architecture.md — Architecture (mentions src/editor/common/)",
+            "  docs/more.md — More (mentions src/editor/ (2 times))",
+        ]);
+    });
+
+    it("describe of a file writes the file's own path without a slash, and a folder README as this folder's or another's", () => {
+        const lines = answerText(describeAnswer({
+            repo: "/r", path: "src/app/loader.ts", kind: "file", summaryStatus: "off", stats: { fileCount: 1, lineCount: 6 },
+            symbols: [], uses: [], usedBy: [], stalePaths: 0, indexVersion: 1,
+            docs: [
+                { path: "src/app/README.md", title: "The app", reason: { kind: "readme", target: "src/app", count: 1 } },
+                { path: "notes.md", title: "Notes", reason: { kind: "mentions", target: "src/app/loader.ts", count: 1 } },
+            ],
+        }, "r")).split("\n");
+        expect(lines.slice(2, 5)).toEqual([
+            "Docs about it:",
+            "  src/app/README.md — The app (README of src/app/)",
+            "  notes.md — Notes (mentions src/app/loader.ts)",
+        ]);
+    });
+
     it("a folder: its size, what's inside, and the areas on each side", () => {
         const d: DescribeResponse = {
             repo: "C:/r/mini-repo", path: "src/core", kind: "folder", ...off, stats: { fileCount: 2, lineCount: 10 },

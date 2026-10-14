@@ -63,6 +63,18 @@ describe("discoverFiles — git repositories", () => {
         expect(result.skipped[0].reason).toMatch(/^too large/);
     });
 
+    it("reports a doc over the size cap in skipped, not silently (F15)", () => {
+        const dir = makeTempDir("neb-discover-bigdoc-");
+        fs.writeFileSync(path.join(dir, "a.ts"), "export {};\n");
+        fs.writeFileSync(path.join(dir, "small.md"), "# s\n");
+        fs.writeFileSync(path.join(dir, "huge.md"), `# h\n${"x".repeat(60)}\n`);
+        const result = discoverFiles(dir, { extensions: TS_EXTENSIONS, maxBytes: 40 });
+        expect(result.docs.map((d) => d.path)).toEqual(["small.md"]);
+        expect(result.skipped).toHaveLength(1);
+        expect(result.skipped[0].path).toBe("huge.md");
+        expect(result.skipped[0].reason).toMatch(/^too large/);
+    });
+
     it("never returns files under node_modules, even in a git repo whose .gitignore doesn't exclude it", () => {
         const dir = makeTempDir("neb-discover-nm-");
         execFileSync("git", ["init", "-q", dir]);

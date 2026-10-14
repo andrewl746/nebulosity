@@ -112,6 +112,13 @@ export type LevelResponse = {
 export type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
 
 /** GET /api/describe — docs/API_CONTRACTS.md §12 */
+/** A doc linked to a place (ADR-054), and why. describe always says why; overview says it for a doc that applies to a folder. */
+export type DocPointer = {
+  path: string;
+  title: string;
+  reason?: { kind: "applies" | "readme" | "mentions"; target: string; detail?: string; count: number };
+};
+
 export type DescribeResponse = {
   /** The repo's root: absolute, forward slashes (for vscode:// links). */
   repo: string;
@@ -122,6 +129,8 @@ export type DescribeResponse = {
   summaryStatus: SummaryStatus;
   /** Why the last attempt failed, when summaryStatus is "failed". */
   summaryError?: string;
+  /** For a folder or file, the docs linked to it or the folders above it; for the repo, the docs to read first (ADR-054). Left out when none. */
+  docs?: DocPointer[];
   stats: { fileCount: number; lineCount: number };
   /** Folders and the repo: every child, in the Map's order (the order level() draws them in, page by page). */
   children?: MapNode[];

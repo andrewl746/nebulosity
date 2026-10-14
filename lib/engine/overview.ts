@@ -1,5 +1,5 @@
 import path from "path";
-import type { SummaryStatus } from "../contracts";
+import type { DocPointer, SummaryStatus } from "../contracts";
 import { getDb } from "../db/client";
 import { loadFileInfo, sumLinesInside } from "../db/store/map";
 import { requireRepository } from "../db/store/structure";
@@ -28,6 +28,8 @@ export type Overview = {
     areas: OverviewArea[];
     /** The files most files import (ADR-010's importance), at most MOST_IMPORTED, none that nothing imports. */
     mostImported: { path: string; importedBy: number }[];
+    /** The docs to read first (ADR-054). */
+    docs: DocPointer[];
     stalePaths: number;
     indexVersion: number;
 };
@@ -67,6 +69,7 @@ export function overview(repoRoot: string, options: MapReadOptions = {}): Overvi
                 ...(child.tagline ? { tagline: child.tagline } : {}),
             })),
             mostImported: rankMostImported(index, MOST_IMPORTED),
+            docs: root.docs ?? [],
             stalePaths: root.stalePaths,
             indexVersion: root.indexVersion,
         };

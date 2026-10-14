@@ -69,7 +69,9 @@ export function discoverFiles(
         }
         if (DOC_EXTENSIONS.some((ext) => rel.toLowerCase().endsWith(ext))){
             const docSize = sizeOf(path.join(repoRoot, rel));
-            if (docSize !== null && docSize <= maxBytes) docs.push({ path: rel, sizeBytes: docSize });
+            if (docSize === null) skipped.push({ path: rel, reason: "unreadable: no size" });
+            else if (docSize > maxBytes) skipped.push({ path: rel, reason: `too large (${docSize} bytes)` });
+            else docs.push({ path: rel, sizeBytes: docSize });
             continue;
         }
         if (!opts.extensions.some((ext) => rel.endsWith(ext))) continue;

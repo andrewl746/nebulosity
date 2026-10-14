@@ -196,6 +196,37 @@ export const entryPoints = sqliteTable("entry_points", {
     uniqueIndex("entry_points_repo_path_unique").on(t.repoId, t.path)
 ]);
 
+/** The repo's Markdown docs (ADR-054): their titles. */
+export const docs = sqliteTable("docs", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    title: text("title").notNull()
+}, (t) => [
+    uniqueIndex("docs_repo_path_unique").on(t.repoId, t.path)
+]);
+
+export const DOC_LINK_KINDS = ["applies", "readme", "mentions"] as const;
+export type DocLinkKind = (typeof DOC_LINK_KINDS)[number];
+
+/** Which doc talks about which folder or file, and how (ADR-054); "" is the repo itself. */
+export const docLinks = sqliteTable("doc_links", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    docPath: text("doc_path").notNull(),
+    targetPath: text("target_path").notNull(),
+    kind: text("kind", { enum: DOC_LINK_KINDS }).notNull(),
+    count: integer("count").notNull(),
+    detail: text("detail")   // the glob, for "applies"
+}, (t) => [
+    index("doc_links_repo_target_idx").on(t.repoId, t.targetPath)
+]);
+
+/** A doc as the docs reader produces it and the store writes it (declared here so the store never imports lib/index, ARCHITECTURE.md §3). */
+export type DocFacts = { path: string; title: string };
+/** A doc link as the docs reader produces it and the store writes it: every column but the ids. */
+export type DocLinkRow = Omit<typeof docLinks.$inferSelect, "id" | "repoId">;
+
 /** A symbol as the language adapter produces it and the store writes it: every column but the ids. */
 export type SymbolRow = Omit<typeof symbols.$inferSelect, "id" | "fileId">;
 /** A folder as the aggregator builds it and the store writes it. */

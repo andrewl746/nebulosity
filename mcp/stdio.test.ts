@@ -105,6 +105,7 @@ describe("the MCP server over stdio (node mcp/launch.mjs)", () => {
         expect(textOf(await client.callTool({ name: "overview", arguments: {} }))).toBe([
             `${path.basename(repo)}: 8 files, 48 lines, 11 imports between files.`,
             S,
+            "Docs to read first:", "  README.md — mini-repo",
             "Areas, largest first:", "  src/  7 files, 45 lines", "  scripts/  1 file, 3 lines",
             "Most imported files:",
             "  src/app/main.ts  imported by 3", "  src/core/log.ts  imported by 3", "  src/util/strings.ts  imported by 2",

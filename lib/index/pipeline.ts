@@ -11,9 +11,11 @@ import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
     type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
+import { replaceDocs } from "../db/store/docs";
 import { pruneSummaries } from "../db/store/summaries";
 import { bumpIndexVersion, readAdapterVersion, writeAdapterVersion } from "../db/store/version";
 import { buildFolders, buildLevelEdges } from "./aggregate";
+import { docLinks, folderSuffixes, type KnownPaths } from "./docs";
 import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
 import { ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
@@ -112,6 +114,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
+        const skipped: SkippedFile[] = [...discovered.skipped];   // the docs read below add theirs
         let changed = 0;
         let unchanged = 0;
 
@@ -179,6 +182,19 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const levelRows = buildLevelEdges(edges);
         replaceAggregates(db, repoId, folderRows, levelRows);
         pruneSummaries(db, repoId);   // a deleted file or folder takes its summary with it
+
+        // which docs talk about which folders (ADR-054): read with the folders just built, so a mention can name any of them
+        const folderPaths = folderRows.map((f) => f.path);
+        const known: KnownPaths = { folders: new Set(folderPaths), files: fileSet, suffixes: folderSuffixes(folderPaths) };
+        const readDocs = discovered.docs.flatMap((doc) => {
+            try{
+                return [docLinks(doc.path, fs.readFileSync(path.join(root, doc.path), "utf8"), known)];
+            } catch (err){
+                skipped.push({ path: doc.path, reason: `unreadable: ${message(err)}` });   // reported, as an unreadable source file is
+                return [];
+            }
+        });
+        replaceDocs(db, repoId, readDocs.map((d) => d.facts), readDocs.flatMap((d) => d.links));
         timingsMs.aggregate = performance.now() - t;
         options.onProgress?.("aggregate", folderRows.length, folderRows.length);
 
@@ -208,7 +224,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             folders: folderRows.length,
             levelEdges: levelRows.length,
             errors,
-            skipped: discovered.skipped,
+            skipped,
             timingsMs,
             totalMs,
             searchIndexMs,

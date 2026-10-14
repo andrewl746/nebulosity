@@ -203,8 +203,11 @@ What a folder, file or the repo (`path` empty) is (`lib/engine/describe.ts`). Th
 ```ts
 type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
 type AreaCount = { path: string; kind: "folder" | "file"; count: number };
+type DocPointer = { path: string; title: string;
+  reason?: { kind: "applies" | "readme" | "mentions"; target: string; detail?: string; count: number } };
 type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | "file";
   tagline?: string; summary?: string; summaryStatus: SummaryStatus; summaryError?: string;
+  docs?: DocPointer[];
   stats: { fileCount: number; lineCount: number };
   children?: MapNode[]; symbols?: SymbolInfo[];
   uses: AreaCount[]; usedBy: AreaCount[]; stalePaths: number; indexVersion: number };
@@ -213,6 +216,7 @@ type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | 
 - **`children`** (folders and the repo) lists every child in the Map's order, the order `level()` draws each page's boxes in. A client shows 20 at a time.
 - **`symbols`** (files) are the top-level declarations and class members in line order, members by qualified name (`Logger.info`). The lines are the declaration's own, for jumping to it.
 - **`uses` / `usedBy`** count imports across the target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2), most first. An area is a folder, or a file when the other file sits directly in the lowest folder both share. Test files count like any other file. A file's summary was written from an "Imported by" line that counts tests apart (RAG_PIPELINE.md), so the numbers in its text can differ; the detail panel labels both.
+- **`docs`** (ADR-054, additive; `CONTRACTS_VERSION` stays 3) points at the repo's own Markdown. For a folder or file it is up to 5 docs linked to the target or the folders above it (the root left out), each by its strongest link, ranked by kind (`applies`, `readme`, `mentions`), deeper target, a plain-folder glob, a name about architecture, count, then path; `reason` always says why (`target` is the place the link names, `detail` the glob of an `applies` link). For the repo it is up to 5 docs to read first: the root README, then docs named for architecture, then docs that apply to a folder (`reason` only on those). Left out when none.
 - **`summaryStatus`** follows §11's rule. **`summaryError`** says why the last attempt failed, and only appears when the status is `failed`.
 - **`stalePaths`** counts files at or under the target whose summary is out of date with their bytes. It's non-zero between a file's edit and the refresh of its summary (`PIVOT_SPEC.md` §5.6).
 - **Caching.** The server keeps each answer until the index version moves (ADR-036, amended in V1.3.1), so a repeat is about 0.1 ms. The answer doesn't change shape.
@@ -295,8 +299,8 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 
 | Tool | Input (default) | Answer |
 |---|---|---|
-| `overview` | none | the repo's size and summary, its top-level areas largest first (size and tagline; 30 at most), and the 10 most-imported files |
-| `describe` | `path` | kind, files and lines; the summary; what's inside (20 children) or the declarations (30, with lines); uses and used by (10 areas each, with import counts) |
+| `overview` | none | the repo's size and summary, the docs to read first (up to 5), its top-level areas largest first (size and tagline; 30 at most), and the 10 most-imported files |
+| `describe` | `path` | kind, files and lines; the summary; the docs about it (up to 5); what's inside (20 children) or the declarations (30, with lines); uses and used by (10 areas each, with import counts) |
 | `search` | `query` (1–200 characters), `limit` 1–30 (10) | the best files and folders, each with its tagline and best-matching code (cut to 160 characters) |
 | `dependents` | `path`, `transitive` (false), `limit` 1–500 (50), `offset` (0) | the direct and total counts, then the files: nearest first, most imported next, by path last; grouped by distance when transitive |
 | `dependencies` | the same | the same, following what the target imports |

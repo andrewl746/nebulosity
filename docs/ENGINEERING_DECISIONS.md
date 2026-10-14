@@ -815,3 +815,20 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 - An edge from a module id or a computed import is stored like any other: its specifier is the literal or the id as written.
 - A repo with internal packages but no workspace declaration resolves only its root package by name; report-resolution lists what stays unresolved.
 **Revisit when:** a repo's packages resolve only through a bundler's own config (webpack aliases, Vite `resolve.alias`): read those, or let the user name aliases.
+
+## ADR-054 — Docs pointers: which docs talk about which folders, read from the repo's Markdown (2026-10-14)
+
+**Context:** In Eval #1, big-picture scores followed whether a run read VS Code's `.github/instructions/source-code-organization.instructions.md`. The five runs that read it scored 0.88–1.00 on BP2 and BP4; the seven that didn't scored 0.44–0.83. Both U runs on BP4 called `describe` on `src/vs/workbench`, got its layout and counts, and never found the file, whose front matter says `applyTo: src/vs/**`. Nebulosity's summaries say what a folder holds, not its rules. The rules are often already written down, in a README, an architecture doc, or instructions for agents.
+**Decision:**
+- Each full run reads the repo's `.md`, `.mdx` and `.mdc` files under the size cap (a doc over it, or one that can't be read, is listed in the run's `skipped`). It stores each doc's title (its first level-one heading, else its name) and its links:
+  - **applies:** an `applyTo` (Copilot instructions) or `globs` (Cursor rules) glob's folder, read from the front matter. Quotes, a trailing YAML comment, comma lists, YAML lists and one whole brace group are opened.
+  - **readme:** a README's own folder.
+  - **mentions:** each path of two or more segments the text names: an indexed folder or file, or a folder tail only one folder ends with.
+- `describe` names up to 5 docs linked to the place or its folders above it (the root left out). Each doc is shown by its strongest link, ranked by kind, deeper target, plain-folder glob, a name about architecture, count, then path.
+- `describe` of the repo and `overview` name up to 5 docs to read first: the root README, then docs named for architecture, then docs that apply to folders.
+- No model is involved, so it all works in free mode.
+- Docs refresh with full runs only (R7): the worker's warm full run at start redoes them.
+- The row types (`DocFacts`, `DocLinkRow`, `DocLinkKind`) are declared in `lib/db/schema.ts`, so the store never imports from `lib/index/` (ARCHITECTURE.md §3, rule 4).
+**Alternatives:** (a) Summaries that state rules: a model reading every folder's code still can't see a rule the code breaks, and it costs money. (b) Search over doc text: the agent has to think of searching; a pointer in `describe` comes with the answer it already asked for. (c) Inline the doc in the answer: thousands of tokens per call, and the agent can Read the file itself.
+**Consequences:** `DescribeResponse` gains `docs` (API_CONTRACTS.md §12, additive). The static demo's describe bundles carry it, and the Map's panel ignores it for now. On VS Code, `describe(src/vs/workbench)` now leads with `.github/instructions/source-code-organization.instructions.md` (371 docs and 559 links are stored), and `overview` starts with `README.md`, then `AGENTS.md`, `CONTRIBUTING.md` and `.github/copilot-instructions.md`. The docs pass (read, parse, link) takes 111 ms on VS Code, inside an aggregate step of 2.1 s.
+**Revisit when:** a doc's links should refresh while the Map runs (route Markdown changes through the worker), or docs outside Markdown matter (`.txt`, wiki pages, docstrings).
