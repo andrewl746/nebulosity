@@ -1,5 +1,6 @@
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../db/client";
@@ -138,7 +139,8 @@ describe("dependents and dependencies", () => {
     it("refuses the whole repo, and a limit outside its range", async () => {
         const context = freeFixture();
         await expect(call("dependents", { path: "" }, context)).rejects.toThrow(BadInputError);
-        await expect(call("dependents", { path: "src", limit: 501 }, context)).rejects.toThrow();
+        // a schema failure (zod's own error class), not just any throw: 500 is the largest page
+        await expect(call("dependents", { path: "src", limit: 501 }, context)).rejects.toBeInstanceOf(z.ZodError);
     });
 });
 

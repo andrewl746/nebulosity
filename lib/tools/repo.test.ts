@@ -93,7 +93,7 @@ describe("setupCall", () => {
         expect(setupCall(root).context.indexNote).toBe("The last index update failed (disk full), so answers may be out of date. Running npm run index in the Nebulosity folder redoes it.");
     });
 
-    it("says nothing is indexed when no repo is chosen", () => {
+    it("refuses when the project folder is outside every indexed repo and the Map shows none", () => {
         process.env.NEBULOSITY_HOME = makeTempDir("neb-call-");
         writeConfig({ activeRepo: null, port: 3000 });
         expect(() => setupCall(makeTempDir("neb-elsewhere-"))).toThrow(NoActiveRepoError);

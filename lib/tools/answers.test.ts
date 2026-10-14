@@ -193,9 +193,13 @@ describe("reachAnswer", () => {
         const parts = reachAnswer({ path: "hub.ts", kind: "file", direction: "dependents", direct: 600, indexVersion: 1, reached }, { transitive: false, limit: 500, offset: 0 });
         const text = answerText({ ...parts, repoNote: "r".repeat(300), indexNote: "i".repeat(200) });
         expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        // Hand-derived. The header "hub.ts is imported by 600 files directly and 600 files in all, counting files that reach
+        // it through others." is 107 characters, so the budget is 40,000 - 2,000 (headroom for the notes) - 107 = 37,893. Each
+        // line "  deep/" + 90 x's + "/0000.ts" is 2 + 5 + 90 + 1 + 4 + 3 = 105 characters, 106 with its line break. 37,893 / 106
+        // is 357.5, so 357 lines fit and 243 are left.
         const listed = parts.body.filter((line) => line.startsWith("  deep/")).length;
-        expect(listed).toBeLessThan(500);
-        expect(parts.body.at(-1)).toBe(`… ${600 - listed} more (next page: offset ${listed})`);
+        expect(listed).toBe(357);
+        expect(parts.body.at(-1)).toBe("… 243 more (next page: offset 357)");
     });
 });
 
