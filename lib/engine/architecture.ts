@@ -27,6 +27,8 @@ export type Layers = {
     unlinked: Part[];
 };
 export type Conventions = {
+    /** The fewest folders a name recurs in to be listed: relative to the place (see recurringThreshold). */
+    minFolders: number;
     names: { name: string; folders: number }[];
     /** examples only for pairs of 3 imports or fewer */
     pairs: { from: string; to: string; count: number; examples: [string, string][] }[];
@@ -49,6 +51,8 @@ export type ArchitectureAnswer = {
 export const MIN_RECURRING = 3;
 /** A pair of folder names with this many imports or fewer shows its imports. */
 export const RARE_PAIR = 3;
+/** A folder name recurs when it is in this many folders: 3, or 1% of the folders under the place when that's more (a huge repo has hundreds of names that merely appear 3 times). */
+export const recurringThreshold = (foldersUnder: number): number => Math.max(MIN_RECURRING, Math.ceil(foldersUnder / 100));
 /** Imports shown for each pair against the layers. */
 const EXAMPLES = 3;
 
@@ -228,18 +232,21 @@ function foldersOf(paths: readonly string[]): Set<string> {
 }
 
 /**
- * Folder names that recur in MIN_RECURRING or more folders strictly under the place, and what each one's files import:
+ * Folder names that recur in `minFolders` or more folders strictly under the place (default: recurringThreshold), and what each one's files import:
  * a file belongs to the deepest recurring name on its path below the place, and an import counts when both ends have one.
  */
-export function conventionsOf(index: ImportIndex, folderPath: string, minFolders = MIN_RECURRING): Conventions {
+export function conventionsOf(index: ImportIndex, folderPath: string, minFolders?: number): Conventions {
     const prefix = folderPath === "" ? "" : `${folderPath}/`;
     const counts = new Map<string, number>();
+    let foldersUnder = 0;
     for (const f of foldersOf(index.paths)){
         if (!f.startsWith(prefix)) continue;
+        foldersUnder++;
         const name = f.slice(f.lastIndexOf("/") + 1);
         counts.set(name, (counts.get(name) ?? 0) + 1);
     }
-    const names = [...counts].filter(([, n]) => n >= minFolders).map(([name, folders]) => ({ name, folders })).sort((a, b) => compare(a.name, b.name));
+    const threshold = minFolders ?? recurringThreshold(foldersUnder);
+    const names = [...counts].filter(([, n]) => n >= threshold).map(([name, folders]) => ({ name, folders })).sort((a, b) => compare(a.name, b.name));
     const recurring = new Set(names.map((n) => n.name));
     const [from, to] = rangeOf(index, folderPath, folderPath === "" ? "repo" : "folder");
     const envOf = (i: number): string | null => {
@@ -263,6 +270,7 @@ export function conventionsOf(index: ImportIndex, folderPath: string, minFolders
         }
     }
     return {
+        minFolders: threshold,
         names,
         pairs: [...pairs.values()]
             .map((p) => (p.count <= RARE_PAIR ? p : { ...p, examples: [] }))

@@ -78,6 +78,30 @@ describe("conventionsOf on the fixture's src", () => {
     });
 });
 
+describe("conventionsOf, the threshold relative to the place", () => {
+    // place "p": 160 folders p/gNNN, each with a leaf folder (160 more), and "rare" under g000, g001, g002: 323 folders in all
+    const dirs = Array.from({ length: 160 }, (_, i) => `p/g${String(i).padStart(3, "0")}`);
+    const paths = [...dirs.map((d) => `${d}/leaf/f.ts`), ...dirs.slice(0, 3).map((d) => `${d}/rare/f.ts`)].sort();
+    const big = buildImportIndex(buildImportGraph(paths.map((p, id) => ({ id, path: p })), []));
+
+    it("is 1% of the folders under the place when that's above 3: 323 folders need 4", () => {
+        const c = conventionsOf(big, "p");
+        expect(c.minFolders).toBe(4);
+        expect(c.names).toEqual([{ name: "leaf", folders: 160 }]);   // rare is in 3 folders: below 4
+    });
+
+    it("an explicit minFolders wins", () => {
+        const c = conventionsOf(big, "p", 3);
+        expect(c.minFolders).toBe(3);
+        expect(c.names).toEqual([{ name: "leaf", folders: 160 }, { name: "rare", folders: 3 }]);
+    });
+
+    it("stays 3 on the fixture's places", () => {
+        expect(conventionsOf(index, "src").minFolders).toBe(3);
+        expect(conventionsOf(index, "").minFolders).toBe(3);
+    });
+});
+
 describe("architecture(), against the ground truth", () => {
     it("files nothing imports in src: one an entry point, one not named, one test", () => {
         expect(architecture(root, "src", "unused").unused).toEqual({ declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts"], tests: 1 });

@@ -2,6 +2,7 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 import type { DescribeResponse, MapNode, SearchResult } from "../contracts";
 import { architecture } from "../engine/architecture";
+import { layersOf } from "../engine/architecture";
 import { indexRepository } from "../index/pipeline";
 import type { Overview } from "../engine/overview";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
@@ -446,7 +447,7 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         const pairs = names.flatMap((a, i) => names.map((b, j) => ({
             from: a.name, to: b.name, count: i === j ? 2 : 9_000, examples: i === j ? ([["src/a/" + "x".repeat(100) + ".ts", "src/b/" + "y".repeat(100) + ".ts"]] as [string, string][]) : [],
         })));
-        const conventions = answerText(architectureAnswer({ path: "src", kind: "folder", report: "conventions", conventions: { names, pairs } }, page));
+        const conventions = answerText(architectureAnswer({ path: "src", kind: "folder", report: "conventions", conventions: { minFolders: 3, names, pairs } }, page));
         expect(conventions.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
         expect(conventions).toContain("… 130 more");
         // 400 groups of 20 files with 150-character paths
@@ -454,5 +455,58 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         const text = answerText(architectureAnswer({ path: "", kind: "repo", report: "cycles", cycles }, { limit: 400, offset: 0 }));
         expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
         expect(text).toContain("(next page: offset ");
+    });
+
+    it("prints the place's own threshold, and when the names are capped keeps the most-recurring, not the first alphabetically", () => {
+        // 30 names: n00-n24 recur in 10 folders each, n25-n29 in 50. The top 20 are n25-n29 and, on the tie at 10, n00-n14.
+        const names = Array.from({ length: 30 }, (_, i) => ({ name: `n${String(i).padStart(2, "0")}`, folders: i >= 25 ? 50 : 10 }));
+        const pair = (from: string, to: string, count: number) => ({ from, to, count, examples: [] as [string, string][] });
+        const c = { minFolders: 7, names, pairs: [pair("n00", "n29", 4), pair("n20", "n00", 2), pair("n20", "n20", 6), pair("n29", "n29", 5)] };
+        const lines = answerText(architectureAnswer({ path: "src", kind: "folder", report: "conventions", conventions: c }, page)).split("\n");
+        expect(lines[0]).toBe("Folder names that recur under src/ (in 7 or more folders): "
+            + "n00 (10), n01 (10), n02 (10), n03 (10), n04 (10), n05 (10), n06 (10), n07 (10), n08 (10), n09 (10), n10 (10), n11 (10), n12 (10), n13 (10), n14 (10), "
+            + "n25 (50), n26 (50), n27 (50), n28 (50), n29 (50), … 10 more.");
+        // rows only for kept names; n20 is cut, and so is every pair that touches it
+        expect(lines.slice(1)).toEqual(["What each one's files import:", "  n00 → n29 4", "  n29 → n29 5"]);
+        expect(answerText(architectureAnswer({ path: "", kind: "repo", report: "conventions", conventions: { minFolders: 4, names: [], pairs: [] } }, page)))
+            .toBe("No folder name recurs in 4 or more folders under the repo.");
+    });
+
+    it("keeps layers, the summary and a long cycle under the limit, and says how many were left out", () => {
+        const part = (p: string) => ({ path: p, kind: "file" as const });
+        const none = (): [string, string][] => [];
+        const rest = { conventions: { minFolders: 3, names: [], pairs: [] }, cycles: [], unused: { declared: [], others: [], tests: 0 } };
+        // a flat folder of 3,001 files each importing one helper: two levels, the second with 3,000 names
+        const flatParts = [part("helper.ts"), ...Array.from({ length: 3_000 }, (_, i) => part(`file${String(i).padStart(4, "0")}.ts`))];
+        const flat = layersOf(flatParts, flatParts.slice(1).map((p) => ({ source: p.path, target: "helper.ts", count: 1 })), none);
+        const summary = answerText(architectureAnswer({ path: "", kind: "repo", report: "summary", layers: flat, ...rest }, page));
+        expect(summary.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(summary).toContain("… 2,980 more");
+        // a chain of 3,000 files: 3,000 levels
+        const chainParts = Array.from({ length: 3_000 }, (_, i) => part(`c${String(i).padStart(4, "0")}.ts`));
+        const chain = layersOf(chainParts, chainParts.slice(0, -1).map((p, i) => ({ source: p.path, target: chainParts[i + 1].path, count: 1 })), none);
+        const chainSummary = answerText(architectureAnswer({ path: "", kind: "repo", report: "summary", layers: chain, ...rest }, page));
+        expect(chainSummary.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(chainSummary).toContain("… 2,992 more levels");
+        const chainLayers = answerText(architectureAnswer({ path: "", kind: "repo", report: "layers", layers: chain }, page));
+        expect(chainLayers.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(chainLayers).toContain("… 2,970 more levels");
+        // 400 tangled pairs and 30 circles of 40 long names
+        const long = (i: number) => part(`${"q".repeat(120)}${i}.ts`);
+        const tangled = Array.from({ length: 400 }, (_, i) => ({ a: long(i), b: long(i + 1_000), count: 2 }));
+        const circles = Array.from({ length: 30 }, (_, g) => Array.from({ length: 40 }, (_, i) => long(g * 100 + i)));
+        const tangledText = answerText(architectureAnswer({ path: "", kind: "repo", report: "layers", layers: { levels: [], against: [], tangled, circles, unlinked: [] } }, page));
+        expect(tangledText.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(tangledText).toContain("… 380 more pairs with as many imports each way");
+        expect(tangledText).toContain("… 20 more circles");
+        // a cycle of 2,000 steps shows its first 20 steps and its last 20
+        const cycle = Array.from({ length: 2_001 }, (_, i) => `${"c".repeat(100)}${i % 2_000}.ts`);
+        const specifiers = cycle.slice(1).map((_, i) => `./s${i}`);
+        const through = answerText(architectureAnswer({ path: cycle[0], kind: "file", report: "cycles", through: { file: cycle[0], cycle, specifiers } }, page)).split("\n");
+        expect(through.join("\n").length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(through[0]).toContain("(2,000 steps)");
+        expect(through).toContain("  … 1,960 more steps");
+        expect(through).toHaveLength(1 + 1 + 20 + 1 + 20);
+        expect(through[through.length - 1]).toBe(`  → ${cycle[2_000]}  (import "./s1999")`);
     });
 });

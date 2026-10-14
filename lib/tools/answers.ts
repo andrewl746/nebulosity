@@ -1,5 +1,5 @@
 import type { AreaCount, DescribeResponse, DocPointer, SearchResult } from "../contracts";
-import { MIN_RECURRING, RARE_PAIR, type ArchitectureAnswer, type Conventions, type Layers, type Part, type Unused } from "../engine/architecture";
+import { RARE_PAIR, type ArchitectureAnswer, type Conventions, type Layers, type Part, type Unused } from "../engine/architecture";
 import type { Impact, Roots } from "../engine/impact";
 import type { Overview } from "../engine/overview";
 import { FILE_CHUNK } from "../engine/rank";
@@ -215,7 +215,10 @@ export function chainAnswer(c: ChainAnswer): AnswerParts {
 const NAMES_SHOWN = 20;
 /** Pairs and lines shown in the layers and conventions reports before "… N more": a big repo has hundreds. */
 const PAIR_LINES = 20;
-const CONVENTION_LINES = 40;
+const LEVEL_LINES = 30;
+const SUMMARY_LEVELS = 8;
+const CIRCLE_LINES = 10;
+const CYCLE_STEPS = 20;
 const RARE_LINES = 30;
 
 /** Where a report is about: "src/", or "the repo". */
@@ -233,7 +236,8 @@ const namesList = (names: readonly string[]): string =>
 function layerLines(a: ArchitectureAnswer, layers: Layers): string[] {
     const name = (p: Part): string => partName(a, p);
     const lines = [`Layers of ${whereOf(a)}, bottom first (each uses only the layers below it, except the imports listed after):`];
-    layers.levels.forEach((level, n) => lines.push(`  ${n}  ${namesList(level.map(name))}`));
+    layers.levels.slice(0, LEVEL_LINES).forEach((level, n) => lines.push(`  ${n}  ${namesList(level.map(name))}`));
+    if (layers.levels.length > LEVEL_LINES) lines.push(`  ${moreLine(layers.levels.length - LEVEL_LINES)} levels`);
     if (layers.against.length === 0) lines.push("Against that order: none.");
     else {
         const total = layers.against.reduce((sum, x) => sum + x.count, 0);
@@ -245,30 +249,35 @@ function layerLines(a: ArchitectureAnswer, layers: Layers): string[] {
         }
         if (layers.against.length > PAIR_LINES) lines.push(`  ${moreLine(layers.against.length - PAIR_LINES)} pairs`);
     }
-    for (const t of layers.tangled) lines.push(`As many imports each way: ${name(t.a)} ↔ ${name(t.b)}  ${formatCount(t.count)} each`);
-    for (const circle of layers.circles) lines.push(`Using each other in a circle: ${namesList(circle.map(name))}`);
+    for (const t of layers.tangled.slice(0, PAIR_LINES)) lines.push(`As many imports each way: ${name(t.a)} ↔ ${name(t.b)}  ${formatCount(t.count)} each`);
+    if (layers.tangled.length > PAIR_LINES) lines.push(`${moreLine(layers.tangled.length - PAIR_LINES)} pairs with as many imports each way`);
+    for (const circle of layers.circles.slice(0, CIRCLE_LINES)) lines.push(`Using each other in a circle: ${namesList(circle.map(name))}`);
+    if (layers.circles.length > CIRCLE_LINES) lines.push(`${moreLine(layers.circles.length - CIRCLE_LINES)} circles`);
     if (layers.unlinked.length > 0) lines.push(`Not linked to the others: ${namesList(layers.unlinked.map(name))}`);
     return lines;
 }
 
+/** The names a report shows: when more than NAMES_SHOWN recur, the most-recurring (ties by name), in name order. */
+function keptNames(c: Conventions): { shown: Conventions["names"]; hidden: number } {
+    if (c.names.length <= NAMES_SHOWN) return { shown: c.names, hidden: 0 };
+    const top = [...c.names].sort((x, y) => y.folders - x.folders || (x.name < y.name ? -1 : x.name > y.name ? 1 : 0)).slice(0, NAMES_SHOWN);
+    return { shown: top.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0)), hidden: c.names.length - NAMES_SHOWN };
+}
+
 function conventionLines(a: ArchitectureAnswer, c: Conventions): string[] {
     const where = whereOf(a);
-    if (c.names.length === 0) return [`No folder name recurs in ${MIN_RECURRING} or more folders under ${where}.`];
+    if (c.names.length === 0) return [`No folder name recurs in ${c.minFolders} or more folders under ${where}.`];
+    const { shown, hidden } = keptNames(c);
+    const kept = new Set(shown.map((n) => n.name));
     const lines = [
-        `Folder names that recur under ${where} (in ${MIN_RECURRING} or more folders): ${namesList(c.names.map((n) => `${n.name} (${formatCount(n.folders)})`))}.`,
+        `Folder names that recur under ${where} (in ${c.minFolders} or more folders): ${shown.map((n) => `${n.name} (${formatCount(n.folders)})`).join(", ")}${hidden > 0 ? `, … ${formatCount(hidden)} more` : ""}.`,
         "What each one's files import:",
     ];
+    const pairs = c.pairs.filter((p) => kept.has(p.from) && kept.has(p.to));
     const byFrom = new Map<string, { to: string; count: number }[]>();
-    for (const p of c.pairs) byFrom.set(p.from, [...(byFrom.get(p.from) ?? []), { to: p.to, count: p.count }]);
-    const froms = [...byFrom];
-    for (const [from, tos] of froms.slice(0, CONVENTION_LINES)){
-        // a long row keeps its biggest targets, still in name order
-        const keep = tos.length <= NAMES_SHOWN ? tos : [...tos].sort((x, y) => y.count - x.count).slice(0, NAMES_SHOWN).sort((x, y) => (x.to < y.to ? -1 : 1));
-        const more = tos.length > keep.length ? `, … ${formatCount(tos.length - keep.length)} more` : "";
-        lines.push(`  ${from} → ${keep.map((t) => `${t.to} ${formatCount(t.count)}`).join(", ")}${more}`);
-    }
-    if (froms.length > CONVENTION_LINES) lines.push(`  ${moreLine(froms.length - CONVENTION_LINES)} names`);
-    const rare = c.pairs.filter((p) => p.examples.length > 0);
+    for (const p of pairs) byFrom.set(p.from, [...(byFrom.get(p.from) ?? []), { to: p.to, count: p.count }]);
+    for (const [from, tos] of byFrom) lines.push(`  ${from} → ${tos.map((t) => `${t.to} ${formatCount(t.count)}`).join(", ")}`);
+    const rare = pairs.filter((p) => p.examples.length > 0);
     if (rare.length > 0){
         lines.push(`The rarer pairs (${RARE_PAIR} imports or fewer):`);
         for (const p of rare.slice(0, RARE_LINES)) lines.push(`  ${p.from} → ${p.to}: ${p.examples.map(([x, y]) => `${x} → ${y}`).join("; ")}`);
@@ -282,7 +291,14 @@ function cycleLines(a: ArchitectureAnswer, page: { limit: number; offset: number
         const t = a.through;
         if (t.cycle === null) return [`${t.file} is in no import cycle.`];
         const lines = [`The shortest import cycle through ${t.file} (${plural(t.cycle.length - 1, "step")}):`, `  ${t.cycle[0]}`];
-        for (let i = 1; i < t.cycle.length; i++) lines.push(`  → ${t.cycle[i]}  (import "${t.specifiers[i - 1]}")`);
+        const step = (i: number): string => `  → ${t.cycle![i]}  (import "${t.specifiers[i - 1]}")`;
+        const last = t.cycle.length - 1;
+        if (last <= 2 * CYCLE_STEPS) for (let i = 1; i <= last; i++) lines.push(step(i));
+        else {
+            for (let i = 1; i <= CYCLE_STEPS; i++) lines.push(step(i));
+            lines.push(`  ${moreLine(last - 2 * CYCLE_STEPS)} steps`);
+            for (let i = last - CYCLE_STEPS + 1; i <= last; i++) lines.push(step(i));
+        }
         return lines;
     }
     const groups = a.cycles ?? [];
@@ -321,13 +337,14 @@ function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; of
 function summaryLines(a: ArchitectureAnswer): string[] {
     const lines = [`${a.path === "" ? "The repo" : whereOf(a)} — what its imports say about how it's organized:`];
     const l = a.layers!;
-    const order = l.levels.map((level) => level.map((p) => partName(a, p)).join(", ")).join(" · ");
+    const order = l.levels.slice(0, SUMMARY_LEVELS).map((level) => namesList(level.map((p) => partName(a, p)))).join(" · ")
+        + (l.levels.length > SUMMARY_LEVELS ? ` · ${moreLine(l.levels.length - SUMMARY_LEVELS)} levels` : "");
     const against = l.against.reduce((sum, x) => sum + x.count, 0);
     lines.push(l.levels.length === 0 ? "Layers: its parts don't import each other."
         : `Layers, bottom first: ${order}${against > 0 ? ` (${plural(against, "import")} against that order)` : ""}`);
     const c = a.conventions!;
-    lines.push(c.names.length === 0 ? `Folder conventions: none (no folder name recurs in ${MIN_RECURRING} or more folders)`
-        : `Folder conventions: ${namesList(c.names.map((n) => n.name))}`);
+    lines.push(c.names.length === 0 ? `Folder conventions: none (no folder name recurs in ${c.minFolders} or more folders)`
+        : `Folder conventions: ${keptNames(c).shown.map((n) => n.name).join(", ")}${keptNames(c).hidden > 0 ? `, … ${formatCount(keptNames(c).hidden)} more` : ""}`);
     const groups = a.cycles ?? [];
     lines.push(groups.length === 0 ? "Import cycles: none" : `Import cycles: ${formatCount(groups.length)}, the largest ${plural(groups[0].size, "file")}`);
     const u = a.unused!;
