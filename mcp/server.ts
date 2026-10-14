@@ -3,6 +3,7 @@
  * Thin by rule (§3, rule 2): each call picks its repo, runs one registry entry, posts one live event, and returns text.
  */
 import path from "path";
+import util from "util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { LiveEvent } from "../lib/contracts";
@@ -45,8 +46,9 @@ export function createServer(options: ServerOptions): McpServer {
                     const event: LiveEvent = { tool: tool.name, paths: output.paths, at: now().toISOString(), ...(output.action ? { action: output.action } : {}) };
 
                     if (!output.action){
-                        // a pulse on the open Map: fire and forget, so no answer waits on it
-                        if (options.live && call.live.allowed) void post(event, call.live.port);
+                        // a pulse on the open Map: fire and forget, so no answer waits on it. The catch matters: a poster that
+                        // rejects would otherwise be an unhandled rejection, which ends a Node 24 process.
+                        if (options.live && call.live.allowed) void post(event, call.live.port).catch(() => {});
                         return { content: [{ type: "text" as const, text: output.text }] };
                     }
 
@@ -79,6 +81,9 @@ export function keepStdoutForProtocol(): void {
     console.log = toStderr;
     console.info = toStderr;
     console.debug = toStderr;
+    // dir and dirxml also write to stdout (Node 24.14.0); dir prints through util.inspect, with its options
+    console.dirxml = toStderr;
+    console.dir = (item?: unknown, options?: util.InspectOptions): void => console.error(util.inspect(item, options));
 }
 
 /** The stdio entry point that mcp/launch.mjs runs. */

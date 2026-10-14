@@ -11,7 +11,6 @@ import { getDb } from "../lib/db/client";
 import { repoKey } from "../lib/index/paths";
 import { indexRepository } from "../lib/index/pipeline";
 import { refreshSummaryStatus } from "../lib/index/summarize/status";
-import { setupCall } from "../lib/tools/repo";
 import { SERVER_INSTRUCTIONS, TOOLS } from "../lib/tools/registry";
 import { createServer, keepStdoutForProtocol, SERVER_VERSION, type ServerOptions } from "./server";
 
@@ -37,13 +36,13 @@ function mapShowing(port = 4321): string {
     return root;
 }
 
-/** A client talking to createServer over an in-memory pair; `posted` records every live event. */
-async function connect(options: Omit<ServerOptions, "post" | "now"> & { mapAnswers?: boolean }){
+/** A client talking to createServer over an in-memory pair; `posted` records every live event (unless `post` replaces the recorder). */
+async function connect(options: Omit<ServerOptions, "now"> & { mapAnswers?: boolean }){
     const posted: Posted[] = [];
     const server = createServer({
         ...options,
         now: () => AT,
-        post: async (event, port) => { posted.push({ event, port }); return options.mapAnswers ?? true; },
+        post: options.post ?? (async (event, port) => { posted.push({ event, port }); return options.mapAnswers ?? true; }),
     });
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await server.connect(serverSide);
@@ -71,9 +70,25 @@ describe("the MCP server", () => {
     it("answers with the registry's text, and pulses the Map once on its port", async () => {
         const root = mapShowing();
         const { client, posted } = await connect({ projectDir: root, live: true });
-        const expected = await TOOLS.find((t) => t.name === "describe")!.handler({ path: "src/core" }, setupCall(root).context);
-        expect(textOf(await client.callTool({ name: "describe", arguments: { path: "src/core" } }))).toBe(expected.text);
+        // the fixture is indexed with no key, so this is the ground truth's free-mode `describe src/core`
+        expect(textOf(await client.callTool({ name: "describe", arguments: { path: "src/core" } }))).toBe([
+            "src/core/ — folder: 2 files, 10 lines.",
+            "Summary: none — summaries are off (no ANTHROPIC_API_KEY); a key adds a short summary of every file and folder.",
+            "Inside (2):", "  log.ts", "  index.ts",
+            "Uses: nothing outside it.",
+            "Used by (3 imports):", "  src/app/  1", "  src/index.ts  1", "  src/util/  1",
+        ].join("\n"));
         expect(posted).toEqual([{ event: { tool: "describe", paths: ["src/core"], at: AT.toISOString() }, port: 4321 }]);
+    });
+
+    it("answers a call even when the live poster rejects (the pulse is fire and forget)", async () => {
+        // an unhandled rejection kills a Node 24 process, and Vitest fails the run on one, so without the .catch this fails
+        const { client } = await connect({ projectDir: mapShowing(), live: true, post: async () => { throw new Error("down"); } });
+        const result = await client.callTool({ name: "describe", arguments: { path: "src/core" } });
+        expect(result.isError).toBeFalsy();
+        expect(textOf(result)).toMatch(/^src\/core\/ — folder: 2 files, 10 lines\.\n/);
+        // give a stray rejection its turn to surface before the test ends
+        await new Promise((resolve) => setTimeout(resolve, 20));
     });
 
     it("show_on_map waits for the Map and says what became of the event", async () => {
@@ -111,6 +126,7 @@ describe("the MCP server", () => {
         expect(missing.isError).toBe(true);
         expect(textOf(missing)).toBe('Nothing is indexed at "src/nope.ts".');
         const whole = await client.callTool({ name: "dependents", arguments: { path: "" } });
+        expect(whole.isError).toBe(true);
         expect(textOf(whole)).toBe("Pass a folder or a file: the whole repo has nothing outside it.");
         const invalid = await client.callTool({ name: "dependents", arguments: { path: "src", limit: 0 } });
         expect(invalid.isError).toBe(true);
@@ -127,17 +143,19 @@ describe("the MCP server", () => {
         expect(textOf(result)).toBe(`No repository indexed yet. Run npm run index -- <path-to-repo>. (Nebulosity's folder: ${process.env.NEBULOSITY_HOME}.)`);
     });
 
-    it("keeps stdout for the protocol: log, info and debug go through console.error", () => {
+    it("keeps stdout for the protocol: log, info, debug, dir and dirxml go through console.error", () => {
         // Vitest routes console output through its own streams, so this spies on console.error, not on process.stderr;
         // that a real process's stdout carries nothing else is mcp/stdio.test.ts's job (Review Focus 1)
-        const saved = { log: console.log, info: console.info, debug: console.debug };
+        const saved = { log: console.log, info: console.info, debug: console.debug, dir: console.dir, dirxml: console.dirxml };
         const toError = vi.spyOn(console, "error").mockImplementation(() => {});
         try{
             keepStdoutForProtocol();
             console.log("a");
             console.info("b");
             console.debug("c");
-            expect(toError.mock.calls).toEqual([["a"], ["b"], ["c"]]);
+            console.dir({ a: 1 });
+            console.dirxml("d");
+            expect(toError.mock.calls).toEqual([["a"], ["b"], ["c"], ["{ a: 1 }"], ["d"]]);
         } finally{
             Object.assign(console, saved);
             toError.mockRestore();
