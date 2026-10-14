@@ -111,6 +111,9 @@ export function planSummaries(
         }
     }
 
+    // the root folder's row carries the repo's name (aggregate.ts), which a top-level test folder's template uses
+    const repoName = folders.find((f) => f.path === "")?.name ?? "";
+
     for (const folder of [...folders].sort((a, b) => b.depth - a.depth || compare(a.path, b.path))){
         const kind: SummaryTargetKind = folder.path === "" ? "repo" : "folder";
 
@@ -120,7 +123,7 @@ export function planSummaries(
         if (kind === "folder" && testCount > 0 && !nonTestFilesBelow.has(folder.path)){
             const key = targetKey("folder", folder.path);
             const row = storedByKey.get(key);
-            const text = testFolderSummary(folder.path, testCount);
+            const text = testFolderSummary(folder.path, testCount, repoName);
             const hash = inputHash("template", PROMPT_VERSION, `${folder.path}\n${text.tagline}\n${text.summary}`);
             planned.set(key, row?.inputHash === hash
                 ? { kind: "folder", path: folder.path, model: "template", inputHash: hash, state: "current", status: row.status === "skipped" ? null : "skipped" }

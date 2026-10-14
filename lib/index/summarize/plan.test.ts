@@ -222,6 +222,17 @@ describe("planSummaries — test-only folders", () => {
         expect(byPath.get("empty")).toMatchObject({ model: "claude-sonnet-5-5", state: "ready" });
     });
 
+    it("templates a top-level test folder with the repo's name, taken from the root folder's row", () => {
+        const files = [file("src/a.ts", 5, false), file("test/a.test.ts", 7, true)];
+        const folders = [
+            { ...folder("", null, 0, 2, 0), name: "acme" },
+            folder("src", "", 1, 1, 1),
+            folder("test", "", 1, 1, 1),
+        ];
+        const byPath = new Map(planSummaries(files, folders, [], options()).map((t) => [t.path, t]));
+        expect(byPath.get("test")?.templateText?.tagline).toBe("Tests for acme");
+    });
+
     it("never templates the repo, even when every file in it is a test", () => {
         const files = [file("t/x.test.ts", 4, true)];
         const folders = [folder("", null, 0, 1, 0), folder("t", "", 1, 1, 1)];

@@ -360,6 +360,8 @@
 
 **Revisit when:** Review #2 (the same 20 files) still shows taglines cut or summaries hedged, or usage sentences go stale enough to mislead. Then redo the most-imported files on a schedule.
 
+**Amended (2026-10-14, V1.5): a top-level test folder takes the repo's name.** VS Code's `test/` read "Tests for test" in the overview and on the Map: no segment comes before a top-level test folder, so the template fell back to the folder's own name. It now names the repo ("Tests for vscode"). The template's text is in its input hash, so the next plan rewrites the row for free. The repo summary's prompt lists that tagline, so the repo summary is redone once (one Sonnet request).
+
 ## ADR-035 — A spend cap on summary runs (2026-10-11)
 
 **Context:** The owner approved the full VS Code pass with one condition: "Before submitting each further batch, stop if the spend so far plus the remaining estimate would pass $15". Review #2 estimated the pass at about $11.70 (Haiku files, Sonnet folders and the repo, by batch), and $15 is S2's ceiling. Until now a run learned what it had spent only after paying: `summary_usage` records each answer's tokens as it lands.
