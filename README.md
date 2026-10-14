@@ -1,8 +1,8 @@
 # Nebulosity
 
-**Claude Code walks a big repo's imports one step at a time. Nebulosity does the walk in one call, for a fraction of the tokens, cost and time.**
+**Nebulosity does the import walk a dependency question needs in one call: measured on VS Code, for a fraction of the tokens, cost and time Claude Code spent walking it by hand.**
 
-Nebulosity indexes a big TypeScript or JavaScript repository once and keeps the index fresh as files change: its folder tree, every import between its files, and, with an Anthropic API key, a short summary of every file and folder. It serves that index two ways: to AI agents like Claude Code through an MCP server, and to people through a zoomable Map. Measured on VS Code against Claude Code alone, it made the questions that need a walk over the import graph (the shortest import chain between two files, every file that depends on one directly or through other files) cheaper and faster, at the same or a better score. It raised the score on none of the three kinds of question tested, and lowered it on big-picture questions.
+Nebulosity indexes a big TypeScript or JavaScript repository once and keeps the index fresh as files change: its folder tree, every import between its files, and, with an Anthropic API key, a short summary of every file and folder. It serves that index two ways: to AI agents like Claude Code through an MCP server, and to people through a zoomable Map. Measured on VS Code against Claude Code alone, with Claude Code limited to read-only commands, it made the questions that need a walk over the import graph cheaper and faster: at the same score on the five questions about the import chain between two files, and at about the same score on the one list of every file that depends on a given file, directly or through other files. On lists of direct importers, grep did as well in one to four calls. It raised the score on none of the three kinds of question tested, and lowered it on big-picture questions.
 
 [How it compares with Claude Code alone](docs/EVAL_RESULTS.md)
 
@@ -20,7 +20,7 @@ Some questions about a big repo are walks over its import graph. What depends on
 
 ## How it compares with Claude Code alone
 
-Claude Code answered 15 questions about VS Code, twice each, on its own and with Nebulosity's MCP server at Claude Code's default settings. Big-picture questions ask how the code is organized ("which layers of `src/vs` may depend on which?"), complete-list questions ask for every file that imports something, and connection questions ask for the shortest chain of imports from one file to another.
+Claude Code answered 15 questions about VS Code, twice each, on its own and with Nebulosity's MCP server at Claude Code's default settings. Big-picture questions ask how the code is organized ("What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?"), complete-list questions ask for every file that imports something, and connection questions ask for the shortest chain of imports from one file to another.
 
 | Questions (5 of each) | Setup | Score | Median tokens | Median cost estimate | Median time | Median tool calls |
 |---|---|---|---|---|---|---|
@@ -41,7 +41,7 @@ The score is the share of rubric points for big-picture, recall for lists and th
 
 **Where it helped.**
 - **Connection questions**, at the same score: every run of both setups scored 1.00. With Nebulosity, Claude Code answered each with one Nebulosity call (`path`, or `dependencies` on the question whose answer is "none"), for less than half the tokens, about a third of the cost estimate and about a third of the time.
-- **The one list that needed a walk** (every file that depends on `markers.ts`, directly or through other files): one `dependents` call scored 0.95 in both runs, against Claude Code alone's 0.86 and 1.00, with 7.9 times fewer tokens, a cost estimate 7.5 times lower and 6.0 times less time.
+- **The one list that needed a walk** (every file that depends on `markers.ts`, directly or through other files): one `dependents` call scored 0.95 in both runs, against Claude Code alone's 0.86 and 1.00, within the spread of Claude Code's own two runs. On average, Claude Code with Nebulosity used 7.9 times fewer tokens, a cost estimate 7.5 times lower and 6.0 times less time.
 - These savings are partly a product of the eval's read-only rules: six runs of Claude Code alone tried to write a script to walk the imports and were refused. Where Claude Code may run scripts, it may answer these more cheaply.
 
 The setup: 15 questions on VS Code at commit `cc3fec88`, 2 runs per question and setup, Sonnet 5.5 at medium effort in Claude Code 2.1.299 with read-only tools. The lists' and chains' ground truth comes from an independent scanner and was checked in the source by Claude models, not taken from Nebulosity's index; the big-picture answers were graded blind by Claude models against a rubric from VS Code's wiki. Details, every transcript and every grade: [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
@@ -52,7 +52,7 @@ You need Node 24 and git. Nebulosity runs locally, and has been tested on Window
 
 1. `git clone https://github.com/andrewl746/Nebulosity && cd Nebulosity && npm install`
 2. Index a repo: `npm run index -- /path/to/your/repo` (VS Code's 14,844 TypeScript and JavaScript files take about a minute).
-3. Optional, summaries: put `ANTHROPIC_API_KEY=…` in `.env.local` in the Nebulosity folder, then `npm run summarize -- /path/to/your/repo`. They cost about $1 per 1,000 files ($10.30 for VS Code), and your code is sent to Anthropic to write them. Spending on a repo's summaries is capped at $15 unless you raise it with `--budget`. Without a key, everything else works: the Map, the dependency tools, keyword search.
+3. Optional, summaries: put `ANTHROPIC_API_KEY=…` in `.env.local` in the Nebulosity folder, then `npm run summarize -- /path/to/your/repo`. They cost about $1 per 1,000 files ($10.30 for VS Code), and your code is sent to Anthropic to write them. Spending on a repo's summaries is capped at $15 unless you raise it with `--budget`. Without a key, the structure index needs no API, and the seven MCP tools answer in free mode: where a summary would go they say summaries are off and what a key adds, and search uses code, file and folder names ([ADR-047](docs/ENGINEERING_DECISIONS.md); the tools' tests run on a repo indexed with no key).
 4. Open the Map: `npm run dev`, then http://localhost:3000. (`npm run build`, then `npm start`, is the production build the Map's speeds below were measured on.)
 5. Connect Claude Code. Nebulosity's MCP server gives Claude Code the index: an overview of the repo, what any folder or file is, search, dependency lists that are exact and complete over the repo's indexed import graph, import chains, and pointing at things on the Map. Register the server for that repo: run this in the repo's folder (the one you indexed). Use forward slashes in the path, also on Windows, and quotes if it has spaces:
 
@@ -101,7 +101,7 @@ Measured on VS Code (20,342 files, 14,844 of them indexed): the structure index 
 
 ## Status
 
-V1.5 is done: the engine, the Map, the MCP server, the static demo build and the eval. It reads TypeScript and JavaScript only, and has been run at VS Code's scale on one repo, on Windows. Next: V1.6, so it works on your repo without cloning this one (an installable package, macOS and Linux, a free mode with no key), plus the two index limits the eval found. Then Python support, clustering, and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+V1.5 is done: the engine, the Map, the MCP server, the static demo build and the eval. It reads TypeScript and JavaScript only, and has been run at VS Code's scale on one repo, on Windows. Next: V1.6, so it works on your repo without cloning this one: an installable package, macOS and Linux, and the whole no-key path, the Map included, checked and packaged as a free mode, plus the two index limits the eval found. Then Python support, clustering, and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
 
 ## Why I built this
 
