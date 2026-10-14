@@ -9,12 +9,14 @@ Where things are:
 - The truth builder, the scanner it uses, the runner and the scorer: `scripts/eval/`.
 - Kept transcripts (scrubbed, leak-scanned, gzipped): `eval/runs/`, with one summary line per run in `eval/runs/index.jsonl`. Raw ones stay in `.nebulosity/eval/raw/`, which git ignores.
 
-## The two arms
+## The arms
 
 - **A, baseline:** Claude Code with its read-only built-in tools and its subagents.
 - **B, Nebulosity:** the same, plus Nebulosity's MCP server (seven tools: overview, describe, search, dependents, dependencies, path, show_on_map), started with the command the README registers (`node <checkout>/mcp/launch.mjs`), with live events off. It answers about the index of `../vscode`.
 
-The arms differ only in the MCP config file. Prompts are identical and never mention Nebulosity.
+- **U, `nebulosity-upfront`:** B with `ENABLE_TOOL_SEARCH=false`, so its seven tools are loaded up front instead of deferred behind ToolSearch. It shows what V1.6's fix (`alwaysLoad` in the README's registration) buys.
+
+The headline comparison is A against B at the default, which is what a user who follows the README gets today. U is reported beside it. A and B differ only in the MCP config file; U differs from B only in `ENABLE_TOOL_SEARCH`. Prompts are identical and never mention Nebulosity.
 
 ## Setup
 
@@ -30,7 +32,7 @@ The arms differ only in the MCP config file. Prompts are identical and never men
 
 ### The command
 
-The prompt goes on stdin. Everything else is the same in both arms, except the file after `--mcp-config`.
+The prompt goes on stdin. Everything else is the same in every arm, except the file after `--mcp-config` (A's differs from B's and U's) and, for U, `ENABLE_TOOL_SEARCH`.
 
 ```
 claude -p --output-format stream-json --verbose
@@ -59,7 +61,7 @@ claude -p --output-format stream-json --verbose
 - **On in both arms:** Read, Grep, Glob, the Agent tool, and Bash for read-only commands. D3 named `git grep`, `git ls-files`, `rg`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq` and `find`; the runner also allows `git log`, `git show` and `grep`. The Agent tool brings Explore and the other built-in subagents, which are how Claude Code explores a big repo by default. The runner expects `claude-haiku-5-5` for Claude Code's Explore subagent and notes any other model that answers; the pilot shows which models answer. `mcp__nebulosity` is allowed everywhere, but the tools exist only where the server runs.
 - **Off in both:** Edit, Write and NotebookEdit (nothing may change `../vscode`); WebFetch and WebSearch (the web holds the very wiki page the rubric comes from); Skill; PowerShell (`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`, so both arms use the same Bash shell); Monitor.
 - **Permissions:** `dontAsk` refuses anything outside the allowed set, and `--permission-prompts none` tells the model not to retry. Whether Claude Code 2.1.299 reads a rule like `Bash(git grep:*)` as intended shows in the pilot's `permission_denials`.
-- **Tool search:** the full run uses Claude Code's default, under which every MCP tool is deferred and loaded on demand through ToolSearch. That is what a user who follows the README gets. The pilot adds three B runs with `ENABLE_TOOL_SEARCH=false` (tools loaded up front, named `nebulosity-upfront`) to measure what deferral costs. If deferral clearly hurts, the fix is a product change (V1.6: `alwaysLoad` in the README's registration), reported as such, not a different eval setting. Each transcript records its ToolSearch calls.
+- **Tool search:** B uses Claude Code's default, under which every MCP tool is deferred and loaded on demand through ToolSearch. That is what a user who follows the README gets. The third arm, `nebulosity-upfront`, runs `ENABLE_TOOL_SEARCH=false` (tools loaded up front) on every question to measure what deferral costs. The pilot showed why it is on every question: at the default B loaded Nebulosity's tools in 1 of 3 runs, up front in 3 of 3. If deferral clearly hurts, the fix is a product change (V1.6: `alwaysLoad` in the README's registration), reported as such, not a different eval setting. Each transcript records its ToolSearch calls.
 - **Limits per run:** 80 turns and $4 (Claude Code's own estimate), and a 30-minute wall-clock limit. A run that hits the turn or budget limit scores 0 and is reported. A run killed at 30 minutes is an outage (below).
 
 ### Isolation from the owner's own Claude Code setup
@@ -78,7 +80,7 @@ The runs use the owner's subscription, not an API key. Nothing of the owner's se
 | `ENABLE_CLAUDEAI_MCP_SERVERS` | `false` | no connectors |
 | `DISABLE_AUTOUPDATER` | `1` | the version can't change mid-eval |
 | `NEBULOSITY_LIVE` | `off` | no live events to the owner's Map |
-| `ENABLE_TOOL_SEARCH` | `false`, only in the pilot's three up-front runs | tools loaded up front |
+| `ENABLE_TOOL_SEARCH` | `false`, only in the `nebulosity-upfront` arm's runs | tools loaded up front |
 
 - Variables removed from every child: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` (a key in `-p` always wins over the subscription and would bill the API), `CLAUDE_CODE_EFFORT_LEVEL` (it overrides `--effort`), the Bedrock, Vertex and Foundry switches, `ENABLE_TOOL_SEARCH`, `CLAUDE_CONFIG_DIR`, and **every name that starts with `CLAUDE`, `ANTHROPIC_` or `MCP_`**, in any case. The last rule is for a runner started inside a Claude Code session, whose own variables would otherwise reach every child. The pins above are set after the removal. The runner prints the removed names (never their values) and stops if one would still reach a child.
 - If dropping the user settings ever fails to keep the owner's plugins out, the fallback is a dedicated `CLAUDE_CONFIG_DIR` that the owner logs into once (`--config-dir`).
@@ -93,11 +95,11 @@ The runs use the owner's subscription, not an API key. Nothing of the owner's se
 
 ## The runs planned
 
-- **The pilot, 9 runs:** BP4, CL2 and CN3 in both arms (6), plus those three in B with tool search off (3). They are also the first test of the isolation checks on real transcripts. Then each run's usage and the extrapolation are reported, and **the owner approves the full count.**
-- **The full run, 54 more:** the other 12 questions in both arms (24), then a second run of all 15 in both arms (30). The pilot's 6 two-arm runs count as first runs.
-- **Total:** 63 runs, plus at most 6 re-runs, only for infrastructure failures, never for a bad answer.
-- **If 63 won't fit** in the owner's usage: one run per question (30), plus the pilot's 3 tool-search runs.
-- **Expected usage:** Claude Code's estimate for V1.4's smoke run (8 turns, no exploring) was $0.05. An exploring run on VS Code should land between $0.30 and $1.50 at list prices, so roughly $20–90 for the 63. On a subscription that is a share of the 5-hour and 7-day windows, not a bill, and the pilot measures the share. D4 estimated about 20 runs per sitting.
+- **The pilot, 9 runs:** BP4, CL2 and CN3 in all three arms (9). They are also the first test of the isolation checks on real transcripts. Then each run's usage and the extrapolation are reported, and **the owner approves the full count.**
+- **The full run, 81 more:** three arms (A, B, `nebulosity-upfront`) on all 15 questions, twice: 90 runs, of which the pilot's 9 are first runs. The owner decided this on 2026-10-14: "How many runs for the full eval?"="54 more (Recommended)" and "Should the full run also run the 'tools up front' arm on every question?"="Add up-front arm (Recommended)". Per question and repeat the order is A and B (which goes first alternates), then the up-front run.
+- **Total:** 90 runs, plus at most 6 re-runs, only for infrastructure failures, never for a bad answer.
+- **If 90 won't fit** in the owner's usage: one run per question in all three arms (45, `--repeat 1`).
+- **Expected usage:** Claude Code's estimate for V1.4's smoke run (8 turns, no exploring) was $0.05. An exploring run on VS Code should land between $0.30 and $1.50 at list prices, so roughly $20–90 for the 90 (three arms; the up-front arm costs about what B does). On a subscription that is a share of the 5-hour and 7-day windows, not a bill, and the pilot measures the share. D4 estimated about 20 runs per sitting.
 
 ## The questions
 
@@ -214,7 +216,7 @@ Lists and chains are scored by `npm run eval:score`. Big-picture answers are gra
 - **BP4's rule points measure repeating the wiki, not following the code.** BP4.5–BP4.8 are documented rules the code breaks, and BP4.3 is one it mostly keeps. All five count as "states the rule".
 - **The truth and the index could share a blind spot.** The scanner and the index both read written-out specifiers. The two other nets (the parse of every evidence line, and the quoted-string sweep) found nothing the owner's rule left out. Under that rule a file loaded by a computed `import()` counts only when reading the code around it names the file (CL4's two loaders do). A file loaded by a worker's URL, by a forked process's entry path (named in an environment variable) or by a computed address that the code around it doesn't pin to one file is outside the definition on purpose.
 - **Models may list files that aren't in the truth**, such as the Copilot test fixture `codeMapper/notebookEditorWidget.ts` (CL2, which imports a file that doesn't exist), a namesake file (CL1, CL3) or a build entry-point list. Lists score by recall, so that costs precision only. The Copilot fixtures that do count (five of them) are the files a model is least likely to find, and a model that misses them loses recall on CL2 and CL5.
-- **Deferred tools may weaken B.** Under Claude Code's default, B's tools load on demand. The pilot's up-front runs measure what that costs.
+- **Deferred tools may weaken B.** Under Claude Code's default, B's tools load on demand. The `nebulosity-upfront` arm measures what that costs.
 
 ## The owner's decisions (2026-10-14)
 

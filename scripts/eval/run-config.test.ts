@@ -56,10 +56,10 @@ describe("childEnv", () => {
 });
 
 describe("schedule", () => {
-    it("runs each question in both arms, alternating which arm goes first by question and by repeat", () => {
+    it("runs each question in three arms, alternating which of A and B goes first by question and by repeat, the up-front run after the pair", () => {
         expect(schedule(["q1", "q2"], 2).map(runName)).toEqual([
-            "q1-baseline-1", "q1-nebulosity-1", "q2-nebulosity-1", "q2-baseline-1",
-            "q1-nebulosity-2", "q1-baseline-2", "q2-baseline-2", "q2-nebulosity-2",
+            "q1-baseline-1", "q1-nebulosity-1", "q1-nebulosity-upfront-1", "q2-nebulosity-1", "q2-baseline-1", "q2-nebulosity-upfront-1",
+            "q1-nebulosity-2", "q1-baseline-2", "q1-nebulosity-upfront-2", "q2-baseline-2", "q2-nebulosity-2", "q2-nebulosity-upfront-2",
         ]);
         expect(runName({ question: "cl2", arm: "nebulosity", repeat: 1, toolSearch: false })).toBe("cl2-nebulosity-upfront-1");
     });
@@ -67,9 +67,13 @@ describe("schedule", () => {
     it("takes which arm goes first from a question's place in the whole list, so choosing some questions changes no arm order", () => {
         const all = ["q1", "q2", "q3"];
         // q2 is at index 1: (1 + repeat - 1) % 2 is 1 for repeat 1 (nebulosity first) and 0 for repeat 2 (baseline first)
-        expect(schedule(["q2"], 2, all).map(runName)).toEqual(["q2-nebulosity-1", "q2-baseline-1", "q2-baseline-2", "q2-nebulosity-2"]);
+        expect(schedule(["q2"], 2, all).map(runName)).toEqual([
+            "q2-nebulosity-1", "q2-baseline-1", "q2-nebulosity-upfront-1", "q2-baseline-2", "q2-nebulosity-2", "q2-nebulosity-upfront-2",
+        ]);
         // q3 is at index 2 and q1 at index 0: both even, so baseline first at repeat 1, in the order asked
-        expect(schedule(["q3", "q1"], 1, all).map(runName)).toEqual(["q3-baseline-1", "q3-nebulosity-1", "q1-baseline-1", "q1-nebulosity-1"]);
+        expect(schedule(["q3", "q1"], 1, all).map(runName)).toEqual([
+            "q3-baseline-1", "q3-nebulosity-1", "q3-nebulosity-upfront-1", "q1-baseline-1", "q1-nebulosity-1", "q1-nebulosity-upfront-1",
+        ]);
         expect(() => schedule(["q9"], 1, all)).toThrow(/q9/);
     });
 
@@ -77,7 +81,15 @@ describe("schedule", () => {
         expect(QUESTION_ORDER).toHaveLength(15);
         expect(["bp4", "cl2", "cn3"].map((id) => QUESTION_ORDER.indexOf(id))).toEqual([3, 6, 12]);
         expect(schedule(["bp4", "cl2", "cn3"], 1, QUESTION_ORDER).map(runName)).toEqual([
-            "bp4-nebulosity-1", "bp4-baseline-1", "cl2-baseline-1", "cl2-nebulosity-1", "cn3-baseline-1", "cn3-nebulosity-1",
+            "bp4-nebulosity-1", "bp4-baseline-1", "bp4-nebulosity-upfront-1", "cl2-baseline-1", "cl2-nebulosity-1", "cl2-nebulosity-upfront-1",
+            "cn3-baseline-1", "cn3-nebulosity-1", "cn3-nebulosity-upfront-1",
+        ]);
+    });
+
+    it("plans CL1 and CL2 over two repeats as twelve runs: cl1 (place 5) B first at repeat 1, cl2 (place 6) A first, both flipped at repeat 2", () => {
+        expect(schedule(["cl1", "cl2"], 2, QUESTION_ORDER).map(runName)).toEqual([
+            "cl1-nebulosity-1", "cl1-baseline-1", "cl1-nebulosity-upfront-1", "cl2-baseline-1", "cl2-nebulosity-1", "cl2-nebulosity-upfront-1",
+            "cl1-baseline-2", "cl1-nebulosity-2", "cl1-nebulosity-upfront-2", "cl2-nebulosity-2", "cl2-baseline-2", "cl2-nebulosity-upfront-2",
         ]);
     });
 });

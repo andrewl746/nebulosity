@@ -1,9 +1,10 @@
 /**
- * npm run eval:run -- [--pilot | --only bp1,cl2,...] [--repeat 1|2] [--limit n]
+ * npm run eval:run -- [--pilot | --only bp1,cl2,...] [--repeat 1|2 (default 2)] [--limit n]
  *                     [--stop-at-seven-day 0.85] [--stop-at-five-hour 0.9] [--config-dir dir] [--dry-run]
  *
  * The eval's runner (D3, D4 in docs/plans/2026-10-13-v1-5-ship.md). It starts `claude -p` headless on each question in
- * both arms (A: no MCP server; B: Nebulosity's), checks every run's init message against the agreed setup instead of
+ * three arms (A: no MCP server; B: Nebulosity's, its tools deferred as in Claude Code's default; U: B with its tools
+ * loaded up front, named nebulosity-upfront), checks every run's init message against the agreed setup instead of
  * trusting it, scrubs the machine's paths out of the transcript, and keeps it in eval/runs. It can be run again: a run
  * whose eval/runs/<name>.jsonl.gz exists is skipped. A run uses the owner's subscription, so nothing here starts without
  * the owner's go-ahead. --dry-run reads, checks and prints, and spawns nothing: not even `claude --version`.
@@ -385,9 +386,7 @@ async function main(): Promise<void> {
     const chosen = questions.questions.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
     // which arm goes first comes from a question's place in the whole list (D2's order for the placeholders), however few are asked
     const order = placeholder ? QUESTION_ORDER : questions.questions.map((q) => q.id);
-    const planned: RunId[] = schedule(chosen, options.pilot ? 1 : options.repeat ?? 1, order);
-    // the pilot also measures what deferring Nebulosity's tools (Claude Code's default) costs: B with every tool loaded up front
-    if (options.pilot) for (const question of chosen) planned.push({ question, arm: "nebulosity", repeat: 1, toolSearch: false });
+    const planned: RunId[] = schedule(chosen, options.pilot ? 1 : options.repeat ?? 2, order);
     const isDone = (run: RunId): boolean => fs.existsSync(`${RUNS_DIR}/${runName(run)}.jsonl.gz`);
     const todo = planned.filter((run) => !isDone(run));
     const batch = todo.slice(0, options.limit);

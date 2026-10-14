@@ -74,8 +74,10 @@ export const QUESTION_ORDER = [
 ];
 
 /**
- * Per repeat, question by question, both arms; which arm goes first alternates by question and by repeat, so neither
- * always meets a warmer cache or a later hour. "By question" is the question's place in `order` (the whole list, which
+ * Per repeat, question by question, three runs: A and B (B at Claude Code's default tool search), then B with every
+ * tool loaded up front (`toolSearch: false`, named `...-nebulosity-upfront-n`). Which of A and B goes first alternates by
+ * question and by repeat, so neither always meets a warmer cache or a later hour; the up-front run always follows the
+ * pair (its tool list differs, so it shares no cache with them, and the three runs of a question fall within minutes). "By question" is the question's place in `order` (the whole list, which
  * is `questions` itself unless only some of them are asked), so the pilot and --only give a question the arm order the
  * full run will give it.
  */
@@ -87,6 +89,7 @@ export function schedule(questions: readonly string[], repeats: number, order: r
             if (place < 0) throw new Error(`question ${question} is not in the order (${order.join(", ")})`);
             const arms: Arm[] = (place + repeat - 1) % 2 === 0 ? ["baseline", "nebulosity"] : ["nebulosity", "baseline"];
             for (const arm of arms) runs.push({ question, arm, repeat, toolSearch: true });
+            runs.push({ question, arm: "nebulosity", repeat, toolSearch: false });
         }
     }
     return runs;
