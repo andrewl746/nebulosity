@@ -302,14 +302,14 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 | `path` | `from`, `to` | the shortest chain of imports with each step's specifier, the other direction when needed, or "no chain" |
 | `show_on_map` | `action`: highlight, focus or clear (highlight); `paths` (0–50) | what was sent, what was left out, and whether the Map took it |
 
-**Paths.** Inputs are repo-relative. Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, absolute and drive-letter paths are refused. `""` is the repo root; `dependents`, `dependencies` and `path` refuse it, since the whole repo has no outside.
+**Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `dependents`, `dependencies` and `path` refuse it, since the whole repo has no outside.
 
 **Answers.**
 - Plain text with no Markdown. Repo-relative paths, folders ending in `/`.
 - Exact counts with thousands separators. A count always covers everything, even when the list under it is cut.
 - A cut list ends with `… N more`, plus `(next page: offset K)` where the tool pages.
 - Every answer stays under 40,000 characters.
-- Notes are lines starting `Note: `. When the project folder didn't pick the repo, that note comes first. Then the answer, then the tool's own notes, then the index note (an update in progress or failed), and the stale-summary note last.
+- Notes are lines starting `Note: `. When the project folder didn't pick the repo, or sits below the repo's root, that note comes first. Then the answer, then the tool's own notes, then the index note (an update in progress or failed), and the stale-summary note last.
 - With no API key, the line where a summary would go reads `Summary: none — summaries are off (no ANTHROPIC_API_KEY); a key adds a short summary of every file and folder.`
 
 **Errors.** An MCP error result (`isError: true`) with one sentence. The cases:

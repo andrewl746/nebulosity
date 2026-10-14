@@ -241,7 +241,7 @@ Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplic
 
 **Safety.** Every tool is read-only. Paths are validated against the repo root (today's `safePath`, generalized). The MCP server listens on nothing (stdio), and the live endpoint accepts only localhost.
 
-**Which repo** *(V1.4, ADR-046)*: each call answers about the indexed repo holding Claude Code's project folder (`CLAUDE_PROJECT_DIR`), else the Map's repo, which the answer's first line then names.
+**Which repo** *(V1.4, ADR-046)*: each call answers about the indexed repo holding Claude Code's project folder (`CLAUDE_PROJECT_DIR`), else the Map's repo, which the answer's first line then names. Paths are relative to the repo root or absolute inside it, and a session in a subfolder is told that paths count from the root *(ADR-046, amended after the owner's check)*.
 
 ---
 

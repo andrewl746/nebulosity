@@ -653,6 +653,12 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 **Consequences:** One user-scope registration serves every indexed repo, and `npm run index` or the Map's repo menu take effect without restarting Claude Code. Each call pays a few reads (about 39 ms on VS Code, nearly all of it the two row counts behind the embeddings stage: MCP Benchmark #1).
 **Revisit when:** someone runs two Maps on different ports, or wants the Map to follow Claude Code's repo by itself, or setupCall's status read dominates a call (it runs the embeddings counts it doesn't use; MCP Benchmark #1: about 39 ms).
 
+**Amended (2026-10-13, the owner's check of V1.4): absolute paths, and a session below the root.** Two gaps:
+- Claude Code's own tools write absolute paths, and the tools refused them, so a model had to retry with a repo-relative one.
+- A session started in a subfolder of an indexed repo (a monorepo's package, `vscode/extensions/git`) read every relative path from the repo's root, with nothing saying so: `src/main.ts` would describe the root's file, not the package's.
+
+Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`; Windows ignores case). One outside the repo, in a sibling that shares its prefix, or climbing out with `..` is refused, and the refusal names the root. A session below the root gets a first line saying paths count from the repo root, and that its own files start with `<subfolder>/`. One rule, `insideRoot`, decides "inside" for picking the repo, for paths and for that note.
+
 ## ADR-047 — One registry entry per tool, answering in compact text (2026-10-13) — amends ADR-030
 
 **Context:** ADR-030 puts each tool in `lib/tools/registry.ts` once, wrapped by MCP now and by LangGraph in E1. Two things weren't settled. What a handler returns, given that the MCP server must also tell the Map (§8) and the Guide will turn UI actions into `ui_action` events (API_CONTRACTS.md §5). And what the answer text looks like: PIVOT_SPEC.md §6.2 asks for compact plain text, exact totals, truncation markers and a freshness note last.

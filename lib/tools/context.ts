@@ -7,7 +7,10 @@ export type ToolContext = {
     repoRoot: string;
     /** The stored summaries stage is "off": no API key, so missing summaries say what a key adds. */
     summariesOff: boolean;
-    /** The answer's first line when the project folder didn't pick the repo. */
+    /**
+     * The answer's first line: when the project folder didn't pick the repo, or when it sits below the repo's root, since
+     * paths still count from the root (ADR-046, amended).
+     */
     repoNote?: string;
     /** Said after the answer while the structure stage isn't ready (PIVOT_SPEC.md §5.6, honest answers). */
     indexNote?: string;

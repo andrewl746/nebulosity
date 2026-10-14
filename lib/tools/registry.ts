@@ -6,10 +6,10 @@ import { BadInputError } from "../engine/errors";
 import { overview } from "../engine/overview";
 import { importChain, reach, targetKinds, type Direction } from "../engine/reach";
 import { search } from "../engine/search";
-import { parseRepoPath } from "../index/paths";
 import { plural } from "../index/summarize/prompts";
 import { chainAnswer, describeAnswer, overviewAnswer, reachAnswer, searchAnswer } from "./answers";
 import type { ToolContext } from "./context";
+import { repoPathFrom } from "./repo";
 import { answerText, shownPath, type AnswerParts } from "./text";
 
 export type { ToolContext } from "./context";
@@ -39,16 +39,16 @@ export const SERVER_INSTRUCTIONS = [
     "- dependents / dependencies: what imports X or what X imports, directly or through other files; exact and complete over the indexed import graph (imports that resolve to files in the repo), so better than grep for impact questions;",
     "- path: how one file or folder reaches another through imports;",
     "- show_on_map: point the user at files or folders on Nebulosity's Map.",
-    'Paths are relative to the repo root, with forward slashes ("" is the root). Read source text with your own Read tool.',
+    'Paths are relative to the repo root ("" is the root), or absolute paths inside it; answers write them from the root. Read source text with your own Read tool.',
 ].join("\n");
 
 const repoPath = z.string().max(1024)
-    .describe('A path inside the repo, relative to its root, with forward slashes: "src/vs/base" or "src/index.ts". "" is the repo root.');
+    .describe('A path inside the repo: relative to its root ("src/vs/base", "src/index.ts"; "" is the root), or absolute.');
 
-/** A path from the model, in the spelling stored paths use; refused when it could leave the repo. */
-function repoPathOf(raw: string): string {
-    const parsed = parseRepoPath(raw);
-    if (parsed === null) throw new BadInputError(`"${raw}" isn't a path inside the repo: use forward slashes from the repo root, no "..", and "" for the root.`);
+/** A path from the model (repo-relative, or absolute inside the repo) in the spelling stored paths use; refused when it could leave the repo. */
+function repoPathOf(raw: string, context: ToolContext): string {
+    const parsed = repoPathFrom(raw, context.repoRoot);
+    if (parsed === null) throw new BadInputError(`"${raw}" isn't a path inside the repo (${context.repoRoot}): pass one relative to its root ("" for the root) or an absolute one inside it, without "..".`);
     return parsed;
 }
 
@@ -71,7 +71,7 @@ const describeTool: ToolEntry<typeof describeInput> = {
     description: "What a folder or file is: its summary, size, what's inside (subfolders and files, or a file's declarations with their line numbers), and which areas it imports from and is imported by, with exact counts. Use it to get oriented in an area before reading its files.",
     inputSchema: describeInput,
     async handler({ path: raw }, context){
-        const target = repoPathOf(raw);
+        const target = repoPathOf(raw, context);
         const answer = describe(context.repoRoot, target, { summariesOff: context.summariesOff });
         return { text: finish(describeAnswer(answer, path.basename(context.repoRoot)), context), paths: [target] };
     },
@@ -103,7 +103,7 @@ function reachTool(direction: Direction, description: string): ToolEntry<typeof 
         description,
         inputSchema: reachInput,
         async handler({ path: raw, transitive, limit, offset }, context){
-            const target = repoPathOf(raw);
+            const target = repoPathOf(raw, context);
             return { text: finish(reachAnswer(reach(context.repoRoot, target, direction), { transitive, limit, offset }), context), paths: [target] };
         },
     };
@@ -115,7 +115,7 @@ const pathTool: ToolEntry<typeof pathInput> = {
     description: "How one file or folder reaches another through imports: the shortest chain of files, each step with the import that makes it. Checks both directions and says which way the chain runs, or that none exists. Use it for \"how does A end up depending on B?\".",
     inputSchema: pathInput,
     async handler({ from, to }, context){
-        const answer = importChain(context.repoRoot, repoPathOf(from), repoPathOf(to));
+        const answer = importChain(context.repoRoot, repoPathOf(from, context), repoPathOf(to, context));
         const middle = answer.files.filter((file) => file !== answer.from && file !== answer.to);
         return { text: finish(chainAnswer(answer), context), paths: [answer.from, answer.to, ...middle] };
     },
@@ -125,7 +125,7 @@ const showInput = z.object({
     action: z.enum(["highlight", "focus", "clear"]).default("highlight")
         .describe("highlight: mark the paths; focus: move the Map to one path and select it; clear: remove the highlights."),
     paths: z.array(z.string().max(1024)).max(50).default([])
-        .describe("Repo-relative paths: 1 to 50 for highlight, exactly 1 for focus, none for clear."),
+        .describe("Paths inside the repo (relative to its root, or absolute): 1 to 50 for highlight, exactly 1 for focus, none for clear."),
 });
 const showOnMapTool: ToolEntry<typeof showInput> = {
     name: "show_on_map",
@@ -134,7 +134,7 @@ const showOnMapTool: ToolEntry<typeof showInput> = {
     async handler({ action, paths: raw }, context){
         if (action === "clear") return { text: "Clearing the Map's highlights.", paths: [], action: { type: "clear_highlights" } };
 
-        const wanted = [...new Set(raw.map(repoPathOf))];
+        const wanted = [...new Set(raw.map((p) => repoPathOf(p, context)))];
         if (action === "focus" && wanted.length !== 1) throw new BadInputError("focus takes exactly one path.");
         if (wanted.length === 0) throw new BadInputError("highlight takes 1 to 50 paths.");
 

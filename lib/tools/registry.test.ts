@@ -77,6 +77,16 @@ describe("overview, describe and search with no API key", () => {
         await expect(call("describe", { path: "src/nope.ts" }, context)).rejects.toThrow(PathNotFoundError);
     });
 
+    it("takes an absolute path inside the repo, Claude Code's own form, and refuses one outside it, naming the root", async () => {
+        const context = freeFixture();
+        expect(await call("describe", { path: path.join(context.repoRoot, "src", "core") }, context))
+            .toEqual(await call("describe", { path: "src/core" }, context));
+        expect(await call("dependents", { path: path.join(context.repoRoot, "src", "core", "log.ts") }, context))
+            .toEqual(await call("dependents", { path: "src/core/log.ts" }, context));
+        await expect(call("describe", { path: path.join(path.dirname(context.repoRoot), "elsewhere.ts") }, context))
+            .rejects.toThrow(`isn't a path inside the repo (${context.repoRoot})`);
+    });
+
     it("describe: notes a stale summary last", async () => {
         const root = copyFixture();
         indexRepository(root);
@@ -184,6 +194,13 @@ describe("show_on_map", () => {
         await expect(call("show_on_map", { action: "focus", paths: ["src", "scripts"] }, context)).rejects.toThrow("focus takes exactly one path.");
         await expect(call("show_on_map", { paths: [] }, context)).rejects.toThrow("highlight takes 1 to 50 paths.");
         await expect(call("show_on_map", { paths: ["src/nope.ts"] }, context)).rejects.toThrow("None of these paths are in the index: src/nope.ts.");
+    });
+
+    it("takes an absolute path inside the repo", async () => {
+        const context = freeFixture();
+        expect(await call("show_on_map", { action: "focus", paths: [path.join(context.repoRoot, "src", "core", "log.ts")] }, context)).toEqual({
+            text: "Moving the Map to src/core/log.ts.", paths: ["src/core/log.ts"], action: { type: "focus_node", nodeId: "src/core/log.ts" },
+        });
     });
 });
 

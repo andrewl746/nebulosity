@@ -10,7 +10,7 @@ import { NoActiveRepoError } from "../engine/errors";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
 import { refreshSummaryStatus } from "../index/summarize/status";
-import { chooseRepo, setupCall } from "./repo";
+import { chooseRepo, repoPathFrom, setupCall } from "./repo";
 
 // Open the test database before any test moves NEBULOSITY_HOME (as repos.test.ts does): a temp home has no migrations.
 beforeAll(() => { getDb(); });
@@ -46,6 +46,30 @@ describe("chooseRepo (ADR-046)", () => {
     });
 });
 
+describe("repoPathFrom (ADR-046, amended after the owner's check)", () => {
+    it("takes a repo-relative path as before", () => {
+        expect(repoPathFrom("src/vs/base", "C:/r/vscode", "win32")).toBe("src/vs/base");
+        expect(repoPathFrom(".\\src\\vs\\", "C:/r/vscode", "win32")).toBe("src/vs");
+        expect(repoPathFrom("", "C:/r/vscode", "win32")).toBe("");
+        expect(repoPathFrom("../outside", "C:/r/vscode", "win32")).toBeNull();
+    });
+
+    it("turns an absolute path inside the repo into a repo-relative one, in any case on Windows", () => {
+        expect(repoPathFrom("C:\\r\\vscode\\src\\vs\\base", "C:/r/vscode", "win32")).toBe("src/vs/base");
+        expect(repoPathFrom("c:/R/VSCODE/src/vs/base", "C:/r/vscode", "win32")).toBe("src/vs/base");
+        expect(repoPathFrom("C:/r/vscode", "C:/r/vscode", "win32")).toBe("");
+        expect(repoPathFrom("C:/r/vscode/", "C:/r/vscode", "win32")).toBe("");
+        expect(repoPathFrom("/r/vscode/src", "/r/vscode", "linux")).toBe("src");
+    });
+
+    it("refuses an absolute path outside the repo, in a sibling that shares its prefix, or climbing out of it", () => {
+        expect(repoPathFrom("C:/r/vscode-docs/x.ts", "C:/r/vscode", "win32")).toBeNull();
+        expect(repoPathFrom("C:/r/vscode/../secret.ts", "C:/r/vscode", "win32")).toBeNull();
+        expect(repoPathFrom("/etc/passwd", "/r/vscode", "linux")).toBeNull();
+        expect(repoPathFrom("/R/VSCODE/src", "/r/vscode", "linux")).toBeNull();
+    });
+});
+
 describe("setupCall", () => {
     function indexed(): string {
         const root = copyFixture();
@@ -53,14 +77,19 @@ describe("setupCall", () => {
         return root;
     }
 
-    it("answers about the project's repo, and lets live events through when the Map shows it", () => {
+    it("answers about the project's repo, says paths count from its root in a subfolder, and lets live events through when the Map shows it", () => {
         process.env.NEBULOSITY_HOME = makeTempDir("neb-call-");
         const root = indexed();
         writeConfig({ activeRepo: repoKey(root), port: 4321 });
         expect(setupCall(path.join(root, "src"))).toEqual({
-            context: { repoRoot: repoKey(root), summariesOff: false },
+            context: {
+                repoRoot: repoKey(root),
+                summariesOff: false,
+                repoNote: `Paths count from the repo root (${repoKey(root)}), not from this session's folder: its files start with src/.`,
+            },
             live: { allowed: true, port: 4321, mapRepo: path.basename(root) },
         });
+        expect(setupCall(root).context.repoNote).toBeUndefined();
     });
 
     it("falls back to the Map's repo with a note first, and keeps live events off another repo's Map", () => {
