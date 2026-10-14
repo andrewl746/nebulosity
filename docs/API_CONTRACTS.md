@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools.
+> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools. §18 holds V1.5's static demo files.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -325,3 +325,19 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 **Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; dependents and dependencies the target; path `from`, `to`, then the chain between; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
 
 **Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 2,048 characters), are `SERVER_INSTRUCTIONS` in the registry.
+
+## 18. The static demo's files (slice V1.5)
+
+`npm run export-demo -- <repo>` writes these under `.nebulosity/demo/`, and `npm run build-demo` copies them to the built site's `demo/` (ADR-049). The Map's static transport (`app/map/staticApi.ts`) reads them in place of the HTTP API; the shapes are in `lib/contracts.ts`.
+
+| File | Holds |
+|---|---|
+| `manifest.json` | `DemoManifest`: the format (`DEMO_FORMAT_VERSION`, 1), the repo's public name, its origin, the indexed commit, the status, every folder in path order (a folder's id is its position, the root 0) and the page counts of paged folders |
+| `level/<id>-<page>.json` | the `LevelResponse` for that folder and page (§11), one per page |
+| `pages/<id>.json` | `DemoPageIndex`: the box paths on each page of a paged folder, so a focus finds its page without the server |
+| `describe/<id>.json` | `DemoDescribeBundle`: the `DescribeResponse` (§12) of the folder and of each file directly inside it, by path |
+| `search.json` | `DemoSearchIndex`: summaries, folders, files with importer counts and test flags, and exported declaration names |
+| `SOURCE-LICENSE.txt` | the indexed repo's own license file, when it has one, since the data is derived from its code |
+
+- **The repo's name.** Every `repo` field (levels, describe answers, the status, the repo list the client builds) holds the public name, never an absolute root. The exporter fails on any file holding a spelling of a local folder or the git email.
+- **What isn't here.** No source text (the demo links to GitHub at `commit`), no live events, no summarize or re-index, no code search index and no vectors: search ranks summaries and names only, and says so (`staticSearch.ts`).
