@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's.
+> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -157,7 +157,7 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **Folder names** *(V1.3.1, additive)*: the `name` list ranks folders whose name matches a query word (`RAG_PIPELINE.md` §6) and counts double in the fusion, so searching "terminal" finds the terminal folders. The Map's search palette shows every folder hit first, then every file hit, and asks for 40.
 - **The repo's own name** is dropped from the query before searching when other meaningful words remain ("vscode terminal" searches "terminal" in VS Code). `query` in the answer is still the query as typed.
-- **`note`** is set when something limits the results: no summaries yet, no vectors yet, the embedding model unavailable, or a query made only of very common words.
+- **`note`** is set when something limits the results: no summaries yet, summaries off (no `ANTHROPIC_API_KEY`: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."), no vectors yet, the embedding model unavailable, or a query made only of very common words.
 
 ## 11. GET /api/level?path=&page=&focus= (slice V1.3; pages added in V1.3.1, portals and `focus` in contract v3)
 
@@ -283,3 +283,44 @@ type SourceResponse = { repo: string; path: string; content: string; lineCount: 
 - Like every `/api` route, it answers only requests addressed to this machine (ADR-039). It reads and never writes.
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo, or an empty one; `404 NOT_FOUND` for a folder, a file the index doesn't know, or a file deleted since; `404 INDEX_EMPTY`.
+
+## 17. The MCP tools (slice V1.4)
+
+Claude Code and any MCP client reach the engine through `mcp/server.ts` over stdio (PIVOT_SPEC.md §6.2, ADR-030). Each tool is defined once in `lib/tools/registry.ts` (ADR-047). Claude Code shows them as `mcp__nebulosity__<name>`.
+
+**Launch.** `node <checkout>/mcp/launch.mjs` (ADR-048). It sets `NEBULOSITY_HOME` to the checkout unless it's set. `NEBULOSITY_LIVE=off` stops every live event.
+
+**Which repo.** The indexed repo holding the project folder (`CLAUDE_PROJECT_DIR`, else the server's working folder), the deepest when repos nest. Else the repo the Map shows, with a note first. Else an error (ADR-046).
+
+| Tool | Input (default) | Answer |
+|---|---|---|
+| `overview` | none | the repo's size and summary, its top-level areas largest first (size and tagline; 30 at most), and the 10 most-imported files |
+| `describe` | `path` | kind, files and lines; the summary; what's inside (20 children) or the declarations (30, with lines); uses and used by (10 areas each, with import counts) |
+| `search` | `query` (1–200 characters), `limit` 1–30 (10) | the best files and folders, each with its tagline and best-matching code (cut to 160 characters) |
+| `dependents` | `path`, `transitive` (false), `limit` 1–500 (50), `offset` (0) | the direct and total counts, then the files: nearest first, most imported next, by path last; grouped by distance when transitive |
+| `dependencies` | the same | the same, following what the target imports |
+| `path` | `from`, `to` | the shortest chain of imports with each step's specifier, the other direction when needed, or "no chain" |
+| `show_on_map` | `action`: highlight, focus or clear (highlight); `paths` (0–50) | what was sent, what was left out, and whether the Map took it |
+
+**Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `dependents`, `dependencies` and `path` refuse it, since the whole repo has no outside.
+
+**Answers.**
+- Plain text with no Markdown. Repo-relative paths, folders ending in `/`.
+- Exact counts with thousands separators. A count always covers everything, even when the list under it is cut.
+- A cut list ends with `… N more`, plus `(next page: offset K)` where the tool pages.
+- Every answer stays under 40,000 characters.
+- Notes are lines starting `Note: `. When the project folder didn't pick the repo, or sits below the repo's root, that note comes first. Then the answer, then the tool's own notes, then the index note (an update in progress or failed), and the stale-summary note last.
+- With no API key, the line where a summary would go reads `Summary: none — summaries are off (no ANTHROPIC_API_KEY); a key adds a short summary of every file and folder.`
+
+**Errors.** An MCP error result (`isError: true`) with one sentence. The cases:
+- nothing indexed yet (with Nebulosity's folder);
+- an index older than the checkout;
+- nothing indexed at a path;
+- a path outside the repo;
+- overlapping places for `path`;
+- bad `show_on_map` input;
+- the MCP SDK's "Input validation error" for input outside a schema.
+
+**Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; dependents and dependencies the target; path `from`, `to`, then the chain between; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
+
+**Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 2,048 characters), are `SERVER_INSTRUCTIONS` in the registry.

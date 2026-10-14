@@ -1,4 +1,5 @@
 import type { ErrorCode } from "../contracts";
+import { DatabaseMissingError, DatabaseOutdatedError } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { RepoNotIndexedError } from "../db/store/structure";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
@@ -34,6 +35,14 @@ export class RepoSwitchingError extends Error {
     }
 }
 
+/** Input the caller can fix: a path outside the repo, places that overlap, the wrong number of paths (V1.4's tools). */
+export class BadInputError extends Error {
+    constructor(message: string){
+        super(message);
+        this.name = "BadInputError";
+    }
+}
+
 /** Each error code's HTTP status (API_CONTRACTS.md §1). */
 export const STATUS_FOR: Readonly<Record<ErrorCode, number>> = {
     BAD_REQUEST: 400,
@@ -59,13 +68,13 @@ export function errorResponseFor(err: unknown): { status: number; error: { code:
 }
 
 function codeFor(err: unknown): ErrorCode {
-    if (err instanceof RepoNotIndexedError || err instanceof NoActiveRepoError) return "INDEX_EMPTY";
+    if (err instanceof RepoNotIndexedError || err instanceof NoActiveRepoError || err instanceof DatabaseMissingError) return "INDEX_EMPTY";
     if (err instanceof PathNotFoundError || err instanceof TargetNotFoundError || err instanceof UnknownBatchError || err instanceof UnknownRepoError){
         return "NOT_FOUND";
     }
-    if (err instanceof NotAFolderError) return "BAD_REQUEST";
+    if (err instanceof NotAFolderError || err instanceof BadInputError) return "BAD_REQUEST";
     if (err instanceof IndexLockedError || err instanceof StructureNotReadyError || err instanceof RepoSwitchingError) return "INDEX_LOCKED";
-    if (err instanceof TargetNotReadyError) return "NOT_READY";
+    if (err instanceof TargetNotReadyError || err instanceof DatabaseOutdatedError) return "NOT_READY";
     if (err instanceof SummariesOffError) return "SUMMARIES_OFF";
     // Anthropic refused the key: the fault is upstream of this server, and retrying won't help until the key changes
     if (err instanceof SummarizerAuthError) return "UPSTREAM";

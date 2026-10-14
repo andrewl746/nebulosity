@@ -189,7 +189,7 @@
 **Decision:** Call `migrate()` unconditionally in `createDb`. Drizzle records applied migrations in its own table, so this is idempotent and near-free on an already-current database.
 **Alternatives:** (a) A separate `npm run migrate` step — correct for a deployed multi-instance service, but this is a single-user local tool where a forgotten step is the whole failure mode. (b) `drizzle-kit push` in dev — no versioned history, and it is what let the schema drift in the first place.
 **Consequences:** The schema is now self-healing and migrations are exercised on every run, including by the test suite against a real migration file. `drizzle-kit generate` after a schema edit is still required — the guard against forgetting it is that the tests now fail rather than silently passing.
-**Revisit when:** Nebulosity ever runs as more than one process against one database file, where concurrent migration needs a lock. *(Fired 2026-10-11: the MCP server is a second process. Answered by ADR-030: the MCP server opens read-only and never migrates.)*
+**Revisit when:** Nebulosity ever runs as more than one process against one database file, where concurrent migration needs a lock. *(Fired 2026-10-11: the MCP server is a second process. Answered by ADR-030: the MCP server opens read-only and never migrates.)* *(Amended 2026-10-13 by ADR-044: the MCP server opens read-only and never migrates.)*
 
 ## ADR-024 — Pivot to a code-intelligence companion for massive codebases (2026-10-11)
 
@@ -260,10 +260,10 @@
 
 **Context:** Two agents need the same knowledge. Claude Code connects from outside through MCP, launched from the user's repo; the Guide (E1) runs in-process on LangGraph. `lib/agent/tools.ts` mixes tool logic with LangChain wrappers. `lib/db/client.ts` resolves the database and migrations relative to `process.cwd()`, and when Claude Code launches the MCP server, that directory is the user's repo. ADR-023's multi-process revisit trigger also fires here.
 **Decision:**
-- Each tool is defined once in `lib/tools/registry.ts`: a name, a description written for LLMs, a zod schema, and a handler that calls the engine.
+- Each tool is defined once in `lib/tools/registry.ts`: a name, a description written for LLMs, a zod schema, and a handler that calls the engine. *(Amended 2026-10-13, ADR-047: a handler takes `(input, context)` and returns `{ text, paths, action? }`; adapters post live events or emit UI actions.)*
 - The MCP server registers those entries, and the Guide wraps the same entries as LangChain tools.
 - The database, migrations and config resolve from `NEBULOSITY_HOME`. When it's unset they fall back to `process.cwd()`, which is correct for Next.js, the CLI and Vitest because all three run from the checkout. The MCP launcher (V1.4) always sets it. *(Amended 2026-10-11 in slice V1.1: the original default, the module's own location, breaks under Next.js, which bundles server modules into `.next/`.)*
-- The MCP server opens the database read-only and never migrates.
+- The MCP server opens the database read-only and never migrates. *(Amended 2026-10-13, ADR-044: the read-only open is `openDb(file, "readonly")`, which also refuses a database behind the checkout's migrations.)*
 - MCP tool calls notify the open Map through a localhost-only live channel, and `show_on_map` reuses the UIAction contract (ADR-008).
 **Alternatives:** (a) Route the Guide through the MCP server too: guaranteed parity, but an extra process and protocol hop for what is an in-process call. (b) A separate tool set per agent: the drift this ADR exists to prevent.
 **Consequences:** Each new capability (call graph, history, clusters) reaches both agents from one definition. The MCP server runs correctly from any working directory because its launcher sets `NEBULOSITY_HOME`, and schema changes have a single owner.
@@ -613,3 +613,75 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 - Users bring issues and support, which comes out of the owner's time.
 
 **Revisit when:** V1.5's eval shows Nebulosity doesn't help Claude Code on big repos (then the positioning is the question, not the order), or users ask for something this order puts last.
+
+## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
+
+**Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
+**Decision:**
+- `openDb(file, "readonly")` opens with better-sqlite3's `readonly` and `fileMustExist`, sets no pragmas and runs no migrations. The database itself is never written, but SQLite creates its `-wal` and `-shm` side files beside it when either is missing, so the folder must be writable at those times (with both already there, SQLite reads without writing anything). The file is already in WAL mode (a writer set it, and the mode persists), so it reads while the worker writes, and each query sees the newest commit.
+- It checks the file is current: this checkout's newest migration must be in drizzle's `__drizzle_migrations`. If not, `DatabaseOutdatedError` tells the user to start the Map (`npm run dev`) or run `npm run index -- <path-to-repo>` once in the Nebulosity folder, since both migrate (the bare command would migrate nothing: the script exits on a missing path before it opens the database). Any other failure of that check (a file that isn't a database, a busy or unreadable file) is rethrown as it is, since "start the Map" would not help.
+- No file is `DatabaseMissingError`: nothing indexed yet. A failed open isn't kept, so the server recovers without a restart once something is indexed.
+- The MCP entry point calls `useReadOnlyDatabase()` before anything opens the database. Tests keep their in-memory database.
+**Alternatives:** (a) A normal open plus `pragma query_only`: the open would still set WAL and migrate. (b) Let the MCP server migrate as well: a Claude Code session could change the schema under a running Map. (c) A copy of the database per session: stale at once.
+**Consequences:** A long-lived reader's caches stay correct only because they're keyed on the index version (ADR-036) or the vector stamp; new caches must follow that rule (ADR-045's import index does). After a pull that brings a migration, the tools answer with the update sentence until the Map or the CLI runs once.
+**Revisit when:** the data moves out of the checkout (V1.6's package or the desktop app), so the migrations folder and the database no longer share `NEBULOSITY_HOME`, or the database folder becomes read-only.
+
+## ADR-045 — Import reach: folders as well as files, exact totals, nearest and most-imported first, paged (2026-10-13) — amends PIVOT_SPEC.md §6.1
+
+**Context:** §6.1 asks for `dependents`/`dependencies` (a breadth-first search over an in-memory adjacency list, cached per index version, with an exact total and then the top entries by distance) and `path` (the shortest chain, in either direction, or "no path"). Building them raised four questions: can a target be a folder, how entries at one distance are ordered, how an agent gets more than one answer's worth, and which chain comes back when several are equally short.
+**Decision:**
+- **Targets.** A file or a folder. A folder's files are the start, and none of them is ever listed, so "what imports `src/vs/base`" means files outside it. The whole repo has no outside and is refused.
+- **Totals.** Every answer counts all the files reached and the direct ones, however many are listed.
+- **Order.** Nearest first, then the most imported (in-degree, ADR-010), then by path, so a cut list shows the most central files.
+- **Paging.** `limit` (1–500, default 50) and `offset`. The cut line names the next offset.
+- **Chains.** Breadth-first from every file of `from` at once, neighbours in path order, so the same chain comes back every time. When `from` doesn't reach `to`, the other direction is tried, and the answer says which way the chain runs. Places that overlap are refused.
+- **The index.** Both directions as compressed rows (offsets plus neighbours, in `Int32Array`s), built from the import graph describe already loads once per index version (ADR-036), and kept beside it.
+**Alternatives:** (a) Files only: an agent asking about an area would have to list its files first. (b) Path order within a distance: a cut list of a hub's thousands of importers would show `build/` and `extensions/` first, whatever matters. (c) No paging and a larger cap: Claude Code moves results of 50,000 characters or more to a file, and a complete list is the point of the tool.
+**Consequences:** On VS Code the rows add about 1.3 MB beside the graph, built once per version, and a search over 139,580 imports takes milliseconds (about 2 ms warm; MCP Benchmark #1). Totals are exact for the index, which is as current as the background worker keeps it.
+**Revisit when:** agents ask for a subset (the dependents under one folder): add an `under` filter rather than a bigger page.
+
+## ADR-046 — An MCP call answers about the repo Claude Code is in, else the Map's repo (2026-10-13)
+
+**Context:** Claude Code starts the MCP server once per session, in whatever project the user opened, and sets `CLAUDE_PROJECT_DIR` to that project's root for the servers it starts. The index can hold several repos; the Map shows one, the config's `activeRepo` (PIVOT_SPEC.md §7.1). Live events carry paths but no repo (API_CONTRACTS.md §14), so an event about one repo lights boxes with the same paths in another.
+**Decision:**
+- Each call reads the indexed repos and the config afresh. It answers about the repo holding the project folder (`CLAUDE_PROJECT_DIR`, else the working folder), the deepest when indexed repos nest. Folders compare by forward-slash spelling without a trailing slash, and case-insensitively on Windows.
+- Otherwise it answers about the Map's repo, and the answer's first line says so, naming both folders. Otherwise it's an error: nothing indexed yet.
+- Live events go to the config's port, read per call, and only when the answering repo is the Map's. `show_on_map` says when the Map shows another repo.
+- Free mode is the stored summaries stage: `off` means no key (ADR-043), so the server never loads `.env.local` or holds the key.
+- An index update in progress or failed is noted after every answer.
+**Alternatives:** (a) Always the Map's repo: Claude Code opened in another indexed repo would get answers about the wrong one, with nothing said. (b) A `repo` argument on every tool: more for the model to get wrong. (c) A repo fixed per registration (`-e`): one registration per repo. (d) A `repo` field on live events, with the Map ignoring others': a contract change for a case this rule already prevents.
+**Consequences:** One user-scope registration serves every indexed repo *(the README registers per repo with `--scope local` since the owner's check: ADR-048, amended)*, and `npm run index` or the Map's repo menu take effect without restarting Claude Code. Each call pays a few reads (about 39 ms on VS Code, nearly all of it the two row counts behind the embeddings stage: MCP Benchmark #1).
+**Revisit when:** someone runs two Maps on different ports, or wants the Map to follow Claude Code's repo by itself, or setupCall's status read dominates a call (it runs the embeddings counts it doesn't use; MCP Benchmark #1: about 39 ms).
+
+**Amended (2026-10-13, the owner's check of V1.4): absolute paths, and a session below the root.** Two gaps:
+- Claude Code's own tools write absolute paths, and the tools refused them, so a model had to retry with a repo-relative one.
+- A session started in a subfolder of an indexed repo (a monorepo's package, `vscode/extensions/git`) read every relative path from the repo's root, with nothing saying so: `src/main.ts` would describe the root's file, not the package's.
+
+Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`; Windows ignores case). One outside the repo, in a sibling that shares its prefix, or climbing out with `..` is refused, and the refusal names the root. A session below the root gets a first line saying paths count from the repo root, and that its own files start with `<subfolder>/`. One rule, `insideRoot`, decides "inside" for picking the repo, for paths and for that note.
+
+## ADR-047 — One registry entry per tool, answering in compact text (2026-10-13) — amends ADR-030
+
+**Context:** ADR-030 puts each tool in `lib/tools/registry.ts` once, wrapped by MCP now and by LangGraph in E1. Two things weren't settled. What a handler returns, given that the MCP server must also tell the Map (§8) and the Guide will turn UI actions into `ui_action` events (API_CONTRACTS.md §5). And what the answer text looks like: PIVOT_SPEC.md §6.2 asks for compact plain text, exact totals, truncation markers and a freshness note last.
+**Decision:**
+- An entry is `{ name, description, inputSchema (zod), handler(input, context) }`. The context names the repo, says whether summaries are off, and carries any repo or index note (ADR-046). The handler returns `{ text, paths, action? }`: the answer, the paths it touched, and show_on_map's UI action. It never touches the network: the MCP adapter posts the live event, and E1's adapter will emit `ui_action`.
+- The text rules are API_CONTRACTS.md §17: plain text; repo-relative paths, folders ending in "/"; exact counts with separators; lists cut with "… N more" and the next offset where the tool pages; under 40,000 characters; notes last, with the stale-summary note very last, except the repo note, which comes first.
+- Free mode answers everything (ADR-043). Where a summary would go, the answer says summaries are off and what a key adds; search says it used code and folder names.
+- One pure builder per tool (`lib/tools/answers.ts`) turns engine results into text, so the format is tested without a database.
+- `lib/agent/tools.ts` (the owner's Phase 5 tools) stays as it is until E1 replaces it with wrappers over this registry.
+**Alternatives:** (a) JSON answers (`structuredContent`): exact, but larger, and a model skims prose faster. (b) Handlers that post live events themselves: the Guide's in-process adapter would then make HTTP calls to its own server. (c) Markdown: tokens spent on syntax.
+**Consequences:** A new tool is one entry and one builder. The text is a contract (§17), tested on the fixture.
+**Revisit when:** a client wants structured results (an IDE view of a dependents list, say): add an `outputSchema` beside the text.
+
+## ADR-048 — The MCP server starts as `node <checkout>/mcp/launch.mjs` (2026-10-13)
+
+**Context:** Claude Code runs an MCP config's command from the user's project folder. The engine is TypeScript run by tsx, a devDependency that only the checkout has. On Windows, `npx` is a `.cmd` batch file, so a config that starts `npx` needs `cmd /c`.
+**Decision:**
+- A plain-JavaScript launcher, `mcp/launch.mjs`, run by `node`. It sets `NEBULOSITY_HOME` to the checkout it sits in unless that's already set, imports tsx from the checkout (an ESM import resolves next to the importing file, not from the working folder), then runs `mcp/server.ts`'s `main()`.
+- The server speaks MCP over stdio through `@modelcontextprotocol/sdk` 1.32.1, pinned exactly. Before anything else, it sends `console.log`, `info`, `debug`, `dir` and `dirxml` to stderr: stdout carries protocol messages only.
+- It exits when the client closes stdin. On Windows, Claude Code (2.1.296) kills the process tree 300 ms after closing it.
+- One line registers it on every OS: `claude mcp add --scope user --transport stdio nebulosity -- node <checkout>/mcp/launch.mjs`. *(Amended 2026-10-13 after the owner's check: per repo with `--scope local`, run in the repo's folder; see the amendment below.)*
+**Alternatives:** (a) `cmd /c npx tsx …/mcp/server.ts`: a Windows-only line, npx's lookup on every start, and tsx found only if the working folder has it. (b) Compile to `dist/` and run plain JavaScript: no tsx at run time, but a build step before every use. V1.6's package decides that.
+**Consequences:** Start-up costs tsx's load plus the engine's transpile: about 0.7 s from spawn to initialized, measured with tsx's cache warm (MCP Benchmark #1). A first-ever start, with a cold tsx cache, wasn't measured. The server needs the checkout's `node_modules`, a local tool's normal state.
+**Revisit when:** V1.6 ships an installable package (a `bin` entry replaces the launcher), or Node runs the engine's TypeScript without tsx.
+
+**Amended (2026-10-13, the owner's check of V1.4): registered per repo, with `--scope local`.** Under `--scope user`, Claude Code starts the server in every project. A session in a project Nebulosity hasn't indexed was still told "Nebulosity has already indexed this repository", got answers about the Map's repo (ADR-046's fallback, said on each answer's first line), and its calls lit up the Map. The README now registers the server in each indexed repo's folder with `--scope local`, the way the owner registered it for VS Code, and says why not `--scope user`. This is docs only: the server and ADR-046's rule are unchanged. V1.6's installer revisits a single registration.

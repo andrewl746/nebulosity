@@ -1,0 +1,223 @@
+import { describe, expect, it } from "vitest";
+import type { DescribeResponse, MapNode, SearchResult } from "../contracts";
+import type { Overview } from "../engine/overview";
+import type { ChainAnswer, ReachAnswer } from "../engine/reach";
+import { chainAnswer, describeAnswer, overviewAnswer, reachAnswer, searchAnswer } from "./answers";
+import { answerText, MAX_ANSWER_CHARS, SUMMARIES_OFF_LINE as S } from "./text";
+
+const off = { summaryStatus: "off" as const };
+const file = (p: string): MapNode => ({ path: p, name: p.slice(p.lastIndexOf("/") + 1), kind: "file", fileCount: 1, summaryStatus: "off" });
+
+/** dependents of src/core/log.ts, as the ground truth orders them. */
+const LOG_DEPENDENTS: ReachAnswer = {
+    path: "src/core/log.ts", kind: "file", direction: "dependents", direct: 3, indexVersion: 1,
+    reached: [
+        { path: "src/app/main.ts", distance: 1 }, { path: "src/core/index.ts", distance: 1 }, { path: "src/index.ts", distance: 1 },
+        { path: "src/util/strings.ts", distance: 2 }, { path: "src/app/view.tsx", distance: 2 }, { path: "scripts/build.js", distance: 2 },
+        { path: "src/util/strings.test.ts", distance: 3 },
+    ],
+};
+const LOG_HEADER = "src/core/log.ts is imported by 3 files directly and 7 files in all, counting files that reach it through others.";
+
+describe("overviewAnswer", () => {
+    it("sizes, areas and the most-imported files, with no summaries", () => {
+        const o: Overview = {
+            repo: "C:/r/mini-repo", name: "mini-repo", ...off,
+            stats: { fileCount: 8, lineCount: 48, importCount: 11 },
+            areas: [{ path: "src", kind: "folder", fileCount: 7, lineCount: 45 }, { path: "scripts", kind: "folder", fileCount: 1, lineCount: 3 }],
+            mostImported: [
+                { path: "src/app/main.ts", importedBy: 3 }, { path: "src/core/log.ts", importedBy: 3 }, { path: "src/util/strings.ts", importedBy: 2 },
+                { path: "src/app/view.tsx", importedBy: 1 }, { path: "src/core/index.ts", importedBy: 1 }, { path: "src/index.ts", importedBy: 1 },
+            ],
+            stalePaths: 0, indexVersion: 1,
+        };
+        expect(overviewAnswer(o)).toEqual({ stale: 0, body: [
+            "mini-repo: 8 files, 48 lines, 11 imports between files.",
+            S,
+            "Areas, largest first:",
+            "  src/  7 files, 45 lines",
+            "  scripts/  1 file, 3 lines",
+            "Most imported files:",
+            "  src/app/main.ts  imported by 3",
+            "  src/core/log.ts  imported by 3",
+            "  src/util/strings.ts  imported by 2",
+            "  src/app/view.tsx  imported by 1",
+            "  src/core/index.ts  imported by 1",
+            "  src/index.ts  imported by 1",
+        ] });
+    });
+});
+
+describe("describeAnswer", () => {
+    it("a folder: its size, what's inside, and the areas on each side", () => {
+        const d: DescribeResponse = {
+            repo: "C:/r/mini-repo", path: "src/core", kind: "folder", ...off, stats: { fileCount: 2, lineCount: 10 },
+            children: [file("src/core/log.ts"), file("src/core/index.ts")],
+            uses: [], usedBy: [{ path: "src/app", kind: "folder", count: 1 }, { path: "src/index.ts", kind: "file", count: 1 }, { path: "src/util", kind: "folder", count: 1 }],
+            stalePaths: 0, indexVersion: 1,
+        };
+        expect(describeAnswer(d, "mini-repo").body).toEqual([
+            "src/core/ — folder: 2 files, 10 lines.", S, "Inside (2):", "  log.ts", "  index.ts",
+            "Uses: nothing outside it.", "Used by (3 imports):", "  src/app/  1", "  src/index.ts  1", "  src/util/  1",
+        ]);
+    });
+
+    it("a file: its declarations with their lines", () => {
+        const d: DescribeResponse = {
+            repo: "C:/r/mini-repo", path: "src/core/log.ts", kind: "file", ...off, stats: { fileCount: 1, lineCount: 9 },
+            symbols: [
+                { name: "log", kind: "function", startLine: 2, endLine: 2, exported: true },
+                { name: "Logger", kind: "class", startLine: 4, endLine: 7, exported: true },
+                { name: "Logger.info", kind: "method", startLine: 5, endLine: 5, exported: true },
+                { name: "Logger.warn", kind: "method", startLine: 6, endLine: 6, exported: false },
+                { name: "banner", kind: "const", startLine: 9, endLine: 9, exported: true },
+            ],
+            uses: [], usedBy: [{ path: "src/app", kind: "folder", count: 1 }, { path: "src/core/index.ts", kind: "file", count: 1 }, { path: "src/index.ts", kind: "file", count: 1 }],
+            stalePaths: 0, indexVersion: 1,
+        };
+        expect(describeAnswer(d, "mini-repo").body).toEqual([
+            "src/core/log.ts — file: 9 lines.", S, "Declarations (5):",
+            "  2  function log", "  4–7  class Logger", "  5  method Logger.info", "  6  method Logger.warn (not exported)", "  9  const banner",
+            "Uses: nothing outside it.", "Used by (3 imports):", "  src/app/  1", "  src/core/index.ts  1", "  src/index.ts  1",
+        ]);
+    });
+
+    it("the repo: no outside, so no uses or used by", () => {
+        const d: DescribeResponse = {
+            repo: "C:/r/mini-repo", path: "", kind: "repo", ...off, stats: { fileCount: 8, lineCount: 48 },
+            children: [{ path: "src", name: "src", kind: "folder", fileCount: 7, summaryStatus: "off" }, { path: "scripts", name: "scripts", kind: "folder", fileCount: 1, summaryStatus: "off" }],
+            uses: [], usedBy: [], stalePaths: 0, indexVersion: 1,
+        };
+        expect(describeAnswer(d, "mini-repo").body).toEqual(["mini-repo — the whole repo: 8 files, 48 lines.", S, "Inside (2):", "  src/  7 files", "  scripts/  1 file"]);
+    });
+
+    it("cuts long lists and says how many more", () => {
+        const children = Array.from({ length: 25 }, (_, i) => file(`big/f${String(i + 1).padStart(2, "0")}.ts`));
+        const usedBy = Array.from({ length: 12 }, (_, i) => ({ path: `a${String(i + 1).padStart(2, "0")}`, kind: "folder" as const, count: 1 }));
+        const symbols = Array.from({ length: 31 }, (_, i) => ({ name: `s${i + 1}`, kind: "function", startLine: i + 1, endLine: i + 1, exported: true }));
+        const folder = describeAnswer({ repo: "C:/r", path: "big", kind: "folder", ...off, stats: { fileCount: 25, lineCount: 25 }, children, uses: [], usedBy, stalePaths: 0, indexVersion: 1 }, "r").body;
+        expect(folder.slice(2, 4)).toEqual(["Inside (25):", "  f01.ts"]);
+        expect(folder[22]).toBe("  f20.ts");
+        expect(folder[23]).toBe("  … 5 more");
+        expect(folder.slice(-2)).toEqual(["  a10/  1", "  … 2 more areas"]);
+        const one = describeAnswer({ repo: "C:/r", path: "x.ts", kind: "file", ...off, stats: { fileCount: 1, lineCount: 31 }, symbols, uses: [], usedBy: [], stalePaths: 0, indexVersion: 1 }, "r").body;
+        expect(one[32]).toBe("  30  function s30");
+        expect(one[33]).toBe("  … 1 more");
+    });
+});
+
+describe("searchAnswer", () => {
+    it("lists hits with their tagline and best code, cut to 160 characters", () => {
+        const r: SearchResult = {
+            query: "log",
+            hits: [
+                { path: "src/core", kind: "folder", score: 0.03, matchedBy: ["name"], tagline: "Core services" },
+                { path: "src/core/log.ts", kind: "file", score: 0.02, matchedBy: ["code"], code: { symbol: "log", startLine: 2, endLine: 2, snippet: "export function log(message: string): void { console.log(message); }" } },
+                { path: "src/core/index.ts", kind: "file", score: 0.01, matchedBy: ["code"], tagline: "Re-exports logging", code: { symbol: "(file)", startLine: 1, endLine: 3, snippet: "x".repeat(200) } },
+            ],
+            lists: { code: 2, summary: 0, vector: 0, name: 1 },
+            note: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only.",
+        };
+        expect(searchAnswer(r)).toEqual({
+            body: [
+                'Search "log": 3 best matches.',
+                " 1. src/core/ — Core services",
+                " 2. src/core/log.ts",
+                "    log, line 2: export function log(message: string): void { console.log(message); }",
+                " 3. src/core/index.ts — Re-exports logging",
+                `    (file), lines 1–3: ${"x".repeat(159)}…`,
+            ],
+            notes: ["Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."],
+        });
+    });
+
+    it("says when nothing matches", () => {
+        expect(searchAnswer({ query: "zzz", hits: [], lists: { code: 0, summary: 0, vector: 0, name: 0 } }))
+            .toEqual({ body: ['No files or folders match "zzz". Try other words; for an exact string, use Grep.'], notes: [] });
+    });
+});
+
+describe("reachAnswer", () => {
+    it("lists the direct importers under both totals", () => {
+        expect(reachAnswer(LOG_DEPENDENTS, { transitive: false, limit: 50, offset: 0 }).body)
+            .toEqual([LOG_HEADER, "  src/app/main.ts", "  src/core/index.ts", "  src/index.ts"]);
+    });
+
+    it("groups everything reached by distance, and pages it", () => {
+        expect(reachAnswer(LOG_DEPENDENTS, { transitive: true, limit: 50, offset: 0 }).body).toEqual([
+            LOG_HEADER,
+            "Distance 1 (3):", "  src/app/main.ts", "  src/core/index.ts", "  src/index.ts",
+            "Distance 2 (3):", "  src/util/strings.ts", "  src/app/view.tsx", "  scripts/build.js",
+            "Distance 3 (1):", "  src/util/strings.test.ts",
+        ]);
+        expect(reachAnswer(LOG_DEPENDENTS, { transitive: true, limit: 4, offset: 0 }).body).toEqual([
+            LOG_HEADER,
+            "Distance 1 (3):", "  src/app/main.ts", "  src/core/index.ts", "  src/index.ts",
+            "Distance 2 (3):", "  src/util/strings.ts",
+            "… 3 more (next page: offset 4)",
+        ]);
+        expect(reachAnswer(LOG_DEPENDENTS, { transitive: true, limit: 4, offset: 4 }).body).toEqual([
+            LOG_HEADER, "Showing 5–7 of 7.",
+            "Distance 2 (3):", "  src/app/view.tsx", "  scripts/build.js",
+            "Distance 3 (1):", "  src/util/strings.test.ts",
+        ]);
+        expect(reachAnswer(LOG_DEPENDENTS, { transitive: true, limit: 4, offset: 10 }).body).toEqual([LOG_HEADER, "Nothing at offset 10: the list has 7."]);
+    });
+
+    it("words an empty answer for each direction and kind", () => {
+        const none = (direction: "dependents" | "dependencies", kind: "file" | "folder", p: string) =>
+            reachAnswer({ path: p, kind, direction, reached: [], direct: 0, indexVersion: 1 }, { transitive: false, limit: 50, offset: 0 }).body;
+        expect(none("dependents", "file", "scripts/build.js")).toEqual(["Nothing imports scripts/build.js."]);
+        expect(none("dependents", "folder", "scripts")).toEqual(["Nothing outside scripts/ imports it."]);
+        expect(none("dependencies", "file", "src/core/log.ts")).toEqual(["src/core/log.ts imports no other indexed file."]);
+        expect(none("dependencies", "folder", "src")).toEqual(["src/ imports nothing outside it."]);
+    });
+
+    it("says a folder's importers are from outside it, and what a file imports in turn", () => {
+        const folder: ReachAnswer = { path: "src", kind: "folder", direction: "dependents", direct: 1, indexVersion: 1, reached: [{ path: "scripts/build.js", distance: 1 }] };
+        expect(reachAnswer(folder, { transitive: false, limit: 50, offset: 0 }).body)
+            .toEqual(["src/ is imported from outside it by 1 file directly and 1 file in all, counting files that reach it through others.", "  scripts/build.js"]);
+        const main: ReachAnswer = {
+            path: "src/app/main.ts", kind: "file", direction: "dependencies", direct: 3, indexVersion: 1,
+            reached: [{ path: "src/core/log.ts", distance: 1 }, { path: "src/util/strings.ts", distance: 1 }, { path: "src/app/view.tsx", distance: 1 }, { path: "src/core/index.ts", distance: 2 }],
+        };
+        expect(reachAnswer(main, { transitive: true, limit: 50, offset: 0 }).body).toEqual([
+            "src/app/main.ts imports 3 files directly and 4 files in all, counting what those import in turn.",
+            "Distance 1 (3):", "  src/core/log.ts", "  src/util/strings.ts", "  src/app/view.tsx",
+            "Distance 2 (1):", "  src/core/index.ts",
+        ]);
+    });
+
+    it("stays under the character budget on a huge answer, and the cut line's offset is right", () => {
+        const reached = Array.from({ length: 600 }, (_, i) => ({ path: `deep/${"x".repeat(90)}/${String(i).padStart(4, "0")}.ts`, distance: 1 }));
+        const parts = reachAnswer({ path: "hub.ts", kind: "file", direction: "dependents", direct: 600, indexVersion: 1, reached }, { transitive: false, limit: 500, offset: 0 });
+        const text = answerText({ ...parts, repoNote: "r".repeat(300), indexNote: "i".repeat(200) });
+        expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        // Hand-derived. The header "hub.ts is imported by 600 files directly and 600 files in all, counting files that reach
+        // it through others." is 107 characters, so the budget is 40,000 - 2,000 (headroom for the notes) - 107 = 37,893. Each
+        // line "  deep/" + 90 x's + "/0000.ts" is 2 + 5 + 90 + 1 + 4 + 3 = 105 characters, 106 with its line break. 37,893 / 106
+        // is 357.5, so 357 lines fit and 243 are left.
+        const listed = parts.body.filter((line) => line.startsWith("  deep/")).length;
+        expect(listed).toBe(357);
+        expect(parts.body.at(-1)).toBe("… 243 more (next page: offset 357)");
+    });
+});
+
+describe("chainAnswer", () => {
+    const chain = { files: ["scripts/build.js", "src/app/main.ts", "src/core/log.ts"], specifiers: ["../src/app/main", "../core/log"] };
+    const steps = ["  scripts/build.js", '  → src/app/main.ts  (import "../src/app/main")', '  → src/core/log.ts  (import "../core/log")'];
+
+    it("shows the chain, either way round, or says there is none", () => {
+        const forward: ChainAnswer = { from: "scripts/build.js", fromKind: "file", to: "src/core/log.ts", toKind: "file", found: "forward", ...chain };
+        expect(chainAnswer(forward).body).toEqual(["scripts/build.js reaches src/core/log.ts in 2 steps:", ...steps]);
+        const reverse: ChainAnswer = { from: "src/core/log.ts", fromKind: "file", to: "scripts/build.js", toKind: "file", found: "reverse", ...chain };
+        expect(chainAnswer(reverse).body).toEqual([
+            "src/core/log.ts doesn't reach scripts/build.js through imports; the other way round, scripts/build.js reaches src/core/log.ts in 2 steps:",
+            ...steps,
+        ]);
+        const none: ChainAnswer = { from: "src/app/view.tsx", fromKind: "file", to: "src/util/strings.test.ts", toKind: "file", found: "none", files: [], specifiers: [] };
+        expect(chainAnswer(none).body).toEqual(["No chain of imports joins src/app/view.tsx and src/util/strings.test.ts, in either direction."]);
+        const folders: ChainAnswer = { from: "src/app", fromKind: "folder", to: "src/core", toKind: "folder", found: "forward", files: ["src/app/main.ts", "src/core/log.ts"], specifiers: ["../core/log"] };
+        expect(chainAnswer(folders).body).toEqual(["src/app/ reaches src/core/ in 1 step:", "  src/app/main.ts", '  → src/core/log.ts  (import "../core/log")']);
+    });
+});

@@ -8,6 +8,9 @@
 import path from "path";
 import { RepoNotIndexedError } from "../lib/db/store/structure";
 import { search } from "../lib/engine/search";
+import { hasAnthropicKey, loadLocalEnv } from "./env";
+
+loadLocalEnv();   // the key may live in .env.local, which tsx doesn't read; free mode (no key) says "off", not "not ready"
 
 const args = process.argv.slice(2);
 const [target, query] = args;
@@ -20,13 +23,14 @@ if (!target || !query){
 const limitFlag = args.indexOf("--limit");
 const limit = limitFlag === -1 ? 10 : Number(args[limitFlag + 1]);
 const root = path.resolve(target);
+const summariesOff = !hasAnthropicKey();
 
 async function main(): Promise<void> {
     let started = performance.now();
-    const result = await search(root, query, { limit });
+    const result = await search(root, query, { limit, summariesOff });
     const firstMs = performance.now() - started;
     started = performance.now();
-    await search(root, query, { limit });
+    await search(root, query, { limit, summariesOff });
     const warmMs = performance.now() - started;
 
     console.log(`[search] "${query}": ${result.hits.length} hits · lists: code ${result.lists.code}, summary ${result.lists.summary},`

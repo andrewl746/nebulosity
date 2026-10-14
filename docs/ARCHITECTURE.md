@@ -45,7 +45,7 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
   and the CLI                                        and the CLI)
 ```
 
-The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server (V1.4) is a third process: read-only on the database, posting live events to the server.
+The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout>/mcp/launch.mjs` (ADR-048) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
 
 ---
 

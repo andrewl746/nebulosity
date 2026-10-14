@@ -51,7 +51,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S2 | Full summary pass, tiered, via the Batch API | ≤ $15 |
 | S3 | Map interaction (click, zoom, level change → rendered), on the production build (`next build` + `next start`; the dev server is slower on dense levels, docs/BENCHMARKS.md Map Benchmark #1) | ≤ 100 ms; level API ≤ 50 ms |
 | S4 | Boxes on screen at once, counting a page's portals (V1.3.1; V1.3 counted the "+N more" box) | ≤ 50 |
-| S5 | MCP tool latency, warm (after the first call of a session) | ≤ 500 ms |
+| S5 | MCP tool latency, warm (after the first call of a session) *(measured through the MCP server by `npm run bench-mcp`: each tool warm after its own first call of the session, every warm call within the bound; owner's decision D5, V1.4)* | ≤ 500 ms |
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
 | S7 | Evaluation run and published, losses included | done |
 | S8 | Public repo, README, video, live demo link | done |
@@ -82,8 +82,8 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 1. Core (`lib/`) never imports `app/`, `next` or React. Fix on the way in: `lib/graph.ts` imports types from `app/components/FileNode` today, which breaks this rule.
 2. Adapters are thin. The MCP server, route handlers, static exporter and CLI scripts each validate input, call one engine function, and format the result.
 3. `lib/contracts.ts` becomes renderer-agnostic. React Flow's `Node`/`Edge` types leave the contract, and the UI maps a `LevelResponse` into whatever renderer it uses.
-4. **Paths resolve from the install directory, not `cwd`.** `lib/db/client.ts` opens `.nebulosity/nebulosity.db` and the migrations folder relative to `process.cwd()`. Claude Code launches the MCP server from the *user's* repo, so both must resolve from `NEBULOSITY_HOME`, falling back to `process.cwd()` when it's unset. That fallback is correct for Next.js, the CLI and Vitest, which all run from the checkout. The MCP launcher (V1.4) always sets it.
-5. One database, many repos. The `repositories` table already supports this. WAL lets the MCP server read while the indexer writes. **The MCP server opens the database read-only and never runs migrations.** Only the Next server and CLI own the schema. Running two processes against one database file is exactly ADR-023's revisit trigger, and this is the answer to it.
+4. **Paths resolve from the install directory, not `cwd`.** `lib/db/client.ts` opens `.nebulosity/nebulosity.db` and the migrations folder relative to `process.cwd()`. Claude Code launches the MCP server from the *user's* repo, so both must resolve from `NEBULOSITY_HOME`, falling back to `process.cwd()` when it's unset. That fallback is correct for Next.js, the CLI and Vitest, which all run from the checkout. The MCP launcher (V1.4) always sets it. *(`mcp/launch.mjs` sets it to its own checkout unless it's already set, ADR-048.)*
+5. One database, many repos. The `repositories` table already supports this. WAL lets the MCP server read while the indexer writes. **The MCP server opens the database read-only and never runs migrations.** Only the Next server and CLI own the schema. Running two processes against one database file is exactly ADR-023's revisit trigger, and this is the answer to it. *(V1.4, ADR-044: `openDb(file, "readonly")`, which also refuses a database behind the checkout's migrations and says to start the Map or run `npm run index -- <path-to-repo>` once.)*
 
 **Processes.** The Next.js server runs the UI, the API and the live channel, and forks one background worker (ADR-038) that owns every write while the Map is open: the watcher, incremental updates, summary refreshes, the folder sweep and embeddings. The MCP server is spawned once per Claude Code session, is read-only on the database, and posts live events over HTTP. CLI scripts cover index, export, bench and eval.
 
@@ -218,13 +218,14 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ### 6.1 Queries (pure functions over the store, unit-tested, cached per index version)
 - **`level(path, page?, focus?)`**: breadcrumb, at most 50 nodes (a big folder's page of 44 boxes plus up to 6 portals to its other pages, V1.3.1), that page's edges with the far ends folded onto portals, the hidden count, the page and the page count.
 - **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
+- **`overview()`** *(V1.4)*: the repo's describe answer, plus each top-level area's lines and the 10 most-imported files (ADR-010's in-degree), for the `overview` tool.
 - **`search(query, opts)`**: hybrid. Three ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, and cosine similarity over `summary_vectors`. They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ 1 / (60 + rankᵢ(d))`, then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
-- **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance.
-- **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path".
+- **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance. *(V1.4, ADR-045: a file or a folder, whose own files are never listed; every answer counts all reached files and the direct ones; entries go nearest first, then most imported, then by path; `limit` and `offset` page them.)*
+- **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path". *(V1.4, ADR-045: from every file of `from` at once, neighbours in path order so the same chain comes back each time; the answer says which way it runs; overlapping places are refused.)*
 - **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
 
 ### 6.2 Registry
-Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zod input schema, handler }`. Descriptions are written for an LLM: when to use the tool and what it returns. Adapters wrap the entries: MCP registers them in v1, and LangGraph wraps the same entries in E1. Output is compact plain text with repo-relative paths, exact totals, truncation markers ("… 4,231 more") and a freshness note last.
+Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zod input schema, handler }`. Descriptions are written for an LLM: when to use the tool and what it returns. Adapters wrap the entries: MCP registers them in v1, and LangGraph wraps the same entries in E1. Output is compact plain text with repo-relative paths, exact totals, truncation markers ("… 4,231 more") and a freshness note last. *(V1.4, ADR-047: a handler returns `{ text, paths, action? }`; the format's rules are API_CONTRACTS.md §17.)*
 
 | v1 tool | Purpose |
 |---|---|
@@ -239,6 +240,8 @@ Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zo
 Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
 
 **Safety.** Every tool is read-only. Paths are validated against the repo root (today's `safePath`, generalized). The MCP server listens on nothing (stdio), and the live endpoint accepts only localhost.
+
+**Which repo** *(V1.4, ADR-046)*: each call answers about the indexed repo holding Claude Code's project folder (`CLAUDE_PROJECT_DIR`), else the Map's repo, which the answer's first line then names. Paths are relative to the repo root or absolute inside it, and a session in a subfolder is told that paths count from the root *(ADR-046, amended after the owner's check)*.
 
 ---
 
@@ -303,7 +306,7 @@ type LiveEvent = { tool: string; paths: string[]; at: string };
 
 ## 8. The live channel
 
-An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` with `{ tool, paths, at }`, a 200 ms timeout, and errors ignored. If the Map isn't running, nothing happens. The server fans the event out over SSE to open Map tabs. `show_on_map` reuses the `UIAction` contract (ADR-008): `highlight_nodes`, `focus_node`, `clear_highlights`. The port comes from config.
+An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` with `{ tool, paths, at }`, a 200 ms timeout, and errors ignored. If the Map isn't running, nothing happens. The server fans the event out over SSE to open Map tabs. `show_on_map` reuses the `UIAction` contract (ADR-008): `highlight_nodes`, `focus_node`, `clear_highlights`. The port comes from config. *(V1.4, ADR-046: the port is read per call, and events go out only for the repo the Map shows; `NEBULOSITY_LIVE=off` stops them.)*
 
 ---
 
@@ -373,7 +376,7 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - **Existing tests.** Kept where behavior is unchanged. The regex-scanner golden vectors (`GRAPH_IMPLEMENTATION_REVIEW.md` PART 3 §3.4) retire with the regex extractor, and that retirement is recorded in the review doc.
 - **Benchmark.** `scripts/bench-index.ts` on VS Code records per-stage timings against S1, S3 and S6.
 - **UI performance.** Click-to-render time measured in the browser on VS Code with the Performance API, and recorded.
-- **MCP smoke test.** `claude -p` exercises every tool once.
+- **MCP smoke test.** `claude -p` exercises every tool once. *(V1.4: one run, every tool once, BENCHMARKS.md MCP Smoke Test #1.)*
 - **Gate for every task:** `npx tsc --noEmit && npm run lint && npx vitest run`, all clean.
 
 ---
@@ -426,7 +429,7 @@ Each v1 slice ends demoable:
 
 ## 15. Decisions recorded with this spec
 
-`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13:
+`ENGINEERING_DECISIONS.md`. ADR-024 to ADR-030 were recorded with the spec; ADR-031 to ADR-035 were added during V1.2, ADR-036 to ADR-040 during V1.3, ADR-041 and ADR-042 during V1.3.1, and ADR-043 (the scope after v1) on 2026-10-13; ADR-044 onward were added during V1.4:
 
 | ADR | Decision |
 |---|---|
@@ -450,6 +453,11 @@ Each v1 slice ends demoable:
 | ADR-041 | The Map's dark theme refined for readability (V1.3.1, `VISUAL_REFRESH.md`) |
 | ADR-042 | The owner's review of V1.3.1: routed lines, pages of related boxes with portals, Back, a source viewer, help, the violet-slate theme |
 | ADR-043 | Shipped for other people's repos: slice V1.6 with a free mode (no API key), and the extras reordered E4 → E5 → E1, with E3 smaller and optional and E2 behind a measurement |
+| ADR-044 | The MCP server opens the database read-only: no pragmas, no migrations, a check that the file is current, recovery once something is indexed |
+| ADR-045 | Import reach: files and folders, exact totals, nearest and most-imported first, paged with an offset; chains in either direction |
+| ADR-046 | An MCP call answers about the indexed repo holding Claude Code's project folder, else the Map's repo (said first); live events only for the Map's repo; free mode from the stored stage |
+| ADR-047 | One registry entry per tool: a handler returns text, the paths it touched and an optional UI action; answers are compact text under 40,000 characters (API_CONTRACTS.md §17) |
+| ADR-048 | The MCP server starts as node <checkout>/mcp/launch.mjs: no npx, no cmd /c, tsx from the checkout, the SDK pinned at 1.32.1, stdout only for the protocol |
 
 ## 16. Doc migration
 

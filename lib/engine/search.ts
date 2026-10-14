@@ -34,7 +34,12 @@ const STOPWORDS = new Set([
 
 type Target = { kind: "file" | "folder"; path: string };
 
-export type SearchOptions = { limit?: number; embed?: EmbedFn };
+export type SearchOptions = {
+    limit?: number;
+    embed?: EmbedFn;
+    /** No API key (ADR-043): the note says summaries are off rather than not ready. */
+    summariesOff?: boolean;
+};
 
 /**
  * Turns free text into a safe FTS5 query. Every word is quoted, so nothing the user types
@@ -188,8 +193,11 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
     const name = rankFolderNames(loadFolderFacts(db, repoId), query).slice(0, LIST_DEPTH).map((p) => remember({ kind: "folder", path: p }));
 
     if (isCodeSearchDeferred(db)) notes.push("Code search is still being built after a large index run, so code results may be missing.");
-    if (countEmbeddable(db, repoId) === 0) notes.unshift("Summaries aren't ready yet, so results come from code keywords only.");
-    else if (index.targets.length === 0) notes.unshift("Summaries aren't embedded yet, so results come from keywords only.");
+    if (countEmbeddable(db, repoId) === 0){
+        notes.unshift(options.summariesOff
+            ? "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."
+            : "Summaries aren't ready yet, so results come from code and folder names only.");
+    } else if (index.targets.length === 0) notes.unshift("Summaries aren't embedded yet, so results come from keywords only.");
 
     const hits: SearchHit[] = fuseRankings({ code, summary, vector, name }).slice(0, limit).map(({ key, score, matchedBy }) => {
         const target = targets.get(key)!;

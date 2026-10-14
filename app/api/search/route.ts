@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SearchResult } from "@/lib/contracts";
 import { search } from "@/lib/engine/search";
+import { summariesEnabled } from "@/lib/index/summarize/env";
 import { activeRepo, errorJson, jsonError, noActiveRepo } from "../_lib/respond";
 
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest){
     const limit = Math.min(50, Math.max(1, Number(request.nextUrl.searchParams.get("limit")) || 10));
 
     try{
-        return NextResponse.json<SearchResult>(await search(repo, query, { limit }));
+        return NextResponse.json<SearchResult>(await search(repo, query, { limit, summariesOff: !summariesEnabled() }));
     } catch (err){
         return errorJson(err);
     }
