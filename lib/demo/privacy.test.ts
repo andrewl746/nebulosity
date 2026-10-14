@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import { makeTempDir } from "../../test/helpers/temp";
-import { findLeak, leakNeedles, scanForLeaks, spellings } from "./privacy";
+import { findLeak, leakNeedles, scanForLeaks, slug, spellings } from "./privacy";
 
 describe("spellings", () => {
     it("covers slashes either way, JSON-escaped, URL-encoded and Git Bash's form, lowercased", () => {
@@ -15,6 +15,22 @@ describe("spellings", () => {
     it("refuses a folder too shallow to scan for", () => {
         expect(() => spellings("C:/")).toThrow(/too shallow/);
         expect(() => spellings("/")).toThrow(/too shallow/);
+    });
+});
+
+describe("slug", () => {
+    it("is the folder with every character that isn't a letter or a digit turned into a dash: how Claude Code names a project's folder", () => {
+        expect(slug("C:/Users/Ann")).toBe("C--Users-Ann");
+        expect(slug("C:\\Users\\Ann\\")).toBe("C--Users-Ann");
+        expect(slug("/home/ann")).toBe("-home-ann");
+        expect(slug("C:/Users/Ann/my.code_1")).toBe("C--Users-Ann-my-code-1");
+    });
+
+    it("is one of a folder's leak needles, lowercased, because a transcript names ~/.claude/projects/<slug>/", () => {
+        const needles = leakNeedles({ folders: ["C:/Users/Ann"] });
+        expect(needles).toContain("c--users-ann");
+        expect(findLeak("projects\\C--Users-Ann-code\\memory", needles)).toBe("c--users-ann");
+        expect(findLeak("projects/C--Users-Bob/memory", needles)).toBeNull();
     });
 });
 

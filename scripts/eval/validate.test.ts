@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunSummary } from "./transcript";
-import { infrastructureFailure, resultNotes, validateInit } from "./validate";
+import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
 const GOOD: RunSummary = {
     model: "claude-sonnet-5-5", claudeVersion: "2.1.296", apiKeySource: "none", permissionMode: "dontAsk",
@@ -60,5 +60,39 @@ describe("infrastructureFailure", () => {
         expect(infrastructureFailure(init)).toBe("the transcript has no result line (the run was killed, crashed or timed out)");
         expect(infrastructureFailure("")).toBe("the transcript has no result line (the run was killed, crashed or timed out)");
         expect(infrastructureFailure(done)).toBe("the transcript has no init message");
+    });
+
+    it("counts a final message that is an error, with no status, as an outage: Claude Code writes its own API errors as a success that is_error", () => {
+        const connection = JSON.stringify({ type: "result", subtype: "success", is_error: true, api_error_status: null, result: "API Error: Connection error." });
+        expect(infrastructureFailure([init, connection].join("\n"))).toBe("the run ended on an error message, not an answer (API Error: Connection error.)");
+        // the limits are answers that scored 0 even though is_error is true, and a success that isn't an error is an answer
+        expect(infrastructureFailure([init, JSON.stringify({ type: "result", subtype: "error_max_budget_usd", is_error: true, api_error_status: null })].join("\n"))).toBeNull();
+        expect(infrastructureFailure([init, JSON.stringify({ type: "result", subtype: "success", is_error: false, api_error_status: null, result: "API Error: is this text" })].join("\n"))).toBeNull();
+    });
+});
+
+describe("firstInitLine", () => {
+    const hook = JSON.stringify({ type: "system", subtype: "hook_started", hook_name: "SessionStart" });
+    const init = JSON.stringify({ type: "system", subtype: "init", model: "claude-sonnet-5-5", tools: ["Bash"] });
+    const assistant = JSON.stringify({ type: "assistant", message: { content: [] } });
+
+    it("finds the first init line, after hook events and lines that aren't JSON", () => {
+        expect(firstInitLine([hook, "not json", init, assistant].join("\n"))).toBe(init);
+        expect(firstInitLine(`${hook}\r\n${init}\r\n`)).toBe(init);
+        // a complete line needs no newline after it: JSON that parses as an object has all of its braces
+        expect(firstInitLine(`${hook}\n${init}`)).toBe(init);
+    });
+
+    it("waits (null) when the init isn't all there yet: no text, no init, a last line cut short", () => {
+        expect(firstInitLine("")).toBeNull();
+        expect(firstInitLine([hook, assistant].join("\n"))).toBeNull();
+        expect(firstInitLine(`${hook}\n${init.slice(0, 40)}`)).toBeNull();
+        // only a system event of subtype init counts
+        expect(firstInitLine(JSON.stringify({ type: "assistant", subtype: "init" }))).toBeNull();
+    });
+
+    it("returns the first of two init lines", () => {
+        const second = JSON.stringify({ type: "system", subtype: "init", model: "other" });
+        expect(firstInitLine([init, second].join("\n"))).toBe(init);
     });
 });

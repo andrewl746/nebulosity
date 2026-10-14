@@ -21,14 +21,15 @@ export function validateInit(run: RunSummary, expect: { arm: Arm; model: string;
 
 /**
  * Why a raw transcript is an outage, not a result (R-R), or null: the API reported an error (a rate limit is one), the
- * run ended with no result line (killed, crashed, timed out), or it never started (no init message). Running out of
- * turns or budget is an answer that scores 0, not an outage.
+ * run ended with no result line (killed, crashed, timed out), the final message is an error (Claude Code writes its own
+ * API errors, such as "API Error: Connection error.", as a success with is_error and no status), or it never started
+ * (no init message). Running out of turns or budget is an answer that scores 0, not an outage.
  */
 export function infrastructureFailure(jsonl: string): string | null {
     let init = false;
-    let result: { api_error_status?: unknown } | undefined;
+    let result: { subtype?: unknown; is_error?: unknown; api_error_status?: unknown; result?: unknown } | undefined;
     for (const line of jsonl.split(/\r?\n/)){
-        let event: { type?: unknown; subtype?: unknown; api_error_status?: unknown } | null;
+        let event: { type?: unknown; subtype?: unknown; is_error?: unknown; api_error_status?: unknown; result?: unknown } | null;
         try{
             event = JSON.parse(line) as typeof event;
         } catch{
@@ -43,7 +44,28 @@ export function infrastructureFailure(jsonl: string): string | null {
         return `the API returned an error (${typeof status === "string" ? status : JSON.stringify(status)})`;
     }
     if (result === undefined) return "the transcript has no result line (the run was killed, crashed or timed out)";
+    if (result.is_error === true && result.subtype === "success"){
+        const text = typeof result.result === "string" ? result.result.trim().slice(0, 200) : "";
+        return `the run ended on an error message, not an answer (${text || "no text"})`;
+    }
     if (!init) return "the transcript has no init message";
+    return null;
+}
+
+/**
+ * The first line of a raw transcript, still being written or finished, that is the init message, or null while it
+ * isn't all there. Only a complete line counts: JSON that parses as an object has all its braces, so a last line cut
+ * short never matches. Lines before it (hook events) and lines that aren't JSON are skipped.
+ */
+export function firstInitLine(text: string): string | null {
+    for (const line of text.split(/\r?\n/)){
+        try{
+            const event = JSON.parse(line) as { type?: unknown; subtype?: unknown } | null;
+            if (event !== null && typeof event === "object" && event.type === "system" && event.subtype === "init") return line;
+        } catch{
+            // not JSON, or the line the child is writing now
+        }
+    }
     return null;
 }
 

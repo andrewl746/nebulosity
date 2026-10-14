@@ -19,9 +19,19 @@ export function spellings(folder: string): string[] {
     return [...new Set(forms.map((f) => f.toLowerCase()))];
 }
 
-/** The needles for some folders and an email, longest first, so a report names the most specific match. */
+/**
+ * The name Claude Code gives a project's folder under ~/.claude/projects/: the folder with every character that isn't
+ * a letter or a digit turned into "-" (C:/Users/Ann becomes C--Users-Ann). A stream-json transcript names it, in the
+ * init message's memory_paths and in the paths of tool results, and it holds the folder as plainly as a spelling does.
+ */
+export function slug(folder: string): string {
+    return folder.replace(/\\/g, "/").replace(/\/+$/, "").replace(/[^a-zA-Z0-9]/g, "-");
+}
+
+/** The needles for some folders (each one's spellings and its slug) and an email, longest first, so a report names the most specific match. */
 export function leakNeedles(input: { folders: readonly string[]; email?: string | null }): string[] {
-    const needles = new Set(input.folders.flatMap((folder) => spellings(folder)));
+    // spellings() first: it refuses a folder too shallow to scan for, and its slug would be as greedy
+    const needles = new Set(input.folders.flatMap((folder) => [...spellings(folder), slug(folder).toLowerCase()]));
     if (input.email) needles.add(input.email.toLowerCase());
     return [...needles].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
 }

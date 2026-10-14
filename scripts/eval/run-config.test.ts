@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
-import { childEnv, claudeArgs, parsePorcelain, runName, schedule, scrub } from "./run-config";
+import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, rawFileName, runName, schedule, scrub, utilizationCheck } from "./run-config";
 
 describe("claudeArgs", () => {
     it("pins the model and effort, drops user settings, allows read-only tools, and differs between arms only in the MCP config", () => {
@@ -30,6 +30,29 @@ describe("childEnv", () => {
         expect(childEnv({}, { gitBash: "b", toolSearch: false }).ENABLE_TOOL_SEARCH).toBe("false");
         expect(childEnv({}, { gitBash: "b", toolSearch: true, configDir: "C:/eval-cfg" }).CLAUDE_CONFIG_DIR).toBe("C:/eval-cfg");
     });
+
+    it("strips every variable of the Claude Code session that launches the runner (CLAUDE*, ANTHROPIC_*, MCP_*, in any case), keeps the rest, then sets the pins", () => {
+        const base = {
+            CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", MCP_CONNECTION_NONBLOCKING: "true", ANTHROPIC_BASE_URL: "http://x",
+            claude_code_child_session: "1", USERPROFILE: "C:/Users/Ann", PATH: "p",
+        };
+        const pins = {
+            CLAUDE_CODE_GIT_BASH_PATH: "b", CLAUDE_CODE_USE_POWERSHELL_TOOL: "0", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+            ENABLE_CLAUDEAI_MCP_SERVERS: "false", DISABLE_AUTOUPDATER: "1", NEBULOSITY_LIVE: "off",
+        };
+        expect(childEnv(base, { gitBash: "b", toolSearch: true })).toEqual({ USERPROFILE: "C:/Users/Ann", PATH: "p", ...pins });
+        // a pin's name inside a stripped namespace is stripped from the base first, so the pin's value wins
+        expect(childEnv({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: "0", ENABLE_CLAUDEAI_MCP_SERVERS: "true" }, { gitBash: "b", toolSearch: true })).toEqual(pins);
+    });
+
+    it("knows which names it strips", () => {
+        for (const name of ["CLAUDECODE", "claude_code_child_session", "CLAUDE_AGENT_SDK_VERSION", "ANTHROPIC_BASE_URL", "mcp_connection_nonblocking", "ENABLE_TOOL_SEARCH", "CLAUDE_CODE_USE_FOUNDRY"]){
+            expect(isStripped(name), name).toBe(true);
+        }
+        for (const name of ["PATH", "USERPROFILE", "APPDATA", "HOME", "NEBULOSITY_LIVE", "ENABLE_CLAUDEAI_MCP_SERVERS", "DISABLE_AUTOUPDATER"]){
+            expect(isStripped(name), name).toBe(false);
+        }
+    });
 });
 
 describe("schedule", () => {
@@ -39,6 +62,70 @@ describe("schedule", () => {
             "q1-nebulosity-2", "q1-baseline-2", "q2-baseline-2", "q2-nebulosity-2",
         ]);
         expect(runName({ question: "cl2", arm: "nebulosity", repeat: 1, toolSearch: false })).toBe("cl2-nebulosity-upfront-1");
+    });
+
+    it("takes which arm goes first from a question's place in the whole list, so choosing some questions changes no arm order", () => {
+        const all = ["q1", "q2", "q3"];
+        // q2 is at index 1: (1 + repeat - 1) % 2 is 1 for repeat 1 (nebulosity first) and 0 for repeat 2 (baseline first)
+        expect(schedule(["q2"], 2, all).map(runName)).toEqual(["q2-nebulosity-1", "q2-baseline-1", "q2-baseline-2", "q2-nebulosity-2"]);
+        // q3 is at index 2 and q1 at index 0: both even, so baseline first at repeat 1, in the order asked
+        expect(schedule(["q3", "q1"], 1, all).map(runName)).toEqual(["q3-baseline-1", "q3-nebulosity-1", "q1-baseline-1", "q1-nebulosity-1"]);
+        expect(() => schedule(["q9"], 1, all)).toThrow(/q9/);
+    });
+
+    it("gives the pilot the arm order the full run will give BP4, CL2 and CN3 (D2's order puts them at indexes 3, 6 and 12)", () => {
+        expect(QUESTION_ORDER).toHaveLength(15);
+        expect(["bp4", "cl2", "cn3"].map((id) => QUESTION_ORDER.indexOf(id))).toEqual([3, 6, 12]);
+        expect(schedule(["bp4", "cl2", "cn3"], 1, QUESTION_ORDER).map(runName)).toEqual([
+            "bp4-nebulosity-1", "bp4-baseline-1", "cl2-baseline-1", "cl2-nebulosity-1", "cn3-baseline-1", "cn3-nebulosity-1",
+        ]);
+    });
+});
+
+describe("utilizationCheck", () => {
+    const limits = { fiveHour: 0.9, sevenDay: 0.85 };
+
+    it("lets a batch go on while both windows are under their thresholds", () => {
+        expect(utilizationCheck({ fiveHour: 0.4, sevenDay: 0.6 }, limits, 1)).toEqual({ unwatched: 0, warning: null, stop: null, giveUp: null });
+    });
+
+    it("stops cleanly at a threshold, the 7-day window first, and counts a window at its threshold as past it", () => {
+        expect(utilizationCheck({ fiveHour: 0.4, sevenDay: 0.85 }, limits, 0).stop).toBe("the 7-day window is at 0.85 (threshold 0.85)");
+        expect(utilizationCheck({ fiveHour: 0.95, sevenDay: 0.5 }, limits, 0).stop).toBe("the 5-hour window is at 0.95 (threshold 0.9)");
+        expect(utilizationCheck({ fiveHour: 0.95, sevenDay: 0.9 }, limits, 0).stop).toBe("the 7-day window is at 0.90 (threshold 0.85)");
+        // one figure missing still leaves the other one watched
+        expect(utilizationCheck({ fiveHour: null, sevenDay: 0.9 }, limits, 1)).toEqual({
+            unwatched: 0, warning: null, stop: "the 7-day window is at 0.90 (threshold 0.85)", giveUp: null,
+        });
+    });
+
+    it("warns when a run reports neither window, and gives up after two such runs in a row", () => {
+        const none = { fiveHour: null, sevenDay: null };
+        expect(utilizationCheck(none, limits, 0)).toEqual({
+            unwatched: 1, stop: null, giveUp: null,
+            warning: "WARNING: this run reported neither the 5-hour nor the 7-day window, so the thresholds are not being watched.",
+        });
+        const second = utilizationCheck(none, limits, 1);
+        expect(second.unwatched).toBe(2);
+        expect(second.giveUp).toBe("two runs in a row reported neither the 5-hour nor the 7-day window, so the thresholds can't be enforced");
+    });
+});
+
+describe("rawFileName and attemptsSoFar", () => {
+    it("names a raw transcript by run and start time (UTC), so a re-run keeps the earlier one", () => {
+        const at = new Date("2026-10-14T06:07:08.123Z");
+        expect(rawFileName("bp4-baseline-1", at, "jsonl")).toBe("bp4-baseline-1.20261014T060708.jsonl");
+        expect(rawFileName("bp4-baseline-1", at, "stderr.txt")).toBe("bp4-baseline-1.20261014T060708.stderr.txt");
+    });
+
+    it("counts a run's earlier attempts by its transcripts only, never another run's whose name starts the same", () => {
+        const files = [
+            "bp4-nebulosity-1.20261014T060708.jsonl", "bp4-nebulosity-1.20261014T060708.stderr.txt", "bp4-nebulosity-1.20261014T071500.jsonl",
+            "bp4-nebulosity-upfront-1.20261014T060708.jsonl", "bp4-nebulosity-11.20261014T060708.jsonl", "notes.txt",
+        ];
+        expect(attemptsSoFar("bp4-nebulosity-1", files)).toBe(2);
+        expect(attemptsSoFar("bp4-nebulosity-upfront-1", files)).toBe(1);
+        expect(attemptsSoFar("cl2-baseline-1", files)).toBe(0);
     });
 });
 
@@ -75,5 +162,12 @@ describe("parsePorcelain and scrub", () => {
         // the deepest folder goes first in this pass too, so a mixed path inside both keeps the deeper name
         const both = [{ folder: "C:/Users/Ann", with: "~" }, { folder: "C:/Users/Ann/code/vscode", with: "<vscode>" }];
         expect(scrub("C:\\Users/Ann/code/vscode/x", both)).toBe("<vscode>/x");
+    });
+
+    it("also replaces Claude Code's project-folder name for a folder (C--Users-Ann-code-vscode), the deepest first, so findLeak finds nothing after", () => {
+        const both = [{ folder: "C:/Users/Ann", with: "~" }, { folder: "C:/Users/Ann/code/vscode", with: "<vscode>" }];
+        const out = scrub("projects/C--Users-Ann-code-vscode/memory and C--Users-Ann/x", both);
+        expect(out).toBe("projects/<vscode>/memory and ~/x");
+        expect(findLeak(out, leakNeedles({ folders: ["C:/Users/Ann", "C:/Users/Ann/code/vscode"] }))).toBeNull();
     });
 });
