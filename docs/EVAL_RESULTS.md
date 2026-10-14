@@ -1,6 +1,6 @@
 # 2026 10 14 Eval #1 — Claude Code with and without Nebulosity on VS Code
 
-**Status: the method is drafted and checked, and the owner's review of the questions and their truth is pending. No run has happened yet.** Claude models read the ground truth in the source and re-checked it; no person has yet (see "How the ground truth was made and checked"). The results section is empty until the runs are done. Two calls on the questions wait for the owner (see "Open questions for the owner").
+**Status: the method is drafted and checked, and the owner's review of the questions and their truth is pending. No run has happened yet.** Claude models read the ground truth in the source and re-checked it; no person has yet (see "How the ground truth was made and checked"). The results section is empty until the runs are done. Three calls on the questions wait for the owner (see "Open questions for the owner").
 
 This is the evaluation `PIVOT_SPEC.md` §9 asks for. It asks one thing: does Claude Code answer questions about a big repo better with Nebulosity's MCP server than without it? "Better" means more correct, and at what cost in tokens, tool calls and time. Losses are reported beside wins. The reasons behind each choice are in ADR-050. The plan is `docs/plans/2026-10-13-v1-5-ship.md` (D2, D3 and D4).
 
@@ -106,7 +106,7 @@ Prompts are identical in both arms. Each ends with a fixed answer format:
 - chains: `End with a line that says ANSWER: and then either the word none, or the chain as file paths relative to the repository root, one per line, from the first file to the last, where each file imports the next.`
 - big-picture: `Answer in at most 400 words.`
 
-Every list prompt also says what "imports" means: `Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.` (The table leaves that sentence out of each list prompt.)
+Every list prompt also says what "imports" means: `Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.` (The table leaves that sentence out of each list prompt. Its "refers to" is not D2's "resolves to": open question 3.)
 
 ### Big-picture (5), scored by a rubric from VS Code's wiki page "Source Code Organization" (edited 2025-10-11)
 
@@ -157,7 +157,7 @@ The truth never comes from Nebulosity's index, or the eval would be circular.
 - **Chains.** Every step of every example chain was read. A widened graph (the scanner's edges plus 1,618 edges that exist only as quoted strings) gives the same shortest lengths, so no missed written-out specifier can make a chain shorter. For CN4, `strings.ts` reaches 68 files: 67 in `src/vs/base/common`, plus `src/vs/nls.ts`, which imports nothing. Every one's imports were read, and none is in `src/vs/workbench`.
 - **The result:** 0 false hits dropped, 0 misses added, 0 chains changed. The sizes are exactly the planning scan's. `eval/truth/adjudicated.json` is empty. 30 candidates were read and left out, three of them pending the owner's call (open question 1); each is recorded in its truth's `notes`:
   - paths that only look alike (CL1: five files under `src/vs/workbench/services` import a namesake `search/common/search.ts`; CL3: `editor/common/standalone` is not `editor/standalone`);
-  - Copilot test fixtures (old VS Code source kept as text; `extensions/copilot/tsconfig.json` excludes their folders);
+  - Copilot test fixtures (old VS Code source kept as text; `extensions/copilot/tsconfig.json` excludes their folders; see open question 3);
   - build entry-point lists and a file glob, lint scopes in `eslint.config.js`, and one 1.4 MB string of recorded data;
   - the three behind open question 1: two computed `import()` loaders (`src/vs/code/electron-browser/workbench/workbench.ts` and `src/vs/sessions/electron-browser/sessions.ts`) and `build/vite/workbench-electron.ts`, which imports the first.
 - **Rubric points.** Opus checked each of the 34 against `cc3fec88`, and Sonnet re-checked all 34: the files and folders exist, the functions have the stated signatures, the entry files import each other. 33 hold. BP3.1 does not (open question 2). Four points in BP4 (BP4.5–BP4.8) are documented rules the code breaks. For example, nothing outside `contrib` should depend on it, yet `src/vs/sessions` has 391 files that import `contrib`, `workbench/api` 113 and `workbench/test` 67; 36 of 101 contributions have more than one `.contribution.ts`. A fifth, BP4.3 (`services` holds core services, not ones only a contribution uses), is a rule the code mostly keeps: 3 of 95 service folders serve a single contribution. All five stay in the rubric as "states the rule", and each point's `note` says how the code breaks or keeps it.
@@ -201,15 +201,16 @@ Lists and chains are scored by `npm run eval:score`. Big-picture answers are gra
 - **The runner has never run Claude Code yet.** Its tests use hand-built transcripts, and its reading of a transcript was checked against the one real smoke-run transcript from V1.4. The isolation checks will first be proven on real transcripts by the pilot, and a failed check stops the batch.
 - **BP4's rule points measure repeating the wiki, not following the code.** BP4.5–BP4.8 are documented rules the code breaks, and BP4.3 is one it mostly keeps. All five count as "states the rule".
 - **The truth and the index could share a blind spot.** The scanner and the index both read written-out specifiers. The two other nets (the parse of every evidence line, and the quoted-string sweep) found nothing, but files loaded by a computed specifier (open question 1), by a worker's URL or by a forked process's entry path are outside the definition on purpose.
-- **Models may list files that aren't in the truth**, such as the Copilot test fixtures (CL2, CL5) or `build/vite/workbench-electron.ts` (CL4). Lists score by recall, so that costs precision only.
+- **Models may list files that aren't in the truth**, such as the Copilot test fixtures (CL2, CL5; open question 3) or `build/vite/workbench-electron.ts` (CL4). Lists score by recall, so that costs precision only.
 - **Deferred tools may weaken B.** Under Claude Code's default, B's tools load on demand. The pilot's up-front runs measure what that costs.
 
 ## Open questions for the owner
 
-Neither is decided. Both should be settled before the first run, since each changes what a question scores.
+None of the three is decided. Each should be settled before the first run, since each changes what a question asks or scores.
 
 1. **CL4: do the two computed loaders count (63 or 66 files)?** `src/vs/code/electron-browser/workbench/workbench.ts` (lines 510–517) and `src/vs/sessions/electron-browser/sessions.ts` (lines 123–130) load the desktop and sessions main files with `await import(workbenchUrl)`. The address is built at run time, so no written-out specifier names a file. The truth leaves them out, as the scanner, Nebulosity's index and VS Code's own import lint (which checks written-out specifiers only) all do. Counting them would also add `build/vite/workbench-electron.ts`, which imports the first one, and make CL4 66 files. The cost of each answer: with 63, a model that lists the three loses precision only; with 66, a model that misses them loses recall. The decision is recorded in `eval/truth/cl4.json`.
 2. **BP3.1: dropped, or held under a narrower reading?** The wiki says most services are defined in `platform`. At `cc3fec88` the non-test code under `src/vs` has 699 service identifiers: `platform` defines 256 (36.6%), the workbench 364 (52.1%). On the plain reading of "most" the point doesn't hold, so it is dropped and BP3 is scored over 5 points. Read as "most of the services that aren't a contribution's own", `platform` has 256 of 480 (53%) and the point holds, and BP3 is scored over 6. The point's `holds` field in `eval/rubric/bp3.json` is the switch.
+3. **The list prompts say "refers to"; the truth follows "resolves to". Which is the rule?** The definition sentence in every list prompt (`eval/questions.json`, as the plan wrote it) tells the model to count a file if any of its statements "refers to" the target. D2 defines an import as one whose specifier "resolves to" the file, and the truth's exclusions rest on that: the computed `await import(url)` loaders in CL4 (open question 1), and the Copilot test fixtures, whose specifiers are old `vs/…` module ids that no module resolution turns into a file. Under "refers to", CL2 would gain 3 of those fixture files and CL5 2. Today's truths use "resolves to" and the prompts say "refers to". Whichever wording the owner picks, the prompt and the truth's rule should say the same thing: either the prompt's sentence changes to "resolves to", or the truths gain the files that "refers to" would count.
 
 ## Results
 
