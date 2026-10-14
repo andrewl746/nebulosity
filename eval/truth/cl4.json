@@ -5,7 +5,10 @@
   "scope": "transitive",
   "files": [
     "build/vite/index-workbench.ts",
+    "build/vite/workbench-electron.ts",
     "src/vs/code/browser/workbench/workbench.ts",
+    "src/vs/code/electron-browser/workbench/workbench.ts",
+    "src/vs/sessions/electron-browser/sessions.ts",
     "src/vs/sessions/sessions.common.main.ts",
     "src/vs/sessions/sessions.desktop.main.ts",
     "src/vs/sessions/sessions.web.main.internal.ts",
@@ -74,22 +77,22 @@
       "path": "src/vs/code/electron-browser/workbench/workbench.ts",
       "scanner": false,
       "nebulosity": false,
-      "decision": "out",
-      "why": "Ruling (owner to confirm): L510-517 load the desktop workbench with `await import(workbenchUrl)`, where workbenchUrl is computed at run time (new URL(`vs/workbench/workbench.desktop.main.js`, baseUrl).href into out/, or '../../../workbench/workbench.desktop.main.js' in dev). The import() has no literal specifier that names a file, so by the eval's definition (a statement whose specifier resolves to the file) it isn't counted; VS Code's own import lint (.eslint-plugin-local/utils.ts, createImportRuleListener) also checks only string-literal specifiers. Counting computed imports would add this file, src/vs/sessions/electron-browser/sessions.ts and build/vite/workbench-electron.ts (CL4 would be 66)."
+      "decision": "added",
+      "why": "L510-517 load the desktop workbench with `await import(workbenchUrl)`; reading the code around it, workbenchUrl is '../../../workbench/workbench.desktop.main.js' in dev (src/vs/workbench/workbench.desktop.main.ts) or new URL(`vs/workbench/workbench.desktop.main.js`, baseUrl).href into out/ otherwise: the same file. Counted by the owner's ruling (2026-10-14): 'refers to' counts, way (c): a computed import() whose loaded address is the target file. src/vs/workbench/workbench.desktop.main.ts is already in the closure, so this file joins it."
     },
     {
       "path": "src/vs/sessions/electron-browser/sessions.ts",
       "scanner": false,
       "nebulosity": false,
-      "decision": "out",
-      "why": "Same ruling: L123-130 `await import(workbenchUrl)` with workbenchUrl = new URL(`vs/sessions/sessions.desktop.main.js`, baseUrl).href (or './sessions.desktop.main.js' in dev), a computed specifier."
+      "decision": "added",
+      "why": "L123-130 `await import(workbenchUrl)` with workbenchUrl = './sessions.desktop.main.js' in dev (src/vs/sessions/sessions.desktop.main.ts) or new URL(`vs/sessions/sessions.desktop.main.js`, baseUrl).href otherwise: the same file, already in the closure. Counted by the owner's ruling (2026-10-14): 'refers to' counts, way (c)."
     },
     {
       "path": "build/vite/workbench-electron.ts",
       "scanner": false,
       "nebulosity": false,
-      "decision": "out",
-      "why": "L6 imports '../../src/vs/code/electron-browser/workbench/workbench' (a real import), but that file is not a dependent under the computed-import ruling above, so this one isn't either. It joins only if the ruling flips."
+      "decision": "added",
+      "why": "L6 `import '../../src/vs/code/electron-browser/workbench/workbench';` is a written-out side-effect import of src/vs/code/electron-browser/workbench/workbench.ts (way (a)), which is now in the closure, so this file joins it by the owner's ruling (2026-10-14): 'refers to' counts."
     },
     {
       "path": "build/gulpfile.vscode.ts",
@@ -103,7 +106,7 @@
       "scanner": false,
       "nebulosity": false,
       "decision": "out",
-      "why": "L103-104, L122, L162-198: entry-point lists of the bundler ('vs/workbench/workbench.desktop.main', 'vs/code/browser/workbench/workbench', ...), strings, not imports."
+      "why": "L103-104, L122, L162-198: entry-point lists of the bundler ('vs/workbench/workbench.desktop.main', 'vs/code/browser/workbench/workbench', ...), strings, not imports. (Under 'refers to' still out: an entry-point list is not an import statement of the file.)"
     },
     {
       "path": "build/next/test/resources.test.ts",
@@ -132,6 +135,13 @@
       "nebulosity": false,
       "decision": "out",
       "why": "L347 compares a name with 'vs/workbench/workbench.web.main' inside a Copilot test fixture (excluded from compilation): a string, not an import."
+    },
+    {
+      "path": "scripts/code-sessions-web.js",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L140 `import { create, URI } from '${fileRoot}/vs/sessions/${useMock ? ...}.js';` sits inside a template literal that holds the HTML of a page the script generates. That import belongs to the generated page, not to code-sessions-web.js's own statements, so it isn't counted (ruling recorded 2026-10-14: CL4 stays 66, not 67)."
     }
   ]
 }

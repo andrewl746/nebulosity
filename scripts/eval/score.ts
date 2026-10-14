@@ -281,7 +281,7 @@ export function scannerOnlySteps(
 
 export type Cleanliness = { truthsVerified: boolean; unverified: string[]; uncheckedPoints: number };
 
-/** Whether every truth is hand-verified, and how many rubric points are still unchecked (`holds: null`), over the questions asked. */
+/** Whether every truth is checked (`verified`), and how many rubric points are still unchecked (`holds: null`), over the questions asked. */
 export function cleanliness(questions: readonly QuestionData[]): Cleanliness {
     const unverified = questions.filter((q) => q.truth !== undefined && !q.truth.verified).map((q) => q.id);
     const uncheckedPoints = questions.reduce((n, q) => n + (q.rubric?.points ?? []).filter((p) => p.holds === null).length, 0);
@@ -291,7 +291,7 @@ export function cleanliness(questions: readonly QuestionData[]): Cleanliness {
 /** The header line for results that rest on unchecked truths or rubric points, or null when everything is clean. */
 export function cleanlinessLine(c: Cleanliness): string | null {
     if (c.truthsVerified && c.uncheckedPoints === 0) return null;
-    return `Truths hand-verified: ${c.truthsVerified ? "yes" : `no (${c.unverified.join(", ")})`}. Rubric points still unchecked: ${c.uncheckedPoints}.`;
+    return `Truths checked: ${c.truthsVerified ? "yes" : `no (${c.unverified.join(", ")})`}. Rubric points still unchecked: ${c.uncheckedPoints}.`;
 }
 
 /** Where the results are written: --out, else (when the runs come from somewhere else, as in a try-out) a temp file, else eval/results.json. */

@@ -381,7 +381,7 @@ describe("scannerOnlySteps", () => {
 describe("cleanliness", () => {
     const unverified: QuestionData = { ...listQ, truth: { ...(listQ.truth as NonNullable<QuestionData["truth"]>), verified: false } };
 
-    it("says whether every truth is hand-verified and how many rubric points are still unchecked", () => {
+    it("says whether every truth is checked and how many rubric points are still unchecked", () => {
         // bpQ: BP1.2 has holds: null, so one point is unchecked
         expect(cleanliness([listQ, chainQ(3), bpQ])).toEqual({ truthsVerified: true, unverified: [], uncheckedPoints: 1 });
         expect(cleanliness([unverified, chainQ(3)])).toEqual({ truthsVerified: false, unverified: ["cl1"], uncheckedPoints: 0 });
@@ -390,8 +390,8 @@ describe("cleanliness", () => {
 
     it("has a header line only when something is not clean, naming both", () => {
         expect(cleanlinessLine({ truthsVerified: true, unverified: [], uncheckedPoints: 0 })).toBeNull();
-        expect(cleanlinessLine({ truthsVerified: true, unverified: [], uncheckedPoints: 1 })).toBe("Truths hand-verified: yes. Rubric points still unchecked: 1.");
-        expect(cleanlinessLine({ truthsVerified: false, unverified: ["cl1", "cl2"], uncheckedPoints: 0 })).toBe("Truths hand-verified: no (cl1, cl2). Rubric points still unchecked: 0.");
+        expect(cleanlinessLine({ truthsVerified: true, unverified: [], uncheckedPoints: 1 })).toBe("Truths checked: yes. Rubric points still unchecked: 1.");
+        expect(cleanlinessLine({ truthsVerified: false, unverified: ["cl1", "cl2"], uncheckedPoints: 0 })).toBe("Truths checked: no (cl1, cl2). Rubric points still unchecked: 0.");
     });
 });
 

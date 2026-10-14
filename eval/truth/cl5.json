@@ -4,6 +4,8 @@
   "target": "src/vs/platform/undoRedo",
   "scope": "outside",
   "files": [
+    "extensions/copilot/test/simulation/fixtures/fix/issue-7544/notebookMulticursor.ts",
+    "extensions/copilot/test/simulation/fixtures/tests/in-suite-issue-3701/notebookFolding.test.ts",
     "src/vs/editor/browser/services/bulkEditService.ts",
     "src/vs/editor/common/model.ts",
     "src/vs/editor/common/model/editStack.ts",
@@ -66,15 +68,15 @@
       "path": "extensions/copilot/test/simulation/fixtures/fix/issue-7544/notebookMulticursor.ts",
       "scanner": false,
       "nebulosity": false,
-      "decision": "out",
-      "why": "L35 'vs/platform/undoRedo/common/undoRedo'. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+      "decision": "added",
+      "why": "L35 `import { IPastFutureElements, IUndoRedoElement, IUndoRedoService, UndoRedoElementType } from 'vs/platform/undoRedo/common/undoRedo';` names src/vs/platform/undoRedo/common/undoRedo.ts (read against src/). A Copilot test fixture (a copy of old VS Code source kept as text for the Copilot extension's tests, and excluded from compilation), but its statement is the file's own and its specifier is a non-relative module id that names the target. Counted by the owner's ruling (2026-10-14): 'refers to' counts, way (b). (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\".)"
     },
     {
       "path": "extensions/copilot/test/simulation/fixtures/tests/in-suite-issue-3701/notebookFolding.test.ts",
       "scanner": false,
       "nebulosity": false,
-      "decision": "out",
-      "why": "L9 'vs/platform/undoRedo/common/undoRedo'. A Copilot test fixture: a copy of old VS Code source kept as text for the Copilot extension's tests, excluded from compilation (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\"). Its specifiers are AMD-era \"vs/...\" module ids that resolve under no module resolution at cc3fec88, so it imports no repo file."
+      "decision": "added",
+      "why": "L9 `import { IUndoRedoService } from 'vs/platform/undoRedo/common/undoRedo';` names src/vs/platform/undoRedo/common/undoRedo.ts (read against src/). A Copilot test fixture (a copy of old VS Code source kept as text for the Copilot extension's tests, and excluded from compilation), but its statement is the file's own and its specifier is a non-relative module id that names the target. Counted by the owner's ruling (2026-10-14): 'refers to' counts, way (b). (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\".)"
     },
     {
       "path": "src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts",

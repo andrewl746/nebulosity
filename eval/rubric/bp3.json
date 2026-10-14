@@ -7,7 +7,7 @@
       "text": "most services are defined in `platform`",
       "check": "Counted createDecorator< (one per service identifier) in the non-test files of src/vs: 699 in all. src/vs/platform 256 (36.6%); src/vs/workbench 364 (52.1%: contrib 219, services 99, api 43, browser 2, common 1); src/vs/sessions 48; src/vs/editor 28; src/vs/server 3.",
       "holds": false,
-      "note": "Not borne out at cc3fec88: platform is the biggest single folder, but it defines about a third of the service identifiers, and the workbench defines more of them than platform. Read as 'most of the services that aren't a contribution's own', platform has 256 of 480 (53%), so the point survives only that narrower reading: owner's call."
+      "note": "Not borne out at cc3fec88: platform is the biggest single folder, but it defines about a third of the service identifiers, and the workbench defines more of them than platform. Read as 'most of the services that aren't a contribution's own', platform has 256 of 480 (53%), so the point survives only that narrower reading: owner's call. Dropped by the owner (2026-10-14)."
     },
     {
       "id": "BP3.2",
