@@ -26,17 +26,43 @@ export function leakNeedles(input: { folders: readonly string[]; email?: string 
     return [...needles].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
 }
 
-/** The first needle a text holds, ignoring case, or null. */
-export function findLeak(text: string, needles: readonly string[]): string | null {
-    const lower = text.toLowerCase();
-    return needles.find((needle) => lower.includes(needle)) ?? null;
+/**
+ * A text in one spelling, for a match that doesn't care how a path was written or escaped: lowercased, with %5c and
+ * %2f turned into "/", %3a into ":" and %40 into "@", and every run of "\" and "/" folded into a single "/". A path
+ * escaped twice (JSON inside JSON), three times or more, with its slashes mixed, or with only its colon encoded
+ * (file:///c%3A/...) comes out the same as the plain one.
+ */
+function canonical(text: string): string {
+    return text
+        .toLowerCase()
+        .replace(/%5c|%2f/g, "/")
+        .replace(/%3a/g, ":")
+        .replace(/%40/g, "@")
+        .replace(/[\\/]+/g, "/");
 }
 
 /**
- * Every file under a folder that holds a needle, by path relative to the folder. Each file is read as UTF-8 and as
- * latin1, so a needle is found in text with any non-ASCII name and in binary files alike.
+ * The first needle a text holds, ignoring case, or null. It looks for each needle as written first. Only when none is
+ * there does it look again at both in canonical form, so a deeper escape than the spellings cover still counts. It
+ * returns the needle as it was given, never its canonical form. The match is a substring, with no check that it ends at
+ * a path segment: for a leak scanner, a false report is the safe mistake.
+ */
+export function findLeak(text: string, needles: readonly string[]): string | null {
+    const lower = text.toLowerCase();
+    const exact = needles.find((needle) => lower.includes(needle.toLowerCase()));
+    if (exact !== undefined) return exact;
+    const folded = canonical(text);
+    return needles.find((needle) => folded.includes(canonical(needle))) ?? null;
+}
+
+/**
+ * Every file under a folder that holds a needle, by path relative to the folder. Each file is read as UTF-8, as latin1
+ * and as latin1 with its NULs removed, so a needle is found in text with any non-ASCII name, in binary files, and in
+ * UTF-16 text (either byte order, with a BOM or without; Windows PowerShell 5.1's > writes it), which has a NUL beside
+ * every ASCII character. It throws with no needles, because scanning for nothing would call every folder clean.
  */
 export function scanForLeaks(dir: string, needles: readonly string[]): Leak[] {
+    if (needles.length === 0) throw new Error("nothing to scan for: no needles were given");
     const leaks: Leak[] = [];
     const walk = (folder: string): void => {
         for (const entry of fs.readdirSync(folder, { withFileTypes: true })){
@@ -46,7 +72,8 @@ export function scanForLeaks(dir: string, needles: readonly string[]): Leak[] {
                 continue;
             }
             const bytes = fs.readFileSync(full);
-            const needle = findLeak(bytes.toString("utf8"), needles) ?? findLeak(bytes.toString("latin1"), needles);
+            const latin1 = bytes.toString("latin1");
+            const needle = findLeak(bytes.toString("utf8"), needles) ?? findLeak(latin1, needles) ?? findLeak(latin1.replace(/\0/g, ""), needles);
             if (needle !== null) leaks.push({ file: path.relative(dir, full).replace(/\\/g, "/"), needle });
         }
     };
