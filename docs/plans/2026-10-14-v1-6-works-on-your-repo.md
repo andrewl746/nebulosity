@@ -91,17 +91,19 @@
 
 The plan is written for those picks. D1 and D2 spell them out exactly. D3 and D4 are the two calls left for later stops.
 
+**Approved 2026-10-14** (verbatim): "but im fine with using the apis and spending the money. ok lets resume. i approve v1.6 plan give me the prompt to resume in a new session". Built subagent-driven from a fresh session. Repo 2 keeps its summaries and big-picture questions (the owner declined the free-mode version). The estimates below were corrected on approval: V1.1–V1.5 took about 3–4 days subagent-driven, so day counts measure the agent's pace, and the waits are the owner's stops, the batch summaries and the eval's usage windows.
+
 ### The order of the work
 
-| Part | Tasks | What it does | My estimate |
+| Part | Tasks | What it does | Rough time |
 |---|---|---|---|
-| 0 Start and measure | 0–3 | the baseline; repo 2 and the variety repos (stop); E2's measurement; the probe and Eval #1's correction | ½–1 day |
-| 1 The engine | 4–7 | resolution, docs pointers, impact, architecture facts | 3–4 days |
-| 2 The eval harness | 8–11 | definitions and scripts allowed, sessions, the independent truth, the scorer and the gate | 2 days |
-| 3 The tool surface | 12–13 | six tools, five always loaded; the dev set | 1 day |
-| 4 Eval #2's questions | 14 | questions, truths, rubrics, sessions, the method (stop) | 1 day |
-| 5 Works on your repo | 15–19 | the data folder, the CLI and package, free mode and the yes before spending, CI, real repos and the README | 2–3 days, while you review Part 4 |
-| 6 Eval #2 | 20–25 | summaries (stop), freeze and pilot (stop), full run, grading (stop), the verdict (stop), close-out (stop) | 2–3 days, plus the runs' sittings |
+| 0 Start and measure | 0–3 | the baseline; repo 2 and the variety repos (stop); E2's measurement; the probe and Eval #1's correction | a few hours, plus your pick |
+| 1 The engine | 4–7 | resolution, docs pointers, impact, architecture facts | about 1 day |
+| 2 The eval harness | 8–11 | definitions and scripts allowed, sessions, the independent truth, the scorer and the gate | under a day |
+| 3 The tool surface | 12–13 | six tools, five always loaded; the dev set | a few hours |
+| 4 Eval #2's questions | 14 | questions, truths, rubrics, sessions, the method (stop) | a few hours, plus your review |
+| 5 Works on your repo | 15–19 | the data folder, the CLI and package, free mode and the yes before spending, CI, real repos and the README | about a day, while you review Part 4 |
+| 6 Eval #2 | 20–25 | summaries (stop), freeze and pilot (stop), full run, grading (stop), the verdict (stop), close-out (stop) | 1–2 days, set by the batch summaries and the runs' usage windows |
 
 **Why this order.**
 - The engine comes before the tool surface, and the tool surface before the dev set: the dev set tunes the wording of tools that have to exist.
@@ -110,7 +112,7 @@ The plan is written for those picks. D1 and D2 spell them out exactly. D3 and D4
 - V1.6's original scope (package, three systems, free mode, real repos) runs while you review the questions. It lands before the freeze, because it touches code the server runs (the data folder) and the spending rules.
 - The README's claims come last, from the measured results.
 
-**About 12–15 working days, more than the memo's 10–12:** the eval harness and the package are bigger than the memo counted. If the date matters more (applications open around late October or early November), Tasks 18–19 (CI, real repos) can move after Eval #2. They don't decide the gate, but a resolver fix they find would then wait for the results too.
+**About 4–6 days in all**, at the pace V1.1–V1.5 were built. The agent's work isn't what sets the date. The waits are your stop points, repo 2's batch summaries (hours), Eval #2's runs (about one 5-hour window, over two or three sittings) and CI rounds. If the date matters more, Tasks 18–19 (CI, real repos) can move after Eval #2: they don't decide the gate, but a resolver fix they find would then wait for the results.
 
 ### D1. The ship gate (approved; exact definitions)
 
