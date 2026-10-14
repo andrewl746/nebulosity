@@ -47,7 +47,7 @@ LangGraph agent    (in progress) answers questions with retrieval,
 
 The design splits everything into three strict layers. Core logic in `lib/` never imports from the UI framework, route handlers stay thin, and the two sides only communicate through typed contracts in `lib/contracts.ts`. That discipline exists for a reason: the long term target is a desktop app, and this shape means only the thin adapter layer needs rewriting.
 
-A few decisions I'd defend in an interview (the full records are in [ENGINEERING_DECISIONS.md](docs/ENGINEERING_DECISIONS.md)):
+A few decisions worth defending (the full records are in [ENGINEERING_DECISIONS.md](docs/ENGINEERING_DECISIONS.md)):
 
 - **Regex scanning for the MVP, AST parsing scheduled.** The regex version shipped a working graph in a day with zero dependencies. Its failure modes are documented, tested, and quarantined behind one function so the upgrade is a single module swap.
 - **The C++ scanner is an accelerator, never a dependency.** Scanning a repo is I/O bound, so a rewrite for speed alone would be hard to defend. Instead both engines honor the same output contract, the bridge falls back to TypeScript automatically, and the deliverable is a benchmark of both. The interview story is the measurement, not the rewrite.

@@ -4,7 +4,7 @@
 
 **Status:** Review artifact (audit of code as of 2026-09-04, commit `ccb0075`) — **ALL FINDINGS RESOLVED 2026-09-04.** See "Resolution" below.
 **Scope:** Phases 2–4 as shipped — `lib/chunks.ts`, `lib/index-repo.ts`, `lib/embed.ts`, `lib/retrieve.ts`, `app/api/index/route.ts`, `app/api/search/route.ts`, `lib/db/migrations/`, plus the `lib/chunks.test.ts` / `lib/embed.test.ts` harnesses
-**Context:** Phases 2, 3 and 4 were implemented away from this project's usual coached workflow, using a different model, while the project owner was without reliable access to Claude. The code typechecks and lints; this review is about whether it *works*, which is a different question and one nobody had been able to answer, because the embedding model could not be downloaded from inside China (see the header note in `lib/embed.test.ts`).
+**Context:** Phases 2, 3 and 4 were first written without being able to run them, outside this project's usual coached workflow: none of the Phase 2–4 code had ever been run (the embedding model could not be downloaded). The code typechecks and lints; this review is about whether it *works*, which is a different question and one nobody had been able to answer, because the embedding model could not be downloaded (see the header note in `lib/embed.test.ts`).
 **Method:** every claim below is backed by something that was actually executed — `tsc`, `eslint`, `vitest`, direct SQL against `.nebulosity/nebulosity.db`, or a throwaway harness run against the real MiniLM model. Nothing here is inferred from reading alone. Measured outputs are reproduced in PART 3.
 **Companion:** fixes are mapped to tiers in PART 2. This review adds work items; it does not change the architecture. Findings are numbered `R1`–`R18` to avoid colliding with `GRAPH_IMPLEMENTATION_REVIEW.md`'s `W`/`F` numbering.
 
@@ -82,7 +82,7 @@ new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4)
 **Evidence:** `lib/index-repo.ts:153` — `extractChunksFromFile(fullPath, content)` where `fullPath = path.join(repoRoot, scanned.id)`. Live rows from `.nebulosity/nebulosity.db`:
 
 ```
-chunks.chunk_id : C:\Users\Andrew\Programming\Nebulosity\lib\chunks.ts#parseFile#0
+chunks.chunk_id : <checkout>\lib\chunks.ts#parseFile#0
 files.path      : lib/chunks.ts
 ```
 

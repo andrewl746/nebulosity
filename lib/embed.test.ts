@@ -7,8 +7,8 @@
 // a second afterwards. lib/embed.ts logs the download so it doesn't look like a
 // hang.
 //
-// HISTORICAL NOTE (2026-08, resolved 2026-09-04): huggingface.co is unreachable
-// from inside China, so this suite could not run at all while it was written —
+// HISTORICAL NOTE (2026-08, resolved 2026-09-04): the embedding model could not
+// be downloaded, so this suite could not run at all while it was written —
 // which is why "should batch multiple texts" shipped failing and stayed that way
 // for weeks. It caught a real bug the moment it could execute: transformers.js
 // returns ONE tensor per batch, and the code was pushing the whole flat buffer as

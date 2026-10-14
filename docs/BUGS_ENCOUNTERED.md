@@ -3,9 +3,9 @@
 A running log of real bugs hit while building Nebulosity: what broke, how it
 was found, the root cause, the fix, and the reusable lesson.
 
-**Purpose:** this is interview ammunition. "Tell me about a hard bug you
-debugged" is one of the most common questions, and a specific, well-told bug
-story beats any amount of memorization. Keep entries short and honest — one
+**Purpose:** a record of the hard bugs and how each was found. Each entry is
+a specific story (the symptom, how it was caught, the root cause), which
+teaches more than a rule would. Keep entries short and honest — one
 paragraph each, root-cause-first.
 
 **Format per entry:** Where · When/how caught · Symptom · Root cause · Fix ·
@@ -88,7 +88,7 @@ Takeaway (the transferable lesson).
 ## 7. Every batch of embeddings collapsed into a single vector
 
 - **Where:** `lib/embed.ts` → `embedTexts()`
-- **Caught:** the first time the model could actually be downloaded (back in Canada, 2026-09-04) — `lib/embed.test.ts`'s "should batch multiple texts" failed with `expected [ …(2) ] to have a length of 20 but got 2`. Written in China, that test had never once been able to run.
+- **Caught:** the first time the model could actually be downloaded (2026-09-04) — `lib/embed.test.ts`'s "should batch multiple texts" failed with `expected [ …(2) ] to have a length of 20 but got 2`. Written while the model could not be downloaded, that test had never once been able to run.
 - **Symptom:** 20 input texts produced 2 output "vectors" — one per *batch* rather than one per text — each 6144 floats long instead of 384. Downstream, `embedChunks` zipped `chunks[i]` with `vectors[i]`, so every chunk past the batch count got `undefined`.
 - **Root cause:** transformers.js returns **one `Tensor` for the whole batch**, not one per input: `dims: [3, 384]` with a flat, row-major `data: Float32Array(1152)`. Nothing in the object separates the rows. The code guessed at the shape with a four-branch `Array.isArray`/`instanceof` ladder; a `Tensor` is not an `Array`, so control fell into the generic object branch, found `tensor.data instanceof Float32Array`, and pushed the entire flat buffer as one vector.
 - **Fix:** read `dims`, slice `data` into `dims[0]` rows of `dims[1]`, and assert the shape rather than branching on it. The whole ladder was deleted.

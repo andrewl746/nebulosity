@@ -20,7 +20,7 @@
 - **Layering:** nothing under `lib/` imports from `app/`, `next` or `react` (ARCHITECTURE.md §3, rule 1).
 - **Parameter cap:** no SQLite statement may exceed 32,766 bound parameters. Every bulk insert goes through `lib/db/batch.ts`.
 - **Don't index the Nebulosity repo itself before V1.3.** The old `GET /api/graph` (`saveScan`) only scans `app/` and `lib/` and deletes every other file row for that repo.
-- **Success criterion S1:** the structure stage takes ≤ 60 s on VS Code at commit `cc3fec88`, cloned at `../vscode` (`C:\Users\Andrew\Programming\vscode`).
+- **Success criterion S1:** the structure stage takes ≤ 60 s on VS Code at commit `cc3fec88`, cloned at `../vscode`.
 - **Out of scope for V1.1:** summaries, FTS, embeddings, API routes, UI, MCP. Those are V1.2–V1.4.
 
 ## Review Focus

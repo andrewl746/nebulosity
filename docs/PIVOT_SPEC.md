@@ -406,7 +406,7 @@ Each v1 slice ends demoable:
 - Claude implements and verifies by running things: `tsc`, lint, tests, benchmarks, the browser.
 - The owner reviews demos, makes the product calls, records the video, and deploys.
 - Learning comes after shipping. The owner writes a detailed public explainer, and lessons or quizzes happen on request.
-- This overrides CLAUDE.md's default "coach, don't write" for the duration of the sprint. Coaching resumes when the owner asks for it.
+- During the sprint the assistant implements and the owner reviews; the coached mode resumes when the owner asks for it.
 
 ---
 

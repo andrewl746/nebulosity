@@ -4,7 +4,7 @@ The owner's checks of model-written summaries before they're generated at scale.
 
 ## 2026 10 11 Summary Review #1 — claude-haiku-5-5 vs claude-sonnet-5-5 on 20 files of vscode
 
-- **Repo:** `C:/Users/Andrew/Programming/vscode` · **effort** low · **prompt version** 1 · the regular Messages API
+- **Repo:** `../vscode` · **effort** low · **prompt version** 1 · the regular Messages API
 - **Sample:** the 10 most-imported files, then 10 more spread evenly through the tree. Test files are left out: they get a template.
 
 ### Cost on this sample
@@ -131,7 +131,7 @@ Folder inputs are assumed to be about 1,000 tokens each, since a folder lists it
 
 ## 2026 10 11 Summary Review #2 — claude-haiku-5-5 vs claude-sonnet-5-5 on 20 files of vscode
 
-- **Repo:** `C:/Users/Andrew/Programming/vscode` · **effort** low · **prompt version** 2 · the regular Messages API
+- **Repo:** `../vscode` · **effort** low · **prompt version** 2 · the regular Messages API
 - **Sample:** the 10 most-imported files, then 10 more spread evenly through the tree. Test files are left out: they get a template.
 
 ### Cost on this sample
@@ -258,7 +258,7 @@ Folder inputs are assumed to be about 1,000 tokens each, since a folder lists it
 
 ## 2026 10 11 Summary Review #3 — folder preview: claude-haiku-5-5 files and claude-sonnet-5-5 folders on 10 folders of vscode
 
-- **Repo:** `C:/Users/Andrew/Programming/vscode` · **effort** low · **prompt version** 2 · the regular Messages API
+- **Repo:** `../vscode` · **effort** low · **prompt version** 2 · the regular Messages API
 - **Sample:** 10 folders (below): 128 files went to claude-haiku-5-5, then 25 folders to claude-sonnet-5-5, bottom-up in 3 waves, with exactly the prompts a real run builds. 14 test files got the template, as in a real run. Nothing was written to the index.
 - **Failures:** none.
 
