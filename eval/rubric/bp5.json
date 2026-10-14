@@ -1,0 +1,48 @@
+{
+  "id": "bp5",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file",
+      "check": "",
+      "holds": null,
+      "note": ""
+    }
+  ]
+}

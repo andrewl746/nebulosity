@@ -1,0 +1,62 @@
+{
+  "id": "bp1",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`",
+      "check": "",
+      "holds": null,
+      "note": ""
+    }
+  ]
+}

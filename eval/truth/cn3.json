@@ -1,0 +1,17 @@
+{
+  "id": "cn3",
+  "kind": "chain",
+  "from": "src/vs/workbench/api/common/extHost.api.impl.ts",
+  "to": "src/vs/editor/common/model/textModel.ts",
+  "connected": true,
+  "shortest": 4,
+  "example": [
+    "src/vs/workbench/api/common/extHost.api.impl.ts",
+    "src/vs/workbench/api/common/extHost.protocol.ts",
+    "src/vs/workbench/contrib/notebook/common/notebookCommon.ts",
+    "src/vs/workbench/contrib/notebook/common/model/notebookTextModel.ts",
+    "src/vs/editor/common/model/textModel.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

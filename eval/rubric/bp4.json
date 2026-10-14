@@ -1,0 +1,62 @@
+{
+  "id": "bp4",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals",
+      "check": "",
+      "holds": null,
+      "note": ""
+    }
+  ]
+}

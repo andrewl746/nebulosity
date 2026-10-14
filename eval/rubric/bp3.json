@@ -1,0 +1,48 @@
+{
+  "id": "bp3",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP3.1",
+      "text": "most services are defined in `platform`",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup",
+      "check": "",
+      "holds": null,
+      "note": ""
+    }
+  ]
+}

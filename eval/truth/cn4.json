@@ -1,0 +1,11 @@
+{
+  "id": "cn4",
+  "kind": "chain",
+  "from": "src/vs/base/common/strings.ts",
+  "to": "src/vs/workbench",
+  "connected": false,
+  "shortest": null,
+  "example": null,
+  "verified": false,
+  "notes": []
+}

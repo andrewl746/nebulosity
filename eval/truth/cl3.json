@@ -1,0 +1,13 @@
+{
+  "id": "cl3",
+  "kind": "list",
+  "target": "src/vs/editor/standalone",
+  "scope": "outside",
+  "files": [
+    "build/vite/setup-dev.ts",
+    "src/vs/editor/editor.api.ts",
+    "src/vs/editor/editor.main.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

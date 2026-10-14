@@ -1,0 +1,16 @@
+{
+  "id": "cn5",
+  "kind": "chain",
+  "from": "src/vs/workbench/contrib/scm/browser/scmViewPane.ts",
+  "to": "src/vs/platform/undoRedo/common/undoRedo.ts",
+  "connected": true,
+  "shortest": 3,
+  "example": [
+    "src/vs/workbench/contrib/scm/browser/scmViewPane.ts",
+    "src/vs/workbench/browser/labels.ts",
+    "src/vs/editor/common/model.ts",
+    "src/vs/platform/undoRedo/common/undoRedo.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

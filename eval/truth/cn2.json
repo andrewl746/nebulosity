@@ -1,0 +1,18 @@
+{
+  "id": "cn2",
+  "kind": "chain",
+  "from": "src/vs/workbench/workbench.web.main.ts",
+  "to": "src/vs/workbench/contrib/debug/browser/debugSession.ts",
+  "connected": true,
+  "shortest": 5,
+  "example": [
+    "src/vs/workbench/workbench.web.main.ts",
+    "src/vs/workbench/workbench.common.main.ts",
+    "src/vs/workbench/contrib/debug/browser/debug.contribution.ts",
+    "src/vs/workbench/contrib/debug/browser/debug.service.contribution.ts",
+    "src/vs/workbench/contrib/debug/browser/debugService.ts",
+    "src/vs/workbench/contrib/debug/browser/debugSession.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

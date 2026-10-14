@@ -1,0 +1,48 @@
+{
+  "id": "bp2",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)",
+      "check": "",
+      "holds": null,
+      "note": ""
+    }
+  ]
+}

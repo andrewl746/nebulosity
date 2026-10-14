@@ -1,0 +1,17 @@
+{
+  "id": "cn1",
+  "kind": "chain",
+  "from": "src/vs/workbench/workbench.desktop.main.ts",
+  "to": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+  "connected": true,
+  "shortest": 4,
+  "example": [
+    "src/vs/workbench/workbench.desktop.main.ts",
+    "src/vs/workbench/workbench.common.main.ts",
+    "src/vs/workbench/contrib/terminal/terminal.all.ts",
+    "src/vs/workbench/contrib/terminalContrib/inlineHint/browser/terminal.initialHint.contribution.ts",
+    "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts"
+  ],
+  "verified": false,
+  "notes": []
+}
