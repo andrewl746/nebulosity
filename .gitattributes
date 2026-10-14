@@ -1,0 +1,2 @@
+# The eval transcripts are data, compared byte for byte: git must not convert their line endings.
+eval/runs/** -text
