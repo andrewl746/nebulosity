@@ -1,0 +1,8 @@
+{ "id": "c8897693", "points": [
+  { "id": "BP2.1", "score": 1, "quote": "| `common` | Any environment. It uses only basic JavaScript, with no DOM or Node APIs. | `common` only |" },
+  { "id": "BP2.2", "score": 1, "quote": "| `browser` | A web page or renderer, with DOM and Web APIs. | `common` |" },
+  { "id": "BP2.3", "score": 1, "quote": "| `node` | Node.js. | `common` |" },
+  { "id": "BP2.4", "score": 1, "quote": "| `electron-browser` | The Electron renderer, which is browser code plus limited Electron IPC. | `common`, `browser` |" },
+  { "id": "BP2.5", "score": 1, "quote": "| `electron-utility` | The Electron utility process. | `common`, `node` |" },
+  { "id": "BP2.6", "score": 1, "quote": "| `electron-main` | The Electron main process. | `common`, `node`, `electron-utility` |" }
+] }

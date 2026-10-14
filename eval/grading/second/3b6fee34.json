@@ -1,0 +1,7 @@
+{ "id": "3b6fee34", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create the decorator with `createDecorator<IFooService>('fooService')`, and give it the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`." },
+  { "id": "BP3.3", "score": 1, "quote": "Constructor injection: put the service parameter after any non-service arguments and mark it with the decorator: ... `@IFooService private readonly fooService: IFooService,`" },
+  { "id": "BP3.4", "score": 1, "quote": "Creating injectable objects: call `instantiationService.createInstance(MyClass, arg)`. ... Contributions, such as workbench contributions, are created through `createInstance`, so they receive injection too." },
+  { "id": "BP3.5", "score": 1, "quote": "Registering a singleton: `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`." },
+  { "id": "BP3.6", "score": 1, "quote": "Singleton registration is a side-effect import, so the file must be pulled in by an entry-point `import`." }
+] }

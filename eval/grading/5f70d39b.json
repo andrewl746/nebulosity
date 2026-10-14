@@ -1,0 +1,13 @@
+{
+  "id": "5f70d39b",
+  "points": [
+    {"id": "BP4.1", "score": 0.5, "quote": "`browser/` is the shell: layout, parts and core actions. `common/` holds shared contracts and models. `electron-browser/` is the desktop entry layer."},
+    {"id": "BP4.2", "score": 0.5, "quote": "`api/` bridges the extension host to the main thread (`mainThread*` and `extHost*`)."},
+    {"id": "BP4.3", "score": 0.5, "quote": "`services/` is the injected service layer, with about 660 files."},
+    {"id": "BP4.4", "score": 1, "quote": "`contrib/` holds the feature modules, with about 3,270 files."},
+    {"id": "BP4.5", "score": 0, "quote": "none"},
+    {"id": "BP4.6", "score": 1, "quote": "Each `*.contribution.ts` file registers a feature's actions, views, editors, settings and singleton services."},
+    {"id": "BP4.7", "score": 0, "quote": "none"},
+    {"id": "BP4.8", "score": 0, "quote": "none"}
+  ]
+}

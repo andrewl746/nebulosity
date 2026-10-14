@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSheet, mergeGrades, validateReply, type Sheet } from "./grading";
+import { applyReview, buildSheet, mergeGrades, validateReply, type Review, type Sheet } from "./grading";
 import type { Rubric } from "./score";
 
 const rubric: Rubric = {
@@ -54,5 +54,45 @@ describe("mergeGrades", () => {
         expect(Object.keys(grades)).toEqual(["bp9-baseline-1", "bp9-nebulosity-2"]);
         expect(grades["bp9-nebulosity-2"]).toEqual({ "BP9.1": { score: 1, sentence: "q1" }, "BP9.3": { score: 0.5, sentence: "none" } });
         expect(grades["bp9-baseline-1"]["BP9.3"]).toEqual({ score: 1, sentence: "yes" });
+    });
+});
+
+describe("applyReview", () => {
+    const key = { "0a1b2c3d": "bp9-nebulosity-2" };
+    const grades = () => ({ "bp9-nebulosity-2": { "BP9.1": { score: 1, sentence: "q1" }, "BP9.3": { score: 0.5, sentence: "none" } } });
+    const review = (rulings: Review["rulings"]): Review => ({ rulings });
+
+    it("replaces the ruled point with the owner's score and sentence, and leaves the others", () => {
+        const r = applyReview(grades(), review([{ sheet: "0a1b2c3d", point: "BP9.1", grader1: 1, grader2: 0.5, score: 0.5, sentence: "g2 quote" }]), key);
+        expect(r.problems).toEqual([]);
+        expect(r.grades["bp9-nebulosity-2"]).toEqual({ "BP9.1": { score: 0.5, sentence: "g2 quote" }, "BP9.3": { score: 0.5, sentence: "none" } });
+        expect(r.changed).toBe(1);
+    });
+    it("counts a kept grade as applied but not changed", () => {
+        const r = applyReview(grades(), review([{ sheet: "0a1b2c3d", point: "BP9.3", grader1: 0.5, grader2: 1, score: 0.5, sentence: "none" }]), key);
+        expect(r.problems).toEqual([]);
+        expect(r.changed).toBe(0);
+    });
+    it("refuses an unknown sheet", () => {
+        const r = applyReview(grades(), review([{ sheet: "ffffffff", point: "BP9.1", grader1: 1, grader2: 0, score: 0, sentence: "x" }]), key);
+        expect(r.problems[0]).toContain("ffffffff");
+    });
+    it("refuses an unknown point", () => {
+        const r = applyReview(grades(), review([{ sheet: "0a1b2c3d", point: "BP9.2", grader1: 1, grader2: 0, score: 0, sentence: "x" }]), key);
+        expect(r.problems[0]).toContain("BP9.2");
+    });
+    it("refuses when grader1 no longer matches the merged grade", () => {
+        const r = applyReview(grades(), review([{ sheet: "0a1b2c3d", point: "BP9.1", grader1: 0, grader2: 0.5, score: 0.5, sentence: "x" }]), key);
+        expect(r.problems[0]).toContain("BP9.1");
+        expect(r.problems[0]).toMatch(/changed|differs|grader1/);
+    });
+    it("refuses a score that isn't 0, 0.5 or 1", () => {
+        const r = applyReview(grades(), review([{ sheet: "0a1b2c3d", point: "BP9.1", grader1: 1, grader2: 0.5, score: 0.75, sentence: "x" }]), key);
+        expect(r.problems[0]).toContain("0.75");
+    });
+    it("does not modify the grades it was given", () => {
+        const g = grades();
+        applyReview(g, review([{ sheet: "0a1b2c3d", point: "BP9.1", grader1: 1, grader2: 0.5, score: 0.5, sentence: "g2" }]), key);
+        expect(g["bp9-nebulosity-2"]["BP9.1"].score).toBe(1);
     });
 });

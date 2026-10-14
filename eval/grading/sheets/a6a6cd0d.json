@@ -1,0 +1,31 @@
+{
+  "id": "a6a6cd0d",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "**Sharing: a layered tree with two thin entry points**\n\nThe workbench lives in `src/vs/workbench/`. Code is split by the environment it needs, and each layer may only import from layers below it:\n\n- `common`: pure TypeScript with no DOM or Node.\n- `browser`: needs the DOM.\n- `electron-browser` (the desktop renderer): DOM plus Electron preload APIs.\n- `node`: Node only (extension host, servers).\n- `worker`: web worker code.\n\nMost of the workbench is in `common` and `browser`, so desktop and web share it. ESLint rules enforce the layering (for example `local/code-layering` and import-pattern rules). A `common` file can't accidentally pull in `electron-browser` code.\n\nThe two builds differ only at the entry points:\n\n- `workbench.common.main.ts` holds the shared set of services and contributions. It's imported by both entry points.\n- `workbench.desktop.main.ts` imports the common set plus the `electron-browser` and `node`-backed services and contributions.\n- `workbench.web.main.ts` imports the common set plus web-specific implementations, such as the web file system provider, web workers, and the web extension host.\n\nWhere the platforms differ, they usually share an interface (`IFooService`). Each platform then registers its own implementation, so features use the same API on both.\n\n**What decides whether code is loaded**\n\n1. **Static imports from the entry points.** Most features are side-effect imports like `import './contrib/foo/browser/foo.contribution.js'`. If an entry point doesn't import a feature, the bundler never includes it. This is the main gate. Desktop-only features (terminal pty, native dialogs) are imported only from the desktop entry.\n2. **Registration, not just loading.** Services use `registerSingleton(..., InstantiationType.Delayed | Eager)`, and Delayed services are created only on first use. Contributions use `registerWorkbenchContribution2` with a `WorkbenchPhase` (`BlockStartup`, `BlockRestore`, `AfterRestored`, `Eventually`), which controls when they're instantiated.\n3. **Dynamic `import()` and lazy descriptors.** Editors, views, and viewlets are registered as descriptors, and their classes are created only when opened. Heavy modules are loaded on demand.\n4. **Runtime gating.** Context keys and `when` clauses control whether UI is shown. `product.json` and configuration can disable features. `isWeb` and `isNative` checks branch inside shared code.\n5. **Extensions.** These are separate from the workbench bundle. Each extension has a `main` entry for the Node extension host and a `browser` entry for the web worker host. Activation events decide when the extension code actually runs.\n\nI answered from my knowledge of the repo layout and didn't open files to confirm. I can check any of this against the current tree if you want."
+}

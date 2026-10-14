@@ -1,0 +1,30 @@
+{
+  "id": "07c7ee6f",
+  "points": [
+    {
+      "id": "BP3.2",
+      "score": 1,
+      "quote": "Declare an interface and give it a brand: `export const IFooService = createDecorator<IFooService>('fooService');`. ... The interface and the const share one name. The const is both the service identifier and a parameter decorator."
+    },
+    {
+      "id": "BP3.3",
+      "score": 1,
+      "quote": "Constructors declare dependencies with `@IFooService private readonly fooService: IFooService`."
+    },
+    {
+      "id": "BP3.4",
+      "score": 1,
+      "quote": "`createInstance(Ctor, ...staticArgs)` builds an object and resolves the decorated params from its `ServiceCollection`. ... Contributions ... are created with `instantiationService.createInstance`, so they get injection too."
+    },
+    {
+      "id": "BP3.5",
+      "score": 1,
+      "quote": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed | Eager)` in `extensions.ts` registers it."
+    },
+    {
+      "id": "BP3.6",
+      "score": 0,
+      "quote": "none"
+    }
+  ]
+}

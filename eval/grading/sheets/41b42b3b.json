@@ -1,0 +1,31 @@
+{
+  "id": "41b42b3b",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "I answered this from my knowledge of VS Code's layout and didn't check it against your checkout, so verify file names before relying on them.\n\n## Sharing code\n\n**Layers.** Code under `src/vs` is split by what runtime APIs it may touch:\n- `common`: pure JS, runs anywhere.\n- `browser`: needs DOM APIs.\n- `node`: needs Node APIs.\n- `electron-browser`, `electron-main`, `electron-utility`: Electron-specific.\n- `worker`: web worker.\n\nA folder can only import from layers at or below its own. This is enforced by the layering lint rules and `tsconfig` splits. Most workbench code lives in `common` or `browser`, so both builds use it unchanged.\n\n**Platform differences go behind services.** The workbench is wired up through dependency injection (`IInstantiationService`, `registerSingleton`). Platform-neutral code depends on an interface such as `IFileService`, `IStorageService` or `IWorkbenchEnvironmentService`. Each platform supplies its own implementation:\n- Desktop: `src/vs/workbench/electron-browser` (`desktop.main.ts`), plus `services/**/electron-browser`.\n- Web: `src/vs/workbench/browser/web.main.ts`, plus `services/**/browser`.\n\n**Entry points.** Both builds share `workbench.common.main.ts`, which pulls in the workbench core and the contributions that work everywhere. Each platform adds its own entry file on top: `workbench.desktop.main.ts` or `workbench.web.main.ts`. These two files are the main place where a feature is included or excluded.\n\n## What decides whether a feature loads\n\n1. **Which entry file imports it.** A feature that only works on desktop, such as the terminal's pty host or native menus, is imported from `workbench.desktop.main.ts` only. A feature imported from `workbench.common.main.ts` ships everywhere. The bundler follows imports, so a module nobody imports isn't in the bundle.\n2. **Which services it needs.** A contribution that needs a service with no web implementation either gets a web stub or stays out of the web entry.\n3. **Side-effect imports and registration.** Contributions register themselves when their module runs (`registerWorkbenchContribution2`, `registerSingleton`, `registerAction2`). If the module is never imported, it never registers.\n4. **Lifecycle phase.** A contribution is registered with a phase (`Starting`, `Ready`, `Restored`, `Eventually`), and that decides when it is instantiated. Some are also created lazily, with `InstantiationType.Delayed`.\n5. **Runtime conditions.** Context keys and `when` clauses, configuration, and checks such as `isWeb` or `isNative` can disable a feature that was loaded. They stop it from activating, but the code is still in the bundle.\n6. **Extensions.** Extension code loads separately, based on activation events and the extension host type (local, web worker, or remote). An extension's `extensionKind` and its `browser` or `main` entry decide whether it runs on web.\n\nThe first three are build-time and decide whether the code is shipped. The last three are runtime and decide whether it activates."
+}

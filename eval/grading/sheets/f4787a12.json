@@ -1,0 +1,39 @@
+{
+  "id": "f4787a12",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "`src/vs/workbench` sits in the fourth layer of `src/vs`. The layers run `base`, `platform`, `editor`, `workbench`, `code`, `server` and `sessions`, and each can import only from the layers below it. `src/vs/sessions` may import from `workbench`, but `workbench` must never import from `sessions`. This comes from `.github/instructions/source-code-organization.instructions.md` and `.github/copilot-instructions.md`. I didn't read the layering lint config itself.\n\n## Layout of `src/vs/workbench`\n\n- **`common/`, `browser/`, `electron-browser/`** hold the minimal workbench core. `browser/` has the parts, layout and actions.\n- **`api/`** provides the `vscode.d.ts` API. It contains the extension host implementation and the main-thread counterparts (`mainThread*`, `extHost*`).\n- **`services/`** holds core services that aren't specific to one feature.\n- **`contrib/`** holds feature contributions. It has about 101 folders, such as `chat`, `debug`, `search`, `terminal`, `notebook` and `files`.\n- **`test/`** holds tests.\n- **Entry points** are `workbench.common.main.ts`, `workbench.desktop.main.ts`, `workbench.web.main.ts` and `workbench.web.main.internal.ts`. Only code reachable from these files gets loaded.\n\nInside each layer, code is split by runtime environment:\n\n| Folder | Environment |\n|---|---|\n| `common` | Plain JavaScript only |\n| `browser` | Web and DOM APIs |\n| `node` | Node.js APIs |\n| `electron-browser` | Browser plus limited Electron IPC |\n| `electron-utility` | Electron utility process |\n| `electron-main` | Electron main process |\n\nA folder may use only the environments listed for it. For example, `browser` may use `common`, and `electron-browser` may use `common` and `browser`.\n\n## Rules for `contrib/`\n\n- **No inward dependencies.** Nothing outside `contrib/` may depend on code inside it.\n- **One entry point.** Each contribution has a single `.contribution.ts` file that registers it. For example, `chat.contribution.ts` imports `aiCustomization.contribution.js`.\n- **One shared API file.** A contribution exposes its internal API from a single `common` file.\n- **No reaching into internals.** Other contributions must depend on that common API, not on another contribution's internals.\n- **Constructor injection.**\n  - Services are injected through decorated constructor parameters.\n  - Non-service parameters come before the service parameters.\n  - Service parameters must use the canonical service interface, with no local subset or `Pick<>` types.\n  - Services are registered with `registerSingleton(IFoo, Foo, InstantiationType.Delayed)`.\n- **Registry-based contributions.** Features add themselves through registries and extension points, not by being called directly."
+}

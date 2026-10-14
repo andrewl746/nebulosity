@@ -1,0 +1,39 @@
+{
+  "id": "5747a378",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "VS Code's core under `src/vs` is organized into these layers. This is from my knowledge of the repo, and I haven't re-checked it against the current tree.\n\n**Layers, lowest to highest**\n\n1. **`base`** holds general utilities and UI building blocks: collections, events, lifecycle and disposables, strings, paths, async helpers, and DOM widgets. It has no VS Code domain knowledge.\n2. **`platform`** provides services and their dependency-injection infrastructure: files, configuration, storage, instantiation, log, telemetry, and theme. Each service defines an interface and a service identifier. It also contains the lower-level hosting pieces such as the agent host, which is the most recent addition.\n3. **`editor`** is the Monaco text editor: model, view, language features, and standalone editor APIs. It sits on `base` and `platform`, and is deliberately independent of the workbench.\n4. **`workbench`** is the full application UI: parts such as the sidebar, panel, and status bar, plus the contributions, services, and features built on them. This includes the extension host integration.\n5. **`code`** is the Electron desktop entry point (main process, shared process, and so on). **`server`** is the remote and web server entry point. Both start up the workbench.\n\n**Target environments**\n\nWithin each layer, folders are split by the environment the code runs in:\n\n- `common`: runs anywhere.\n- `browser`: needs DOM APIs.\n- `node`: needs Node.js APIs.\n- `electron-browser`: Electron renderer.\n- `electron-main`: Electron main process.\n- `worker`: web worker.\n\nA folder may only import from environments it is compatible with. For example, `common` can't import from `browser` or `node`, but `browser` and `node` can both import from `common`.\n\n**Dependency rules**\n\n- Dependencies point downward only: `base` ← `platform` ← `editor` ← `workbench` ← `code`/`server`.\n- `base` depends on nothing above it.\n- `platform` may use `base` only.\n- `editor` may use `base` and `platform`, but never `workbench`.\n- `workbench` may use all lower layers.\n- A lower layer must never import from a higher one.\n\n**Other points**\n\n- `workbench` is further split into `workbench/services`, `workbench/contrib`, and `workbench/api`. Contributions in `contrib` should not be imported by `services`, and one contribution should generally not import another's internals. Cross-contribution access goes through services or a contribution's public entry point.\n- Extensions live outside `src/vs` and talk to the workbench only through the `vscode` API (`workbench/api`).\n- These rules are enforced by ESLint rules such as `local/code-layering` and `local/code-import-patterns`. They are configured in `eslint.config.js`, so that file has the authoritative, current rules."
+}

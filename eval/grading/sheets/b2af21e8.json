@@ -1,0 +1,31 @@
+{
+  "id": "b2af21e8",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Inside each layer of `src/vs`, such as `base`, `platform`, `editor` and `workbench`, the folders are named for the environment their code runs in. I'm answering from memory of VS Code's layering conventions and haven't re-checked the repo's guidelines in this session.\n\n| Folder | Runs in | What it may use and import |\n|---|---|---|\n| `common` | Any environment | Only basic JavaScript and ECMAScript APIs. It has no DOM and no Node. It can import only other `common` code. |\n| `browser` | A browser or renderer | DOM and Web APIs. It can import `common` and other `browser` code. |\n| `node` | A Node.js process (the shared process, extension host, CLI, server) | Node.js APIs. It can import `common` and other `node` code. |\n| `electron-browser` | The Electron renderer window (sandboxed) | Electron renderer APIs, such as the `ipcRenderer` exposed through the preload. It can import `common`, `browser` and other `electron-browser` code. It was previously called `electron-sandbox`. |\n| `electron-main` | The Electron main process | Electron main-process APIs. It can import `common`, `node` and other `electron-main` code. |\n| `worker` | A web worker | Worker-safe APIs only. It can import `common` and, carefully, worker-safe `browser` code. |\n\nTwo further rules apply across these folders:\n- **Direction:** a more general environment must never import a more specific one. For example, `common` can't import `browser` or `node`, and `browser` can't import `node` or `electron-*`.\n- **Layers:** the layering between the top-level folders is a separate rule from the environment split. Lower layers can't import higher ones: `base` → `platform` → `editor` → `workbench`, with `code`, `server` and the like on top.\n\nTo check these rules:\n- The `eslint-plugin-local` import rules, notably `code-import-patterns`, enforce them.\n- Violations appear as lint errors.\n- The authoritative definition is in `.github/copilot-instructions.md` and the import-pattern rules in the ESLint config."
+}

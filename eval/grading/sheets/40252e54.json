@@ -1,0 +1,27 @@
+{
+  "id": "40252e54",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses constructor-based dependency injection. I'm answering from my knowledge of the codebase and haven't opened the files in this session. The core is in `src/vs/platform/instantiation/common/`.\n\n**1. Defining a service**\n- Declare an interface and give it a branded marker: `export interface IFooService { readonly _serviceBrand: undefined; ... }`.\n- Create the identifier with `createDecorator<IFooService>('fooService')`, which is in `instantiation.ts`. It is exported under the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`.\n- The result is both a type and a parameter decorator. The string id must be unique.\n- Convention: the interface and decorator are named `IXxxService` and live in a `common/` file, usually `xxxService.ts`.\n\n**2. Making an implementation available**\n- Register it with `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`. This is in `extensions.ts`, and it is typically called at module level in a `*.contribution.ts` or in the service's own file.\n- `InstantiationType.Eager` creates the service at startup. `Delayed` returns a proxy and only constructs the real service when first used.\n- You can also pass a `SyncDescriptor` instead of a class.\n- Services needed early are constructed by hand and added to a `ServiceCollection` with `.set(IFooService, instance)`. Examples are the entry points `workbench.ts` and `main.ts`, and the `web.main`/`server` equivalents.\n- Registered singletons are collected by `getSingletonServiceDescriptors()` and added to the collection.\n\n**3. Getting it into consuming classes**\n- Declare it as a constructor parameter with the decorator: `constructor(arg1: string, @IFooService private readonly fooService: IFooService) {}`.\n- Convention: non-service arguments come first and injected services come last.\n- The decorator records the dependency by calling `storeServiceDependency` on the target class.\n- `InstantiationService` (`instantiationService.ts`) reads those dependencies with `getServiceDependencies`. It resolves them from its `ServiceCollection`, or from its parent instantiation service, and builds the instance.\n- It also detects cycles, using `Graph` and `_createAndCacheServiceInstance`.\n\n**4. Creating injected objects**\n- `instantiationService.createInstance(Ctor, ...nonServiceArgs)` creates a class with injected services.\n- `invokeFunction(accessor => accessor.get(IFooService))` is used for ad-hoc lookups.\n- `instantiationService.createChild(serviceCollection)` creates a scoped child with overrides.\n- Within a class, inject `IInstantiationService` itself to create children.\n- Contributions, such as workbench contributions, are registered with `registerWorkbenchContribution2` and constructed this way.\n\n**5. Testing**\n- `TestInstantiationService` and `ServiceCollection` let tests stub services, for example with `instantiationService.stub(IFooService, mock)`."
+}

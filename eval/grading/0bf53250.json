@@ -1,0 +1,8 @@
+{ "id": "0bf53250", "points": [
+{ "id": "BP5.1", "score": 0.5, "quote": "`workbench.desktop.main.ts`: desktop-only features" },
+{ "id": "BP5.2", "score": 0.5, "quote": "`workbench.web.main.ts`: web-only features" },
+{ "id": "BP5.3", "score": 0.5, "quote": "`workbench.common.main.ts`: features for every platform" },
+{ "id": "BP5.4", "score": 0, "quote": "none" },
+{ "id": "BP5.5", "score": 1, "quote": "Nothing is loaded unless it is imported, directly or transitively, from one of these files." },
+{ "id": "BP5.6", "score": 0.5, "quote": "A contribution file such as `foo.contribution.ts` runs its registrations on import" }
+] }

@@ -1,0 +1,13 @@
+{
+  "id": "141e069d",
+  "points": [
+    { "id": "BP1.1", "score": 1, "quote": "**`base`** holds general utilities and UI building blocks: strings, arrays, events, lifecycle, URI, async helpers, and basic DOM and widgets." },
+    { "id": "BP1.2", "score": 1, "quote": "**`platform`** provides dependency-injected services shared across the app, such as files, configuration, storage, instantiation, log, telemetry" },
+    { "id": "BP1.3", "score": 1, "quote": "**`editor`** is the Monaco text editor: model, view, languages, and standalone editor APIs." },
+    { "id": "BP1.4", "score": 0.5, "quote": "**`workbench`** is the full application shell: ... `contrib` holds the feature contributions: SCM, debug, terminal, chat, and so on." },
+    { "id": "BP1.5", "score": 1, "quote": "**`code`** is the desktop entry point for Electron (main process, shared process, CLI)." },
+    { "id": "BP1.6", "score": 1, "quote": "**`server`** is the entry point for remote and web server hosting." },
+    { "id": "BP1.7", "score": 1, "quote": "Dependencies go downward only: `workbench` → `editor` → `platform` → `base`. Lower layers never import from higher ones." },
+    { "id": "BP1.8", "score": 0.5, "quote": "`extensions/` (outside `src/vs`) can only reach core through the `vscode.d.ts` API." }
+  ]
+}

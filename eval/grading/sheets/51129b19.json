@@ -1,0 +1,39 @@
+{
+  "id": "51129b19",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "The layers are listed below, lowest first. I'm describing the layering as VS Code documents it and haven't re-checked it against the current tree.\n\n## Layers\n\n- **`base`**: Generic utilities and UI building blocks, with no knowledge of VS Code itself. It holds collections, strings, URIs, events, async and lifecycle helpers, and basic DOM widgets.\n- **`platform`**: The dependency-injection infrastructure and the services shared by every layer. Examples are files, configuration, storage, logging, telemetry, the instantiation service, and the contribution registries (commands, keybindings, context keys). Many `platform` pieces are used from `editor` and `workbench`, and agent-host code also lives here.\n- **`editor`**: The Monaco text editor, which also ships standalone. It covers the text model, the view, the language-feature APIs, and contributions like find, folding, and suggest. It knows nothing of the workbench.\n- **`workbench`**: The full IDE shell. It provides the layout (parts such as the sidebar, panel, and status bar), the services for editors, views, and extensions, and the built-in features under `contrib/`. It also contains the extension host and the extension API implementation (`api/`). Features live in `contrib/`, and the services they use live in `services/`.\n- **`code`**: The desktop application entry points. It runs the Electron main process, the shared process, and the CLI. It is the host that wires `workbench` into a runnable app.\n- **`server`**: The remote server (node) entry point. It runs the extension host and services for remote and web scenarios.\n\n## Allowed dependencies\n\nDependencies go downward only:\n\n- `base` → nothing\n- `platform` → `base`\n- `editor` → `base`, `platform`\n- `workbench` → `base`, `platform`, `editor`\n- `code` and `server` → everything below them\n\nLower layers must never import from higher ones. In particular, `editor` must not import `workbench`, and `platform` must not import `editor`. Each layer also has an `index`-style public API. Features in `workbench/contrib` should not reach into each other's internals. They should go through services or a contribution's `common` API.\n\n## Environment sub-folders\n\nInside each layer, folders are split by the runtime they target:\n\n- `common`: Pure JS/TS that runs anywhere. It may import only other `common` code (and lower layers' `common`).\n- `browser`: Needs DOM and web APIs. It may import `common` and `browser`.\n- `node`: Needs Node APIs. It may import `common` and `node`.\n- `electron-browser`: The renderer process with Node access. It may import `common`, `browser`, `node`, and `electron-browser`.\n- `electron-main`: The main process. It may import `common`, `node`, and `electron-main`.\n- `worker`: Web worker code.\n\nThese rules prevent, for example, `browser` code from importing `node` code.\n\n## Enforcement\n\nThe `eslint` rule `local/code-import-patterns`, configured in `eslint.config.js`, enforces both the layer and environment restrictions. The `layers-check` tooling does the same."
+}

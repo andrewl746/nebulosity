@@ -1,0 +1,31 @@
+{
+  "id": "9ffc2a51",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "I'm answering from my knowledge of the VS Code layering rules, without checking the repo. Folder names have changed over time, so verify against `.github/copilot-instructions.md` and the `eslint.config.js` import-pattern rules.\n\nEvery layer (`base`, `platform`, `editor`, `workbench`, and so on) splits into these environment folders:\n\n| Folder | Runs in | May import (within the allowed layers) |\n|---|---|---|\n| `common` | Any environment: browser, Node, Electron, worker | Only other `common` code. It can't use the DOM or Node APIs. |\n| `browser` | A browser or renderer with a DOM, including the web build | `common` and `browser` |\n| `node` | A Node.js process: extension host, server, shared process, CLI | `common` and `node` |\n| `electron-browser` (formerly `electron-sandbox`) | The sandboxed Electron renderer window | `common`, `browser` and `electron-browser`. It has no direct Node access and reaches the main process through IPC or preload globals. |\n| `electron-main` | The Electron main process | `common`, `node` and `electron-main`, plus the `electron` API |\n| `worker` | Web workers, such as the extension host worker | `common` and `worker`, with no DOM |\n\nThe rules follow one pattern:\n\n- **Dependencies point toward more general code.** A specific environment can import `common`. `common` can never import from `browser`, `node` or the Electron folders.\n- **`browser` and `node` are mutually exclusive.** Neither can import the other, because the web build must work without Node.\n- **Electron folders can't import each other.** `electron-browser` can't import `electron-main` or `node`, because the renderer is sandboxed.\n- **Layers also constrain imports.** Code can import only from its own layer or lower ones. The order is `base`, then `platform`, then `editor`, then `workbench`. For example, `platform` can't import from `workbench`.\n- **Contributions and services depend on interfaces.** The interfaces live in `common` and each environment provides its own implementation. This is how the same workbench runs on desktop and web.\n- **Tests mirror the same rules.** They live in `test/<environment>/` and follow the same import rules as the code they test.\n\nThese rules are enforced by ESLint's `local/code-import-patterns` rule, which fails the build on violations."
+}

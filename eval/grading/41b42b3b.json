@@ -1,0 +1,11 @@
+{
+  "id": "41b42b3b",
+  "points": [
+    { "id": "BP5.1", "score": 1, "quote": "A feature that only works on desktop, such as the terminal's pty host or native menus, is imported from `workbench.desktop.main.ts` only." },
+    { "id": "BP5.2", "score": 0.5, "quote": "Each platform adds its own entry file on top: `workbench.desktop.main.ts` or `workbench.web.main.ts`." },
+    { "id": "BP5.3", "score": 1, "quote": "Both builds share `workbench.common.main.ts`, which pulls in the workbench core and the contributions that work everywhere." },
+    { "id": "BP5.4", "score": 0.5, "quote": "A contribution that needs a service with no web implementation either gets a web stub or stays out of the web entry." },
+    { "id": "BP5.5", "score": 1, "quote": "The bundler follows imports, so a module nobody imports isn't in the bundle." },
+    { "id": "BP5.6", "score": 0.5, "quote": "Contributions register themselves when their module runs (`registerWorkbenchContribution2`, `registerSingleton`, `registerAction2`). If the module is never imported, it never registers." }
+  ]
+}

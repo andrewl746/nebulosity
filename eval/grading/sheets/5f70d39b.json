@@ -1,0 +1,39 @@
+{
+  "id": "5f70d39b",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "**Organization of `src/vs/workbench`** (about 4,600 files)\n\n- `browser/` is the shell: layout, parts and core actions.\n- `common/` holds shared contracts and models.\n- `electron-browser/` is the desktop entry layer.\n- `services/` is the injected service layer, with about 660 files.\n- `api/` bridges the extension host to the main thread (`mainThread*` and `extHost*`).\n- `contrib/` holds the feature modules, with about 3,270 files. Examples are chat, notebook, debug, terminal, extensions, search and git.\n- `test/` holds the workbench tests.\n- The top-level `workbench.common.main.ts`, `workbench.desktop.main.ts` and `workbench.web.main.ts` wire everything together. They use side-effect imports of each contribution's `*.contribution.ts` and `registerSingleton` calls. `workbench.web.main.internal.ts` exposes the public web embedder API.\n\n**Rules for `contrib/`**\n\nI read these from `.github/copilot-instructions.md` and the terminal contrib README. I did not read the layering rule definitions themselves, so the exact enforcement is unverified.\n\n- **Layering:** the code goes `base` → `platform` → `editor` → `workbench`. The `workbench` layer can import from the layers below it. `src/vs/sessions` sits alongside it and may import from workbench, but workbench must not import from it. `npm run valid-layers-check` validates layering. Run it when a change may affect module layering.\n- **Contribution model:** features plug into registries and extension points. Each `*.contribution.ts` file registers a feature's actions, views, editors, settings and singleton services. Features are not hard-wired into the shell.\n- **Dependency injection:** services come in through constructor parameters. Non-service parameters must come before the service parameters.\n- **Feature folders:** a feature and its tests live together. Folders are split by environment, such as `browser/`, `common/`, `electron-browser/` and `test/`.\n- **Sub-contribs:** `terminalContrib/` can only import from `terminal/`, never the reverse. ESLint rules enforce this to prevent circular dependencies.\n- **Code style:**\n  - Don't duplicate imports.\n  - Don't leave blank lines where an import was removed.\n  - Open editors through `IEditorService`, not `IEditorGroupsService.activeGroup.openEditor`.\n  - The ESLint config has many per-file allowlists and exemptions for `contrib` files.\n- **Docs:** some features have their own guides, such as `chat/chatCodeOrganization.md` and `imageCarousel/AGENTS.md`."
+}

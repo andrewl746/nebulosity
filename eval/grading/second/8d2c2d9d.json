@@ -1,0 +1,10 @@
+{ "id": "8d2c2d9d", "points": [
+  { "id": "BP1.1", "score": 1, "quote": "**`base/`** holds foundation utilities with no knowledge of the application. That includes collections, events, lifecycle and disposables, strings, URIs, async helpers and basic DOM and UI widgets." },
+  { "id": "BP1.2", "score": 1, "quote": "**`platform/`** holds platform services and the dependency-injection infrastructure. ... It knows nothing about editors or the workbench UI." },
+  { "id": "BP1.3", "score": 1, "quote": "**`editor/`** is the Monaco text editor: the model, view, languages, and standalone editor APIs." },
+  { "id": "BP1.4", "score": 1, "quote": "**`workbench/`** is the VS Code application shell. It contains the parts (editor groups, sidebar, panel), contributions, services, and the extension host and extension API." },
+  { "id": "BP1.5", "score": 1, "quote": "**`code/`** holds the desktop (Electron) entry points. It covers the main process, the shared process, the CLI and the window bootstrap." },
+  { "id": "BP1.6", "score": 1, "quote": "**`server/`** holds the remote and server entry points. This is the remote server for remote development and web." },
+  { "id": "BP1.7", "score": 1, "quote": "Dependencies point downward only, and a layer may import only from layers below it: code / server  →  sessions  →  workbench  →  editor  →  platform  →  base" },
+  { "id": "BP1.8", "score": 0.5, "quote": "It contains the parts (editor groups, sidebar, panel), contributions, services, and the extension host and extension API." }
+] }

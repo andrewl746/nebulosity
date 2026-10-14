@@ -1,0 +1,206 @@
+{
+  "reviewedBy": "owner",
+  "date": "2026-10-14",
+  "method": "A second blind grader (an Opus subagent given the same sheets and instruction, never grader 1's replies or the key) graded all 30 answers; the two agreed exactly on 174 of 198 points; the owner ruled on each of the 24 disagreements, arms hidden, taking the suggested score for each; every other grade is grader 1's.",
+  "ownerWords": "Take your suggested scores for all 24.",
+  "agreement": {
+    "points": 198,
+    "exact": 174,
+    "disagreements": 24
+  },
+  "secondGrader": "eval/grading/second/",
+  "rulings": [
+    {
+      "sheet": "5747a378",
+      "point": "BP1.4",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "**`workbench`** is the full application UI: parts such as the sidebar, panel, and status bar, plus the contributions, services, and features built on them."
+    },
+    {
+      "sheet": "6478027c",
+      "point": "BP1.4",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "The full application UI and its features. ... `workbench/browser` holds the layout and parts."
+    },
+    {
+      "sheet": "e0a5e94a",
+      "point": "BP1.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "The full IDE shell: parts (editor area, sidebar, panel), `services/`, `contrib/` features, and `api/` (the extension host and the VS Code API implementation)."
+    },
+    {
+      "sheet": "02685239",
+      "point": "BP2.5",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Some layers also have other environment folders, such as `electron-utility` or `server`. They follow the same pattern."
+    },
+    {
+      "sheet": "61e22919",
+      "point": "BP2.4",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "| `electron-sandbox` | The sandboxed Electron renderer, with DOM plus the preload-exposed Electron bridge. It was formerly `electron-browser`. | `common`, `browser`, `electron-sandbox` |"
+    },
+    {
+      "sheet": "07c7ee6f",
+      "point": "BP3.6",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0,
+      "sentence": "none"
+    },
+    {
+      "sheet": "3b6fee34",
+      "point": "BP3.6",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Singleton registration is a side-effect import, so the file must be pulled in by an entry-point `import`."
+    },
+    {
+      "sheet": "6bbf41de",
+      "point": "BP3.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`instantiationService.createInstance(MyClass, staticArg1, ...)`. The instantiation service reads the dependency metadata and resolves each service from its collection."
+    },
+    {
+      "sheet": "57ae7ae5",
+      "point": "BP4.3",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "**`services/`**: service implementations."
+    },
+    {
+      "sheet": "57ae7ae5",
+      "point": "BP4.5",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "each feature plugs into registries and extension points instead of being hard-wired into the core."
+    },
+    {
+      "sheet": "57ae7ae5",
+      "point": "BP4.8",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Never use another component's storage keys to change it. Add a proper API instead."
+    },
+    {
+      "sheet": "5f70d39b",
+      "point": "BP4.5",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Features are not hard-wired into the shell."
+    },
+    {
+      "sheet": "a3c2d829",
+      "point": "BP4.5",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "features plug in by contributing to registries and extension points. They are not hard-wired into the shell."
+    },
+    {
+      "sheet": "0bf53250",
+      "point": "BP5.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts`: desktop-only features"
+    },
+    {
+      "sheet": "0bf53250",
+      "point": "BP5.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`workbench.web.main.ts`: web-only features"
+    },
+    {
+      "sheet": "0bf53250",
+      "point": "BP5.4",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0,
+      "sentence": "none"
+    },
+    {
+      "sheet": "1e3b210e",
+      "point": "BP5.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` adds the `electron-sandbox` and node-backed pieces."
+    },
+    {
+      "sheet": "1e3b210e",
+      "point": "BP5.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`workbench.common.main.ts` imports the contributions and services both builds share."
+    },
+    {
+      "sheet": "1e3b210e",
+      "point": "BP5.6",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Contributions under `workbench/contrib/<feature>/` register themselves through side-effect imports, such as `import './contrib/foo/browser/foo.contribution.js'`."
+    },
+    {
+      "sheet": "2434e3c3",
+      "point": "BP5.6",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Features are usually pulled in by side-effect imports of their `*.contribution.ts` files, which are listed in these entry points."
+    },
+    {
+      "sheet": "41b42b3b",
+      "point": "BP5.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "Each platform adds its own entry file on top: `workbench.desktop.main.ts` or `workbench.web.main.ts`."
+    },
+    {
+      "sheet": "41b42b3b",
+      "point": "BP5.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "A contribution that needs a service with no web implementation either gets a web stub or stays out of the web entry."
+    },
+    {
+      "sheet": "41b42b3b",
+      "point": "BP5.6",
+      "grader1": 0.5,
+      "grader2": 0,
+      "score": 0.5,
+      "sentence": "Contributions register themselves when their module runs (`registerWorkbenchContribution2`, `registerSingleton`, `registerAction2`). If the module is never imported, it never registers."
+    },
+    {
+      "sheet": "9870cf0d",
+      "point": "BP5.6",
+      "grader1": 0.5,
+      "grader2": 0,
+      "score": 0.5,
+      "sentence": "Features register themselves on import ... The entry-point imports therefore effectively act as the feature manifest."
+    }
+  ]
+}

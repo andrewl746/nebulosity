@@ -1,0 +1,10 @@
+{ "id": "20776c93", "points": [
+  { "id": "BP4.1", "score": 0.5, "quote": "**`browser/`**: core workbench UI, meaning the parts, layout and actions." },
+  { "id": "BP4.2", "score": 1, "quote": "**`api/`**: the extension host and the implementation of the VS Code extension API." },
+  { "id": "BP4.3", "score": 1, "quote": "**`services/`**: core service implementations that aren't tied to one feature." },
+  { "id": "BP4.4", "score": 0.5, "quote": "**`contrib/`**: feature contributions such as `git`, `debug`, `search`, `terminal`, `chat`, `extensions`, `scm`, `notebook` and `testing`. There are roughly 100 of these folders." },
+  { "id": "BP4.5", "score": 1, "quote": "**No inward dependencies.** Nothing outside `contrib/` may depend on code inside `contrib/`." },
+  { "id": "BP4.6", "score": 1, "quote": "**One entry point.** Each contribution has a single `.contribution.ts` file." },
+  { "id": "BP4.7", "score": 1, "quote": "**One public API file.** A contribution exposes its internal API from a single `common` file." },
+  { "id": "BP4.8", "score": 1, "quote": "**No reaching into internals.** When one contribution depends on another, it uses that other contribution's common API." }
+] }

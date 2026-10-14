@@ -1,0 +1,10 @@
+{
+  "id": "3b6fee34",
+  "points": [
+    { "id": "BP3.2", "score": 1, "quote": "Create the decorator with `createDecorator<IFooService>('fooService')`, and give it the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`. The interface and the const share one identifier" },
+    { "id": "BP3.3", "score": 1, "quote": "put the service parameter after any non-service arguments and mark it with the decorator: constructor(arg: string, @IFooService private readonly fooService: IFooService)" },
+    { "id": "BP3.4", "score": 1, "quote": "call `instantiationService.createInstance(MyClass, arg)`. Pass only the static arguments, and the service arguments are supplied for you." },
+    { "id": "BP3.5", "score": 1, "quote": "Registering a singleton: `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`." },
+    { "id": "BP3.6", "score": 0.5, "quote": "Singleton registration is a side-effect import, so the file must be pulled in by an entry-point `import`." }
+  ]
+}

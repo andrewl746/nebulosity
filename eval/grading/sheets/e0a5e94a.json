@@ -1,0 +1,39 @@
+{
+  "id": "e0a5e94a",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "**Main layers under `src/vs`** (from the repo's `copilot-instructions.md`, plus what I know of the codebase):\n\n| Layer | Purpose |\n|---|---|\n| `base/` | Foundation utilities with no product knowledge: data structures, events, lifecycle and disposables, strings, paths, async helpers, and generic UI widgets. It is split by environment (`common`, `browser`, `node`, `parts`). |\n| `platform/` | The dependency-injection infrastructure and the services shared across the product: files, configuration, storage, log, instantiation, and so on. Each service defines its interface and its implementations. |\n| `editor/` | The Monaco text editor: model, view, language features, and standalone editor APIs. It does not know about the workbench. |\n| `workbench/` | The full IDE shell: parts (editor area, sidebar, panel), `services/`, `contrib/` features, and `api/` (the extension host and the VS Code API implementation). |\n| `code/` | The Electron main process (windows, app startup). |\n| `server/` | The server and remote entry points. |\n| `sessions/` | A dedicated workbench-like layer for the agent sessions window. |\n\n**Dependency rules**\n\n- Dependencies point downward: `base` ← `platform` ← `editor` ← `workbench`. A layer may import from the layers below it but never from those above.\n  - `base` imports nothing else in `vs`.\n  - `platform` may import `base`.\n  - `editor` may import `base` and `platform`.\n  - `workbench` may import `base`, `platform`, and `editor`.\n- The entry layers (`code`, `server`) sit on top and may import from the layers below them.\n- `sessions` sits alongside `workbench`. It may import from `workbench` but not the other way round.\n- Within each layer, code is also separated by target environment:\n  - `common` can be imported from anywhere.\n  - `browser` can use DOM APIs.\n  - `node` and `electron-*` can use Node or Electron APIs.\n  - `worker` is for web workers.\n  - A `common` folder may not import from `browser` or `node`.\n- Within `workbench`, `contrib/` features should not be imported by `services/` or `browser/` parts. They are wired in through registries and contribution points.\n- Layer violations are checked with `npm run valid-layers-check`. Run it when a change might affect module layering.\n\nI didn't check the exact rules for `code` and `server`, or the extra restrictions on `contrib/`. Those details come from my knowledge of the codebase, not from the file I read."
+}

@@ -1,0 +1,7 @@
+{ "id": "40252e54", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create the identifier with `createDecorator<IFooService>('fooService')`, which is in `instantiation.ts`. It is exported under the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`." },
+  { "id": "BP3.3", "score": 1, "quote": "Declare it as a constructor parameter with the decorator: `constructor(arg1: string, @IFooService private readonly fooService: IFooService) {}`." },
+  { "id": "BP3.4", "score": 1, "quote": "`instantiationService.createInstance(Ctor, ...nonServiceArgs)` creates a class with injected services. ... Contributions, such as workbench contributions, are registered with `registerWorkbenchContribution2` and constructed this way." },
+  { "id": "BP3.5", "score": 1, "quote": "Register it with `registerSingleton(IFooService, FooService, InstantiationType.Delayed)`." },
+  { "id": "BP3.6", "score": 1, "quote": "This is in `extensions.ts`, and it is typically called at module level in a `*.contribution.ts` or in the service's own file." }
+] }

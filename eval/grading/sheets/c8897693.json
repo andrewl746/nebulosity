@@ -1,0 +1,31 @@
+{
+  "id": "c8897693",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Each layer of `src/vs` is split by runtime environment. The table below comes from `.github/instructions/source-code-organization.instructions.md`.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any environment. It uses only basic JavaScript, with no DOM or Node APIs. | `common` only |\n| `browser` | A web page or renderer, with DOM and Web APIs. | `common` |\n| `node` | Node.js. | `common` |\n| `electron-browser` | The Electron renderer, which is browser code plus limited Electron IPC. | `common`, `browser` |\n| `electron-utility` | The Electron utility process. | `common`, `node` |\n| `electron-main` | The Electron main process. | `common`, `node`, `electron-utility` |\n\nIn short, `common` sits at the bottom and everything may depend on it. The browser-side and Node-side branches don't import each other: `browser` can't use `node`, and `node` can't use `browser`. Each Electron folder builds on the plain environment it extends.\n\nTwo other rules apply:\n\n- **Editor layer:** `vs/editor` is the Monaco core and must not depend on `node` or `electron-*` code.\n- **Workbench:** `vs/workbench` follows the same split. Its minimal core is `vs/workbench/{common|browser|electron-browser}`, and the entry points follow the pattern, for example `workbench.common.main.ts` for shared dependencies.\n\nThis file doesn't mention a `worker` environment. VS Code's code may also use `worker` folders, but I haven't checked that in the repo."
+}

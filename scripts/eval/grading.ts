@@ -11,7 +11,8 @@
  *           and writes eval/grading/grades.json (the shape score.ts reads: run name -> point id -> { score, sentence }),
  *           then copies the key to eval/grading/key.json: grading is done, so the mapping is published. It refuses
  *           (exit 1, listing every problem) and writes nothing when any sheet has no reply or any reply is malformed.
- * The owner's review of the grades (Step 5) goes in eval/grading/review.json, never in grades.json, whose keys are run names.
+ * The owner's review of the grades goes in eval/grading/review.json (grader 1's replies stay untouched); merge applies it on
+ * top of the merged grades, so re-running merge can never undo the review. A ruling that no longer fits refuses the merge.
  */
 import crypto from "crypto";
 import fs from "fs";
@@ -67,6 +68,40 @@ export function mergeGrades(key: Key, replies: Record<string, Reply>): Record<st
         grades[run] = grade;
     }
     return grades;
+}
+
+export type Ruling = { sheet: string; point: string; grader1: number; grader2?: number; score: number; sentence: string };
+export type Review = { rulings: Ruling[] } & Record<string, unknown>;
+
+/** Puts the owner's rulings over the merged grades. Every ruling is checked first; any problem means nothing is applied. */
+export function applyReview(grades: Record<string, RunGrade>, review: Review, key: Key): { grades: Record<string, RunGrade>; changed: number; problems: string[] } {
+    const out: Record<string, RunGrade> = {};
+    for (const [run, g] of Object.entries(grades)) out[run] = { ...g };
+    const problems: string[] = [];
+    let changed = 0;
+    for (const r of review.rulings){
+        const run = key[r.sheet];
+        if (run === undefined){
+            problems.push(`${r.sheet}: not a sheet in the key`);
+            continue;
+        }
+        const current = out[run]?.[r.point];
+        if (current === undefined){
+            problems.push(`${r.sheet} ${r.point}: not a point on that sheet`);
+            continue;
+        }
+        if (current.score !== r.grader1){
+            problems.push(`${r.sheet} ${r.point}: the ruling says grader 1 gave ${r.grader1} but the merged grade is ${current.score}; the replies changed under the review`);
+            continue;
+        }
+        if (!SCORES.includes(r.score)){
+            problems.push(`${r.sheet} ${r.point}: the ruled score ${r.score} isn't 0, 0.5 or 1`);
+            continue;
+        }
+        if (r.score !== current.score) changed++;
+        out[run][r.point] = { score: r.score, sentence: r.sentence };
+    }
+    return { grades: out, changed, problems };
 }
 
 const forward = (p: string): string => p.replace(/\\/g, "/");
@@ -151,9 +186,22 @@ function merge(checkout: string): void {
         console.error(`merge refused, nothing written:\n  ${problems.join("\n  ")}`);
         process.exit(1);
     }
-    const grades = mergeGrades(key, replies);
+    let grades = mergeGrades(key, replies);
+    let reviewNote = "";
+    const reviewFile = `${checkout}/eval/grading/review.json`;
+    if (fs.existsSync(reviewFile)){
+        const review = readJson<Review>(reviewFile);
+        const applied = applyReview(grades, review, key);
+        if (applied.problems.length > 0){
+            console.error(`merge refused, nothing written (the owner's review does not fit):\n  ${applied.problems.join("\n  ")}`);
+            process.exit(1);
+        }
+        grades = applied.grades;
+        reviewNote = `owner's review: ${review.rulings.length} rulings, ${applied.changed} changed grades`;
+    }
     writeJson(`${checkout}/eval/grading/grades.json`, grades);
     writeJson(`${checkout}/eval/grading/key.json`, Object.fromEntries(Object.entries(key).sort(([a], [b]) => a.localeCompare(b))));
+    if (reviewNote !== "") console.log(reviewNote.trim());
     console.log(`${Object.keys(grades).length} runs graded -> eval/grading/grades.json; the key is published as eval/grading/key.json`);
 }
 

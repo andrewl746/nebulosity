@@ -1,0 +1,31 @@
+{
+  "id": "9870cf0d",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "VS Code's layering is enforced by folder naming and by the entry-point files that import each folder. This is from my knowledge of the repo's structure. I haven't re-checked it against the current tree.\n\n**How code is shared**\n\n- `src/vs/` is split into layers: `base`, `platform`, `editor`, `workbench`. Each layer is further split by the runtime it targets:\n  - `common/` is pure JS with no DOM or Node.\n  - `browser/` may use DOM APIs.\n  - `node/` may use Node APIs.\n  - `electron-browser/` and `electron-main/` are Electron-specific.\n  - `worker/` is for web worker code.\n- Both builds share nearly all of `workbench/browser/` and `workbench/common/`. This includes the workbench layout, parts, services and most contributions.\n- Platform differences sit behind service interfaces. A service is declared as an interface plus a decorator in `common` or `browser`. Each platform then registers its own implementation:\n  - Desktop (`workbench/electron-browser/`, `services/**/electron-browser`) uses IPC to the main or shared process and native Node.\n  - Web (`workbench/browser/web.main.ts`, `services/**/browser`) uses browser storage, `fetch` and web workers.\n- Layering rules are enforced by ESLint (`local/code-layering` and `code-import-patterns`) and by the TS project configs. A `common` file can't import `browser` or `node`, and a `browser` file can't import `node`.\n\n**What decides whether a feature loads**\n\n1. **Entry points.** Desktop starts from `workbench.desktop.main.ts` and web from `workbench.web.main.ts`, both in `src/vs/workbench/`.\n   - Each imports the shared `workbench.common.main.ts`, then its own list of services and contributions.\n   - Anything not imported (transitively) from an entry point is never bundled or run.\n   - Desktop-only features, such as native terminals, are imported only from the desktop entry. Web-only services are imported only from the web entry.\n2. **Side-effect imports.** Features register themselves on import (`registerSingleton`, `registerWorkbenchContribution2`, action registration). The entry-point imports therefore effectively act as the feature manifest.\n3. **Registration phases.** Contributions declare a `WorkbenchPhase` (`BlockStartup`, `BlockRestore`, `AfterRestored`, `Eventually`), which controls when they are instantiated.\n   - Services registered with `InstantiationType.Delayed` are only created on first use.\n4. **Runtime gating.** Even when code is bundled, `when` clauses and context keys such as `isWeb` and `isNative` decide whether it's active. Configuration and product flags do the same. Extensions can also declare `extensionKind` and `browser` or `main` entry points, and the extension host selection depends on that.\n5. **Build config.** The gulp and esbuild bundling targets (`vs/workbench/workbench.*.main`) produce separate bundles for each platform, so dead entries are excluded at build time.\n\nIn short, shared code lives in `common` and `browser`. The entry points decide what's included, and context keys and phases decide what runs."
+}
