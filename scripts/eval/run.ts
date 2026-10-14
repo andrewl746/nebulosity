@@ -24,6 +24,7 @@
  * and stops cleanly (exit 0) when a run reports the 5-hour or 7-day window past its threshold.
  */
 import { execFileSync, spawn, spawnSync, type ChildProcess } from "child_process";
+import crypto from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -36,7 +37,7 @@ import { requireRepository } from "../../lib/db/store/structure";
 import { repoKey } from "../../lib/index/paths";
 import { loadDefinition, type EvalDefinition } from "./definition";
 import {
-    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scrub, utilizationCheck,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub, utilizationCheck,
     type RunId,
 } from "./run-config";
 import { summarizeRun, type RunSummary } from "./transcript";
@@ -55,12 +56,12 @@ const forward = (p: string): string => p.replace(/\\/g, "/");
 const CHECKOUT = forward(path.resolve(__dirname, "..", ".."));
 
 /** Where one eval keeps its files (`--eval <dir>`, default eval): the tracked folder, and the untracked work folder under .nebulosity. */
-type Paths = { dir: string; name: string; questions: string; emptyMcp: string; runs: string; work: string; raw: string; nebulosityMcp: string; scratch: string };
+type Paths = { dir: string; name: string; questions: string; emptyMcp: string; runs: string; work: string; raw: string; nebulosityMcp: string };
 function pathsFor(definition: EvalDefinition): Paths {
     const dir = forward(definition.dir);
     const name = path.basename(dir);
     const work = `${CHECKOUT}/.nebulosity/${name}`;
-    return { dir, name, questions: `${dir}/questions.json`, emptyMcp: `${dir}/mcp/empty.json`, runs: `${dir}/runs`, work, raw: `${work}/raw`, nebulosityMcp: `${work}/mcp-nebulosity.json`, scratch: `${work}/scratch` };
+    return { dir, name, questions: `${dir}/questions.json`, emptyMcp: `${dir}/mcp/empty.json`, runs: `${dir}/runs`, work, raw: `${work}/raw`, nebulosityMcp: `${work}/mcp-nebulosity.json` };
 }
 // set once by main(), before anything reads them
 let P!: Paths;
@@ -185,8 +186,15 @@ function git(args: string[], failure: GitFailure = BEFORE_RUNS): string {
 const repoChanges = (root: string, failure?: GitFailure): string[] => parsePorcelain(git(["--no-optional-locks", "-C", root, "status", "--porcelain"], failure));
 
 let readOnlyDb = false;
-/** The index version of a repo, read from Nebulosity's database without ever writing it (null when the repo isn't indexed or there is no database). */
-function indexVersionOf(root: string): number | null {
+/** The raw lines of `git status --porcelain`, status codes included: a file edited a second time changes its line only if its code does, so this is the snapshot the checkout is compared with. */
+const statusLines = (root: string, failure?: GitFailure): string[] => git(["--no-optional-locks", "-C", root, "status", "--porcelain"], failure).split(/\r?\n/).filter((l) => l.trim() !== "");
+
+/**
+ * The index version of a repo, read from Nebulosity's database without ever writing it: { version } or { problem }, a
+ * sentence (no database, an outdated one, a repo never indexed, or a repo with no version recorded). The tools of the
+ * N arm answer from this index, so a run with none would measure a server that fails.
+ */
+function indexVersionOf(root: string): { version: number } | { problem: string } {
     try{
         if (!readOnlyDb){
             // eslint-disable-next-line react-hooks/rules-of-hooks -- a database mode switch, not a React hook (ADR-044)
@@ -194,9 +202,10 @@ function indexVersionOf(root: string): number | null {
             readOnlyDb = true;
         }
         const db = getDb();
-        return readIndexVersion(db, requireRepository(db, repoKey(path.resolve(root))));
-    } catch{
-        return null;
+        const version = readIndexVersion(db, requireRepository(db, repoKey(path.resolve(root))));
+        return version > 0 ? { version } : { problem: `${root} has no index version recorded` };
+    } catch(e){
+        return { problem: `Nebulosity's index of ${root} couldn't be read: ${(e as Error).message.split("\n")[0]}` };
     }
 }
 
@@ -298,6 +307,9 @@ async function runClaude(
 type Context = {
     options: Options; questions: QuestionFile; claude: string; gitBash: string; forbiddenPlugins: string[];
     mcp: { empty: string; nebulosity: string }; replacements: { folder: string; with: string }[]; needles: string[];
+    folders: string[]; email: string | null;
+    /** The checkout's `git status --porcelain` lines before the batch (and after each kept run, which writes its own files): any difference after a run is a change that run made. */
+    snapshot: string[];
 };
 
 const fixed = (x: number | null): string => (x === null ? "n/a" : x.toFixed(2));
@@ -305,19 +317,58 @@ const fixed = (x: number | null): string => (x === null ? "n/a" : x.toFixed(2));
 /** The files in the raw folder: none on a first run. */
 const rawFiles = (): string[] => (fs.existsSync(P.raw) ? fs.readdirSync(P.raw) : []);
 
-/** One run, start to finish: the claude process, the checks that can stop the batch, then scrubbed and kept. */
+/**
+ * One run. With scripts on, its writable folder is opaque and arm-free (the plan's R6, as the controller fixed it): a new
+ * random-named folder under the system temp folder, outside the checkout and every repo, so the prompt, `--add-dir` and
+ * the Edit rule are the same text in both arms. Whatever the run left there is copied to the raw folder beside its
+ * transcript (<run name>.scratch) and the temp folder is removed, whether the run was kept or stopped the batch.
+ */
 async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
+    const name = runName(run);
+    if (!DEF.scripts) return runOneIn(run, ctx, undefined);
+    const hex = crypto.randomBytes(8).toString("hex");
+    const scratch = scratchFolder(fs.realpathSync.native(os.tmpdir()), hex);
+    fs.rmSync(scratch, { recursive: true, force: true });
+    fs.mkdirSync(scratch, { recursive: true });
+    try{
+        return await runOneIn(run, ctx, { folder: scratch, hex });
+    } finally{
+        fs.mkdirSync(P.raw, { recursive: true });
+        const kept = fs.existsSync(`${P.raw}/${name}.scratch`) ? `${P.raw}/${name}.scratch-${attemptsSoFar(name, rawFiles())}` : `${P.raw}/${name}.scratch`;
+        fs.cpSync(scratch, kept, { recursive: true });
+        fs.rmSync(scratch, { recursive: true, force: true });
+    }
+}
+
+/** What a finished run may not have changed: every repo of the definition (HEAD at its commit, status clean) and the checkout (status as before the run). */
+function checkNothingChanged(name: string, ctx: Context, rawFile: string): void {
+    for (const id of Object.keys(DEF.repos)){
+        const repo = repoOf(id);
+        const head = git(["-C", repo.root, "rev-parse", "HEAD"], AFTER_A_RUN).trim();
+        if (head !== repo.commit) throw new Stop(3, `${name}: ${repo.root} is at ${head} after the run, not ${repo.commit}. Nothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
+        const changed = repoChanges(repo.root, AFTER_A_RUN);
+        if (changed.length > 0) throw new Stop(3, `${name}: git status in ${repo.root} names changes:\n  ${changed.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
+    }
+    // the checkout can't be required clean (the owner's work in progress is there), so it is compared with the snapshot
+    const now = statusLines(CHECKOUT, AFTER_A_RUN);
+    const before = new Set(ctx.snapshot);
+    const after = new Set(now);
+    const difference = [...now.filter((l) => !before.has(l)).map((l) => `+ ${l}`), ...ctx.snapshot.filter((l) => !after.has(l)).map((l) => `- ${l}`)];
+    if (difference.length > 0) throw new Stop(3, `${name}: git status in the Nebulosity checkout (${CHECKOUT}) differs from before the batch:\n  ${difference.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
+}
+
+async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; hex: string } | undefined): Promise<RunSummary> {
     const name = runName(run);
     const question = ctx.questions.questions.find((q) => q.id === run.question)!;
     const repo = questionRepo(question);
-    // with scripts on, a fresh empty scratch folder per run, named in the prompt (R6)
-    const scratch = DEF.scripts ? `${P.scratch}/${name}` : undefined;
-    if (scratch !== undefined){
-        fs.rmSync(scratch, { recursive: true, force: true });
-        fs.mkdirSync(scratch, { recursive: true });
-    }
+    const scratch = scratchRun?.folder;
     const prompt = promptFor(question, ctx.questions.formats, scratch);
-    const indexVersion = indexVersionOf(repo.root);
+    // the N arm's tools answer from the index, so a repo without one stops the batch; the A arm just records what there is
+    const found = indexVersionOf(repo.root);
+    if ("problem" in found && run.arm === "nebulosity") throw new Stop(1, `${name}: ${found.problem}, so Nebulosity's tools would fail. Nothing was run.`);
+    const indexVersion = "version" in found ? found.version : null;
+    const replacements = scratch === undefined ? ctx.replacements : [...ctx.replacements, { folder: scratch, with: "<scratch>" }];
+    const needles = scratch === undefined ? ctx.needles : leakNeedles({ folders: [...ctx.folders, scratch], email: ctx.email });
     const startedAt = new Date();
     // one raw file per attempt, named by its start time, so a re-run after an outage keeps the earlier evidence
     const attempt = attemptsSoFar(name, rawFiles()) + 1;
@@ -343,9 +394,8 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     const problems = neverStarted ? [] : validateInit(summary, expected);
     if (problems.length > 0) throw new Stop(2, `${name}: the run differs from the agreed setup:\n  - ${problems.join("\n  - ")}\nThe raw transcript is ${rawFile}. Nothing was kept.`);
 
-    // 2. the repo, which no run may change. Never restored automatically.
-    const changed = repoChanges(repo.root, AFTER_A_RUN);
-    if (changed.length > 0) throw new Stop(3, `${name}: git status in ${repo.root} names changes:\n  ${changed.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
+    // 2. what no run may change: any repo of the definition, or the checkout. Never restored automatically.
+    checkNothingChanged(name, ctx, rawFile);
 
     // 3. an outage is re-run later (it counts toward the 6 re-runs), not scored. Its raw transcript stays.
     if (outage !== null){
@@ -354,14 +404,14 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     }
 
     // 4. scrubbed, then checked: a path or the email still there stops the batch before anything is published
-    const scrubbed = scrub(raw, ctx.replacements);
-    const leak = findLeak(scrubbed, ctx.needles);
+    const scrubbed = scrub(raw, replacements);
+    const leak = findLeak(scrubbed, needles);
     if (leak !== null) throw new Stop(4, `${name}: the scrubbed transcript still holds "${leak}". The raw transcript is ${rawFile}. Nothing was kept.`);
 
     // finalText stays in the transcript only: undefined leaves JSON.stringify's output
-    const entry = { name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, [DEF.pins.model, EXPLORE_MODEL]), repo: repo.id, indexVersion };
+    const entry = { name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, [DEF.pins.model, EXPLORE_MODEL]), repo: repo.id, indexVersion, scratch: scratchRun?.hex };
     const indexLine = JSON.stringify(entry);
-    const indexLeak = findLeak(indexLine, ctx.needles);
+    const indexLeak = findLeak(indexLine, needles);
     if (indexLeak !== null) throw new Stop(4, `${name}: its index line holds "${indexLeak}". The raw transcript is ${rawFile}. Nothing was kept.`);
 
     // The .gz is written as .tmp, the index line appended, and only then the .tmp renamed: a run that is skipped as done
@@ -372,6 +422,8 @@ async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
     fs.writeFileSync(`${gz}.tmp`, zlib.gzipSync(Buffer.from(scrubbed, "utf8")));
     fs.appendFileSync(`${P.runs}/index.jsonl`, `${indexLine}\n`);
     fs.renameSync(`${gz}.tmp`, gz);
+    // the files this run just wrote are the checkout's new normal for the next run's comparison
+    ctx.snapshot = statusLines(CHECKOUT, AFTER_A_RUN);
 
     const u = summary.usage;
     const n = (x: number): string => x.toLocaleString("en-US");
@@ -446,6 +498,12 @@ async function main(): Promise<void> {
         const dirty = repoChanges(repo.root);
         if (dirty.length > 0) throw new Stop(1, `git status in ${repo.root} names changes (${dirty.slice(0, 5).join(", ")}${dirty.length > 5 ? ", ..." : ""}). Nothing was run; ask the owner before restoring.`);
         console.log(`${repo.root}: HEAD ${head}, git status clean`);
+        const index = indexVersionOf(repo.root);
+        const needsIndex = batch.some((run) => run.arm === "nebulosity" && questionRepo(questions.questions.find((q) => q.id === run.question)!).id === id);
+        if ("version" in index) console.log(`${repo.root}: Nebulosity's index version ${index.version}`);
+        else if (!needsIndex) console.log(`${repo.root}: ${index.problem} (only A-arm runs ask about it, so the runs record no index version)`);
+        else if (dry) console.log(`${repo.root}: WOULD STOP a real run: ${index.problem}, and an N-arm run asks about it.`);
+        else throw new Stop(1, `${index.problem}, and an N-arm run asks about it, so Nebulosity's tools would fail. Nothing was run.`);
     }
 
     const mcp = { empty: P.emptyMcp, nebulosity: P.nebulosityMcp };
@@ -459,7 +517,8 @@ async function main(): Promise<void> {
         for (const run of batch){
             const pins = childEnv({}, { gitBash, toolSearch: run.toolSearch, configDir: options.configDir ?? undefined });
             const q = questions.questions.find((x) => x.id === run.question)!;
-            const scratch = DEF.scripts ? `${P.scratch}/${runName(run)}` : undefined;
+            // a real run makes a new random folder under the system temp folder; this is its shape
+            const scratch = DEF.scripts ? scratchFolder(forward(os.tmpdir()), "<16 random hex digits>") : undefined;
             const stdin = promptFor(q, questions.formats, scratch);
             const attempt = attemptsSoFar(runName(run), rawFiles()) + 1;
             console.log(`\n${runName(run)} (attempt ${attempt})`);
@@ -492,6 +551,8 @@ async function main(): Promise<void> {
     const ctx: Context = {
         options, questions, claude, gitBash, forbiddenPlugins, mcp,
         // each repo's folder becomes <its id> (<vscode> stays <vscode>), the checkout <nebulosity>, home ~
+        folders: [home, CHECKOUT, ...Object.keys(DEF.repos).map(repoRoot)], email,
+        snapshot: statusLines(CHECKOUT),
         replacements: [...Object.keys(DEF.repos).map((id) => ({ folder: repoRoot(id), with: `<${id}>` })), { folder: CHECKOUT, with: "<nebulosity>" }, { folder: home, with: "~" }],
         needles: leakNeedles({ folders: [home, CHECKOUT, ...Object.keys(DEF.repos).map(repoRoot)], email }),
     };

@@ -42,6 +42,11 @@ export function scratchRule(absPath: string): string {
     return drive ? `//${drive[1].toLowerCase()}/${drive[2]}/**` : `/${slashed}/**`;
 }
 
+/** A run's writable folder (R6, as the controller fixed it): opaque, arm-free, outside the checkout and every repo. Forward slashes, as claude and its permission rule are given it. */
+export function scratchFolder(tmp: string, hex: string): string {
+    return `${tmp.replace(/\\/g, "/").replace(/\/+$/, "")}/eval-scratch/${hex}`;
+}
+
 /** The text a run sends: the question, its family's format line, and with scripts on the scratch sentence (R6). */
 export function promptFor(question: { prompt: string; family: string }, formats: Record<string, string>, scratch?: string): string {
     const base = `${question.prompt}\n\n${formats[question.family]}`;

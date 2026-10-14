@@ -16,7 +16,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { loadDefinition } from "./definition";
-import { PINS, childEnv, claudeArgs } from "./run-config";
+import crypto from "crypto";
+import { PINS, childEnv, claudeArgs, scratchFolder } from "./run-config";
 import { summarizeRun } from "./transcript";
 
 const PROMPT = "Reply with the single word ready.";
@@ -61,8 +62,8 @@ const nebulosity = `${work}/mcp-nebulosity.json`;
 fs.writeFileSync(nebulosity, `${JSON.stringify({ mcpServers: { nebulosity: { command: "node", args: [`${checkout}/mcp/launch.mjs`], env: { NEBULOSITY_LIVE: "off" } } } }, null, 2)}
 `);
 const pins = definition?.pins ?? PINS;
-// the scratch folder a scripts-allowed eval's runs get, so the tool list is the one a run sees
-const scratch = definition?.scripts ? `${work}/probe-scratch` : undefined;
+// the kind of scratch folder a scripts-allowed eval's runs get (opaque, under the system temp folder), so the tool list is the one a run sees
+const scratch = definition?.scripts ? scratchFolder(fs.realpathSync.native(os.tmpdir()), crypto.randomBytes(8).toString("hex")) : undefined;
 if (scratch !== undefined) fs.mkdirSync(scratch, { recursive: true });
 
 for (const name of names){

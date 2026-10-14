@@ -295,6 +295,16 @@ export function cleanlinessLine(c: Cleanliness): string | null {
     return `Truths checked: ${c.truthsVerified ? "yes" : `no (${c.unverified.join(", ")})`}. Rubric points still unchecked: ${c.uncheckedPoints}.`;
 }
 
+/** The repo a question asks about: the one it names, else the definition's only repo (R: Eval #1's questions name none). */
+export function repoIdFor(repoIds: readonly string[], named: string | undefined, questionId: string): string {
+    if (named === undefined){
+        if (repoIds.length === 1) return repoIds[0];
+        throw new Error(`question ${questionId} names no repo, and eval.json has several (${repoIds.join(", ")}).`);
+    }
+    if (!repoIds.includes(named)) throw new Error(`question ${questionId} names the repo ${named}, which eval.json doesn't list.`);
+    return named;
+}
+
 /** Where the results are written: --out, else (when the runs come from somewhere else, as in a try-out) a temp file, else eval/results.json. */
 export function resultsFile(given: { runs: string | null; out: string | null }, checkout: string, tmp: string, dir = "eval"): string {
     return given.out ?? (given.runs !== null ? `${tmp}/nebulosity-eval-results.json` : `${checkout}/${dir}/results.json`);
@@ -413,13 +423,11 @@ function main(): void {
     const definition = loadDefinition(path.resolve(checkout, evalDir));
     const dir = forward(definition.dir);
     const name = path.basename(dir);
-    // one repo per scoring run so far (Eval #1's); the per-repo scoring of Eval #2 comes with its kinds
-    const [repoId] = Object.keys(definition.repos);
-    const repoPath = forward(path.resolve(checkout, definition.repos[repoId].path));
+    const repoIds = Object.keys(definition.repos);
     const runsDir = runsGiven ?? `${dir}/runs`;
     const outFile = resultsFile({ runs: runsGiven, out: outGiven }, checkout, forward(os.tmpdir()), name);
 
-    const file = readJson<{ commit: string; questions: { id: string; family: Family; truth?: string; rubric?: string }[] }>(`${dir}/questions.json`);
+    const file = readJson<{ commit: string; questions: { id: string; family: Family; repo?: string; truth?: string; rubric?: string }[] }>(`${dir}/questions.json`);
     const unknown = (only ?? []).filter((id) => !file.questions.some((q) => q.id === id));
     if (unknown.length > 0 || only?.length === 0) throw new Stop(`no such question: ${unknown.join(", ") || "(none given)"}. The questions are ${file.questions.map((q) => q.id).join(", ")}.`);
     const questions: QuestionData[] = file.questions.filter((q) => only === null || only.includes(q.id)).map((q) => ({
@@ -439,14 +447,28 @@ function main(): void {
     let results: RunResult[] = [];
     let edges: [string, string][] = [];
     if (wanted.length > 0){
-        const head = execFileSync("git", ["-C", repoPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-        if (!head.startsWith(file.commit.slice(0, 8))) throw new Stop(`${repoPath} is at ${head}, not ${file.commit}: the truth is for that commit.`);
-        const g = scanRepo(repoPath);
-        edges = g.edges;
-        const ctx: ScoreContext = { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicated) };
+        // one score context per repo the wanted runs touch, chosen by the question's repo; each repo's HEAD is checked against its pinned commit
+        const repoOfQuestion = new Map<string, string>();
+        for (const q of file.questions){
+            try{
+                repoOfQuestion.set(q.id, repoIdFor(repoIds, q.repo, q.id));
+            } catch(e){
+                throw new Stop(`${name}/questions.json: ${(e as Error).message}`);
+            }
+        }
+        const contexts = new Map<string, ScoreContext>();
+        for (const repoId of new Set(wanted.map((r) => repoOfQuestion.get(parseRunName(r.name)!.question)!))){
+            const repoPath = forward(path.resolve(checkout, definition.repos[repoId].path));
+            const pinned = definition.repos[repoId].commit;
+            const head = execFileSync("git", ["-C", repoPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+            if (head !== pinned) throw new Stop(`${repoPath} is at ${head}, not ${pinned}: the truth is for that commit.`);
+            const g = scanRepo(repoPath);
+            edges = [...edges, ...g.edges];
+            contexts.set(repoId, { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicated) });
+        }
         results = wanted.map((r) => {
             const id = parseRunName(r.name)!;
-            return scoreRun(r, id, questions.find((q) => q.id === id.question)!, ctx, grades[r.name]);
+            return scoreRun(r, id, questions.find((q) => q.id === id.question)!, contexts.get(repoOfQuestion.get(id.question)!)!, grades[r.name]);
         });
         if (JSON.stringify(results.map((r) => r.name)) !== JSON.stringify([...new Set(results.map((r) => r.name))])) warnings.push("two runs share a name");
     }

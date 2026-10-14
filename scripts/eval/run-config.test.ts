@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
-import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchRule, scrub, utilizationCheck } from "./run-config";
+import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scratchRule, scrub, utilizationCheck } from "./run-config";
 
 describe("claudeArgs", () => {
     it("pins the model and effort, drops user settings, allows read-only tools, and differs between arms only in the MCP config", () => {
@@ -216,5 +216,36 @@ describe("scripts allowed (Eval #2)", () => {
             "a-nebulosity-2", "a-baseline-2", "b-baseline-2", "b-nebulosity-2",
             "a-baseline-3", "a-nebulosity-3", "b-nebulosity-3", "b-baseline-3",
         ]);
+    });
+});
+
+describe("an opaque scratch folder (R6 as fixed)", () => {
+    const mcp = { empty: "e.json", nebulosity: "n.json" };
+    const question = { prompt: "Q?", family: "chain" };
+    const formats = { chain: "End with ANSWER." };
+
+    it("builds the folder from the system temp folder and a hex name, with forward slashes and no trailing slash", () => {
+        expect(scratchFolder("C:\\Users\\Ann\\AppData\\Local\\Temp\\", "0a1b2c3d4e5f6071")).toBe("C:/Users/Ann/AppData/Local/Temp/eval-scratch/0a1b2c3d4e5f6071");
+        expect(scratchFolder("/tmp", "ff")).toBe("/tmp/eval-scratch/ff");
+    });
+
+    it("gives both arms the same prompt, --add-dir and permission rules for the same scratch folder: only the MCP config differs", () => {
+        const scratch = scratchFolder("C:/Temp", "0a1b2c3d4e5f6071");
+        const a = claudeArgs("baseline", mcp, undefined, { scratch });
+        const n = claudeArgs("nebulosity", mcp, undefined, { scratch });
+        expect(a.filter((x, i) => x !== n[i])).toEqual(["e.json"]);
+        expect(n.filter((x, i) => x !== a[i])).toEqual(["n.json"]);
+        expect(a[a.indexOf("--add-dir") + 1]).toBe("C:/Temp/eval-scratch/0a1b2c3d4e5f6071");
+        expect(a[a.indexOf("--allowedTools") + 1]).toContain("Edit(//c/Temp/eval-scratch/0a1b2c3d4e5f6071/**)");
+        expect(promptFor(question, formats, scratch)).toContain("scripts in C:/Temp/eval-scratch/0a1b2c3d4e5f6071 (and nowhere else)");
+        // neither the folder nor the prompt carries an arm or a run name
+        expect(scratch).not.toMatch(/baseline|nebulosity/i);
+    });
+
+    it("scrubs a transcript's scratch folder to <scratch>, before the home folder becomes ~", () => {
+        const scratch = "C:/Users/Ann/AppData/Local/Temp/eval-scratch/0a1b2c3d4e5f6071";
+        const text = `{"cmd":"node ${scratch}/count.js","note":"home C:/Users/Ann/code"}`;
+        expect(scrub(text, [{ folder: "C:/Users/Ann", with: "~" }, { folder: scratch, with: "<scratch>" }]))
+            .toBe('{"cmd":"node <scratch>/count.js","note":"home ~/code"}');
     });
 });

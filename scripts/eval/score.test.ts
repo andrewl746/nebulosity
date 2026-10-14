@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { runName } from "./run-config";
 import {
     cleanliness, cleanlinessLine, familyArmRows, lastPerName, loadRuns, makeImports, median, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable,
-    renderQuestionTable, renderTable, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, sumTokens, type FamilyArmRow, type QuestionArmRow, type QuestionData,
+    renderQuestionTable, renderTable, repoIdFor, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, sumTokens, type FamilyArmRow, type QuestionArmRow, type QuestionData,
     type RunResult, type ScoreContext,
 } from "./score";
 import type { RunSummary } from "./transcript";
@@ -434,5 +434,17 @@ describe("loadRuns", () => {
 
     it("finds nothing in a folder that doesn't exist", () => {
         expect(loadRuns(path.join(os.tmpdir(), "score-no-such-folder"))).toEqual({ runs: [], warnings: [] });
+    });
+});
+
+describe("repoIdFor", () => {
+    it("takes the only repo when a question names none, and the named one when there are several", () => {
+        expect(repoIdFor(["vscode"], undefined, "bp1")).toBe("vscode");
+        expect(repoIdFor(["vscode", "affine"], "affine", "affine-cn1")).toBe("affine");
+    });
+
+    it("refuses a question that names no repo among several, or one the definition doesn't list", () => {
+        expect(() => repoIdFor(["vscode", "affine"], undefined, "q1")).toThrow("question q1 names no repo, and eval.json has several (vscode, affine).");
+        expect(() => repoIdFor(["vscode"], "other", "q2")).toThrow("question q2 names the repo other, which eval.json doesn't list.");
     });
 });
