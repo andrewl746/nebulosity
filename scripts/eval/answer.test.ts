@@ -9,6 +9,12 @@ describe("answerSection", () => {
         expect(isNone("none")).toBe(true);
         expect(isNone("src/a.ts")).toBe(false);
     });
+
+    it("ignores bold and backticks around the label, but not a prose label with words before it", () => {
+        expect(answerSection("**ANSWER**:\nsrc/a.ts")).toBe("src/a.ts");
+        expect(answerSection("`ANSWER:`\nsrc/a.ts")).toBe("src/a.ts");
+        expect(answerSection("Final answer: x")).toBeNull();
+    });
 });
 
 describe("extractPaths", () => {
@@ -30,6 +36,20 @@ describe("extractPaths", () => {
             notFiles: ["src/vs/folder/", "../outside/x.ts"],
         });
     });
+
+    it("reads bolded, italic and table-cell paths, and keeps a file whose own name starts with an underscore", () => {
+        const underscored = new Set([...known, "_x.ts"]);
+        const section = "**src/vs/a.ts**\n_src/vs/b.ts_\n|src/vs/c.ts|entry|\n- **src/vs/d.ts:12** — the entry\n_x.ts";
+        // "entry", "the" and the dash have no "/" and no code extension, so they are not paths at all
+        expect(extractPaths(section, root, underscored)).toEqual({
+            files: ["src/vs/a.ts", "src/vs/b.ts", "src/vs/c.ts", "src/vs/d.ts", "_x.ts"],
+            notFiles: [],
+        });
+    });
+
+    it("skips the repo root itself", () => {
+        expect(extractPaths("C:/Users/Ann/vscode/\n./", root, known)).toEqual({ files: [], notFiles: [] });
+    });
 });
 
 describe("scores", () => {
@@ -50,5 +70,12 @@ describe("scores", () => {
         const none = { from: "d", to: "a", connected: false, shortest: null };
         expect(scoreChain({ none: true, files: [] }, none, imports)).toEqual({ score: 1, valid: true, steps: null });
         expect(scoreChain({ none: false, files: ["d", "a"] }, none, imports)).toMatchObject({ score: 0 });
+    });
+
+    it("scores a right none 1 even when the same section names the files it talks about", () => {
+        // "ANSWER:\nnone\nsrc/d.ts never imports src/a.ts" reads as none: true with both files extracted
+        const none = { from: "d", to: "a", connected: false, shortest: null };
+        expect(scoreChain({ none: true, files: ["d", "a"] }, none, () => false)).toEqual({ score: 1, valid: true, steps: null });
+        expect(scoreChain({ none: false, files: ["d", "a"] }, none, () => false)).toMatchObject({ score: 0, problem: "claims a chain where none exists" });
     });
 });
