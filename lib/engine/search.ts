@@ -1,14 +1,15 @@
 import path from "path";
 import type { SearchHit, SearchResult } from "../contracts";
 import { getDb, type Db } from "../db/client";
-import { isCodeSearchDeferred, loadSummaryText, searchCode, searchSummaries, type CodeMatch } from "../db/store/search";
+import { isCodeSearchDeferred, loadExportedNames, loadSummaryText, searchCode, searchSummaries, type CodeMatch } from "../db/store/search";
 import { requireRepository } from "../db/store/structure";
-import { loadFolderFacts, targetKey } from "../db/store/summaries";
+import { loadFileFacts, loadFolderFacts, targetKey } from "../db/store/summaries";
 import { countEmbeddable, loadSummaryVectors, summaryVectorStamp } from "../db/store/summary-vectors";
+import { readIndexVersion } from "../db/store/version";
 import { decodeVector, embedTexts } from "../embed";
 import type { EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
-import { dropRepoName, fuseRankings, LIST_DEPTH, rankFolderNames, toFtsQuery } from "./rank";
+import { dropRepoName, fuseRankings, LIST_DEPTH, rankFileNames, rankFolderNames, toFtsQuery, type Declared, type FileFact } from "./rank";
 
 // The pure ranking lives in rank.ts so the browser can bundle it (ADR-049); the old public names stay importable from here.
 export { dropRepoName, fuseRankings, LIST_DEPTH, LIST_WEIGHTS, rankFolderNames, RRF_K, toFtsQuery } from "./rank";
@@ -28,12 +29,13 @@ export type SearchOptions = {
 };
 
 /**
- * Hybrid search (PIVOT_SPEC.md §6.1, RAG_PIPELINE.md §6). Four ranked lists of files
+ * Hybrid search (PIVOT_SPEC.md §6.1, RAG_PIPELINE.md §6). Five ranked lists of files
  * and folders are fused with RRF:
  * 1. bm25 over code, grouped by file;
  * 2. bm25 over summaries;
  * 3. cosine similarity between the query and every summary vector;
- * 4. folders whose names match the query (rankFolderNames).
+ * 4. folders whose names match the query (rankFolderNames);
+ * 5. files named like the query, or declaring what it names (rankFileNames).
  */
 export async function search(repoRoot: string, typed: string, options: SearchOptions = {}): Promise<SearchResult> {
     const db = getDb();
@@ -77,6 +79,10 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
     // 4. folders named like the query
     const name = rankFolderNames(loadFolderFacts(db, repoId), query).slice(0, LIST_DEPTH).map((p) => remember({ kind: "folder", path: p }));
 
+    // 5. files named like the query, or declaring what it names (ADR-052)
+    const facts = nameFactsFor(db, repoId);
+    const file = rankFileNames(facts.files, facts.declared, query).slice(0, LIST_DEPTH).map((p) => remember({ kind: "file", path: p }));
+
     if (isCodeSearchDeferred(db)) notes.push("Code search is still being built after a large index run, so code results may be missing.");
     if (countEmbeddable(db, repoId) === 0){
         notes.unshift(options.summariesOff
@@ -84,7 +90,7 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
             : "Summaries aren't ready yet, so results come from code and folder names only.");
     } else if (index.targets.length === 0) notes.unshift("Summaries aren't embedded yet, so results come from keywords only.");
 
-    const hits: SearchHit[] = fuseRankings({ code, summary, vector, name }).slice(0, limit).map(({ key, score, matchedBy }) => {
+    const hits: SearchHit[] = fuseRankings({ code, summary, vector, name, file }).slice(0, limit).map(({ key, score, matchedBy }) => {
         const target = targets.get(key)!;
         const text = loadSummaryText(db, repoId, target.kind, target.path);
         const chunk = target.kind === "file" ? bestChunk.get(target.path) : undefined;
@@ -103,9 +109,26 @@ export async function search(repoRoot: string, typed: string, options: SearchOpt
     return {
         query: typed,
         hits,
-        lists: { code: code.length, summary: summary.length, vector: vector.length, name: name.length },
+        lists: { code: code.length, summary: summary.length, vector: vector.length, name: name.length, file: file.length },
         ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
     };
+}
+
+/** What the file list needs (and, from Task 6, test damping), loaded once per index version (ADR-036). */
+type NameFacts = { version: number; files: FileFact[]; declared: Declared[] };
+const nameCache = new Map<number, NameFacts>();
+
+function nameFactsFor(db: Db, repoId: number): NameFacts {
+    const version = readIndexVersion(db, repoId);
+    const cached = nameCache.get(repoId);
+    if (cached?.version === version) return cached;
+    const facts: NameFacts = {
+        version,
+        files: loadFileFacts(db, repoId).map((f) => ({ path: f.path, importedBy: f.importedBy })),
+        declared: loadExportedNames(db, repoId),
+    };
+    nameCache.set(repoId, facts);
+    return facts;
 }
 
 /** Every summary vector of a repo in one flat matrix, reloaded only when the set of vectors changes. */

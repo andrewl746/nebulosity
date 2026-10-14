@@ -12,9 +12,10 @@ export const RRF_K = 60;
 /**
  * Each list's weight in the fusion. A folder named like the query is strong evidence it's what the user means, but on
  * its own it scored like one code hit and fell past the results' cut-off (VS Code's main debug folder for "debugger");
- * counting it double puts it among the hits two lists agree on (owner review, 2026-10-13).
+ * counting it double puts it among the hits two lists agree on (owner review, 2026-10-13). A file named like the query,
+ * or declaring what it names, is strong evidence too (V1.5, ADR-052).
  */
-export const LIST_WEIGHTS: Record<SearchList, number> = { code: 1, summary: 1, vector: 1, name: 2 };
+export const LIST_WEIGHTS: Record<SearchList, number> = { code: 1, summary: 1, vector: 1, name: 2, file: 2 };
 /** How many files or folders each list contributes to the fusion. */
 export const LIST_DEPTH = 50;
 
@@ -111,6 +112,40 @@ export function rankFolderNames(folders: readonly { path: string; name: string; 
         .map((r) => r.path);
 }
 
+/** A file for the file-name list: its path and how many files import it (its importance, ADR-010). */
+export type FileFact = { path: string; importedBy: number };
+/** An exported top-level declaration and the file declaring it. */
+export type Declared = { name: string; path: string };
+
+/** A file's name as a word: no folder, no extension, no .test/.spec marker ("lifecycle" for lifecycle.ts). */
+export function fileStem(filePath: string): string {
+    const base = filePath.slice(filePath.lastIndexOf("/") + 1);
+    return base.replace(/\.(test|spec)(?=\.[cm]?[jt]sx?$)/, "").replace(/\.[cm]?[jt]sx?$/, "");
+}
+
+/**
+ * Files named like the query or declaring what it names, most imported first, then by path (ADR-052). A file counts
+ * when its name is a query word, or that word plus an ending of up to 3 letters with both 4+ letters long (nameMatch's
+ * first tier: "lifecycle" finds lifecycle.ts, "debugger" finds debug.ts), or when it exports a top-level declaration
+ * named exactly like a query word ("registerSingleton" finds the file defining it). Partial matches stay with the
+ * code list: thousands of files contain a common word. Importance breaks ties, so VS Code's own lifecycle.ts comes
+ * before an extension's copy of it.
+ */
+export function rankFileNames(files: readonly FileFact[], declared: readonly Declared[], query: string): string[] {
+    const words = nameWords(query);
+    if (words.length === 0) return [];
+    const exact = new Set(words);
+    const found = new Set<string>();
+    for (const file of files){
+        const stem = fileStem(file.path).toLowerCase();
+        if (words.some((w) => nameMatch(stem, w) === 0)) found.add(file.path);
+    }
+    for (const d of declared) if (exact.has(d.name.toLowerCase())) found.add(d.path);
+
+    const importedBy = new Map(files.map((f) => [f.path, f.importedBy]));
+    return [...found].sort((a, b) => (importedBy.get(b) ?? 0) - (importedBy.get(a) ?? 0) || (a < b ? -1 : a > b ? 1 : 0));
+}
+
 /**
  * Weighted Reciprocal Rank Fusion (ADR-027): score(d) = Σ w / (k + rank), rank 1-based, over every
  * list that contains d, w its list's weight (LIST_WEIGHTS). It combines lists whose own scores (bm25,
@@ -119,7 +154,7 @@ export function rankFolderNames(folders: readonly { path: string; name: string; 
 export function fuseRankings(lists: Partial<Record<SearchList, readonly string[]>>, k: number = RRF_K): { key: string; score: number; matchedBy: SearchList[] }[] {
     const fused = new Map<string, { key: string; score: number; matchedBy: SearchList[] }>();
 
-    for (const list of ["code", "summary", "vector", "name"] as const){
+    for (const list of ["code", "summary", "vector", "name", "file"] as const){
         (lists[list] ?? []).forEach((key, i) => {
             const entry = fused.get(key) ?? { key, score: 0, matchedBy: [] };
             entry.score += LIST_WEIGHTS[list] / (k + i + 1);

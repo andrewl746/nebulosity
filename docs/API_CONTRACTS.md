@@ -140,11 +140,11 @@ type IndexStatus = { repo: string; stages: Record<StageName, StageStatus>; index
 The hybrid search engine (`lib/engine/search.ts`, `RAG_PIPELINE.md` §6) returns a `SearchResult`. `GET /api/search?q=&limit=` serves it (V1.3; `limit` 1–50, default 10), and V1.4's MCP `search` tool formats it as text. `400 BAD_REQUEST` without `q`, `404 INDEX_EMPTY` without an active repo.
 
 ```ts
-type SearchList = "code" | "summary" | "vector" | "name";   // "name" since V1.3.1
+type SearchList = "code" | "summary" | "vector" | "name" | "file";   // "name" since V1.3.1, "file" since V1.5
 type SearchHit = {
   path: string;                 // repo-relative, forward slashes
   kind: "file" | "folder";
-  score: number;                // weighted RRF: Σ w / (60 + rank) over the lists that found it (w = 2 for "name", else 1)
+  score: number;                // weighted RRF: Σ w / (60 + rank) over the lists that found it (w = 2 for "name" and "file", else 1)
   matchedBy: SearchList[];
   tagline?: string;             // the target's summary, when it has one
   summary?: string;
@@ -156,6 +156,7 @@ type SearchResult = { query: string; hits: SearchHit[]; lists: Record<SearchList
 - **Hits are files and folders**, never chunks: a file's chunks are grouped before ranking, and `code` is its best one. The repo summary is never a hit.
 - **`lists`** says how many files or folders each list contributed (at most 50 each).
 - **Folder names** *(V1.3.1, additive)*: the `name` list ranks folders whose name matches a query word (`RAG_PIPELINE.md` §6) and counts double in the fusion, so searching "terminal" finds the terminal folders. The Map's search palette shows every folder hit first, then every file hit, and asks for 40.
+- **File names** *(V1.5, additive)*: the `file` list ranks files whose name is a query word (or that word plus an ending of up to 3 letters), or that export a top-level declaration named exactly like one, most imported first. It counts double, like folder names (ADR-052).
 - **The repo's own name** is dropped from the query before searching when other meaningful words remain ("vscode terminal" searches "terminal" in VS Code). `query` in the answer is still the query as typed.
 - **`note`** is set when something limits the results: no summaries yet, summaries off (no `ANTHROPIC_API_KEY`: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only."), no vectors yet, the embedding model unavailable, or a query made only of very common words.
 

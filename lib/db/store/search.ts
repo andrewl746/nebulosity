@@ -1,6 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "../client";
-import { meta, summaries, type SummaryTargetKind } from "../schema";
+import { files, meta, summaries, symbols, type SummaryTargetKind } from "../schema";
 import type { SummaryText } from "./summaries";
 
 export type CodeMatch = { path: string; symbol: string; startLine: number; endLine: number; snippet: string };
@@ -35,6 +35,16 @@ export function loadSummaryText(db: Db, repoId: number, kind: SummaryTargetKind,
         .where(and(eq(summaries.repoId, repoId), eq(summaries.targetKind, kind), eq(summaries.targetPath, targetPath)))
         .get();
     return row?.tagline ? { tagline: row.tagline, summary: row.summary ?? "" } : null;
+}
+
+/** Exported top-level declarations (members aren't top-level), by file, then line: the file-name list's names (ADR-052). */
+export function loadExportedNames(db: Db, repoId: number): { name: string; path: string }[] {
+    return db.select({ name: symbols.name, path: files.path })
+        .from(symbols)
+        .innerJoin(files, eq(files.id, symbols.fileId))
+        .where(and(eq(files.repoId, repoId), eq(symbols.exported, true), isNull(symbols.parentQualifiedName)))
+        .orderBy(asc(files.path), asc(symbols.startLine))
+        .all();
 }
 
 /** The meta row that stops the chunk trigger while a bulk run writes (migration 0006, ADR-031 amended). */

@@ -115,7 +115,7 @@ describe("searchAnswer", () => {
                 { path: "src/core/log.ts", kind: "file", score: 0.02, matchedBy: ["code"], code: { symbol: "log", startLine: 2, endLine: 2, snippet: "export function log(message: string): void { console.log(message); }" } },
                 { path: "src/core/index.ts", kind: "file", score: 0.01, matchedBy: ["code"], tagline: "Re-exports logging", code: { symbol: "(file)", startLine: 1, endLine: 3, snippet: "x".repeat(200) } },
             ],
-            lists: { code: 2, summary: 0, vector: 0, name: 1 },
+            lists: { code: 2, summary: 0, vector: 0, name: 1, file: 0 },
             note: "Summaries are off (no ANTHROPIC_API_KEY), so results come from code and folder names only.",
         };
         expect(searchAnswer(r)).toEqual({
@@ -132,7 +132,7 @@ describe("searchAnswer", () => {
     });
 
     it("says when nothing matches", () => {
-        expect(searchAnswer({ query: "zzz", hits: [], lists: { code: 0, summary: 0, vector: 0, name: 0 } }))
+        expect(searchAnswer({ query: "zzz", hits: [], lists: { code: 0, summary: 0, vector: 0, name: 0, file: 0 } }))
             .toEqual({ body: ['No files or folders match "zzz". Try other words; for an exact string, use Grep.'], notes: [] });
     });
 });

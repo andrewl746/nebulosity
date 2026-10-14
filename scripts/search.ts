@@ -34,7 +34,7 @@ async function main(): Promise<void> {
     const warmMs = performance.now() - started;
 
     console.log(`[search] "${query}": ${result.hits.length} hits · lists: code ${result.lists.code}, summary ${result.lists.summary},`
-        + ` vector ${result.lists.vector} · first ${firstMs.toFixed(0)} ms, warm ${warmMs.toFixed(0)} ms`);
+        + ` vector ${result.lists.vector}, name ${result.lists.name}, file ${result.lists.file} · first ${firstMs.toFixed(0)} ms, warm ${warmMs.toFixed(0)} ms`);
     if (result.note) console.log(`[search] note: ${result.note}`);
 
     result.hits.forEach((hit, i) => {
