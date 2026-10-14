@@ -20,6 +20,11 @@ describe("importSpecifiers", () => {
         ].join("\n");
         expect(importSpecifiers(text)).toEqual(["./a.js", "../b", "./c", "./d.js", "./side-effect.css", "./e.js", "./f", "./multi.js"]);
     });
+
+    it("reads a dynamic import with a bundler comment before the quote, and a minified side-effect import", () => {
+        const text = 'const d = await import(/* webpackChunkName: "d" */ \'./d.js\');\nimport"./min.js";';
+        expect(importSpecifiers(text)).toEqual(["./d.js", "./min.js"]);
+    });
 });
 
 describe("resolveRelative", () => {
@@ -38,6 +43,21 @@ describe("resolveRelative", () => {
         expect(resolveRelative("src/x.ts", "react", known)).toBeNull();
         expect(resolveRelative("src/x.ts", "./missing", known)).toBeNull();
         expect(resolveRelative("src/x.ts", "./a.css", known)).toBeNull();
+    });
+
+    it("falls back to a .d.ts declaration file, after every real source candidate", () => {
+        const declarations = new Set(["src/api/git.d.ts", "src/types/index.d.ts"]);
+        expect(resolveRelative("src/x.ts", "./api/git", declarations)).toBe("src/api/git.d.ts");
+        expect(resolveRelative("src/x.ts", "./api/git.js", declarations)).toBe("src/api/git.d.ts");
+        expect(resolveRelative("src/x.ts", "./types", declarations)).toBe("src/types/index.d.ts");
+        expect(resolveRelative("src/x.ts", "./api/git", new Set([...declarations, "src/api/git.ts"]))).toBe("src/api/git.ts");
+    });
+
+    it("resolves a bare or trailing-slash specifier to the index file of the folder it names", () => {
+        const folders = new Set(["index.ts", "src/dir/index.ts", "src/index.ts"]);
+        expect(resolveRelative("src/x.ts", "..", folders)).toBe("index.ts");
+        expect(resolveRelative("src/x.ts", "./dir/", folders)).toBe("src/dir/index.ts");
+        expect(resolveRelative("src/x.ts", "./", folders)).toBe("src/index.ts");
     });
 });
 

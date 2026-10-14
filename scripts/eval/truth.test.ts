@@ -19,4 +19,16 @@ describe("truths over a scanned graph", () => {
         expect(hasEdge(G, "dir/f.ts", "c.ts")).toBe(true);
         expect(hasEdge(G, "a.ts", "c.ts")).toBe(false);
     });
+
+    it("breaks a tie between equally short chains by path order, whatever order the edges came in", () => {
+        const tie: Graph = {
+            files: ["a.ts", "x.ts", "y.ts", "z.ts"],
+            edges: [["a.ts", "y.ts"], ["a.ts", "x.ts"], ["x.ts", "z.ts"], ["y.ts", "z.ts"]],
+        };
+        expect(shortestChain(tie, "a.ts", "z.ts")).toEqual(["a.ts", "x.ts", "z.ts"]);
+    });
+
+    it("ends a chain at the first file reached inside a folder when the target is a folder", () => {
+        expect(shortestChain(G, "a.ts", "dir")).toEqual(["a.ts", "dir/e.ts"]);
+    });
 });

@@ -8,8 +8,9 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 
-/** import … from '…', export … from '…', import '…', import('…'), require('…'). */
-const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)['"]([^'"\n]+)['"]/gm;
+// import … from '…', export … from '…', import '…' (also minified, import'…'), import('…'), require('…').
+// Block comments between import( and the quote (a bundler's webpackChunkName hint) are skipped.
+const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*(?:\/\*.*?\*\/\s*)*|\brequire\s*\(\s*|^\s*import\s*)['"]([^'"\n]+)['"]/gm;
 const CODE_FILE = /\.[cm]?[jt]sx?$/;
 const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 /** TypeScript's pairs: a .js specifier names the .ts file next to it once compiled, and so on. */
@@ -21,17 +22,26 @@ export function importSpecifiers(text: string): string[] {
     return [...code.matchAll(SPECIFIER)].map((m) => m[1]);
 }
 
-/** A relative specifier as a file the repo has, or null: its TypeScript source, itself, an added extension, or an index file. */
+/**
+ * A relative specifier as a file the repo has, or null. In order: its TypeScript source, itself, an added extension, an
+ * index file, and last a .d.ts declaration file (so a real source file of the same name always wins). A trailing slash is
+ * dropped, and a path that comes out as "." (import '..' from a file one folder down) is the repo root.
+ */
 export function resolveRelative(fromFile: string, specifier: string, known: ReadonlySet<string>): string | null {
     if (!specifier.startsWith(".")) return null;
-    const base = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), specifier));
+    const joined = path.posix.join(path.posix.dirname(fromFile), specifier).replace(/\/+$/, "");
+    const base = joined === "." ? "" : joined;
+    const folder = base === "" ? "" : `${base}/`;
     const ext = path.posix.extname(base);
     const stem = base.slice(0, base.length - ext.length);
     const candidates = [
         ...(COMPILED_FROM[ext] ?? []).map((e) => stem + e),
         ...(CODE_FILE.test(base) ? [base] : []),
-        ...EXTENSIONS.map((e) => base + e),
-        ...EXTENSIONS.map((e) => `${base}/index${e}`),
+        ...(base === "" ? [] : EXTENSIONS.map((e) => base + e)),
+        ...EXTENSIONS.map((e) => `${folder}index${e}`),
+        ...(ext in COMPILED_FROM ? [`${stem}.d.ts`] : []),
+        ...(base === "" ? [] : [`${base}.d.ts`]),
+        `${folder}index.d.ts`,
     ];
     return candidates.find((c) => known.has(c)) ?? null;
 }
