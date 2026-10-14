@@ -447,7 +447,7 @@ This is the evaluation `PIVOT_SPEC.md` §9 asks for. The method, every run's sco
 | Connection | B | 1.00 | – | 6 | 2,603 | 62,705 | 405 | 65,150 | $0.020 | 8.4 s | 2 |
 | Connection | U | 1.00 | – | 4 | 1,494 | 67,166 | 313 | 69,073 | $0.016 | 7.1 s | 1 |
 
-Each row covers 10 runs. The score is the mean share of rubric points for big-picture, the mean recall for lists, and the mean chain score for connections. The medians are over the same 10 runs, with halves rounded up. Tokens are summed over every model, the cost is Claude Code's own list-price estimate, and the tool calls include ToolSearch. All 90 runs together came to $4.88 by that estimate.
+Each row covers 10 runs. The score is the mean share of rubric points for big-picture, the mean recall for lists, and the mean chain score for connections. The medians are over the same 10 runs, with halves rounded up. Tokens are summed over every model, the cost is Claude Code's own list-price estimate, and the tool calls include ToolSearch. All 90 runs together came to $4.88 by that estimate. A later probe (2026-10-14, V1.6 Task 3) corrected the up-front token figure: most of the 13,000 tokens were Claude Code's own deferred tools, not Nebulosity's (docs/EVAL_RESULTS.md, "The losses").
 
 ## 2026 10 14 Typecheck Benchmark #1 — E2's measurement: type-checking VS Code
 

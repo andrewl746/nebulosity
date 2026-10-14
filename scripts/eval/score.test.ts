@@ -225,7 +225,7 @@ function summary(over: Partial<RunSummary> = {}): RunSummary {
     return {
         model: "claude-sonnet-5-5", claudeVersion: "2.1.296", apiKeySource: "none", permissionMode: "dontAsk", tools: [], mcpServers: [], plugins: [], skills: 0,
         finalText: answer(A, B, C, D), subtype: "success", isError: false, turns: 6, durationMs: 40000, apiMs: 30000, costUsd: 0.31,
-        usage: USAGE, models: MODELS, toolCalls: { Grep: 1, ToolSearch: 1, mcp__nebulosity__dependents: 1 }, nestedToolCalls: { Read: 2 }, toolErrors: 0,
+        usage: USAGE, firstCallContext: null, models: MODELS, toolCalls: { Grep: 1, ToolSearch: 1, mcp__nebulosity__dependents: 1 }, nestedToolCalls: { Read: 2 }, toolErrors: 0,
         toolSearchCalls: 1, nebulosityCalls: 1, utilization: { fiveHour: null, sevenDay: null }, ...over,
     };
 }

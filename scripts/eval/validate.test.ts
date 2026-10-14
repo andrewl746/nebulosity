@@ -6,7 +6,7 @@ const GOOD: RunSummary = {
     model: "claude-sonnet-5-5", claudeVersion: "2.1.299", apiKeySource: "none", permissionMode: "dontAsk",
     tools: ["Bash", "Read", "Grep", "Glob", "Agent", "ToolSearch"], mcpServers: [{ name: "nebulosity", status: "connected" }],
     plugins: ["cc-plugin-agents-md"], skills: 0, finalText: "x", subtype: "success", isError: false, turns: 3, durationMs: 1, apiMs: 1, costUsd: 0.1,
-    usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 },
+    usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 }, firstCallContext: null,
     models: { "claude-sonnet-5-5": { costUsd: 0.1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
     toolCalls: {}, nestedToolCalls: {}, toolErrors: 0, toolSearchCalls: 0, nebulosityCalls: 0, utilization: { fiveHour: 0.4, sevenDay: 0.6 },
 };
