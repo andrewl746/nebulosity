@@ -329,14 +329,14 @@ Every run's score, and what the transcripts show. A question's six runs differ o
 | CN4 | 134k / 66k / 69k | $0.045 / $0.023 / $0.014 | 19 / 9 / 6 s | 6 / 2 / 1 |
 | CN5 | 186k / 65k / 69k | $0.091 / $0.017 / $0.015 | 28 / 8 / 7 s | 9 / 2 / 1 |
 
-B made no Nebulosity call on the direct-import lists (CL1–CL3, CL5) or on any big-picture question. Where it differs from A on those rows, the difference is between two runs of the same setup, not the tools.
+B made no Nebulosity call on the direct-import lists (CL1–CL3, CL5) or on any big-picture question, so on those rows no tool answer caused its differences from A. B's setup still differs from A's in its deferred tool list, which adds about 500 tokens to every turn (a one-turn answer: 21,004 against 20,528).
 
 ### The losses
 
-- **Big-picture: both Nebulosity arms scored below Claude Code alone.** B scored 0.819 and U 0.774, against A's 0.909: 0.090 and 0.135 lower. The whole gap is in two questions. On BP2, A scored 1.00 and B and U 0.79 each. On BP4, A scored 0.94, B 0.66 and U 0.47.
-  - *What decided the score:* whether a run read VS Code's own `.github/instructions/source-code-organization.instructions.md`, which states the environment table BP2 asks about and the contribution rules BP4.6–BP4.8 ask about. The five runs whose tools showed them that file scored 0.88–1.00 (BP2: A ×2; BP4: A ×2 and B r1). The seven runs on those two questions that never saw it scored 0.44–0.83.
+- **Big-picture: both Nebulosity arms scored below Claude Code alone.** B scored 0.819 and U 0.774, against A's 0.909: 0.090 and 0.135 lower. B's gap sits in two questions, BP2 and BP4: it is level with A on BP1 and BP3 and above it on BP5. U's sits mostly in the same two. U is also a little below A on BP1 (0.875 against 0.906, −0.031) and BP3 (0.90 against 0.95, −0.050), both within the spread of A's own two repeats there, and above it on BP5 (+0.083). On BP2, A scored 1.00 and B and U 0.79 each. On BP4, A scored 0.94, B 0.66 and U 0.47.
+  - *What the scores followed:* whether a run read VS Code's own `.github/instructions/source-code-organization.instructions.md`, which states the environment table BP2 asks about and the contribution rules BP4.6–BP4.8 ask about. The five runs whose tools showed them that file scored 0.88–1.00 (BP2: A ×2; BP4: A ×2 and B r1). The seven runs on those two questions that never saw it scored 0.44–0.83. That is what the transcripts show, a correlation in twelve runs, not a measured cause.
   - *What B and U did:* default B never loaded Nebulosity's tools on a big-picture question. U called `describe` on `src/vs/workbench` in both BP4 runs. The index's summary gave the folder's layout and counts but not the rules, and U still scored lowest there.
-  - *The other three:* on BP1, BP3 and BP5, where no run read the file, the arms are level (A 0.869, B 0.883, U 0.869).
+  - *The other three:* on BP1, BP3 and BP5, where no run read the file, the arms' means over the three are close (A 0.869, B 0.883, U 0.869). Within them U is a little below A on BP1 and BP3 and above it on BP5.
   - *What can't be told:* with two runs per question, whether the Nebulosity arms read less because of the tools or by chance.
 - **CL1, B's second repeat: 0.59 (13 of 22).** It didn't load the tools. Its one Grep pattern couldn't match the `../common/search.js` form that the feature's own `browser/` files use. Its follow-up checks looked outside `src/vs` for the full path and in `contrib/search/common` for `./search`, and it reported "Neither search found anything". So it missed 9 files. One `dependents` call returns all 22, and both U runs got 1.00. This one run is B's whole list gap.
 - **Nebulosity's index falls short of the owner's "refers to" truth in two ways.** These are limits of the index's import resolution against the eval's definition, not bugs under "resolves to" (R2: recorded here, fixed after the eval as V1.6 items):
@@ -393,16 +393,18 @@ ADR-043 says Nebulosity's edge should show on big repos, in complete dependency 
   - At the default (B): big-picture went from 0.909 to 0.819, lists from 0.972 to 0.935, and connections stayed at 1.00.
   - With the tools up front (U): 0.774, 0.969 and 1.00.
   - Per question, B was above A on 2: BP5 (+0.04) and CL4 (+0.02). Both gains are smaller than the gap between A's own two repeats on those questions. B was below A on 3 (BP2, BP4, CL1) and level on 10.
+  - U, against A: above on 2, BP5 (+0.08) and CL4 (+0.02), both again within the gap between A's own repeats; below on 5 (BP1, BP2, BP3, BP4, CL5); level on 8.
 - **This eval doesn't support "summaries of whole areas".**
   - Default B never loaded a tool on a big-picture question. U called `describe` twice, both times on BP4, and scored lowest there.
-  - The big-picture scores followed whether a run read VS Code's own instructions file. The index's summaries say what a folder holds, not the rules that file and the wiki state.
+  - The big-picture scores followed whether a run read VS Code's own instructions file.
+  - In U's two `describe` calls, both on `src/vs/workbench` for BP4, the index's summary said what the folder holds and gave none of the rules that file and the wiki state. That is an observation from two calls, not a test of the summaries.
 - **"Complete dependency answers" held in cost, not in score.**
   - Where a question needed a walk over the graph (the five connection questions and CL4), the tools answered in one call. The mean score was the same or better, for about a third of A's cost estimate and time on connections, and about an eighth of its tokens on CL4.
   - On the four direct-import lists, the tools added nothing. A's greps scored 1.00 on three of them, and on CL2 every arm missed the same three fixtures.
   - The index's own limits (`vs/…` module ids, computed `import()`) cost recall where the owner's rule counts those statements.
 - **At the default, the tools were used in 40% of runs** (12 of 30), all of them questions about chains or transitive dependents. Loading the tools up front raised that to 22 of 30 but didn't lift any family above A.
 - **ADR-024's test.** ADR-024 says the value proposition needs rethinking if Nebulosity's tools don't improve Claude Code's answers on VS Code.
-  - On correctness, this eval shows they didn't on 13 of the 15 questions (level on 10, lower on 3). On the other 2 the gain is within the spread of A's own repeats.
+  - On correctness, this eval shows they didn't on 13 of the 15 questions in either Nebulosity arm. At the default (B) they were level with A on 10 and lower on 3. With the tools up front (U) they were level on 8 and lower on 5. On the other 2 in each arm (BP5 and CL4), the gain is within the spread of A's own repeats.
   - What the tools did improve is the cost and time of dependency answers.
   - Whether that is enough is the owner's decision. This eval doesn't make it.
 - **What this eval doesn't show.**
