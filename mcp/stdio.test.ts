@@ -73,6 +73,14 @@ describe("the MCP server over stdio (node mcp/launch.mjs)", () => {
     it("starts before anything is indexed, then answers every tool read-only and tells the Map", async () => {
         const home = freshHome();
         const repo = copyFixture();
+        // The fake Map comes first and the config names its port before the server starts, so no call can post to port 3000
+        // (the Map a developer may have open). readConfig falls back to 3000 on a missing or malformed file; the seeded one
+        // never lets it.
+        const map = await fakeMap();
+        expect(map.port).not.toBe(3000);
+        const configFile = path.join(home, ".nebulosity", "config.json");
+        fs.mkdirSync(path.dirname(configFile), { recursive: true });
+        fs.writeFileSync(configFile, JSON.stringify({ activeRepo: null, port: map.port }));
         const transportErrors: Error[] = [];
         const client = new Client({ name: "stdio-test", version: "1" });
         client.onerror = (err) => transportErrors.push(err);
@@ -91,10 +99,8 @@ describe("the MCP server over stdio (node mcp/launch.mjs)", () => {
 
         // the user indexes; the same server answers, no restart
         indexInto(home, repo);
-        const map = await fakeMap();
-        const configFile = path.join(home, ".nebulosity", "config.json");
-        fs.writeFileSync(configFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(configFile, "utf8")), port: map.port }));
-        expect(map.port).not.toBe(3000);
+        // npm run index keeps the port it found (scripts/index.ts writes { ...readConfig(), activeRepo }): still the fake Map's
+        expect(JSON.parse(fs.readFileSync(configFile, "utf8")).port).toBe(map.port);
 
         expect(textOf(await client.callTool({ name: "overview", arguments: {} }))).toBe([
             `${path.basename(repo)}: 8 files, 48 lines, 11 imports between files.`,
