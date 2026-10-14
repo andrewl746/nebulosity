@@ -77,9 +77,9 @@ export const QUESTION_ORDER = [
  * Per repeat, question by question, three runs: A and B (B at Claude Code's default tool search), then B with every
  * tool loaded up front (`toolSearch: false`, named `...-nebulosity-upfront-n`). Which of A and B goes first alternates by
  * question and by repeat, so neither always meets a warmer cache or a later hour; the up-front run always follows the
- * pair (its tool list differs, so it shares no cache with them, and the three runs of a question fall within minutes). "By question" is the question's place in `order` (the whole list, which
- * is `questions` itself unless only some of them are asked), so the pilot and --only give a question the arm order the
- * full run will give it.
+ * pair (its tool list differs, so it shares no cache with them, and the three runs of a question fall within minutes).
+ * "By question" is the question's place in `order` (the whole list, which is `questions` itself unless only some of
+ * them are asked), so the pilot and --only give a question the arm order the full run will give it.
  */
 export function schedule(questions: readonly string[], repeats: number, order: readonly string[] = questions): RunId[] {
     const runs: RunId[] = [];

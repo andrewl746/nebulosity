@@ -58,8 +58,8 @@ claude -p --output-format stream-json --verbose
 
 ### What is on, what is off, and why
 
-- **On in both arms:** Read, Grep, Glob, the Agent tool, and Bash for read-only commands. D3 named `git grep`, `git ls-files`, `rg`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq` and `find`; the runner also allows `git log`, `git show` and `grep`. The Agent tool brings Explore and the other built-in subagents, which are how Claude Code explores a big repo by default. The runner expects `claude-haiku-5-5` for Claude Code's Explore subagent and notes any other model that answers; the pilot shows which models answer. `mcp__nebulosity` is allowed everywhere, but the tools exist only where the server runs.
-- **Off in both:** Edit, Write and NotebookEdit (nothing may change `../vscode`); WebFetch and WebSearch (the web holds the very wiki page the rubric comes from); Skill; PowerShell (`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`, so both arms use the same Bash shell); Monitor.
+- **On in every arm:** Read, Grep, Glob, the Agent tool, and Bash for read-only commands. D3 named `git grep`, `git ls-files`, `rg`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq` and `find`; the runner also allows `git log`, `git show` and `grep`. The Agent tool brings Explore and the other built-in subagents, which are how Claude Code explores a big repo by default. The runner expects `claude-haiku-5-5` for Claude Code's Explore subagent and notes any other model that answers; the pilot shows which models answer. `mcp__nebulosity` is allowed everywhere, but the tools exist only where the server runs.
+- **Off in every arm:** Edit, Write and NotebookEdit (nothing may change `../vscode`); WebFetch and WebSearch (the web holds the very wiki page the rubric comes from); Skill; PowerShell (`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`, so every arm uses the same Bash shell); Monitor.
 - **Permissions:** `dontAsk` refuses anything outside the allowed set, and `--permission-prompts none` tells the model not to retry. Whether Claude Code 2.1.299 reads a rule like `Bash(git grep:*)` as intended shows in the pilot's `permission_denials`.
 - **Tool search:** B uses Claude Code's default, under which every MCP tool is deferred and loaded on demand through ToolSearch. That is what a user who follows the README gets. The third arm, `nebulosity-upfront`, runs `ENABLE_TOOL_SEARCH=false` (tools loaded up front) on every question to measure what deferral costs. The pilot showed why it is on every question: at the default B loaded Nebulosity's tools in 1 of 3 runs, up front in 3 of 3. If deferral clearly hurts, the fix is a product change (V1.6: `alwaysLoad` in the README's registration), reported as such, not a different eval setting. Each transcript records its ToolSearch calls.
 - **Limits per run:** 80 turns and $4 (Claude Code's own estimate), and a 30-minute wall-clock limit. A run that hits the turn or budget limit scores 0 and is reported. A run killed at 30 minutes is an outage (below).
@@ -74,7 +74,7 @@ The runs use the owner's subscription, not an API key. Nothing of the owner's se
 
 | Variable | Value | Why |
 |---|---|---|
-| `CLAUDE_CODE_GIT_BASH_PATH` | the Git Bash that runs | both arms use one shell, and children find it |
+| `CLAUDE_CODE_GIT_BASH_PATH` | the Git Bash that runs | every arm uses one shell, and children find it |
 | `CLAUDE_CODE_USE_POWERSHELL_TOOL` | `0` | no PowerShell tool |
 | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` | `1` | no memory shared between runs |
 | `ENABLE_CLAUDEAI_MCP_SERVERS` | `false` | no connectors |
@@ -103,7 +103,7 @@ The runs use the owner's subscription, not an API key. Nothing of the owner's se
 
 ## The questions
 
-Prompts are identical in both arms. Each ends with a fixed answer format:
+Prompts are identical in the three arms. Each ends with a fixed answer format:
 - lists: `End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.`
 - chains: `End with a line that says ANSWER: and then either the word none, or the chain as file paths relative to the repository root, one per line, from the first file to the last, where each file imports the next.`
 - big-picture: `Answer in at most 400 words.`
@@ -204,9 +204,9 @@ Lists and chains are scored by `npm run eval:score`. Big-picture answers are gra
 
 ## Threats to validity
 
-- **VS Code ships its own overview for agents.** `AGENTS.md` points to `.github/copilot-instructions.md`, a 158-line architecture overview, and both arms can read it. It may help A as much as B.
-- **The wiki page is public.** The rubric comes from it, and the model may know it from training. Both arms share that, and it may narrow any gap on the big-picture family.
-- **Nebulosity's summaries were written by Claude models** (Haiku for files, Sonnet for folders and the repo), the same family that answers in both arms.
+- **VS Code ships its own overview for agents.** `AGENTS.md` points to `.github/copilot-instructions.md`, a 158-line architecture overview, and every arm can read it. It may help A as much as B.
+- **The wiki page is public.** The rubric comes from it, and the model may know it from training. Every arm shares that, and it may narrow any gap on the big-picture family.
+- **Nebulosity's summaries were written by Claude models** (Haiku for files, Sonnet for folders and the repo), the same family that answers in every arm.
 - **The ground truth was read by models, and no person has read every entry.** A Claude model (Opus) read every edge and rubric point in the source, and a second (Sonnet) re-checked a sample of the entries, every chain step and every rubric point. A misreading shared by the models is possible. The owner settled the three calls the reading left open (see "The owner's decisions").
 - **The rubric is graded by a model**, with the owner's review of every grade, against one wiki page.
 - **Two runs per question is a small sample.** Repeats of one arm differ. The tables show every run, and the results make no claim a sample this small can't carry.

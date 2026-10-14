@@ -71,7 +71,7 @@ type Options = {
     sevenDay: number; fiveHour: number; configDir: string | null; dryRun: boolean;
 };
 
-const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--dry-run]";
+const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2 (default 2: all remaining runs)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--dry-run]";
 
 function parseArgs(argv: string[]): Options {
     const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false };
