@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
 import {
-    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, singleQuestionIds,
     scratchRule, scrub, sessionArgs, utilizationCheck,
 } from "./run-config";
 
@@ -277,6 +277,32 @@ describe("sessionArgs", () => {
     it("uses the single-run budget when the pins name no session budget", () => {
         const session = sessionArgs("baseline", mcp, { ...pins, sessionMaxBudgetUsd: undefined });
         expect(session[session.indexOf("--max-budget-usd") + 1]).toBe("4");
+    });
+});
+
+describe("session questions run only inside their sessions (Task 14)", () => {
+    // a file as Eval #2's is laid out: single questions, a session's four, then more single questions
+    const questions = [
+        { id: "a-impact" }, { id: "a-cycle" },
+        { id: "a-s1-impact", session: "a-s1" }, { id: "a-s1-chain", session: "a-s1" }, { id: "a-s1-cycle", session: "a-s1" }, { id: "a-s1-unused", session: "a-s1" },
+        { id: "b-bp1" }, { id: "b-cn1" },
+    ];
+
+    it("schedules every single question and none of a session's, in the file's order", () => {
+        expect(singleQuestionIds(questions, null)).toEqual(["a-impact", "a-cycle", "b-bp1", "b-cn1"]);
+        // the full single schedule: 4 questions x 2 arms x 3 repeats, no session question among them
+        const runs = schedule(singleQuestionIds(questions, null), 3, singleQuestionIds(questions, null), { upfront: false });
+        expect(runs).toHaveLength(24);
+        expect(runs.some((r) => r.question.includes("-s1-"))).toBe(false);
+    });
+
+    it("keeps the file's order for a pilot or --only list, whatever order it names them in", () => {
+        expect(singleQuestionIds(questions, ["b-cn1", "a-impact"])).toEqual(["a-impact", "b-cn1"]);
+    });
+
+    it("refuses a session's question named as a single run, and an unknown id, each in a sentence", () => {
+        expect(() => singleQuestionIds(questions, ["a-impact", "a-s1-chain"])).toThrow("a-s1-chain is a question of task session a-s1, asked only inside it (run it with --sessions --only a-s1)");
+        expect(() => singleQuestionIds(questions, ["zz"])).toThrow("no such question: zz. The questions are a-impact, a-cycle, b-bp1, b-cn1");
     });
 });
 

@@ -1,7 +1,7 @@
 /**
  * npm run eval:run -- [--pilot | --only bp1,cl2,...] [--repeat 1|2 (default 2)] [--limit n]
  *                     [--stop-at-seven-day 0.85] [--stop-at-five-hour 0.9] [--config-dir dir] [--dry-run]
- * npm run eval:run -- --eval eval2 --sessions [--only <session ids>] [--repeat 1|2|3] [--limit n] [--dry-run]
+ * npm run eval:run -- --eval eval2 --sessions [--pilot | --only <session ids>] [--repeat 1|2|3] [--limit n] [--dry-run]
  * npm run eval:run -- --eval eval2 --dev [--arms nebulosity|baseline,nebulosity] [--only <ids>] [--limit n] [--dry-run]
  *
  * With --dev the questions are the dev set's (<dir>/dev/questions.json, every one marked "dev": true; V1.6's Task 13, R1):
@@ -13,7 +13,9 @@
  * over --input-format stream-json, the next written to stdin when the last one's `result` event appears. Every check a
  * single run gets applies (init, each repo and the checkout, scrub, leak), with session.ts's outage check (fewer results
  * than messages is an outage). A session is kept as <dir>/runs/<session>-<arm>-<repeat>.jsonl.gz, its index line carrying
- * `session`, each message's question id (`turnQuestions`) and each message's own figures (`sessionTurns`).
+ * `session`, each message's question id (`turnQuestions`) and each message's own figures (`sessionTurns`). With --pilot it
+ * asks the definition's `pilotSessions`, one repeat in each arm. A session's questions (marked "session" in questions.json)
+ * are asked only inside it: the single-run schedule, --pilot and --only leave them out.
  *
  * The eval's runner (D3, D4 in docs/plans/2026-10-13-v1-5-ship.md). It starts `claude -p` headless on each question in
  * three arms (A: no MCP server; B: Nebulosity's, its tools deferred as in Claude Code's default; U: B with its tools
@@ -51,10 +53,10 @@ import { repoKey } from "../../lib/index/paths";
 import { loadDefinition, type EvalDefinition } from "./definition";
 import {
     QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub,
-    sessionArgs, utilizationCheck,
+    sessionArgs, singleQuestionIds, utilizationCheck,
     type Arm, type RunId,
 } from "./run-config";
-import { resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef, type SessionFile } from "./session";
+import { chosenSessions, resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef, type SessionFile } from "./session";
 import { summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
@@ -110,7 +112,7 @@ type Options = {
     dev: boolean; arms: Arm[] | null;
 };
 
-const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--sessions (with --only <session ids>)] [--dev [--arms baseline,nebulosity (default nebulosity)]] [--dry-run]";
+const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--sessions (with --pilot or --only <session ids>)] [--dev [--arms baseline,nebulosity (default nebulosity)]] [--dry-run]";
 
 function parseArgs(argv: string[]): Options {
     const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false, evalDir: "eval", sessions: false, dev: false, arms: null };
@@ -159,9 +161,8 @@ function parseArgs(argv: string[]): Options {
     if (options.dev && (options.pilot || options.sessions)) throw new Stop(1, "--dev runs the dev set's single questions, so it can't be combined with --pilot or --sessions.");
     if (options.dev && options.repeat !== null) throw new Stop(1, "--dev is one run of each dev question, so it can't be combined with --repeat.");
     if (options.arms !== null && !options.dev) throw new Stop(1, "--arms is for the dev set: use it with --dev.");
-    if (options.sessions && options.pilot) throw new Stop(1, "--pilot is for single questions, so it can't be combined with --sessions.");
-    if (options.pilot && options.only) throw new Stop(1, "--pilot already names its questions (the definition's), so it can't be combined with --only.");
-    if (options.pilot && options.repeat !== null) throw new Stop(1, "--pilot is one run of each pilot question, so it can't be combined with --repeat.");
+    if (options.pilot && options.only) throw new Stop(1, "--pilot already names its questions or sessions (the definition's), so it can't be combined with --only.");
+    if (options.pilot && options.repeat !== null) throw new Stop(1, "--pilot is one run of each pilot question or session, so it can't be combined with --repeat.");
     return options;
 }
 
@@ -169,7 +170,7 @@ function parseArgs(argv: string[]): Options {
  * A question may name the repo it asks about; Eval #1's don't, and get the definition's only repo. A cycle question names
  * its `file` for its format line; a dev-set question is marked `dev`.
  */
-type Question = { id: string; family: string; prompt: string; repo?: string; file?: string; dev?: boolean };
+type Question = { id: string; family: string; prompt: string; repo?: string; file?: string; dev?: boolean; session?: string };
 type QuestionFile = { formats: Record<string, string>; questions: Question[] };
 
 /** What a dry run asks until the questions file exists: the definition's pilot ids (else bp4, cl2, cn3), with no real prompt. */
@@ -590,18 +591,26 @@ async function main(): Promise<void> {
     let planned: RunId[];
     if (options.sessions){
         sessionDefs = loadSessions(questions);
-        const unknownSessions = (options.only ?? []).filter((id) => !sessionDefs.some((x) => x.id === id));
-        if (unknownSessions.length > 0) throw new Stop(1, `no such session: ${unknownSessions.join(", ")}. The sessions are ${sessionDefs.map((x) => x.id).join(", ")}.`);
-        const chosenSessions = sessionDefs.filter((x) => options.only === null || options.only.includes(x.id)).map((x) => x.id);
-        planned = scheduleSessions(chosenSessions, options.repeat ?? DEF.repeats, sessionDefs.map((x) => x.id));
+        let chosen: string[];
+        try{
+            chosen = chosenSessions(sessionDefs.map((x) => x.id), { pilot: options.pilot, only: options.only, pilotSessions: DEF.pilotSessions ?? [] });
+        } catch(e){
+            throw new Stop(1, `${(e as Error).message}. Nothing was run.`);
+        }
+        // the pilot asks each of its sessions once in each arm, as it does its single questions
+        planned = scheduleSessions(chosen, options.pilot ? 1 : options.repeat ?? DEF.repeats, sessionDefs.map((x) => x.id));
     } else {
         if (options.pilot && DEF.pilot.length === 0) throw new Stop(1, `${P.name}/eval.json lists no pilot questions.`);
         const ids = options.pilot ? DEF.pilot : options.only;
-        const unknown = (ids ?? []).filter((id) => !questions.questions.some((q) => q.id === id));
-        if (unknown.length > 0) throw new Stop(1, `no such question: ${unknown.join(", ")}. The questions are ${questions.questions.map((q) => q.id).join(", ")}.`);
-        const chosen = questions.questions.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
-        // which arm goes first comes from a question's place in the whole list (D2's order for the placeholders), however few are asked
-        const order = placeholder && chosen.every((id) => QUESTION_ORDER.includes(id)) ? QUESTION_ORDER : questions.questions.map((q) => q.id);
+        // a task session's questions are asked only inside their sessions (Task 14): never scheduled as single runs
+        let chosen: string[];
+        try{
+            chosen = singleQuestionIds(questions.questions, ids);
+        } catch(e){
+            throw new Stop(1, `${(e as Error).message}. Nothing was run.`);
+        }
+        // which arm goes first comes from a question's place in the whole list of single questions (D2's order for the placeholders), however few are asked
+        const order = placeholder && chosen.every((id) => QUESTION_ORDER.includes(id)) ? QUESTION_ORDER : singleQuestionIds(questions.questions, null);
         if (options.dev){
             const arms = options.arms ?? ["nebulosity"];
             const missing = arms.filter((arm) => !DEF.arms.includes(arm));

@@ -21,6 +21,13 @@ describe("loadDefinition", () => {
         expect(loadDefinition(write(good))).toEqual({ ...good, dir: expect.any(String) });
     });
 
+    it("reads the pilot's sessions when it lists them, and refuses a list that isn't of ids", () => {
+        expect(loadDefinition(write({ ...good, pilotSessions: ["vscode-s1"] })).pilotSessions).toEqual(["vscode-s1"]);
+        expect(loadDefinition(write(good)).pilotSessions).toBeUndefined();
+        expect(() => loadDefinition(write({ ...good, pilotSessions: "vscode-s1" }))).toThrow("eval.json: pilotSessions, when given, lists session ids.");
+        expect(() => loadDefinition(write({ ...good, pilotSessions: [1] }))).toThrow("eval.json: pilotSessions, when given, lists session ids.");
+    });
+
     it("refuses an unknown arm, a repeat count outside 1–3, and a commit that isn't a full sha, each in a sentence", () => {
         expect(() => loadDefinition(write({ ...good, arms: ["baseline", "other"] }))).toThrow('eval.json: arms may be "baseline", "nebulosity" and "nebulosity-upfront", not "other".');
         expect(() => loadDefinition(write({ ...good, repeats: 4 }))).toThrow("eval.json: repeats is 1, 2 or 3.");

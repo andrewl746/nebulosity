@@ -16,6 +16,8 @@ export type EvalDefinition = {
     /** Node scripts and edits allowed under a fresh scratch folder per run (R6). */
     scripts: boolean;
     pilot: string[];
+    /** The task sessions the pilot asks (`--sessions --pilot`, one repeat in each arm); absent in an eval with no sessions. */
+    pilotSessions?: string[];
 };
 
 const ARMS: readonly ArmName[] = ["baseline", "nebulosity", "nebulosity-upfront"];
@@ -36,5 +38,6 @@ export function loadDefinition(dir: string): EvalDefinition {
         if (!/^[0-9a-f]{40}$/.test(repo.commit ?? "")) fail(`repo ${id}'s commit must be a full 40-character sha.`);
     }
     if (typeof raw.scripts !== "boolean" || !Array.isArray(raw.pilot)) fail("scripts is true or false, and pilot lists question ids.");
+    if (raw.pilotSessions !== undefined && (!Array.isArray(raw.pilotSessions) || raw.pilotSessions.some((id) => typeof id !== "string"))) fail("pilotSessions, when given, lists session ids.");
     return { ...(raw as EvalDefinition), dir: path.resolve(dir) };
 }

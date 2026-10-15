@@ -1,6 +1,6 @@
 import { validateInit } from "./validate";
 import { describe, expect, it } from "vitest";
-import { resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
+import { chosenSessions, resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
 
 /**
  * A hand-made two-message session in the shape the probe run of Task 9 showed (docs: task-9-report.md), with round numbers:
@@ -102,6 +102,30 @@ describe("scheduleSessions", () => {
             "s1-baseline-1", "s1-nebulosity-1", "s2-nebulosity-1", "s2-baseline-1",
             "s1-nebulosity-2", "s1-baseline-2", "s2-baseline-2", "s2-nebulosity-2",
         ]);
+    });
+});
+
+describe("chosenSessions", () => {
+    const ids = ["v-s1", "v-s2", "v-s3", "a-s1", "a-s2", "a-s3"];
+
+    it("takes the definition's pilot sessions with --pilot, in the file's order, and schedules each once in each arm", () => {
+        const chosen = chosenSessions(ids, { pilot: true, only: null, pilotSessions: ["a-s1", "v-s1"] });
+        expect(chosen).toEqual(["v-s1", "a-s1"]);
+        // one repeat: v-s1 is first in the file (A first), a-s1 fourth (N first)
+        expect(scheduleSessions(chosen, 1, ids).map((r) => `${r.question}-${r.arm}-${r.repeat}`)).toEqual([
+            "v-s1-baseline-1", "v-s1-nebulosity-1", "a-s1-nebulosity-1", "a-s1-baseline-1",
+        ]);
+    });
+
+    it("takes --only's sessions, or every session with neither", () => {
+        expect(chosenSessions(ids, { pilot: false, only: ["v-s2"], pilotSessions: ["v-s1"] })).toEqual(["v-s2"]);
+        expect(chosenSessions(ids, { pilot: false, only: null, pilotSessions: ["v-s1"] })).toEqual(ids);
+    });
+
+    it("refuses a pilot with no sessions listed, and an id that isn't a session, each in a sentence", () => {
+        expect(() => chosenSessions(ids, { pilot: true, only: null, pilotSessions: [] })).toThrow("eval.json lists no pilot sessions (pilotSessions)");
+        expect(() => chosenSessions(ids, { pilot: true, only: null, pilotSessions: ["v-s9"] })).toThrow("no such session: v-s9. The sessions are v-s1, v-s2, v-s3, a-s1, a-s2, a-s3");
+        expect(() => chosenSessions(ids, { pilot: false, only: ["x"], pilotSessions: [] })).toThrow("no such session: x.");
     });
 });
 

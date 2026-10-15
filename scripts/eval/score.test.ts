@@ -5,7 +5,7 @@ import zlib from "zlib";
 import { describe, expect, it } from "vitest";
 import { runName } from "./run-config";
 import {
-    cleanliness, cleanlinessLine, familyArmRows, kindArmRows, kindOf, lastPerName, loadRuns, makeImports, median, missingForGate, repoScoreContext, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
+    cleanliness, cleanlinessLine, familyArmRows, familyOfKind, kindArmRows, kindOf, lastPerName, loadRuns, makeImports, median, missingForGate, repoScoreContext, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
     renderQuestionTable, renderTable, repoIdFor, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, scoreSession, sumTokens, toGateRun, toGateSession, type Adjudicated, type FamilyArmRow, type SessionResult, type QuestionArmRow, type QuestionData,
     type RunResult, type ScoreContext,
 } from "./score";
@@ -650,6 +650,28 @@ describe("the Eval #2 tables", () => {
         expect(rows[0].medianCostUsd).toBeCloseTo(0.2, 10);
     });
 
+    it("scores a question that names its kind in the kind's family: the lists one family, the six new kinds grep-hard", () => {
+        expect(familyOfKind("bigPicture")).toBe("bigPicture");
+        expect(familyOfKind("chain")).toBe("chain");
+        expect(familyOfKind("list-direct")).toBe("list");
+        expect(familyOfKind("list-transitive")).toBe("list");
+        for (const kind of ["impact", "cycle", "unused", "violations", "entries", "pairs"] as const) expect(familyOfKind(kind)).toBe("grepHard");
+    });
+
+    it("gives each grep-hard kind its own row in the family table, labeled by the kind, after the other families", () => {
+        const hard = (name: string, kind: "impact" | "cycle", score: number): RunResult => result(name, { family: "grepHard", kind, repo: "r", score });
+        const rows = familyArmRows([
+            hard("vi-cycle-baseline-1", "cycle", 1),
+            hard("vi-impact-baseline-1", "impact", 1),
+            hard("vi-impact-baseline-2", "impact", 0.5),
+            result("vl-cl1-baseline-1", { kind: "list-direct", repo: "r", score: 1 }),
+        ]);
+        // list first (FAMILY_ORDER), then grep-hard by KIND_ORDER: impact before cycle
+        expect(rows.map((r) => [r.family, r.kind, r.runs, r.mean])).toEqual([["list", undefined, 1, 1], ["grepHard", "impact", 2, 0.75], ["grepHard", "cycle", 1, 1]]);
+        expect(rows[0]).not.toHaveProperty("kind");
+        expect(renderFamilyTable(rows).split("\n").slice(2).map((l) => l.split(" | ")[0])).toEqual(["| Complete-list", "| Impact", "| Cycle"]);
+    });
+
     it("prints a repo's sessions of one arm as one row: scored of all, mean score, mean cost, mean time, mean Nebulosity calls", () => {
         const s = (score: number | null, costUsd: number, wallMs: number): SessionResult => ({
             name: "s1-baseline-1", session: "s1", repo: "r", arm: "baseline", repeat: 1, score, pending: null,
@@ -721,6 +743,23 @@ describe("fix round 1", () => {
         expect(missingForGate({ ...expected, repoIds: ["vscode"] }, [run("q1-baseline-1"), run("q1-baseline-1"), run("q1-nebulosity-1"), run("q1-nebulosity-3")], []))
             .toEqual(["q1 (baseline): 1 of 2 runs", "q1 (nebulosity): 1 of 2 runs", "session s1 (baseline): 0 of 2 runs", "session s1 (nebulosity): 0 of 2 runs"]);
         expect(missingForGate({ ...expected, repoIds: ["vscode"], sessions: [] }, [run("q1-baseline-1"), run("q1-baseline-2"), run("q1-nebulosity-1"), run("q1-nebulosity-2")], [])).toEqual([]);
+    });
+
+    it("expects a session's questions only through the session's runs, never as single runs (Task 14)", () => {
+        const expected = {
+            repoIds: ["vscode"], arms: ["baseline", "nebulosity"], repeats: 2,
+            questions: [{ id: "q1", repo: "vscode" }, { id: "s1-impact", repo: "vscode", session: "s1" }, { id: "s1-chain", repo: "vscode", session: "s1" }],
+            sessions: [{ id: "s1", repo: "vscode" }],
+        };
+        const run = (name: string): RunResult => ({ ...result(name, { score: 1 }), repo: "vscode" });
+        const singles = [run("q1-baseline-1"), run("q1-baseline-2"), run("q1-nebulosity-1"), run("q1-nebulosity-2")];
+        const sess = (arm: string, repeat: number): SessionResult => ({
+            name: "x", session: "s1", repo: "vscode", arm, repeat, score: 1, pending: null, turns: [], costUsd: 0, wallMs: 0, firstCallContext: null, unknown: [], flags: [],
+        });
+        // q1 has its four single runs and s1 its four session runs: complete, with no single run of s1-impact or s1-chain
+        expect(missingForGate(expected, singles, [sess("baseline", 1), sess("baseline", 2), sess("nebulosity", 1), sess("nebulosity", 2)])).toEqual([]);
+        // a session short of a repeat is still missing, named as the session, and its questions still aren't asked for as single runs
+        expect(missingForGate(expected, singles, [sess("baseline", 1), sess("baseline", 2), sess("nebulosity", 1)])).toEqual(["session s1 (nebulosity): 1 of 2 runs"]);
     });
 
     it("scores Eval #2 on the truth's own graph: a workspace import resolves, and Task 10's 'out' verdict removes a scanner edge (C1)", () => {

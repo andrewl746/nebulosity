@@ -194,7 +194,7 @@
       "kind": "impact",
       "family": "impact",
       "session": "vscode-s1",
-      "prompt": "If I change `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/workbench/contrib/notebook`, `src/vs/workbench/contrib/chat`, `src/vs/workbench/api`, `src/vs/sessions`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "prompt": "I'm about to change `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts`. If I change `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/workbench/contrib/notebook`, `src/vs/workbench/contrib/chat`, `src/vs/workbench/api`, `src/vs/sessions`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-s1-impact.json"
     },
     {
@@ -231,7 +231,7 @@
       "kind": "impact",
       "family": "impact",
       "session": "vscode-s2",
-      "prompt": "If I change `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/editor`, `src/vs/workbench`, `src/vs/sessions`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "prompt": "I'm about to change `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts`. If I change `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/editor`, `src/vs/workbench`, `src/vs/sessions`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-s2-impact.json"
     },
     {
@@ -268,7 +268,7 @@
       "kind": "impact",
       "family": "impact",
       "session": "vscode-s3",
-      "prompt": "If I change `src/vs/platform/terminal/node/terminalEnvironment.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/platform/terminal`, `src/vs/platform/agentHost`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "prompt": "I'm about to change `src/vs/platform/terminal/node/terminalEnvironment.ts`. If I change `src/vs/platform/terminal/node/terminalEnvironment.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/platform/terminal`, `src/vs/platform/agentHost`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-s3-impact.json"
     },
     {
@@ -450,7 +450,7 @@
       "kind": "impact",
       "family": "impact",
       "session": "affine-s1",
-      "prompt": "If I change `blocksuite/affine/blocks/database/src/database-block.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `blocksuite/affine`, `blocksuite/integration-test`, `packages/frontend/core`, `packages/frontend/apps`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "prompt": "I'm about to change `blocksuite/affine/blocks/database/src/database-block.ts`. If I change `blocksuite/affine/blocks/database/src/database-block.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `blocksuite/affine`, `blocksuite/integration-test`, `packages/frontend/core`, `packages/frontend/apps`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-s1-impact.json"
     },
     {
@@ -487,7 +487,7 @@
       "kind": "impact",
       "family": "impact",
       "session": "affine-s2",
-      "prompt": "If I change `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `packages/frontend/core/src/blocksuite`, `packages/frontend/core/src/components`, `packages/frontend/core/src/desktop`, `packages/frontend/core/src/mobile`, `packages/frontend/apps`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "prompt": "I'm about to change `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts`. If I change `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `packages/frontend/core/src/blocksuite`, `packages/frontend/core/src/components`, `packages/frontend/core/src/desktop`, `packages/frontend/core/src/mobile`, `packages/frontend/apps`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-s2-impact.json"
     },
     {
@@ -524,7 +524,7 @@
       "kind": "impact",
       "family": "impact",
       "session": "affine-s3",
-      "prompt": "If I change `blocksuite/affine/blocks/surface/src/surface-block.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `blocksuite/affine/blocks`, `blocksuite/affine/gfx`, `blocksuite/affine/widgets`, `packages/frontend/core`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "prompt": "I'm about to change `blocksuite/affine/blocks/surface/src/surface-block.ts`. If I change `blocksuite/affine/blocks/surface/src/surface-block.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `blocksuite/affine/blocks`, `blocksuite/affine/gfx`, `blocksuite/affine/widgets`, `packages/frontend/core`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-s3-impact.json"
     },
     {

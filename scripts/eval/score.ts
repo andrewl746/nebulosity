@@ -354,10 +354,15 @@ export function repoScoreContext(
 
 /**
  * What stops the gate being computed (D1): a repo with no runs, and any question or session without every scheduled repeat
- * of every arm among the scored runs. The sentences name what is missing; none means the data is complete.
+ * of every arm among the scored runs. A task session's question (one that names its `session`) is asked only inside its
+ * session, so it is expected only through the session's runs, never as a single run. The sentences name what is missing;
+ * none means the data is complete.
  */
 export function missingForGate(
-    expected: { repoIds: readonly string[]; arms: readonly string[]; repeats: number; questions: readonly { id: string; repo: string }[]; sessions: readonly { id: string; repo: string }[] },
+    expected: {
+        repoIds: readonly string[]; arms: readonly string[]; repeats: number;
+        questions: readonly { id: string; repo: string; session?: string }[]; sessions: readonly { id: string; repo: string }[];
+    },
     results: readonly RunResult[], sessions: readonly SessionResult[],
 ): string[] {
     const missing: string[] = [];
@@ -368,7 +373,9 @@ export function missingForGate(
         const have = new Set([...repeats].filter((n) => n >= 1 && n <= expected.repeats));
         if (have.size < expected.repeats) missing.push(`${id} (${arm}): ${have.size} of ${expected.repeats} runs`);
     };
-    for (const q of expected.questions) for (const arm of expected.arms) check(q.id, arm, results.filter((r) => r.question === q.id && r.arm === arm).map((r) => r.repeat));
+    for (const q of expected.questions.filter((x) => x.session === undefined)){
+        for (const arm of expected.arms) check(q.id, arm, results.filter((r) => r.question === q.id && r.arm === arm).map((r) => r.repeat));
+    }
     for (const s of expected.sessions) for (const arm of expected.arms) check(`session ${s.id}`, arm, sessions.filter((x) => x.session === s.id && x.arm === arm).map((x) => x.repeat));
     return missing;
 }
@@ -398,6 +405,20 @@ export function repoReadouts(
 const FAMILY_ORDER: Family[] = ["bigPicture", "list", "chain", "grepHard"];
 const FAMILY_LABEL: Record<Family, string> = { bigPicture: "Big-picture", list: "Complete-list", chain: "Connection", grepHard: "Grep-hard" };
 const KIND_ORDER: QuestionKind[] = ["bigPicture", "list-direct", "list-transitive", "chain", "impact", "cycle", "unused", "violations", "entries", "pairs"];
+/** The per-family table's label for a grep-hard kind, which gets a row of its own there (Eval #2). */
+const KIND_LABEL: Partial<Record<QuestionKind, string>> = {
+    impact: "Impact", cycle: "Cycle", unused: "Files nothing imports", violations: "Violations", entries: "Entries", pairs: "Pairs",
+};
+
+/**
+ * The scorer's family for a question kind (D2): the lists are one family, big-picture and chains their own, and the six
+ * new kinds are grep-hard. A question file's `family` is the runner's key to its format line (impact, cycle, pairs, ...),
+ * so a question that names its kind is scored by this instead.
+ */
+export function familyOfKind(kind: QuestionKind): Family {
+    if (kind === "bigPicture" || kind === "chain") return kind;
+    return kind.startsWith("list-") ? "list" : "grepHard";
+}
 const ARM_ORDER = ["baseline", "nebulosity", "nebulosity-upfront"];
 const rank = (order: readonly string[], x: string): number => (order.includes(x) ? order.indexOf(x) : order.length);
 
@@ -426,23 +447,33 @@ export function questionArmRows(results: readonly RunResult[], order: readonly s
 }
 
 export type FamilyArmRow = {
-    family: Family; arm: string; runs: number; scored: number; mean: number | null; recall: number | null; precision: number | null;
+    family: Family;
+    /** A grep-hard row's kind: each grep-hard kind gets its own row, labeled by the kind (Eval #2). Absent for the other families. */
+    kind?: QuestionKind;
+    arm: string; runs: number; scored: number; mean: number | null; recall: number | null; precision: number | null;
     /** Medians of each kind of token apart (D2), and of the total. */
     medianInput: number | null; medianCacheWrite: number | null; medianCacheRead: number | null; medianOutput: number | null; medianTokens: number | null;
     medianCostUsd: number | null; medianWallMs: number | null; medianToolCalls: number | null;
 };
 
-/** One row per family and arm: the mean score over the scored runs, and the medians over all the runs. */
+/** A grep-hard run's own kind, the row it goes in; undefined for every other run (its family is its row). */
+const rowKind = (r: RunResult): QuestionKind | undefined => (r.family === "grepHard" && r.kind !== undefined ? r.kind : undefined);
+
+/**
+ * One row per family and arm (a grep-hard family per kind and arm): the mean score over the scored runs, and the medians
+ * over all the runs. Eval #1's runs have no kind, so its rows are the families as they were.
+ */
 export function familyArmRows(results: readonly RunResult[]): FamilyArmRow[] {
-    const rows = [...groups(results, (r) => `${r.family}${SEP}${r.arm}`).values()].map((runs) => ({
-        family: runs[0].family, arm: runs[0].arm, runs: runs.length, scored: runs.filter((r) => r.score !== null).length,
+    const rows = [...groups(results, (r) => `${r.family}${SEP}${rowKind(r) ?? ""}${SEP}${r.arm}`).values()].map((runs) => ({
+        family: runs[0].family, ...(rowKind(runs[0]) !== undefined ? { kind: rowKind(runs[0]) } : {}), arm: runs[0].arm, runs: runs.length, scored: runs.filter((r) => r.score !== null).length,
         mean: mean(runs.map((r) => r.score)), recall: mean(runs.map((r) => r.recall)), precision: mean(runs.map((r) => r.precision)),
         medianInput: median(runs.map((r) => r.tokens.input)), medianCacheWrite: median(runs.map((r) => r.tokens.cacheWrite)),
         medianCacheRead: median(runs.map((r) => r.tokens.cacheRead)), medianOutput: median(runs.map((r) => r.tokens.output)),
         medianTokens: median(runs.map((r) => r.tokens.total)), medianCostUsd: median(runs.map((r) => r.costUsd)),
         medianWallMs: median(runs.map((r) => r.wallMs)), medianToolCalls: median(runs.map((r) => r.toolCalls)),
     }));
-    return rows.sort((a, b) => rank(FAMILY_ORDER, a.family) - rank(FAMILY_ORDER, b.family) || rank(ARM_ORDER, a.arm) - rank(ARM_ORDER, b.arm) || (a.arm < b.arm ? -1 : a.arm > b.arm ? 1 : 0));
+    return rows.sort((a, b) => rank(FAMILY_ORDER, a.family) - rank(FAMILY_ORDER, b.family) || rank(KIND_ORDER, a.kind ?? "") - rank(KIND_ORDER, b.kind ?? "")
+        || rank(ARM_ORDER, a.arm) - rank(ARM_ORDER, b.arm) || (a.arm < b.arm ? -1 : a.arm > b.arm ? 1 : 0));
 }
 
 /** Each chain step still to adjudicate, once, however many runs left it open. */
@@ -549,7 +580,7 @@ export function renderFamilyTable(rows: readonly FamilyArmRow[]): string {
             "Median output", "Median total tokens", "Median cost est.", "Median wall", "Median tool calls",
         ],
         rows.map((r) => [
-            FAMILY_LABEL[r.family], r.arm, `${r.scored} / ${r.runs}`, n2(r.mean), n2(r.recall), n2(r.precision),
+            (r.kind !== undefined ? KIND_LABEL[r.kind] : undefined) ?? FAMILY_LABEL[r.family] ?? r.family, r.arm, `${r.scored} / ${r.runs}`, n2(r.mean), n2(r.recall), n2(r.precision),
             count(r.medianInput), count(r.medianCacheWrite), count(r.medianCacheRead), count(r.medianOutput), count(r.medianTokens),
             usd(r.medianCostUsd), seconds(r.medianWallMs), count(r.medianToolCalls),
         ]),
@@ -670,13 +701,16 @@ function main(): void {
 
     const questionsFile = `${dir}/questions.json`;
     if (!fs.existsSync(questionsFile)) throw new Stop(`${name}/questions.json doesn't exist yet, so there is nothing to score. Nothing was scored.`);
-    type FileQuestion = { id: string; family?: Family; kind?: QuestionKind; repo?: string; truth?: string; rubric?: string };
+    type FileQuestion = { id: string; family?: Family; kind?: QuestionKind; repo?: string; truth?: string; rubric?: string; session?: string };
     const file = readJson<{ commit: string; questions: FileQuestion[] }>(questionsFile);
+    // a question that names its kind is scored by it: its `family` is the runner's key to its format line (impact, cycle, pairs, ...)
     const familyOf = (q: FileQuestion): Family => {
-        if (q.family !== undefined) return q.family;
-        if (q.kind === undefined) throw new Stop(`${name}/questions.json: question ${q.id} has neither a family nor a kind.`);
-        return q.kind === "bigPicture" ? "bigPicture" : q.kind === "chain" ? "chain" : q.kind.startsWith("list-") ? "list" : "grepHard";
+        if (q.kind !== undefined) return familyOfKind(q.kind);
+        if (q.family === undefined) throw new Stop(`${name}/questions.json: question ${q.id} has neither a family nor a kind.`);
+        return q.family;
     };
+    // a task session's question is asked only inside its session (Task 14): never as a single run
+    const sessionQuestion = new Map(file.questions.flatMap((q) => (q.session !== undefined ? [[q.id, q.session] as const] : [])));
     // an eval with several repos or any question kind gets the per-repo tables, the sessions and the gate; Eval #1's output is as it was
     const gated = repoIds.length > 1 || file.questions.some((q) => q.kind !== undefined);
     const unknown = (only ?? []).filter((id) => !file.questions.some((q) => q.id === id));
@@ -707,8 +741,12 @@ function main(): void {
     const loaded = loadRuns(runsDir);
     const warnings = [...loaded.warnings];
     const singles = loaded.runs.filter((r) => r.session === undefined);
-    const wanted = singles.filter((r) => order.includes(parseRunName(r.name)!.question));
-    for (const r of singles) if (!file.questions.some((q) => q.id === parseRunName(r.name)!.question)) warnings.push(`${r.name} is for a question that isn't in ${name}/questions.json; ignored`);
+    const wanted = singles.filter((r) => order.includes(parseRunName(r.name)!.question) && !sessionQuestion.has(parseRunName(r.name)!.question));
+    for (const r of singles){
+        const question = parseRunName(r.name)!.question;
+        if (!file.questions.some((q) => q.id === question)) warnings.push(`${r.name} is for a question that isn't in ${name}/questions.json; ignored`);
+        else if (sessionQuestion.has(question)) warnings.push(`${r.name} is a single run of ${question}, a question of session ${sessionQuestion.get(question)}, which is asked only inside its session; ignored`);
+    }
     // task sessions are scored whole: --only picks questions, so it leaves them out
     const sessionRuns: { run: LoadedRun; def: SessionDef }[] = [];
     for (const r of loaded.runs) {
@@ -801,7 +839,7 @@ function main(): void {
     if (gated){
         const missing = missingForGate({
             repoIds, arms: definition.arms, repeats: definition.repeats,
-            questions: file.questions.map((q) => ({ id: q.id, repo: repoOfQuestion.get(q.id)! })),
+            questions: file.questions.map((q) => ({ id: q.id, repo: repoOfQuestion.get(q.id)!, ...(q.session !== undefined ? { session: q.session } : {}) })),
             sessions: sessionDefs.map((s) => ({ id: s.id, repo: s.repo })),
         }, results, sessionResults);
         const waiting = results.filter((r) => r.score === null).length + sessionResults.filter((s) => s.score === null).length;

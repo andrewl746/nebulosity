@@ -879,7 +879,7 @@ They need the whole graph, and the index already holds it.
 **Decision:**
 - **Two repos:** VS Code at `cc3fec88` (Eval #1's 15 questions again, plus 6 grep-hard ones), and AFFiNE at `0b69a6da`, a repo with no repo-level agent guide at that commit (only one package, `packages/frontend/apps/ios`, has an `AGENTS.md`). AFFiNE was the owner's pick at Task 1, and gets 4 big-picture questions, 4 lists, 4 chains and 6 grep-hard ones.
 - **The grep-hard kinds and their scores:** impact counts (1 − relative error per line, floored at 0), cycles (1 / 0.5 / 0), and F1 for files nothing imports, layering violations, the roots that load a file, and folder pairs.
-- **3 task sessions per repo**, 4 questions each, in one Claude Code process over stream-json input.
+- **3 task sessions per repo**, 4 questions each, in one Claude Code process over stream-json input. The first question opens with "I'm about to change `<X>`.". A session's questions are asked only inside it: never as single runs, and the gate expects them only through the session runs. The pilot's sessions (`pilotSessions`) run by `--sessions --pilot`.
 - **Two arms,** A and N. N is registered as `nebulosity setup` registers it, plus `NEBULOSITY_LIVE=off`, with the tools always loaded through their `_meta`.
 - **Scripts allowed in both arms** (the owner's pick): node, and edits under a fresh scratch folder per run (R6).
   - Every prompt in both arms ends with the owner's sentence (2026-10-14): `You may write Node.js scripts in <scratch> with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.` It replaces R6's sentence, because in the dev set 5 runs tried a script as a Bash heredoc, all 5 were refused, and none wrote one with Write.

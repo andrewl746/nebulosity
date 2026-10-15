@@ -92,6 +92,18 @@ export function scheduleSessions(ids: readonly string[], repeats: number, order:
     return schedule(ids, repeats, order, { upfront: false });
 }
 
+/**
+ * The sessions a `--sessions` run asks, in the file's order: with `pilot`, the definition's `pilotSessions`; else the ones
+ * `only` names (null: every one). Throws a sentence for a pilot with none listed, or an id that isn't a session.
+ */
+export function chosenSessions(sessionIds: readonly string[], options: { pilot: boolean; only: readonly string[] | null; pilotSessions: readonly string[] }): string[] {
+    if (options.pilot && options.pilotSessions.length === 0) throw new Error("eval.json lists no pilot sessions (pilotSessions)");
+    const wanted = options.pilot ? options.pilotSessions : options.only;
+    const unknown = (wanted ?? []).filter((id) => !sessionIds.includes(id));
+    if (unknown.length > 0) throw new Error(`no such session: ${unknown.join(", ")}. The sessions are ${sessionIds.join(", ")}`);
+    return sessionIds.filter((id) => wanted === null || wanted.includes(id));
+}
+
 /** <dir>/sessions.json: the sessions, each over one repo, and the question ids it asks in order. */
 export type SessionDef = { id: string; repo: string; title: string; questions: string[] };
 export type SessionFile = { sessions: SessionDef[] };

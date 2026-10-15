@@ -139,16 +139,17 @@ Variables:
 
   An outage is not scored. It is re-run later (Eval #1's rule), and every attempt's raw transcript is kept.
 - **Usage:** the runner stops cleanly when the 7-day window reaches 0.85 or the 5-hour window reaches 0.9. It stops if two runs in a row report neither.
-- **Order:** which arm goes first alternates by question (or session) and by repeat. It comes from the question's place in `eval2/questions.json` (or the session's in `eval2/sessions.json`), so the pilot gives each the order the full run will.
+- **Order:** which arm goes first alternates by question (or session) and by repeat. It comes from the question's place among the single questions of `eval2/questions.json` (or the session's in `eval2/sessions.json`), so the pilot gives each the order the full run will.
+- **Session questions run only in their sessions.** The single-run schedule, `--pilot` and `--only` leave out every question marked `"session"`, and the runner refuses one named as a single run.
 
 ## The runs planned
 
 - **The pilot, 20 runs** (`eval2/eval.json`): one repeat, in both arms, of 8 single questions (16 runs) and of one task session per repo (4 runs).
   - The singles, per repo a big-picture question, a chain and two grep-hard questions (impact and one other): VS Code `vscode-bp4`, `vscode-cn3`, `vscode-impact` and `vscode-pairs`; AFFiNE `affine-bp1`, `affine-cn1`, `affine-impact` and `affine-entries`. They run with `npm run eval:run -- --eval eval2 --pilot`.
-  - The sessions, `vscode-s1` and `affine-s1` (`pilotSessions` in `eval2/eval.json`), run with `npm run eval:run -- --eval eval2 --sessions --only vscode-s1,affine-s1 --repeat 1`. The runner takes `--pilot` for single questions only.
+  - The sessions, `vscode-s1` and `affine-s1` (`pilotSessions` in `eval2/eval.json`), run with `npm run eval:run -- --eval eval2 --sessions --pilot`: one repeat of each, in both arms.
   - These sessions are the runner's first against Claude Code itself (only Task 9's probe ran before). They also show whether `--max-turns` counts per message or per process, and what hitting `--max-budget-usd` does to a session.
   - Then each run's usage and the extrapolation are reported, and **the owner approves the full count.**
-- **The full run:** 39 single questions (VS Code 21, AFFiNE 18) and 6 task sessions, in both arms, three times. That is 234 single runs and 36 session runs, the pilot's 20 among their first repeats.
+- **The full run:** 39 single questions (VS Code 21, AFFiNE 18) and 6 task sessions, in both arms, three times. That is 234 single runs (`npm run eval:run -- --eval eval2`) and 36 session runs (`npm run eval:run -- --eval eval2 --sessions`), the pilot's 20 among their first repeats. The sessions' 24 questions are asked only inside their sessions, never as single runs.
 - **Expected usage:** Claude Code's list-price estimate is about $20–40 for the whole eval. Eval #1's 90 runs cost $4.88 and took at most 0.16 of one 5-hour window. The pilot measures the real share.
 
 ## The questions
@@ -174,6 +175,7 @@ Prompts are the same in both arms and never name Nebulosity. Each ends with its 
 | entries | Which files that no other file imports end up loading `<file>`, directly or through other files? Leave out test files. |
 | pairs | Code under `<folder>` sits in folders named `<n1>`, `<n2>`, …. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path. For a folder's children: Which of the folders directly inside `<folder>` import from which others? |
 | lists, chains | Eval #1's wordings. AFFiNE's four chains take Eval #1's four chain wordings in order. Every session chain is: Give the shortest chain of imports from `<entry>` to `<file>`. |
+| a session's first question | I'm about to change `<file>`. followed by the impact template for the same file. |
 
 **Test files.** A test file has a folder named `test`, `tests` or `__tests__` on its path, or `.test.` or `.spec.` in its name. Fixtures, stories and e2e helpers outside a test folder are not tests. "Leave out test files" uses this rule. Impact, the lists and violations count test files, as the import rule says.
 
@@ -229,7 +231,7 @@ Each session is about one area ("I'm about to change X"). Its four questions are
 3. the shortest import cycle through X, or none;
 4. the files nothing imports in X's folder.
 
-Their targets differ from every single question's and from the dev set's (see "The overlap check").
+The first question opens with "I'm about to change `<X>`." and goes on as the impact template does; the other three are the templates as they stand. Their targets differ from every single question's and from the dev set's (see "The overlap check").
 
 | Session | X | Impact | Chain from | Cycle | Files nothing imports |
 |---|---|---|---|---|---|
@@ -240,7 +242,7 @@ Their targets differ from every single question's and from the dev set's (see "T
 | affine-s2 | `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts` | 681, per `core/src/blocksuite` 187, `core/src/components` 145, `core/src/desktop` 128, `core/src/mobile` 92, `packages/frontend/apps` 19, and 110 elsewhere | `packages/frontend/apps/electron-renderer/src/app/index.tsx`: 9 steps | none | in its own folder, `…/ai-onboarding`: 2 of 13 |
 | affine-s3 | `blocksuite/affine/blocks/surface/src/surface-block.ts` | 2,192, per `blocksuite/affine/blocks` 230, `blocksuite/affine/gfx` 185, `blocksuite/affine/widgets` 73, `packages/frontend/core` 1,287, `tests` 201, and 216 elsewhere | `packages/frontend/apps/ios/src/index.tsx`: 6 steps | 4 steps | in `blocksuite/affine/blocks/surface/src`: 2 of 79 |
 
-For vscode-s1 and vscode-s2, "X's folder" is X's area: the parent of the `model/` folder X sits in, which has no such file. The prompts are the templates', and `eval2/sessions.json` gives each session a title ("I'm about to change the notebook cell model").
+For vscode-s1 and vscode-s2, "X's folder" is X's area: the parent of the `model/` folder X sits in, which has no such file. `eval2/sessions.json` gives each session a title ("I'm about to change the notebook cell model"), which is a record only: the runner sends the four prompts.
 
 ### The overlap check (R1)
 
@@ -337,7 +339,7 @@ Every condition below must hold.
 **Written before the first run; it does not change after.**
 
 How `scripts/eval/gate.ts` computes it:
-- **Its inputs.** The scored single runs and task sessions of arms A and N. The scorer computes the gate only when the data is complete (every repo has runs, and every single question and every session has its three scheduled runs kept in both arms) and no run waits for a grade or for a chain or cycle step to be read. Otherwise it prints "Not computed" and why.
+- **Its inputs.** The scored single runs and task sessions of arms A and N. The scorer computes the gate only when the data is complete (every repo has runs, and every single question and every session has its three scheduled runs kept in both arms; a session's questions are expected only through its session runs) and no run waits for a grade or for a chain or cycle step to be read. Otherwise it prints "Not computed" and why.
 - **The kinds.** Grep-hard is impact, cycle, files nothing imports, violations, entries and pairs. Graph questions are chains, transitive lists and the grep-hard kinds. "Other" is big-picture and direct lists. Condition 2's "lists" pools direct and transitive lists into one family per repo.
 - **Condition by condition:**
   - 1 is computed over every grep-hard run of both repos, and per question (repo and id) for the 0.05 floor, reporting the worst question.
@@ -370,6 +372,9 @@ How `scripts/eval/gate.ts` computes it:
   - Both cost N on those three impact questions. They were found by comparing the index with Eval #2's answer key, so fixing them before the freeze would tune on the eval (R1). They are fixed after the results.
 - The truths were read by an independent reader, who also built a third graph (44 of 44 truths agree), and the session that ran the eval read a sample.
 - AFFiNE's rubrics come from its own docs. The rubric's author listed 11 of the 32 graded points as answerable from training or the README. Two of the four questions are on BlockSuite.
+- Each session's first question opens with "I'm about to change `<X>`.", X being the session's area file (Task 14's ruling). The other three prompts are the templates unchanged.
+- A session's questions are asked only inside the session: the single-run schedule leaves them out (234 single runs, not 378), and the gate expects them only through the session runs. The pilot's sessions run by flag, `--sessions --pilot`, which reads `pilotSessions` (Task 14's ruling).
+- The scorer files a question by its `kind` (a question file's `family` is the runner's key to its format line), and its per-family table gives each grep-hard kind a row of its own. Eval #1's tables are unchanged by this: its re-score's output is byte-identical.
 
 ## Threats to validity
 

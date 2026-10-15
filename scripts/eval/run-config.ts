@@ -149,6 +149,22 @@ export function schedule(questions: readonly string[], repeats: number, order: r
 }
 
 /**
+ * The questions a single-run schedule asks, in the file's order: the ones `ids` names (null: every one), leaving out the
+ * task sessions' questions (marked `"session"`), which are asked only inside their sessions (Task 14). Throws a sentence
+ * for an id that isn't a question, or one that belongs to a session.
+ */
+export function singleQuestionIds(questions: readonly { id: string; session?: string }[], ids: readonly string[] | null): string[] {
+    const singles = questions.filter((q) => q.session === undefined);
+    const unknown = (ids ?? []).filter((id) => !questions.some((q) => q.id === id));
+    if (unknown.length > 0) throw new Error(`no such question: ${unknown.join(", ")}. The questions are ${singles.map((q) => q.id).join(", ")}`);
+    const inSessions = questions.filter((q) => q.session !== undefined && (ids ?? []).includes(q.id));
+    if (inSessions.length > 0){
+        throw new Error(inSessions.map((q) => `${q.id} is a question of task session ${q.session}, asked only inside it (run it with --sessions --only ${q.session})`).join("; "));
+    }
+    return singles.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
+}
+
+/**
  * The dev set's runs (Task 13, R1): each question once (repeat 1, Claude Code's default tool search), in the arms asked.
  * With both arms, which goes first is schedule's, from the question's place in `order`.
  */
