@@ -9,5 +9,6 @@
   "arms": ["baseline", "nebulosity"],
   "repeats": 3,
   "scripts": true,
-  "pilot": []
+  "pilot": ["vscode-bp4", "vscode-cn3", "vscode-impact", "vscode-pairs", "affine-bp1", "affine-cn1", "affine-impact", "affine-entries"],
+  "pilotSessions": ["vscode-s1", "affine-s1"]
 }

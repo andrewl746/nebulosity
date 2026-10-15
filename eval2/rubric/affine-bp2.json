@@ -1,0 +1,62 @@
+{
+  "id": "affine-bp2",
+  "source": "BlockSuite's own docs in AFFiNE at 0b69a6da: blocksuite/docs-site/guide/overview.md, guide/component-types.md, guide/inline.md, guide/store.md, components/overview.md; packages/frontend/component/src/lit-react/readme.md",
+  "points": [
+    {
+      "id": "AFFINE-BP2.1",
+      "text": "BlockSuite has two groups of packages: a headless framework (`blocksuite/framework`: `@blocksuite/store`, `@blocksuite/std` and support packages) and the prebuilt editing components built on it (`blocksuite/affine`: the blocks, widgets, fragments, models and shared code); the framework does not depend on the components",
+      "check": "Doc: guide/overview.md L56 ('structured around key packages that are categorized into two groups: a headless framework and prebuilt editing components'), L66-76 (framework: store, inline, block-std), L88-93 (components: blocks, presets). Code: blocksuite/framework holds global, std, store, sync (@blocksuite/global, @blocksuite/std, @blocksuite/store, @blocksuite/sync); blocksuite/affine holds all (@blocksuite/affine), blocks, widgets, fragments, model (@blocksuite/affine-model), shared, components, rich-text, inlines, gfx, data-view, ext-loader, foundation. No file under blocksuite/framework imports @blocksuite/affine*, @blocksuite/data-view or @blocksuite/integration-test (git grep, tests excluded: 0).",
+      "holds": true,
+      "note": "Rewritten for the package names at this commit: the docs' @blocksuite/block-std is @blocksuite/std, @blocksuite/inline is inside std, and @blocksuite/blocks and @blocksuite/presets became the blocksuite/affine packages. An answer using the docs' names earns the point if the split is right."
+    },
+    {
+      "id": "AFFINE-BP2.2",
+      "text": "`@blocksuite/store` is the data layer: documents are modeled on the Yjs CRDT, which gives them real-time collaboration and history (undo/redo)",
+      "check": "Doc: guide/overview.md L66-67 and guide/store.md L3 ('the data layer for modeling collaborative document states. It's natively built on the CRDT library Yjs, powering all BlockSuite documents with built-in real-time collaboration and time-travel capabilities'). Code: blocksuite/framework/store/package.json L24 depends on yjs; store/src/model/store/store.ts L598 observes the doc's Y.Map of blocks (this._yBlocks.observeDeep); store/src/extension/history/history-extension.ts L22 builds a Y.UndoManager over the blocks; store.ts L328 undo, L341 redo.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP2.3",
+      "text": "`@blocksuite/std` (the docs' `block-std`) is the standard library for editable blocks: UI event handling, selection and clipboard (with commands), and the `EditorHost` that turns the block tree into components",
+      "check": "Doc: guide/overview.md L74-75 ('@blocksuite/block-std: library for modeling editable blocks. Its capabilities cover the structure of block fields, events, selection, clipboard support'); guide/working-with-block-tree.md L67-80 (editor.host is the EditorHost mapping the block tree to the component tree; host.std gives spec, selection, command). Code: blocksuite/framework/std/src/event/dispatcher.ts L84 UIEventDispatcher; selection/text.ts L34 TextSelection, selection/block.ts L8 BlockSelection; clipboard/clipboard.ts L17 Clipboard; command/manager.ts; scope/std-scope.ts L51 BlockStdScope with getters clipboard L72, command L80, event L84, host L96, selection L111 and render() L152; view/element/lit-host.ts L50 EditorHost.",
+      "holds": true,
+      "note": "The docs call block-std framework-agnostic. At this commit it is not: std/package.json L25 depends on lit, and std holds the lit EditorHost, BlockComponent and WidgetComponent (the docs' separate @blocksuite/lit is merged into std). That part of the claim is left out of the point."
+    },
+    {
+      "id": "AFFINE-BP2.4",
+      "text": "rich text is handled by a small inline editor (the docs' `@blocksuite/inline`): each block's text is its own Y.Text with its own inline editor, instead of one rich-text editor for the whole document",
+      "check": "Doc: guide/overview.md L70-71 ('BlockSuite allows splitting rich text content in different block nodes into different inline editors'); guide/inline.md L3 ('Every inlineEditor instance attaches to an independent Y.Text'). Code: blocksuite/framework/std/src/inline/inline-editor.ts L35 class InlineEditor, L179 readonly yText: Y.Text, L192-193 constructor(yText, ...); blocksuite/affine/rich-text/src/rich-text.ts L168 new InlineEditor(this._yText, ...); blocksuite/affine/blocks/paragraph/src/paragraph-block.ts L361-362 renders <rich-text .yText=${this.model.props.text.yText}>.",
+      "holds": true,
+      "note": "The inline editor now lives in @blocksuite/std (std/src/inline), not in its own package."
+    },
+    {
+      "id": "AFFINE-BP2.5",
+      "text": "its component types are editors (the page editor and the edgeless whiteboard editor), blocks, widgets (helper UI that shows up for a block, such as the slash menu or drag handle) and fragments (UI outside the editor that shares its document, such as the doc title or outline panel)",
+      "check": "Doc: components/overview.md L5-8 (Editor, Block, Widget, Fragment); guide/component-types.md L9-21 (editors and fragments; blocks and widgets: 'drag handles and slash menus'). Code: blocksuite/affine/blocks has 20 block packages (paragraph, list, note, database, root, surface, ...); blocksuite/affine/widgets has 16 (drag-handle, slash-menu, toolbar, linked-doc, remote-selection, ...); blocksuite/affine/fragments has adapter-panel, doc-title, frame-panel, outline. The editors: packages/frontend/core/src/blocksuite/editors/page-editor.ts and edgeless-editor.ts, defined as page-editor and edgeless-editor in editors/index.ts L27-28.",
+      "holds": true,
+      "note": "The docs put PageEditor and EdgelessEditor in @blocksuite/presets; at this commit no presets package exists, and the two editor elements are defined in the AFFiNE app (@affine/core), still as lit elements over BlockSuite's std."
+    },
+    {
+      "id": "AFFINE-BP2.6",
+      "text": "all of these components are native web components built with lit, while the AFFiNE app is written in React, so the app wraps BlockSuite's editors in React components",
+      "check": "Doc: guide/overview.md L14 ('All BlockSuite components (including editors) are native web components'), L49 ('AFFiNE uses React while BlockSuite uses web components'); components/overview.md L12, L29; packages/frontend/component/src/lit-react/readme.md ('our custom @lit/react wrapper'). Code: 522 files under blocksuite/affine import lit and none imports react or react-dom; 639 files under packages/frontend/core/src import react. packages/frontend/core/src/blocksuite/editors/index.ts L1 imports createReactComponentFromLit from @affine/component and wraps PageEditor (L11-13), DocTitle (L16-18) and EdgelessEditor (L21-23).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP2.7",
+      "text": "an editor is thin, just the set of block and widget registrations mounted on an `EditorHost`; so the page and edgeless editors are two views of the same document, and the root block keeps one model (`RootBlockModel`, flavour `affine:page`) with a different view in each",
+      "check": "Doc: guide/component-types.md L27 ('the editor is typically designed to be remarkably lightweight. The actual editable blocks are registered to the EditorHost'), L62 ('type Editor = BlockSpec[]'), L75 (the root block is implemented differently for PageEditor and EdgelessEditor 'but with the same shared RootBlockModel'); components/overview.md L28 ('reusing an existing first-party BlockSuite editor, you are actually reusing a preset of blocks and widgets'). Code: packages/frontend/core/src/blocksuite/editors/page-editor.ts L63-66 new BlockStdScope({ store: this.doc, extensions: this.specs }) and L82 std.render() (the whole editor); std/src/view/element/lit-host.ts L62-80 EditorHost renders each model with the view registered for its flavour (L69) plus the widgets registered for it (L75-80). blocksuite/affine/blocks/root/src/view.ts L66 registers literal`affine-page-root` and L87 literal`affine-edgeless-root` for the same 'affine:page' flavour; blocksuite/affine/model/src/blocks/root/root-block-model.ts L12 RootBlockModel, L54 flavour 'affine:page'.",
+      "holds": true,
+      "note": "Rewritten: the docs' BlockSpec objects are now extensions (see affine-bp3), so 'Editor = BlockSpec[]' reads 'an editor = a list of extensions' at this commit."
+    },
+    {
+      "id": "AFFINE-BP2.8",
+      "text": "BlockSuite stands apart from the app, like Monaco from VS Code: the app depends on BlockSuite and reuses it through its components, and BlockSuite never imports the app's code",
+      "check": "Doc: guide/overview.md L49 ('The relationship between BlockSuite and AFFiNE is similar to that between the Monaco Editor and VSCode'), L53 ('Both AFFiNE and other projects should equally reuse and extend BlockSuite through components, without any privileges'). Code: no file anywhere under blocksuite/ (tests included) imports @affine/* or @toeverything/infra, and none reaches into packages/ by a relative path (git grep: 0; the @toeverything/theme it imports is an outside npm package, ^1.1.23). 650 files under packages/frontend/core/src import @blocksuite/.",
+      "holds": true,
+      "note": "The docs also say BlockSuite is 'maintained independently' (overview.md L49). At this commit it is maintained in the AFFiNE repository, and its component packages are AFFiNE's own blocks (@blocksuite/affine-*), so only the dependency direction is graded."
+    }
+  ]
+}

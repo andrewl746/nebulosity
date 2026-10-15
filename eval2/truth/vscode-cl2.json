@@ -1,0 +1,115 @@
+{
+  "id": "vscode-cl2",
+  "kind": "list",
+  "target": "src/vs/workbench/contrib/debug",
+  "scope": "outside",
+  "files": [
+    "extensions/copilot/src/extension/prompts/node/test/fixtures/extHost.api.impl.ts",
+    "extensions/copilot/test/simulation/fixtures/doc/issue-6406/debugModel.ts",
+    "extensions/copilot/test/simulation/fixtures/vscode/extHost.api.impl.ts",
+    "src/vs/sessions/sessions.common.main.ts",
+    "src/vs/sessions/sessions.desktop.main.ts",
+    "src/vs/sessions/sessions.web.main.ts",
+    "src/vs/workbench/api/browser/mainThreadDebugService.ts",
+    "src/vs/workbench/api/browser/viewsExtensionPoint.ts",
+    "src/vs/workbench/api/common/extHost.api.impl.ts",
+    "src/vs/workbench/api/common/extHost.protocol.ts",
+    "src/vs/workbench/api/common/extHostDebugService.ts",
+    "src/vs/workbench/api/common/extHostTypeConverters.ts",
+    "src/vs/workbench/api/node/extHostDebugService.ts",
+    "src/vs/workbench/api/test/browser/extHostDebugTreeSessions.test.ts",
+    "src/vs/workbench/api/test/browser/extHostDebugVisualization.test.ts",
+    "src/vs/workbench/api/test/browser/mainThreadDebugService.test.ts",
+    "src/vs/workbench/contrib/accessibilitySignals/browser/accessibilitySignalDebuggerContribution.ts",
+    "src/vs/workbench/contrib/accessibilitySignals/browser/editorTextPropertySignalsContribution.ts",
+    "src/vs/workbench/contrib/extensions/electron-browser/debugExtensionHostAction.ts",
+    "src/vs/workbench/contrib/mcp/common/mcpDevMode.ts",
+    "src/vs/workbench/contrib/mcp/electron-browser/mcpDevModeDebuggingNode.ts",
+    "src/vs/workbench/contrib/notebook/browser/contrib/debug/notebookBreakpoints.ts",
+    "src/vs/workbench/contrib/notebook/browser/contrib/debug/notebookCellPausing.ts",
+    "src/vs/workbench/contrib/notebook/browser/contrib/debug/notebookDebugDecorations.ts",
+    "src/vs/workbench/contrib/notebook/browser/contrib/notebookVariables/notebookInlineVariables.ts",
+    "src/vs/workbench/contrib/notebook/browser/contrib/notebookVariables/notebookVariables.ts",
+    "src/vs/workbench/contrib/notebook/browser/contrib/notebookVariables/notebookVariablesTree.ts",
+    "src/vs/workbench/contrib/notebook/browser/contrib/notebookVariables/notebookVariablesView.ts",
+    "src/vs/workbench/contrib/notebook/browser/controller/executeActions.ts",
+    "src/vs/workbench/contrib/notebook/browser/notebookEditorWidget.ts",
+    "src/vs/workbench/contrib/quickaccess/browser/viewQuickAccess.ts",
+    "src/vs/workbench/contrib/remote/browser/remoteExplorer.ts",
+    "src/vs/workbench/contrib/remote/browser/urlFinder.ts",
+    "src/vs/workbench/contrib/remote/test/browser/urlFinder.test.ts",
+    "src/vs/workbench/contrib/replNotebook/browser/repl.contribution.ts",
+    "src/vs/workbench/contrib/testing/browser/testResultsView/testResultsOutput.ts",
+    "src/vs/workbench/contrib/testing/browser/testResultsView/testResultsViewContent.ts",
+    "src/vs/workbench/contrib/workspace/browser/workspaceTrustEditor.ts",
+    "src/vs/workbench/workbench.common.main.ts",
+    "src/vs/workbench/workbench.desktop.main.ts",
+    "src/vs/workbench/workbench.web.main.ts"
+  ],
+  "verified": true,
+  "notes": [
+    {
+      "path": "extensions/copilot/src/extension/prompts/node/test/fixtures/extHost.api.impl.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "added",
+      "why": "L96 `import { DebugConfigurationProviderTriggerKind } from 'vs/workbench/contrib/debug/common/debug';` names src/vs/workbench/contrib/debug/common/debug.ts (read against src/). A Copilot test fixture (a copy of old VS Code source kept as text for the Copilot extension's tests, and excluded from compilation), but its statement is the file's own and its specifier is a non-relative module id that names the target. Counted by the owner's ruling (2026-10-14): 'refers to' counts, way (b): the specifier is a module id naming the file, whether or not any module resolution would turn it into one. (extensions/copilot/tsconfig.json excludes \"src/extension/prompts/node/test/fixtures/**/*\".)"
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/vscode/extHost.api.impl.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "added",
+      "why": "L96 `import { DebugConfigurationProviderTriggerKind } from 'vs/workbench/contrib/debug/common/debug';` names src/vs/workbench/contrib/debug/common/debug.ts (read against src/). A Copilot test fixture (a copy of old VS Code source kept as text for the Copilot extension's tests, and excluded from compilation), but its statement is the file's own and its specifier is a non-relative module id that names the target. Counted by the owner's ruling (2026-10-14): 'refers to' counts, way (b). (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\".)"
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/doc/issue-6406/debugModel.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "added",
+      "why": "L25-29 import from 'vs/workbench/contrib/debug/common/{debug,debugSource,debugStorage,debugVisualizers,disassemblyViewInput}', five module ids that each name a file inside src/vs/workbench/contrib/debug (read against src/). A Copilot test fixture (a copy of old VS Code source kept as text for the Copilot extension's tests, and excluded from compilation), but its statement is the file's own and its specifier is a non-relative module id that names the target. Counted by the owner's ruling (2026-10-14): 'refers to' counts, way (b). (extensions/copilot/tsconfig.json excludes \"test/simulation/fixtures/**/*\".)"
+    },
+    {
+      "path": "extensions/copilot/test/simulation/fixtures/codeMapper/notebookEditorWidget.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L50 imports '../../debug/browser/debugColors.js', a relative specifier. It resolves to extensions/copilot/test/simulation/fixtures/debug/browser/debugColors.js, which doesn't exist, and it names no file inside src/vs/workbench/contrib/debug (way (a) finds no target; way (b) covers non-relative module ids only). Still out under the owner's ruling (2026-10-14): a Copilot test fixture whose own statement refers to a missing file beside it."
+    },
+    {
+      "path": "src/vs/platform/telemetry/node/customEndpointTelemetryService.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L45 VSCODE_ESM_ENTRYPOINT: 'vs/workbench/contrib/debug/node/telemetryApp' is an environment variable naming the entry point of a forked child process (bootstrap-fork loads it), not an import statement of this file."
+    },
+    {
+      "path": "build/next/index.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L105 'vs/workbench/contrib/debug/node/telemetryApp' is an entry in the bundler's desktopEntryPoints list, a string, not an import."
+    },
+    {
+      "path": "build/next/resources.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L75 'vs/workbench/contrib/debug/browser/media/*.png' is a resource glob for the build, not an import."
+    },
+    {
+      "path": "eslint.config.js",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "L393-398 and L744-761 list contrib/debug files in lint rule scopes; strings, not imports."
+    },
+    {
+      "path": "src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts",
+      "scanner": false,
+      "nebulosity": false,
+      "decision": "out",
+      "why": "One 1.4 MB string literal (a recorded TypeScript server response) that names hundreds of source paths: data, not an import."
+    }
+  ]
+}

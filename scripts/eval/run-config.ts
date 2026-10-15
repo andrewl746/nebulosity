@@ -70,10 +70,17 @@ export function formatLine(question: { family: string; file?: string }, formats:
     return line.split("<file>").join(`\`${question.file}\``);
 }
 
-/** The text a run sends: the question, its family's format line, and with scripts on the scratch sentence (R6). */
+/**
+ * The text a run sends: the question, its family's format line, and with scripts on the scratch sentence, the same in
+ * both arms. Its wording is the owner's (2026-10-14, "Name the way that works", replacing R6's): it names the way that
+ * works under the permission rules, Write into the scratch folder then node, or node -e, because in the dev set (Task 13)
+ * every script tried as a Bash heredoc was refused and no run wrote one with Write.
+ */
 export function promptFor(question: { prompt: string; family: string; file?: string }, formats: Record<string, string>, scratch?: string): string {
     const base = `${question.prompt}\n\n${formatLine(question, formats)}`;
-    return scratch === undefined ? base : `${base}\n\nYou may write and run Node.js scripts in ${scratch} (and nowhere else); don't change any file in the repository.`;
+    return scratch === undefined
+        ? base
+        : `${base}\n\nYou may write Node.js scripts in ${scratch} with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`;
 }
 
 /** Names that would bill an API key instead of the subscription, or override a pin. Windows ignores their case. */

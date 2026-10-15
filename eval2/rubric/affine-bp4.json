@@ -1,0 +1,69 @@
+{
+  "id": "affine-bp4",
+  "source": "AFFiNE's and BlockSuite's own docs at 0b69a6da: blocksuite/docs-site/blog/crdt-native-data-flow.md, guide/store.md, guide/data-synchronization.md, guide/adapter.md; packages/common/nbstore/README.md; README.md",
+  "points": [
+    {
+      "id": "AFFINE-BP4.1",
+      "text": "a document's content is a Yjs CRDT: each doc is its own Yjs document (the docs say a subdocument), its blocks are kept in it, and that CRDT data is the single source of truth for the block tree",
+      "check": "Doc: guide/store.md L3 ('natively built on the CRDT library Yjs'), L7 ('Under the hood, every doc holds a Yjs subdocument'); blog/crdt-native-data-flow.md L32 ('BlockSuite chooses to directly use the CRDT model as the single source of truth'). Code: blocksuite/framework/store/src/extension/workspace/doc.ts L33-35 (get rootDoc(): Y.Doc; get spaceDoc(): Y.Doc; get yBlocks(): Y.Map<YBlock>); the app's implementation, packages/frontend/core/src/modules/workspace/impls/doc.ts L40 const spaceDoc = new Y.Doc({ guid: this.id }).",
+      "holds": true,
+      "note": "Rewritten: each doc is a separate Y.Doc keyed by the doc's id. The subdocument under the workspace's root doc ('spaces') is created only for old versions: doc.ts L26-38 ('This is a piece of old version compatible code ... new version no longer needs subdoc on spaces'). An answer saying 'a Yjs subdocument per doc' earns the point."
+    },
+    {
+      "id": "AFFINE-BP4.2",
+      "text": "an edit changes the Yjs data first; the store turns the resulting Yjs events into updates of the block models, which then notify the UI; local edits, undo/redo and other users' changes all take that same path, so app code doesn't need to tell them apart",
+      "check": "Doc: blog/crdt-native-data-flow.md L32-36 ('regardless of whether the update comes from local or remote sources, the same process will be performed: 1. Firstly modify YModel ... 2. Update the model nodes in the block tree based on the Y.Event. 3. Send corresponding slot events'), L42 ('ignore whether updates to the block model come from local editing, history stack, or collaboration with other users'). Code: blocksuite/framework/store/src/model/store/store.ts L743-768 addBlock writes through this._crud inside this.transact (a Yjs transaction) and returns only the id; deleteBlock likewise (L938-970). L598 this._yBlocks.observeDeep(this._handleYEvents); L1266-1293 _handleYEvent marks each change local or remote (L1271-1277; an undo counts as local, L1274) and emits slots.yBlockUpdated; L611-625 that subscription calls _onBlockAdded or _onBlockRemoved for both. store/src/model/block/block-model.ts L120-127 a model's children follow its Y block's observers. store/src/extension/history/history-extension.ts L22 undo is a Y.UndoManager over the blocks.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP4.3",
+      "text": "what is stored and synced is the CRDT's binary update data, not JSON",
+      "check": "Doc: guide/data-synchronization.md L34 ('the document data stored on the server is no longer JSON, but always a binary representation of CRDT'); packages/common/nbstore/README.md L21 ({ docId, bin: Uint8Array, timestamp, editor? }) and L43-46 (pushDocUpdate with bin). Code: packages/common/nbstore/src/storage/doc.ts L34-36 DocRecord { bin: Uint8Array; editor? }, L44-47 DocUpdate { bin: Uint8Array }, L81 getDoc, L91 pushDocUpdate(update, origin); the server receives updates as packages/backend/server/src/core/sync/gateway.ts L1434 @SubscribeMessage('space:push-doc-update').",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP4.4",
+      "text": "JSON snapshots of the block tree exist for import and export: a transformer turns a doc into a snapshot and back, and adapters convert snapshots to and from formats such as Markdown and HTML",
+      "check": "Doc: guide/data-synchronization.md L11 ('its built-in snapshot mechanism'), L28 ('The snapshot stores the JSON representation of the doc block tree ... an Adapter API on top of the snapshot to handle conversions between the block tree and third-party formats like markdown and HTML'); guide/adapter.md L3. Code: blocksuite/framework/store/src/transformer/transformer.ts L57 class Transformer, L100 docToSnapshot, L192 snapshotToDoc; store/src/adapter/base.ts L70 abstract class BaseAdapter, L122 fromDocSnapshot, L183 toDocSnapshot; blocksuite/affine/shared/src/adapters/ has markdown, html, notion-html, plain-text, pdf, image, attachment, mix-text, notion-text and clipboard adapters, each extending BaseAdapter.",
+      "holds": true,
+      "note": "Rewritten: the docs' Job class (new Job({ collection }), job.docToSnapshot) is now Transformer."
+    },
+    {
+      "id": "AFFINE-BP4.5",
+      "text": "cursors and selections are shared through Yjs awareness, kept beside the document and outside its history",
+      "check": "Doc: guide/store.md L9 ('the selection state is also stored in the doc.awarenessStore ... built on top of the Yjs awareness'); blog/crdt-native-data-flow.md L71 ('shared states that do not require a history of changes, such as the awareness state of each user's cursor position'). Code: blocksuite/framework/store/src/yjs/awareness.ts L1 imports Awareness from y-protocols, L22 class AwarenessStore; store/src/extension/selection/selection-extension.ts L56-69 reads other clients' selections from awareness, L158 setLocalSelection; blocksuite/affine/widgets/remote-selection/src/doc/doc-remote-selection.ts L61 draws remote cursors from awarenessStore.getStates(). The undo manager covers only the blocks (history-extension.ts L22).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP4.6",
+      "text": "on the device, documents and files are kept through `@affine/nbstore`'s storages (doc, blob and more, grouped per workspace), which come in IndexedDB and SQLite implementations",
+      "check": "Doc: packages/common/nbstore/README.md L9-21 (IndexedDBDocStorage from @affine/nbstore/idb), L28-46 (SpaceStorage combining IndexedDBDocStorage and SqliteBlobStorage; storage.get('doc'), storage.tryGet('blob')). Code: packages/common/nbstore/package.json exports ./idb (L11), ./cloud (L14), ./sqlite (L16); src/storage/index.ts L32-49 class SpaceStorage holding awareness, blob, blobSync, doc, docSync, indexer and indexerSync storages. The app picks them per platform: packages/frontend/core/src/modules/workspace-engine/impls/local.ts L193-225 SQLite on Electron, iOS and Android, IndexedDB otherwise (the browser).",
+      "holds": true,
+      "note": "The README's SpaceStorage takes an array; at this commit it takes an object keyed by storage type. Its third example, storage behind a worker, also holds (apps/web/src/nbstore.worker.ts L13-18 serves the storages from a worker; src/worker/client.ts L293-294 pushDocUpdate calls 'docStorage.pushDocUpdate', ops.ts L57), but is left out to keep the rubric at 8."
+    },
+    {
+      "id": "AFFINE-BP4.7",
+      "text": "it is local-first: the copy on the device is the primary one, and a cloud workspace syncs it in real time with the server (one more storage it syncs with), which is what makes collaboration work",
+      "check": "Doc: README.md L69-71 ('Local-first & Real-time collaborative ... you always own your data on your disk, in spite of the cloud. Furthermore, AFFiNE supports real-time sync and collaborations'); guide/data-synchronization.md L50-52 and L101 ('by connecting multiple providers, documents can automatically be synchronized to a variety of different backends'). Code: packages/frontend/core/src/modules/workspace-engine/impls/cloud.ts L506 local storages and L562-590 remotes (CloudDocStorage, CloudBlobStorage, CloudAwarenessStorage for the server); packages/common/nbstore/src/sync/doc/index.ts L49 DocSyncImpl, L55-62 a DocSyncPeer between the local storage and each remote; src/impls/cloud/doc.ts L1 and L32 CloudDocStorage over socket.io-client; the server side is packages/backend/server/src/core/sync/gateway.ts L327 @WebSocketGateway() and L1434 'space:push-doc-update'.",
+      "holds": true,
+      "note": "Rewritten: the docs' 'providers' (y-indexeddb's IndexeddbPersistence, a WebSocket provider) are now nbstore's local storage plus remote storages kept in step by its sync."
+    },
+    {
+      "id": "AFFINE-BP4.8",
+      "text": "y-octo, a native Rust implementation of Yjs, handles the CRDT data in native code on both the client and the server",
+      "check": "Doc: README.md L153 ('y-octo is a native, high-performance, thread-safe YJS CRDT implementation, serving as the core engine enabling the AFFiNE Client/Server to achieve local-first functionality'). Code: Cargo.toml L114 y-octo = '0.1.1'; client: packages/frontend/native/Cargo.toml L33 and packages/frontend/native/nbstore/Cargo.toml L34 depend on it, packages/frontend/native/nbstore/src/doc.rs L5 use y_octo::{DocOptions, merge_updates_v1} (the SQLite store's doc updates); server: packages/backend/native/Cargo.toml L92, packages/backend/native/src/lib.rs L26 use y_octo::{Doc, Update}, and packages/backend/server/src/core/doc/merge-updates.ts L7 merges updates with the native mergeUpdatesInApplyWay.",
+      "holds": true,
+      "note": "The browser side still runs the yjs JavaScript library (blocksuite/framework/store/package.json L24); y-octo runs in the native code of the desktop and mobile apps and of the server, and the server keeps yjs as its fallback (merge-updates.ts L3-4)."
+    },
+    {
+      "id": "AFFINE-BP4.9",
+      "text": "OctoBase is the database behind AFFiNE",
+      "check": "Doc: README.md L154 ('OctoBase is the open-source database behind AFFiNE, local-first, yet collaborative'). Code: nothing at 0b69a6da depends on OctoBase; the only non-doc mentions are .vscode/settings.template.json L12 (a spelling word), packages/frontend/apps/electron/forge.config.mjs L421 ('it is for octobase-node, but we dont use it for now') and a demo menu item in packages/frontend/component/src/ui/menu/menu.stories.tsx L156 ({ name: 'octobase', value: '3' }). Data lives in nbstore's IndexedDB or SQLite storages on the device (AFFINE-BP4.6) and in PostgreSQL behind the server (packages/backend/server/schema.prisma L8-11).",
+      "holds": false,
+      "note": "Dropped: the README's OctoBase claim no longer holds."
+    }
+  ]
+}

@@ -767,6 +767,8 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 
 **Amended (2026-10-14, the runs):** run as decided, with the third arm on every question: 90 runs, Sonnet 5.5 at medium effort, Claude Code 2.1.299, on the owner's subscription. Claude Code's list-price estimate was $4.88 for all 90 (the method's estimate had been $20–90), and the 5-hour window rose 0.07 → 0.23 and the 7-day 0.72 → 0.74, shared with the session's own work. The owner did not review every big-picture grade: at the owner's choice, a second blind grader (Opus) graded all 30 answers, the two agreed exactly on 174 of 198 points, and the owner ruled on the 24 disagreements, taking the suggested score for each ("Take your suggested scores for all 24.", `eval/grading/review.json`'s `ownerWords`; 17 grades changed). The results, losses included, are Eval #1 in `docs/EVAL_RESULTS.md`.
 
+**Amended (2026-10-14, V1.6):** Eval #2 extends this method (ADR-057): a second repo, scripts allowed in both arms, task sessions, three repeats, and a gate fixed before the first run. Eval #1's numbers stand as published, with Task 3's dated correction of the up-front token cost.
+
 ## ADR-051 — Going public: MIT, and nothing of the owner's machine in anything published (2026-10-14) — amends ADR-043
 
 **Context:** S8 asks for a public repo, a README, a video and a live demo. The repo has been private with no license; ADR-043 left the license to V1.6's kickoff. V1.5 publishes three kinds of data besides code: the static demo (built from VS Code's index), the eval's transcripts, and the docs, which are written for a reader and record the project's history.
@@ -870,3 +872,35 @@ They need the whole graph, and the index already holds it.
 **Alternatives:** (a) Keep seven tools and add two: more names to choose between, and more tokens every turn. (b) One tool for everything: the model can't see what it does without reading a long description every turn. (c) Ask users to switch tool search off: it loads every deferred tool, Claude Code's own included, about 13,000 tokens a turn in Eval #1. (d) A CLAUDE.md snippet: hides AGENTS.md, and a repo file is the user's to write.
 **Consequences:** MCP clients that called `dependents`, `dependencies` or `path` must call `imports` (the README and API_CONTRACTS.md §17 say how). The five definitions take 4,733 characters (name, description and input schema as JSON) and the instructions 1,036, 5,769 together (a test). On VS Code every tool's worst warm call is 256 ms (MCP Benchmark #3; S5 ≤ 500 ms). `imports` refuses a `within` that is a file, isn't indexed, or equals or sits inside a folder target (a folder's importers and imports lie outside it), and a `within` that leaves no direct file says so (ADR-045's amendment). Task 13 measures the tool-use share and the per-turn cost.
 **Revisit when:** the dev set or Eval #2 shows a tool chosen wrongly or ignored, or Claude Code changes how it loads MCP tools.
+
+## ADR-057 — Eval #2's method and the ship gate (2026-10-14) — amends ADR-050 and ADR-051
+
+**Context:** Eval #1 showed Claude Code alone at the ceiling on its questions, the tools loaded in 12 of 30 runs, and savings only where a question walks the graph, with a read-only baseline. The owner decided nothing ships until a re-measured eval shows clearly better results and efficiency (ADR-051, amended). V1.6 built tools for what grep can't answer cheaply (ADR-053–ADR-056).
+**Decision:**
+- **Two repos:** VS Code at `cc3fec88` (Eval #1's 15 questions again, plus 6 grep-hard ones), and AFFiNE at `0b69a6da`, a repo with no repo-level agent guide at that commit (only one package, `packages/frontend/apps/ios`, has an `AGENTS.md`). AFFiNE was the owner's pick at Task 1, and gets 4 big-picture questions, 4 lists, 4 chains and 6 grep-hard ones.
+- **The grep-hard kinds and their scores:** impact counts (1 − relative error per line, floored at 0), cycles (1 / 0.5 / 0), and F1 for files nothing imports, layering violations, the roots that load a file, and folder pairs.
+- **3 task sessions per repo**, 4 questions each, in one Claude Code process over stream-json input.
+- **Two arms,** A and N. N is registered as `nebulosity setup` registers it, plus `NEBULOSITY_LIVE=off`, with the tools always loaded through their `_meta`.
+- **Scripts allowed in both arms** (the owner's pick): node, and edits under a fresh scratch folder per run (R6).
+  - Every prompt in both arms ends with the owner's sentence (2026-10-14): `You may write Node.js scripts in <scratch> with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.` It replaces R6's sentence, because in the dev set 5 runs tried a script as a Bash heredoc, all 5 were refused, and none wrote one with Write.
+  - The folder is an opaque, arm-free temp folder outside the checkout and both repos. It is archived beside the raw transcript and scrubbed to `<scratch>`. R6's location inside the checkout would have pointed every run at the eval's own answer key, and put the arm into the prompt.
+- **Three repeats.**
+- **Truth** from two independent extractors and the eval's own resolver. Disagreements, computed sites and a 30-edge sample per repo were read in the source; the index was consulted only for candidates (R2).
+  - An independent reader read every list entry, chain step and cycle step, and built a third graph on which all 44 new truths agree.
+  - Impact totals of thousands of files were checked by method and sample, not entry by entry.
+  - The computed-site sweep lists only `import(<name>)`. Counting the 36 other non-literal sites changes no truth.
+  - The test rule and the set of files nothing imports (every code file, `.d.ts` and build config included) are stated in `docs/EVAL_RESULTS.md`.
+- **The ship gate**, fixed before the first run: D1 of V1.6's plan, computed by `scripts/eval/gate.ts`. All of:
+  - grep-hard pooled ≥ A + 0.15, and no grep-hard question below A by more than 0.05;
+  - no other family below A by more than 0.03 on either repo, with the direct and transitive lists pooled as one family;
+  - graph questions at ≤ 50% of A's median cost and time, wall time being `duration_ms`;
+  - other questions at ≤ 115% of A's median cost;
+  - sessions at ≤ 60% of A's cost and time, with the score within 0.03;
+  - tools used in ≥ 90% of list, chain and grep-hard runs;
+  - first-call context ≤ A's + 2,500 tokens.
+
+  It is computed only on complete data: every repo, and every scheduled run kept in both arms.
+- Everything else as ADR-050: pinned versions, the isolation and init checks, outages re-run, blind grading with the owner ruling on disagreements, losses published.
+**Alternatives:** (a) Read-only like Eval #1: comparable, but the savings would stay conditioned on a baseline that can't script, Eval #1's own caveat. (b) VS Code only: the model knows it from training and it ships an agent guide; Eval #1 showed both help Claude Code alone. (c) Questions where Nebulosity can't lose: the owner's gate keeps Eval #1's families and requires no loss there. (d) Two repeats: cheaper, and the noise Eval #1 warned about.
+**Consequences:** 234 single runs and 36 session runs, on the owner's subscription (the pilot measures the share of the windows; the owner approves the count). The results, losses included, go in docs/EVAL_RESULTS.md as Eval #2, and the gate's verdict decides whether S8 (going public) starts. Two index gaps found while checking the truths stay until the results (R1), because they were found through Eval #2's answer key: files over 1 MB are skipped, and `typeof import('…')` isn't followed. They cost N on three impact questions, and are fixed after the results.
+**Revisit when:** the gate passes or fails (the verdict amends this ADR), or a new Claude Code version or model changes the baseline enough to matter for the README's claims.

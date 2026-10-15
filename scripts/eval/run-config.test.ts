@@ -206,9 +206,9 @@ describe("scripts allowed (Eval #2)", () => {
         expect(scratchRule("/home/ann/scratch/")).toBe("//home/ann/scratch/**");
     });
 
-    it("adds the scratch sentence after the format line (R6)", () => {
+    it("adds the owner's scratch sentence after the format line, naming the Write tool, node and node -e", () => {
         expect(promptFor({ prompt: "Q?", family: "chain" }, { chain: "End with ANSWER." }, "C:/s")).toBe(
-            "Q?\n\nEnd with ANSWER.\n\nYou may write and run Node.js scripts in C:/s (and nowhere else); don't change any file in the repository.");
+            "Q?\n\nEnd with ANSWER.\n\nYou may write Node.js scripts in C:/s with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.");
         expect(promptFor({ prompt: "Q?", family: "chain" }, { chain: "End with ANSWER." })).toBe("Q?\n\nEnd with ANSWER.");
     });
 
@@ -240,7 +240,7 @@ describe("an opaque scratch folder (R6 as fixed)", () => {
         expect(n.filter((x, i) => x !== a[i])).toEqual(["n.json"]);
         expect(a[a.indexOf("--add-dir") + 1]).toBe("C:/Temp/eval-scratch/0a1b2c3d4e5f6071");
         expect(a[a.indexOf("--allowedTools") + 1]).toContain("Edit(//c/Temp/eval-scratch/0a1b2c3d4e5f6071/**)");
-        expect(promptFor(question, formats, scratch)).toContain("scripts in C:/Temp/eval-scratch/0a1b2c3d4e5f6071 (and nowhere else)");
+        expect(promptFor(question, formats, scratch)).toContain("scripts in C:/Temp/eval-scratch/0a1b2c3d4e5f6071 with the Write tool");
         // neither the folder nor the prompt carries an arm or a run name
         expect(scratch).not.toMatch(/baseline|nebulosity/i);
     });
@@ -288,7 +288,7 @@ describe("the dev set (Task 13, R1)", () => {
         // a file given to a line that doesn't name one changes nothing
         expect(formatLine({ family: "list", file: "src/a.ts" }, formats)).toBe("End with ANSWER: and the files.");
         expect(promptFor({ prompt: "Q?", family: "cycle", file: "src/a.ts" }, formats, "C:/s")).toBe(
-            "Q?\n\nEnd with ANSWER: none, or the cycle starting and ending with `src/a.ts`, where each file imports the next.\n\nYou may write and run Node.js scripts in C:/s (and nowhere else); don't change any file in the repository.");
+            "Q?\n\nEnd with ANSWER: none, or the cycle starting and ending with `src/a.ts`, where each file imports the next.\n\nYou may write Node.js scripts in C:/s with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.");
     });
 
     it("refuses a format line that names <file> for a question that names none, and a family with no line", () => {

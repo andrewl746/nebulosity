@@ -1,3 +1,400 @@
+# 2026 10 14 Eval #2 — Claude Code with and without Nebulosity, on VS Code and AFFiNE
+
+**Status: the method is fixed and no run has started (2026-10-14).** Everything in this section down to "Results" was written before the first run: the arms, the setup, the questions and their truths, the scoring and the ship gate. The gate does not change after the first run.
+
+This is the re-measured eval that ADR-051's amendment waits for. Nothing ships (the demo deploy, the public repo, the video) until Eval #2 shows clearly better results and efficiency than Eval #1 did. It asks whether Claude Code answers questions about two big repos better and more cheaply with Nebulosity's MCP server than without it. It asks Eval #1's questions again, plus questions grep can't answer cheaply. Losses will be reported beside wins. The decisions are ADR-057, which amends ADR-050 and ADR-051. The plan is `docs/plans/2026-10-14-v1-6-works-on-your-repo.md` (D1, D2, R1–R6 and Task 14).
+
+Where things are:
+- The definition (repos, pins, arms, repeats, scripts and the pilot): `eval2/eval.json`.
+- The questions and format lines: `eval2/questions.json`. The task sessions: `eval2/sessions.json`.
+- The truths: `eval2/truth/<id>.json`, built from `eval2/truth-specs.json`, with every hand decision in `eval2/truth/adjudicated.json`. The rubrics: `eval2/rubric/<id>.json`.
+- The dev set, which is never scored and whose targets appear nowhere here: `eval2/dev/`.
+- The truth builder, its resolver and its two extractors, the runner, the scorer and the gate: `scripts/eval/`.
+- Kept transcripts will go in `eval2/runs/` (scrubbed, leak-scanned, gzipped). Raw ones and each run's scratch folder go in `.nebulosity/eval2/raw/`, which git ignores.
+
+## The arms
+
+- **A, baseline:** Claude Code alone, with its read-only built-in tools, its subagents, and Node.js scripts in a scratch folder (below).
+- **N, Nebulosity:** the same, plus Nebulosity's MCP server.
+  - It is registered the way `nebulosity setup` registers it, plus `NEBULOSITY_LIVE=off`, so no live event reaches the owner's Map.
+  - It has six tools (ADR-056): `overview`, `describe`, `search`, `imports`, `architecture` and `show_on_map`.
+  - The five that answer questions carry `_meta["anthropic/alwaysLoad"]: true`, so they load without ToolSearch. `show_on_map` stays deferred.
+  - The registration carries no `alwaysLoad` (R4).
+  - It answers about the index of the repo the run is in.
+
+A and N differ only in the MCP config file. The prompts, the scratch folder's rules and everything else are the same, and no prompt names Nebulosity. Eval #1's third arm (the tools loaded up front) is retired, because the tools now load themselves.
+
+## Setup
+
+| What | Value |
+|---|---|
+| Claude Code | Pinned at the pilot: Task 21 re-pins `eval2/eval.json`'s `claudeVersion`. It was 2.1.300 when this was written, and the dev set ran on 2.1.300. The runner refuses to start on any other version, and refuses any run whose init message reports another. |
+| Model | `claude-sonnet-5-5` |
+| Effort | `medium` |
+| Limits | A single run: 80 turns, $4 (Claude Code's estimate) and 30 minutes. A task session: one budget of $10 for its four messages, and 60 minutes. |
+| Repos | VS Code at `cc3fec8846d0e678357e476fa611774da26d7e24` (`../vscode`). AFFiNE at `0b69a6da21e8fd35beb85667bb8496d9b3852238` (`../affine`, the head of its canary branch on 2026-10-14, a shallow clone). The runner stops if either HEAD is anything else. |
+| Nebulosity's engine | Frozen at `EVAL2_ENGINE`, which is filled in at the pilot (Task 21). Nothing in `lib/engine`, `lib/tools`, `lib/index`, `lib/db`, `lib/home.ts`, `lib/config.ts` or `mcp/` changes from then until the results are committed. |
+| Nebulosity's index | The owner's database: VS Code with the V1.2 summaries, AFFiNE with Task 20's. The index versions are filled in at the pilot (VS Code was at 138 and AFFiNE at 3 when this was written). Every run records the version it saw, and the server opens the database read-only. |
+| Working folder | The repo the question asks about. |
+
+### The command
+
+The prompt goes on stdin. A task session writes its four prompts as stream-json user messages, each one after the previous answer's result. Everything is the same in both arms except the file after `--mcp-config`.
+
+```
+claude -p --output-format stream-json --verbose
+  --model claude-sonnet-5-5 --effort medium
+  --max-turns 80 --max-budget-usd 4
+  --setting-sources project,local
+  --strict-mcp-config --mcp-config <A: eval2/mcp/empty.json, N: .nebulosity/eval2/mcp-nebulosity.json>
+  --permission-mode dontAsk --permission-prompts none
+  --allowedTools Read,Grep,Glob,Agent,Bash(git grep:*),Bash(git ls-files:*),Bash(git log:*),Bash(git show:*),
+                 Bash(rg:*),Bash(grep:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),
+                 Bash(sort:*),Bash(uniq:*),Bash(find:*),mcp__nebulosity,Bash(node:*),Edit(//<scratch>/**)
+  --disallowedTools NotebookEdit,WebFetch,WebSearch,Skill,PowerShell,Monitor
+  --add-dir <scratch>
+  --no-session-persistence
+```
+
+- A task session runs the same command with `--max-budget-usd 10`, followed by `--input-format stream-json --replay-user-messages`.
+- `<scratch>` is the run's own scratch folder. The Edit rule writes its absolute path the way Claude Code's permission rules want it: `//c/Users/…/eval-scratch/<hex>/**`.
+- The runner writes N's config file:
+
+```json
+{ "mcpServers": { "nebulosity": { "command": "node", "args": ["<checkout>/mcp/launch.mjs"], "env": { "NEBULOSITY_LIVE": "off" } } } }
+```
+
+`eval2/mcp/empty.json` is `{ "mcpServers": {} }`.
+
+### Scripts, and the scratch folder
+
+Both arms may run Node.js scripts (the owner's pick on the options memo, 2026-10-14). Eval #1's baseline could only read, so its savings came with that caveat.
+- **The rules:**
+  - `Bash(node:*)` is allowed.
+  - So are edits under the run's scratch folder: `Edit(//<scratch>/**)`, with `--add-dir <scratch>`. The rule covers the Write tool too, since Claude Code never consults a `Write(…)` rule.
+  - Edit and Write leave the deny list, because a deny would beat the path rule.
+  - Under `dontAsk`, any other edit and any other Bash command is refused.
+- **The folder:** a fresh, empty folder per run, at `<system temp folder>/eval-scratch/<16 random hex digits>/`.
+  - It sits outside the Nebulosity checkout and outside both repos.
+  - Its name carries no arm and no run name, so the prompt, `--add-dir` and the Edit rule are the same text in both arms. The hex is recorded in the run's index line.
+  - After the run, its contents are copied beside the raw transcript (`.nebulosity/eval2/raw/<run>.scratch/`) and the temp folder is removed.
+  - The scrubber turns its path into `<scratch>` in kept transcripts.
+- **The sentence** is the same in both arms and comes after the format line, with the folder's absolute path (forward slashes) in place of `<scratch>`: `You may write Node.js scripts in <scratch> with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`
+
+### What is on, what is off, and why
+
+- **On in both arms:**
+  - Read, Grep, Glob and the Agent tool (Explore and the other built-in subagents).
+  - Bash for the read-only commands Eval #1 allowed.
+  - The scripts above.
+  - `mcp__nebulosity` is allowed everywhere; its tools exist only where the server runs.
+- **Off in both arms:**
+  - NotebookEdit.
+  - WebFetch and WebSearch: the rubrics' sources are on the web (VS Code's wiki page, AFFiNE's and BlockSuite's docs).
+  - Skill and Monitor.
+  - PowerShell (`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`), so every arm uses one shell.
+  - Edit and Write work only under the scratch folder.
+- **Tool search:** Claude Code's default. N's five question tools are always loaded through their own `_meta` (ADR-056), which is what a user who runs `nebulosity setup` gets. On the dev set, every one of the 16 runs used them, with no ToolSearch call (MCP Dev Set #1 in `docs/BENCHMARKS.md`).
+- **Limits:** as in the setup table.
+  - A run that hits its turn or budget limit scores 0 and counts. In a session, the message that hit it scores 0, and so does any message never answered.
+  - A run killed at its time limit is an outage.
+
+### Isolation from the owner's own Claude Code setup
+
+As in Eval #1, and on the owner's subscription, never an API key:
+- `--setting-sources project,local` keeps out the owner's plugins, hooks, model and effort.
+- `--strict-mcp-config` keeps out the repo's `.mcp.json`, the owner's own registration of Nebulosity and claude.ai connectors.
+
+VS Code's `AGENTS.md` stays, as it would for any user there. AFFiNE has no repo-level agent guide at `0b69a6da`: only one package, `packages/frontend/apps/ios`, has an `AGENTS.md`.
+
+Variables:
+- **Set in every child:** `CLAUDE_CODE_GIT_BASH_PATH` (the Git Bash that runs), `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, `ENABLE_CLAUDEAI_MCP_SERVERS=false`, `DISABLE_AUTOUPDATER=1` and `NEBULOSITY_LIVE=off`.
+- **Removed from every child:**
+  - `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN`;
+  - `CLAUDE_CODE_EFFORT_LEVEL`;
+  - the Bedrock, Vertex and Foundry switches;
+  - `ENABLE_TOOL_SEARCH` and `CLAUDE_CONFIG_DIR`;
+  - every name that starts with `CLAUDE`, `ANTHROPIC_` or `MCP_`, in any case.
+
+  The pins are set after the removal. The runner prints the removed names (never their values), and stops if one would still reach a child.
+
+### Checked on every run, not assumed
+
+- **The init message**, judged the moment it appears (in a task session, every message's init). It must show:
+  - the pinned model and Claude Code version;
+  - permission mode `dontAsk` and no API key;
+  - no MCP server in A, and `nebulosity` connected in N;
+  - none of the owner's plugins;
+  - the right tools present and absent.
+
+  A run that differs is killed with its whole process tree.
+- **After the run:** each repo of the definition must be at its commit with a clean `git status`, and the Nebulosity checkout's `git status --porcelain` must match the one before the batch (the owner's work in progress stays). A change stops the batch, and nothing is restored automatically.
+- **Nebulosity's index:** each repo's index version is printed before the batch. A batch stops if an N run asks about a repo with no index version.
+- **Transcripts:** scrubbed of the machine's paths, the scratch folder and the owner's email, then scanned for them. A hit stops the batch.
+- **An outage is not an answer.** These count as outages:
+  - an API error, including one reported as a success;
+  - no result;
+  - a run killed at its time limit;
+  - a session with fewer results than messages sent, or with an error in any one message's stretch of the transcript.
+
+  An outage is not scored. It is re-run later (Eval #1's rule), and every attempt's raw transcript is kept.
+- **Usage:** the runner stops cleanly when the 7-day window reaches 0.85 or the 5-hour window reaches 0.9. It stops if two runs in a row report neither.
+- **Order:** which arm goes first alternates by question (or session) and by repeat. It comes from the question's place in `eval2/questions.json` (or the session's in `eval2/sessions.json`), so the pilot gives each the order the full run will.
+
+## The runs planned
+
+- **The pilot, 20 runs** (`eval2/eval.json`): one repeat, in both arms, of 8 single questions (16 runs) and of one task session per repo (4 runs).
+  - The singles, per repo a big-picture question, a chain and two grep-hard questions (impact and one other): VS Code `vscode-bp4`, `vscode-cn3`, `vscode-impact` and `vscode-pairs`; AFFiNE `affine-bp1`, `affine-cn1`, `affine-impact` and `affine-entries`. They run with `npm run eval:run -- --eval eval2 --pilot`.
+  - The sessions, `vscode-s1` and `affine-s1` (`pilotSessions` in `eval2/eval.json`), run with `npm run eval:run -- --eval eval2 --sessions --only vscode-s1,affine-s1 --repeat 1`. The runner takes `--pilot` for single questions only.
+  - These sessions are the runner's first against Claude Code itself (only Task 9's probe ran before). They also show whether `--max-turns` counts per message or per process, and what hitting `--max-budget-usd` does to a session.
+  - Then each run's usage and the extrapolation are reported, and **the owner approves the full count.**
+- **The full run:** 39 single questions (VS Code 21, AFFiNE 18) and 6 task sessions, in both arms, three times. That is 234 single runs and 36 session runs, the pilot's 20 among their first repeats.
+- **Expected usage:** Claude Code's list-price estimate is about $20–40 for the whole eval. Eval #1's 90 runs cost $4.88 and took at most 0.16 of one 5-hour window. The pilot measures the real share.
+
+## The questions
+
+Prompts are the same in both arms and never name Nebulosity. Each ends with its kind's format line, then the scripts sentence. The format lines are `eval2/questions.json`'s `formats`:
+- lists, and the files nothing imports, violations and entries questions: Eval #1's list line;
+- chains: Eval #1's chain line;
+- big-picture: `Answer in at most 400 words.`;
+- impact: `End with a line that says ANSWER: and then one line for each folder named above, in the same order, as the folder, a colon and the number of files, then a line elsewhere: and the number of files outside them, then a line total: and the number of files in all.`;
+- cycle: `End with a line that says ANSWER: and then either the word none, or the cycle as file paths relative to the repository root, one per line, starting and ending with <file>, where each file imports the next.`, with the question's file in backticks in place of `<file>`;
+- pairs: `End with a line that says ANSWER: and then one line for each pair, as the importing folder's name, then ->, then the imported folder's name.`
+
+**The import rule** is Eval #1's sentence, unchanged. It ends every list, impact, files nothing imports, violations and entries prompt: `Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.` "Refers to" is Eval #1's rule, with its three ways (see Eval #1's "The questions" below). A `declare module '…'` augmentation is not one of the rule's statements.
+
+**The prompts' templates** were fixed in Task 14 so that both repos ask the same way. The table leaves out the import rule.
+
+| Kind | Prompt |
+|---|---|
+| impact | If I change `<file>`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `<f1>`, `<f2>`, …, and how many are elsewhere. |
+| cycle | Is `<file>` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. |
+| files nothing imports | List every file in `<folder>` that no other file in the repository imports. Leave out test files. |
+| violations | List every file in `<folderA>` that directly imports a file in `<folderB>`. |
+| entries | Which files that no other file imports end up loading `<file>`, directly or through other files? Leave out test files. |
+| pairs | Code under `<folder>` sits in folders named `<n1>`, `<n2>`, …. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path. For a folder's children: Which of the folders directly inside `<folder>` import from which others? |
+| lists, chains | Eval #1's wordings. AFFiNE's four chains take Eval #1's four chain wordings in order. Every session chain is: Give the shortest chain of imports from `<entry>` to `<file>`. |
+
+**Test files.** A test file has a folder named `test`, `tests` or `__tests__` on its path, or `.test.` or `.spec.` in its name. Fixtures, stories and e2e helpers outside a test folder are not tests. "Leave out test files" uses this rule. Impact, the lists and violations count test files, as the import rule says.
+
+**Files nothing imports** are files no statement of any file names, counted over every code file: `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs`, `.d.ts` and build-config files included.
+- It means imported by no file, not unreachable.
+- A process's or a worker's main that is started by name counts, because no import statement names it. Examples: VS Code's `ptyHostMain.ts` and `notebookWebWorkerMain.ts`, and the process mains among VSCODE-ENTRIES' roots.
+
+### VS Code: 21 single questions
+
+Eval #1's 15 come first, with their ids prefixed and their prompts unchanged. Their truths and rubrics are Eval #1's, copied (see "How the truths were made and checked"). Six grep-hard questions follow.
+
+| Id | Kind | Asks about | Truth |
+|---|---|---|---|
+| VSCODE-BP1–BP5 | big-picture | Eval #1's BP1–BP5 | 8, 6, 5 (of 6), 8 and 6 rubric points that hold |
+| VSCODE-CL1, CL2, CL3, CL5 | direct list | Eval #1's | 22, 41, 3 and 57 files |
+| VSCODE-CL4 | transitive list | Eval #1's | 66 files, 10 of them direct |
+| VSCODE-CN1–CN5 | chain | Eval #1's | 4 steps, 5, 4, none and 3 |
+| VSCODE-IMPACT | impact | `src/vs/platform/storage/common/storage.ts`, per `src/vs/base`, `src/vs/platform`, `src/vs/editor`, `src/vs/workbench`, `src/vs/sessions`, `src/vs/code` and `src/vs/server` | 4,503: 0 / 224 / 183 / 3,274 / 780 / 11 / 6, and 25 elsewhere |
+| VSCODE-CYCLE | cycle | `src/vs/workbench/contrib/chat/common/languageModels.ts` | 4 steps |
+| VSCODE-UNUSED | files nothing imports | `src/vs/sessions/browser` | 4 of its 87 non-test files |
+| VSCODE-VIOLATIONS | violations | `src/vs/workbench/services` → `src/vs/workbench/contrib` | 5 files, all tests |
+| VSCODE-ENTRIES | entries | `src/vs/platform/environment/node/argv.ts` | 9 files |
+| VSCODE-PAIRS | pairs | the seven environment names under `src/vs`: `common`, `browser`, `node`, `electron-browser`, `electron-utility`, `electron-main` and `worker` | 21 pairs |
+
+### AFFiNE: 18 single questions
+
+| Id | Kind | Asks about | Truth |
+|---|---|---|---|
+| AFFINE-BP1 | big-picture | What are the main parts of the AFFiNE repository and what is each one for? Say which apps are built from it, what the server is for and what it needs to run. | 8 of 10 rubric points hold |
+| AFFINE-BP2 | big-picture | How is BlockSuite, the editor framework under `blocksuite/`, structured: what are its main packages and kinds of components, and how does the AFFiNE app use it? | 8 of 8 |
+| AFFINE-BP3 | big-picture | In BlockSuite, how is a block type defined, rendered and plugged into an editor? Name the functions, classes and conventions involved. | 8 of 11 |
+| AFFINE-BP4 | big-picture | How does AFFiNE represent, store and sync a document's content: what form does the data take, how do local edits and other users' changes reach the editor, and where is the data kept on the device and synced to? | 8 of 9 |
+| AFFINE-CL1 | direct list | `packages/frontend/electron-api/src/index.ts` | 26 files |
+| AFFINE-CL2 | direct list | `packages/common/infra/src/op/index.ts` | 24 files |
+| AFFINE-CL3 | direct list (a folder's outside importers) | `blocksuite/affine/widgets/slash-menu` | 34 files |
+| AFFINE-CL4 | transitive list | `packages/frontend/core/src/mobile/modules/haptics/index.ts` | 56 files, 4 of them direct |
+| AFFINE-CN1 | chain | `packages/frontend/apps/web/src/index.tsx` → `packages/common/nbstore/src/impls/idb/index.ts` | 4 steps |
+| AFFINE-CN2 | chain | `blocksuite/playground/apps/starter/main.ts` → `blocksuite/framework/std/src/gfx/viewport.ts` | 5 steps |
+| AFFINE-CN3 | chain | `packages/frontend/apps/electron/src/helper/index.ts` → `packages/common/nbstore/src/impls/sqlite/index.ts` | 4 steps |
+| AFFINE-CN4 | chain | `packages/frontend/apps/electron/src/main/index.ts` → any file in `packages/frontend/apps/electron/src/helper` | none |
+| AFFINE-IMPACT | impact | `packages/common/env/src/constant.ts`, per `packages/frontend/core`, `packages/frontend/apps`, `packages/common` and `tests` | 1,620: 1,398 / 104 / 38 / 76, and 4 elsewhere |
+| AFFINE-CYCLE | cycle | `packages/common/infra/src/framework/core/components/service.ts`, in AFFiNE's own dependency-injection framework | 4 steps |
+| AFFINE-UNUSED | files nothing imports | `packages/frontend/core/src/components/page-list` | 5 of its 70 non-test files |
+| AFFINE-VIOLATIONS | violations | `packages/frontend/core` → `packages/frontend/apps` | 4 files |
+| AFFINE-ENTRIES | entries | `packages/frontend/core/src/modules/organize/services/organize.ts` | 7 files |
+| AFFINE-PAIRS | pairs (a folder's children) | the folders directly inside `packages/frontend` | 17 pairs |
+
+### Task sessions: 6, with four questions each
+
+Each session is about one area ("I'm about to change X"). Its four questions are asked in one Claude Code process, one message after another:
+1. the impact of X;
+2. the shortest chain from an entry point to X;
+3. the shortest import cycle through X, or none;
+4. the files nothing imports in X's folder.
+
+Their targets differ from every single question's and from the dev set's (see "The overlap check").
+
+| Session | X | Impact | Chain from | Cycle | Files nothing imports |
+|---|---|---|---|---|---|
+| vscode-s1 | `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts` | 3,152, per `contrib/notebook` 225, `contrib/chat` 1,068, `workbench/api` 325, `src/vs/sessions` 703, and 831 elsewhere | `src/vs/workbench/api/node/extensionHostProcess.ts`: 4 steps | 3 steps | in `src/vs/workbench/contrib/notebook/common`: 1 of 29 |
+| vscode-s2 | `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts` | 1,794, per `src/vs/editor` 46, `src/vs/workbench` 1,400, `src/vs/sessions` 336, and 12 elsewhere | `src/vs/sessions/sessions.web.main.internal.ts`: 6 steps, static imports only | 3 steps | in `src/vs/editor/contrib/inlineCompletions/browser`: 1 of 56 |
+| vscode-s3 | `src/vs/platform/terminal/node/terminalEnvironment.ts` | 59, per `platform/terminal` 5, `platform/agentHost` 54, and 0 elsewhere | `src/vs/platform/agentHost/node/agentHostMain.ts`: 3 steps | none | in `src/vs/platform/terminal/node`: 1 of 13 |
+| affine-s1 | `blocksuite/affine/blocks/database/src/database-block.ts` | 1,546, per `blocksuite/affine` 52, `blocksuite/integration-test` 20, `packages/frontend/core` 1,277, `packages/frontend/apps` 58, `tests` 112, and 27 elsewhere | `packages/frontend/apps/android/src/index.tsx`: 7 steps | 3 steps | in `blocksuite/affine/blocks/database/src`: 1 of 50 |
+| affine-s2 | `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts` | 681, per `core/src/blocksuite` 187, `core/src/components` 145, `core/src/desktop` 128, `core/src/mobile` 92, `packages/frontend/apps` 19, and 110 elsewhere | `packages/frontend/apps/electron-renderer/src/app/index.tsx`: 9 steps | none | in its own folder, `…/ai-onboarding`: 2 of 13 |
+| affine-s3 | `blocksuite/affine/blocks/surface/src/surface-block.ts` | 2,192, per `blocksuite/affine/blocks` 230, `blocksuite/affine/gfx` 185, `blocksuite/affine/widgets` 73, `packages/frontend/core` 1,287, `tests` 201, and 216 elsewhere | `packages/frontend/apps/ios/src/index.tsx`: 6 steps | 4 steps | in `blocksuite/affine/blocks/surface/src`: 2 of 79 |
+
+For vscode-s1 and vscode-s2, "X's folder" is X's area: the parent of the `model/` folder X sits in, which has no such file. The prompts are the templates', and `eval2/sessions.json` gives each session a title ("I'm about to change the notebook cell model").
+
+### The overlap check (R1)
+
+`npm run eval:overlap` compares the targets of every question with the dev set's, and the targets of every session question with every single question's. A question's targets are the file or folder it asks about, a chain's two ends and a violation's two folders. The folders an impact question counts by and a pairs question's names are not targets. On the final `eval2/questions.json` (63 questions with 76 targets, Eval #1's 15 copies and AFFiNE's big-picture prompts included, against the dev set's 16 questions and 20 targets), it printed nothing.
+
+## How the truths were made and checked
+
+The truth never comes from Nebulosity's index (R2).
+- **Eval #1's truths are copied unchanged.** Its 15 VS Code truths and five rubrics are in `eval2/truth/vscode-<id>.json` and `eval2/rubric/vscode-<id>.json`. Only each file's `id` changed (`cl1` → `vscode-cl1`, and so on); the rubric points keep their ids (`BP1.1`, …). How they were made and checked is in Eval #1's section below.
+- **Two independent extractors, and the eval's own resolver.**
+  - The regex scanner (`scripts/eval/scan.ts`) and TypeScript's `preProcessFile` (`scripts/eval/ts-graph.ts`) read each repo's import statements.
+  - Both resolve through `scripts/eval/resolve-truth.ts`, written from ADR-053's text: relative paths, declared workspace packages and their `exports`, module ids read against the folders that hold a tsconfig (R3), and compiled paths mapped to their sources.
+  - None of the four files imports anything from `lib/`, and a test pins that.
+  - VS Code: 14,849 code files. The scanner finds 139,696 edges and `preProcessFile` 139,681; the truth's graph has 139,687 after the verdicts.
+  - AFFiNE: 6,987 code files, with 26,262 and 26,266 edges.
+- **Every disagreement and every computed site was read in the source.**
+  - VS Code had 15 edges only the scanner finds, and none only `preProcessFile` finds. AFFiNE had 4 only `preProcessFile` finds. A sweep listed 13 computed `import(<name>)` sites (11 and 2).
+  - Each was read at the pinned commit and decided in `eval2/truth/adjudicated.json`, with the line that decides it: 32 verdicts, 6 "in" and 26 "out", none left open.
+  - The six "in": two `export * as` re-exports and an `import()` with a comment before its specifier, which are statements `preProcessFile` misses; and three computed loaders whose address the code around them pins to one file (`workbench.ts` L517, `sessions.ts` L130, `cli.ts` L141), counted the way Eval #1's owner ruling counted CL4's loaders.
+  - The "out": import lines inside strings and template literals, a JSDoc comment, four `declare module '…'` augmentations, and computed sites that load a parameter, a URL, a temporary file or an npm package.
+  - Only the three loader verdicts change any truth: VSCODE-IMPACT, VSCODE-ENTRIES and the impact questions of sessions vscode-s1 and vscode-s2. Without the `cli.ts` verdict, `cliProcessMain.ts` would be a tenth root in VSCODE-ENTRIES.
+- **Every list entry, chain step and cycle step was read**, as in Eval #1. The evidence sheet cites 420 import lines, and a fixed-seed sample adds 30 truth edges per repo. The independent reader (below) read each one at its line in the repo and confirmed all of them: each is a real statement that resolves to the named file.
+- **Impact totals of thousands of files were checked by method and sample, not entry by entry** (R2's stated change). An independent walk on an independent graph reproduced every line of all eight impact truths, and 10 dependents per truth were traced step by step to the target, reading each import line.
+- **A third graph.** The independent reader built one from TypeScript's own parser (its syntax tree, not `preProcessFile` and not a regex), with a resolver of its own written from each repo's `package.json` files and tsconfig folders. It shares no code with `scripts/eval` or `lib`. On it, all 44 new truths came out identical. The first run differed on three AFFiNE impact totals: three electron tests import `@affine/electron/helper/…`, and the reader's resolver was stricter than the truth's. The electron package's vitest config aliases that name to its `src/`, so the truth was right.
+- **Nebulosity's index was consulted only for candidates**, read-only, after the truths were built. On the index, 41 of the 44 truths come out the same. The 3 that differ were read in the source, and the truth is right each time. The differences come from two gaps in the index, listed under "Decisions made since the plan".
+- **The computed-site sweep's reach.** The sweep lists only `import(<name>)`. 35 other non-literal `import()` sites in VS Code and 1 in AFFiNE pass an expression instead, such as `keyboardLayoutService.ts` L463, and are not listed. Counting every one of them as "in", the widest reading, changes no truth.
+- **Who read what.** Claude models did the reading; no person read every entry.
+  - One Opus subagent picked the targets, built the truths, and read and decided every disagreement and computed site.
+  - A second, fresh Opus subagent was the independent reader. It read every cited line and the 60 sampled edges, re-read all 32 verdicts (it agreed with each), built the third graph and marked each truth `verified: true`.
+  - The session that ran the eval read a sample itself: two of VSCODE-VIOLATIONS' entries, a search for violations the truth might miss (none), and AFFINE-CYCLE's four steps.
+- **AFFiNE's rubrics** come from AFFiNE's own docs at `0b69a6da`:
+  - the README, `docs/contributing/tutorial.md`, `docs/BUILDING.md` and `docs/developing-server.md`;
+  - the server's and nbstore's READMEs, and the ext-loader and lit-react readmes;
+  - BlockSuite's docs site, which is in the repo (`blocksuite/docs-site`).
+
+  The website added nothing: its contributing page has no architecture text, and a second page returned HTTP 402.
+  - One Opus subagent checked every point in the source at the pinned commit, and the independent reader re-checked each one.
+  - 32 points hold, 8 per question, and are graded.
+  - 6 doc claims don't hold. They stay in the files as `holds: false` and are not graded: OctoBase as the backend or the database (twice), workspace plugins in a package that no longer exists, block roles that enforce nesting, a `BlockService` for every block type, and props that must not be `undefined`.
+  - 12 holding points were rewritten from the docs' outdated names to what the code bears out, each saying how in its `note`.
+  - The re-check found no point text wrong. It found four slips in the ungraded `check` notes (two counts, an incomplete list of importers, a missed stories file), corrected when the rubrics were copied in.
+
+## Scoring
+
+`npm run eval:score -- --eval eval2` scores everything but the big-picture answers, each repo against its own truth graph and verdicts (`scripts/eval/score.ts` and `answer.ts`).
+- **Reading an answer:** as in Eval #1. The scorer reads the text after the last `ANSWER:` line, reads files tolerantly, and matches them without regard to case.
+- **Direct and transitive lists:** recall, with precision beside it, as in Eval #1.
+- **Chains:** as in Eval #1. 1 for a valid shortest chain or a right "none", 0.5 for a valid longer chain, 0 otherwise. A step that neither the truth's graph nor a verdict knows waits to be read in the source and decided.
+- **Impact:** the mean, over the truth's lines (each named folder, then elsewhere, then total), of max(0, 1 − |answer − truth| / max(truth, 1)). A line the answer lacks scores 0. A number may carry thousands separators or a "~".
+- **Cycle:**
+  - 1 for a valid cycle of the shortest length or a right "none", 0.5 for a valid longer cycle, 0 otherwise.
+  - Valid means it starts and ends at the file and every step is an import.
+  - A step nobody has read waits, as a chain's does.
+  - A cycle shorter than the truth's, or a valid one where the truth says none, is flagged for a recheck of the truth.
+- **Files nothing imports, violations and entries:** F1 of the listed files against the truth's. A listed path that isn't a file of the repo counts as a false positive and is flagged.
+- **Pairs:** F1 over the pairs (`a -> b`), with names compared in lowercase.
+- **Big-picture:** as in Eval #1 (R4). A blind grader per answer sees only the points that hold and the answer. A second blind grader grades every answer, and the owner rules on each point where the two disagree.
+- **Task sessions:** each message is scored as its question.
+  - A message never answered (the session ended first) scores 0, and so does one that hit a limit.
+  - A session's score is the mean of its messages' scores.
+  - Its cost is Claude Code's total for the process, and its time is the sum of its messages' `duration_ms`.
+- **Reported per run:**
+  - the score;
+  - tokens, summed over every model, with the main conversation's apart;
+  - the cost estimate (`total_cost_usd`) and `duration_ms`;
+  - turns, tool calls by tool, and Nebulosity calls;
+  - the first call's context;
+  - the 5-hour and 7-day utilization;
+  - the flags.
+
+  The tables show each question and arm, each repo and kind, and each repo's sessions.
+
+## The ship gate (D1)
+
+Eval #2 has two arms: **A**, Claude Code alone, and **N**, Claude Code with Nebulosity registered the way `nebulosity setup` registers it. `scripts/eval/gate.ts` computes the gate from `eval2/results.json`.
+
+Every condition below must hold.
+
+| # | Condition | Measured over | Eval #1 |
+|---|---|---|---|
+| 1 | **Better results where it should matter:** N's mean score ≥ A's mean + 0.15, and no grep-hard question where N's mean is below A's by more than 0.05 | the grep-hard questions of both repos, every run pooled | no such family |
+| 2 | **No losses elsewhere:** N's mean ≥ A's mean − 0.03 | each repo × each of big-picture, lists (direct and transitive) and chains | big-picture −0.09, lists −0.04: fails |
+| 3a | **Efficiency on graph questions:** N's median cost estimate ≤ 0.5 × A's, and N's median wall time ≤ 0.5 × A's | each repo's chain, transitive-list and grep-hard runs | chains 31% and 36% |
+| 3b | **No overhead elsewhere:** N's median cost estimate ≤ 1.15 × A's | each repo's big-picture and direct-list runs | 105% and 82% |
+| 4 | **Sessions:** N's total cost estimate ≤ 0.6 × A's, N's total wall time ≤ 0.6 × A's, and N's mean session score ≥ A's − 0.03 | each repo's task-session runs | no sessions |
+| 5a | **Tools used:** the share of N's runs that call a Nebulosity tool ≥ 0.90 | N's list, chain and grep-hard runs, both repos | 12 of 20 (0.60): fails |
+| 5b | **Cheaply:** N's median first-call context − A's ≤ 2,500 tokens | each repo, every single run | +478 at the default; +13,547 up front |
+
+- **Score** is the question kind's score (D2). A mean is over every run of the set (questions × repeats), and medians are too. A session's score is the mean of its questions' scores.
+- **Cost estimate** is Claude Code's `total_cost_usd`; wall time is `duration_ms`.
+- **First-call context** is the first assistant message's `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`.
+- A run that hits its turn or budget limit scores 0 and counts. Outages are re-run (Eval #1's rule).
+
+**Written before the first run; it does not change after.**
+
+How `scripts/eval/gate.ts` computes it:
+- **Its inputs.** The scored single runs and task sessions of arms A and N. The scorer computes the gate only when the data is complete (every repo has runs, and every single question and every session has its three scheduled runs kept in both arms) and no run waits for a grade or for a chain or cycle step to be read. Otherwise it prints "Not computed" and why.
+- **The kinds.** Grep-hard is impact, cycle, files nothing imports, violations, entries and pairs. Graph questions are chains, transitive lists and the grep-hard kinds. "Other" is big-picture and direct lists. Condition 2's "lists" pools direct and transitive lists into one family per repo.
+- **Condition by condition:**
+  - 1 is computed over every grep-hard run of both repos, and per question (repo and id) for the 0.05 floor, reporting the worst question.
+  - 2, 3a, 3b, 4 and 5b are computed per repo. Each fails when any repo fails, and reports the worst repo. A family with no runs of both arms on a repo is not compared there.
+  - 4 uses each arm's totals over a repo's session runs (cost, and the sum of the messages' `duration_ms`) and the mean session score.
+  - 5a counts N's direct-list, transitive-list, chain and grep-hard runs of both repos with at least one Nebulosity tool call.
+  - 5b compares the medians over every single run that has a first call.
+- **Numbers.**
+  - A ratio over an A value of 0 is 0 if N's is 0 too, and infinite otherwise.
+  - Comparisons use the unrounded values, with a tolerance of 1e-9. The printed values are rounded to 4 decimal places.
+  - A condition with nothing to compare fails, so the gate never passes on no data.
+  - The gate passes only when all seven conditions pass.
+
+## Decisions made since the plan
+
+- Repo 2 is AFFiNE at `0b69a6da`, the owner's pick at Task 1, from the probe's table.
+- The scripts sentence is the owner's (2026-10-14, "Name the way that works (Recommended)"): `You may write Node.js scripts in <scratch> with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.` It replaces R6's, because 5 dev-set runs tried a script as a Bash heredoc and each was refused, and no run wrote one with Write. The dev set ran with R6's sentence, and stays as recorded.
+- Each run's scratch folder is an opaque temp folder outside the checkout, archived beside the raw transcript and scrubbed. This replaces R6's location (`<checkout>/.nebulosity/eval2/scratch/<run name>/`), which pointed every run, in both arms, into the folder holding the eval's own answer key, and put the arm's name into the prompt.
+- N's registration is the shape `nebulosity setup` writes, plus `NEBULOSITY_LIVE: "off"`.
+- Condition 2's "lists" pools the direct and the transitive lists. A family of one transitive question per repo (three runs an arm) would turn on a single run against a 0.03 margin.
+- Wall time is the result's `duration_ms`, for single runs and sessions alike, as D1 defines it. Eval #1's tables used the process's wall clock, about 1–2 s more per run, and so does the D1 table's Eval #1 column.
+- The gate is computed only on complete data: every repo, and every scheduled run kept in both arms.
+- The truth's test rule and its set of files nothing imports are the ones under "The questions". The set counts every code file, `.d.ts` and build config included.
+- Impact truths of thousands of files were checked by method and sample, not entry by entry (R2's stated change).
+- The computed-site sweep lists only `import(<name>)`. 36 other non-literal sites (35 in VS Code, 1 in AFFiNE) are not listed; counting them changes no truth.
+- The VS Code violations question moved from the plan's `src/vs/platform` → `src/vs/editor` to `src/vs/workbench/services` → `src/vs/workbench/contrib` (R1: the dev set used `src/vs/platform`). The new pair breaks VS Code's own rule, "No dependency from outside `contrib/` into `contrib/`" (`.github/instructions/source-code-organization.instructions.md` L44).
+- Two gaps in the index, found while checking the truths, are not fixed before the eval.
+  - Files over 1 MB are skipped. On VSCODE-IMPACT the index finds 4,501 dependents against the truth's 4,503. On vscode-s3's impact it finds 56 against 59, with the `agentHost` line at 51 against 54.
+  - `typeof import('…')` isn't followed. On affine-s1's impact the index finds 1,446 against 1,546, with the `tests` line at 12 against 112.
+  - Both cost N on those three impact questions. They were found by comparing the index with Eval #2's answer key, so fixing them before the freeze would tune on the eval (R1). They are fixed after the results.
+- The truths were read by an independent reader, who also built a third graph (44 of 44 truths agree), and the session that ran the eval read a sample.
+- AFFiNE's rubrics come from its own docs. The rubric's author listed 11 of the 32 graded points as answerable from training or the README. Two of the four questions are on BlockSuite.
+
+## Threats to validity
+
+- **Scripts let both arms write their own import walkers.** The baseline can compute in Node.js what Nebulosity's tools compute, which narrows any gap. That is the point of allowing it: Eval #1's caveat was a baseline that couldn't script. The pilot shows whether a baseline run actually scripts under the new sentence.
+- **The model may know VS Code from training.** VS Code also ships its own guide for agents (`AGENTS.md`, which points to a 158-line architecture overview), and in Eval #1 that helped Claude Code alone. AFFiNE is the repo without one. VS Code's 15 questions are Eval #1's again: comparable across the two evals, and already near the ceiling for Claude Code alone.
+- **Repo 2's rubric is the project's own docs, as corrected by the code.**
+  - The docs are partly outdated, and every arm can read them. A claim that no longer holds isn't graded, so repeating it costs nothing, unless the answer contradicts a holding point.
+  - AFFiNE and BlockSuite are popular public projects, and BlockSuite's docs site is likely in training data. The rubric's author listed 11 of the 32 points as answerable from memory or the README (AFFINE-BP1.1–BP1.3, BP1.5, BP2.2, BP2.4, BP2.6, BP4.1, BP4.2, BP4.5 and BP4.8).
+  - Two of the four questions (BP2, BP3) are on BlockSuite, and BP4's first half is BlockSuite's store. The app layer (its dependency-injection framework, its modules) isn't asked about, because the framework has no prose docs to grade against.
+- **The dev set and the eval share kinds, not targets.** The tools' wording was checked on the dev set's 16 questions, one of each kind per repo, with the same templates. The overlap check refuses any shared target, but the wording may suit these kinds better than a user's own questions.
+- **Three repeats is still a small sample.** Repeats of one arm differ, and the tables will show every run. Each grep-hard kind has one question per repo, so condition 1's floor of −0.05 per question turns on three runs an arm.
+- **D1's thresholds are the owner's, set after Eval #1**, knowing where Eval #1 fell short. They were fixed with the plan, before Eval #2's questions existed, and they don't change after the first run.
+- **The truths were read by models, and no person read every entry.** A misreading shared by the readers is possible. The third graph lowers the odds of a graph error, but not of a misread rule.
+- **The index's two known gaps cost N** on three impact questions (see "Decisions made since the plan").
+- **Type-only edges carry weight.** All 4 of AFFINE-VIOLATIONS' files are `import type`. The 112 `tests` dependents in affine-s1's impact reach the target only through one `typeof import('@blocksuite/affine/blocks/database')`. An answer that drops type-only imports loses these, but the rule says they count.
+- **Files started by name count as files nothing imports.** An answer that leaves out a process's main "because it is an entry point" disagrees with the rule as written. The answers to vscode-s1's and vscode-s3's last questions are such files.
+- **AFFiNE's impact sizes ride on barrel files.** Most of AFFINE-IMPACT's 1,620 come through `@toeverything/infra`'s index. A count reasoned from "who uses this symbol" undercounts badly, in either arm.
+- **The session chains run long.** affine-s2's chain is 9 steps, affine-s1's 7 and vscode-s2's 6. These are the costliest for the baseline, which is the point of the kind.
+- **The big-picture answers are graded by models**, as in Eval #1. The owner rules only where two blind graders disagree.
+- **No shared prompt cache between the arms** (their tool lists differ), so a pair's first arm may meet a colder cache or an earlier hour. The arms alternate for that reason.
+
+## Results
+
+Results: to come after the runs.
+
 # 2026 10 14 Eval #1 — Claude Code with and without Nebulosity on VS Code
 
 **Status: run, scored and published (2026-10-14): 90 runs in three arms. The results, losses included, are under "Results" at the end.** The method that comes before them was fixed before the first run. Claude models read the ground truth in the source and re-checked it; the owner settled the three calls but did not read every entry (see "How the ground truth was made and checked" and "The owner's decisions"). Models graded the big-picture answers, and the owner ruled on the points where two graders disagreed (see "Scoring").
