@@ -56,6 +56,14 @@ describe("the registry", () => {
         expect(chars + SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(7_000);
         expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(2_048);   // within the old cap too, for older Claude Code
     });
+
+    it("tells Claude to open the docs the answers name before answering how code is organized (ADR-054, amended 2026-10-15)", () => {
+        expect(SERVER_INSTRUCTIONS.split("\n").slice(-2)).toEqual([
+            "The docs these answers name are the maintainers' own account of the code: open them before answering how it is organized or why, since the tools' counts and summaries don't replace them.",
+            'Paths are relative to the repo root ("" is the root) or absolute inside it.',
+        ]);
+        expect(SERVER_INSTRUCTIONS).not.toContain("Read the docs they point to");
+    });
 });
 
 describe("overview, describe and search with no API key", () => {
@@ -274,8 +282,33 @@ describe("imports and architecture on the arch-repo", () => {
                 '  → src/editor/common/tokens.ts  (import "./tokens")',
                 '  → src/editor/common/textModel.ts  (import "./textModel")',
                 '  → src/editor/common/model.ts  (import "./model")',
+                "Docs to read before answering how this is organized or why:",
+                "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
+                "  docs/architecture.md — Architecture (mentions src/editor/common/)",
             ].join("\n"),
         });
+    });
+
+    it("architecture: a folder a doc applies to names it after the report (ADR-054, amended 2026-10-15)", async () => {
+        expect(await call("architecture", { path: "src/editor", report: "cycles" }, archFixture())).toEqual({
+            paths: ["src/editor"],
+            text: [
+                "Import cycles touching src/editor/: 1, holding 3 files in all.",
+                "  3 files: src/editor/common/model.ts, src/editor/common/textModel.ts, src/editor/common/tokens.ts",
+                "Docs to read before answering how this is organized or why:",
+                "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
+                "  docs/architecture.md — Architecture (mentions src/editor/ (2 times))",
+            ].join("\n"),
+        });
+    });
+
+    it("describe: a folder's docs under the same header", async () => {
+        expect(lines(await call("describe", { path: "src/editor/common" }, archFixture())).slice(1, 5)).toEqual([
+            S,
+            "Docs to read before answering how this is organized or why:",
+            "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
+            "  docs/architecture.md — Architecture (mentions src/editor/common/)",
+        ]);
     });
 });
 

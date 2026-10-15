@@ -128,4 +128,20 @@ describe("architecture(), against the ground truth", () => {
         // the summary of src with no through counts its one group of three files
         expect(architecture(root, "src", "summary")).toMatchObject({ report: "summary", cycles: [{ size: 3, files: ["src/editor/common/model.ts", "src/editor/common/textModel.ts", "src/editor/common/tokens.ts"] }] });
     });
+
+    it("carries the docs about the place, as describe gives them (ADR-054, amended 2026-10-15)", () => {
+        // src/editor/common: the doc that applies to src/editor first, then docs/architecture.md's mention of the folder (docs.test.ts)
+        expect(architecture(root, "src/editor/common", "conventions").docs).toEqual([
+            { path: ".github/instructions/editor.instructions.md", title: "Editor rules", reason: { kind: "applies", target: "src/editor", detail: "src/editor/**", count: 1 } },
+            { path: "docs/architecture.md", title: "Architecture", reason: { kind: "mentions", target: "src/editor/common", count: 1 } },
+        ]);
+        // no doc links to src itself, and the root is never a folder above it
+        expect(architecture(root, "src", "summary").docs).toBeUndefined();
+        // the repo: the docs to read first (docs.test.ts's overview)
+        expect(architecture(root, "", "layers").docs).toEqual([
+            { path: "README.md", title: "arch-repo" },
+            { path: "docs/architecture.md", title: "Architecture" },
+            { path: ".github/instructions/editor.instructions.md", title: "Editor rules", reason: { kind: "applies", target: "src/editor", detail: "src/editor/**", count: 1 } },
+        ]);
+    });
 });

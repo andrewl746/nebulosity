@@ -951,6 +951,15 @@ Neither changes what the TypeScript adapter stores, so `ADAPTER_VERSION` stays 4
 
 On the owner's index, re-indexed after the sweep, every doc's links came out as the code before it made them (560 on VS Code, 49 on AFFiNE, compared doc by doc). 15 titles changed on VS Code and 37 on AFFiNE, all to plain text: links and code ticks off (`[Hooks (.json)](https://…)` reads `Hooks (.json)`), and one struck-through API title (`~~Abstract Class: BlockService~~`).
 
+**Amended (2026-10-15, after Eval #2): `architecture` names the docs too, and the pointer reads as an instruction.**
+- *Why.* On VS Code's big-picture questions Nebulosity's arm scored 0.844 against 0.927 alone, and BP1 and BP2 made −0.058 of that −0.083 (docs/EVAL_RESULTS.md, Eval #2, "The losses"). On BP2 all three N runs called only `architecture`'s conventions report, whose answer had no docs line, answered from its counts, and never opened `.github/instructions/source-code-organization.instructions.md`; every A run read it. On BP1, `describe src/vs` listed that file first under "Docs about it:", and two of the three runs still didn't open it.
+- *What changed.*
+  - Every `architecture` answer (all five reports, and a file's cycle) ends with the docs about its place, from the same queries as `describe`: the docs to read first for the repo, else the docs linked to the place or its folders above it, in this ADR's order and cap. `ArchitectureAnswer` (`lib/engine/architecture.ts`, not a contract type) gains an optional `docs`. A page of cycles or of files nothing imports takes the docs lines' length out of its list's budget, so the answer stays under `MAX_ANSWER_CHARS`.
+  - The header for a folder or file is now "Docs to read before answering how this is organized or why:" in `describe` and `architecture`; the repo's stays "Docs to read first:" in `describe`, `overview` and `architecture`.
+  - The server's instructions replace "Read the docs they point to for the repo's own rules." with "The docs these answers name are the maintainers' own account of the code: open them before answering how it is organized or why, since the tools' counts and summaries don't replace them." They are 1,169 characters (1,036 before), and the five definitions with them 5,902 (the test's bound is 7,000; the instructions' own, 2,048).
+- *On the owner's index* (opened read-only), `architecture src/vs` with the conventions report now ends with `.github/instructions/source-code-organization.instructions.md` first among five docs that apply to `src/vs/**`.
+- Whether runs now open those docs is measured in the next eval, on questions this wasn't tuned on (BP1 and BP2 are Eval #2's).
+
 ## ADR-055 — Impact and architecture facts, computed from the import graph (2026-10-14) — amends PIVOT_SPEC.md §6.1
 
 **Context:** Eval #1 found Claude Code alone at the ceiling on its questions. Grep finds a file's direct importers in a few calls, and the model knows VS Code's layout. Where Nebulosity was used, it won on cost, not on score. The questions it should win are the ones grep can't answer cheaply:

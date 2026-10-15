@@ -44,7 +44,9 @@ export const SERVER_INSTRUCTIONS = [
     "- describe: what a folder or file is, what it uses and what uses it, and the docs that describe it;",
     "- overview: an unfamiliar repo's areas and the docs to read first;",
     "- search: where a feature or concept lives.",
-    'Read the docs they point to for the repo\'s own rules. Paths are relative to the repo root ("" is the root) or absolute inside it.',
+    // ADR-054, amended 2026-10-15: in Eval #2 the docs line alone didn't get the repo's own rules opened
+    "The docs these answers name are the maintainers' own account of the code: open them before answering how it is organized or why, since the tools' counts and summaries don't replace them.",
+    'Paths are relative to the repo root ("" is the root) or absolute inside it.',
 ].join("\n");
 
 const repoPath = z.string().max(1024)

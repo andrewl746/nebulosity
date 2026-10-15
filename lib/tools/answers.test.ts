@@ -65,7 +65,7 @@ describe("describeAnswer", () => {
             ],
         }, "r"));
         expect(text.split("\n").slice(2, 6)).toEqual([
-            "Docs about it:",
+            "Docs to read before answering how this is organized or why:",
             "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
             "  docs/architecture.md — Architecture (mentions src/editor/common/)",
             "  docs/more.md — More (mentions src/editor/ (2 times))",
@@ -82,10 +82,24 @@ describe("describeAnswer", () => {
             ],
         }, "r")).split("\n");
         expect(lines.slice(2, 5)).toEqual([
-            "Docs about it:",
+            "Docs to read before answering how this is organized or why:",
             "  src/app/README.md — The app (README of src/app/)",
             "  notes.md — Notes (mentions src/app/loader.ts)",
         ]);
+    });
+
+    it("describe of the repo, and overview, keep the docs to read first (ADR-054, amended 2026-10-15)", () => {
+        const docs = [{ path: "README.md", title: "mini-repo" }];
+        const repo = describeAnswer({
+            repo: "/r", path: "", kind: "repo", summaryStatus: "off", stats: { fileCount: 8, lineCount: 48 },
+            children: [], uses: [], usedBy: [], stalePaths: 0, indexVersion: 1, docs,
+        }, "mini-repo").body;
+        expect(repo.slice(2, 4)).toEqual(["Docs to read first:", "  README.md — mini-repo"]);
+        const o = overviewAnswer({
+            repo: "/r", name: "mini-repo", ...off, stats: { fileCount: 8, lineCount: 48, importCount: 11 },
+            areas: [], mostImported: [], docs, stalePaths: 0, indexVersion: 1,
+        }).body;
+        expect(o.slice(2)).toEqual(["Docs to read first:", "  README.md — mini-repo"]);
     });
 
     it("a folder: its size, what's inside, and the areas on each side", () => {
@@ -389,13 +403,34 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         ]);
     });
 
-    it("layers of src/base", () => {
+    it("layers of src/base, then the doc that mentions it (ADR-054, amended 2026-10-15)", () => {
+        // docs/architecture.md names `src/base` once; nothing links to src, and the root is left out
         expect(text("src/base", "layers")).toEqual([
             "Layers of src/base/, bottom first (each uses only the layers below it, except the imports listed after):",
             "  0  common/",
             "  1  browser/, node/, test/",
             "Against that order: none.",
+            "Docs to read before answering how this is organized or why:",
+            "  docs/architecture.md — Architecture (mentions src/base/)",
         ]);
+    });
+
+    it("every report on a folder a doc applies to ends with that doc first (ADR-054, amended 2026-10-15)", () => {
+        // editor.instructions.md's applyTo is src/editor/**; docs/architecture.md names `src/editor` twice
+        const docs = [
+            "Docs to read before answering how this is organized or why:",
+            "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
+            "  docs/architecture.md — Architecture (mentions src/editor/ (2 times))",
+        ];
+        expect(text("src/editor", "cycles")).toEqual([
+            "Import cycles touching src/editor/: 1, holding 3 files in all.",
+            "  3 files: src/editor/common/model.ts, src/editor/common/textModel.ts, src/editor/common/tokens.ts",
+            ...docs,
+        ]);
+        for (const report of ["summary", "layers", "conventions", "unused"] as const) {
+            const lines = answerText(architectureAnswer(architecture(root, "src/editor", report), page)).split("\n").filter((l) => !l.startsWith("Note: "));
+            expect(lines.slice(-3)).toEqual(docs);
+        }
     });
 
     it("conventions of src", () => {
@@ -420,17 +455,26 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         ]);
     });
 
-    it("the shortest cycle through model.ts", () => {
+    // the docs about model.ts, as describe gives them for src/editor/common (docs.test.ts): the folder a doc applies to
+    // first, then the deeper of docs/architecture.md's two mentions above it
+    const MODEL_DOCS = [
+        "Docs to read before answering how this is organized or why:",
+        "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
+        "  docs/architecture.md — Architecture (mentions src/editor/common/)",
+    ];
+
+    it("the shortest cycle through model.ts, then the docs about the file", () => {
         expect(text("src/editor/common/model.ts", "cycles")).toEqual([
             "The shortest import cycle through src/editor/common/model.ts (3 steps):",
             "  src/editor/common/model.ts",
             '  → src/editor/common/tokens.ts  (import "./tokens")',
             '  → src/editor/common/textModel.ts  (import "./textModel")',
             '  → src/editor/common/model.ts  (import "./model")',
+            ...MODEL_DOCS,
         ]);
     });
 
-    it("the default summary with through, or on a file, answers with that file's cycle", () => {
+    it("the default summary with through, or on a file, answers with that file's cycle; the docs are the place's", () => {
         const cycle = [
             "The shortest import cycle through src/editor/common/model.ts (3 steps):",
             "  src/editor/common/model.ts",
@@ -438,12 +482,17 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
             '  → src/editor/common/textModel.ts  (import "./textModel")',
             '  → src/editor/common/model.ts  (import "./model")',
         ];
+        // the place is src, which no doc links to
         expect(text("src", "summary", { through: "src/editor/common/model.ts" })).toEqual(cycle);
-        expect(text("src/editor/common/model.ts", "summary")).toEqual(cycle);
+        expect(text("src/editor/common/model.ts", "summary")).toEqual([...cycle, ...MODEL_DOCS]);
     });
 
-    it("no cycle through storage.ts", () => {
-        expect(text("src/platform/common/storage.ts", "cycles")).toEqual(["src/platform/common/storage.ts is in no import cycle."]);
+    it("no cycle through storage.ts, and the doc that names its folder twice", () => {
+        expect(text("src/platform/common/storage.ts", "cycles")).toEqual([
+            "src/platform/common/storage.ts is in no import cycle.",
+            "Docs to read before answering how this is organized or why:",
+            "  docs/architecture.md — Architecture (mentions src/platform/ (2 times))",
+        ]);
     });
 
     it("files nothing imports, in src and in the repo", () => {
@@ -463,6 +512,14 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
             "Not named anywhere (2):",
             "  src/app/legacy.ts",
             "  tools/fixtures/legacy-ids.ts",
+        ]);
+        // the repo's docs are the docs to read first (docs.test.ts's overview), before the tool's note
+        expect(repo.slice(6)).toEqual([
+            "Docs to read first:",
+            "  README.md — arch-repo",
+            "  docs/architecture.md — Architecture",
+            "  .github/instructions/editor.instructions.md — Editor rules (applies to src/editor/**)",
+            "Note: a file nothing imports may still be loaded by name (a build script, a worker, an HTML page, a test runner), so check before deleting it.",
         ]);
     });
 
@@ -503,6 +560,25 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         const text = answerText(architectureAnswer({ path: "", kind: "repo", report: "cycles", cycles }, { limit: 400, offset: 0 }));
         expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
         expect(text).toContain("(next page: offset ");
+    });
+
+    it("a full page of cycles or unused files leaves the docs their room, so the answer stays under the limit", () => {
+        // five docs of about 1,500 characters each: a 1,000-character path and a 500-character glob
+        const docs = Array.from({ length: 5 }, (_, i) => ({
+            path: `${"d".repeat(1_000)}${i}.md`, title: "Rules",
+            reason: { kind: "applies" as const, target: "src", detail: `src/${"g".repeat(500)}/**`, count: 1 },
+        }));
+        // 400 groups of 20 files with 150-character paths: the list alone fills its budget (the test above)
+        const cycles = Array.from({ length: 400 }, (_, g) => ({ size: 20, files: Array.from({ length: 20 }, (_, i) => `${"p".repeat(150)}${g}-${i}.ts`) }));
+        const cycleText = answerText(architectureAnswer({ path: "src", kind: "folder", report: "cycles", cycles, docs }, { limit: 400, offset: 0 }));
+        expect(cycleText.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(cycleText).toContain("(next page: offset ");
+        expect(cycleText.split("\n").slice(-6, -5)).toEqual(["Docs to read before answering how this is organized or why:"]);
+        const others = Array.from({ length: 3_000 }, (_, i) => `src/${"u".repeat(150)}${i}.ts`);
+        const declared = Array.from({ length: 60 }, (_, i) => `src/${"e".repeat(150)}${i}.ts`);
+        const unusedText = answerText(architectureAnswer({ path: "src", kind: "folder", report: "unused", unused: { declared, others, tests: 0 }, docs }, { limit: 500, offset: 0 }));
+        expect(unusedText.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(unusedText).toContain("(next page: offset ");
     });
 
     it("prints the place's own threshold, and when the names are capped keeps the most-recurring, not the first alphabetically", () => {

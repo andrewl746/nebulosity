@@ -17,7 +17,16 @@ const REACH_HEADROOM = 2_000;
 /** dependents and dependencies list a page: everything reached, or only the direct files. */
 export type ReachPage = { transitive: boolean; limit: number; offset: number };
 
-/** "Docs about it:" or "Docs to read first:": one line per doc, its path, its title, and why (ADR-054). */
+/**
+ * The docs headers (ADR-054, amended 2026-10-15). A folder's or file's reads as an instruction, not a list: in Eval #2,
+ * runs shown "Docs about it:" answered from the tools' counts and never opened the repo's own rules. The repo's are the
+ * docs to read first. describe, overview and architecture all use these two.
+ */
+const DOCS_HERE = "Docs to read before answering how this is organized or why:";
+const DOCS_FIRST = "Docs to read first:";
+const docsHeader = (kind: "repo" | "folder" | "file"): string => (kind === "repo" ? DOCS_FIRST : DOCS_HERE);
+
+/** A docs header, then one line per doc: its path, its title, and why (ADR-054). */
 function docLines(header: string, docs: readonly DocPointer[] | undefined, here: { path: string; kind: "repo" | "folder" | "file" }): string[] {
     if (!docs || docs.length === 0) return [];
     const why = (r: NonNullable<DocPointer["reason"]>): string => {
@@ -33,7 +42,7 @@ export function overviewAnswer(o: Overview): AnswerParts {
     const body = [
         `${o.name}: ${plural(o.stats.fileCount, "file")}, ${plural(o.stats.lineCount, "line")}, ${plural(o.stats.importCount, "import")} between files.`,
         summaryLine(o),
-        ...docLines("Docs to read first:", o.docs, { path: "", kind: "repo" }),
+        ...docLines(DOCS_FIRST, o.docs, { path: "", kind: "repo" }),
     ];
     if (o.areas.length > 0){
         body.push("Areas, largest first:");
@@ -57,7 +66,7 @@ export function describeAnswer(d: DescribeResponse, repoName: string): AnswerPar
             : d.kind === "folder" ? `${d.path}/ — folder: ${size}.`
             : `${d.path} — file: ${plural(d.stats.lineCount, "line")}.`,
         summaryLine(d),
-        ...docLines(d.kind === "repo" ? "Docs to read first:" : "Docs about it:", d.docs, { path: d.path, kind: d.kind }),
+        ...docLines(docsHeader(d.kind), d.docs, { path: d.path, kind: d.kind }),
     ];
 
     if (d.children){
@@ -292,7 +301,8 @@ function conventionLines(a: ArchitectureAnswer, c: Conventions): string[] {
     return lines;
 }
 
-function cycleLines(a: ArchitectureAnswer, page: { limit: number; offset: number }): string[] {
+/** `room`: the characters kept for the lines after the list (the docs), taken out of its budget. */
+function cycleLines(a: ArchitectureAnswer, page: { limit: number; offset: number }, room: number): string[] {
     if (a.through){
         const t = a.through;
         if (t.cycle === null) return [`${t.file} is in no import cycle.`];
@@ -314,7 +324,7 @@ function cycleLines(a: ArchitectureAnswer, page: { limit: number; offset: number
     const lines = [`Import cycles touching ${where}: ${formatCount(groups.length)}, holding ${plural(files, "file")} in all.`];
     if (page.offset >= groups.length) return [...lines, `Nothing at offset ${page.offset}: there are ${formatCount(groups.length)} groups.`];
     const rest = groups.slice(page.offset).map((g) => `  ${plural(g.size, "file")}: ${namesList(g.files)}`);
-    const shown = fitting(rest, page.limit, MAX_ANSWER_CHARS - REACH_HEADROOM - lines[0].length);
+    const shown = fitting(rest, page.limit, MAX_ANSWER_CHARS - REACH_HEADROOM - lines[0].length - room);
     lines.push(...rest.slice(0, shown));
     const hidden = rest.length - shown;
     if (hidden > 0) lines.push(moreLine(hidden, page.offset + shown));
@@ -323,7 +333,7 @@ function cycleLines(a: ArchitectureAnswer, page: { limit: number; offset: number
 
 const UNUSED_NOTE = "a file nothing imports may still be loaded by name (a build script, a worker, an HTML page, a test runner), so check before deleting it.";
 
-function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; offset: number }): { lines: string[]; notes: string[] } {
+function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; offset: number }, room: number): { lines: string[]; notes: string[] } {
     const total = u.declared.length + u.others.length;
     const tests = u.tests > 0 ? `, not counting ${plural(u.tests, "test file")}` : "";
     const head = `Files in ${whereOf(a)} that no indexed file imports: `;
@@ -334,7 +344,7 @@ function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; of
         lines.push(`Not named anywhere (${formatCount(u.others.length)}):`);
         if (page.offset >= u.others.length) return { lines: [...lines, `Nothing at offset ${page.offset}: the list has ${formatCount(u.others.length)}.`], notes: [UNUSED_NOTE] };
         const rest = u.others.slice(page.offset);
-        const shown = fitting(rest.map((p) => `  ${p}`), page.limit, MAX_ANSWER_CHARS / 2);
+        const shown = fitting(rest.map((p) => `  ${p}`), page.limit, MAX_ANSWER_CHARS / 2 - room);
         lines.push(...rest.slice(0, shown).map((p) => `  ${p}`));
         if (rest.length > shown) lines.push(`  ${moreLine(rest.length - shown, page.offset + shown)}`);
     }
@@ -362,16 +372,21 @@ function summaryLines(a: ArchitectureAnswer): string[] {
     return lines;
 }
 
-/** architecture (ADR-055): one small function per report, each returning lines. */
+/**
+ * architecture (ADR-055): one small function per report, each returning lines. Every report ends with the docs about the
+ * place (ADR-054, amended 2026-10-15), and a paged list leaves them their room.
+ */
 export function architectureAnswer(a: ArchitectureAnswer, page: { limit: number; offset: number }): AnswerParts {
+    const docs = docLines(docsHeader(a.kind), a.docs, { path: a.path, kind: a.kind });
+    const room = docs.reduce((sum, line) => sum + line.length + 1, 0);
     switch (a.report){
-        case "summary": return { body: summaryLines(a) };
-        case "layers": return { body: layerLines(a, a.layers!) };
-        case "conventions": return { body: conventionLines(a, a.conventions!) };
-        case "cycles": return { body: cycleLines(a, page) };
+        case "summary": return { body: [...summaryLines(a), ...docs] };
+        case "layers": return { body: [...layerLines(a, a.layers!), ...docs] };
+        case "conventions": return { body: [...conventionLines(a, a.conventions!), ...docs] };
+        case "cycles": return { body: [...cycleLines(a, page, room), ...docs] };
         case "unused": {
-            const { lines, notes } = unusedLines(a, a.unused!, page);
-            return { body: lines, notes };
+            const { lines, notes } = unusedLines(a, a.unused!, page, room);
+            return { body: [...lines, ...docs], notes };
         }
     }
 }

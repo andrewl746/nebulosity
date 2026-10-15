@@ -2,9 +2,10 @@
  * How code under a folder is organized, computed from its imports (ADR-055), with no model: its parts in layers by the
  * direction most imports go, the imports against that order, the folder names that recur and what each one's files
  * import (VS Code's common/browser/node), the import cycles, and the files nothing imports. A rule a team wrote down
- * shows here as it's kept or broken; the docs pointers (ADR-054) point at where it's written.
+ * shows here as it's kept or broken; the docs pointers (ADR-054) point at where it's written, and every answer carries them.
  */
 import path from "path";
+import type { DocPointer } from "../contracts";
 import { getDb } from "../db/client";
 import { loadEntryPoints } from "../db/store/entries";
 import { loadChildFiles, loadChildFolders, loadLevelEdgeRows } from "../db/store/map";
@@ -12,6 +13,7 @@ import { requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
 import { isTestPath } from "../index/discover";
 import { dirOf, repoKey } from "../index/paths";
+import { docsAbout, docsToReadFirst } from "./docs";
 import { BadInputError } from "./errors";
 import { rangeOf } from "./graph";
 import { importIndexFor, requireKind, specifiersAlong, type ImportIndex } from "./reach";
@@ -45,6 +47,12 @@ export type ArchitectureAnswer = {
     cycles?: CycleGroup[];
     through?: { file: string; cycle: string[] | null; specifiers: string[] };
     unused?: Unused;
+    /**
+     * The docs about the place, as describe names them (ADR-054, amended 2026-10-15): for the repo the docs to read first,
+     * else the docs linked to it or the folders above it. Left out when none. In Eval #2 the conventions answer had none,
+     * and no run that called only it opened the repo's own rules.
+     */
+    docs?: DocPointer[];
 };
 
 /** A folder name recurs when this many folders under the place have it. */
@@ -339,7 +347,8 @@ export function architecture(repoRoot: string, targetPath: string, report: Archi
 
         const index = importIndexFor(db, repoId, readIndexVersion(db, repoId));
         const range = rangeOf(index, targetPath, kind);
-        const answer: ArchitectureAnswer = { path: targetPath, kind, report: effective };
+        const docs = kind === "repo" ? docsToReadFirst(db, repoId) : docsAbout(db, repoId, targetPath);
+        const answer: ArchitectureAnswer = { path: targetPath, kind, report: effective, ...(docs.length > 0 ? { docs } : {}) };
         const all = effective === "summary";
 
         if (all || effective === "layers"){
