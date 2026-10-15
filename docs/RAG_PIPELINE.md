@@ -125,7 +125,7 @@ The budget is `--budget <usd>`, default $15 (S2). The background worker caps eac
 **Amended (2026-10-15, V1.6).** Three changes to what this section describes:
 - **An estimate and a yes before the first request** (S11, ADR-035 amended). A full run no longer simply spends up to `--budget`. It first prints its estimate, every request the planner will send priced as the cap prices them, and asks; without a terminal it needs `--yes`. The yes is recorded for the repo. `--path` (one request) and a run with nothing to send skip the question.
 - **Lazy refresh only for a confirmed repo** (ADR-038 amended). The background worker's refreshes, its folder sweep and "summarize now" run only for a repo whose summaries were confirmed: a yes recorded by `summarize`, or summaries a model already wrote. For any other repo nothing is sent: opening a pending summary in the Map says to run `nebulosity summarize`, which shows the estimate and asks first.
-- **A third template: "Over the size cap: imports only"** (ADR-053 amended). A code file over the 1 MB cap is now indexed for its imports only, with no declarations or chunks, and like a test file it skips the model: its template's tagline reads "Over the size cap: imports only". The estimate leaves such files out too.
+- **A third template: "Over the size cap: imports only"** (ADR-053 amended). A code file over the 1 MB cap and up to 20 MB is now indexed for its imports only (read by the full adapter up to 5 MB, by a token scan from 5 to 20 MB), with no declarations or chunks, and like a test file it skips the model: its template's tagline reads "Over the size cap: imports only". The estimate leaves such files out too. A file over 20 MB is skipped.
 
 ---
 

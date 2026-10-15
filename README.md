@@ -150,7 +150,7 @@ Good to know:
 
 ### Windows, macOS and Linux
 
-Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. `nebulosity setup` has been run against a real Claude Code on Windows; on macOS and Linux that check, and the Map's background worker in an installed copy, wait for the next CI run.
+Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. It also runs `nebulosity setup` against a real Claude Code, checks that the installed Map's background worker picks up a saved file, and checks that `summarize` refuses to spend without a key or a yes.
 
 ### Tested on
 
