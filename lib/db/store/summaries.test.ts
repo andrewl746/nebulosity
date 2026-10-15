@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../../test/helpers/fixture";
+import { makeTempDir } from "../../../test/helpers/temp";
 import { FILES } from "../../../test/helpers/mini-repo-facts";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { getDb } from "../client";
@@ -23,6 +24,15 @@ describe("summary store — facts for the planner", () => {
         const { repoId } = indexRepository(copyFixture());
         expect(loadFileFacts(getDb(), repoId).map((f) => [f.path, f.importedBy, f.isTest, f.lineCount]))
             .toEqual(FILES.map((f) => [f.path, f.importedBy, f.isTest, f.lineCount]));
+    });
+
+    it("loads each file's size in bytes, which tells the planner the files over the size cap (ADR-053)", () => {
+        const root = makeTempDir("neb-sizes-");
+        fs.writeFileSync(path.join(root, "a.ts"), "export const a = 1;\n");          // 20 bytes
+        fs.writeFileSync(path.join(root, "b.ts"), 'import { a } from "./a";\n');     // 25 bytes
+        fs.writeFileSync(path.join(root, "é.ts"), "export const é = 1;\n");          // 6 + 1 + 5 + 1 + 2 + 5 + 1 = 21 bytes: é is 2 in UTF-8
+        const { repoId } = indexRepository(root);
+        expect(loadFileFacts(getDb(), repoId).map((f) => [f.path, f.sizeBytes])).toEqual([["a.ts", 20], ["b.ts", 25], ["é.ts", 21]]);
     });
 
     it("loads the folder tree with its file counts", () => {

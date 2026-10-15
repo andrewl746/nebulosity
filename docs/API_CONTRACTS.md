@@ -237,7 +237,7 @@ type SummarizeResponse = { path: string; kind: "repo" | "folder" | "file"; tagli
 - **Duplicates.** Concurrent requests for one target share one request (ADR-033, amended).
 - **Status codes.**
   - `409 NOT_READY`: a folder whose files or subfolders aren't all summarized yet. Its summary would be written over "(no summary yet)".
-  - `409 SUMMARIES_OFF`: no API key.
+  - `409 SUMMARIES_OFF`: no API key, or the repo's summaries were never confirmed (no yes recorded by `nebulosity summarize`, and no summary written by a model). The message says to run `nebulosity summarize`, which shows the estimate and asks first; nothing is sent (S11, ADR-038 amended).
   - `409 INDEX_LOCKED`: the background worker is still switching to the active repo (ADR-038, amended); try again in a moment. It never summarizes another repo's path.
   - `502 UPSTREAM`: Anthropic refused the API key.
   - `404 NOT_FOUND`, `400 BAD_REQUEST` and `403 FORBIDDEN` as usual.
@@ -313,7 +313,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 - *`to`* (a file or folder): the shortest chain of imports from `path` to `to`, each step with the import as written, the other direction when needed, or "no chain". Places that overlap, and the whole repo, are refused.
 - The whole repo ("") is refused as `path`: it has no outside.
 
-**`architecture`, by report.** `summary` is the four reports in brief (layers bottom first and the imports against that order; the recurring folder names; the cycle count and the largest; the files nothing imports). `layers`, `conventions`, `cycles` and `unused` give one in full; `cycles` with `through` (or with a file as `path`) gives the shortest import cycle through that file, or says it is in none. Every report fits the 40,000-character limit. Any other report on a file is refused.
+**`architecture`, by report.** `summary` is the four reports in brief (layers bottom first and the imports against that order; the recurring folder names; the cycle count and the largest; the files nothing imports). `layers`, `conventions`, `cycles` and `unused` give one in full; `cycles` with `through` (or with a file as `path`) gives the shortest import cycle through that file, or says it is in none; `through` with any other report is refused. A page of `unused` past the end of its list says how long the list is. Every report fits the 40,000-character limit. Any other report on a file is refused.
 
 **Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports` and `architecture` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The five definitions and the instructions together stay under 7,000 characters (a test).
 
@@ -333,6 +333,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 - nothing indexed at a path;
 - a path outside the repo;
 - overlapping places for `imports` with `to`, and a `within` that cannot match;
+- `architecture`'s `through` with a report other than `cycles`;
 - bad `show_on_map` input;
 - the MCP SDK's "Input validation error" for input outside a schema.
 

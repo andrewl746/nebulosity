@@ -2,6 +2,7 @@ import type { ErrorCode } from "../contracts";
 import { DatabaseMissingError, DatabaseOutdatedError } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { RepoNotIndexedError } from "../db/store/structure";
+import { commandHint } from "../hints";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
 import { SummarizerAuthError } from "../index/summarize/types";
 import { NotAFolderError, PathNotFoundError } from "./level";
@@ -12,6 +13,17 @@ export class SummariesOffError extends Error {
     constructor(){
         super("Summaries are off: ANTHROPIC_API_KEY is not set (put it in .env.local and restart the server).");
         this.name = "SummariesOffError";
+    }
+}
+
+/**
+ * Thrown when a summary is asked for on a repo whose summaries nobody confirmed (S11, ADR-038 amended): a key alone
+ * never starts spending. `nebulosity summarize` shows the estimate and asks; its yes is what this waits for.
+ */
+export class SummariesNotConfirmedError extends Error {
+    constructor(repo: string){
+        super(`Summaries for ${repo} haven't been confirmed, so nothing is sent from here: run ${commandHint("summarize", `"${repo}"`)}, which shows the estimate and asks first.`);
+        this.name = "SummariesNotConfirmedError";
     }
 }
 
@@ -75,7 +87,7 @@ function codeFor(err: unknown): ErrorCode {
     if (err instanceof NotAFolderError || err instanceof BadInputError) return "BAD_REQUEST";
     if (err instanceof IndexLockedError || err instanceof StructureNotReadyError || err instanceof RepoSwitchingError) return "INDEX_LOCKED";
     if (err instanceof TargetNotReadyError || err instanceof DatabaseOutdatedError) return "NOT_READY";
-    if (err instanceof SummariesOffError) return "SUMMARIES_OFF";
+    if (err instanceof SummariesOffError || err instanceof SummariesNotConfirmedError) return "SUMMARIES_OFF";
     // Anthropic refused the key: the fault is upstream of this server, and retrying won't help until the key changes
     if (err instanceof SummarizerAuthError) return "UPSTREAM";
     return "INTERNAL";

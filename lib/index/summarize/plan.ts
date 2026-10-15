@@ -36,7 +36,10 @@ export type PlanOptions = {
     refreshStaleFolders: boolean;
     /** targetKeys that failed earlier in this run: they wait for the next run. */
     failedThisRun: ReadonlySet<string>;
-    /** A non-test file over this was indexed for its imports only and gets a template (ADR-053). Default: the indexer's cap. */
+    /**
+     * A non-test file over this was indexed for its imports only and gets a template (ADR-053). Default: the indexer's
+     * cap, DEFAULT_MAX_FILE_BYTES, the product's only one; tests pass another to match an index they built with it.
+     */
     maxFileBytes?: number;
 };
 

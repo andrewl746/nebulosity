@@ -3,7 +3,7 @@ import { getDb } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { findRepository } from "../db/store/structure";
 import { countStaleFolders, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
-import { NoActiveRepoError, RepoSwitchingError, SummariesOffError } from "../engine/errors";
+import { NoActiveRepoError, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "../engine/errors";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository, type IndexOptions, type IndexResult } from "../index/pipeline";
@@ -386,6 +386,8 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         async summarizeNow(targetPath, expectedRoot){
             if (deps.summarizer === null) throw new SummariesOffError();
             const repo = rootFor(expectedRoot);
+            // the Map asks on opening a panel; on a repo nobody said yes for, that would spend unasked (S11)
+            if (!mayRefresh(repo)) throw new SummariesNotConfirmedError(repo);
             const row = await summarizeNow(repo, targetPath, deps.summarizer);
             queueEmbed();
             return row;

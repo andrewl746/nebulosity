@@ -32,7 +32,10 @@ export type IndexOptions = {
     onProgress?: (stage: IndexStage, done: number, total: number) => void;
     /** Files parsed and committed per transaction. */
     batchSize?: number;
-    /** A code file over this is indexed for its imports only (ADR-053). Default DEFAULT_MAX_FILE_BYTES (1 MB). */
+    /**
+     * A code file over this is indexed for its imports only (ADR-053). Default DEFAULT_MAX_FILE_BYTES (1 MB): the product
+     * never passes another, so the summary planner and describe, which read that constant, agree with the index.
+     */
     maxFileBytes?: number;
     /** Up to this, such a file is parsed in full for them; past it, token-scanned. Default DEFAULT_PARSE_MAX_FILE_BYTES (5 MB). */
     parseMaxFileBytes?: number;
@@ -213,7 +216,12 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         const indexedHead = readGitHead(root);
         markIndexed(db, repoId, indexedHead);
-        writeAdapterVersion(db, repoId, ADAPTER_VERSION);
+        // A file that failed keeps its previous row (ADR-022). After a forced re-parse that row is the older adapter's, and
+        // its hash still matches the bytes, so recording this version now would leave it as it is for good. The next full
+        // run parses everything again instead; a file that fails every time makes every full run do so, and its run's
+        // errors name it.
+        const olderRowsKept = reparseAll && errors.some((e) => stored.has(e.path));
+        if (!olderRowsKept) writeAdapterVersion(db, repoId, ADAPTER_VERSION);
         writeStage(db, repoId, "structure", {
             state: "ready",
             done: fileSet.size,

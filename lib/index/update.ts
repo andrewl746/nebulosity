@@ -133,7 +133,8 @@ export function applyFileChanges(
         const current = loadStoredFiles(db, repoId);
         const fileSet = new Set(current.keys());
         // read on every update, not only when everything re-resolves: an edited file's workspace, module-id and
-        // computed edges need it as much as a full run's do (one git ls-files, about 0.1 s on VS Code)
+        // computed edges need it as much as a full run's do. It costs about 0.28 s an update on VS Code, most of it one
+        // git ls-files (ADR-053); a repo without git is walked whole instead, every update.
         const workspace = readWorkspace(root, listManifests(root));
         const resolve = createResolver(root, fileSet, { workspace });
 
@@ -145,13 +146,14 @@ export function applyFileChanges(
         const { removed, added } = diffEdges(before, after);
 
         applyEdgeChanges(db, repoId, removed, added, levelEdgeDeltas([...removed, ...cascaded], added));
-        if (resolvedAll) replaceEntryPoints(db, repoId, declaredEntries(workspace, createSourceFinder(fileSet, workspace)));
+        // a package.json can change only its entry points: that alone is a change readers must see
+        const entriesChanged = resolvedAll && replaceEntryPoints(db, repoId, declaredEntries(workspace, createSourceFinder(fileSet, workspace)));
         if (fileSetChanged){
             syncFolders(db, repoId, buildFolders([...current.keys()], path.basename(root)));
             pruneSummaries(db, repoId);   // a deleted file, or a folder left empty, takes its summary with it
         }
 
-        const anything = changed.length > 0 || deleted.length > 0 || removed.length > 0 || added.length > 0;
+        const anything = changed.length > 0 || deleted.length > 0 || removed.length > 0 || added.length > 0 || entriesChanged;
         if (anything){
             markIndexed(db, repoId, readGitHead(root));
             writeStage(db, repoId, "structure", {

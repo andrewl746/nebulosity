@@ -1,6 +1,6 @@
 import type { FileFacts } from "../../db/store/summaries";
-import { DEFAULT_MAX_FILE_BYTES } from "../discover";
 import { ASSUMED_TOKENS } from "./budget";
+import { writtenByModel } from "./plan";
 import { costUsd, formatUsd, pricePerMTok } from "./pricing";
 import { plural, PROMPT_VERSION } from "./prompts";
 import type { SummaryOutcome } from "./types";
@@ -46,7 +46,8 @@ export type ComparisonReport = {
  * order, as loadFileFacts returns them.
  */
 export function pickSample(files: readonly FileFacts[], count: number): FileFacts[] {
-    const candidates = files.filter((f) => !f.isTest && f.sizeBytes <= DEFAULT_MAX_FILE_BYTES);
+    // the planner's own rule, at the product's one cap (DEFAULT_MAX_FILE_BYTES), so the sample never holds a templated file
+    const candidates = files.filter((f) => writtenByModel(f));
     const central = [...candidates]
         .sort((a, b) => b.importedBy - a.importedBy || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
         .slice(0, Math.ceil(count / 2));

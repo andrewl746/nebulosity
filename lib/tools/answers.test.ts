@@ -454,6 +454,18 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         ]);
     });
 
+    it("a page past the end of the files nothing imports says how long the list is, as the cycles report does", () => {
+        const past = answerText(architectureAnswer(architecture(root, "src", "unused"), { limit: 50, offset: 10 })).split("\n");
+        expect(past).toEqual([
+            "Files in src/ that no indexed file imports: 2, not counting 1 test file.",
+            "Named as entry points by a package.json (1):",
+            "  src/app/loader.ts",
+            "Not named anywhere (1):",
+            "Nothing at offset 10: the list has 1.",
+            "Note: a file nothing imports may still be loaded by name (a build script, a worker, an HTML page, a test runner), so check before deleting it.",
+        ]);
+    });
+
     it("the summary of src", () => {
         expect(text("src", "summary")).toEqual([
             "src/ — what its imports say about how it's organized:",

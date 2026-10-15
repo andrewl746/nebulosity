@@ -10,7 +10,7 @@ import { requireRepository } from "../db/store/structure";
 import { addUsage, confirmSummaries, loadSummaries } from "../db/store/summaries";
 import { countEmbedded } from "../db/store/summary-vectors";
 import { describe as describeTarget } from "../engine/describe";
-import { RepoSwitchingError, SummariesOffError } from "../engine/errors";
+import { errorResponseFor, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "../engine/errors";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
@@ -300,6 +300,27 @@ describe("background service", () => {
         expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh" });
         await service.idle();
         expect(embedded(root)).toBe(13);
+        await service.stop();
+    });
+
+    it("summarize now spends nothing on a repo whose summaries nobody confirmed, and says how to confirm them (S11)", async () => {
+        const root = copyFixture();
+        indexRepository(root);   // structure only: no yes recorded, no model-written summary
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        const refusal = service.summarizeNow("src/core/log.ts");
+        await expect(refusal).rejects.toThrow(SummariesNotConfirmedError);
+        await expect(refusal).rejects.toThrow(`run nebulosity summarize "${path.resolve(root)}"`);
+        expect(stub.requests).toHaveLength(0);
+        expect(errorResponseFor(await refusal.catch((err: unknown) => err)).error.code).toBe("SUMMARIES_OFF");
+
+        const db = getDb();
+        confirmSummaries(db, requireRepository(db, repoKey(root)));
+        expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh" });
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
         await service.stop();
     });
 

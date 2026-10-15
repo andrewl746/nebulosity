@@ -44,11 +44,53 @@ function stripComment(value: string): string {
     return value;
 }
 
-/** The first level-one heading, else the file's name without its extension. */
+/** A title longer than this is cut, its last character an ellipsis. */
+export const MAX_TITLE_CHARS = 120;
+
+/**
+ * The first level-one heading with any text in it, as plain text and at most MAX_TITLE_CHARS; else the file's name
+ * without its extension. A heading that is only a badge, or a bare "#", is no title.
+ */
 export function docTitle(docPath: string, body: string): string {
-    const m = /^#[ \t]+(.+?)[ \t#]*$/m.exec(body);
-    if (m) return m[1].trim();
+    for (const m of body.matchAll(/^#[ \t]+(.+?)[ \t#]*$/gm)){
+        // only the start of a long heading can show, and the markup patterns below would be slow on a huge line of "["
+        const title = plainText(m[1].slice(0, 4_000));
+        if (title === "") continue;
+        if (title.length <= MAX_TITLE_CHARS) return title;
+        let cut = MAX_TITLE_CHARS - 1;
+        if (/[\uD800-\uDBFF]/.test(title[cut - 1])) cut--;   // never half of a character outside the BMP
+        return `${title.slice(0, cut).trimEnd()}…`;
+    }
     return docPath.slice(docPath.lastIndexOf("/") + 1).replace(/\.(md|mdx|mdc)$/i, "");
+}
+
+/**
+ * Inline Markdown as the words a reader sees: images and badges dropped, links as their text, code as its text, and
+ * outside code, HTML tags and emphasis marks off. Underscores inside a word (snake_case) and a lone "*" stay.
+ */
+function plainText(markdown: string): string {
+    const linked = markdown
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")       // an image or a badge: ![alt](src)
+        .replace(/!\[[^\]]*\]\[[^\]]*\]/g, "")      // a reference image: ![alt][ref]
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")    // a link: [text](url); a badge's link is left with no text
+        .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1");  // a reference link: [text][ref]
+    const pieces: string[] = [];
+    let at = 0;
+    for (const code of linked.matchAll(/(`+)(.+?)\1/g)){
+        pieces.push(withoutMarks(linked.slice(at, code.index)), code[2]);
+        at = (code.index ?? 0) + code[0].length;
+    }
+    pieces.push(withoutMarks(linked.slice(at)));
+    return pieces.join("").replace(/\s+/g, " ").trim();
+}
+
+/** Text outside code without HTML tags and emphasis marks. */
+function withoutMarks(text: string): string {
+    return text
+        .replace(/<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/g, "")   // <img …>, <br/>, <b>
+        .replace(/(\*\*|__|~~)(.+?)\1/g, "$2")                          // **strong**, __strong__, ~~struck~~
+        .replace(/(^|[^\w*])\*(?!\s)([^*]+?)\*(?!\w)/g, "$1$2")        // *em*, not 2*3*4
+        .replace(/(^|\W)_(?!\s)([^_]+?)_(?!\w)/g, "$1$2");             // _em_, not snake_case
 }
 
 const unquote = (s: string): string => {
@@ -85,22 +127,35 @@ export function splitGlobs(value: string): string[] {
     return parts.map(unquote).filter((p) => p !== "").flatMap((p) => (p.startsWith("{") && oneGroup(p) ? splitGlobs(p.slice(1, -1)) : [p]));
 }
 
+/** Whether a glob is one folder and everything under it ("src/vs/**"), not a pattern for some of its files ("*.css" under it). */
+export function isPlainFolderGlob(glob: string): boolean {
+    return /^[^*?[{]*\/\*\*$/.test(glob);
+}
+
 /** The folder a glob is about: the segments before the first one with a wildcard or a brace; a glob that is one file names its folder. */
 export function globFolder(glob: string): string {
-    const segments = glob.replace(/^\.\//, "").split("/");
+    // "/src/vs/**" and "src/vs/" mean the repo's src/vs: a leading "./" or "/" and a trailing "/" name no folder of their own
+    const trimmed = glob.replace(/^\.?\/+/, "");
+    const isFolder = trimmed.endsWith("/");   // "docs/v1.2/" is a folder, though its name looks like a file's
+    const segments = trimmed.replace(/\/+$/, "").split("/");
     const literal: string[] = [];
     for (const s of segments){
         if (/[*?[{]/.test(s)) break;
         literal.push(s);
     }
-    if (literal.length === segments.length && /\.[A-Za-z0-9]+$/.test(literal[literal.length - 1] ?? "")) literal.pop();
+    if (!isFolder && literal.length === segments.length && /\.[A-Za-z0-9]+$/.test(literal[literal.length - 1] ?? "")) literal.pop();
     return literal.join("/");
 }
 
-/** Path-like words of two or more segments: not part of a URL, cut before a wildcard segment, trailing punctuation off. */
+/**
+ * Path-like words of two or more segments: not part of a URL, cut before a wildcard segment, trailing punctuation off.
+ * A match starts only where a word starts (the lookbehind): without it, a long word with no slash was tried from each of
+ * its characters, each try running to the word's end, which is quadratic (a 1 MB doc could take minutes). A match from
+ * inside a word could only be a shorter copy of the one from its start, so the tokens are the same.
+ */
 export function mentionTokens(body: string): string[] {
     const tokens: string[] = [];
-    for (const m of body.matchAll(/[A-Za-z0-9_@.*-]+(?:\/[A-Za-z0-9_@.*-]+)+\/?/g)){
+    for (const m of body.matchAll(/(?<![A-Za-z0-9_@.*-])[A-Za-z0-9_@.*-]+(?:\/[A-Za-z0-9_@.*-]+)+\/?/g)){
         const start = m.index ?? 0;
         if (start > 0 && /[:/]/.test(body[start - 1])) continue;   // inside https://… or a longer path
         const kept: string[] = [];
@@ -142,7 +197,10 @@ export function docLinks(docPath: string, text: string, known: KnownPaths): { fa
         for (const glob of splitGlobs(value)){
             const target = globFolder(glob);
             if (target !== "" && !known.folders.has(target)) continue;
-            if (!links.some((l) => l.kind === "applies" && l.targetPath === target)) links.push({ docPath, targetPath: target, kind: "applies", count: 1, detail: glob });
+            // one link per folder: the first glob that names it, unless a plain one ("src/vs/**") comes after a file pattern
+            const kept = links.find((l) => l.kind === "applies" && l.targetPath === target);
+            if (!kept) links.push({ docPath, targetPath: target, kind: "applies", count: 1, detail: glob });
+            else if (isPlainFolderGlob(glob) && !isPlainFolderGlob(kept.detail ?? "")) kept.detail = glob;
         }
     }
     const counts = new Map<string, number>();

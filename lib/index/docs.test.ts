@@ -26,6 +26,25 @@ describe("docTitle", () => {
         expect(docTitle("docs/architecture.md", "intro\n\n# Architecture\n\n## Layers\n")).toBe("Architecture");
         expect(docTitle("docs/notes.mdx", "## only a second-level heading\n")).toBe("notes");
     });
+
+    it("reads the heading as plain text: badges and images gone, links and code kept as their text, emphasis and HTML tags off", () => {
+        const badges = "# [![Build](https://ci.example/badge.svg)](https://ci.example) **Visual Studio Code** - [Open Source](https://github.com/microsoft/vscode) `code`\n";
+        expect(docTitle("README.md", badges)).toBe("Visual Studio Code - Open Source code");
+        expect(docTitle("README.md", "# __Bold__, *em*, _em_ and ~~old~~ but snake_case_name and 2*3*4\n")).toBe("Bold, em, em and old but snake_case_name and 2*3*4");
+        expect(docTitle("README.md", '# <img src="logo.png" alt="logo" width="40"> AFFiNE <br/>\n')).toBe("AFFiNE");
+        expect(docTitle("README.md", "# The `__init__` and `<Map>` [`api`][ref] guide ##\n")).toBe("The __init__ and <Map> api guide");
+    });
+
+    it("skips a heading with nothing left in it: a bare # or one holding only a badge", () => {
+        expect(docTitle("docs/guide.md", "#   \n\n# ![badge](https://x/y.svg)\n\n# Real title\n")).toBe("Real title");
+        expect(docTitle("docs/guide.md", "#\t \ntext\n")).toBe("guide");
+    });
+
+    it("cuts a long heading to 120 characters, the last an ellipsis", () => {
+        const title = docTitle("README.md", `# ${"word ".repeat(60)}\n`);
+        expect(title).toHaveLength(120);
+        expect(title).toBe(`${"word ".repeat(23)}word…`);   // 119 characters of the heading (23 × 5 + 4), then "…"
+    });
 });
 
 describe("splitGlobs, on VS Code's own applyTo lines", () => {
@@ -60,6 +79,14 @@ describe("globFolder", () => {
         expect(globFolder("cli/ThirdPartyNotices.txt")).toBe("cli");
         expect(globFolder("cglicenses.json")).toBe("");
     });
+
+    it("reads past a leading or trailing slash", () => {
+        expect(globFolder("/src/vs/**")).toBe("src/vs");
+        expect(globFolder("src/vs/")).toBe("src/vs");
+        expect(globFolder("/src/vs/")).toBe("src/vs");
+        expect(globFolder("./src/vs/")).toBe("src/vs");
+        expect(globFolder("docs/v1.2/")).toBe("docs/v1.2");   // a trailing slash says it's a folder
+    });
 });
 
 describe("mentionTokens", () => {
@@ -70,6 +97,16 @@ describe("mentionTokens", () => {
 
     it("drops a word with one segment and a path cut down to one", () => {
         expect(mentionTokens("main.ts, src/**/x.ts and and/or")).toEqual(["and/or"]);
+    });
+
+    it("reads a 200,000-character word with no slash in linear time, and still finds the path after it", () => {
+        // the regex used to try every start inside such a word, each running to its end: 40,000 characters took about 1 s,
+        // so 200,000 would take about 25 s (a base64 image in a README, a minified line in a doc)
+        const body = `${"x".repeat(200_000)} then src/app/main.ts, and ${"y".repeat(100_000)}/z`;
+        const started = performance.now();
+        const tokens = mentionTokens(body);
+        expect(performance.now() - started).toBeLessThan(500);
+        expect(tokens).toEqual(["src/app/main.ts", `${"y".repeat(100_000)}/z`]);
     });
 });
 
@@ -94,6 +131,16 @@ describe("docLinks on the architecture fixture's docs", () => {
             facts: { path: ".github/instructions/editor.instructions.md", title: "Editor rules" },
             links: [{ docPath: ".github/instructions/editor.instructions.md", targetPath: "src/editor", kind: "applies", count: 1, detail: "src/editor/**" }],
         });
+    });
+
+    it("keeps one applies link per folder, by its plain glob when a file pattern names the same folder first", () => {
+        const text = "---\napplyTo: 'src/editor/**/*.css, src/editor/**, src/editor/**/*.ts'\n---\n\n# Editor rules\n";
+        expect(docLinks(".github/instructions/editor.instructions.md", text, known).links).toEqual([
+            { docPath: ".github/instructions/editor.instructions.md", targetPath: "src/editor", kind: "applies", count: 1, detail: "src/editor/**" },
+        ]);
+        // with no plain glob for the folder, the first pattern stays
+        expect(docLinks("x.instructions.md", "---\napplyTo: 'src/app/**/*.ts, src/app/**/*.tsx'\n---\n", known).links)
+            .toEqual([{ docPath: "x.instructions.md", targetPath: "src/app", kind: "applies", count: 1, detail: "src/app/**/*.ts" }]);
     });
 
     it("links a README to its own folder and counts the paths a doc mentions", () => {

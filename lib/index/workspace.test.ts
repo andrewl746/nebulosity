@@ -5,7 +5,7 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { discoverFiles } from "./discover";
 import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript";
 import { createResolver, createSourceFinder } from "./resolve";
-import { declaredEntries, flattenExports, packageNameOf, readWorkspace } from "./workspace";
+import { declaredEntries, expandBraces, flattenExports, packageNameOf, readWorkspace } from "./workspace";
 
 const fixture = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
 const found = discoverFiles(fixture, { extensions: TYPESCRIPT_EXTENSIONS });
@@ -61,6 +61,17 @@ describe("flattenExports", () => {
     });
 });
 
+describe("expandBraces", () => {
+    it("opens each group, nested or one after another, and leaves a group with no choice or no end as written", () => {
+        expect(expandBraces("{apps,packages}/*")).toEqual(["apps/*", "packages/*"]);
+        expect(expandBraces("a/{b,c}/{d,e}")).toEqual(["a/b/d", "a/b/e", "a/c/d", "a/c/e"]);
+        expect(expandBraces("ui-{web,{native,desktop}}")).toEqual(["ui-web", "ui-native", "ui-desktop"]);
+        expect(expandBraces("{x}/{a,b}")).toEqual(["{x}/a", "{x}/b"]);
+        expect(expandBraces("open{a,b")).toEqual(["open{a,b"]);
+        expect(expandBraces("packages/*")).toEqual(["packages/*"]);
+    });
+});
+
 describe("packageNameOf", () => {
     it("keeps a scope with its name and drops a subpath", () => {
         expect(packageNameOf("@arch/core/lib/log")).toBe("@arch/core");
@@ -110,6 +121,25 @@ describe("which packages resolve by name: the root and the declared workspaces (
         ]);
     });
 
+    it("never reaches an undeclared package through a module id either (F2): its name stands in for nothing", () => {
+        // the review's probe: extensions/ holds a tsconfig, so "gulp/src/main" read as a module id names extensions/gulp/src/main.ts,
+        // the folder of the undeclared package "gulp"; a module id whose first segment names no package still resolves
+        const root = makeRepo({
+            "package.json": { name: "app", workspaces: ["packages/*"] },
+            "extensions/gulp/package.json": { name: "gulp", main: "./out/main.js" },
+            "extensions/gulp/src/main.ts": "export {};\n",
+            "extensions/tsconfig.base.json": { compilerOptions: {} },
+            "extensions/shared/util.ts": "export {};\n",
+            "build/lib/task.ts": 'import "gulp/src/main";\nimport "shared/util";\n',
+        });
+        const ws = readWorkspace(root, ["extensions/gulp/package.json", "extensions/tsconfig.base.json", "package.json"]);
+        expect(ws.idRoots).toEqual(["extensions"]);
+        const resolve = createResolver(root, new Set(["build/lib/task.ts", "extensions/gulp/src/main.ts", "extensions/shared/util.ts"]), { workspace: ws });
+        expect(resolve("build/lib/task.ts", "gulp")).toBeNull();
+        expect(resolve("build/lib/task.ts", "gulp/src/main")).toBeNull();
+        expect(resolve("build/lib/task.ts", "shared/util")).toBe("extensions/shared/util.ts");
+    });
+
     it("with no workspaces declared, resolves only the root package by name", () => {
         const root = makeRepo({
             "package.json": { name: "app", main: "src/main.ts" },
@@ -149,6 +179,23 @@ describe("which packages resolve by name: the root and the declared workspaces (
         });
         const ws = readWorkspace(root, ["package.json", "packages/a/package.json", "packages/legacy/package.json"]);
         expect([...ws.byName.keys()]).toEqual(["@x/a"]);
+    });
+
+    it("opens brace groups in a workspace glob: one alternative per group, inside a folder name or across folders", () => {
+        const root = makeRepo({
+            "package.json": { name: "app", workspaces: ["{apps,packages}/*", "tools/{cli,dev}", "libs/ui-{web,{native,desktop}}"] },
+            "apps/web/package.json": { name: "@x/web" },
+            "packages/a/package.json": { name: "@x/a" },
+            "tools/cli/package.json": { name: "@x/cli" },
+            "tools/dev/package.json": { name: "@x/dev" },
+            "tools/other/package.json": { name: "@x/other" },
+            "libs/ui-desktop/package.json": { name: "@x/desktop" },
+            "libs/ui-mobile/package.json": { name: "@x/mobile" },
+            "{apps,packages}/odd/package.json": { name: "@x/odd" },
+        });
+        const ws = readWorkspace(root, ["{apps,packages}/odd/package.json", "apps/web/package.json", "libs/ui-desktop/package.json", "libs/ui-mobile/package.json",
+            "package.json", "packages/a/package.json", "tools/cli/package.json", "tools/dev/package.json", "tools/other/package.json"]);
+        expect([...ws.byName.keys()].sort()).toEqual(["@x/a", "@x/cli", "@x/desktop", "@x/dev", "@x/web", "app"]);
     });
 
     it("reads lerna.json's packages", () => {

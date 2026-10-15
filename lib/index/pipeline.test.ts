@@ -12,7 +12,7 @@ import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/stor
 import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/search";
 import { readStages, type StoredStage } from "../db/store/stages";
 import { findRepository, loadImportEdges, upsertRepository, writeFileRecords } from "../db/store/structure";
-import { writeAdapterVersion } from "../db/store/version";
+import { readAdapterVersion, writeAdapterVersion } from "../db/store/version";
 import { ADAPTER_VERSION } from "./languages/typescript";
 import { repoKey } from "./paths";
 import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
@@ -388,5 +388,27 @@ describe("indexRepository on the architecture fixture", () => {
 
         expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 21, unchanged: 0, edges: 31 });
         expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 0, unchanged: 21, edges: 31 });
+    });
+
+    it("keeps the older adapter's version while a file it parsed failed the re-parse, so the next full run tries again", () => {
+        const copy = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(copy);
+        const db = getDb();
+        db.update(files).set({ importSpecifiers: "[]" }).where(and(eq(files.repoId, repoId), eq(files.path, "src/app/loader.ts"))).run();
+        writeAdapterVersion(db, repoId, ADAPTER_VERSION - 1);
+
+        // loader.ts can't be read during the forced re-parse: discovered, then moved away before its turn
+        const loader = path.join(copy, "src/app/loader.ts");
+        const away = path.join(copy, "loader.moved");
+        const failed = indexRepository(copy, { onProgress: (stage) => { if (stage === "discover") fs.renameSync(loader, away); } });
+        fs.renameSync(away, loader);
+        // its old row stays (ADR-022), with the old adapter's empty specifiers: edge #5 is still missing
+        expect(failed).toMatchObject({ files: 21, changed: 20, edges: 30 });
+        expect(failed.errors.map((e) => e.path)).toEqual(["src/app/loader.ts"]);
+        expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION - 1);
+
+        // the next full run parses everything again, so loader.ts's bytes, unchanged, are read by this adapter at last
+        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 21, edges: 31, errors: [] });
+        expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION);
     });
 });

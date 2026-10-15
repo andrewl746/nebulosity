@@ -2,6 +2,7 @@ import type { DocPointer } from "../contracts";
 import type { Db } from "../db/client";
 import { loadAllDocLinks, loadDocLinksTo, loadDocs } from "../db/store/docs";
 import type { DocLinkKind, DocLinkRow } from "../db/schema";
+import { isPlainFolderGlob } from "../index/docs";
 import { dirOf } from "../index/paths";
 
 /** A doc whose name holds one of these is about how the code is organized. */
@@ -14,7 +15,7 @@ const KIND_RANK: Record<DocLinkKind, number> = { applies: 3, readme: 2, mentions
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const depth = (p: string): number => (p === "" ? 0 : p.split("/").length);
 /** An applies glob that is one folder and everything under it ("src/vs/**"), not a file pattern. */
-const plainGlob = (l: DocLinkRow): number => (l.kind === "applies" && /^[^*?[{]*\/\*\*$/.test(l.detail ?? "") ? 1 : 0);
+const plainGlob = (l: DocLinkRow): number => (l.kind === "applies" && isPlainFolderGlob(l.detail ?? "") ? 1 : 0);
 
 export function hasArchitectureWord(docPath: string): boolean {
     const name = docPath.slice(docPath.lastIndexOf("/") + 1).toLowerCase().replace(/\.(md|mdx|mdc)$/, "");

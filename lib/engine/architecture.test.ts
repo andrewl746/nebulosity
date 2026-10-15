@@ -111,4 +111,13 @@ describe("architecture(), against the ground truth", () => {
         expect(() => architecture(root, "src/app/main.ts", "layers")).toThrow('architecture reads a folder ("" for the repo); for one file, ask for report "cycles".');
         expect(architecture(root, "src/editor/common/model.ts", "cycles").through?.cycle).toHaveLength(4);
     });
+
+    it("takes through only with cycles: a summary would have printed no cycles for a folder that has one", () => {
+        const sentence = 'through goes with report "cycles": ask again with report "cycles" for the shortest import cycle through that file.';
+        expect(() => architecture(root, "src", "summary", { through: "src/editor/common/model.ts" })).toThrow(sentence);
+        expect(() => architecture(root, "src", "unused", { through: "src/editor/common/model.ts" })).toThrow(sentence);
+        expect(architecture(root, "src", "cycles", { through: "src/editor/common/model.ts" }).through?.cycle).toHaveLength(4);
+        // the summary of src counts its one group of three files (the ground truth's cycle)
+        expect(architecture(root, "src", "summary").cycles).toEqual([{ size: 3, files: ["src/editor/common/model.ts", "src/editor/common/textModel.ts", "src/editor/common/tokens.ts"] }]);
+    });
 });

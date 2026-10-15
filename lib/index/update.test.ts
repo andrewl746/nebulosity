@@ -259,12 +259,26 @@ describe("what re-resolves every file, and the workspace on every update (ADR-05
         expect(tables(repoId)).toEqual(fullRunOf(root));
     });
 
-    it("a changed package.json replaces the entry points", () => {
+    it("a changed package.json replaces the entry points, and moves the index version though no file or edge changed", () => {
         const root = copyFixture(ARCH_FIXTURE);
         const { repoId } = indexRepository(root);
+        const version = readIndexVersion(getDb(), repoId);
         write(root, "package.json", JSON.stringify({ name: "arch-repo", private: true, main: "src/app/main.ts", workspaces: ["packages/*"] }));
 
-        expect(applyFileChanges(root, ["package.json"])).toMatchObject({ changed: [], deleted: [], resolvedAll: true, edgesAdded: 0, edgesRemoved: 0 });
+        // readers cache per index version (ADR-036): a version that stays put would keep serving loader.ts as the entry point
+        expect(applyFileChanges(root, ["package.json"]))
+            .toMatchObject({ changed: [], deleted: [], resolvedAll: true, edgesAdded: 0, edgesRemoved: 0, indexVersion: version + 1 });
         expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/main.ts"]);
+    });
+
+    it("a package.json saved with the same entry points keeps the index version", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        const version = readIndexVersion(getDb(), repoId);
+        // the same fields, written again with other spacing: everything re-resolves, and nothing it stores changes
+        write(root, "package.json", JSON.stringify({ name: "arch-repo", private: true, main: "src/app/loader.ts", workspaces: ["packages/*"] }));
+
+        expect(applyFileChanges(root, ["package.json"])).toMatchObject({ resolvedAll: true, edgesAdded: 0, edgesRemoved: 0, indexVersion: version });
+        expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
     });
 });

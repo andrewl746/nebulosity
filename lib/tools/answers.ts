@@ -332,6 +332,7 @@ function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; of
     if (u.declared.length > 0) lines.push(...listBlock(`Named as entry points by a package.json (${formatCount(u.declared.length)}):`, u.declared));
     if (u.others.length > 0){
         lines.push(`Not named anywhere (${formatCount(u.others.length)}):`);
+        if (page.offset >= u.others.length) return { lines: [...lines, `Nothing at offset ${page.offset}: the list has ${formatCount(u.others.length)}.`], notes: [UNUSED_NOTE] };
         const rest = u.others.slice(page.offset);
         const shown = fitting(rest.map((p) => `  ${p}`), page.limit, MAX_ANSWER_CHARS / 2);
         lines.push(...rest.slice(0, shown).map((p) => `  ${p}`));

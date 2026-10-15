@@ -327,6 +327,10 @@ export function architecture(repoRoot: string, targetPath: string, report: Archi
     return db.transaction(() => {
         const kind = requireKind(db, repoId, targetPath);
         if (kind === "file" && report !== "cycles") throw new BadInputError('architecture reads a folder ("" for the repo); for one file, ask for report "cycles".');
+        // through answers one file's cycle, in place of the groups: with the summary it would have left "Import cycles: none"
+        if (options.through !== undefined && report !== "cycles"){
+            throw new BadInputError('through goes with report "cycles": ask again with report "cycles" for the shortest import cycle through that file.');
+        }
         const through = kind === "file" ? targetPath : options.through;
         if (through !== undefined && requireKind(db, repoId, through) !== "file") throw new BadInputError("through takes a file.");
 

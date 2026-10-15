@@ -277,7 +277,10 @@ export type IndexEventMap = {
     levelEdges: number;
     /** Per-file failures: indexing is per-file error-tolerant (ADR-021). */
     errors: Array<{ path: string; error: string }>;
-    /** Files left out (over 20 MB, unreadable). A file over 1 MB is indexed for its imports only (ADR-053). */
+    /**
+     * Files left out: code files over 20 MB, docs over 1 MB, and files that couldn't be read. A code file over 1 MB is
+     * indexed for its imports only (ADR-053).
+     */
     skipped: number;
     totalMs: number;
   };

@@ -35,6 +35,9 @@ const byPath = (a: { path: string }, b: { path: string }): number => (a.path < b
  * Bigger than this is almost always generated or minified code, not something to read: a code file over it is indexed
  * for its imports only (ADR-053, amended), and a doc over it is skipped. VS Code's three agent-host tests of 1.0–1.6 MB
  * import real files, which is why the cap no longer drops a file outright.
+ * The product has this one cap: no command, the worker, the Map or the MCP server passes another, so the summary planner,
+ * the checkpoint's sample (compare.ts) and describe's importsOnly read it as the index did. The options that take
+ * another (IndexOptions, applyFileChanges, PlanOptions) are for tests, which shrink it to a few bytes.
  */
 export const DEFAULT_MAX_FILE_BYTES = 1_000_000;
 

@@ -169,8 +169,10 @@ function declaredWorkspaces(repoRoot: string, rootManifest: PackageJson | null):
     const exclude: string[][] = [];
     for (const glob of globs){
         const negated = glob.startsWith("!");
-        const segments = normalizeSlashes(negated ? glob.slice(1) : glob).split("/").filter((s) => s !== "" && s !== ".");
-        if (segments.length > 0) (negated ? exclude : include).push(segments);   // "." is the root, which counts anyway
+        for (const one of expandBraces(normalizeSlashes(negated ? glob.slice(1) : glob))){
+            const segments = one.split("/").filter((s) => s !== "" && s !== ".");
+            if (segments.length > 0) (negated ? exclude : include).push(segments);   // "." is the root, which counts anyway
+        }
     }
 
     return (dir) => {
@@ -185,6 +187,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringsIn(value: unknown): string[] {
     return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/** A glob's brace groups can't multiply past this many globs; the rest of a pathological one is dropped. */
+const MAX_BRACE_EXPANSION = 256;
+
+/**
+ * A glob with its brace groups opened, as package managers' glob libraries do: "{apps,packages}/*" is apps/* and
+ * packages/*, "ui-{web,{native,desktop}}" three names. The first group is opened, then each result again, so groups can
+ * nest or follow one another. A "{" with no "}" to close it, or a group with no comma, stays as written.
+ */
+export function expandBraces(glob: string): string[] {
+    const open = glob.indexOf("{");
+    if (open === -1) return [glob];
+    let depth = 0;
+    const commas: number[] = [];
+    for (let i = open; i < glob.length; i++){
+        const c = glob[i];
+        if (c === "{") depth++;
+        else if (c === "," && depth === 1) commas.push(i);
+        else if (c === "}" && --depth === 0){
+            // "{x}" is no choice: it stays as written, and a later group still opens
+            if (commas.length === 0) return expandBraces(glob.slice(i + 1)).map((rest) => glob.slice(0, i + 1) + rest);
+            const cuts = [open, ...commas, i];
+            const prefix = glob.slice(0, open);
+            const suffix = glob.slice(i + 1);
+            const out: string[] = [];
+            for (let k = 0; k + 1 < cuts.length && out.length < MAX_BRACE_EXPANSION; k++){
+                for (const rest of expandBraces(prefix + glob.slice(cuts[k] + 1, cuts[k + 1]) + suffix)){
+                    if (out.length < MAX_BRACE_EXPANSION) out.push(rest);
+                }
+            }
+            return out;
+        }
+    }
+    return [glob];
 }
 
 /** A folder's names against a glob's, one by one; `**` tries every number of folders, none included. */
