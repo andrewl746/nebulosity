@@ -31,9 +31,14 @@ export type Workspace = {
     idRoots: readonly string[];
     /** Longest outDir first, so a nested one wins over its parent. */
     outDirs: readonly OutDirMapping[];
+    /**
+     * Every package.json's folder, named or not, with its `imports` flattened ("#x" or "#x/*" → the targets to try;
+     * empty when it has none): the nearest one above a file is what that file's "#…" specifiers read (Node's package scope).
+     */
+    subpathImports: ReadonlyMap<string, ReadonlyMap<string, string[]>>;
 };
 
-export const EMPTY_WORKSPACE: Workspace = { byName: new Map(), packages: [], idRoots: [], outDirs: [] };
+export const EMPTY_WORKSPACE: Workspace = { byName: new Map(), packages: [], idRoots: [], outDirs: [], subpathImports: new Map() };
 
 /** An exports entry's conditions, in the order tried: the source first, then what TypeScript and bundlers read. */
 const CONDITIONS = ["source", "types", "typings", "import", "module", "default", "require", "node", "browser"];
@@ -53,6 +58,7 @@ export function readWorkspace(repoRoot: string, manifests: readonly string[]): W
     const packages: WorkspacePackage[] = [];
     const idRoots = new Set<string>();
     const outDirs: OutDirMapping[] = [];
+    const subpathImports = new Map<string, Map<string, string[]>>();
     let rootManifest: PackageJson | null = null;
 
     for (const rel of manifests){
@@ -60,6 +66,7 @@ export function readWorkspace(repoRoot: string, manifests: readonly string[]): W
         if (rel === "package.json" || rel.endsWith("/package.json")){
             const pkg = readJson(path.join(repoRoot, rel));
             if (rel === "package.json") rootManifest = pkg;
+            subpathImports.set(dir, flattenImports(pkg?.imports));
             if (pkg && typeof pkg.name === "string" && pkg.name !== "") packages.push(toPackage(pkg, dir));
         } else{
             // a tsconfig inside a test, fixture or example folder describes that sample, not the repo's own code
@@ -79,7 +86,7 @@ export function readWorkspace(repoRoot: string, manifests: readonly string[]): W
 
     packages.sort((a, b) => compare(a.dir, b.dir));
     outDirs.sort((a, b) => b.outDir.length - a.outDir.length || compare(a.outDir, b.outDir));
-    return { byName, packages, idRoots: [...idRoots].sort(compare), outDirs };
+    return { byName, packages, idRoots: [...idRoots].sort(compare), outDirs, subpathImports };
 }
 
 type PackageJson = Record<string, unknown>;
@@ -122,6 +129,21 @@ export function flattenExports(value: unknown): Map<string, string[]> {
         else out.set(".", targetsOf(value));
     }
     for (const [key, targets] of out) if (targets.length === 0) out.delete(key);
+    return out;
+}
+
+/**
+ * `imports` as "#key" → targets, read like `exports` (conditions in CONDITIONS order, null dropped). Only a target in
+ * the package ("./…") is kept: one naming an npm package ("#dep": "some-package") is outside the repo.
+ */
+export function flattenImports(value: unknown): Map<string, string[]> {
+    const out = new Map<string, string[]>();
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return out;
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)){
+        if (!key.startsWith("#")) continue;
+        const targets = targetsOf(entry).filter((t) => t.startsWith("./"));
+        if (targets.length > 0) out.set(key, targets);
+    }
     return out;
 }
 

@@ -101,12 +101,27 @@ describe("createResolver with the workspace (ADR-053)", () => {
 
     it("refuses a module id two roots both hold", () => {
         const both = createResolver("/repo", new Set(["a/lib/x.ts", "b/lib/x.ts", "c/main.ts"]), {
-            workspace: { byName: new Map(), packages: [], idRoots: ["a", "b"], outDirs: [] },
+            workspace: { byName: new Map(), packages: [], idRoots: ["a", "b"], outDirs: [], subpathImports: new Map() },
         });
         expect(both("c/main.ts", "lib/x")).toBeNull();
     });
 
     it("still resolves relative imports first, as before", () => {
         expect(resolve("src/app/main.ts", "../editor/node/editorFiles")).toBe("src/editor/node/editorFiles.ts");
+    });
+});
+
+describe("createResolver — a bundler's query (Vite's ?worker, ?url, ?inline)", () => {
+    const resolve = createResolver("/repo", new Set(["src/main.ts", "src/worker.ts", "src/theme.css.ts"]));
+
+    it("resolves the file named before the '?'", () => {
+        expect(resolve("src/main.ts", "./worker?worker")).toBe("src/worker.ts");
+        expect(resolve("src/main.ts", "./worker.js?worker&url")).toBe("src/worker.ts");
+        expect(resolve("src/main.ts", "./theme.css?inline")).toBe("src/theme.css.ts");
+    });
+
+    it("still gives nothing for a file the index doesn't hold, or for the importer itself", () => {
+        expect(resolve("src/main.ts", "./logo.svg?url")).toBeNull();
+        expect(resolve("src/main.ts", "./main?raw")).toBeNull();
     });
 });

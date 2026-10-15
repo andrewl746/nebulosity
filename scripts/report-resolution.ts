@@ -3,8 +3,9 @@
  *
  * The share of an indexed repo's import specifiers the resolver turns into files (S10). It reads the stored specifiers
  * and resolves each again with today's resolver, reading the repo's workspace as a full run does (ADR-053), so a
- * specifier whose target another specifier of the same file already reached still counts as resolved. Read-only: it
- * opens the database read-only (ADR-044) and writes nothing.
+ * specifier whose target another specifier of the same file already reached still counts as resolved. A relative one
+ * that resolves to nothing and names a file the index doesn't read (a style sheet, JSON, an image, a font) is counted on
+ * a line of its own, out of the relative share. Read-only: it opens the database read-only (ADR-044) and writes nothing.
  */
 import path from "path";
 import { getDb, useReadOnlyDatabase } from "../lib/db/client";
@@ -33,5 +34,9 @@ const pct = (r: { total: number; resolved: number }): string => (r.total === 0 ?
 
 console.log(`[resolution] ${repoKey(root)}: ${stored.size} files`);
 console.log(`[resolution] relative: ${report.relative.resolved}/${report.relative.total} (${pct(report.relative)})`);
+if (report.notCode.total > 0){
+    const top = report.notCode.byExtension.slice(0, 6).map((e) => `${e.extension} ${e.count}`).join(", ");
+    console.log(`[resolution] relative, not code: ${report.notCode.total} name files the index doesn't read (${top}${report.notCode.byExtension.length > 6 ? ", …" : ""}), left out above`);
+}
 console.log(`[resolution] bare: ${report.bare.resolved}/${report.bare.total} (${pct(report.bare)})`);
 for (const miss of report.unresolvedBare) console.log(`[resolution]   unresolved ${miss.name}: ${miss.count}`);

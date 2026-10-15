@@ -5,7 +5,7 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { discoverFiles } from "./discover";
 import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript";
 import { createResolver, createSourceFinder } from "./resolve";
-import { declaredEntries, expandBraces, flattenExports, packageNameOf, readWorkspace } from "./workspace";
+import { declaredEntries, expandBraces, flattenExports, flattenImports, packageNameOf, readWorkspace } from "./workspace";
 
 const fixture = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
 const found = discoverFiles(fixture, { extensions: TYPESCRIPT_EXTENSIONS });
@@ -221,5 +221,60 @@ describe("module-id roots (R3)", () => {
         expect(ws.idRoots).toEqual(["src"]);
         // only the fixture's folder holds lib/x, so the id means nothing
         expect(createResolver(root, new Set(["src/main.ts", "test/fixtures/proj/lib/x.ts"]), { workspace: ws })("src/main.ts", "lib/x")).toBeNull();
+    });
+});
+
+describe("flattenImports", () => {
+    it("keeps '#' keys whose targets are inside the package, conditions ordered as for exports", () => {
+        expect(flattenImports({ "#a": "./a.js", "#b/*": { default: "./b/*.js", types: "./b/*.d.ts" }, "#c": null, "#d": "dep", "./e": "./e.js" }))
+            .toEqual(new Map([["#a", ["./a.js"]], ["#b/*", ["./b/*.d.ts", "./b/*.js"]]]));
+    });
+
+    it("reads nothing from a field that isn't an object", () => {
+        expect(flattenImports(undefined)).toEqual(new Map());
+        expect(flattenImports(["./x.js"])).toEqual(new Map());
+    });
+});
+
+describe("subpath imports: a '#…' specifier reads the nearest package.json's imports (Node's package scope)", () => {
+    it("resolves exact keys, '*' patterns and conditions, as exports are read", () => {
+        // the imports of vite's packages/vite/package.json at bd325338, and a target naming an npm package
+        const root = makeRepo({
+            "package.json": { name: "monorepo", private: true },
+            "packages/vite/package.json": {
+                name: "vite",
+                imports: {
+                    "#module-sync-enabled": { "module-sync": "./misc/true.js", default: "./misc/false.js" },
+                    "#types/*": "./types/*.d.ts",
+                    "#dep-types/*": "./src/types/*.d.ts",
+                    "#npm": "some-npm-package",
+                },
+            },
+        });
+        const files = new Set([
+            "packages/vite/misc/false.js", "packages/vite/misc/true.js", "packages/vite/src/node/config.ts",
+            "packages/vite/src/types/alias.d.ts", "packages/vite/types/hot.d.ts",
+        ]);
+        const resolve = createResolver(root, files, { workspace: readWorkspace(root, ["package.json", "packages/vite/package.json"]) });
+        const importer = "packages/vite/src/node/config.ts";
+
+        expect(resolve(importer, "#types/hot")).toBe("packages/vite/types/hot.d.ts");
+        expect(resolve(importer, "#dep-types/alias")).toBe("packages/vite/src/types/alias.d.ts");
+        // "default" is one of the conditions tried in order; "module-sync" isn't, so it comes after
+        expect(resolve(importer, "#module-sync-enabled")).toBe("packages/vite/misc/false.js");
+        expect(resolve(importer, "#npm")).toBeNull();
+        expect(resolve(importer, "#types/missing")).toBeNull();
+    });
+
+    it("reads only the nearest package.json, named or not", () => {
+        const root = makeRepo({
+            "package.json": { name: "app", imports: { "#util": "./lib/util.ts" } },
+            "tools/package.json": { private: true },
+        });
+        const files = new Set(["lib/util.ts", "src/a.ts", "tools/b.ts"]);
+        const resolve = createResolver(root, files, { workspace: readWorkspace(root, ["package.json", "tools/package.json"]) });
+
+        expect(resolve("src/a.ts", "#util")).toBe("lib/util.ts");
+        expect(resolve("tools/b.ts", "#util")).toBeNull();   // tools/package.json is its scope, and it has no imports
     });
 });

@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import { dirOf, joinRepoPath, normalizeSlashes } from "./paths";
-import { EMPTY_WORKSPACE, packageNameOf, type Workspace, type WorkspacePackage } from "./workspace";
+import { EMPTY_WORKSPACE, packageNameOf, type Workspace } from "./workspace";
 import type { ImportEdge } from "../db/store/structure";
 
 /** Tried, in order, after a specifier that names no file directly. */
@@ -25,6 +25,15 @@ type PathsConfig = { baseDir: string | null; patterns: PathPattern[] };
 export type Resolver = (importer: string, specifier: string) => string | null;
 
 export type ResolverOptions = { workspace?: Workspace };
+
+/**
+ * A specifier without a bundler's query: Vite's "./worker?worker" and "./logo.svg?url", webpack's "./x?inline", name the
+ * file before the "?". A "?" can't be in a Windows file name and is rare anywhere else. One at the very start is left.
+ */
+function withoutQuery(specifier: string): string {
+    const query = specifier.indexOf("?");
+    return query > 0 ? specifier.slice(0, query) : specifier;
+}
 
 /** A path as written to the file it names: itself, NodeNext .js → .ts, an added extension, or a folder's index file. */
 function findFile(fileSet: ReadonlySet<string>, base: string): string | null {
@@ -71,17 +80,34 @@ function packageCandidates(workspace: Workspace, specifier: string): string[] {
         return joined === null ? [] : [joined];
     };
     const key = sub === "" ? "." : `./${sub}`;
-    const candidates = [...exportTargets(pkg, key).flatMap(at)];
+    const candidates = [...mappedTargets(pkg.exports, key).flatMap(at)];
     if (sub === "") candidates.push(...pkg.mains.flatMap((m) => at(m.target)), ...at("src/index"), ...at("index"));
     else candidates.push(...at(sub), ...at(`src/${sub}`));
     return candidates;
 }
 
-/** An exports key's targets: the exact key, else the first "*" pattern it fits, with the star filled in. */
-function exportTargets(pkg: WorkspacePackage, key: string): string[] {
-    const exact = pkg.exports.get(key);
+/**
+ * The paths a "#…" specifier can mean (Node's subpath imports): the `imports` of the nearest package.json above the
+ * importer, named or not, read as `exports` are. A folder with no package.json above it has none.
+ */
+function subpathImportCandidates(workspace: Workspace, importer: string, specifier: string): string[] {
+    for (let dir = dirOf(importer); ; dir = dirOf(dir)){
+        const imports = workspace.subpathImports.get(dir);
+        if (imports !== undefined){
+            return mappedTargets(imports, specifier).flatMap((t) => {
+                const joined = joinRepoPath(dir, t);
+                return joined === null ? [] : [joined];
+            });
+        }
+        if (dir === "") return [];
+    }
+}
+
+/** An exports or imports key's targets: the exact key, else the first "*" pattern it fits, with the star filled in. */
+function mappedTargets(map: ReadonlyMap<string, string[]>, key: string): string[] {
+    const exact = map.get(key);
     if (exact) return exact;
-    for (const [pattern, targets] of pkg.exports){
+    for (const [pattern, targets] of map){
         const star = pattern.indexOf("*");
         if (star === -1) continue;
         const prefix = pattern.slice(0, star);
@@ -134,7 +160,7 @@ export function createResolver(repoRoot: string, fileSet: ReadonlySet<string>, o
     };
 
     return (importer, rawSpecifier) => {
-        const specifier = normalizeSlashes(rawSpecifier);
+        const specifier = withoutQuery(normalizeSlashes(rawSpecifier));
         const isRelative = specifier === "." || specifier === ".." || specifier.startsWith("./") || specifier.startsWith("../");
         const candidates: string[] = [];
 
@@ -144,6 +170,7 @@ export function createResolver(repoRoot: string, fileSet: ReadonlySet<string>, o
         } else{
             const config = nearestConfig(dirOf(importer));
             if (config) candidates.push(...aliasCandidates(config, specifier));
+            if (specifier.startsWith("#")) candidates.push(...subpathImportCandidates(workspace, importer, specifier));
             candidates.push(...packageCandidates(workspace, specifier));
         }
 

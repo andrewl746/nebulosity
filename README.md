@@ -48,32 +48,101 @@ The setup: 15 questions on VS Code at commit `cc3fec88`, 2 runs per question and
 
 ## Try it on your repo
 
-You need Node 24 and git. Nebulosity runs locally, and has been tested on Windows so far; V1.6 adds an installable package and macOS and Linux runs.
+**Who it's for:** you're new to a big TypeScript or JavaScript codebase, and you use Claude Code. Nebulosity gives Claude Code the repo's whole import graph and a map of its parts, and gives you the Map to look at while it explains.
 
-1. `git clone https://github.com/andrewl746/Nebulosity && cd Nebulosity && npm install`
-2. Index a repo: `npm run index -- /path/to/your/repo` (VS Code's 14,844 TypeScript and JavaScript files take about a minute).
-3. Optional, summaries: put `ANTHROPIC_API_KEY=…` in `.env.local` in the Nebulosity folder, then `npm run summarize -- /path/to/your/repo`. They cost about $1 per 1,000 files ($10.30 for VS Code), and your code is sent to Anthropic to write them. Spending on a repo's summaries is capped at $15 unless you raise it with `--budget`. Without a key, the structure index needs no API, and the six MCP tools answer in free mode: where a summary would go they say summaries are off and what a key adds, and search uses code, file and folder names ([ADR-047](docs/ENGINEERING_DECISIONS.md); the tools' tests run on a repo indexed with no key).
-4. Open the Map: `npm run dev`, then http://localhost:3000. (`npm run build`, then `npm start`, is the production build the Map's speeds below were measured on.)
-5. Connect Claude Code. Nebulosity's MCP server gives Claude Code the index: an overview of the repo, what any folder or file is, search, dependency lists that are exact and complete over the repo's indexed import graph, import chains, and pointing at things on the Map. Register the server for that repo: run this in the repo's folder (the one you indexed). Use forward slashes in the path, also on Windows, and quotes if it has spaces:
+### Install
 
-   ```bash
-   claude mcp add --scope local --transport stdio nebulosity -- node /path/to/Nebulosity/mcp/launch.mjs
-   ```
+You need Node 24 or later and git. Claude Code is what the MCP server plugs into.
 
-   `--scope local` keeps it to that project; do this once for each repo you index. Don't use `--scope user`: it would start the server in every project, including ones Nebulosity hasn't indexed, whose sessions would get answers about the repo the Map shows. No `npx`, so Windows needs no `cmd /c` wrapper.
+Once Nebulosity is published to npm:
 
-   Check, in the same folder: `claude mcp list` shows `nebulosity` as connected.
+```bash
+npm install -g nebulosity
+```
 
-The server answers about the indexed repo that holds the folder Claude Code runs in, or else the repo the Map shows. It only reads the index, so keep the Map running (`npm run dev`) to have changes picked up as files change. To keep tool calls off the Map, add `-e NEBULOSITY_LIVE=off` before `--transport`.
+Until then, install it from a checkout:
 
-Claude Code defers MCP tools by default and loads one when it decides to: in the eval it loaded Nebulosity's in 12 of 30 runs, all of them on questions about import chains or dependents through other files. Starting Claude Code with `ENABLE_TOOL_SEARCH=false` loads them up front: in the eval they were then used in 22 of 30 runs, their definitions added about 13,000 tokens to every turn's context, and the scores were 0.77 on big-picture, 0.97 on lists and 1.00 on connections (0.82, 0.94 and 1.00 at the default).
+```bash
+git clone https://github.com/andrewl746/Nebulosity
+cd Nebulosity
+npm install
+npm run build    # builds the Map
+npm link         # puts the nebulosity command on your PATH
+```
+
+`nebulosity doctor` checks Node, git, Claude Code and Nebulosity's data folder, and says what's missing.
+
+### Three commands
+
+Run them in your repo's root folder:
+
+```bash
+nebulosity index .    # read the repo: its folders, files and every import between them (free)
+nebulosity map        # open the Map at http://localhost:3000
+nebulosity setup      # connect Claude Code to this repo
+```
+
+- **`index`** takes about a minute for VS Code's 15,000 files and a few seconds for most repos. Run it again whenever you like; it only re-reads files that changed. While the Map runs, it keeps the index up to date as you save files.
+- **`setup`** registers Nebulosity's MCP server with Claude Code for this repo only (`claude mcp add --scope local`). Do it once per repo. Afterwards `claude mcp list` shows `nebulosity` as connected. `nebulosity setup --print` shows the command instead of running it.
+- **Where the index lives:** in your user data folder (`%LOCALAPPDATA%\Nebulosity` on Windows, `~/Library/Application Support/Nebulosity` on macOS, `~/.local/share/nebulosity` on Linux), or in `.nebulosity/` inside a checkout. Nothing is written into your repo.
+
+### Without an API key (free mode)
+
+Everything except summaries works without a key, and without one nothing is sent to Anthropic:
+- the index, and the Map with its folders, files, import lines, panels and source viewer;
+- search over code, declarations, file names and folder names;
+- all six tools in Claude Code.
+
+Where a summary would go, Nebulosity says summaries are off and what a key would add.
+
+### Summaries: the paid upgrade
+
+With an Anthropic API key, `nebulosity summarize .` writes a short summary of every file and folder. Summaries make the Map's panels, `overview` and `describe` read like a guide, and let search match by meaning, not only by words.
+- **Your code goes to Anthropic:** each file's code is sent to write its summary.
+- **It costs about $1 per 1,000 files, or a little less:** $10.30 for VS Code, $6.02 for AFFiNE.
+- **It asks first:** the command prints its estimate and spends nothing until you say yes (`--yes` for scripts). A repo's spend is capped at $15 unless you raise it with `--budget`.
+- **The key** goes in your environment as `ANTHROPIC_API_KEY`, or in a `.env.local` file in the data folder above (in a checkout, in the checkout's folder).
+
+A big first run goes through Anthropic's Batch API at half price, so it can take a while; `--no-wait` returns at once, and running the command again picks up where it left off.
+
+### The six tools Claude Code gets
+
+- **`overview`**: start here. The repo's size and summary, its top-level areas, the docs to read first, and the files most others import.
+- **`describe`**: what a folder or file is: its summary, what's inside, what it imports from and what imports it, with exact counts, and the docs that describe it.
+- **`search`**: where a feature or concept lives, across code, summaries, file and folder names, and declarations.
+- **`imports`**: exact answers from the whole import graph in one call: what imports a file or folder, what it imports, what a change would affect, and the shortest import chain between two places.
+- **`architecture`**: how a folder's code is organized, computed from its imports: its layers and the imports that go against them, recurring folder conventions, import cycles, and files nothing imports.
+- **`show_on_map`**: points at files or folders on the Map while Claude Code explains them.
+
+Good to know:
+- The server answers about the indexed repo that holds the folder Claude Code runs in. It only reads the index, so keep `nebulosity map` running to have changes picked up as you edit.
+- Claude Code loads MCP tools when it decides it needs them. In Eval #1 it used Nebulosity's on the questions that walk the import graph, and not on big-picture ones. Starting Claude Code with `ENABLE_TOOL_SEARCH=false` loads them up front, at about 13,000 tokens of context per turn.
+- To keep tool calls off the Map, run `nebulosity setup --print`, add `-e NEBULOSITY_LIVE=off` right after the name `nebulosity` in the line it prints, and run that line.
+
+### Windows, macOS and Linux
+
+Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map.
+
+### Tested on
+
+Five real repos of different shapes, each indexed from a fresh clone ([Variety Benchmark #1](docs/BENCHMARKS.md)):
+
+| Repo | Shape | Files indexed | Links between files | Relative imports resolved |
+|---|---|---|---|---|
+| [express](https://github.com/expressjs/express) | plain JavaScript, one package | 141 | 153 | 100% |
+| [vite](https://github.com/vitejs/vite) | pnpm monorepo, packages built by a bundler | 1,599 | 2,059 | 99.1% |
+| [excalidraw](https://github.com/excalidraw/excalidraw) | yarn workspaces, a React app with path aliases | 710 | 3,678 | 100% |
+| [AFFiNE](https://github.com/toeverything/AFFiNE) | a large yarn monorepo, 124 packages | 6,987 | 26,261 | 99.99% |
+| [VS Code](https://github.com/microsoft/vscode) | one very large repo, no workspaces | 14,849 | 140,583 | 99.5% |
+
+Imports of style sheets, images, fonts and JSON aren't counted: the index reads code. Imports of npm packages stay outside the graph on purpose. A monorepo's imports of its own packages by name are linked, with one known gap: a package whose entry file exists only after a build, like vite's own `vite`.
 
 ## How it works
 
 ```
 your repo
-   │  npm run index: discover → parse (TypeScript's compiler) → resolve imports → aggregate folders
-   │  npm run summarize (optional): summaries of files and folders, then local embeddings of them
+   │  nebulosity index: discover → parse (TypeScript's compiler) → resolve imports → aggregate folders
+   │  nebulosity summarize (optional): summaries of files and folders, then local embeddings of them
    ▼
 SQLite in WAL mode: files, imports, folders, summaries, full-text search, vectors
    │
@@ -101,7 +170,7 @@ Measured on VS Code (20,342 files, 14,844 of them indexed): the structure index 
 
 ## Status
 
-V1.5 is done: the engine, the Map, the MCP server, the static demo build and the eval. It reads TypeScript and JavaScript only, and has been run at VS Code's scale on one repo, on Windows. Next: V1.6, so it works on your repo without cloning this one: an installable package, macOS and Linux, and the whole no-key path, the Map included, checked and packaged as a free mode, plus the two index limits the eval found. Then Python support, clustering, and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+V1.5 is done: the engine, the Map, the MCP server, the static demo build and the eval. V1.6 makes it work on your repo: one `nebulosity` command, Windows, macOS and Linux, a free mode with no API key, and five real repos of different shapes tested. It reads TypeScript and JavaScript only. Then Python support, clustering, and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
 
 ## Why I built this
 

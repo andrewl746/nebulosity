@@ -748,3 +748,64 @@ Afterwards 8,971/8,971 summaries were up to date, and all 8,036 new ones were em
 - **Recorded spend:** VS Code's total went from $10.40 to $10.41.
 
 With it, Task 20 spent about $6.03 of the owner's $12.
+
+## 2026 10 15 Variety Benchmark #1 — five real repos
+
+- **Targets and machine:** the owner's laptop, Node 24.14.0, the TypeScript adapter at version 4.
+
+  | Repo | Commit | Shape |
+  |---|---|---|
+  | express | `a419aa73` | plain JavaScript (CommonJS), one package, no TypeScript and no workspaces |
+  | vite | `bd325338` | pnpm monorepo (`packages/*`, `playground/**`, `docs`), 303 package.json files, packages built by a bundler (rolldown, tsdown) with no tsconfig `outDir`, package.json `imports` (`#types/*`) |
+  | excalidraw | `4c37956b` | yarn workspaces (`excalidraw-app`, `packages/*`, `examples/*`), a React app in TypeScript, tsconfig `paths` for each of its packages |
+  | AFFiNE | `0b69a6da` | yarn 4 workspaces, 124 package.json files, a large TypeScript monorepo with dependency injection (repo 2) |
+  | VS Code | `cc3fec88` | one large repo with no declared workspaces: extensions with their own package.json, module ids (`vs/…`) |
+
+  express, vite and excalidraw are shallow clones in `../repos/`.
+- **Commands:** with `NEBULOSITY_DATA` set to a scratch folder, for each repo `npx tsx scripts/index.ts <repo> --no-activate`, then `npm run report-resolution -- <repo>`. The owner's index wasn't touched.
+  - The structure times are each repo's first, cold run in that folder, made with the code before ADR-053's amendment of this day. The amendment changes only how imports resolve, and resolving VS Code's specifiers took 0.6–1.3 s with either version (three alternating passes).
+  - After the amendment, each repo was indexed again in the same folder, and report-resolution run. The rows below are those runs.
+- **Counting:**
+  - "relative" counts relative specifiers (`./x`, `../y`) that name code;
+  - "not code" counts relative specifiers that resolve to nothing and name a file the index doesn't read (a style sheet, JSON, an image, a font, a `.vue` component). report-resolution prints these on a line of their own, by extension, and leaves them out of the relative share (ADR-053, amended);
+  - "bare" counts everything else (`react`, `@affine/core`, `vs/…`, `#types/hot`). It resolves only when it names the repo's own code, so a repo that imports many npm packages has a low bare share by design.
+
+| Repo | Files | Edges | Structure | Relative resolved | Not code | Bare resolved | Top unresolved bare names |
+|---|---|---|---|---|---|---|---|
+| express | 141 | 153 | 0.3 s | 153/153 (100%) | 0 | 0/240 (0%) | supertest 80, node:assert 31, node:path 21, node:buffer 13, after 10 |
+| vite | 1,599 | 2,059 | 1.9 s | 1,745/1,760 (99.1%) | 222 (.css 129, .svg 37, .json 16, .png 15, .vue 8) | 318/1,725 (18.4%) | node:path 203, vitest 191, vite 170, rolldown 108, node:fs 105 |
+| excalidraw | 710 | 3,678 | 2.9 s | 2,530/2,530 (100%) | 323 (.woff2 230, .scss 85, .css 4, .json 4) | 1,150/1,736 (66.2%) | react 225, clsx 80, vitest 48, radix-ui 25, @testing-library/react 20 |
+| AFFiNE | 6,987 | 26,261 | 17.3 s | 14,473/14,475 (99.99%) | 636 (.svg 472, .json 69, .png 39, .node 30, .jpg 9) | 11,795/20,671 (57.1%) | lit 1,637, react 924, @toeverything/theme 719, @blocksuite/icons 606, @vanilla-extract/css 431 |
+| VS Code | 14,849 | 140,583 | 62.7 s * | 139,022/139,763 (99.5%) | 822 (.css 773, .json 49) | 1,563/11,350 (13.8%) | assert 2,921, vscode 725, fs 684, path 552, vitest 468 |
+
+\* The machine was shared with another job during this run. S1 is measured on a quiet machine (Index Benchmark #5: 55.7 s at worst of three).
+
+**S10: every repo indexed without a crash, and every repo resolves at least 99% of its relative imports of code.**
+- **Every unresolved bare name above is outside the repo,** except vite's own `vite` (below). The others are Node's built-ins, npm packages and VS Code's extension API (`vscode`). Among the next names, VS Code's `@vscode/prompt-tsx` (292) is an npm package that a test fixture's package.json also carries. The fixture is no declared workspace, so it doesn't capture the name (ADR-053).
+- **Two repos were under 95% on the old counting**, which put style sheets, fonts and images among relative imports: vite at 1,720/1,982 (86.8%) and excalidraw at 2,530/2,853 (88.7%). Every miss was read:
+
+| vite's 262 unresolved relative specifiers, before the amendment | Count | Now |
+|---|---|---|
+| not code: styles, images, JSON, `.vue`/`.svelte`, `.wasm`, media | 222 | counted apart |
+| a bundler's query on a code file (`./worker?worker`, `./x.js?url`) | 26 | 25 resolve; 1 names its own file |
+| build output the checkout doesn't have (`../dist/node/cli.js`, `./dist/app.js`) | 6 | unresolved (a limit) |
+| `playground/resolve/browser-field`: paths a package.json `browser` field remaps | 3 | unresolved (a limit) |
+| fixtures that import a missing file on purpose (`./non-existent.js`) | 2 | unresolved, rightly |
+| a folder imported through its package.json `main` (`./bar`, `./`) | 2 | unresolved (a limit) |
+| `./foo` naming `foo.json` | 1 | unresolved (JSON isn't indexed) |
+
+  excalidraw's 323 are all not code: fonts (230 `.woff2`, from `packages/excalidraw/fonts/`), style sheets (89) and JSON (4).
+- **vite's bare misses that name its own code:**
+  - `#types/*`, `#dep-types/*` and `#module-sync-enabled` (77, plus 3 in config fixtures) are subpath imports that `packages/vite/package.json` declares in `imports`. They now resolve.
+  - `vite` (170) is its own package, a declared workspace (`packages/*` in pnpm-workspace.yaml). Its `exports` point at `./dist/node/index.js`, which rolldown builds from `src/node/index.ts` with no tsconfig `outDir`, so ADR-053's compiled → source mapping doesn't apply. The 170 are mostly the playground's and the templates' configs (`import { defineConfig } from 'vite'`).
+  - Reading a package's missing `dist/` as its `src/` would resolve 168 of them, with no edge changed on VS Code or AFFiNE and one more VS Code entry point. It is a limit for now (ADR-053's revisit).
+- **The amendment moved nothing on the eval's repos.** Each repo's stored edges (source, target and specifier) and entry points were dumped before and after the second run, and compared line by line:
+  - VS Code (140,583 edges, 50 entry points), AFFiNE (26,261, 100), express and excalidraw are identical;
+  - vite gained 103 edges, with none removed: 80 from `#…` specifiers, and 23 from the 25 queries that now resolve (a file that imports one file twice, with two different queries, has one edge to it).
+- **What VS Code's and AFFiNE's relative misses are:**
+  - VS Code's 741:
+    - 669 name files that don't exist at this commit: 483 in Copilot's test fixtures, which are copies of VS Code files without their neighbours, 76 in the colorizer's perf-test fixtures, and the rest mostly other Copilot tests and files the build generates and git ignores (`build/lib/policies/policyDto.ts`, `test/automation/src/driver.d.ts`);
+    - 63 are `test/mcp`'s imports of the folder `test/scenario` through its package.json `main`, the limit above;
+    - 9 name scripts or other endings (`.ps1`, a diff fixture's `./gulpfile.compile`).
+  - AFFiNE's 2: a declaration file that imports its own name (`packages/backend/native/index.d.ts`), and `affine.wasi.cjs`, which isn't in the repo.
+- **Against Index Benchmark #4:** VS Code's relative share read 98.9% there, and AFFiNE's 95.8%. The difference is the counting (822 and 636 specifiers now counted apart), plus the import types and over-cap files ADR-053's earlier amendment added.
