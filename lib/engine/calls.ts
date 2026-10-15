@@ -86,13 +86,14 @@ export function buildCallIndex(decls: readonly StoredTypeDecl[], bindings: reado
     const edgeOf = (file: string, specifier: string | null): string | null => (specifier === null ? null : targets.get(`${file}\0${specifier}`) ?? null);
 
     // a name in a file: a type declared there, or what its import binding brings in
-    const resolveLocal = (file: string, name: string, hops: number): Found => {
+    // one visited set per resolution, shared by both functions: a local re-export (`import { X } from "./b"; export { X }`) goes round the same cycle, and a fresh set each time would walk it MAX_HOPS deep through every `export *`
+    const resolveLocal = (file: string, name: string, hops: number, visited: Set<string> = new Set()): Found => {
         const local = localTypes.get(file)?.get(name);
         if (local !== undefined) return { type: local };
         const b = (bindingsOf.get(file) ?? []).find((x) => x.kind === "import" && x.local === name);
         const into = b ? edgeOf(file, b.specifier) : null;
         if (!b || into === null) return null;
-        return b.imported === "*" ? { namespace: into } : resolveExport(into, b.imported, hops + 1, new Set());
+        return b.imported === "*" ? { namespace: into } : resolveExport(into, b.imported, hops + 1, visited);
     };
     // a name a module exports: its own type, a local export, a re-export, or what an `export *` passes on
     const resolveExport = (file: string, name: string, hops: number, visited: Set<string>): Found => {
@@ -105,7 +106,7 @@ export function buildCallIndex(decls: readonly StoredTypeDecl[], bindings: reado
         }
         const own = bindingsOf.get(file) ?? [];
         const exported = own.find((x) => x.kind === "export" && x.local === name);
-        if (exported) return resolveLocal(file, exported.imported, hops + 1);
+        if (exported) return resolveLocal(file, exported.imported, hops + 1, visited);
         const renamed = own.find((x) => x.kind === "reexport" && x.local === name);
         if (renamed){
             const into = edgeOf(file, renamed.specifier);

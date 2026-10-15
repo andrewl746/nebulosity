@@ -154,6 +154,37 @@ describe("buildCallIndex: loops end (Review Focus 1), one name is one type (Revi
         expect([...subtypes]).toEqual(["b.ts#B"]);
     });
 
+    // barrel.ts does `export *` from w1..w6; each wN does `import { X } from "./barrel"; export { X }`; c.ts imports X from the barrel
+    const barrelFacts = (extra: string[]) => {
+        const ws = ["w1.ts", "w2.ts", "w3.ts", "w4.ts", "w5.ts", "w6.ts", ...extra];
+        const bindings = [
+            ...ws.map((w) => ({ path: "barrel.ts", kind: "reexport" as const, local: "*", imported: "*", specifier: "./" + w.replace(".ts", "") })),
+            ...ws.filter((w) => w.startsWith("w")).flatMap((w) => [
+                { path: w, kind: "import" as const, local: "X", imported: "X", specifier: "./barrel" },
+                { path: w, kind: "export" as const, local: "X", imported: "X", specifier: null },
+            ]),
+            { path: "c.ts", kind: "import" as const, local: "X", imported: "X", specifier: "./barrel" },
+        ];
+        const edges = [
+            ...ws.map((w) => ({ source: "barrel.ts", target: w, specifier: "./" + w.replace(".ts", "") })),
+            ...ws.filter((w) => w.startsWith("w")).map((w) => ({ source: w, target: "barrel.ts", specifier: "./barrel" })),
+            { source: "c.ts", target: "barrel.ts", specifier: "./barrel" },
+        ];
+        return { bindings, edges };
+    };
+
+    it("a cycle through local re-exports of a name that is no class or interface answers null at once", () => {
+        const { bindings, edges } = barrelFacts([]);
+        const index = buildCallIndex([], bindings, edges);
+        expect(index.resolve("c.ts", "X")).toBeNull();
+    });
+
+    it("a name reached through that cycle is still found down another export * branch", () => {
+        const { bindings, edges } = barrelFacts(["real.ts"]);
+        const index = buildCallIndex([decl("real.ts", "X")], bindings, edges);
+        expect(index.resolve("c.ts", "X")).toBe("real.ts#X");
+    });
+
     it("merges two declarations of one name in a file", () => {
         const index = buildCallIndex([decl("f.ts", "IFoo", ["IA"], ["a"]), decl("f.ts", "IFoo", ["IB"], ["b"])], [], []);
         expect([...index.types.get("f.ts#IFoo")!.members].sort()).toEqual(["a", "b"]);
