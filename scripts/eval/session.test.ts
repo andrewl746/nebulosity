@@ -55,6 +55,7 @@ describe("summarizeSession", () => {
         expect(s.turns).toHaveLength(2);
         expect(s.turns[0].finalText).toBe("It printed 42.");
         expect(s.turns[1].finalText).toBe("No, I could not.");
+        expect(s.turns.map((t) => t.subtype)).toEqual(["success", "success"]);
         // cumulative 0.02 then 0.03: the second message cost 0.03 - 0.02
         expect(s.turns[0].costUsd).toBeCloseTo(0.02, 10);
         expect(s.turns[1].costUsd).toBeCloseTo(0.01, 10);

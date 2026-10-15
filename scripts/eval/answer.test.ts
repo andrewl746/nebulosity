@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerSection, extractPaths, isNone, scoreChain, scoreList } from "./answer";
+import { answerSection, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreCycle, scoreList, scorePairs } from "./answer";
 
 describe("answerSection", () => {
     it("takes the text after the last ANSWER: line, in any case, with markdown around it", () => {
@@ -89,5 +89,53 @@ describe("scores", () => {
         const none = { from: "d", to: "a", connected: false, shortest: null };
         expect(scoreChain({ none: true, files: ["d", "a"] }, none, () => false)).toEqual({ score: 1, valid: true, steps: null });
         expect(scoreChain({ none: false, files: ["d", "a"] }, none, () => false)).toMatchObject({ score: 0, problem: "claims a chain where none exists" });
+    });
+});
+
+describe("the new kinds' scores", () => {
+    it("scores counts per line as 1 − the relative error, floored at 0, missing lines 0", () => {
+        const answer = "Some text\nANSWER:\nsrc/app: 3\nsrc/base: 2\nelsewhere: 1\ntotal: 20";
+        const truth = { counts: [["src/app", 3], ["src/base", 4], ["src/editor", 5]] as [string, number][], elsewhere: 1, total: 16 };
+        // src/app 1; src/base 1 − 2/4 = 0.5; src/editor missing 0; elsewhere 1; total 1 − 4/16 = 0.75 → mean 3.25 / 5
+        expect(scoreCounts(answerSection(answer)!, truth)).toBeCloseTo(0.65, 10);
+    });
+
+    it("reads counts with thousands separators, bullets, bold and any case", () => {
+        const truth = { counts: [["Src/App", 1200]] as [string, number][], elsewhere: 0, total: 1200 };
+        expect(scoreCounts("- **src/app**: 1,200\nTOTAL: 1,200\nElsewhere: 0", truth)).toBe(1);
+    });
+
+    it("scores F1 over a list", () => {
+        expect(f1(["a", "b", "x"], ["a", "b", "c", "d"])).toBeCloseTo(2 * (2 / 3) * (2 / 4) / ((2 / 3) + (2 / 4)), 10);
+        expect(f1([], [])).toBe(1);
+        expect(f1(["a"], [])).toBe(0);
+    });
+
+    it("reads pairs written 'a -> b' or with an arrow, in any case and spacing", () => {
+        expect(scorePairs(["common -> browser", "node→common", " Browser ->  browser "], [["browser", "browser"], ["common", "browser"], ["node", "common"], ["node", "node"]]))
+            .toBeCloseTo(2 * 1 * 0.75 / 1.75, 10);
+    });
+
+    it("scores a cycle: 1 shortest, 0.5 longer, 1 a right none, 0 a wrong none or an invalid step", () => {
+        const edges = new Set(["m>t", "t>x", "x>m", "m>y", "y>z", "z>m"]);
+        const imports = (a: string, b: string): boolean | null => edges.has(`${a}>${b}`);
+        expect(scoreCycle(["m", "t", "x", "m"], { file: "m", shortest: 3 }, imports)).toBe(1);
+        expect(scoreCycle(["m", "y", "z", "m", "t", "x", "m"], { file: "m", shortest: 3 }, imports)).toBe(0.5);
+        expect(scoreCycle("none", { file: "s", shortest: null }, imports)).toBe(1);
+        expect(scoreCycle("none", { file: "m", shortest: 3 }, imports)).toBe(0);
+        expect(scoreCycle(["m", "x", "m"], { file: "m", shortest: 3 }, imports)).toBe(0);
+    });
+
+    it("rejects a cycle that doesn't start and end at the file, and a one-step self loop", () => {
+        const imports = (a: string, b: string): boolean | null => ["m>t", "t>x", "x>m", "m>m"].includes(`${a}>${b}`);
+        expect(scoreCycle(["t", "x", "m", "t"], { file: "m", shortest: 3 }, imports)).toBe(0);
+        expect(scoreCycle(["m", "m"], { file: "m", shortest: 3 }, imports)).toBe(0);
+        expect(scoreCycle(["m", "t", "x", "m"], { file: "m", shortest: null }, imports)).toBe(0);
+    });
+
+    it("keeps a path's repeats when asked, so a cycle's first and last file both show", () => {
+        const known = new Set(["m.ts", "t.ts"]);
+        expect(extractPaths("m.ts\nt.ts\nm.ts", "/r", known).files).toEqual(["m.ts", "t.ts"]);
+        expect(extractPaths("m.ts\nt.ts\nm.ts", "/r", known, { repeats: true }).files).toEqual(["m.ts", "t.ts", "m.ts"]);
     });
 });

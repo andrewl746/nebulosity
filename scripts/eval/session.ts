@@ -12,7 +12,7 @@ import { schedule, type RunId } from "./run-config";
 import { streamEvents, summarizeRun, type Json, type RunSummary } from "./transcript";
 import { infrastructureFailure } from "./validate";
 
-export type SessionTurn = { finalText: string | null; costUsd: number; durationMs: number; toolCalls: Record<string, number>; nebulosityCalls: number };
+export type SessionTurn = { finalText: string | null; subtype: string | null; costUsd: number; durationMs: number; toolCalls: Record<string, number>; nebulosityCalls: number };
 export type SessionSummary = { turns: SessionTurn[]; costUsd: number; durationMs: number; firstCallContext: number | null };
 
 /** One line of stdin that sends a user message (the newline is the writer's). */
@@ -78,7 +78,7 @@ export function summarizeSession(jsonl: string): SessionSummary {
             if (firstCallContext === null && usage) firstCallContext = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
         } else if (e.type === "result"){
             const total: number = e.total_cost_usd ?? previousTotal;
-            turns.push({ finalText: e.result ?? null, costUsd: total - previousTotal, durationMs: e.duration_ms ?? 0, toolCalls, nebulosityCalls });
+            turns.push({ finalText: e.result ?? null, subtype: e.subtype ?? null, costUsd: total - previousTotal, durationMs: e.duration_ms ?? 0, toolCalls, nebulosityCalls });
             previousTotal = total;
             toolCalls = {};
             nebulosityCalls = 0;
