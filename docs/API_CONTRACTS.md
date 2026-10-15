@@ -342,7 +342,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 
 **Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; imports its target, or with `to` the target, `to`, then the chain between; architecture its path; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
 
-**Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 4,096 characters since 2.1.296, 2,048 before), are `SERVER_INSTRUCTIONS` in the registry: when to reach for each tool, under 2,048 characters so older clients keep all of it. Since 2026-10-15 they end by saying the docs the answers name are the maintainers' own account, to open before answering how the code is organized or why (ADR-054, amended).
+**Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 4,096 characters since 2.1.296, 2,048 before), are `SERVER_INSTRUCTIONS` in the registry: when to reach for each tool, under 2,048 characters so older clients keep all of it. Since 2026-10-15 their next-to-last sentence says the docs the answers name are the maintainers' own account, to open before answering how the code is organized or why (ADR-054, amended).
 
 ## 18. The static demo's files (slice V1.5)
 
