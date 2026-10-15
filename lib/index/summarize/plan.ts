@@ -1,8 +1,11 @@
 import { createHash } from "crypto";
 import type { StoredSummaryStatus, SummaryTargetKind } from "../../db/schema";
 import { targetKey, type FileFacts, type FolderFacts, type StoredSummary, type SummaryText } from "../../db/store/summaries";
+import { DEFAULT_MAX_FILE_BYTES } from "../discover";
 import { dirOf } from "../paths";
-import { PROMPT_VERSION, renderFolderPrompt, renderRepoPrompt, testFileSummary, testFolderSummary, type FolderItem } from "./prompts";
+import {
+    importsOnlyFileSummary, PROMPT_VERSION, renderFolderPrompt, renderRepoPrompt, testFileSummary, testFolderSummary, type FolderItem,
+} from "./prompts";
 
 /**
  * current: the text matches the current input · template: a test file or test-only folder whose
@@ -33,7 +36,20 @@ export type PlanOptions = {
     refreshStaleFolders: boolean;
     /** targetKeys that failed earlier in this run: they wait for the next run. */
     failedThisRun: ReadonlySet<string>;
+    /**
+     * A non-test file over this was indexed for its imports only and gets a template (ADR-053). Default: the indexer's
+     * cap, DEFAULT_MAX_FILE_BYTES, the product's only one; tests pass another to match an index they built with it.
+     */
+    maxFileBytes?: number;
 };
+
+/**
+ * Whether a model writes this file's summary: a test file and a file over the size cap get a template instead (ADR-053).
+ * The planner and every full-pass cost estimate ask here, so they count the same files.
+ */
+export function writtenByModel(file: Pick<FileFacts, "isTest" | "sizeBytes">, maxFileBytes: number = DEFAULT_MAX_FILE_BYTES): boolean {
+    return !file.isTest && file.sizeBytes <= maxFileBytes;
+}
 
 /** hash(model, prompt version, input) (PIVOT_SPEC.md §5.3): identical input is never summarized twice. */
 export function inputHash(model: string, promptVersion: number, input: string): string {
@@ -57,6 +73,7 @@ export function planSummaries(
 ): PlannedTarget[] {
     const storedByKey = new Map(stored.map((s) => [targetKey(s.kind, s.path), s]));
     const planned = new Map<string, PlannedTarget>();
+    const maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
 
     // the text a target shows right now: its fresh template, else whatever its row holds
     const textOf = (target: PlannedTarget): SummaryText | null => {
@@ -70,8 +87,9 @@ export function planSummaries(
         const key = targetKey("file", file.path);
         const row = storedByKey.get(key);
 
-        if (file.isTest){
-            const text = testFileSummary(file.path, file.lineCount);
+        // a test file, and a file over the size cap (indexed for its imports only), get a template rather than a model
+        if (!writtenByModel(file, maxFileBytes)){
+            const text = file.isTest ? testFileSummary(file.path, file.lineCount) : importsOnlyFileSummary(file.lineCount, maxFileBytes);
             const hash = inputHash("template", PROMPT_VERSION, `${file.path}\n${text.tagline}\n${text.summary}`);
             const current = row?.inputHash === hash;
             planned.set(key, current

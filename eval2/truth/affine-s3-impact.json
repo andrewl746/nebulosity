@@ -1,0 +1,31 @@
+{
+  "id": "affine-s3-impact",
+  "kind": "impact",
+  "target": "blocksuite/affine/blocks/surface/src/surface-block.ts",
+  "counts": [
+    [
+      "blocksuite/affine/blocks",
+      230
+    ],
+    [
+      "blocksuite/affine/gfx",
+      185
+    ],
+    [
+      "blocksuite/affine/widgets",
+      73
+    ],
+    [
+      "packages/frontend/core",
+      1287
+    ],
+    [
+      "tests",
+      201
+    ]
+  ],
+  "elsewhere": 216,
+  "total": 2192,
+  "verified": true,
+  "notes": []
+}

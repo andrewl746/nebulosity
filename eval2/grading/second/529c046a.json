@@ -1,0 +1,7 @@
+{ "id": "529c046a", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "In `instantiation.ts`, `createDecorator<IFoo>('fooService')` returns a `ServiceIdentifier<IFoo>`. By convention the const and the interface share one name, `IFoo`" },
+  { "id": "BP3.3", "score": 1, "quote": "**Constructor injection:** declare the service as a constructor parameter with the decorator ... `constructor(arg: string, @IFooService private readonly fooService: IFooService) {}`" },
+  { "id": "BP3.4", "score": 1, "quote": "**Creation:** `IInstantiationService.createInstance(Ctor, ...staticArgs)` resolves the dependencies and passes the services in." },
+  { "id": "BP3.5", "score": 1, "quote": "**Lazy registration:** call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` from `extensions.ts`." },
+  { "id": "BP3.6", "score": 0.5, "quote": "It is usually placed in a `*.contribution.ts` or the `workbench.*.main.ts` entry points." }
+] }

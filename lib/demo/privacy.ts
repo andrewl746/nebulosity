@@ -28,12 +28,31 @@ export function slug(folder: string): string {
     return folder.replace(/\\/g, "/").replace(/\/+$/, "").replace(/[^a-zA-Z0-9]/g, "-");
 }
 
-/** The needles for some folders (each one's spellings and its slug) and an email, longest first, so a report names the most specific match. */
-export function leakNeedles(input: { folders: readonly string[]; email?: string | null }): string[] {
+/**
+ * The needles for some folders (each one's spellings and its slug) and an email, longest first, so a report names the
+ * most specific match. With `home` (the user's home folder, scanned for too), each folder inside it adds one more: the
+ * home's last segment and the folder's first segment below it ("ann/projects" for C:/Users/Ann/Projects/app). A path
+ * cut off at its front still holds that pair: a script that prints `path.slice(n)` writes "ers/Ann/Projects/app/x.ts",
+ * which no whole-folder spelling matches. findLeak compares it in canonical form, so any separator or escape counts.
+ */
+export function leakNeedles(input: { folders: readonly string[]; email?: string | null; home?: string | null }): string[] {
+    const folders = input.home ? [input.home, ...input.folders] : input.folders;
     // spellings() first: it refuses a folder too shallow to scan for, and its slug would be as greedy
-    const needles = new Set(input.folders.flatMap((folder) => [...spellings(folder), slug(folder).toLowerCase()]));
+    const needles = new Set(folders.flatMap((folder) => [...spellings(folder), slug(folder).toLowerCase()]));
+    if (input.home) for (const needle of homeSegmentNeedles(input.home, input.folders)) needles.add(needle);
     if (input.email) needles.add(input.email.toLowerCase());
     return [...needles].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** "<home's last segment>/<first segment below home>" for each folder inside home, lowercased; none for home itself. */
+function homeSegmentNeedles(home: string, folders: readonly string[]): string[] {
+    const forward = (p: string): string => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    const base = forward(home);
+    const user = base.slice(base.lastIndexOf("/") + 1);
+    return folders
+        .map(forward)
+        .filter((folder) => folder.startsWith(`${base}/`))
+        .map((folder) => `${user}/${folder.slice(base.length + 1).split("/")[0]}`);
 }
 
 /**

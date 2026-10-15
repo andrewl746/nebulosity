@@ -22,7 +22,7 @@ async function send(url: string, init?: RequestInit): Promise<Response> {
         return await fetch(url, init);
     } catch (err){
         if (err instanceof DOMException && err.name === "AbortError") throw err;   // the caller cancelled: not a failure
-        throw new ApiError(0, "NETWORK", "The Nebulosity server didn't answer. Is npm run dev still running?");
+        throw new ApiError(0, "NETWORK", "The Nebulosity server didn't answer. Is nebulosity map (or npm run dev) still running?");
     }
 }
 

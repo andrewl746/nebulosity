@@ -1,0 +1,13 @@
+{
+  "id": "dd08f285",
+  "points": [
+    { "id": "AFFINE-BP3.1", "score": 1, "quote": "`defineBlockSchema({ flavour, props, metadata, toModel })` declares the block. The flavour is a string such as `'affine:paragraph'`. ... `metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours." },
+    { "id": "AFFINE-BP3.2", "score": 1, "quote": "`props(internal)` returns the default props, for example `internal.Text()` for rich text." },
+    { "id": "AFFINE-BP3.3", "score": 0.5, "quote": "`metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours." },
+    { "id": "AFFINE-BP3.4", "score": 1, "quote": "The model is a class that extends `BlockModel<Props>`, here `ParagraphBlockModel`, with props accessed as `model.props.*`." },
+    { "id": "AFFINE-BP3.5", "score": 1, "quote": "`BlockViewExtension('affine:paragraph', literal\\`affine-paragraph\\`)`, which maps the flavour to the component's tag." },
+    { "id": "AFFINE-BP3.6", "score": 0, "quote": "none" },
+    { "id": "AFFINE-BP3.7", "score": 0.5, "quote": "A package's `store.ts` has a class that extends `StoreExtensionProvider` ... A package's `view.ts` has a class that extends `ViewExtensionProvider<Options>`." },
+    { "id": "AFFINE-BP3.8", "score": 0.5, "quote": "`effect()` calls `effects()`, which defines the custom elements." }
+  ]
+}

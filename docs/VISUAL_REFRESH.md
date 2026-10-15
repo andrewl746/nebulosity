@@ -124,16 +124,15 @@ It's actionable and structured, not a static card. From top to bottom:
 
 - **Top bar, left to right:** a small Nebulosity mark and name, the repo as `owner / repo` (prominent), the view title "Dependency map", then a wide search field ("Search files and concepts", `Ctrl K`). A green status dot sits on the right.
 - **Activity bar:** a slim bar along the bottom that's always visible. It shows Claude Code's **last 3 actions** ("Reading build/gulpfile.js"), each with an `--agent` dot. It stays slim so the Map remains the focus, and it's never hidden: live activity is the demo's differentiator.
-  - *(Added in the V1.3.1 build.)* Each tool call reads as a phrase (`app/map/activity.ts`). A leading `mcp__nebulosity__` is dropped, "+N" counts further paths, and `""` reads "the repo":
+  - *(Added in the V1.3.1 build; the `imports` and `architecture` rows since V1.6, which replaced `dependents`, `dependencies` and `path`, ADR-056.)* Each tool call reads as a phrase (`app/map/activity.ts`). A leading `mcp__nebulosity__` is dropped, "+N" counts further paths, and `""` reads "the repo":
 
     | Tool | Phrase |
     |---|---|
     | `describe` | Reading build/gulpfile.js |
     | `overview` | Reading the repo overview |
     | `search` | Searching · a.ts +2 |
-    | `dependents` | Finding what uses x.ts |
-    | `dependencies` | Finding what src/vs/editor uses |
-    | `path` | Tracing a.ts → b.ts |
+    | `imports` | Following the imports of x.ts (with `to`: Tracing a.ts → b.ts) |
+    | `architecture` | Reading how src is organized |
     | `show_on_map` | Showing src/vs +1 on the map |
     | anything else | its name · its first path |
 

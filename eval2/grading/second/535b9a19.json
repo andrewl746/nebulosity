@@ -1,0 +1,8 @@
+{ "id": "535b9a19", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "Imported only in `workbench.desktop.main.ts`: desktop only." },
+  { "id": "BP5.2", "score": 1, "quote": "Imported only in `workbench.web.main.ts`: web only." },
+  { "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point. ... `workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`." },
+  { "id": "BP5.4", "score": 0.5, "quote": "Desktop and web each have their own service registrations ... which supply the platform implementations behind shared interfaces." },
+  { "id": "BP5.5", "score": 1, "quote": "A contribution is therefore loaded if and only if it is reachable from the entry file of that build" },
+  { "id": "BP5.6", "score": 1, "quote": "A file such as `contrib/<feature>/browser/<feature>.contribution.ts` registers its views, actions, services and settings as a side effect of being imported. Nothing runs unless some entry file imports it." }
+] }

@@ -11,6 +11,7 @@ import {
     loadImporters, loadSummaries, loadUsage, markInFlight, releaseBatch, targetKey, writeResults,
     type FileFacts, type StoredSummary, type SummaryResult, type UsageRow,
 } from "../../db/store/summaries";
+import { commandHint } from "../../hints";
 import { repoKey } from "../paths";
 import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
@@ -126,7 +127,7 @@ export class TargetNotFoundError extends Error {
 /** Thrown by summarizeNow for a folder whose files or subfolders don't all have summaries yet. */
 export class TargetNotReadyError extends Error {
     constructor(targetPath: string){
-        super(`"${targetPath}" can't be summarized yet: some of its files or subfolders have no summary, and a folder's summary is written from theirs. Run npm run summarize, or open them first.`);
+        super(`"${targetPath}" can't be summarized yet: some of its files or subfolders have no summary, and a folder's summary is written from theirs. Run ${commandHint("summarize", "<path-to-repo>")}, or open them first.`);
         this.name = "TargetNotReadyError";
     }
 }
@@ -138,7 +139,7 @@ export class TargetNotReadyError extends Error {
  */
 export class StructureNotReadyError extends Error {
     constructor(readonly state: string){
-        super(`the structure stage is ${state}; wait for npm run index to finish (or re-run it) before summarizing`);
+        super(`the structure stage is ${state}; wait for the index run to finish, or run ${commandHint("index", "<path-to-repo>")} again, before summarizing`);
         this.name = "StructureNotReadyError";
     }
 }
@@ -166,7 +167,7 @@ export class BatchesUnreachableError extends Error {
 export function releaseHint(root: string, batchIds: readonly string[]): string {
     const one = batchIds.length === 1;
     const flags = batchIds.map((id) => `--release-batch ${id}`).join(" ");
-    return `if ${one ? "that batch" : "those batches"} can never be read, run npm run summarize -- "${repoKey(root)}" ${flags} to send ${one ? "its" : "their"} requests again (paid again)`;
+    return `if ${one ? "that batch" : "those batches"} can never be read, run ${commandHint("summarize", `"${repoKey(root)}" ${flags}`)} to send ${one ? "its" : "their"} requests again (paid again)`;
 }
 
 type Tally = { summarized: number; templated: number; failed: number; batches: number; waves: number };
@@ -330,6 +331,19 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
 }
 
 /**
+ * What a full run would send to a model right now (S11): every target still to be written, as the kind and model of its
+ * request, planned the way runSummaries' first pass plans (stale folders redone). A template is no request. Reads only.
+ */
+export function plannedRequests(repoRoot: string): ProjectedRequest[] {
+    const db = getDb();
+    const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
+    const toWrite: ReadonlySet<TargetState> = new Set(["ready", "waiting", "lazy", "failed"]);
+    return planSnapshot(db, repoId, true, new Set()).targets
+        .filter((t) => toWrite.has(t.state) && t.model !== "template")
+        .map((t) => ({ kind: t.kind, model: t.model }));
+}
+
+/**
  * summarizeNow calls running in this process, by repo and path. A second call for a target already being summarized
  * joins the first instead of paying again: the Map can ask twice (a double click, a second tab) before the answer lands.
  */
@@ -417,7 +431,7 @@ function buildRequest(ctx: RunContext, snap: Snapshot, target: PlannedTarget, id
     }
 
     if (prompt === null){
-        return { failure: { customId, ok: false, error: `${target.path} changed after it was indexed; run npm run index first`, model: null, usage: null } };
+        return { failure: { customId, ok: false, error: `${target.path} changed after it was indexed; run ${commandHint("index", "<path-to-repo>")} first`, model: null, usage: null } };
     }
 
     return { request: { customId, model: target.model, system: SYSTEM_PROMPTS[target.kind], prompt } };

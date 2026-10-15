@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import type { IndexStage } from "../contracts";
 import { getDb, type Db } from "../db/client";
+import { replaceEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, releaseIndexLock } from "../db/store/lock";
 import { deferCodeSearch, fillCodeSearch, isCodeSearchDeferred } from "../db/store/search";
 import { writeStage } from "../db/store/stages";
@@ -10,14 +11,19 @@ import {
     deleteFilesNotIn, loadStoredFiles, markIndexed, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
     type FileError, type FileRecord, type ImportEdge,
 } from "../db/store/structure";
+import { replaceDocs } from "../db/store/docs";
 import { pruneSummaries } from "../db/store/summaries";
-import { bumpIndexVersion } from "../db/store/version";
+import { bumpIndexVersion, readAdapterVersion, recordAdapterVersion } from "../db/store/version";
 import { buildFolders, buildLevelEdges } from "./aggregate";
-import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
+import { docLinks, folderSuffixes, type KnownPaths } from "./docs";
+import { discoverFiles, isTestPath, readGitHead, type DiscoveredFile, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
-import { languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
+import {
+    ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile, parseTypeScriptImportsOnly, scanTypeScriptImports,
+} from "./languages/typescript";
 import { repoKey } from "./paths";
-import { createResolver, edgesFrom } from "./resolve";
+import { createResolver, createSourceFinder, edgesFrom } from "./resolve";
+import { declaredEntries, readWorkspace } from "./workspace";
 
 export type { IndexStage };
 
@@ -26,7 +32,15 @@ export type IndexOptions = {
     onProgress?: (stage: IndexStage, done: number, total: number) => void;
     /** Files parsed and committed per transaction. */
     batchSize?: number;
+    /**
+     * A code file over this is indexed for its imports only (ADR-053). Default DEFAULT_MAX_FILE_BYTES (1 MB): the product
+     * never passes another, so the summary planner and describe, which read that constant, agree with the index.
+     */
     maxFileBytes?: number;
+    /** Up to this, such a file is parsed in full for them; past it, token-scanned. Default DEFAULT_PARSE_MAX_FILE_BYTES (5 MB). */
+    parseMaxFileBytes?: number;
+    /** A code file over this is skipped. Default DEFAULT_HARD_MAX_FILE_BYTES (20 MB). */
+    hardMaxFileBytes?: number;
     /**
      * At least this many files to parse (new, or with no stored hash) and code search is filled in one go after the
      * structure stage instead of by a trigger per chunk (ADR-031, amended). Default 2,000.
@@ -45,7 +59,10 @@ export type IndexResult = {
     folders: number;
     levelEdges: number;
     errors: FileError[];
+    /** Files left out: over the hard bound, unreadable, or a doc over the cap. */
     skipped: SkippedFile[];
+    /** Code files over the size cap, in the index for their imports only: no declarations, code search or summary (ADR-053). */
+    importsOnly: DiscoveredFile[];
     timingsMs: Record<IndexStage, number>;
     totalMs: number;
     /** Filling code search after a bulk run (0 when it wasn't deferred); not part of totalMs (S1). */
@@ -96,18 +113,24 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         // ---- discover ---------------------------------------------------------
         let t = performance.now();
-        const discovered = discoverFiles(root, { extensions: TYPESCRIPT_EXTENSIONS, maxBytes: options.maxFileBytes });
+        const discovered = discoverFiles(root, {
+            extensions: TYPESCRIPT_EXTENSIONS,
+            maxBytes: options.maxFileBytes, parseMaxBytes: options.parseMaxFileBytes, hardMaxBytes: options.hardMaxFileBytes,
+        });
         const stored = loadStoredFiles(db, repoId);
         timingsMs.discover = performance.now() - t;
         options.onProgress?.("discover", discovered.files.length, discovered.files.length);
         writeStage(db, repoId, "structure", { state: "running", done: 0, total: discovered.files.length });
 
-        const toParse = discovered.files.filter((f) => (stored.get(f.path)?.contentHash ?? "") === "").length;
+        // files an older adapter parsed are parsed again whatever their hash: what it stored may lack what this one reads
+        const reparseAll = readAdapterVersion(db, repoId) !== ADAPTER_VERSION;
+        const toParse = reparseAll ? discovered.files.length : discovered.files.filter((f) => (stored.get(f.path)?.contentHash ?? "") === "").length;
         const deferred = toParse >= (options.bulkSearchThreshold ?? 2_000);
         if (deferred) deferCodeSearch(db);
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
+        const skipped: SkippedFile[] = [...discovered.skipped];   // the docs read below add theirs
         let changed = 0;
         let unchanged = 0;
 
@@ -128,14 +151,14 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
                 const contentHash = createHash("sha256").update(text).digest("hex");
 
-                // ADR-022: the hash means "the indexer last processed exactly these bytes"
-                if (stored.get(file.path)?.contentHash === contentHash){
+                // ADR-022: the hash means "the indexer last processed exactly these bytes" (with this adapter, ADR-053)
+                if (!reparseAll && stored.get(file.path)?.contentHash === contentHash){
                     unchanged++;
                     continue;
                 }
 
                 try{
-                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes));
+                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, { importsOnly: file.importsOnly }));
                 } catch (err){
                     errors.push({ path: file.path, error: message(err) });
                 }
@@ -158,12 +181,14 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const deleted = deleteFilesNotIn(db, repoId, new Set(discovered.files.map((f) => f.path)));
         const current = loadStoredFiles(db, repoId);
         const fileSet = new Set(current.keys());
-        const resolve = createResolver(root, fileSet);
+        const workspace = readWorkspace(root, discovered.manifests);
+        const resolve = createResolver(root, fileSet, { workspace });
         const edges: ImportEdge[] = [];
 
         for (const [source, file] of current) edges.push(...edgesFrom(resolve, source, file.importSpecifiers));
 
         const edgeCount = replaceImports(db, repoId, edges);
+        replaceEntryPoints(db, repoId, declaredEntries(workspace, createSourceFinder(fileSet, workspace)));
         timingsMs.resolve = performance.now() - t;
         options.onProgress?.("resolve", fileSet.size, fileSet.size);
 
@@ -173,11 +198,29 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const levelRows = buildLevelEdges(edges);
         replaceAggregates(db, repoId, folderRows, levelRows);
         pruneSummaries(db, repoId);   // a deleted file or folder takes its summary with it
+
+        // which docs talk about which folders (ADR-054): read with the folders just built, so a mention can name any of them
+        const folderPaths = folderRows.map((f) => f.path);
+        const known: KnownPaths = { folders: new Set(folderPaths), files: fileSet, suffixes: folderSuffixes(folderPaths) };
+        const readDocs = discovered.docs.flatMap((doc) => {
+            try{
+                return [docLinks(doc.path, fs.readFileSync(path.join(root, doc.path), "utf8"), known)];
+            } catch (err){
+                skipped.push({ path: doc.path, reason: `unreadable: ${message(err)}` });   // reported, as an unreadable source file is
+                return [];
+            }
+        });
+        replaceDocs(db, repoId, readDocs.map((d) => d.facts), readDocs.flatMap((d) => d.links));
         timingsMs.aggregate = performance.now() - t;
         options.onProgress?.("aggregate", folderRows.length, folderRows.length);
 
         const indexedHead = readGitHead(root);
         markIndexed(db, repoId, indexedHead);
+        // A file that failed keeps its previous row (ADR-022). After a forced re-parse that row is the older adapter's, and
+        // its hash still matches the bytes, so it would stay as it is for good. Its hash is cleared as this version is
+        // recorded, so the next full run parses that file again, and no other.
+        const unparsed = reparseAll ? errors.map((e) => e.path).filter((p) => stored.has(p)) : [];
+        recordAdapterVersion(db, repoId, ADAPTER_VERSION, unparsed);
         writeStage(db, repoId, "structure", {
             state: "ready",
             done: fileSet.size,
@@ -201,7 +244,8 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             folders: folderRows.length,
             levelEdges: levelRows.length,
             errors,
-            skipped: discovered.skipped,
+            skipped,
+            importsOnly: discovered.files.filter((f) => f.importsOnly),
             timingsMs,
             totalMs,
             searchIndexMs,
@@ -236,9 +280,17 @@ function isDirectory(p: string): boolean {
     }
 }
 
-/** One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed. */
-export function toFileRecord(filePath: string, text: string, contentHash: string, sizeBytes: number): FileRecord {
-    const parsed = parseTypeScriptFile(filePath, text);
+/**
+ * One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed.
+ * A file over the size cap is read for its imports only, parsed or token-scanned by size: no declarations and no chunks,
+ * so no code search (ADR-053).
+ */
+export function toFileRecord(
+    filePath: string, text: string, contentHash: string, sizeBytes: number, opts: { importsOnly?: "parse" | "scan" } = {}
+): FileRecord {
+    const parsed = opts.importsOnly === "scan" ? scanTypeScriptImports(filePath, text)
+        : opts.importsOnly === "parse" ? parseTypeScriptImportsOnly(filePath, text)
+        : parseTypeScriptFile(filePath, text);
     return {
         path: filePath,
         kind: /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",

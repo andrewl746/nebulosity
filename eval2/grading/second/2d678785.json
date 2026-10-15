@@ -1,0 +1,8 @@
+{ "id": "2d678785", "points": [
+  { "id": "BP2.1", "score": 1, "quote": "`common` | Any JavaScript environment. It can't touch DOM or Node APIs. | Only `common`." },
+  { "id": "BP2.2", "score": 1, "quote": "`browser` | The renderer or web, with DOM access. | `browser` and `common`" },
+  { "id": "BP2.3", "score": 1, "quote": "`node` | Node.js, with no DOM and no Electron. | `node` and `common`" },
+  { "id": "BP2.4", "score": 1, "quote": "`electron-browser` | The Electron renderer, with DOM plus a preload/Node bridge. | `electron-browser`, `browser` and `common`" },
+  { "id": "BP2.5", "score": 0, "quote": "none" },
+  { "id": "BP2.6", "score": 0.5, "quote": "`electron-main` | The Electron main process. | `electron-main`, `node` and `common`" }
+] }

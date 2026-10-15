@@ -1,0 +1,13 @@
+{
+  "id": "9f88bebe",
+  "points": [
+    { "id": "BP1.1", "score": 1, "quote": "**`base`** is the foundation: cross-platform utilities such as strings, arrays, events, lifecycle/disposables, async helpers, URI, and basic DOM and UI widgets." },
+    { "id": "BP1.2", "score": 1, "quote": "**`platform`** holds the services and the dependency-injection infrastructure: instantiation, service decorators, configuration, files, storage, log, and similar." },
+    { "id": "BP1.3", "score": 1, "quote": "**`editor`** is the Monaco text editor: the model, the view, language services, syntax highlighting, and editing features." },
+    { "id": "BP1.4", "score": 0.5, "quote": "**`workbench`** is the application shell for web and desktop. Its subfolders are: `browser`: parts, layout, and actions." },
+    { "id": "BP1.5", "score": 1, "quote": "**`code`** is the Electron main process implementation, which includes the desktop app startup." },
+    { "id": "BP1.6", "score": 1, "quote": "**`server`** is the server implementation for remote and web hosting." },
+    { "id": "BP1.7", "score": 1, "quote": "Dependencies point downward only. A layer may import from the layers below it and never from the layers above it: `base` imports only from `base`. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform`, and `editor`." },
+    { "id": "BP1.8", "score": 0.5, "quote": "`api`: the extension host and the VS Code API implementation." }
+  ]
+}

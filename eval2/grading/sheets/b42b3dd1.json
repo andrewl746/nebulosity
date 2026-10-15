@@ -1,0 +1,27 @@
+{
+  "id": "b42b3dd1",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses its own dependency-injection system, in `src/vs/platform/instantiation/common/`.\n\n**1. Defining a service**\n- Declare an interface and a matching identifier with `createDecorator<IFoo>('fooService')`. By convention both are named `IFoo`, with the identifier as a `const` of the same name. The interface carries `readonly _serviceBrand: undefined;` so that otherwise-identical service shapes stay nominally distinct.\n- The same `IFoo` identifier is used as a TypeScript type and as a runtime key.\n- The interface lives in a `common/` file such as `foo.ts`. Implementations go in layer-specific files such as `fooService.ts`, or in `browser/` or `node/` folders.\n\n**2. Making an implementation available**\n- **Singleton registration (lazy).** Call `registerSingleton(IFoo, FooService, InstantiationType.Delayed)` (`extensions.ts`). `Delayed` hands out an idle-time proxy that instantiates on first use. `Eager` instantiates at startup.\n- **Collection of services.** Workbench and other entry points collect these registrations with `getSingletonServiceDescriptors()` into a `ServiceCollection`. The collection is a map of `IFoo` to either an instance or a `SyncDescriptor`. In `main.ts` or `workbench.ts`, an entry point can also call `serviceCollection.set(IFoo, instance)` directly for services created by hand.\n- **Instantiation service.** `new InstantiationService(serviceCollection)` is the container. It is itself available as `IInstantiationService`.\n\n**3. Getting it into consumers**\n- **Constructor parameter decorators.** Services are injected as trailing constructor parameters, each annotated with its identifier:\n  ```ts\n  constructor(\n    private readonly arg: string,\n    @IFooService private readonly fooService: IFooService,\n  ) {}\n  ```\n  The decorator, which is what `createDecorator` returns, records the dependency on the class in `_util.DI_DEPENDENCIES`. Non-service arguments must come first.\n- **Creating the instance.** `instantiationService.createInstance(MyClass, 'static-arg')` supplies the static arguments and resolves the rest from the container. It also accepts a `SyncDescriptor`. Plain `new MyClass()` bypasses injection.\n- **Resolving on demand.** `instantiationService.invokeFunction(accessor => accessor.get(IFoo))` fetches a service inside a function. The accessor is only valid synchronously. Actions and commands use this form, as in `run(accessor: ServicesAccessor)`.\n- **Child scopes.** `instantiationService.createChild(new ServiceCollection([IFoo, ...]))` adds or overrides services for a subtree, such as an editor or a window part.\n\n**Conventions**\n- The `I` prefix on interfaces and identifiers.\n- The `_serviceBrand` field.\n- Services as constructor-injected `private readonly` fields.\n- Singletons registered in `*.contribution.ts` files or in `workbench.common.main.ts`, `workbench.desktop.main.ts` and similar entry points.\n- Layering: `common` code uses only the interface and never imports an implementation.\n- Tests build a `TestInstantiationService` (or a `ServiceCollection`) and stub services with `.stub(IFoo, mock)`."
+}

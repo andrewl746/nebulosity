@@ -1,0 +1,10 @@
+{ "id": "348443fd", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "A document is a Yjs CRDT (`Y.Doc`). BlockSuite blocks live inside it as nested `Y.Map`/`Y.Array`/`Y.Text` structures." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "Any update whose origin isn't its own is applied with `Y.applyUpdate(doc, update, NBSTORE_ORIGIN)`. The editor renders from the `Y.Doc`, so it updates automatically." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "Storage and the network only handle binary Yjs updates (`Uint8Array`)." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 1, "quote": "Blobs (images and attachments) and awareness (presence) are stored and synced separately from doc content." },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "Browser: `impls/idb`, an IndexedDB store. Desktop and mobile: `impls/sqlite`, a native SQLite file per workspace through the Rust native module" },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "A sync peer connects the local storage to each remote storage. ... Remote updates are written into local storage, which makes the frontend apply them. ... Local-only workspaces have no remote peer." },
+  { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+] }

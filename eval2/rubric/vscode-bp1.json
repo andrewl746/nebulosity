@@ -1,0 +1,62 @@
+{
+  "id": "vscode-bp1",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)",
+      "check": "src/vs/base exists (common, browser, node, parts, ...; base/browser/ui holds the widgets). eslint.config.js code-import-patterns: src/vs/base/~ may import only vs/base/~, and every other layer's list allows vs/base/~. Scanner graph: files importing base: platform 1,778, editor 718, workbench 4,103, code 20, server 28, sessions 803.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)",
+      "check": "src/vs/platform has 112 folders, among them instantiation (createDecorator, InstantiationService). eslint.config.js: src/vs/platform/*/~ may import vs/base and vs/platform only. Scanner graph: platform to editor 3 edges, platform to workbench 0.",
+      "holds": true,
+      "note": "One exception: src/vs/platform/agentHost/node/diffWorkerMain.ts L8-10 imports the editor's diff code (editor/common/diff/*), which eslint.config.js allows by name."
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)",
+      "check": "src/vs/editor exists; editor.api.ts builds the monaco API from createMonacoEditorAPI (standalone/browser/standaloneEditor.ts L502) and createMonacoLanguagesAPI; build/monaco/package.json names the package monaco-editor-core.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)",
+      "check": "All exist: src/vs/workbench/browser/parts/editor/editorPart.ts, contrib/notebook/browser/notebookEditor.ts, contrib/customEditor/browser/customEditors.ts, contrib/files/browser/views/explorerView.ts, browser/parts/statusbar/statusbarPart.ts.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)",
+      "check": "src/vs/code/electron-main/main.ts (Electron main), src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts (shared process), src/vs/code/node/cli.ts (CLI) all exist.",
+      "holds": true,
+      "note": "The shared process now lives under electron-utility (an Electron utility process)."
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)",
+      "check": "src/vs/server/node/server.main.ts exists, with remoteExtensionHostAgentServer.ts beside it; eslint.config.js has its own src/vs/server/~ rule.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)",
+      "check": "eslint.config.js code-import-patterns: base may import base; platform base and platform; editor base, platform and editor; workbench those plus workbench. Scanner graph, imports from a lower layer to a higher one: base to platform 1, platform to editor 3, every other pair 0.",
+      "holds": true,
+      "note": "Two exceptions: a test, src/vs/base/test/browser/actionbar.test.ts L145, dynamically imports platform/quickinput; and src/vs/platform/agentHost/node/diffWorkerMain.ts imports editor/common/diff, allowed by name in the lint config."
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`",
+      "check": "src/vs/workbench/api/node/extensionHostProcess.ts and api/worker/extensionHostWorker.ts are the extension host's entries; services/extensions/electron-browser/localProcessExtensionHost.ts starts it as its own process. extensions/ holds 96 folders with a package.json (the built-in extensions).",
+      "holds": true,
+      "note": ""
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "cd85303e",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Inside each layer of `src/vs` (`base`, `platform`, `editor`, `workbench`, and so on), the folder names mark the runtime environment. The import counts below come from the repo's import graph. I didn't read the repo's written layering rules, so the allowed-import rules are inferred from those counts and from what I know of VS Code's conventions.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any environment | Only `common`. The graph shows no imports from `common` into anything else, so it can't use DOM or Node APIs. |\n| `browser` | The renderer or web, with DOM access | `common` and `browser`. |\n| `node` | A Node.js process, with no DOM | `common` and `node`. |\n| `electron-browser` | The Electron renderer, where both DOM and the Electron renderer APIs are available | `common`, `browser` and `electron-browser`. It can't import `node` directly. |\n| `electron-main` | The Electron main process | `common`, `node` and `electron-main`. It can't import `browser`. |\n| `test` | Test code for that layer | Mostly `common` (52 imports). There are also a few `browser` (6), `node` (4) and `test` (4) imports, because tests may need to reach the environment they exercise. |\n\nThe imports form a hierarchy:\n- `common` is the base. Everything can import it.\n- `browser` and `node` are two separate branches that build on `common` and don't import each other.\n- `electron-browser` extends `browser`, and `electron-main` extends `node`.\n\nA folder never imports from an environment that has APIs it can't rely on. For example, `browser` code can't use Node, and `common` code can't use either. Imports across layers go downward only. A layer such as `workbench` may import `editor`, `platform` and `base`, but not the reverse.\n\nThe repo's `.github/copilot-instructions.md` and the lint rule `layersChecker` enforce these rules. Newer VS Code versions call `electron-browser` \"electron-sandbox\"; the graph here still uses the `electron-browser` name."
+}

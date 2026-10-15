@@ -1,0 +1,39 @@
+{
+  "id": "81d049b6",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "**Organization of `src/vs/workbench`**\n\n`src/vs/workbench` is the \"full VS Code workbench\" layer. It sits above `base`, `platform` and `editor`. `code`, `server` and `sessions` sit above it, and `workbench` must never import from `sessions`. Its top-level contents are:\n\n- `common/`, `browser/` and `electron-browser/` hold the minimal workbench core. That includes parts, layout and actions.\n- `api/` holds the extension host and the implementation behind `vscode.d.ts`.\n- `services/` holds core service implementations that aren't specific to one feature.\n- `contrib/` holds the feature contributions. There are more than 100 of them, for example `chat`, `debug`, `search`, `scm`, `terminal`, `notebook`, `extensions`, `mcp`, `testing` and `git`.\n- `test/` holds tests.\n- Entry-point files: `workbench.common.main.ts` (shared), `workbench.desktop.main.ts` (desktop-only) and `workbench.web.main.ts` (web-only). Only code reachable from these files gets loaded. `workbench.web.main.internal.ts` is also present, but I didn't open it.\n\nInside each layer, code is split by runtime environment:\n\n| Folder | Environment | May use |\n|---|---|---|\n| `common` | Basic JavaScript only | — |\n| `browser` | Web/DOM APIs | `common` |\n| `node` | Node.js APIs | `common` |\n| `electron-browser` | Browser plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | Electron utility process | `common`, `node` |\n| `electron-main` | Electron main process | `common`, `node`, `electron-utility` |\n\n**Rules for `contrib/`**\n\nThese come from `.github/instructions/source-code-organization.instructions.md`:\n\n1. Nothing outside `contrib/` may depend on anything inside `contrib/`.\n2. Each contribution has a single `.contribution.ts` entry point.\n3. A contribution exposes its internal API from a single `common` file.\n4. Other contributions that depend on it must use that common API and never reach into its internals.\n\n**Related conventions**\n\n- Services are injected through constructor parameters with decorators, for example `@IMyService`. Any non-service parameters come before the service ones.\n- Services are registered with `registerSingleton(..., InstantiationType.Delayed)`.\n- Decorated service parameters must use the canonical service interface. Don't create local subset interfaces or `Pick<...>` aliases in production code just to make tests easier.\n- `npm run valid-layers-check` checks layering when a change might affect it.\n\nI didn't check whether the lint or layer checks enforce these rules mechanically. My attempt to search the ESLint config more broadly was denied."
+}

@@ -1,0 +1,18 @@
+{
+  "id": "affine-cn2",
+  "kind": "chain",
+  "from": "blocksuite/playground/apps/starter/main.ts",
+  "to": "blocksuite/framework/std/src/gfx/viewport.ts",
+  "connected": true,
+  "shortest": 5,
+  "example": [
+    "blocksuite/playground/apps/starter/main.ts",
+    "blocksuite/affine/all/src/blocks/note/index.ts",
+    "blocksuite/affine/blocks/note/src/index.ts",
+    "blocksuite/affine/blocks/note/src/components/edgeless-note-background.ts",
+    "blocksuite/framework/std/src/gfx/index.ts",
+    "blocksuite/framework/std/src/gfx/viewport.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

@@ -11,12 +11,12 @@ import { useReadOnlyDatabase } from "../lib/db/client";
 import { errorResponseFor } from "../lib/engine/errors";
 import { nebulosityHome } from "../lib/home";
 import { postLiveEvent } from "../lib/live/client";
-import { SERVER_INSTRUCTIONS, TOOLS } from "../lib/tools/registry";
+import { SERVER_INSTRUCTIONS, TOOLS, type ToolEntry } from "../lib/tools/registry";
 import { setupCall } from "../lib/tools/repo";
 import { deliveryNote, type MapDelivery } from "../lib/tools/text";
 
 /** package.json's version (a test keeps them equal). */
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = "0.2.0";
 
 /** Sends one live event to the Map's server on `port`; true when it took it (lib/live/client.ts). */
 export type LivePoster = (event: LiveEvent, port: number) => Promise<boolean>;
@@ -30,6 +30,12 @@ export type ServerOptions = {
     now?: () => Date;
 };
 
+/** What Claude Code reads from a tool's _meta (ADR-056): load it into every prompt, or the words its ToolSearch matches. */
+export function toolMeta(tool: ToolEntry): Record<string, unknown> {
+    if (tool.alwaysLoad) return { "anthropic/alwaysLoad": true };
+    return tool.searchHint ? { "anthropic/searchHint": tool.searchHint } : {};
+}
+
 export function createServer(options: ServerOptions): McpServer {
     const server = new McpServer({ name: "nebulosity", version: SERVER_VERSION }, { instructions: SERVER_INSTRUCTIONS });
     const post: LivePoster = options.post ?? ((event, port) => postLiveEvent(event, { port }));
@@ -38,7 +44,7 @@ export function createServer(options: ServerOptions): McpServer {
     for (const tool of TOOLS){
         server.registerTool(
             tool.name,
-            { description: tool.description, inputSchema: tool.inputSchema, annotations: { readOnlyHint: true, openWorldHint: false } },
+            { description: tool.description, inputSchema: tool.inputSchema, annotations: { readOnlyHint: true, openWorldHint: false }, _meta: toolMeta(tool) },
             async (input) => {
                 try{
                     const call = setupCall(options.projectDir);

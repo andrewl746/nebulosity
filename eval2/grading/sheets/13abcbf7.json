@@ -1,0 +1,39 @@
+{
+  "id": "13abcbf7",
+  "question": "What are the main parts of the AFFiNE repository and what is each one for? Say which apps are built from it, what the server is for and what it needs to run.",
+  "points": [
+    {
+      "id": "AFFINE-BP1.1",
+      "text": "`packages/` holds the code that runs in production, split into `backend/` (the server), `frontend/` (the apps and the business libraries they share) and `common/` (isomorphic or basic libraries with no business logic)"
+    },
+    {
+      "id": "AFFINE-BP1.2",
+      "text": "`tools/` holds development and CI tooling that doesn't ship (such as the `yarn affine` CLI), and `tests/` holds the end-to-end and integration tests that span packages"
+    },
+    {
+      "id": "AFFINE-BP1.3",
+      "text": "the editor is BlockSuite, which lives in the same repository under `blocksuite/` and is used by the app as workspace packages (`@blocksuite/*`)"
+    },
+    {
+      "id": "AFFINE-BP1.4",
+      "text": "several apps are built from the shared frontend code under `packages/frontend`: the web app, the Electron desktop app, a mobile web app, iOS and Android apps, and an admin app"
+    },
+    {
+      "id": "AFFINE-BP1.5",
+      "text": "some code is written in Rust and built into Node.js bindings with napi-rs: `@affine/native` (`packages/frontend/native`) for the clients and `@affine/server-native` for the server"
+    },
+    {
+      "id": "AFFINE-BP1.6",
+      "text": "the server (`@affine/server`, in `packages/backend/server`) is only needed for cloud features (accounts, sync and collaboration, AI); without it the web app keeps workspaces locally in the browser"
+    },
+    {
+      "id": "AFFINE-BP1.7",
+      "text": "the server runs on PostgreSQL (with the pgvector extension) and Redis, and serves a GraphQL API at `/graphql`"
+    },
+    {
+      "id": "AFFINE-BP1.8",
+      "text": "`@affine/component` (`packages/frontend/component`) is the shared UI component library"
+    }
+  ],
+  "answer": "**AFFiNE** is a Yarn monorepo for an open-source knowledge workspace (docs, whiteboard/edgeless canvas, databases). I read the top-level layout, the server's `package.json` and the CI/deploy files. I didn't read the server code in depth.\n\n**Main parts**\n- **`blocksuite/`** is the editor framework the app is built on.\n  - `framework/` holds the core: `std`, `store` and the Yjs/CRDT data layer.\n  - `affine/` holds the block types, models, widgets and shared services.\n  - `playground/`, `docs-site/` and `integration-test/` are for demos, docs and tests.\n- **`packages/frontend/`** holds the client code.\n  - `core` is the main app logic and UI modules.\n  - `component` is the shared UI library, `i18n` the translations and `routes` the routing.\n  - `admin` is the admin dashboard, `electron-api` the desktop bridge, and `templates` and `track` support code.\n  - `native` and `mobile-native` hold Rust bindings.\n  - `apps/` holds the app shells that package `core`: `web`, `mobile`, `electron`, `electron-renderer`, `android` and `ios`.\n- **`packages/backend/`** holds the `server` (NestJS) and `native` (Rust, via napi).\n- **`packages/common/`** holds code shared by client and server:\n  - `infra`: the base framework, the most-imported package.\n  - `nbstore`: storage and sync.\n  - `graphql`: the API client and schema.\n  - `error`, `env`, `auth`, `realtime`, `reader`, `s3-compat`, `theme`, `debug` and `native`.\n- **`tests/`** holds the end-to-end and other test suites.\n- **`tools/`** holds the `affine` CLI plus CI and release helpers such as changelog, commitlint and doc-diff.\n- **`scripts/`**, **`.github/`** (CI and deploy actions) and **`docs/`** (contributing guides) round it out.\n- The root also has the Cargo workspace and `render.yaml`.\n\n**Apps built from it**\n- Web app\n- Mobile web app\n- Electron desktop app (macOS, Windows and Linux)\n- Android and iOS apps (native shells around the mobile build)\n- Admin dashboard\n- The self-hostable server\n- The BlockSuite playground and docs site\n\n**The server (`packages/backend/server`)**\nIt's the backend for self-hosted and cloud AFFiNE. It handles:\n- accounts, auth and OAuth\n- workspaces, permissions and sharing\n- real-time document sync over socket.io, using Yjs\n- blob and file storage\n- a GraphQL API (`schema.gql`)\n- mail\n- optional plugins: copilot (AI), payment, license, calendar, captcha, indexer and worker\n\n**What it needs to run**\n- Node.js 22 or later, plus Rust native bindings built from `packages/backend/native`.\n- PostgreSQL, accessed through Prisma. Migrations run with `prisma migrate deploy`, and the CI database is `affine`.\n- Redis, used for caching, the socket.io adapter and queues.\n- A config file (`config.example.json`) and environment variables.\n- Storage for blobs: local disk or an S3-compatible service.\n- Optionally Manticore Search (CI uses it) for the indexer plugin, an SMTP server for mail, and AI provider keys for copilot."
+}

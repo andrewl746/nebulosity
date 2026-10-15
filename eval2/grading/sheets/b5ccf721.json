@@ -1,0 +1,39 @@
+{
+  "id": "b5ccf721",
+  "question": "How is BlockSuite, the editor framework under `blocksuite/`, structured: what are its main packages and kinds of components, and how does the AFFiNE app use it?",
+  "points": [
+    {
+      "id": "AFFINE-BP2.1",
+      "text": "BlockSuite has two groups of packages: a headless framework (`blocksuite/framework`: `@blocksuite/store`, `@blocksuite/std` and support packages) and the prebuilt editing components built on it (`blocksuite/affine`: the blocks, widgets, fragments, models and shared code); the framework does not depend on the components"
+    },
+    {
+      "id": "AFFINE-BP2.2",
+      "text": "`@blocksuite/store` is the data layer: documents are modeled on the Yjs CRDT, which gives them real-time collaboration and history (undo/redo)"
+    },
+    {
+      "id": "AFFINE-BP2.3",
+      "text": "`@blocksuite/std` (the docs' `block-std`) is the standard library for editable blocks: UI event handling, selection and clipboard (with commands), and the `EditorHost` that turns the block tree into components"
+    },
+    {
+      "id": "AFFINE-BP2.4",
+      "text": "rich text is handled by a small inline editor (the docs' `@blocksuite/inline`): each block's text is its own Y.Text with its own inline editor, instead of one rich-text editor for the whole document"
+    },
+    {
+      "id": "AFFINE-BP2.5",
+      "text": "its component types are editors (the page editor and the edgeless whiteboard editor), blocks, widgets (helper UI that shows up for a block, such as the slash menu or drag handle) and fragments (UI outside the editor that shares its document, such as the doc title or outline panel)"
+    },
+    {
+      "id": "AFFINE-BP2.6",
+      "text": "all of these components are native web components built with lit, while the AFFiNE app is written in React, so the app wraps BlockSuite's editors in React components"
+    },
+    {
+      "id": "AFFINE-BP2.7",
+      "text": "an editor is thin, just the set of block and widget registrations mounted on an `EditorHost`; so the page and edgeless editors are two views of the same document, and the root block keeps one model (`RootBlockModel`, flavour `affine:page`) with a different view in each"
+    },
+    {
+      "id": "AFFINE-BP2.8",
+      "text": "BlockSuite stands apart from the app, like Monaco from VS Code: the app depends on BlockSuite and reuses it through its components, and BlockSuite never imports the app's code"
+    }
+  ],
+  "answer": "BlockSuite lives in `blocksuite/` and splits into two layers: a generic `framework/` and an AFFiNE-specific `affine/`. I worked this out from the package layout and the file names under `packages/frontend/core/src/blocksuite/`. I didn't open any source files, so the descriptions below are inferred from names.\n\n**`blocksuite/framework/`: the generic core**\n- `global`: shared utilities and base types.\n- `store`: the document and block data model. Docs are collaborative and CRDT-backed, and the store handles schema, transactions and extensions.\n- `sync`: syncing docs and blobs with storage and other clients.\n- `std`: the standard editor runtime. It holds the dependency-injection container, extension system, commands, selection, clipboard, the block and widget view base classes, and the graphics (`gfx`) layer behind edgeless canvas mode.\n\n**`blocksuite/affine/`: the AFFiNE implementation, built on the framework**\n- Support packages: `model` (block schemas and models), `shared`, `foundation`, `components` (shared UI), `rich-text`, `data-view`, `ext-loader`, and `all`, which seems to bundle everything.\n- `blocks/*`: one package per block type.\n  - Text blocks: paragraph, list, code, divider, latex, callout and table.\n  - Page structure: note, root and frame.\n  - Media and embeds: image, attachment, bookmark, embed and embed-doc.\n  - Data and canvas: database, data-view, surface, surface-ref and edgeless-text.\n- `gfx/*`: edgeless canvas tools and elements, such as brush, shape, connector, mindmap, group, text and template. `turbo-renderer` is a rendering optimisation.\n- `inlines/*`: inline rich-text features such as link, reference, mention, footnote, comment and latex.\n- `widgets/*`: UI overlays such as the slash menu, toolbar, drag handle, the edgeless toolbars, remote-selection, linked-doc and note-slicer.\n- `fragments/*`: side panels such as outline, frame-panel, doc-title and adapter-panel.\n\nEach package is a self-contained extension, which is the unit the framework's extension system registers. That lets an app compose only the pieces it wants.\n\n**How the AFFiNE app uses it**\n- The app, mainly `packages/frontend/core`, imports `@blocksuite/affine/*`, `@blocksuite/std` and `@blocksuite/store`. Imports of those packages appear in over 300 files.\n- `packages/frontend/core/src/blocksuite/` is the integration layer:\n  - `manager/store.ts` and `manager/view.ts` assemble the store and view extension sets.\n  - `view-extensions/*` adds AFFiNE-specific behaviour: cloud, electron, mobile, theme, comments, PDF and database integrations, link previews and editor config.\n  - `store-extensions/*` covers feature flags and AI.\n  - `editors/page-editor.ts` and `editors/edgeless-editor.ts` define the two editor modes, document and canvas.\n  - `block-suite-editor/` wraps the editor for React, with `lit-adaper.tsx` bridging React and Lit.\n  - Other folders hold the mode switch, outline viewer, attachment viewer and starter bar.\n- `blocksuite/ai/` is a large AI layer. It adds a custom AI chat block, a chat UI and copilot widgets on top of BlockSuite's extension points."
+}

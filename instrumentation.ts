@@ -6,6 +6,10 @@ export async function register(): Promise<void> {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
     // next build loads this file too, and a file watcher has no business running during a build
     if (process.env.NEXT_PHASE === "phase-production-build") return;
+    // Next reads only its own folder's .env.local; an installed copy keeps the key in the user's data folder, which the CLI
+    // and the background worker already read (scripts/env.ts). Without this the Map would call summaries off there.
+    const { loadLocalEnv } = await import("./scripts/env");
+    loadLocalEnv();
     // a server started only to measure (S3, the demo) must not fork a second writer beside the Map's (ADR-038, amended)
     if (process.env.NEBULOSITY_WORKER === "off") return;
     const { backgroundSupervisor } = await import("./lib/background/start");

@@ -7,10 +7,10 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { acquireSummaryLock, releaseSummaryLock } from "../db/store/lock";
 import { requireRepository } from "../db/store/structure";
-import { addUsage, loadSummaries } from "../db/store/summaries";
+import { addUsage, confirmSummaries, loadSummaries } from "../db/store/summaries";
 import { countEmbedded } from "../db/store/summary-vectors";
 import { describe as describeTarget } from "../engine/describe";
-import { RepoSwitchingError, SummariesOffError } from "../engine/errors";
+import { errorResponseFor, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "../engine/errors";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
@@ -80,6 +80,33 @@ describe("background service", () => {
         expect(rowStatus(root, "src/core/log.ts")).toBe("fresh");
         expect(rowStatus(root, "src/core")).toBe("stale");   // its folder waits to be opened or swept
         expect(embedded(root)).toBe(13);                     // the new summary has its vector again
+        await service.stop();
+    });
+
+    it("never starts spending on a repo whose summaries nobody confirmed (S11); a yes starts it", async () => {
+        const root = copyFixture();
+        indexRepository(root);   // structure only: no model has written anything, and no yes is recorded
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.requests).toHaveLength(0);
+
+        const db = getDb();
+        confirmSummaries(db, requireRepository(db, repoKey(root)));
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const more = 2;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
         await service.stop();
     });
 
@@ -184,7 +211,8 @@ describe("background service", () => {
         await service.idle();
 
         expect(stub.requests).toHaveLength(MAX_AUTO_REFRESH_FILES);
-        expect(logs).toContain("refreshed at most 50 of 52 changed files; the rest stay out of date until opened or npm run summarize");
+        const repo = path.resolve(root);
+        expect(logs).toContain(`refreshed at most 50 of 52 changed files; the rest stay out of date until opened or summarized by nebulosity summarize "${repo}" (in a checkout: npm run summarize -- "${repo}")`);
         await service.stop();
     });
 
@@ -276,6 +304,27 @@ describe("background service", () => {
         await service.stop();
     });
 
+    it("summarize now spends nothing on a repo whose summaries nobody confirmed, and says how to confirm them (S11)", async () => {
+        const root = copyFixture();
+        indexRepository(root);   // structure only: no yes recorded, no model-written summary
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        const refusal = service.summarizeNow("src/core/log.ts");
+        await expect(refusal).rejects.toThrow(SummariesNotConfirmedError);
+        await expect(refusal).rejects.toThrow(`run nebulosity summarize "${path.resolve(root)}"`);
+        expect(stub.requests).toHaveLength(0);
+        expect(errorResponseFor(await refusal.catch((err: unknown) => err)).error.code).toBe("SUMMARIES_OFF");
+
+        const db = getDb();
+        confirmSummaries(db, requireRepository(db, repoKey(root)));
+        expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh" });
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
+        await service.stop();
+    });
+
     it("waits while another summary run holds the lock, then tries again", async () => {
         const root = await summarizedFixture();
         const watcher = fakeWatcher();
@@ -363,7 +412,7 @@ describe("background service", () => {
 
         await service.setRepo(root);
         expect(watching).toBe(0);
-        expect(logs.some((m) => m.includes("isn't indexed yet"))).toBe(true);
+        expect(logs).toContain(`${path.resolve(root)} isn't indexed yet; run nebulosity index "${path.resolve(root)}" (in a checkout: npm run index -- "${path.resolve(root)}") (checked again every 30 s)`);
 
         indexRepository(root);   // npm run index, from a terminal
         await vi.advanceTimersByTimeAsync(30_000);

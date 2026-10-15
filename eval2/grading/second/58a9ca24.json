@@ -1,0 +1,10 @@
+{ "id": "58a9ca24", "points": [
+  { "id": "AFFINE-BP2.1", "score": 1, "quote": "**`blocksuite/framework/`** holds the four core packages ... **`blocksuite/affine/`** is the Affine editor built on that framework." },
+  { "id": "AFFINE-BP2.2", "score": 1, "quote": "`store`: the document model, backed by Yjs (a CRDT library). Docs are trees of blocks." },
+  { "id": "AFFINE-BP2.3", "score": 1, "quote": "`std`: the standard runtime. It covers block views, selection, commands, the extension system and the canvas/gfx runtime." },
+  { "id": "AFFINE-BP2.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.5", "score": 0.5, "quote": "**`blocks/`**: block types ... **`widgets/`**: floating UI such as the drag handle, edgeless toolbars ... **`fragments/`**: side panels such as outline, frame-panel, doc-title and adapter-panel." },
+  { "id": "AFFINE-BP2.6", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.7", "score": 0.5, "quote": "The app configures the editor through BlockSuite's extension system. It registers store extensions and view extensions" },
+  { "id": "AFFINE-BP2.8", "score": 1, "quote": "BlockSuite imports nothing from outside itself. ... 442 files outside `blocksuite/` import it directly." }
+] }

@@ -119,7 +119,7 @@ describe("setupCall", () => {
         writeStage(getDb(), repoId, "structure", { state: "running", done: 3, total: 8 });
         expect(setupCall(root).context.indexNote).toBe("The index is being updated (3/8 files), so answers may miss the newest changes.");
         writeStage(getDb(), repoId, "structure", { state: "failed", done: 3, total: 8, note: "disk full" });
-        expect(setupCall(root).context.indexNote).toBe("The last index update failed (disk full), so answers may be out of date. Running npm run index in the Nebulosity folder redoes it.");
+        expect(setupCall(root).context.indexNote).toBe(`The last index update failed (disk full), so answers may be out of date. Running nebulosity index "${repoKey(root)}" (in a checkout: npm run index -- "${repoKey(root)}") redoes it.`);
     });
 
     it("refuses when the project folder is outside every indexed repo and the Map shows none", () => {

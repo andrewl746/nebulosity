@@ -1,0 +1,13 @@
+{
+  "id": "f7f5eb2a",
+  "points": [
+    { "id": "AFFINE-BP4.1", "score": 1, "quote": "Each document is a `Y.Doc`, and the block tree lives inside it as Yjs types." },
+    { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "Incoming change: it applies the update to the `Y.Doc` as a remote-origin change. The editor then renders it." },
+    { "id": "AFFINE-BP4.3", "score": 1, "quote": "the stored form is binary Yjs update/snapshot blobs, not JSON." },
+    { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+    { "id": "AFFINE-BP4.5", "score": 0.5, "quote": "Awareness (cursors and presence) has its own cloud channel." },
+    { "id": "AFFINE-BP4.6", "score": 1, "quote": "Web (IndexedDB): one database per workspace, named `workspace:${id}`... Desktop and mobile: `impls/sqlite` stores the same kind of data in SQLite" },
+    { "id": "AFFINE-BP4.7", "score": 0.5, "quote": "Local edit: it saves the edit's update to local storage and hands it to the sync layer." },
+    { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+  ]
+}

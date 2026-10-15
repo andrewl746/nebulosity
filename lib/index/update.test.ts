@@ -3,18 +3,19 @@ import { execFileSync } from "child_process";
 import { and, eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
-import { copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
-import { folders, levelEdges } from "../db/schema";
+import { chunks, files, folders, levelEdges, symbols } from "../db/schema";
+import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { loadImportEdges } from "../db/store/structure";
 import { loadFileFacts, loadFolderFacts, loadSummaries } from "../db/store/summaries";
 import { readIndexVersion } from "../db/store/version";
 import { indexRepository } from "./pipeline";
 import { runSummaries } from "./summarize/run";
-import { applyFileChanges } from "./update";
+import { applyFileChanges, resolvesEverything } from "./update";
 
 const write = (root: string, rel: string, text: string): void => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -159,5 +160,125 @@ describe("applyFileChanges", () => {
         } finally{
             releaseIndexLock(db);
         }
+    });
+});
+
+describe("applyFileChanges — files over the size cap (ADR-053, amended)", () => {
+    const CAPS = { maxFileBytes: 100, hardMaxFileBytes: 200 };
+
+    function declarationsOf(repoId: number, filePath: string){
+        const db = getDb();
+        const file = db.select({ id: files.id }).from(files).where(and(eq(files.repoId, repoId), eq(files.path, filePath))).get()!;
+        return {
+            symbols: db.select({ q: symbols.qualifiedName }).from(symbols).where(eq(symbols.fileId, file.id)).all().map((s) => s.q),
+            chunks: db.select({ name: chunks.name }).from(chunks).where(eq(chunks.fileId, file.id)).all().map((c) => c.name),
+        };
+    }
+
+    const edgesOf = (repoId: number): string[] => loadImportEdges(getDb(), repoId).map((e) => `${e.source} -> ${e.target}`).sort();
+
+    it("a file grown over the cap keeps its import edges and loses its declarations and chunks, as a full run stores it", () => {
+        const root = makeTempDir("neb-update-cap-");
+        write(root, "a.ts", "export const a = 1;\n");
+        write(root, "b.ts", 'import { a } from "./a";\nexport function b(): number { return a; }\n');    // 25 + 42 = 67 bytes
+        const { repoId } = indexRepository(root, CAPS);
+        expect(declarationsOf(repoId, "b.ts").symbols).toEqual(["b"]);
+
+        fs.appendFileSync(path.join(root, "b.ts"), `// ${"x".repeat(60)}\n`);                                // 67 + 64 = 131 bytes
+        expect(applyFileChanges(root, ["b.ts"], CAPS)).toMatchObject({ changed: ["b.ts"], deleted: [], edgesAdded: 0, edgesRemoved: 0 });
+
+        expect(edgesOf(repoId)).toEqual(["b.ts -> a.ts"]);
+        expect(declarationsOf(repoId, "b.ts")).toEqual({ symbols: [], chunks: [] });
+        const twin = makeTempDir("neb-twin-");
+        fs.cpSync(root, twin, { recursive: true });
+        expect(tables(repoId)).toEqual(tables(indexRepository(twin, CAPS).repoId));
+    });
+
+    it("a file grown past the hard bound leaves the index, its edges with it", () => {
+        const root = makeTempDir("neb-update-bound-");
+        write(root, "a.ts", "export const a = 1;\n");
+        write(root, "b.ts", 'import { a } from "./a";\nexport function b(): number { return a; }\n');    // 67 bytes
+        const { repoId } = indexRepository(root, CAPS);
+
+        fs.appendFileSync(path.join(root, "b.ts"), `// ${"x".repeat(140)}\n`);                               // 67 + 144 = 211 bytes
+        expect(applyFileChanges(root, ["b.ts"], CAPS)).toMatchObject({ changed: [], deleted: ["b.ts"], edgesRemoved: 1 });
+        expect(edgesOf(repoId)).toEqual([]);
+    });
+
+    it("reads a file past the parse bound with the token scan, as a full run does", () => {
+        const root = makeTempDir("neb-update-scan-");
+        const caps = { maxFileBytes: 60, parseMaxFileBytes: 150, hardMaxFileBytes: 400 };
+        write(root, "a.ts", "export const a = 1;\n");
+        const { repoId } = indexRepository(root, caps);
+
+        // the adapter doesn't count a member require, the token scan does; 20 + 204 = 224 bytes
+        write(root, "scanned.ts", `foo.require("./a");\n// ${"x".repeat(200)}\n`);
+        expect(applyFileChanges(root, ["scanned.ts"], caps)).toMatchObject({ changed: ["scanned.ts"], edgesAdded: 1 });
+        expect(edgesOf(repoId)).toEqual(["scanned.ts -> a.ts"]);
+        const twin = makeTempDir("neb-twin-");
+        fs.cpSync(root, twin, { recursive: true });
+        expect(tables(repoId)).toEqual(tables(indexRepository(twin, caps).repoId));
+    });
+
+    it("a new file over the cap enters the index with its edges", () => {
+        const root = makeTempDir("neb-update-new-");
+        write(root, "a.ts", "export const a = 1;\n");
+        const { repoId } = indexRepository(root, CAPS);
+
+        write(root, "big.ts", `import { a } from "./a";\nexport const big = a;\n// ${"x".repeat(80)}\n`);       // 25 + 22 + 84 = 131 bytes
+        expect(applyFileChanges(root, ["big.ts"], CAPS)).toMatchObject({ changed: ["big.ts"], edgesAdded: 1 });
+        expect(edgesOf(repoId)).toEqual(["big.ts -> a.ts"]);
+        expect(declarationsOf(repoId, "big.ts")).toEqual({ symbols: [], chunks: [] });
+    });
+});
+
+describe("what re-resolves every file, and the workspace on every update (ADR-053)", () => {
+    it("re-resolves every file when a package.json changes, as for a tsconfig (ADR-053)", () => {
+        expect(resolvesEverything("packages/ui/package.json")).toBe(true);
+        expect(resolvesEverything("package.json")).toBe(true);
+        expect(resolvesEverything("src/tsconfig.base.json")).toBe(true);
+        expect(resolvesEverything("src/package-lock.json")).toBe(false);
+        expect(resolvesEverything("src/app/main.ts")).toBe(false);
+    });
+
+    it("re-resolves every file when the root's workspace declarations change", () => {
+        expect(resolvesEverything("pnpm-workspace.yaml")).toBe(true);
+        expect(resolvesEverything("lerna.json")).toBe(true);
+        expect(resolvesEverything("packages/p/lerna.json")).toBe(false);
+    });
+
+    it("keeps a workspace edge when an edit re-resolves only the edited file", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        write(root, "src/platform/node/storageFile.ts", fs.readFileSync(path.join(root, "src/platform/node/storageFile.ts"), "utf8") + "// touched\n");
+
+        // a comment changes no import: the file's four edges (#27-#30) are re-resolved and come back the same
+        expect(applyFileChanges(root, ["src/platform/node/storageFile.ts"]))
+            .toMatchObject({ changed: ["src/platform/node/storageFile.ts"], deleted: [], resolvedAll: false, edgesAdded: 0, edgesRemoved: 0 });
+        expect(tables(repoId).imports).toContain("src/platform/node/storageFile.ts -> packages/core/src/index.ts (@arch/core)");
+        expect(tables(repoId)).toEqual(fullRunOf(root));
+    });
+
+    it("a changed package.json replaces the entry points, and moves the index version though no file or edge changed", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        const version = readIndexVersion(getDb(), repoId);
+        write(root, "package.json", JSON.stringify({ name: "arch-repo", private: true, main: "src/app/main.ts", workspaces: ["packages/*"] }));
+
+        // readers cache per index version (ADR-036): a version that stays put would keep serving loader.ts as the entry point
+        expect(applyFileChanges(root, ["package.json"]))
+            .toMatchObject({ changed: [], deleted: [], resolvedAll: true, edgesAdded: 0, edgesRemoved: 0, indexVersion: version + 1 });
+        expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/main.ts"]);
+    });
+
+    it("a package.json saved with the same entry points keeps the index version", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        const version = readIndexVersion(getDb(), repoId);
+        // the same fields, written again with other spacing: everything re-resolves, and nothing it stores changes
+        write(root, "package.json", JSON.stringify({ name: "arch-repo", private: true, main: "src/app/loader.ts", workspaces: ["packages/*"] }));
+
+        expect(applyFileChanges(root, ["package.json"])).toMatchObject({ resolvedAll: true, edgesAdded: 0, edgesRemoved: 0, indexVersion: version });
+        expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
     });
 });

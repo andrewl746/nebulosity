@@ -1,11 +1,44 @@
 {
   "name": "nebulosity",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "private": true,
+  "bin": {
+    "nebulosity": "bin/nebulosity.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "mcp/",
+    "scripts/cli.ts",
+    "scripts/commands/",
+    "scripts/index.ts",
+    "scripts/summarize.ts",
+    "scripts/background.ts",
+    "scripts/env.ts",
+    "scripts/mcp-smoke.mjs",
+    "app/",
+    "public/",
+    "next.config.ts",
+    "proxy.ts",
+    "instrumentation.ts",
+    "postcss.config.mjs",
+    "tsconfig.json",
+    ".next/",
+    "!.next/cache/",
+    "!.next/dev/",
+    "!**/*.test.ts",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
     "build": "next build",
+    "build:package": "next build && node scripts/prepare-package.mjs",
+    "prepack": "node scripts/prepare-package.mjs --check",
     "start": "next start -H 127.0.0.1",
     "lint": "eslint",
     "test": "vitest run",
@@ -20,13 +53,17 @@
     "bench-search": "tsx scripts/bench-search.ts",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
     "eval:run": "tsx scripts/eval/run.ts",
+    "eval:probe": "tsx scripts/eval/probe.ts",
     "eval:truth": "tsx scripts/eval/build-truth.ts",
     "eval:score": "tsx scripts/eval/score.ts",
     "eval:grading": "tsx scripts/eval/grading.ts",
+    "eval:overlap": "tsx scripts/eval/overlap.ts",
     "export-demo": "tsx scripts/export-demo.ts",
     "build-demo": "tsx scripts/build-demo.ts",
     "serve-demo": "tsx scripts/serve-demo.ts",
-    "preview-folders": "tsx scripts/preview-folders.ts"
+    "preview-folders": "tsx scripts/preview-folders.ts",
+    "report-resolution": "tsx scripts/report-resolution.ts",
+    "measure-typecheck": "node --max-old-space-size=16384 --import tsx scripts/measure-typecheck.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -46,6 +83,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
+    "tsx": "^4.23.0",
+    "typescript": "^5",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -58,8 +97,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
-    "tsx": "^4.23.0",
-    "typescript": "^5",
     "vitest": "^4.1.10"
   }
 }

@@ -1,0 +1,11 @@
+{
+  "id": "affine-cn4",
+  "kind": "chain",
+  "from": "packages/frontend/apps/electron/src/main/index.ts",
+  "to": "packages/frontend/apps/electron/src/helper",
+  "connected": false,
+  "shortest": null,
+  "example": null,
+  "verified": true,
+  "notes": []
+}

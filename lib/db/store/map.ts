@@ -91,8 +91,8 @@ export function loadLevelEdgeRows(db: Db, repoId: number, levelPath: string): { 
         .all();
 }
 
-export function loadFileInfo(db: Db, repoId: number, filePath: string): { path: string; lineCount: number; isTest: boolean } | null {
-    return db.select({ path: files.path, lineCount: files.lineCount, isTest: files.isTest }).from(files)
+export function loadFileInfo(db: Db, repoId: number, filePath: string): { path: string; lineCount: number; isTest: boolean; sizeBytes: number } | null {
+    return db.select({ path: files.path, lineCount: files.lineCount, isTest: files.isTest, sizeBytes: files.sizeBytes }).from(files)
         .where(and(eq(files.repoId, repoId), eq(files.path, filePath))).get() ?? null;
 }
 

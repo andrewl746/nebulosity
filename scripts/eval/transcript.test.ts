@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeRun } from "./transcript";
+import { streamEvents, summarizeRun } from "./transcript";
 
 const LINES: unknown[] = [
     { type: "system", subtype: "init", model: "claude-sonnet-5-5", claude_code_version: "2.1.296", apiKeySource: "none", permissionMode: "dontAsk",
@@ -30,7 +30,7 @@ describe("summarizeRun", () => {
             tools: ["Bash", "Read", "Grep", "Glob", "Agent", "ToolSearch"], mcpServers: [{ name: "nebulosity", status: "connected" }],
             plugins: ["cc-plugin-agents-md"], skills: 0,
             finalText: "Done.\nANSWER:\nsrc/a.ts", subtype: "success", isError: false, turns: 6, durationMs: 42000, apiMs: 30000, costUsd: 0.31,
-            usage: { input: 10, cacheWrite: 2000, cacheRead: 50000, output: 900 },
+            usage: { input: 10, cacheWrite: 2000, cacheRead: 50000, output: 900 }, firstCallContext: null,
             models: {
                 "claude-sonnet-5-5": { costUsd: 0.29, input: 10, output: 900, cacheRead: 50000, cacheWrite: 2000 },
                 "claude-haiku-5-5": { costUsd: 0.02, input: 5, output: 50, cacheRead: 0, cacheWrite: 300 },
@@ -39,5 +39,27 @@ describe("summarizeRun", () => {
             toolErrors: 1, toolSearchCalls: 1, nebulosityCalls: 1,
             utilization: { fiveHour: 0.41, sevenDay: 0.6 },
         });
+    });
+});
+
+describe("firstCallContext", () => {
+    it("is the first assistant message's input, cache writes and cache reads", () => {
+        const lines = [
+            JSON.stringify({ type: "system", subtype: "init", model: "claude-sonnet-5-5" }),
+            JSON.stringify({ type: "assistant", message: { usage: { input_tokens: 2, cache_creation_input_tokens: 2478, cache_read_input_tokens: 18606, output_tokens: 24 } } }),
+            JSON.stringify({ type: "assistant", message: { usage: { input_tokens: 2, cache_creation_input_tokens: 471, cache_read_input_tokens: 21084, output_tokens: 24 } } }),
+            JSON.stringify({ type: "result", subtype: "success", num_turns: 2 }),
+        ].join("\n");
+        expect(summarizeRun(lines).firstCallContext).toBe(21086);
+    });
+
+    it("is null when no assistant message reported usage", () => {
+        expect(summarizeRun(JSON.stringify({ type: "result", subtype: "success" })).firstCallContext).toBeNull();
+    });
+});
+
+describe("streamEvents", () => {
+    it("returns the JSON objects in order and skips partial, non-JSON and non-object lines", () => {
+        expect(streamEvents('{"type":"a"}\r\nnot json\n42\nnull\n{"type":"b"}\n{"type":"c"')).toEqual([{ type: "a" }, { type: "b" }]);
     });
 });

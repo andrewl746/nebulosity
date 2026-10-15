@@ -1,0 +1,39 @@
+{
+  "id": "5bca435e",
+  "question": "What are the main parts of the AFFiNE repository and what is each one for? Say which apps are built from it, what the server is for and what it needs to run.",
+  "points": [
+    {
+      "id": "AFFINE-BP1.1",
+      "text": "`packages/` holds the code that runs in production, split into `backend/` (the server), `frontend/` (the apps and the business libraries they share) and `common/` (isomorphic or basic libraries with no business logic)"
+    },
+    {
+      "id": "AFFINE-BP1.2",
+      "text": "`tools/` holds development and CI tooling that doesn't ship (such as the `yarn affine` CLI), and `tests/` holds the end-to-end and integration tests that span packages"
+    },
+    {
+      "id": "AFFINE-BP1.3",
+      "text": "the editor is BlockSuite, which lives in the same repository under `blocksuite/` and is used by the app as workspace packages (`@blocksuite/*`)"
+    },
+    {
+      "id": "AFFINE-BP1.4",
+      "text": "several apps are built from the shared frontend code under `packages/frontend`: the web app, the Electron desktop app, a mobile web app, iOS and Android apps, and an admin app"
+    },
+    {
+      "id": "AFFINE-BP1.5",
+      "text": "some code is written in Rust and built into Node.js bindings with napi-rs: `@affine/native` (`packages/frontend/native`) for the clients and `@affine/server-native` for the server"
+    },
+    {
+      "id": "AFFINE-BP1.6",
+      "text": "the server (`@affine/server`, in `packages/backend/server`) is only needed for cloud features (accounts, sync and collaboration, AI); without it the web app keeps workspaces locally in the browser"
+    },
+    {
+      "id": "AFFINE-BP1.7",
+      "text": "the server runs on PostgreSQL (with the pgvector extension) and Redis, and serves a GraphQL API at `/graphql`"
+    },
+    {
+      "id": "AFFINE-BP1.8",
+      "text": "`@affine/component` (`packages/frontend/component`) is the shared UI component library"
+    }
+  ],
+  "answer": "AFFiNE is a Yarn monorepo of about 7,000 files. I answered from the repo's structure summaries, the server README and the CI workflow. I did not read the server config, so the server requirements below are partly inferred.\n\n## Main parts\n\n- **`blocksuite/`** holds the editor, built on Yjs (a collaborative-editing library). `framework/` is the core (store, std). `affine/` holds the block types, models, shared services and widgets. There is also a playground and a docs site. Both the \"page\" and the \"edgeless\" (whiteboard) modes come from here.\n- **`packages/frontend/`**\n  - `core` is the main application logic and editor integration.\n  - `component` is the shared React UI library.\n  - `apps/` holds the platform shells.\n  - `admin` is the admin console.\n  - Smaller packages cover `i18n`, `track` (analytics), `routes`, `templates`, `native` (Rust addon loader) and `electron-api`.\n- **`packages/backend/`**\n  - `server` is the NestJS backend.\n  - `native` is a Rust addon (NAPI-RS) that the server relies on heavily.\n- **`packages/common/`** holds code shared by frontend and backend:\n  - `nbstore`: layered storage and sync over IndexedDB, SQLite and cloud.\n  - `infra`: dependency injection, livedata, ORM and RPC primitives.\n  - `graphql`: the typed client and codegen.\n  - Smaller packages: `auth`, `error`, `env`, `debug`, `reader`, `realtime` and `s3-compat`.\n- **`tests/`** holds end-to-end and other tests. `tools/` holds the `affine` CLI and CI helpers. `scripts/` holds build and release scripts. `.github/` holds CI and GKE deployment.\n\n## Apps built from it\n\nAll are built under `packages/frontend/apps/`:\n\n- **web**: the browser app.\n- **mobile**: the mobile web shell.\n- **electron** with **electron-renderer**: the desktop app.\n- **ios** and **android**: Capacitor apps, with `mobile-shared` for shared code.\n\nThe admin console (`packages/frontend/admin`) is a separate frontend. The server is built from `packages/backend`.\n\n## The server\n\nIt is a NestJS application that exposes a GraphQL endpoint at `http://localhost:3000/graphql` in dev. It is the cloud and self-host backend:\n\n- accounts and auth\n- workspaces and sync of documents between clients\n- optional features, which live in `src/plugins/`\n\nIts code is split into `base/` and `models/` foundations, `core/` feature logic and `plugins/`.\n\n**To run it:**\n- Install dependencies with `yarn`.\n- Build the Rust native binding with `yarn affine @affine/server-native build`.\n- Start it with `yarn dev`.\n- A PostgreSQL database, set through `DATABASE_URL`, e.g. `postgresql://affine:affine@localhost:5432/affine`.\n- A Redis instance, set through `REDIS_SERVER_HOST`.\n- The CI workflow `.github/workflows/build-test.yml` runs the server's tests against Postgres and Redis service containers.\n- I did not check whether Postgres or Redis is strictly required in every mode, or what blob storage it needs. The `s3-compat` package suggests optional S3-style object storage."
+}

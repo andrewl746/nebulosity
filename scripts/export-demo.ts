@@ -1,14 +1,15 @@
 /**
  * npm run export-demo -- <path-to-repo> [--out <folder>] [--name <public name>]
  *
- * Writes the static demo's data (ADR-049, API_CONTRACTS.md §18) to <Nebulosity>/.nebulosity/demo by default. It only
+ * Writes the static demo's data (ADR-049, API_CONTRACTS.md §18) to the data folder's demo folder by default
+ * (dataPath("demo"): <Nebulosity>/.nebulosity/demo in a checkout, unless NEBULOSITY_DATA moves it). It only
  * reads the database, so it runs while the Map is open. Exits 1 when any file holds a path of this machine or the git
  * email; the demo must never publish one (D7).
  */
 import path from "path";
 import { useReadOnlyDatabase } from "../lib/db/client";
 import { exportDemo, ExportRefusedError, IndexChangedError } from "../lib/demo/export";
-import { nebulosityPath } from "../lib/home";
+import { dataPath } from "../lib/home";
 import { gitEmail } from "./git-email";
 
 const args = process.argv.slice(2);
@@ -28,7 +29,7 @@ if (!target || missingValue){
 
 // eslint-disable-next-line react-hooks/rules-of-hooks -- not a React hook: it makes this process open the database read-only (ADR-044)
 useReadOnlyDatabase();
-const out = path.resolve(flag("--out") ?? nebulosityPath(".nebulosity", "demo"));
+const out = path.resolve(flag("--out") ?? dataPath("demo"));
 const started = performance.now();
 let report: ReturnType<typeof exportDemo>;
 try{

@@ -53,7 +53,7 @@ async function connect(options: Omit<ServerOptions, "now"> & { mapAnswers?: bool
 }
 
 describe("the MCP server", () => {
-    it("serves the registry's seven tools, read-only, with its instructions and version", async () => {
+    it("serves the registry's six tools, read-only, the five that answer questions marked always loaded, with its instructions and version", async () => {
         const { client } = await connect({ projectDir: mapShowing(), live: true });
         const { tools } = await client.listTools();
         expect(tools.map((t) => t.name)).toEqual(TOOLS.map((t) => t.name));
@@ -61,6 +61,8 @@ describe("the MCP server", () => {
             expect(tool.description).toBe(TOOLS.find((t) => t.name === tool.name)!.description);
             expect(tool.inputSchema.type).toBe("object");
             expect(tool.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: false });
+            const entry = TOOLS.find((t) => t.name === tool.name)!;
+            expect(tool._meta).toEqual(entry.alwaysLoad ? { "anthropic/alwaysLoad": true } : { "anthropic/searchHint": entry.searchHint });
         }
         expect(tools.find((t) => t.name === "describe")!.inputSchema.properties).toHaveProperty("path");
         expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS);
@@ -125,10 +127,10 @@ describe("the MCP server", () => {
         const missing = await client.callTool({ name: "describe", arguments: { path: "src/nope.ts" } });
         expect(missing.isError).toBe(true);
         expect(textOf(missing)).toBe('Nothing is indexed at "src/nope.ts".');
-        const whole = await client.callTool({ name: "dependents", arguments: { path: "" } });
+        const whole = await client.callTool({ name: "imports", arguments: { path: "" } });
         expect(whole.isError).toBe(true);
         expect(textOf(whole)).toBe("Pass a folder or a file: the whole repo has nothing outside it.");
-        const invalid = await client.callTool({ name: "dependents", arguments: { path: "src", limit: 0 } });
+        const invalid = await client.callTool({ name: "imports", arguments: { path: "src", limit: 0 } });
         expect(invalid.isError).toBe(true);
         expect(textOf(invalid)).toContain("Input validation error");
         expect(posted).toEqual([]);
@@ -140,7 +142,7 @@ describe("the MCP server", () => {
         const { client } = await connect({ projectDir: makeTempDir("neb-elsewhere-"), live: true });
         const result = await client.callTool({ name: "overview", arguments: {} });
         expect(result.isError).toBe(true);
-        expect(textOf(result)).toBe(`No repository indexed yet. Run npm run index -- <path-to-repo>. (Nebulosity's folder: ${process.env.NEBULOSITY_HOME}.)`);
+        expect(textOf(result)).toBe(`No repository indexed yet. Run nebulosity index <path-to-repo> (in a checkout: npm run index -- <path-to-repo>). (Nebulosity's folder: ${process.env.NEBULOSITY_HOME}.)`);
     });
 
     it("keeps stdout for the protocol: log, info, debug, dir and dirxml go through console.error", () => {

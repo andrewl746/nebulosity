@@ -1,0 +1,83 @@
+{
+  "id": "affine-bp3",
+  "source": "BlockSuite's own docs in AFFiNE at 0b69a6da: blocksuite/docs-site/guide/block-schema.md, block-view.md, block-widgets.md, block-spec.md, block-service.md, component-types.md, working-with-block-tree.md; blocksuite/affine/ext-loader/README.md",
+  "points": [
+    {
+      "id": "AFFINE-BP3.1",
+      "text": "every block type has a schema made with `defineBlockSchema`: a `flavour` string that names it uniquely (`namespace:name`, such as `affine:paragraph`), its `props`, and `metadata` with a `version` and a `role`",
+      "check": "Doc: guide/block-schema.md L5 ('You can use the defineBlockSchema function to define the schema of the block'), L7-23 (flavour, props, metadata { version, role }), L27 ('The flavour of the block is a string that uniquely identifies the block'); working-with-block-tree.md L11 ('a unique block.flavour, following a namespace:name naming structure ... the default editable blocks use the affine prefix'). Code: blocksuite/framework/store/src/model/block/zod.ts L53-79 (defineBlockSchema({ flavour, metadata: { version, role, parent?, children? }, props?, toModel?, transformer? })) and L81-110; store/src/schema/schema.ts L15 flavourSchemaMap keyed by flavour, L277-281 register. Example: blocksuite/affine/model/src/blocks/paragraph/paragraph-model.ts L29-56 (flavour 'affine:paragraph', version 1, role 'content').",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP3.2",
+      "text": "props can hold Yjs-backed values made with the `internal` helpers, such as `internal.Text()` for the block's rich text (a Y.Text)",
+      "check": "Doc: block-schema.md L13 (text: internal.Text()), L30-31 ('internal types'; 'internal.Text is a special type that represents the text of the block. It represents Y.Text in the Yjs'). Code: store/src/model/block/zod.ts L15-23 InternalPrimitives { Text, Boxed }; store/src/reactive/text/text.ts L9 ('Text is an abstraction of Y.Text'), L35 private readonly _yText: Y.Text; paragraph-model.ts L33 text: internal.Text().",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP3.3",
+      "text": "the schema also says where a block may sit, with `parent` and `children` lists of flavours that accept `*` and glob patterns (minimatch); the `root` role marks the document's root block, which can't have a parent",
+      "check": "Doc: block-schema.md L42 ('root: The block is the root of the document. A document can only have one root block'), L59-106 (parent and children options, '*', glob patterns, 'The glob match feature is powered by minimatch'). Code: store/src/schema/schema.ts L1 imports minimatch, L123-128 _matchFlavour uses it, L181-182 parent and children default to ['*'], L78-88 and L237-247 a root block can't have a parent; store/src/model/store/crud.ts L11-22 the doc's root is the block whose role is 'root', L120 a block added without a parent goes under it. Examples: paragraph-model.ts L45-53 parent: ['affine:note', 'affine:database', ...]; root-block-model.ts L54-60 flavour 'affine:page', role 'root'.",
+      "holds": true,
+      "note": "The docs' rules for the other roles ('hub' children may be hub or content; 'content' children only content; validated by role by default) are not enforced: see AFFINE-BP3.9."
+    },
+    {
+      "id": "AFFINE-BP3.4",
+      "text": "a block's model is a class extending `BlockModel`, created from the schema, which can add its own methods",
+      "check": "Doc: block-schema.md L121-123 ('The schema of the block is used to generate the model of the block'), L168-181 ('You can also customize the model by extending the BlockModel to provide more methods'). Code: store/src/model/block/zod.ts L70 and L97 toModel option; paragraph-model.ts L55 toModel: () => new ParagraphBlockModel(), L61-65 class ParagraphBlockModel extends BlockModel<ParagraphProps> { isEmpty() }; root-block-model.ts L12 RootBlockModel extends BlockModel.",
+      "holds": true,
+      "note": "The docs' SchemaToModel<typeof Schema> helper type no longer exists in the store; models are written as classes and handed over by toModel."
+    },
+    {
+      "id": "AFFINE-BP3.5",
+      "text": "the block's view is a lit web component extending `BlockComponent`, which renders its children through the host, and it is registered for the flavour with `BlockViewExtension(flavour, literal`tag`)`",
+      "check": "Doc: block-view.md L3-9 ('we use view to represent the renderer'; 'We provide a BlockComponent class to help building a lit-based block view'), L38-52 (render children with renderModelChildren); block-spec.md L5-14 (a block spec's view.component, given as literal`my-block-component`). Code: blocksuite/framework/std/src/view/element/block-component.ts L32-35 class BlockComponent extends SignalWatcher(WithDisposable(ShadowlessElement)), L129-131 renderChildren delegates to the host; shadowless-element.ts L5 ShadowlessElement extends LitElement; blocksuite/affine/blocks/paragraph/src/paragraph-block.ts L36 ParagraphBlockComponent extends CaptionedBlockComponent (a BlockComponent); paragraph/src/effects.ts customElements.define('affine-paragraph', ParagraphBlockComponent); paragraph/src/view.ts L57 BlockViewExtension('affine:paragraph', literal`affine-paragraph`); std/src/extension/block-view.ts L24-33; std/src/view/element/lit-host.ts L62-69 the EditorHost looks up the view by the model's flavour.",
+      "holds": true,
+      "note": "Rewritten: the docs' @blocksuite/lit package and renderModelChildren are now part of @blocksuite/std (renderChildren). An answer saying 'a lit component extending BlockComponent, registered for its flavour' earns the point without the extension's name."
+    },
+    {
+      "id": "AFFINE-BP3.6",
+      "text": "widgets are extra UI tied to a host block (toolbars, menus, the drag handle, the slash menu), written as `WidgetComponent`s and registered for a block flavour",
+      "check": "Doc: block-widgets.md L3 ('widgets are components that can be used to display helper UI elements of a block'), L9 (the WidgetComponent class), L30 ('Widget is always related to a block called host block'); component-types.md L21 ('register dynamic UI components such as drag handles and slash menus'). Code: std/src/view/element/widget-component.ts L13-17 class WidgetComponent extends SignalWatcher(WithDisposable(LitElement)), L30-32 get block(); std/src/extension/widget-view-map.ts L22-37 WidgetViewExtension(flavour, id, view) registers under 'flavour|id'; blocksuite/affine/widgets/drag-handle/src/index.ts L11-15 and widgets/slash-menu/src/extensions.ts L19-22 register for 'affine:page'; lit-host.ts L75-80 the host renders, inside each block, the widgets whose flavour matches it.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP3.7",
+      "text": "blocks are packaged as extension providers: a `StoreExtensionProvider` registers the data side (the schema, adapters) and a `ViewExtensionProvider` the UI side (the view, widgets, keymaps, config), and an editor gets its extensions from a `StoreExtensionManager` and a `ViewExtensionManager` that collect the providers",
+      "check": "Doc: blocksuite/affine/ext-loader/README.md L3 ('extension loader system for AFFiNE, providing a structured way to manage and load extensions in different contexts'), L31-61 (Store Extensions: StoreExtensionProvider, context.register, StoreExtensionManager), L63-110 (View Extensions: ViewExtensionProvider, ViewExtensionManager, manager.get('page')). Code: blocksuite/affine/blocks/paragraph/src/store.ts L14-15 registers ParagraphBlockSchemaExtension and the adapter extensions; paragraph/src/view.ts L56-57 registers FlavourExtension and BlockViewExtension, then the keymaps and config; 35 files in blocksuite/affine extend StoreExtensionProvider and 61 extend ViewExtensionProvider; blocksuite/affine/all/src/extensions/store.ts L34 and view.ts L60 list the built-in providers (ParagraphStoreExtension L53, ParagraphViewExtension L92). The app: packages/frontend/core/src/blocksuite/manager/store.ts L28 and manager/view.ts L87-105 build the managers from the built-in providers plus the app's own; block-suite-editor/lit-adaper.tsx L130 return manager.get(mode).",
+      "holds": true,
+      "note": "This replaces the docs' BlockSpec object { schema, service, view: { component, widgets } } (block-spec.md L5-14, component-types.md L19), which no longer exists; the README of ext-loader is the current doc for it."
+    },
+    {
+      "id": "AFFINE-BP3.8",
+      "text": "view providers register per scope (`page`, `edgeless`, their preview and mobile variants), so a block can give each kind of editor a different view; one-time setup such as defining the lit elements goes in `effect()`, which runs once per provider class",
+      "check": "Doc: ext-loader/README.md L84 (if (context.scope === 'page') ...), L112-129 ('View extensions support one-time initialization through the effect method ... only once per provider class'; 'Registering lit elements'), L131-140 (scopes page, edgeless, preview-page, preview-edgeless, mobile-page, mobile-edgeless). Code: blocksuite/affine/ext-loader/src/view-provider.ts L11-17 type ViewScope with those six, L67 static effectRan, L115-120 setup() runs effect() only when effectRan is false; paragraph/src/view.ts L44 effect() calls effects(), which defines 'affine-paragraph'; blocksuite/affine/blocks/root/src/view.ts L50-54 picks the edgeless or page setup by scope, L66 affine-page-root, L87 affine-edgeless-root.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP3.9",
+      "text": "the role sets the nesting rules by default: a `hub` block may hold hub or content blocks, and a `content` block only content blocks",
+      "check": "Doc: block-schema.md L43-44 (hub, content), L61 ('By default, a block will validate its children and parent by its role'). Code: store/src/schema/schema.ts validates only the root role (L78-88, L237-247: a root can't have a parent); otherwise _validateParent (L172-227) checks the parent and children lists, which default to ['*'] (L181-182), and a role counts only when a list names it with '@role' (L139-163). Roles in use: root, hub (note, callout, database, edgeless-text), content.",
+      "holds": false,
+      "note": "Dropped: the hub/content rules are not checked; nesting comes from the parent and children lists."
+    },
+    {
+      "id": "AFFINE-BP3.10",
+      "text": "each block type registers a `BlockService`, created once per editor even when no block of that type exists, for editor-level methods such as hotkeys",
+      "check": "Doc: block-service.md L3 ('Each kind of block can register its own service'), L20 ('For each block type, its service will only be instantiated once. And even though there is no block instance, the service will still be instantiated'); block-spec.md L9. Code: blocksuite/framework/std/src/extension/service.ts L14-21 marks BlockService @deprecated ('BlockService is a legacy extension ... we recommend using the new extension system'). Only 4 classes in blocksuite/affine extend it (EmbedGithubBlockService, EmbedLoomBlockService, EmbedYoutubeBlockService, EdgelessRootService) and 2 in the app's AI code (packages/frontend/core/src/blocksuite/ai/mini-mindmap); the paragraph block, for one, has none.",
+      "holds": false,
+      "note": "Dropped: the block service is deprecated and most blocks have none."
+    },
+    {
+      "id": "AFFINE-BP3.11",
+      "text": "props must not use `undefined` or `null`",
+      "check": "Doc: block-schema.md L29 ('You can use most of the primitive types in the props. But you should not use undefined or null in the props'). Code: the paragraph schema's own defaults use undefined: paragraph-model.ts L34 textAlign: undefined, L36 comments: undefined, L37-40 'meta:createdAt' ... 'meta:updatedBy': undefined.",
+      "holds": false,
+      "note": "Dropped: the built-in blocks don't follow it."
+    }
+  ]
+}

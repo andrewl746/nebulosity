@@ -1,0 +1,27 @@
+{
+  "id": "57f5c005",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses constructor-based dependency injection. The core code is in `src/vs/platform/instantiation/common/`.\n\n**1. Defining a service**\n- Declare an interface, conventionally named `IFooService`. It carries a `readonly _serviceBrand: undefined;` marker so unrelated types can't satisfy it structurally.\n- Create an identifier with the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');` (`instantiation.ts`). The interface and the const share one name, so a single import gives you both the type and the decorator.\n- `createDecorator` returns a `ServiceIdentifier<T>`. It is also a parameter decorator, and it records the dependency in `serviceIds` and in `DI_DEPENDENCIES` on the target class. `refineServiceDecorator` lets you narrow an existing identifier to a subtype.\n\n**2. Making an implementation available**\n- Write `class FooService implements IFooService`. Its own constructor can take other services as decorated parameters.\n- **Lazy singleton:** call `registerSingleton(IFooService, FooService, InstantiationType.Delayed | Eager)` (`extensions.ts`). It stores a `SyncDescriptor` in a global list, which `getSingletonServiceDescriptors()` returns. `Delayed` hands out a proxy and only builds the real instance on first use. `Eager` builds it at startup. You can also pass a `SyncDescriptor` directly.\n- **Explicit setup:** a `ServiceCollection` (`serviceCollection.ts`) maps identifiers to either instances or `SyncDescriptor`s, using `services.set(IFooService, instanceOrDescriptor)`. Entry points such as `workbench.ts` and the `main`/`serverMain` files build this collection. They add the registered singletons to it and then create the root `InstantiationService`.\n\n**3. Getting it into consumers**\n- Constructor injection: `constructor(arg1: string, @IFooService private readonly fooService: IFooService)`. Services always come after the non-service arguments.\n- `InstantiationService` (`instantiationService.ts`) reads `DI_DEPENDENCIES` and creates dependencies in graph order, using `Graph` to detect cycles. It resolves each one from its `ServiceCollection`, or from its parent instantiation service.\n- Create a class through DI with `instantiationService.createInstance(Ctor, ...staticArgs)`. Pass a `SyncDescriptor` instead if you want to defer construction.\n- For code that isn't a class, use `instantiationService.invokeFunction(accessor => accessor.get(IFooService))`. The `ServicesAccessor` is only valid synchronously inside the callback. Actions and commands use this form: `run(accessor: ServicesAccessor)`.\n- `instantiationService.createChild(collection)` makes a scoped child that can override services. Editors and other scoped contexts use this.\n- `IInstantiationService` is itself a service that you can inject.\n\n**Conventions**\n- Interfaces start with `I`, and the decorator is a const with the same name.\n- Common service interfaces live in `common/`. Implementations live in `browser/`, `node/` or `electron-*/`, and registration happens in `*.contribution.ts` or `*.main.ts` files.\n- Use `@IFoo` on constructor parameters, and put injected parameters last."
+}

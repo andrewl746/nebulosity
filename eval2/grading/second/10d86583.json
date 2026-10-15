@@ -1,0 +1,10 @@
+{ "id": "10d86583", "points": [
+  { "id": "AFFINE-BP2.1", "score": 1, "quote": "**`framework/`** holds the four core packages ... **`affine/`** is the Affine editor built on that framework." },
+  { "id": "AFFINE-BP2.2", "score": 1, "quote": "`store`: the Yjs-backed document model (docs, blocks, schemas, transactions)." },
+  { "id": "AFFINE-BP2.3", "score": 1, "quote": "`std`: the runtime that renders and drives the editor. It covers block views, selection, commands, services and the canvas/gfx runtime." },
+  { "id": "AFFINE-BP2.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.5", "score": 0.5, "quote": "`blocks`: block types ... `widgets`: floating UI such as toolbar, slash-menu, drag-handle ... `fragments`: side panels such as outline, frame-panel, doc-title and adapter-panel." },
+  { "id": "AFFINE-BP2.6", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.7", "score": 0.5, "quote": "Each feature package typically provides a model, a view and store extensions. Behaviour is composed through an extension system rather than hard-coded." },
+  { "id": "AFFINE-BP2.8", "score": 1, "quote": "Nothing inside `blocksuite/` imports from the rest of the repo, but the rest of the repo imports it about 1,170 times." }
+] }

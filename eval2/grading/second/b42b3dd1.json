@@ -1,0 +1,7 @@
+{ "id": "b42b3dd1", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Declare an interface and a matching identifier with `createDecorator<IFoo>('fooService')`. By convention both are named `IFoo`, with the identifier as a `const` of the same name." },
+  { "id": "BP3.3", "score": 1, "quote": "Services are injected as trailing constructor parameters, each annotated with its identifier: ... `@IFooService private readonly fooService: IFooService,`" },
+  { "id": "BP3.4", "score": 1, "quote": "`instantiationService.createInstance(MyClass, 'static-arg')` supplies the static arguments and resolves the rest from the container." },
+  { "id": "BP3.5", "score": 1, "quote": "Call `registerSingleton(IFoo, FooService, InstantiationType.Delayed)` (`extensions.ts`)." },
+  { "id": "BP3.6", "score": 0.5, "quote": "Singletons registered in `*.contribution.ts` files or in `workbench.common.main.ts`, `workbench.desktop.main.ts` and similar entry points." }
+] }

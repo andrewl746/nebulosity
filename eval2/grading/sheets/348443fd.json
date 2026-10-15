@@ -1,0 +1,39 @@
+{
+  "id": "348443fd",
+  "question": "How does AFFiNE represent, store and sync a document's content: what form does the data take, how do local edits and other users' changes reach the editor, and where is the data kept on the device and synced to?",
+  "points": [
+    {
+      "id": "AFFINE-BP4.1",
+      "text": "a document's content is a Yjs CRDT: each doc is its own Yjs document (the docs say a subdocument), its blocks are kept in it, and that CRDT data is the single source of truth for the block tree"
+    },
+    {
+      "id": "AFFINE-BP4.2",
+      "text": "an edit changes the Yjs data first; the store turns the resulting Yjs events into updates of the block models, which then notify the UI; local edits, undo/redo and other users' changes all take that same path, so app code doesn't need to tell them apart"
+    },
+    {
+      "id": "AFFINE-BP4.3",
+      "text": "what is stored and synced is the CRDT's binary update data, not JSON"
+    },
+    {
+      "id": "AFFINE-BP4.4",
+      "text": "JSON snapshots of the block tree exist for import and export: a transformer turns a doc into a snapshot and back, and adapters convert snapshots to and from formats such as Markdown and HTML"
+    },
+    {
+      "id": "AFFINE-BP4.5",
+      "text": "cursors and selections are shared through Yjs awareness, kept beside the document and outside its history"
+    },
+    {
+      "id": "AFFINE-BP4.6",
+      "text": "on the device, documents and files are kept through `@affine/nbstore`'s storages (doc, blob and more, grouped per workspace), which come in IndexedDB and SQLite implementations"
+    },
+    {
+      "id": "AFFINE-BP4.7",
+      "text": "it is local-first: the copy on the device is the primary one, and a cloud workspace syncs it in real time with the server (one more storage it syncs with), which is what makes collaboration work"
+    },
+    {
+      "id": "AFFINE-BP4.8",
+      "text": "y-octo, a native Rust implementation of Yjs, handles the CRDT data in native code on both the client and the server"
+    }
+  ],
+  "answer": "**Form of the data**\n- A document is a Yjs CRDT (`Y.Doc`). BlockSuite blocks live inside it as nested `Y.Map`/`Y.Array`/`Y.Text` structures.\n- Storage and the network only handle binary Yjs updates (`Uint8Array`). Each doc record is `{docId, bin, timestamp, editor}`.\n- A workspace also has a root doc that holds the workspace metadata and the doc list.\n- Blobs (images and attachments) and awareness (presence) are stored and synced separately from doc content.\n\n**Local edit → storage**\n- `DocFrontend` (`packages/common/nbstore/src/frontend/doc.ts`) owns the editor's `Y.Doc`.\n- It listens to `doc.on('update')`. Each edit becomes an incremental update, which it pushes to the local doc storage via `pushDocUpdate`, tagged with its own unique origin.\n- `NBSTORE_ORIGIN` marks updates that came from storage. Those are skipped so they don't echo back.\n\n**Other changes → editor**\n- `DocFrontend` subscribes to `storage.subscribeDocUpdate`. Any update whose origin isn't its own is applied with `Y.applyUpdate(doc, update, NBSTORE_ORIGIN)`.\n- The editor renders from the `Y.Doc`, so it updates automatically.\n\n**Local persistence (`nbstore`)**\n- The storage contract is `DocStorage` in `src/storage/doc.ts`. It's an append-only log of updates that gets merged (squashed) into snapshots.\n- Browser: `impls/idb`, an IndexedDB store.\n- Desktop and mobile: `impls/sqlite`, a native SQLite file per workspace through the Rust native module (`packages/frontend/native`). The tables include `snapshots`, `updates` and `clocks`.\n- There are also older IDB/SQLite v1 readers for legacy data. The desktop app has a disk-sync feature that keeps its own state DB.\n- Storage and sync run in a web worker behind an RPC bridge (`worker/`).\n\n**Sync (`src/sync/doc`, `peer.ts`)**\n- A sync peer connects the local storage to each remote storage.\n- It compares per-doc clocks/timestamps, then pulls and pushes missing updates in both directions.\n- Remote updates are written into local storage, which makes the frontend apply them.\n- Cloud workspaces use `impls/cloud/doc.ts`, a socket.io client. It calls `space:join-batch`, `space:load-doc`, `space:push-doc-update` and `space:load-doc-timestamps`. It receives `space:broadcast-doc-updates` for live changes from other users.\n- Local-only workspaces have no remote peer. The workspace-engine providers (`local.ts`, `cloud.ts`) choose which storages to use.\n\n**Server (`packages/backend/server`)**\n- `core/sync/gateway.ts` is the socket.io gateway. `core/doc` holds the storage adapters and a merge job.\n- Postgres, through Prisma, stores `Update` rows (`updates`) and merged `Snapshot` rows (`snapshots`). `SnapshotHistory` keeps history.\n- Updates are merged with Yjs into snapshots and broadcast to the other connected clients."
+}

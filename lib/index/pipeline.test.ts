@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
-import { copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
+import { loadAllDocLinks, loadDocs } from "../db/store/docs";
+import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/search";
 import { readStages, type StoredStage } from "../db/store/stages";
-import { findRepository, upsertRepository, writeFileRecords } from "../db/store/structure";
+import { findRepository, loadImportEdges, upsertRepository, writeFileRecords } from "../db/store/structure";
+import { readAdapterVersion, writeAdapterVersion } from "../db/store/version";
+import { ADAPTER_VERSION } from "./languages/typescript";
 import { repoKey } from "./paths";
 import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
 
@@ -147,6 +151,74 @@ describe("indexRepository — edges of the world", () => {
     });
 });
 
+describe("indexRepository — files over the size cap (ADR-053, amended)", () => {
+    const BIG = [
+        'import { a } from "./a";',                       // 25 bytes with its newline
+        'export type C = typeof import("./c");',          // 38
+        "export function f(): number { return a; }",      // 42
+        "export class K {}",                              // 18
+        "",
+    ].join("\n");                                         // 123 bytes, 4 lines
+
+    function repoWithBigFile(): string {
+        const dir = makeTempDir("neb-importsonly-");
+        fs.writeFileSync(path.join(dir, "a.ts"), "export const a = 1;\n");                                  // 20 bytes
+        fs.writeFileSync(path.join(dir, "c.ts"), "export const c = 2;\n");                                  // 20 bytes
+        fs.writeFileSync(path.join(dir, "big.ts"), BIG);
+        fs.writeFileSync(path.join(dir, "huge.ts"), `import { a } from "./a";\n// ${"x".repeat(300)}\n`);   // 25 + 304 = 329 bytes
+        return dir;
+    }
+
+    function declarationsOf(repoId: number, filePath: string){
+        const db = getDb();
+        const file = db.select({ id: files.id, lineCount: files.lineCount, sizeBytes: files.sizeBytes })
+            .from(files).where(and(eq(files.repoId, repoId), eq(files.path, filePath))).get()!;
+        return {
+            lineCount: file.lineCount,
+            sizeBytes: file.sizeBytes,
+            symbols: db.select({ q: symbols.qualifiedName }).from(symbols).where(eq(symbols.fileId, file.id)).all().map((s) => s.q),
+            chunks: db.select({ name: chunks.name }).from(chunks).where(eq(chunks.fileId, file.id)).all().map((c) => c.name),
+        };
+    }
+
+    it("indexes a file over the cap for its imports only: its edges, no declarations, no chunks; past the hard bound it is skipped", () => {
+        const result = indexRepository(repoWithBigFile(), { maxFileBytes: 100, hardMaxFileBytes: 200 });
+
+        expect(result).toMatchObject({ files: 3, changed: 3, edges: 2, errors: [], importsOnly: [{ path: "big.ts", sizeBytes: 123, importsOnly: "parse" }] });
+        expect(result.skipped).toEqual([{ path: "huge.ts", reason: "too large (329 bytes)" }]);
+        expect(loadImportEdges(getDb(), result.repoId).map((e) => `${e.source} -> ${e.target}`).sort()).toEqual(["big.ts -> a.ts", "big.ts -> c.ts"]);
+
+        expect(declarationsOf(result.repoId, "big.ts")).toEqual({ lineCount: 4, sizeBytes: 123, symbols: [], chunks: [] });
+        // a file under the cap is read in full, as before
+        expect(declarationsOf(result.repoId, "a.ts").symbols).toEqual(["a"]);
+    });
+
+    it("parses a file up to the parse bound with the full adapter, and scans one past it: each gives an edge only its reader finds", () => {
+        const dir = makeTempDir("neb-importsonly-tiers-");
+        fs.writeFileSync(path.join(dir, "a.ts"), "export const a = 1;\n");                                   // 20 bytes
+        fs.writeFileSync(path.join(dir, "c.ts"), "export const c = 2;\n");                                   // 20 bytes
+        // the token scan misses export * as; 26 + 64 = 90 bytes, between the cap (60) and the parse bound (150)
+        fs.writeFileSync(path.join(dir, "parsed.ts"), `export * as c from "./c";\n// ${"x".repeat(60)}\n`);
+        // the adapter doesn't count a member require, the token scan does; 20 + 204 = 224 bytes, past the parse bound
+        fs.writeFileSync(path.join(dir, "scanned.ts"), `foo.require("./a");\n// ${"x".repeat(200)}\n`);
+
+        const result = indexRepository(dir, { maxFileBytes: 60, parseMaxFileBytes: 150, hardMaxFileBytes: 400 });
+
+        expect(result.importsOnly).toEqual([
+            { path: "parsed.ts", sizeBytes: 90, importsOnly: "parse" },
+            { path: "scanned.ts", sizeBytes: 224, importsOnly: "scan" },
+        ]);
+        expect(loadImportEdges(getDb(), result.repoId).map((e) => `${e.source} -> ${e.target}`).sort()).toEqual(["parsed.ts -> c.ts", "scanned.ts -> a.ts"]);
+        expect(declarationsOf(result.repoId, "parsed.ts")).toMatchObject({ symbols: [], chunks: [] });
+    });
+
+    it("keeps an imports-only file unchanged on the next run, edges and all", () => {
+        const root = repoWithBigFile();
+        indexRepository(root, { maxFileBytes: 100, hardMaxFileBytes: 200 });
+        expect(indexRepository(root, { maxFileBytes: 100, hardMaxFileBytes: 200 })).toMatchObject({ files: 3, changed: 0, unchanged: 3, edges: 2 });
+    });
+});
+
 describe("indexRepository — progress", () => {
     it("reports every stage in order, each ending at its total", () => {
         const root = copyFixture();
@@ -229,5 +301,118 @@ describe("indexRepository — code search deferred for a bulk run (ADR-031, amen
         indexRepository(copyFixture());   // any later run repairs first
         expect(isCodeSearchDeferred(db)).toBe(false);
         expect(searchCode(db, crashed, '"crashed"', 10).map((m) => m.path)).toEqual(["crashed.ts"]);
+    });
+});
+
+describe("indexRepository on the architecture fixture", () => {
+    const root = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
+
+    it("resolves the 31 imports of the ground truth", () => {
+        const result = indexRepository(root);
+        expect(result.files).toBe(21);
+        const db = getDb();
+        const edges = loadImportEdges(db, result.repoId).map((e) => `${e.source} -> ${e.target} (${e.specifier})`).sort();
+        expect(edges).toEqual([
+            "packages/core/src/index.ts -> packages/core/src/log.ts (./log)",
+            "packages/ui/src/button.ts -> packages/core/src/log.ts (@arch/core/lib/log)",
+            "packages/ui/src/index.ts -> packages/ui/src/button.ts (./button)",
+            "src/app/legacy.ts -> src/base/common/strings.ts (../base/common/strings)",
+            "src/app/loader.ts -> src/app/main.ts (./main.js)",
+            "src/app/main.ts -> packages/ui/src/index.ts (@arch/ui)",
+            "src/app/main.ts -> src/editor/browser/editorView.ts (../editor/browser/editorView)",
+            "src/app/main.ts -> src/editor/node/editorFiles.ts (../editor/node/editorFiles)",
+            "src/app/main.ts -> src/platform/node/storageFile.ts (../platform/node/storageFile)",
+            "src/base/browser/dom.ts -> src/base/common/strings.ts (../common/strings)",
+            "src/base/common/arrays.ts -> src/base/common/strings.ts (./strings)",
+            "src/base/node/fs.ts -> src/base/common/arrays.ts (../common/arrays)",
+            "src/base/test/common/strings.test.ts -> src/base/common/strings.ts (../../common/strings)",
+            "src/editor/browser/editorView.ts -> src/base/browser/dom.ts (../../base/browser/dom)",
+            "src/editor/browser/editorView.ts -> src/editor/common/model.ts (../common/model)",
+            "src/editor/common/model.ts -> src/editor/common/tokens.ts (./tokens)",
+            "src/editor/common/model.ts -> src/platform/common/storage.ts (../../platform/common/storage)",
+            "src/editor/common/textModel.ts -> src/base/common/strings.ts (../../base/common/strings)",
+            "src/editor/common/textModel.ts -> src/editor/common/model.ts (./model)",
+            "src/editor/common/tokens.ts -> src/editor/common/textModel.ts (./textModel)",
+            "src/editor/node/editorFiles.ts -> src/base/node/fs.ts (../../base/node/fs)",
+            "src/editor/node/editorFiles.ts -> src/editor/common/textModel.ts (../common/textModel)",
+            "src/editor/node/editorFiles.ts -> src/platform/node/storageFile.ts (../../platform/node/storageFile)",
+            "src/platform/browser/storageView.ts -> src/base/browser/dom.ts (../../base/browser/dom)",
+            "src/platform/common/storage.ts -> src/base/common/arrays.ts (../../base/common/arrays)",
+            "src/platform/common/storage.ts -> src/platform/browser/storageView.ts (../browser/storageView)",
+            "src/platform/node/storageFile.ts -> packages/core/src/index.ts (@arch/core)",
+            "src/platform/node/storageFile.ts -> src/base/node/fs.ts (../../base/node/fs)",
+            "src/platform/node/storageFile.ts -> src/editor/common/model.ts (../../editor/common/model)",
+            "src/platform/node/storageFile.ts -> src/platform/common/storage.ts (../common/storage)",
+            "tools/fixtures/legacy-ids.ts -> src/base/common/strings.ts (base/common/strings)",
+        ]);
+    });
+
+    it("stores the three entry points the package.json files name", () => {
+        const { repoId } = indexRepository(root);
+        expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
+    });
+
+    it("stores the 4 docs with their titles and the 13 links of the ground truth", () => {
+        const { repoId } = indexRepository(root);
+        const db = getDb();
+        expect(loadDocs(db, repoId)).toEqual([
+            { path: ".github/instructions/editor.instructions.md", title: "Editor rules" },
+            { path: "README.md", title: "arch-repo" },
+            { path: "docs/architecture.md", title: "Architecture" },
+            { path: "src/app/README.md", title: "The app" },
+        ]);
+        expect(loadAllDocLinks(db, repoId).map((l) => `${l.docPath} ${l.targetPath || "(root)"} ${l.kind} ${l.count}`)).toEqual([
+            ".github/instructions/editor.instructions.md src/editor applies 1",
+            "README.md (root) readme 1",
+            "README.md packages/core mentions 1",
+            "README.md packages/ui mentions 1",
+            "README.md src/app mentions 1",
+            "docs/architecture.md src/app mentions 1",
+            "docs/architecture.md src/base mentions 1",
+            "docs/architecture.md src/editor mentions 2",
+            "docs/architecture.md src/editor/browser mentions 1",
+            "docs/architecture.md src/editor/common mentions 1",
+            "docs/architecture.md src/platform mentions 2",
+            "src/app/README.md src/app readme 1",
+            "src/app/README.md src/app/loader.ts mentions 1",
+        ]);
+    });
+
+    it("re-parses every file once when an older adapter parsed them, so unchanged files gain what this one reads", () => {
+        const copy = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(copy);
+        const db = getDb();
+        // as an index written before computed import(): loader.ts's stored imports lack its two literals, so edge #5 is gone
+        db.update(files).set({ importSpecifiers: "[]" }).where(and(eq(files.repoId, repoId), eq(files.path, "src/app/loader.ts"))).run();
+        writeAdapterVersion(db, repoId, ADAPTER_VERSION - 1);
+
+        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 21, unchanged: 0, edges: 31 });
+        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 0, unchanged: 21, edges: 31 });
+    });
+
+    it("clears the hash of a file that failed the forced re-parse, so the next full run parses it, and only it, again", () => {
+        const copy = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(copy);
+        const db = getDb();
+        db.update(files).set({ importSpecifiers: "[]" }).where(and(eq(files.repoId, repoId), eq(files.path, "src/app/loader.ts"))).run();
+        writeAdapterVersion(db, repoId, ADAPTER_VERSION - 1);
+
+        // loader.ts can't be read during the forced re-parse: discovered, then moved away before its turn
+        const loader = path.join(copy, "src/app/loader.ts");
+        const away = path.join(copy, "loader.moved");
+        const failed = indexRepository(copy, { onProgress: (stage) => { if (stage === "discover") fs.renameSync(loader, away); } });
+        fs.renameSync(away, loader);
+        // its old row stays (ADR-022), with the old adapter's empty specifiers: edge #5 is still missing
+        expect(failed).toMatchObject({ files: 21, changed: 20, edges: 30 });
+        expect(failed.errors.map((e) => e.path)).toEqual(["src/app/loader.ts"]);
+        // the other 20 were parsed by this adapter, so its version is recorded; loader.ts's hash no longer claims its bytes
+        expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION);
+        const hashOf = (p: string) => db.select({ h: files.contentHash }).from(files).where(and(eq(files.repoId, repoId), eq(files.path, p))).get()?.h;
+        expect(hashOf("src/app/loader.ts")).toBe("");
+        expect(hashOf("src/app/main.ts")).not.toBe("");
+
+        // the next full run parses loader.ts alone, with this adapter, and edge #5 is back
+        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 1, unchanged: 20, edges: 31, errors: [] });
+        expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION);
     });
 });

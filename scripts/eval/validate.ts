@@ -4,8 +4,11 @@ import type { RunSummary } from "./transcript";
 
 const REQUIRED_TOOLS = ["Bash", "Read", "Grep", "Glob"];
 const FORBIDDEN_TOOLS = ["WebFetch", "WebSearch", "Skill", "PowerShell", "Edit", "Write"];
+/** With scripts allowed (Eval #2), Edit and Write are expected (the permission rule limits them to the scratch folder); the web, skills and PowerShell stay refused. */
+const REQUIRED_WITH_SCRIPTS = [...REQUIRED_TOOLS, "Edit", "Write"];
+const FORBIDDEN_WITH_SCRIPTS = ["WebFetch", "WebSearch", "Skill", "PowerShell", "NotebookEdit"];
 
-export function validateInit(run: RunSummary, expect: { arm: Arm; model: string; claudeVersion: string; forbiddenPlugins: readonly string[] }): string[] {
+export function validateInit(run: RunSummary, expect: { arm: Arm; model: string; claudeVersion: string; forbiddenPlugins: readonly string[]; scripts: boolean }): string[] {
     const problems: string[] = [];
     if (run.model !== expect.model) problems.push(`model is ${run.model}, not ${expect.model}`);
     if (run.claudeVersion !== expect.claudeVersion) problems.push(`Claude Code is ${run.claudeVersion}, not ${expect.claudeVersion}`);
@@ -15,8 +18,8 @@ export function validateInit(run: RunSummary, expect: { arm: Arm; model: string;
     const wanted = expect.arm === "nebulosity" ? ["nebulosity:connected"] : [];
     if (servers.join(",") !== wanted.join(",")) problems.push(`MCP servers are [${servers.join(", ")}], not [${wanted.join(", ")}]`);
     for (const plugin of run.plugins) if (expect.forbiddenPlugins.includes(plugin)) problems.push(`the owner's plugin ${plugin} is loaded`);
-    for (const tool of REQUIRED_TOOLS) if (!run.tools.includes(tool)) problems.push(`${tool} is missing`);
-    for (const tool of FORBIDDEN_TOOLS) if (run.tools.includes(tool)) problems.push(`${tool} is present`);
+    for (const tool of expect.scripts ? REQUIRED_WITH_SCRIPTS : REQUIRED_TOOLS) if (!run.tools.includes(tool)) problems.push(`${tool} is missing`);
+    for (const tool of expect.scripts ? FORBIDDEN_WITH_SCRIPTS : FORBIDDEN_TOOLS) if (run.tools.includes(tool)) problems.push(`${tool} is present`);
     return problems;
 }
 

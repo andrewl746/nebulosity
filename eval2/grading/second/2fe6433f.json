@@ -1,0 +1,10 @@
+{ "id": "2fe6433f", "points": [
+  { "id": "AFFINE-BP1.1", "score": 1, "quote": "**`packages/frontend/`** is the client side ... **`packages/backend/`** has `server`, a NestJS server ... **`packages/common/`** holds code shared across clients and the server" },
+  { "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tools/`** has developer tooling: the `cli` build tool, commitlint, the changelog generator and others. ... `tests/` (end-to-end tests)" },
+  { "id": "AFFINE-BP1.3", "score": 1, "quote": "**`blocksuite/`** is the editor framework behind AFFiNE." },
+  { "id": "AFFINE-BP1.4", "score": 1, "quote": "**web** is the browser app. **electron** and **electron-renderer** are the desktop app. **mobile** is the mobile web UI ... **ios** and **android** are the native mobile shells. The admin panel (`packages/frontend/admin`) ships with the server." },
+  { "id": "AFFINE-BP1.5", "score": 1, "quote": "`native` and `mobile-native` are native bindings for desktop and mobile. ... `native`, a Rust addon for it (`@affine/server-native`)." },
+  { "id": "AFFINE-BP1.6", "score": 1, "quote": "AFFiNE is local-first, so clients keep their data locally and the server handles sync, sharing and cloud features." },
+  { "id": "AFFINE-BP1.7", "score": 0.5, "quote": "**PostgreSQL** (Prisma). ... **Redis** (CI sets `REDIS_SERVER_HOST`). ... a GraphQL API, plus socket.io WebSockets" },
+  { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared UI component library." }
+] }

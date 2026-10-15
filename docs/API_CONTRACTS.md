@@ -203,16 +203,21 @@ What a folder, file or the repo (`path` empty) is (`lib/engine/describe.ts`). Th
 ```ts
 type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
 type AreaCount = { path: string; kind: "folder" | "file"; count: number };
+type DocPointer = { path: string; title: string;
+  reason?: { kind: "applies" | "readme" | "mentions"; target: string; detail?: string; count: number } };
 type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | "file";
   tagline?: string; summary?: string; summaryStatus: SummaryStatus; summaryError?: string;
+  docs?: DocPointer[];
   stats: { fileCount: number; lineCount: number };
-  children?: MapNode[]; symbols?: SymbolInfo[];
+  children?: MapNode[]; symbols?: SymbolInfo[]; importsOnly?: true;
   uses: AreaCount[]; usedBy: AreaCount[]; stalePaths: number; indexVersion: number };
 ```
 
 - **`children`** (folders and the repo) lists every child in the Map's order, the order `level()` draws each page's boxes in. A client shows 20 at a time.
 - **`symbols`** (files) are the top-level declarations and class members in line order, members by qualified name (`Logger.info`). The lines are the declaration's own, for jumping to it.
+- **`importsOnly`** (files; ADR-053, amended, additive; `CONTRACTS_VERSION` stays 3) is `true` for a file over the 1 MB size cap, which the indexer read for its imports only. Its `symbols` is empty because they weren't read, not because it has none: the MCP answer says "Declarations: not read (over the 1 MB size cap; imports only).", and the detail panel says "Not read (over the 1 MB size cap; imports only).". It is set from the file's stored size and left out otherwise.
 - **`uses` / `usedBy`** count imports across the target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2), most first. An area is a folder, or a file when the other file sits directly in the lowest folder both share. Test files count like any other file. A file's summary was written from an "Imported by" line that counts tests apart (RAG_PIPELINE.md), so the numbers in its text can differ; the detail panel labels both.
+- **`docs`** (ADR-054, additive; `CONTRACTS_VERSION` stays 3) points at the repo's own Markdown. For a folder or file it is up to 5 docs linked to the target or the folders above it (the root left out), each by its strongest link, ranked by kind (`applies`, `readme`, `mentions`), deeper target, a plain-folder glob, a name about architecture, count, then path; `reason` always says why (`target` is the place the link names, `detail` the glob of an `applies` link). For the repo it is up to 5 docs to read first: the root README, then docs named for architecture, then docs that apply to a folder (`reason` only on those). Left out when none.
 - **`summaryStatus`** follows §11's rule. **`summaryError`** says why the last attempt failed, and only appears when the status is `failed`.
 - **`stalePaths`** counts files at or under the target whose summary is out of date with their bytes. It's non-zero between a file's edit and the refresh of its summary (`PIVOT_SPEC.md` §5.6).
 - **Caching.** The server keeps each answer until the index version moves (ADR-036, amended in V1.3.1), so a repeat is about 0.1 ms. The answer doesn't change shape.
@@ -232,7 +237,7 @@ type SummarizeResponse = { path: string; kind: "repo" | "folder" | "file"; tagli
 - **Duplicates.** Concurrent requests for one target share one request (ADR-033, amended).
 - **Status codes.**
   - `409 NOT_READY`: a folder whose files or subfolders aren't all summarized yet. Its summary would be written over "(no summary yet)".
-  - `409 SUMMARIES_OFF`: no API key.
+  - `409 SUMMARIES_OFF`: no API key, or the repo's summaries were never confirmed (no yes recorded by `nebulosity summarize`, and no summary written by a model). The message says to run `nebulosity summarize`, which shows the estimate and asks first; nothing is sent (S11, ADR-038 amended).
   - `409 INDEX_LOCKED`: the background worker is still switching to the active repo (ADR-038, amended); try again in a moment. It never summarizes another repo's path.
   - `502 UPSTREAM`: Anthropic refused the API key.
   - `404 NOT_FOUND`, `400 BAD_REQUEST` and `403 FORBIDDEN` as usual.
@@ -253,7 +258,7 @@ type LiveEvent = { tool: string; paths: string[]; at: string; action?: UIAction 
   - A body that isn't a live event gets `400 BAD_REQUEST`.
   - At most 20 events a second are passed on; the rest are dropped.
 - **`GET /api/live/stream`** is Server-Sent Events: `ready` (`{}`) once, then `tool` (a `LiveEvent`) per call, and a `: keep-alive` comment every 15 s. It's a GET, so the browser's `EventSource` reads it directly. The Map closes its stream when the page is put away (`pagehide`) and opens a new one when it comes back from the back/forward cache (`pageshow`), so a page frozen for Back holds none of the browser's 6 connections to the server (ADR-039, amended).
-- **`postLiveEvent`** (`lib/live/client.ts`) is the poster. It sends one POST to `http://127.0.0.1:<port>/api/live` with a 200 ms timeout and ignores every failure, since no Map being open is the normal case. `port` comes from `.nebulosity/config.json` (default 3000). V1.4's MCP tools call it, and `npm run live -- <tool> [path …] [--highlight | --focus | --clear]` sends one by hand.
+- **`postLiveEvent`** (`lib/live/client.ts`) is the poster. It sends one POST to `http://127.0.0.1:<port>/api/live` with a 200 ms timeout and ignores every failure, since no Map being open is the normal case. `port` comes from `.nebulosity/config.json` (default 3000; the data folder's `config.json` for an installed copy), which `nebulosity map` sets to the port it starts the Map on (since V1.6's final review, ADR-058 amended). V1.4's MCP tools call it, and `npm run live -- <tool> [path …] [--highlight | --focus | --clear]` sends one by hand.
 
 ## 15. GET /api/repos, POST /api/repos (slice V1.3)
 
@@ -285,25 +290,36 @@ type SourceResponse = { repo: string; path: string; content: string; lineCount: 
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo, or an empty one; `404 NOT_FOUND` for a folder, a file the index doesn't know, or a file deleted since; `404 INDEX_EMPTY`.
 
-## 17. The MCP tools (slice V1.4)
+## 17. The MCP tools (slice V1.4; six tools since V1.6, ADR-056)
 
 Claude Code and any MCP client reach the engine through `mcp/server.ts` over stdio (PIVOT_SPEC.md §6.2, ADR-030). Each tool is defined once in `lib/tools/registry.ts` (ADR-047). Claude Code shows them as `mcp__nebulosity__<name>`.
 
-**Launch.** `node <checkout>/mcp/launch.mjs` (ADR-048). It sets `NEBULOSITY_HOME` to the checkout unless it's set. `NEBULOSITY_LIVE=off` stops every live event.
+**Launch.** `node <checkout>/mcp/launch.mjs` (ADR-048), or `node <package>/mcp/launch.mjs` for an installed copy, as `nebulosity setup` registers it (ADR-058). It sets `NEBULOSITY_HOME` to the checkout or package unless it's set, and an installed copy's `NEBULOSITY_DATA` to the user's data folder unless it's set (ADR-044, amended). `NEBULOSITY_LIVE=off` stops every live event.
 
 **Which repo.** The indexed repo holding the project folder (`CLAUDE_PROJECT_DIR`, else the server's working folder), the deepest when repos nest. Else the repo the Map shows, with a note first. Else an error (ADR-046).
 
 | Tool | Input (default) | Answer |
 |---|---|---|
-| `overview` | none | the repo's size and summary, its top-level areas largest first (size and tagline; 30 at most), and the 10 most-imported files |
-| `describe` | `path` | kind, files and lines; the summary; what's inside (20 children) or the declarations (30, with lines); uses and used by (10 areas each, with import counts) |
+| `overview` | none | the repo's size and summary, the docs to read first (up to 5), its top-level areas largest first (size and tagline; 30 at most), and the 10 most-imported files |
+| `describe` | `path` | kind, files and lines; the summary; the docs about it (up to 5); what's inside (20 children) or the declarations (30, with lines); uses and used by (10 areas each, with import counts) |
 | `search` | `query` (1–200 characters), `limit` 1–30 (10) | the best files and folders, each with its tagline and best-matching code (cut to 160 characters) |
-| `dependents` | `path`, `transitive` (false), `limit` 1–500 (50), `offset` (0) | the direct and total counts, then the files: nearest first, most imported next, by path last; grouped by distance when transitive |
-| `dependencies` | the same | the same, following what the target imports |
-| `path` | `from`, `to` | the shortest chain of imports with each step's specifier, the other direction when needed, or "no chain" |
+| `imports` | `path`, `direction` (`dependents`: the files that import it; `dependencies`: the files it imports), `transitive` (false), `to`, `group_by`, `within`, `limit` 1–500 (50), `offset` (0) | see the modes below |
+| `architecture` | `path` (""), `report`: summary, layers, conventions, cycles or unused (summary), `through`, `limit` 1–500 (20), `offset` (0) | a folder's organization computed from its imports (ADR-055), then the docs about the place (up to 5); with `through` or a file as `path`, the default report answers as `cycles`; see below |
 | `show_on_map` | `action`: highlight, focus or clear (highlight); `paths` (0–50) | what was sent, what was left out, and whether the Map took it |
 
-**Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `dependents`, `dependencies` and `path` refuse it, since the whole repo has no outside.
+`imports` replaces V1.4's `dependents`, `dependencies` and `path` (ADR-056): `dependents` is `imports` with `direction: "dependents"` (the default), `dependencies` is `direction: "dependencies"`, and the `path` tool's `from` and `to` are `imports`' `path` and `to`.
+
+**`imports`, by mode.** `to` wins over `group_by`, which wins over the plain list.
+- *The list* (neither `to` nor `group_by`): the direct and total counts, then the files: nearest first, most imported next, by path last; grouped by distance when `transitive`. A transitive list of dependents ends its first page (offset 0) with the tests among them and the files nothing imports that load the target (a package.json's entry points first); later pages are the list's continuation. Pages: a cut list ends `… N more (next page: offset K)`, and a page past the end says how long the list is. `within` keeps only files inside a folder (the first line says which); both directions take it. A `within` that is a file, isn't indexed, or equals or sits inside a folder target is refused with a sentence naming `within`. When `within` leaves no direct file, the direct-only page reads "None of them imports it directly; list them with transitive."
+- *`group_by`* (a folder whose children are the areas, "" the top level, or "auto" for describe's used-by rule): counts everything reached, so always transitive, by area, then the tests and entry points as above. No file list.
+- *`to`* (a file or folder): the shortest chain of imports from `path` to `to`, each step with the import as written, the other direction when needed, or "no chain". Places that overlap, and the whole repo, are refused. A chain ignores `within`, `group_by` and `transitive`; given any of them (`transitive: true`), the answer ends with the note "within, group_by and transitive don't apply to a chain." (since V1.6's final review).
+- The whole repo ("") is refused as `path`: it has no outside.
+
+**`architecture`, by report.** `summary` is the four reports in brief (layers bottom first and the imports against that order; the recurring folder names; the cycle count and the largest; the files nothing imports). `layers`, `conventions`, `cycles` and `unused` give one in full; `cycles` with `through` (or with a file as `path`) gives the shortest import cycle through that file, or says it is in none. `summary` with `through`, or on a file, is read as that question and answered as `cycles` (since 2026-10-15). `through`, or a file as `path`, with `layers`, `conventions` or `unused` is refused. A page of `unused` past the end of its list says how long the list is. Every report, and a file's cycle, ends with the docs about the place, the ones `describe` names for it (the repo's: the docs to read first), since 2026-10-15 (ADR-054, amended). Every report fits the 40,000-character limit: a page of cycles or of files nothing imports takes the docs lines out of its list's budget.
+
+**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports` and `architecture` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The five definitions and the instructions together stay under 7,000 characters (a test).
+
+**Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `imports` refuses it, since the whole repo has no outside.
 
 **Answers.**
 - Plain text with no Markdown. Repo-relative paths, folders ending in `/`.
@@ -312,19 +328,21 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 - Every answer stays under 40,000 characters.
 - Notes are lines starting `Note: `. When the project folder didn't pick the repo, or sits below the repo's root, that note comes first. Then the answer, then the tool's own notes, then the index note (an update in progress or failed), and the stale-summary note last.
 - With no API key, the line where a summary would go reads `Summary: none — summaries are off (no ANTHROPIC_API_KEY); a key adds a short summary of every file and folder.`
+- Docs (ADR-054): a header, then one line per doc, `  <path> — <title> (<why>)`. The header is `Docs to read first:` for the repo (`overview`, and `describe` or `architecture` of "") and `Docs to read before answering how this is organized or why:` for a folder or file (`describe` and `architecture`). Before 2026-10-15 `describe`'s read `Docs about it:` and `architecture` named no docs. `describe` puts them after the summary line; `architecture` after the report.
 
 **Errors.** An MCP error result (`isError: true`) with one sentence. The cases:
 - nothing indexed yet (with Nebulosity's folder);
 - an index older than the checkout;
 - nothing indexed at a path;
 - a path outside the repo;
-- overlapping places for `path`;
+- overlapping places for `imports` with `to`, and a `within` that cannot match;
+- `architecture`'s `through` with `layers`, `conventions` or `unused`;
 - bad `show_on_map` input;
 - the MCP SDK's "Input validation error" for input outside a schema.
 
-**Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; dependents and dependencies the target; path `from`, `to`, then the chain between; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
+**Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; imports its target, or with `to` the target, `to`, then the chain between; architecture its path; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
 
-**Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 2,048 characters), are `SERVER_INSTRUCTIONS` in the registry.
+**Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 4,096 characters since 2.1.296, 2,048 before), are `SERVER_INSTRUCTIONS` in the registry: when to reach for each tool, under 2,048 characters so older clients keep all of it. Since 2026-10-15 their next-to-last sentence says the docs the answers name are the maintainers' own account, to open before answering how the code is organized or why (ADR-054, amended).
 
 ## 18. The static demo's files (slice V1.5)
 

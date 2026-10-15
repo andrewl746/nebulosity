@@ -1,0 +1,31 @@
+{
+  "id": "746043a7",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Each layer of `src/vs` (base, platform, editor, workbench, and so on) is split into folders named for the environment the code runs in. The import counts below come from the repo's import graph. The exact rules are my reading of that data. I didn't find them written down in `.github/copilot-instructions.md`.\n\n| Folder | Runs in | May import | Observed imports |\n|---|---|---|---|\n| `common` | Any environment (pure JS/TS, no DOM or Node APIs) | `common` only | `common` → `common` |\n| `browser` | The renderer or web, with DOM APIs | `common` and `browser` | `browser` → `common` 53k, `browser` 21k |\n| `node` | Node.js, with no DOM | `common` and `node` | `node` → `common` 8k, `node` 5k |\n| `electron-browser` | The Electron renderer, with DOM and Electron or Node access | `common`, `browser` and `electron-browser` | `common` 4.7k, `browser` 611, `electron-browser` 489 |\n| `electron-main` | Electron's main process | `common`, `node` and `electron-main` | `common` 1k, `node` 102, `electron-main` 377 |\n| `test` | Unit tests for the code beside them | `common` mostly, with a few imports of `browser`, `node` and `test` | `common` 52, `browser` 6, `node` 4, `test` 4 |\n\nHow the folders relate to each other:\n\n- **`common` is the base.** It imports only other `common` code, so it can't depend on any runtime-specific code.\n- **No sibling imports.** `browser` never imports `node`, `electron-main` or `electron-browser`, and `node` never imports `browser`.\n- **`electron-browser` adds to `browser`.** Its code runs in the renderer, so it can use `browser` code. Nothing in `browser` imports back from `electron-browser`.\n- **`electron-main` adds to `node`.** It can use Node code and `common`. It never imports the renderer folders.\n- **Layers are separate.** The environment rule works within each layer. A layer such as `workbench` can only import from layers below it, such as `platform` or `base`.\n\nIf you want, I can check the layers rule or find specific imports that break these rules."
+}

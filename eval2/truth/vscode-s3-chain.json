@@ -1,0 +1,16 @@
+{
+  "id": "vscode-s3-chain",
+  "kind": "chain",
+  "from": "src/vs/platform/agentHost/node/agentHostMain.ts",
+  "to": "src/vs/platform/terminal/node/terminalEnvironment.ts",
+  "connected": true,
+  "shortest": 3,
+  "example": [
+    "src/vs/platform/agentHost/node/agentHostMain.ts",
+    "src/vs/platform/agentHost/node/agentService.ts",
+    "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+    "src/vs/platform/terminal/node/terminalEnvironment.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

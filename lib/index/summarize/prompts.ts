@@ -192,6 +192,19 @@ export function testFileSummary(filePath: string, lineCount: number): SummaryTex
 }
 
 /**
+ * A file over the size cap is indexed for its imports only (ADR-053): almost always generated or bundled code, so it
+ * skips the model as a test file does. "1 MB" for the default cap, "1,000-byte" for a cap that isn't whole megabytes.
+ */
+export function importsOnlyFileSummary(lineCount: number, maxFileBytes: number): SummaryText {
+    const cap = maxFileBytes % 1_000_000 === 0 ? `${maxFileBytes / 1_000_000} MB` : `${maxFileBytes.toLocaleString("en-US")}-byte`;
+    return {
+        tagline: "Over the size cap: imports only",
+        summary: `Too large to read in full (${plural(lineCount, "line")}, over the ${cap} size cap): only its imports are indexed. `
+            + "Files over the cap get this template instead of a model-written summary.",
+    };
+}
+
+/**
  * Folders that hold only test files skip the model too (PIVOT_SPEC.md §5.3). The subject is the area the
  * tests cover: the segment just before the first test/tests/__tests__ segment ("folding" for
  * ".../folding/test/browser"). A top-level test folder covers the whole repo, so it takes the repo's name

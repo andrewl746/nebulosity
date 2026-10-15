@@ -1,0 +1,39 @@
+{
+  "id": "9f88bebe",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "Layers in `src/vs`, from lowest to highest. This comes from `.github/copilot-instructions.md` and the directory listing. I didn't run the layer checker.\n\n**Layers**\n\n1. **`base`** is the foundation: cross-platform utilities such as strings, arrays, events, lifecycle/disposables, async helpers, URI, and basic DOM and UI widgets. It has no VS Code–specific knowledge.\n2. **`platform`** holds the services and the dependency-injection infrastructure: instantiation, service decorators, configuration, files, storage, log, and similar. It defines service interfaces and their base implementations.\n3. **`editor`** is the Monaco text editor: the model, the view, language services, syntax highlighting, and editing features. `editor/contrib` holds the individual editor features. It can be used standalone, without the workbench.\n4. **`workbench`** is the application shell for web and desktop. Its subfolders are:\n   - `browser`: parts, layout, and actions.\n   - `services`: the workbench-level service implementations.\n   - `contrib`: feature contributions such as git, debug, search, and terminal.\n   - `api`: the extension host and the VS Code API implementation.\n   - `common` and `electron-browser`: shared code and the desktop renderer.\n5. **`sessions`** is the agent sessions window, a dedicated workbench-style layer for agentic workflows. It sits alongside `workbench` and may import from it, but `workbench` must not import from it. It has its own `LAYERS.md`.\n\n**Entry-point layers**\n\n- **`code`** is the Electron main process implementation, which includes the desktop app startup.\n- **`server`** is the server implementation for remote and web hosting.\n\nThese two sit on top of the others and wire the layers together.\n\n**Dependency rule**\n\nDependencies point downward only. A layer may import from the layers below it and never from the layers above it:\n\n- `base` imports only from `base`.\n- `platform` may use `base`.\n- `editor` may use `base` and `platform`.\n- `workbench` may use `base`, `platform`, and `editor`.\n- `sessions` may use all of the above, including `workbench`.\n- `code` and `server` may use the layers below them as needed.\n\nTwo further constraints apply inside each layer:\n\n- **Environment folders:** code is split by target environment: `common`, `browser`, `node`, `electron-browser`, and `electron-main`. `common` code can't import from `browser`, `node`, or the Electron folders. `browser` code can't import `node` code. `node` code can't import `browser` code.\n- **Contributions:** `workbench/contrib` modules should be self-contained and stay off each other's internals. They share only through a contribution's exposed `common` API or through services.\n\n`npm run valid-layers-check` enforces the layering. The instructions say to run it only when a change may affect module layering."
+}

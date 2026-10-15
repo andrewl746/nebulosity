@@ -13,7 +13,7 @@ import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, t
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
+import { buildFilePrompt, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
@@ -177,7 +177,7 @@ describe("runSummaries — the regular API", () => {
 
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).toMatchObject({ failed: 1, summarized: 12 });
         expect(stub.subjects()).not.toContain("File: src/core/log.ts");
-        expect(row(root, "src/core/log.ts")?.error).toBe("src/core/log.ts changed after it was indexed; run npm run index first");
+        expect(row(root, "src/core/log.ts")?.error).toBe("src/core/log.ts changed after it was indexed; run nebulosity index <path-to-repo> (in a checkout: npm run index -- <path-to-repo>) first");
     });
 
     it("without an API key writes the test template only and reports the stage off", async () => {
@@ -245,7 +245,7 @@ describe("runSummaries — the Batch API", () => {
         // the run that submitted is long gone, but the batch is still at Anthropic: still running, not crashed
         const muchLater = new Date(Date.now() + 6 * 60 * 1000);
         expect(readIndexStatus(root, muchLater)?.stages.summaries).toEqual({
-            state: "running", done: 1, total: 14, note: "7 requests at Anthropic in batches; run npm run summarize to collect them",
+            state: "running", done: 1, total: 14, note: "7 requests at Anthropic in batches; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them",
         });
 
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "batch", pollIntervalMs: 0 }))
@@ -305,7 +305,7 @@ describe("runSummaries — the Batch API", () => {
         // run 2 collects the 7, submits the 4 leaf folders, and finds that batch still processing
         expect(await runSummaries(root, noWait)).toMatchObject({ summarized: 7, batches: 1, waves: 1, inFlight: 4, upToDate: 8 });
         expect(readIndexStatus(root)?.stages.summaries).toEqual({
-            state: "running", done: 8, total: 14, note: "4 requests at Anthropic in batches; run npm run summarize to collect them",
+            state: "running", done: 8, total: 14, note: "4 requests at Anthropic in batches; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them",
         });
         // one level per run from here: src, then the repo, then there's nothing left to do
         expect(await runSummaries(root, noWait)).toMatchObject({ summarized: 4, batches: 1, inFlight: 1, upToDate: 12 });
@@ -373,7 +373,7 @@ describe("runSummaries — the Batch API", () => {
         const muchLater = new Date(Date.now() + 6 * 60 * 1000);
         expect(readIndexStatus(root, muchLater)?.stages.summaries).toEqual({
             state: "running", done: 1, total: 14,
-            note: `Connection error.; 7 requests still at Anthropic; run npm run summarize to collect them; if that batch can never be read, run npm run summarize -- "${repoKey(root)}" --release-batch ${first} to send its requests again (paid again)`,
+            note: `Connection error.; 7 requests still at Anthropic; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them; if that batch can never be read, run nebulosity summarize "${repoKey(root)}" --release-batch ${first} (in a checkout: npm run summarize -- "${repoKey(root)}" --release-batch ${first}) to send its requests again (paid again)`,
         });
 
         // ...and, as the note says, the next run collects it: the 7 files were sent once
@@ -398,7 +398,7 @@ describe("runSummaries — the Batch API", () => {
         expect(polls).toBe(1);
         expect(readIndexStatus(root)?.stages.summaries).toEqual({
             state: "running", done: 1, total: 14,
-            note: "Anthropic rejected the API key: API error 401: invalid x-api-key; 7 requests still at Anthropic; run npm run summarize to collect them",
+            note: "Anthropic rejected the API key: API error 401: invalid x-api-key; 7 requests still at Anthropic; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them",
         });
 
         // a run with a working key collects the batch instead of resending it
@@ -557,7 +557,7 @@ describe("runSummaries — the structure guard and the circuit breaker", () => {
 
         await expect(runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).rejects.toThrow(StructureNotReadyError);
         await expect(summarizeNow(root, "src/core/log.ts", stub.summarizer))
-            .rejects.toThrow("the structure stage is running; wait for npm run index to finish (or re-run it) before summarizing");
+            .rejects.toThrow("the structure stage is running; wait for the index run to finish, or run nebulosity index <path-to-repo> (in a checkout: npm run index -- <path-to-repo>) again, before summarizing");
         expect(stub.requests).toHaveLength(0);
         expect(readIndexStatus(root)?.stages.summaries).toEqual({ state: "idle", done: 0, total: 0 });   // nothing ran
 
@@ -620,8 +620,8 @@ describe("runSummaries — the structure guard and the circuit breaker", () => {
         expect(stub.subjects()).toEqual(["File: src/f11.ts", "File: src/f12.ts"]);
         expect(readIndexStatus(root)?.stages.summaries).toEqual({
             state: "running", done: 0, total: 14,
-            note: "stopped: 10 of 12 requests failed in the last wave (first error: src/f01.ts changed after it was indexed; run npm run index first);"
-                + " the failures are retried next run; 2 requests still at Anthropic; run npm run summarize to collect them",
+            note: "stopped: 10 of 12 requests failed in the last wave (first error: src/f01.ts changed after it was indexed; run nebulosity index <path-to-repo> (in a checkout: npm run index -- <path-to-repo>) first);"
+                + " the failures are retried next run; 2 requests still at Anthropic; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them",
         });
 
         // after npm run index, the next run collects the 2 and sends the 10, then src and the repo: every target exactly once
@@ -751,7 +751,7 @@ describe("runSummaries — the spend cap", () => {
         expect(stub.batches.get(batchId)!.polls).toBe(1);
         // the 6 are paid for and go on at Anthropic without this process: running, not failed
         expect(readIndexStatus(root)?.stages.summaries).toEqual({
-            state: "running", done: 0, total: 14, note: `${overBudget}; 6 requests still at Anthropic; run npm run summarize to collect them`,
+            state: "running", done: 0, total: 14, note: `${overBudget}; 6 requests still at Anthropic; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them`,
         });
 
         // The next run, under the same budget, finds the batch ended. The first check is over budget, as above, so the
@@ -767,7 +767,7 @@ describe("runSummaries — the spend cap", () => {
             "budget: spent $0.0001 + at Anthropic ≈ $0.0000 + this batch ≈ $0.0001 + the rest ≈ $0.0045 = $0.0046 of $0.0075",
         ]);
         expect(readIndexStatus(root)?.stages.summaries).toEqual({
-            state: "running", done: 6, total: 14, note: "6 requests at Anthropic in batches; run npm run summarize to collect them",
+            state: "running", done: 6, total: 14, note: "6 requests at Anthropic in batches; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them",
         });
     });
 
@@ -963,5 +963,26 @@ describe("runSummaries — incremental runs and summarizeNow", () => {
             summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, budgetUsd: 0.001, budgetScope: "run",
         })).toMatchObject({ summarized: 1, stopped: false });
         expect(row(root, "src/core/log.ts")?.status).toBe("fresh");
+    });
+});
+
+describe("plannedRequests", () => {
+    it("lists what a full run would send to a model: not the test file's template, and nothing is written", () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const before = loadSummaries(db, requireRepository(db, repoKey(root)));
+        // mini-repo: 7 non-test files, then 5 folders (scripts, src, src/app, src/core, src/util) and the repo; the root folder is the repo
+        const requests = plannedRequests(root);
+        expect(requests.filter((r) => r.kind === "file")).toEqual(Array.from({ length: 7 }, () => ({ kind: "file", model: "claude-haiku-5-5" })));
+        expect(requests.filter((r) => r.kind === "folder")).toEqual(Array.from({ length: 5 }, () => ({ kind: "folder", model: "claude-sonnet-5-5" })));
+        expect(requests.filter((r) => r.kind === "repo")).toEqual([{ kind: "repo", model: "claude-sonnet-5-5" }]);
+        expect(requests).toHaveLength(13);
+        expect(loadSummaries(db, requireRepository(db, repoKey(root)))).toEqual(before);
+    });
+
+    it("leaves out what is already written, so a second run is priced for what is left", async () => {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        expect(plannedRequests(root)).toEqual([]);
     });
 });

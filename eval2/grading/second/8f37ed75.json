@@ -1,0 +1,10 @@
+{ "id": "8f37ed75", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "A document is a Yjs CRDT (`Y.Doc`). The block tree is stored in Yjs maps and arrays, and the editor (BlockSuite) reads and writes it directly." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "A local edit changes the in-memory `Y.Doc`. ... The editor re-renders from the Yjs change events." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "Persisted and transmitted data is binary Yjs data." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 1, "quote": "Presence (cursors and similar) goes through a separate awareness channel (`frontend/awareness.ts`, `impls/cloud/awareness.ts`)." },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "**Web:** IndexedDB, in a database named `workspace:${id}` ... **Desktop and mobile:** SQLite, through the native Rust module (`impls/sqlite`, `packages/frontend/native`)." },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "`sync/doc/peer.ts` syncs the local storage with each remote peer. ... Local-only workspaces never connect to the server, so they stay on the device." },
+  { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+] }

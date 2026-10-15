@@ -1,0 +1,31 @@
+{
+  "id": "08080920",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Both builds share one workbench. What differs is the entry point each one assembles, and a feature is loaded only if one of those entry points imports it.\n\n**Shared code**\n- `src/vs/workbench/workbench.common.main.ts` is the common entry. It imports the editor (`../editor/editor.all.js`), the core `browser/workbench.contribution.js`, shared actions, extension points (`api/common/...`) and the `contrib/*` features that work everywhere.\n- Both `workbench.desktop.main.ts` and `workbench.web.main.ts` start with `import './workbench.common.main.js'`. Everything reachable from the common entry is therefore in both builds.\n- The workbench shell, such as `browser/workbench.ts` and the parts and layout code, is written against browser APIs and service interfaces. That is why it runs in both builds.\n\n**Platform-specific code**\n- The desktop entry adds `electron-browser/desktop.main.js` and `desktop.contribution.js`. It also adds native service implementations such as `services/textfile/electron-browser/nativeTextFileService.js` and `fileDialogService.js`, and other desktop-only contributions.\n- The web entry adds `browser/web.main.ts`, which comes with `web.factory.ts` and `web.api.ts`. It also adds web variants such as `contrib/webview/browser/webview.web.contribution.js` and `terminal.web.contribution.js`. `workbench.web.main.internal.ts` exists as well.\n- Platform-specific implementations register against the same service interfaces, so the shared code never needs to know which one it got.\n\n**What decides whether a feature loads**\n1. **Import graph.** Contributions register themselves as side effects, for example in `registerSingleton`, the actions registry and the configuration registry. A feature's code is loaded only if some entry file imports its `*.contribution.ts` file, directly or transitively. Leaving it out of an entry file leaves it out of that build.\n2. **Folder layering.** The directory names set what each layer may import:\n   - `common` runs anywhere.\n   - `browser` needs the DOM.\n   - `node` and `electron-main` are Node only.\n   - `electron-browser` is the desktop renderer.\n   - Files named `.web.` are web only.\n   The layering rules enforce this, so a `browser` file can't pull in Node code.\n3. **Runtime gating.** Code that is in the build can still be switched off with context keys, `when` clauses, configuration, `isWeb` and `isNative` checks, or product configuration. Those hide or disable a feature at runtime. They don't remove its code from the bundle.\n\nI only skimmed the entry files and didn't read the build and bundling scripts. Details such as lazy loading and extension-host loading are not covered here."
+}

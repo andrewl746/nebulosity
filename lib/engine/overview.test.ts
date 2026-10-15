@@ -32,6 +32,7 @@ describe("overview", () => {
                 { path: "src/core/index.ts", importedBy: 1 },
                 { path: "src/index.ts", importedBy: 1 },
             ],
+            docs: [{ path: "README.md", title: "mini-repo" }],
             stalePaths: 0,
             indexVersion: readIndexVersion(getDb(), repoId),
         });

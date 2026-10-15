@@ -2,8 +2,8 @@
 // Embedding model notes
 // ================================================================
 //
-// FIRST RUN downloads Xenova/all-MiniLM-L6-v2 (~25 MB) from huggingface.co and
-// caches it under node_modules/.cache. Expect ~10-20s on a cold run, well under
+// FIRST RUN downloads Xenova/all-MiniLM-L6-v2 (about 90 MB) from huggingface.co and
+// caches it under node_modules/@huggingface/transformers/.cache. Expect ~10-20s on a cold run, well under
 // a second afterwards. lib/embed.ts logs the download so it doesn't look like a
 // hang.
 //

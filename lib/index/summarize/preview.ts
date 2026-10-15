@@ -4,10 +4,11 @@ import {
     loadFileFacts, loadFolderFacts, loadImporters, loadSummaries, targetKey,
     type FileFacts, type FolderFacts, type StoredSummary,
 } from "../../db/store/summaries";
+import { commandHint } from "../../hints";
 import { ASSUMED_TOKENS } from "./budget";
 import { perRequestPrice, pickSample, usageStats, type UsageStats } from "./compare";
 import { mapLimit } from "./concurrency";
-import { planSummaries, type PlannedTarget } from "./plan";
+import { planSummaries, writtenByModel, type PlannedTarget } from "./plan";
 import { formatUsd, pricePerMTok } from "./pricing";
 import {
     FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT, SUMMARY_MODELS,
@@ -162,7 +163,7 @@ export async function runFolderPreview(input: PreviewInput): Promise<FolderPrevi
         const customId = keyOf(target);
         const prompt = target.kind === "file" ? input.filePrompt(fileByPath.get(target.path)!) : (target.prompt ?? null);
         if (prompt === null){
-            return Promise.resolve({ customId, ok: false, error: `${target.path} changed after it was indexed; run npm run index first`, model: null, usage: null });
+            return Promise.resolve({ customId, ok: false, error: `${target.path} changed after it was indexed; run ${commandHint("index", "<path-to-repo>")} first`, model: null, usage: null });
         }
         return input.summarizer.summarize({ customId, model: target.model, system: SYSTEM_PROMPTS[target.kind], prompt });
     };
@@ -237,7 +238,7 @@ export async function previewRepoFolders(
         onProgress,
     });
 
-    return { preview, importerLines, fullPass: { files: files.filter((f) => !f.isTest).length, folders: folders.length } };
+    return { preview, importerLines, fullPass: { files: files.filter((f) => writtenByModel(f)).length, folders: folders.length } };
 }
 
 export type FolderPreviewReport = {

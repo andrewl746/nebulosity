@@ -46,15 +46,20 @@ const PAIRS: [string, string][] = [
     ["src/vs/workbench/contrib/notebook/common/notebookCommon.ts", "src/vs/base/browser/dom.ts"],
 ];
 
-/** Each tool's inputs, in the order calls cycle through them (the first is the cold call). */
-const CALLS: [string, Record<string, unknown>[]][] = [
-    ["overview", [{}]],
-    ["describe", [...FOLDERS, ...FILES].map((p) => ({ path: p }))],
-    ["search", QUERIES.map((query) => ({ query }))],
-    ["dependents", FILES.flatMap((p) => [{ path: p }, { path: p, transitive: true }])],
-    ["dependencies", FILES.flatMap((p) => [{ path: p }, { path: p, transitive: true }])],
-    ["path", PAIRS.map(([from, to]) => ({ from, to }))],
-    ["show_on_map", [...FILES, ...FOLDERS].map((p) => ({ paths: [p] }))],
+/** A row of the table: its label, the tool it calls, and its inputs in the order calls cycle through them (the first is the cold call). */
+type Row = { label: string; tool: string; inputs: Record<string, unknown>[] };
+const CALLS: Row[] = [
+    { label: "overview", tool: "overview", inputs: [{}] },
+    { label: "describe", tool: "describe", inputs: [...FOLDERS, ...FILES].map((p) => ({ path: p })) },
+    { label: "search", tool: "search", inputs: QUERIES.map((query) => ({ query })) },
+    { label: "imports (dependents)", tool: "imports", inputs: FILES.flatMap((p) => [{ path: p }, { path: p, transitive: true }]) },
+    { label: "imports (dependencies)", tool: "imports", inputs: FILES.flatMap((p) => [{ path: p, direction: "dependencies" }, { path: p, direction: "dependencies", transitive: true }]) },
+    { label: "imports (to)", tool: "imports", inputs: PAIRS.map(([path, to]) => ({ path, to })) },
+    // what a change to a widely used file affects, by area (ADR-055)
+    { label: "imports (group_by)", tool: "imports", inputs: [{ path: "src/vs/platform/storage/common/storage.ts", group_by: "src/vs" }] },
+    { label: "architecture (summary)", tool: "architecture", inputs: [{ path: "src/vs" }] },
+    { label: "architecture (cycles)", tool: "architecture", inputs: [{ path: "src/vs/workbench/contrib", report: "cycles" }] },
+    { label: "show_on_map", tool: "show_on_map", inputs: [...FILES, ...FOLDERS].map((p) => ({ paths: [p] })) },
 ];
 
 /** Nearest-rank percentile of sorted values. */
@@ -78,15 +83,15 @@ async function table(client: Client): Promise<{ rows: string[]; worst: number; w
     const rows: string[] = [];
     let worst = 0;
     let worstAny = 0;
-    for (const [name, inputs] of CALLS){
-        const first = await timed(client, name, inputs[0]);
+    for (const { label, tool, inputs } of CALLS){
+        const first = await timed(client, tool, inputs[0]);
         const warm: { ms: number; chars: number }[] = [];
-        for (let i = 0; i < WARM_CALLS; i++) warm.push(await timed(client, name, inputs[(i + 1) % inputs.length]));
+        for (let i = 0; i < WARM_CALLS; i++) warm.push(await timed(client, tool, inputs[(i + 1) % inputs.length]));
         const sorted = warm.map((w) => w.ms).sort((a, b) => a - b);
         const largest = Math.max(first.chars, ...warm.map((w) => w.chars));
         worst = Math.max(worst, sorted[sorted.length - 1]);
         worstAny = Math.max(worstAny, first.ms, sorted[sorted.length - 1]);
-        rows.push(`| \`${name}\` | ${ms(first.ms)} | ${WARM_CALLS} | ${ms(percentile(sorted, 0.5))} | ${ms(percentile(sorted, 0.95))} | ${ms(sorted[sorted.length - 1])} | ${largest.toLocaleString("en-US")} |`);
+        rows.push(`| \`${label}\` | ${ms(first.ms)} | ${WARM_CALLS} | ${ms(percentile(sorted, 0.5))} | ${ms(percentile(sorted, 0.95))} | ${ms(sorted[sorted.length - 1])} | ${largest.toLocaleString("en-US")} |`);
     }
     return { rows, worst, worstAny };
 }

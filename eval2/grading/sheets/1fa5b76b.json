@@ -1,0 +1,39 @@
+{
+  "id": "1fa5b76b",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "`src/vs` has these layers. The descriptions come from `.github/copilot-instructions.md` and the directory listing. I didn't run `npm run valid-layers-check`, so the dependency rules below are the documented intent and I haven't checked them against the code.\n\n**Layers, lowest to highest**\n\n1. **`base`**: Generic utilities and UI building blocks with no VS Code concepts. It holds collections, events, lifecycle, URI, strings and async helpers, plus simple widgets (`browser/ui`) and `parts`. It is split by runtime: `common`, `browser`, `node`.\n2. **`platform`**: Services and dependency-injection infrastructure shared across layers. Examples are files, configuration, storage, instantiation, commands, contextkey, log and extension management. Each service is defined as an interface plus a decorator, with per-environment implementations.\n3. **`editor`**: The Monaco text editor, covering the model, view, languages and editor contributions (`contrib`). `standalone` is the embeddable Monaco build and `editor.api.ts` is its public API.\n4. **`workbench`**: The full IDE shell and features: layout, parts, services, extension host and API, and feature contributions (`contrib`) such as search, debug, SCM, terminal and chat.\n5. **`sessions`**: A dedicated window and workbench layer for agentic workflows. It sits alongside the workbench, not above or below it.\n\n**Entry-point layers, separate from the stack above**\n\n- **`code`**: The Electron-specific app, including the main process, utility process and renderer bootstrap.\n- **`server`**: The remote and web server implementation.\n\n**Dependency rules**\n\n- A layer may import only from layers below it. So `base` imports nothing above itself. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform` and `editor`.\n- `sessions` may import from `workbench`, but `workbench` may not import from `sessions`.\n- `code` and `server` are composition roots. They can import from the layers beneath them to assemble the application, and nothing in the core layers should import them.\n- Within each layer, the runtime-folder rules apply:\n  - `common` may import only from `common`.\n  - `browser` may import from `common` and `browser`.\n  - `node` may import from `common` and `node`.\n  - `electron-browser` may import from `common`, `browser`, `node` and `electron-browser`.\n  - `electron-main` may import from `common`, `node` and `electron-main`.\n  - `test` code may reach anything.\n- The workbench has the same ordering inside it: `contrib` may use `services`, `services` may use `browser` and `common`, and `api` sits on top. `contrib` modules should talk to each other only through explicit entry points, not by reaching into each other's internals.\n\nTo enforce this, run `npm run valid-layers-check`. It checks module layering and is worth running whenever a change adds cross-layer imports."
+}

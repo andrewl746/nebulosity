@@ -38,9 +38,9 @@ describe("summaryStageStatus", () => {
         expect(summaryStageStatus([...done, target("ready"), target("waiting", "folder")], { summarizerAvailable: false, inFlight: 0 }))
             .toEqual({ state: "off", done: 2, total: 4, note: "ANTHROPIC_API_KEY is not set, so 2 of 4 summaries can't be written" });
         expect(summaryStageStatus([...done, target("in-flight")], { summarizerAvailable: true, inFlight: 1 }))
-            .toEqual({ state: "running", done: 2, total: 3, note: "1 request at Anthropic in batches; run npm run summarize to collect them" });
+            .toEqual({ state: "running", done: 2, total: 3, note: "1 request at Anthropic in batches; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them" });
         expect(summaryStageStatus(done, { summarizerAvailable: true, inFlight: 3, stopped: "stopped: over budget" }))
-            .toEqual({ state: "running", done: 2, total: 2, note: "stopped: over budget; 3 requests still at Anthropic; run npm run summarize to collect them" });
+            .toEqual({ state: "running", done: 2, total: 2, note: "stopped: over budget; 3 requests still at Anthropic; run nebulosity summarize <path-to-repo> (in a checkout: npm run summarize -- <path-to-repo>) to collect them" });
         expect(summaryStageStatus(done, { summarizerAvailable: true, inFlight: 0, stopped: "stopped: over budget" }))
             .toEqual({ state: "failed", done: 2, total: 2, note: "stopped: over budget" });
     });

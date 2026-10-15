@@ -424,7 +424,8 @@ function EmptyState(){
         <div className="absolute inset-0 grid place-items-center">
             <div className="max-w-md space-y-2 text-center text-[14px] text-text-2">
                 <p className="text-[15px] font-medium text-text">No repository indexed yet.</p>
-                <p>Index one from a terminal, then reload: <code className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">npm run index -- &lt;path-to-repo&gt;</code></p>
+                <p>Index one from a terminal, then reload: <code className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">nebulosity index &lt;path-to-repo&gt;</code></p>
+                <p>In a checkout of Nebulosity: <code className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">npm run index -- &lt;path-to-repo&gt;</code></p>
             </div>
         </div>
     );

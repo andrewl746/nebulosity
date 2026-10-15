@@ -1,0 +1,39 @@
+{
+  "id": "vscode-impact",
+  "kind": "impact",
+  "target": "src/vs/platform/storage/common/storage.ts",
+  "counts": [
+    [
+      "src/vs/base",
+      0
+    ],
+    [
+      "src/vs/platform",
+      224
+    ],
+    [
+      "src/vs/editor",
+      183
+    ],
+    [
+      "src/vs/workbench",
+      3274
+    ],
+    [
+      "src/vs/sessions",
+      780
+    ],
+    [
+      "src/vs/code",
+      11
+    ],
+    [
+      "src/vs/server",
+      6
+    ]
+  ],
+  "elsewhere": 25,
+  "total": 4503,
+  "verified": true,
+  "notes": []
+}

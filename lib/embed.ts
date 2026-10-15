@@ -23,11 +23,11 @@ async function loadPipeline(): Promise<FeatureExtractionPipeline> {
     // dynamic import so the module can be imported without loading the model
     const { pipeline } = await import("@huggingface/transformers");
 
-    // the model is ~25 MB and is fetched from huggingface.co the first time
-    // it is used, then cached under node_modules/.cache. Without this line a
+    // the model is about 90 MB (its model.onnx is 90.4 MB) and is fetched from huggingface.co the first time
+    // it is used, then cached under node_modules/@huggingface/transformers/.cache (ADR-058). Without this line a
     // cold first index looks like a hang.
     // stderr, not stdout: V1.4's MCP server speaks JSON-RPC over stdout, and one stray line there breaks the protocol.
-    console.error(`[embed] loading ${EMBEDDING_MODEL} (first run downloads ~25 MB)…`);
+    console.error(`[embed] loading ${EMBEDDING_MODEL} (first run downloads about 90 MB)…`);
 
     return pipeline("feature-extraction", EMBEDDING_MODEL);
 }

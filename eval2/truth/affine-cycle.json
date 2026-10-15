@@ -1,0 +1,15 @@
+{
+  "id": "affine-cycle",
+  "kind": "cycle",
+  "file": "packages/common/infra/src/framework/core/components/service.ts",
+  "shortest": 4,
+  "example": [
+    "packages/common/infra/src/framework/core/components/service.ts",
+    "packages/common/infra/src/framework/core/components/component.ts",
+    "packages/common/infra/src/framework/core/provider.ts",
+    "packages/common/infra/src/framework/core/event.ts",
+    "packages/common/infra/src/framework/core/components/service.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

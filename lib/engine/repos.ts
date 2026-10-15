@@ -3,12 +3,13 @@ import type { RepoList } from "../contracts";
 import { readConfig, writeConfig } from "../config";
 import { getDb } from "../db/client";
 import { listStagedRepositories } from "../db/store/stages";
+import { commandHint } from "../hints";
 import { readRepoRemote } from "./git-remote";
 
 /** Thrown when the picker names a repo that was never indexed. */
 export class UnknownRepoError extends Error {
     constructor(root: string){
-        super(`${root} isn't an indexed repository. Run npm run index -- "${root}" first.`);
+        super(`${root} isn't an indexed repository. Run ${commandHint("index", `"${root}"`)} first.`);
         this.name = "UnknownRepoError";
     }
 }

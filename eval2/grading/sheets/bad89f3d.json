@@ -1,0 +1,39 @@
+{
+  "id": "bad89f3d",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "I have enough from the docs to answer.\n\n## Organization of `src/vs/workbench`\n\nTop-level folders:\n- **`common/`, `browser/`, `electron-browser/`** hold the minimal workbench core: layout, parts, actions and shared contexts. `browser/` is for web and renderer code. `electron-browser/` is desktop-only.\n- **`api/`** implements the `vscode.d.ts` extension API. It covers the extension host and the main-thread/ext-host split.\n- **`services/`** holds core service implementations that aren't tied to one feature.\n- **`contrib/`** holds the feature contributions: git, debug, search, terminal, chat, notebook, scm, extensions, and about 100 others.\n- **`test/`** holds the tests.\n- **Entry points:** `workbench.common.main.ts` has the shared imports. `workbench.desktop.main.ts` and `workbench.web.main.ts` add the platform-specific ones. Only code reachable from these files gets loaded.\n\nLayering is `base → platform → editor → workbench → code/server`. `src/vs/sessions` sits above `workbench`. It may import from `workbench`, but `workbench` must never import from it. Within each layer, the folder name (`common`, `browser`, `node`, `electron-browser` and so on) limits which APIs the code may use. `common` is plain JavaScript only.\n\n## Rules for `contrib/`\n\nThese come from `.github/instructions/source-code-organization.instructions.md`:\n\n1. **No inbound dependencies.** Nothing outside `contrib/` may depend on `contrib/`. Core, services and API code must not import from it.\n2. **One entry point.** Each contribution has a single `*.contribution.ts` file. It registers the feature's actions, views, services, editors, configuration and workbench contributions, and the entry-point files import it.\n3. **One public API.** A contribution exposes its internal API from a single `common` file.\n4. **No reaching into internals.** Other contributions depend only on that common API. They never import its internal files.\n5. **Platform split.** Each contribution is usually divided into `common/`, `browser/`, and sometimes `electron-browser/` or `node/`. Those folders follow the same environment restrictions as the rest of the codebase. For example, `contrib/git` and `contrib/search` each have `browser/` and `common/`.\n\nFeatures plug in through registries and extension points (the contribution model) rather than being called directly by core. Services are consumed through constructor injection. Non-service parameters come first, and services are injected with decorators, for example `@IMyService`.\n\nI read these rules from the docs. I didn't verify them against the lint import-pattern configuration, because my last shell command was denied. Some existing files may not follow them exactly."
+}

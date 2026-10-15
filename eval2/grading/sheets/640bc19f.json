@@ -1,0 +1,31 @@
+{
+  "id": "640bc19f",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Each layer of `src/vs` is split into six environment folders. This comes from `.github/instructions/source-code-organization.instructions.md`. The `code-layering` ESLint rule in `eslint.config.js` (lines 117–141) enforces the same import table. A folder may also import from itself.\n\n| Folder | Runs in / APIs available | May import from |\n|---|---|---|\n| `common` | Basic JavaScript only, with no DOM and no Node | nothing else (only other `common` code) |\n| `browser` | Web and DOM APIs | `common` |\n| `node` | Node.js APIs | `common` |\n| `electron-browser` | The renderer: browser APIs plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | The Electron utility process | `common`, `node` |\n| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |\n\nThe rules follow from the table:\n- `common` is the base. Everything can import it, and it imports nothing environment-specific.\n- `browser` and `node` are separate and can't import each other, since DOM code and Node code can't safely share a runtime.\n- `electron-browser` builds on `browser`. It can't import `node` or the other Electron folders.\n- `electron-utility` builds on `node`. It can't import `browser`.\n- `electron-main` is the only folder that can import another Electron folder, namely `electron-utility`. It can't import `browser` or `electron-browser`.\n\nThe `eslint.config.js` rule is set to `warn`, and some files are exempted. Examples are `workbenchTestServices.ts` and `updateService.snap.ts`.\n\nLayers are a separate axis: `base`, `platform`, `editor`, `workbench`, `code`, `server` and `sessions`. Each layer may only import from the layers listed before it, and `sessions` may import from `workbench`."
+}

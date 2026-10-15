@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../../test/helpers/fixture";
+import { makeTempDir } from "../../../test/helpers/temp";
 import { FILES } from "../../../test/helpers/mini-repo-facts";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { getDb } from "../client";
@@ -11,8 +12,8 @@ import { indexRepository } from "../../index/pipeline";
 import { runSummaries } from "../../index/summarize/run";
 import { upsertRepository } from "./structure";
 import {
-    addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, pruneSummaries, targetKey, writeResults,
+    addUsage, applyTargetUpdates, confirmSummaries, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
+    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, pruneSummaries, summariesConfirmed, targetKey, writeResults,
 } from "./summaries";
 import { writeSummaryVectors } from "./summary-vectors";
 
@@ -23,6 +24,15 @@ describe("summary store — facts for the planner", () => {
         const { repoId } = indexRepository(copyFixture());
         expect(loadFileFacts(getDb(), repoId).map((f) => [f.path, f.importedBy, f.isTest, f.lineCount]))
             .toEqual(FILES.map((f) => [f.path, f.importedBy, f.isTest, f.lineCount]));
+    });
+
+    it("loads each file's size in bytes, which tells the planner the files over the size cap (ADR-053)", () => {
+        const root = makeTempDir("neb-sizes-");
+        fs.writeFileSync(path.join(root, "a.ts"), "export const a = 1;\n");          // 20 bytes
+        fs.writeFileSync(path.join(root, "b.ts"), 'import { a } from "./a";\n');     // 25 bytes
+        fs.writeFileSync(path.join(root, "é.ts"), "export const é = 1;\n");          // 6 + 1 + 5 + 1 + 2 + 5 + 1 = 21 bytes: é is 2 in UTF-8
+        const { repoId } = indexRepository(root);
+        expect(loadFileFacts(getDb(), repoId).map((f) => [f.path, f.sizeBytes])).toEqual([["a.ts", 20], ["b.ts", 25], ["é.ts", 21]]);
     });
 
     it("loads the folder tree with its file counts", () => {
@@ -258,5 +268,21 @@ describe("summary store — a template over model text", () => {
         await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
         expect(loadSummaries(db, repoId).find((s) => s.id === testFile.id)).toMatchObject({ model: "template", tagline: "Tests for strings" });
         expect(vectorsOf()).toEqual([]);
+    });
+});
+
+describe("summariesConfirmed (S11)", () => {
+    it("is false for a repo nobody confirmed, true after a yes, and true once a model has written a summary", async () => {
+        const db = getDb();
+        const { repoId } = indexRepository(copyFixture());
+        expect(summariesConfirmed(db, repoId)).toBe(false);   // the test file's template doesn't count
+        confirmSummaries(db, repoId);
+        expect(summariesConfirmed(db, repoId)).toBe(true);
+
+        const root = copyFixture();
+        const other = indexRepository(root);
+        expect(summariesConfirmed(db, other.repoId)).toBe(false);
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        expect(summariesConfirmed(db, other.repoId)).toBe(true);   // VS Code's existing summaries keep it confirmed
     });
 });

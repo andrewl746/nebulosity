@@ -148,3 +148,28 @@ describe("reach and importChain over an indexed repo", () => {
         expect(() => importChain(root, "", "src")).toThrow(BadInputError);
     });
 });
+
+describe("reach within a folder (ADR-045, amended)", () => {
+    const root = path.join(__dirname, "..", "..", "test", "fixtures", "arch-repo");
+    indexRepository(root);
+
+    it("keeps only the files inside the folder, and counts them alone", () => {
+        const answer = reach(root, "src/editor", "dependents", { within: "src/platform" });
+        expect(answer.reached).toEqual([{ path: "src/platform/node/storageFile.ts", distance: 1 }]);
+        expect(answer.direct).toBe(1);
+        expect(answer.within).toBe("src/platform");
+    });
+
+    it("refuses a folder target's own inside, which can hold none of its importers, and a within that isn't indexed, naming within", () => {
+        expect(() => reach(root, "src/editor", "dependents", { within: "src/editor" })).toThrow(BadInputError);
+        expect(() => reach(root, "src/editor", "dependents", { within: "src/editor/common" })).toThrow(/within "src\/editor\/common"/);
+        expect(() => reach(root, "src/editor", "dependencies", { within: "src/editor/node" })).toThrow(BadInputError);
+        expect(() => reach(root, "src/editor", "dependents", { within: "src/nope" })).toThrow(/within "src\/nope" isn't a folder/);
+        // a file target is not a folder: within its own folder is a real question
+        expect(reach(root, "src/editor/common/model.ts", "dependents", { within: "src/editor" }).reached.length).toBeGreaterThan(0);
+    });
+
+    it("refuses a file as the folder", () => {
+        expect(() => reach(root, "src/editor", "dependents", { within: "src/app/main.ts" })).toThrow("within takes a folder.");
+    });
+});

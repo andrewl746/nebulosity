@@ -1,0 +1,48 @@
+{
+  "id": "vscode-bp5",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies",
+      "check": "src/vs/workbench/workbench.desktop.main.ts: 114 imports, 104 of them from electron-browser folders; its header says to put common imports in workbench.common.main.ts.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones",
+      "check": "src/vs/workbench/workbench.web.main.ts: 95 imports, none from electron-browser or node folders (71 browser, 23 common).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it",
+      "check": "src/vs/workbench/workbench.common.main.ts: 262 imports, none from electron-browser or node folders. workbench.desktop.main.ts L15 and workbench.web.main.ts L16 both import './workbench.common.main.js'.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails",
+      "check": "Desktop and web register the same identifiers from different files: ITextFileService (services/textfile/electron-browser/nativeTextFileService.ts L118, services/textfile/browser/browserTextFileService.ts L69), IFileDialogService, IHostService, the lifecycle service, extensionHostDebugService (desktop.main L134, web.main L153). A missing one: platform/instantiation/common/instantiationService.ts L142 '[createInstance] ... depends on UNKNOWN service' (thrown in strict mode; otherwise the consumer gets undefined).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded",
+      "check": "build/next/index.ts bundles each target from entry-point lists (desktopEntryPoints has vs/workbench/workbench.desktop.main; the web target uses vs/workbench/workbench.web.main.internal, which imports workbench.web.main.ts), so only what those entries reach is shipped and loaded.",
+      "holds": true,
+      "note": "Other entry points (workers, the extension host, the server, the CLI) have their own lists in the same file."
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file",
+      "check": "Examples: src/vs/workbench/contrib/notebook/browser/notebook.contribution.ts L95-97 import './contrib/debug/notebookBreakpoints.js' and the other notebook debug files; markers.contribution.ts is itself imported by workbench.common.main.ts L296.",
+      "holds": true,
+      "note": ""
+    }
+  ]
+}

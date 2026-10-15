@@ -1,0 +1,11 @@
+{
+  "id": "affine-s2-unused",
+  "kind": "unused",
+  "folder": "packages/frontend/core/src/components/affine/ai-onboarding",
+  "files": [
+    "packages/frontend/core/src/components/affine/ai-onboarding/general.dialog.tsx",
+    "packages/frontend/core/src/components/affine/ai-onboarding/index.tsx"
+  ],
+  "verified": true,
+  "notes": []
+}

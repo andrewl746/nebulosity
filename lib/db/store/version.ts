@@ -1,6 +1,7 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { chunkRows, SQLITE_MAX_PARAMS } from "../batch";
 import type { Db } from "../client";
-import { meta } from "../schema";
+import { files, meta } from "../schema";
 
 /**
  * A per-repo counter that goes up whenever anything the Map shows changes: the structure (files, folders, level edges,
@@ -12,6 +13,40 @@ const versionKey = (repoId: number): string => `indexVersion:${repoId}`;
 export function readIndexVersion(db: Db, repoId: number): number {
     const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, versionKey(repoId))).get();
     return row ? Number(row.value) : 0;
+}
+
+const adapterKey = (repoId: number): string => `adapterVersion:${repoId}`;
+
+/** The language adapter's version (ADAPTER_VERSION) the repo's last full run parsed its files with; 0 when none recorded one (ADR-053). */
+export function readAdapterVersion(db: Db, repoId: number): number {
+    const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, adapterKey(repoId))).get();
+    return row ? Number(row.value) : 0;
+}
+
+export function writeAdapterVersion(db: Db, repoId: number, version: number): void {
+    const updatedAt = new Date();
+    db.insert(meta)
+        .values({ key: adapterKey(repoId), value: String(version), updatedAt })
+        .onConflictDoUpdate({ target: meta.key, set: { value: String(version), updatedAt } })
+        .run();
+}
+
+/**
+ * Records the adapter version a full run parsed with (ADR-053, amended) and, in the same transaction, clears the content
+ * hash of the files it couldn't parse again. Their rows are an older adapter's; a cleared hash ("" = not yet processed,
+ * ADR-022) makes the next full run parse those files, and only those, with this one.
+ */
+export function recordAdapterVersion(db: Db, repoId: number, version: number, unparsed: readonly string[]): void {
+    db.transaction((tx) => {
+        for (const batch of chunkRows(unparsed, 1, SQLITE_MAX_PARAMS - 1)){
+            tx.update(files).set({ contentHash: "" }).where(and(eq(files.repoId, repoId), inArray(files.path, batch))).run();
+        }
+        const updatedAt = new Date();
+        tx.insert(meta)
+            .values({ key: adapterKey(repoId), value: String(version), updatedAt })
+            .onConflictDoUpdate({ target: meta.key, set: { value: String(version), updatedAt } })
+            .run();
+    });
 }
 
 /** Adds one and returns the new value. One statement, so two processes bumping at once can't lose a bump. */

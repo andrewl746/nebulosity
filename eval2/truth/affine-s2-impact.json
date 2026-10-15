@@ -1,0 +1,31 @@
+{
+  "id": "affine-s2-impact",
+  "kind": "impact",
+  "target": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
+  "counts": [
+    [
+      "packages/frontend/core/src/blocksuite",
+      187
+    ],
+    [
+      "packages/frontend/core/src/components",
+      145
+    ],
+    [
+      "packages/frontend/core/src/desktop",
+      128
+    ],
+    [
+      "packages/frontend/core/src/mobile",
+      92
+    ],
+    [
+      "packages/frontend/apps",
+      19
+    ]
+  ],
+  "elsewhere": 110,
+  "total": 681,
+  "verified": true,
+  "notes": []
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FILES, FOLDERS } from "../../../test/helpers/mini-repo-facts";
 import type { FileFacts, FolderFacts, StoredSummary } from "../../db/store/summaries";
-import { inputHash, planSummaries, type PlanOptions, type PlannedTarget } from "./plan";
+import { inputHash, planSummaries, writtenByModel, type PlanOptions, type PlannedTarget } from "./plan";
 import { PROMPT_VERSION, SUMMARY_MODELS } from "./prompts";
 
 const options = (overrides: Partial<PlanOptions> = {}): PlanOptions => ({
@@ -171,8 +171,41 @@ describe("planSummaries — in flight and failed", () => {
     });
 });
 
+describe("planSummaries — files over the size cap (ADR-053, amended)", () => {
+    const facts = (path: string, sizeBytes: number, isTest = false): FileFacts =>
+        ({ path, contentHash: `h-${path}`, lineCount: 120, isTest, importedBy: 0, sizeBytes });
+    const FOLDERS_SRC: FolderFacts[] = [
+        { path: "", parentPath: null, depth: 0, name: "r", fileCount: 3, directFileCount: 0 },
+        { path: "src", parentPath: "", depth: 1, name: "src", fileCount: 3, directFileCount: 3 },
+    ];
+    const SUMMARY = "Too large to read in full (120 lines, over the 1 MB size cap): only its imports are indexed. "
+        + "Files over the cap get this template instead of a model-written summary.";
+
+    it("gives a non-test file over the cap a template, not a model: it is indexed for its imports only", () => {
+        const files = [facts("src/bundle.cjs", 1_000_001), facts("src/main.ts", 1_000_000), facts("src/huge.test.ts", 1_500_000, true)];
+        const byPath = new Map(planSummaries(files, FOLDERS_SRC, [], options()).map((t) => [t.path, t]));
+
+        expect(byPath.get("src/bundle.cjs")).toMatchObject({
+            kind: "file", model: "template", state: "template", status: "skipped",
+            templateText: { tagline: "Over the size cap: imports only", summary: SUMMARY },
+        });
+        expect(byPath.get("src/bundle.cjs")?.inputHash)
+            .toBe(inputHash("template", PROMPT_VERSION, `src/bundle.cjs\nOver the size cap: imports only\n${SUMMARY}`));
+        // exactly at the cap is read in full, so it is summarized as before
+        expect(byPath.get("src/main.ts")).toMatchObject({ model: SUMMARY_MODELS.file, state: "ready" });
+        // a test file keeps its test template, whatever its size
+        expect(byPath.get("src/huge.test.ts")?.templateText?.tagline).toBe("Tests for huge");
+    });
+
+    it("takes the cap from the options when one is given", () => {
+        const byPath = new Map(planSummaries([facts("src/a.ts", 2_000)], FOLDERS_SRC, [], options({ maxFileBytes: 1_000 })).map((t) => [t.path, t]));
+        expect(byPath.get("src/a.ts")).toMatchObject({ model: "template", state: "template" });
+        expect(byPath.get("src/a.ts")?.templateText?.summary).toContain("over the 1,000-byte size cap");
+    });
+});
+
 describe("planSummaries — test-only folders", () => {
-    const file = (path: string, lineCount: number, isTest: boolean): FileFacts => ({ path, contentHash: `h-${path}`, lineCount, isTest, importedBy: 0 });
+    const file = (path: string, lineCount: number, isTest: boolean): FileFacts => ({ path, contentHash: `h-${path}`, lineCount, isTest, importedBy: 0, sizeBytes: 100 });
     const folder = (path: string, parentPath: string | null, depth: number, fileCount: number, directFileCount: number): FolderFacts =>
         ({ path, parentPath, depth, name: path.slice(path.lastIndexOf("/") + 1), fileCount, directFileCount });
     const TEMPLATE_SUMMARY = "Test code (1 test file) for a. Test-only folders get this template instead of a model-written summary.";
@@ -250,5 +283,17 @@ describe("inputHash", () => {
         expect(inputHash("claude-sonnet-5-5", PROMPT_VERSION, "input")).not.toBe(base);
         expect(inputHash("claude-haiku-5-5", PROMPT_VERSION + 1, "input")).not.toBe(base);
         expect(inputHash("claude-haiku-5-5", PROMPT_VERSION, "input2")).not.toBe(base);
+    });
+});
+
+describe("writtenByModel", () => {
+    const file = (over: Partial<FileFacts>): FileFacts => ({ path: "a.ts", contentHash: "h", lineCount: 1, isTest: false, importedBy: 0, sizeBytes: 100, ...over });
+
+    it("is true only for a non-test file within the size cap: tests and over-cap files get templates", () => {
+        expect(writtenByModel(file({}))).toBe(true);
+        expect(writtenByModel(file({ sizeBytes: 1_000_000 }))).toBe(true);    // exactly the cap is still read in full
+        expect(writtenByModel(file({ sizeBytes: 1_000_001 }))).toBe(false);   // indexed for its imports only (ADR-053)
+        expect(writtenByModel(file({ isTest: true }))).toBe(false);
+        expect(writtenByModel(file({ sizeBytes: 500 }), 400)).toBe(false);    // a smaller cap, as planSummaries' option
     });
 });

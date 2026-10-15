@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ErrorCode, ErrorEnvelope } from "@/lib/contracts";
 import { readConfig } from "@/lib/config";
-import { errorResponseFor } from "@/lib/engine/errors";
+import { errorResponseFor, NoActiveRepoError } from "@/lib/engine/errors";
 
 /** Shared by the route handlers: the error envelope (API_CONTRACTS.md §1) and the active repo. */
 export function jsonError(status: number, code: ErrorCode, message: string): NextResponse<ErrorEnvelope> {
@@ -15,13 +15,13 @@ export function errorJson(err: unknown): NextResponse<ErrorEnvelope> {
     return NextResponse.json<ErrorEnvelope>({ error }, { status });
 }
 
-/** The repo the Map shows: `activeRepo` in .nebulosity/config.json, which npm run index sets. */
+/** The repo the Map shows: `activeRepo` in the data folder's config.json, which nebulosity index sets. */
 export function activeRepo(): string | null {
     return readConfig().activeRepo;
 }
 
 export function noActiveRepo(): NextResponse<ErrorEnvelope> {
-    return jsonError(404, "INDEX_EMPTY", "No repository indexed yet. Run npm run index -- <path-to-repo>.");
+    return jsonError(404, "INDEX_EMPTY", new NoActiveRepoError().message);
 }
 
 export function badPath(): NextResponse<ErrorEnvelope> {

@@ -1,0 +1,10 @@
+{
+  "name": "Eval #1",
+  "claudeVersion": "2.1.299",
+  "pins": { "model": "claude-sonnet-5-5", "effort": "medium", "maxTurns": 80, "maxBudgetUsd": 4, "sessionMaxBudgetUsd": 4 },
+  "repos": { "vscode": { "path": "../vscode", "commit": "cc3fec8846d0e678357e476fa611774da26d7e24", "slug": "microsoft/vscode" } },
+  "arms": ["baseline", "nebulosity", "nebulosity-upfront"],
+  "repeats": 2,
+  "scripts": false,
+  "pilot": ["bp4", "cl2", "cn3"]
+}

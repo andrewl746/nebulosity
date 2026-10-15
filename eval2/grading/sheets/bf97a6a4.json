@@ -1,0 +1,31 @@
+{
+  "id": "bf97a6a4",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Desktop and web share almost all workbench code. A small set of entry-point files decides which features get loaded.\n\n**How the code is shared**\n\n- The code is layered by target environment under `src/vs/workbench`, and by `common` / `browser` / `electron-browser` folders inside each feature. `common` is environment-agnostic. `browser` assumes a DOM and web APIs. `electron-browser` can also use Electron and Node-backed services.\n- Both builds run the same `browser` code. Desktop adds `electron-browser` on top of it.\n- `workbench.common.main.ts` imports everything that is common to both builds: the core workbench, the shared services and the shared `contrib/**/browser/*.contribution` files.\n- `workbench.desktop.main.ts` imports `workbench.common.main.js` and then adds the desktop-only pieces: `electron-browser/desktop.main` and `desktop.contribution`, the native text file service, the native file dialogs, the menubar service and so on.\n- `workbench.web.main.ts` (with `workbench.web.main.internal.ts`) imports the same common entry, then the web-specific services (`browser/web.main.ts`, `web.factory.ts`, `web.api.ts`).\n- Each platform provides its own implementation of a service interface. For example, the desktop build registers the native text file service. Callers depend only on the interface.\n\n**What decides whether a feature's code gets loaded**\n\n1. **Import graph.** A feature is only loaded if some entry file imports it, usually through a `*.contribution.ts` file. These files register services, actions, editors, views and configuration as side effects of being imported. If a contribution isn't imported by `common`, `desktop` or `web`, it never ships.\n   - A feature imported from `workbench.common.main.ts` is in both builds.\n   - A feature imported only from `workbench.desktop.main.ts` is desktop-only. Anything under `electron-browser` can only be reached this way, because the web build never imports it.\n2. **Layering rules.** A lint rule enforces the folder conventions (`common` cannot import `browser`, `browser` cannot import `electron-browser`, and so on), so the folder a file sits in determines where it can be used.\n3. **Runtime gating.** Once a file is loaded, it can still be inactive:\n   - Context keys and `when` clauses control visibility.\n   - Configuration settings and the `product.json` / feature flags can turn things off.\n   - Workbench contributions are registered for a lifecycle phase (`Eager`, `Restored`, `Eventually` and so on). The phase decides when they are instantiated, and some are lazy.\n\nI confirmed the entry-file structure by reading the files in this checkout. The layering lint rule and the lifecycle phases are from my knowledge of the codebase, and I didn't check them here."
+}

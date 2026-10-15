@@ -1,0 +1,39 @@
+{
+  "id": "92fd3801",
+  "question": "What are the main parts of the AFFiNE repository and what is each one for? Say which apps are built from it, what the server is for and what it needs to run.",
+  "points": [
+    {
+      "id": "AFFINE-BP1.1",
+      "text": "`packages/` holds the code that runs in production, split into `backend/` (the server), `frontend/` (the apps and the business libraries they share) and `common/` (isomorphic or basic libraries with no business logic)"
+    },
+    {
+      "id": "AFFINE-BP1.2",
+      "text": "`tools/` holds development and CI tooling that doesn't ship (such as the `yarn affine` CLI), and `tests/` holds the end-to-end and integration tests that span packages"
+    },
+    {
+      "id": "AFFINE-BP1.3",
+      "text": "the editor is BlockSuite, which lives in the same repository under `blocksuite/` and is used by the app as workspace packages (`@blocksuite/*`)"
+    },
+    {
+      "id": "AFFINE-BP1.4",
+      "text": "several apps are built from the shared frontend code under `packages/frontend`: the web app, the Electron desktop app, a mobile web app, iOS and Android apps, and an admin app"
+    },
+    {
+      "id": "AFFINE-BP1.5",
+      "text": "some code is written in Rust and built into Node.js bindings with napi-rs: `@affine/native` (`packages/frontend/native`) for the clients and `@affine/server-native` for the server"
+    },
+    {
+      "id": "AFFINE-BP1.6",
+      "text": "the server (`@affine/server`, in `packages/backend/server`) is only needed for cloud features (accounts, sync and collaboration, AI); without it the web app keeps workspaces locally in the browser"
+    },
+    {
+      "id": "AFFINE-BP1.7",
+      "text": "the server runs on PostgreSQL (with the pgvector extension) and Redis, and serves a GraphQL API at `/graphql`"
+    },
+    {
+      "id": "AFFINE-BP1.8",
+      "text": "`@affine/component` (`packages/frontend/component`) is the shared UI component library"
+    }
+  ],
+  "answer": "**AFFiNE** is a local-first workspace that combines docs, whiteboard and tables, and is positioned as an alternative to Notion and Miro. It's a Yarn monorepo with a TypeScript/React frontend, a NestJS backend, Rust native modules and the BlockSuite editor. I read this from the repo's indexed summaries, package manifests and `render.yaml`, and I didn't run anything.\n\n## Main parts\n\n- **`blocksuite/`** is the editor, a Yjs (CRDT) based framework.\n  - `framework/` is the core: store, std and the editor runtime.\n  - `affine/` holds the block types, widgets, models and shared services.\n  - Also here: `playground/`, `docs-site/`, `integration-test/` and `docs/`.\n- **`packages/frontend/`** has the client code.\n  - `core` is the main app logic and editor integration.\n  - `component` is the shared React UI library.\n  - `apps/` holds the platform builds.\n  - `admin` is a separate admin console.\n  - Smaller packages cover translations (`i18n`), analytics (`track`), typed routes (`routes`), built-in templates (`templates`), the Rust addon loader (`native`) and the Electron API bridge (`electron-api`).\n- **`packages/common/`** is shared by the frontend and the backend.\n  - `nbstore` is layered storage and sync, with IndexedDB, SQLite and cloud backends.\n  - `infra` provides dependency injection, `livedata`, an ORM and RPC primitives.\n  - `graphql` is the typed client and codegen.\n  - Others are `auth`, `error`, `debug`, `env`, `realtime`, `reader` (parses BlockSuite documents) and `s3-compat`.\n- **`packages/backend/`** has two packages.\n  - `server` is the NestJS server.\n  - `native` is the Rust addon the server uses. Its build is `yarn affine @affine/server-native build`.\n- **`tests/`** holds end-to-end and other tests.\n- **`tools/`** has the `affine` CLI and CI helpers.\n- **`scripts/`** holds build, release and test scripts.\n- **`.github/`** has CI and GKE deployment.\n- **Root files** include `Cargo.toml` for the Rust workspace, `render.yaml` for Render deployment and `vitest.config.ts`.\n\n## Apps built from it\n\nThe folders under `packages/frontend/apps/` give these builds:\n- **Web** (`web`)\n- **Mobile web** (`mobile`, with `mobile-shared`)\n- **Desktop** (`electron` plus `electron-renderer`)\n- **iOS** (`ios`)\n- **Android** (`android`)\n\nThere is also the **admin console** (`packages/frontend/admin`) and the **server**.\n\n## What the server is for\n\nThe server is the optional cloud and self-host backend. The clients work offline, and the server adds:\n- account login and authentication\n- workspace sync and realtime collaboration, using socket.io and Yjs documents\n- blob and file storage, including S3-compatible storage\n- a GraphQL API at `/graphql`, which the web, mobile and desktop clients use through `common/graphql`\n- optional features loaded from `src/plugins/`\n- an admin backend\n\n## What it needs to run\n\n- **Node and Yarn.** Run `yarn` to install dependencies.\n- **Rust toolchain.** It's needed to build the native binding (`@affine/server-native`).\n- **PostgreSQL.** `render.yaml` provisions Postgres 16. I didn't confirm the database client, because the Prisma grep on `package.json` found nothing.\n- **Redis.** The `ioredis` and `@socket.io/redis-adapter` dependencies and the `REDIS_SERVER_HOST` and `REDIS_SERVER_PORT` settings in `render.yaml` point to it.\n- **Object storage.** S3-compatible storage is optional, since blobs can be stored locally.\n\nTo start it, run `yarn dev` in `packages/backend/server`. The server's README gives only the install, native build and run steps."
+}

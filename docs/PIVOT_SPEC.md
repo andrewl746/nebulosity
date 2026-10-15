@@ -43,7 +43,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 
 **Non-goals.** Editing code. Replacing Claude Code. Multi-user, SaaS or paid tiers (CLAUDE.md's non-goals stand). Non-TS/JS languages before E4. The native C++ scanner (dropped, ADR-025).
 
-**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names:
+**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names, S12 on VS Code and AFFiNE:
 
 | # | Criterion | Threshold |
 |---|---|---|
@@ -55,9 +55,10 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
 | S7 | Evaluation run and published, losses included *(done 2026-10-14: docs/EVAL_RESULTS.md, Eval #1)* | done |
 | S8 | Public repo, README, video, live demo link | done |
-| S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux |
-| S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo |
-| S11 | Free mode (V1.6): no API key | the Map, structure and stats, `dependents`/`dependencies`/`path`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed |
+| S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux *(V1.6: CI on Windows, macOS and Linux installs the package, indexes two fixtures, answers through MCP and serves the Map: run 38701608458. `nebulosity setup` against a real Claude Code (2.1.300) was first run on Windows by the final review, with Claude Code's config isolated, a space in every path, and the server connected. Then CI run 38743531951 (2026-10-15, at `73cbff7`) passed on all three systems with the final review's new steps: `setup` against a real Claude Code (no key), the installed Map's background worker picking up a saved file, and `summarize`'s refusals without a key and without a terminal.)* |
+| S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo *(V1.6: met on express, vite, excalidraw, AFFiNE and VS Code; each indexes without a crash and resolves 99% or more of its relative imports of code, with imports of style sheets, images and other files the index doesn't read counted apart: Variety Benchmark #1)* |
+| S11 | Free mode (V1.6): no API key | the Map, structure and stats, `imports`/`architecture`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed *(V1.6: met; the estimate and the yes, ADR-035 and ADR-038 amended, the Map's on-open summary included since the pre-freeze sweep; the Map checked with no key)* |
+| S12 | Eval #2 passes the ship gate (ADR-057) | all seven of D1's conditions hold *(V1.6: **failed**, 2026-10-15: conditions 1, 2, 3a and 5a failed; 3b, 4 and 5b passed. docs/EVAL_RESULTS.md, Eval #2)* |
 
 ---
 
@@ -132,6 +133,7 @@ Persistence shapes live in `lib/db/schema.ts` (ADR-013). The spec fixes their me
 | `summaries` | new | `targetKind` (file, folder, repo, cluster), `targetPath`, `tagline` (3–6 words asked for; up to 8 kept whole), `summary` (2–4 sentences), `model`, `inputHash`, `status` (fresh, stale, pending, failed, skipped; `off` is reported, never stored), `error`, and `batchId`/`pendingHash` so a Batch run can resume (§5.3) |
 | `summary_vectors` | new | one embedding per model-written summary (encode/decode pair, ADR-017) |
 | `summary_usage` | new | API tokens per repo, model and transport (direct, batch); S2 is measured from it |
+| `docs`, `doc_links` | V1.6 | the repo's Markdown docs (path, title) and which folders and files each applies to, is the README of, or mentions (`kind`, `count`, the glob); read at index time with no model (ADR-054) |
 | `code_fts` | new (FTS5) | `path`, `name`, `nameSplit` (camelCase split, so "editor" finds `openEditor`), `text` over chunks; kept in sync by triggers (ADR-031) |
 | `summary_fts` | new (FTS5) | `path`, `tagline`, `summary`; kept in sync by triggers (ADR-031) |
 | E2 `calls` | later | `callerSymbolId`, `calleeSymbolId`, `count`, `resolution` (typed, heuristic) |
@@ -156,20 +158,22 @@ For every import edge `a → b`, take `L = LCA(dir(a), dir(b))`, the deepest fol
 ## 5. Indexing pipeline
 
 ### 5.1 Discover
-Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree, skipping `node_modules`, `.git`, `.next` and `.nebulosity` (skipped in git mode too), plus `dist`, `out`, `build` and `coverage` (skipped only when walking: in a git repo `.gitignore` decides, and a tracked `build/` can be real source, as in VS Code). Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. Files larger than 1 MB are recorded as skipped. The scan is no longer limited to `app/` and `lib/`.
+Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree, skipping `node_modules`, `.git`, `.next` and `.nebulosity` (skipped in git mode too), plus `dist`, `out`, `build` and `coverage` (skipped only when walking: in a git repo `.gitignore` decides, and a tracked `build/` can be real source, as in VS Code). Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. A code file larger than 1 MB is indexed for its imports only (no declarations, chunks or model summary): parsed in full up to 5 MB, token-scanned up to 20 MB. One larger than 20 MB, or a doc larger than 1 MB, is recorded as skipped (ADR-053, amended). The scan is no longer limited to `app/` and `lib/`.
 
 ### 5.2 Structure (blocking; target S1 ≤ 60 s)
-1. Hash every file and skip unchanged ones (ADR-022's contentHash rule).
+1. Hash every file and skip unchanged ones (ADR-022's contentHash rule), unless an older version of the adapter parsed the repo: then every file is parsed again once (ADR-053).
 2. Parse changed files with the **TypeScript adapter** (`ts.createSourceFile`, no type checker):
    - **Chunks.** The existing chunker, keeping ADR-018/019/020.
    - **Symbols.** Top-level declarations plus class members.
-   - **Imports, read from the AST.** Static, side-effect, re-export, dynamic `import()` and `require`. This retires the regex extractor and its string-literal false positives (ADR-003/016 revisit triggers).
+   - **Imports, read from the AST.** Static, side-effect, re-export, dynamic `import()`, `require`, and import types (`typeof import("x")`, ADR-053). This retires the regex extractor and its string-literal false positives (ADR-003/016 revisit triggers). A file over the 1 MB cap keeps only its imports: from this same parse up to 5 MB, from TypeScript's `preProcessFile` token scan up to 20 MB (ADR-053).
    - **Metadata.** Line count, and whether it's a test file (`/test/`, `.test.`, `.spec.`).
 3. Resolve imports:
    - relative paths
    - `tsconfig` `paths`, read from the **nearest** `tsconfig.json` up the tree so monorepos work
    - NodeNext `.js → .ts`
    - `index` files
+   - workspace packages, package.json `imports` (`#…`), module ids, computed import() and compiled → source paths (ADR-053)
+   - a bundler's query is dropped first: `./worker?worker` names `./worker` (ADR-053)
 4. Write files, symbols, chunks, imports and FTS rows in batched transactions (§4.3).
 5. Aggregate: rebuild `folders` and `level_edges` in full each run (cheap at VS Code scale), then compute in-degree for importance.
 6. Mark the stage `ready`. **The Map is usable from this point.**
@@ -219,27 +223,27 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 
 ### 6.1 Queries (pure functions over the store, unit-tested, cached per index version)
 - **`level(path, page?, focus?)`**: breadcrumb, at most 50 nodes (a big folder's page of 44 boxes plus up to 6 portals to its other pages, V1.3.1), that page's edges with the far ends folded onto portals, the hidden count, the page and the page count.
-- **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness.
+- **`describe(path)`**: tagline, summary, status, stats, children (folder) or symbols (file), uses and used-by (§4.2), freshness, and the docs about it (ADR-054).
 - **`overview()`** *(V1.4)*: the repo's describe answer, plus each top-level area's lines and the 10 most-imported files (ADR-010's in-degree), for the `overview` tool.
 - **`search(query, opts)`**: hybrid. Five ranked lists: BM25 over `code_fts`, BM25 over `summary_fts`, cosine similarity over `summary_vectors`, folder names (V1.3.1) and file names (V1.5, ADR-052). They're merged with **Reciprocal Rank Fusion**, `score(d) = Σᵢ wᵢ / (60 + rankᵢ(d))` (wᵢ is 2 for the folder-name and file-name lists, else 1), then grouped by file with the best snippet. Results are files and folders (the repo summary is left out). Each list contributes its top 50 after grouping, vector matches below cosine 0.25 are dropped, and a note says when summaries or vectors aren't ready yet (`RAG_PIPELINE.md` §6).
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance. *(V1.4, ADR-045: a file or a folder, whose own files are never listed; every answer counts all reached files and the direct ones; entries go nearest first, then most imported, then by path; `limit` and `offset` page them.)*
 - **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path". *(V1.4, ADR-045: from every file of `from` at once, neighbours in path order so the same chain comes back each time; the answer says which way it runs; overlapping places are refused.)*
+- **`impact(path, { direction, group_by, within })` and `architecture(path, report)`** *(V1.6, ADR-055)*: facts computed from the whole import graph, with no model. `impact` counts a change's dependents by area, with the tests among them and the files nothing imports that load it (a package.json's entry points first, ADR-053). `architecture` reports a folder's layers by import direction and the imports against them, the recurring folder names and what each one's files import, the import cycles (Tarjan, iterative; the shortest cycle through a file) and the files nothing imports.
 - **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
 
 ### 6.2 Registry
 Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zod input schema, handler }`. Descriptions are written for an LLM: when to use the tool and what it returns. Adapters wrap the entries: MCP registers them in v1, and LangGraph wraps the same entries in E1. Output is compact plain text with repo-relative paths, exact totals, truncation markers ("… 4,231 more") and a freshness note last. *(V1.4, ADR-047: a handler returns `{ text, paths, action? }`; the format's rules are API_CONTRACTS.md §17.)*
 
-| v1 tool | Purpose |
+| tool | Purpose |
 |---|---|
 | `overview` | Repo summary plus top areas with tagline and size. The first call on any unfamiliar repo |
 | `describe` | What a folder or file is, what's inside it, what it uses, what uses it |
 | `search` | Find code or concepts by keyword or meaning |
-| `dependents` | Everything that imports X, directly or transitively, with complete counts |
-| `dependencies` | Everything X imports, directly or transitively |
-| `path` | How A reaches B through imports |
+| `imports` | What imports X, or what X imports, directly or transitively, with complete counts; `group_by` counts what a change reaches by area; `within` keeps one folder; `to` gives the shortest chain from X to Y *(V1.6, ADR-056: replaces `dependents`, `dependencies` and `path`)* |
+| `architecture` | A folder's layers, folder conventions, import cycles and files nothing imports, from its imports *(V1.6, ADR-055, ADR-056)* |
 | `show_on_map` | Highlight paths on the open Map. Does nothing if the Map isn't open |
 
-Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
+*(V1.6, ADR-056: six tools. The five that answer questions are always loaded into Claude Code's prompt through `_meta["anthropic/alwaysLoad"]`; `show_on_map` is deferred with a search hint.)* Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
 
 **Safety.** Every tool is read-only. Paths are validated against the repo root (today's `safePath`, generalized). The MCP server listens on nothing (stdio), and the live endpoint accepts only localhost.
 
@@ -326,6 +330,8 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 *(Run as ADR-050 says: 90 runs in three arms, Sonnet 5.5 at medium effort, Claude Code 2.1.299.)*
 
+*(Eval #2, V1.6, ADR-057: 270 runs on VS Code and AFFiNE in two arms, three repeats each, Claude Code 2.1.300, scripts allowed in both arms. With Nebulosity, Claude Code was faster and cheaper on the questions that walk the import graph and in task sessions, at an equal or higher score. Part of the cost difference came from the alone arm's refused shell commands. It was lower on VS Code's big-picture questions. The ship gate failed on conditions 1, 2, 3a and 5a (S12). docs/EVAL_RESULTS.md.)*
+
 ---
 
 ## 10. Extras, in order (design level; each gets its own plan)
@@ -396,7 +402,7 @@ Each v1 slice ends demoable:
 | V1.3 Map | level/describe/search APIs, new Map UI (levels, panel, ⌘K, status pill), live channel |
 | V1.4 MCP | tool registry, `mcp/server.ts`, `claude mcp add` instructions, smoke test |
 | V1.5 Ship | static export + hosted demo, eval, README, demo-video script |
-| V1.6 Works on your repo (ADR-043) | an installable package (index, Map and Claude Code setup, one command each); a set of real repos of different shapes; Windows, macOS and Linux; free mode with no API key; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic |
+| V1.6 Works on your repo (ADR-043) — DONE 2026-10-15 | an installable package (index, Map and Claude Code setup, one command each); five real repos of different shapes; Windows, macOS and Linux (CI); free mode with no API key; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic. As built, also: more imports resolved (ADR-053), docs pointers (ADR-054), impact and architecture facts (ADR-055), six tools with five always loaded (ADR-056), and Eval #2 against a gate fixed before its first run (ADR-057), which **failed**: the hold of ADR-051 stays |
 
 **Target:** V1.1–V1.5 by **2026-10-18** (end of reading week), with a slip budget of 2–4 days; V1.6 adds about 3–4 days. The extras follow in the order of ADR-043, E4 → E5 → E1 at about 2–4 days each, then E3 (small, optional) and E2 (after its measurement); each one updates the live demo and README. Context: Shopify applications open around late October or early November 2026. *(Until 2026-10-13 the extras ran E1 → E5 in about 1–2 weeks.)*
 
@@ -466,6 +472,12 @@ Each v1 slice ends demoable:
 | ADR-050 | The evaluation's method: 15 questions in three families, hand-checked truths, three arms, blind grading of the big-picture answers |
 | ADR-051 | Going public: MIT, and nothing of the owner's machine in anything published |
 | ADR-052 | Search finds files by their names and declarations, damps tests, and shows declarations before imports (amends ADR-027) |
+| ADR-053 | More imports resolved: workspace packages, module ids, computed `import()`, and the entry points a package.json names (amends ADR-022, ADR-026) |
+| ADR-054 | Docs pointers: which docs talk about which folders, read from the repo's Markdown |
+| ADR-055 | Impact and architecture facts, computed from the import graph (amends §6.1) |
+| ADR-056 | Six tools, five always loaded, instructions as the setup-free guide, a size budget (amends ADR-047, §6.2) |
+| ADR-057 | Eval #2's method and the ship gate (amends ADR-050, ADR-051) |
+| ADR-058 | Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (implements ADR-043's V1.6; amends ADR-048) |
 
 ## 16. Doc migration
 

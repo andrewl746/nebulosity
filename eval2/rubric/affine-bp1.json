@@ -1,0 +1,76 @@
+{
+  "id": "affine-bp1",
+  "source": "AFFiNE's own docs at 0b69a6da: docs/contributing/tutorial.md (the codebase tour), docs/BUILDING.md, docs/developing-server.md, packages/backend/server/README.md, README.md",
+  "points": [
+    {
+      "id": "AFFINE-BP1.1",
+      "text": "`packages/` holds the code that runs in production, split into `backend/` (the server), `frontend/` (the apps and the business libraries they share) and `common/` (isomorphic or basic libraries with no business logic)",
+      "check": "Doc: docs/contributing/tutorial.md L17-20 ('packages/ contains all code running in production'; backend; 'frontend/ contains frontend code, including the web app, the electron app and business libraries'; 'common contains the isomorphic code or basic libraries without business'). Code: packages/ = backend (server, native), frontend (apps, core, component, admin, native, i18n, routes, ...), common (env, infra, nbstore, graphql, realtime, error, debug, auth, reader, s3-compat, native). The business library is @affine/core (packages/frontend/core/src/modules: 70 modules). packages/common's non-test files import nothing from @affine/core, @affine/component or any app (git grep: 0), and the server imports common code too (packages/backend/server/src: 23 files import @affine/graphql and 14 import @affine/realtime, by git grep -l of from '@affine/graphql and from '@affine/realtime), so it is shared by both sides.",
+      "holds": true,
+      "note": "The tutorial's 'more information from OctoBase' for backend/ does not hold: see AFFINE-BP1.9."
+    },
+    {
+      "id": "AFFINE-BP1.2",
+      "text": "`tools/` holds development and CI tooling that doesn't ship (such as the `yarn affine` CLI), and `tests/` holds the end-to-end and integration tests that span packages",
+      "check": "Doc: tutorial.md L21-22 ('tools/ contains tools to help developing or CI, not used in production'; 'tests/ contains testings across different libraries, including e2e testings and integration testings'). Code: tools/ = cli (@affine-tools/cli), changelog, commitlint, copilot-result, doc-diff, playstore-auto-bump, revert-update, utils, @types. Outside tools/, only @affine-tools/utils is imported, and only by build scripts, codegen, the Storybook config, the test setup and kit, and two server tests: packages/backend/server/scripts/genconfig.ts, packages/frontend/apps/electron/scripts/common.ts, packages/frontend/apps/ios/codegen.ts, packages/frontend/i18n/build.ts, packages/frontend/routes/build.ts, packages/frontend/component/.storybook/main.ts (L23-24, import()), scripts/setup/global.ts, tests/kit/src/electron.ts, tests/kit/src/playwright.ts, tests/kit/src/utils/cloud.ts, tests/kit/src/utils/image.ts, packages/backend/server/src/__tests__/doc/renderer.spec.ts and packages/backend/server/src/__tests__/e2e/prelude.ts; nothing outside tools/ imports any other tool package. tests/ = Playwright suites affine-local, affine-cloud, affine-cloud-copilot, affine-desktop, affine-desktop-cloud, affine-mobile, blocksuite (each with e2e/ and playwright.config.ts), plus the shared kit @affine-test/kit and fixtures.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP1.3",
+      "text": "the editor is BlockSuite, which lives in the same repository under `blocksuite/` and is used by the app as workspace packages (`@blocksuite/*`)",
+      "check": "Doc: README.md L152 ('BlockSuite is the open-source collaborative editor project behind AFFiNE'); blocksuite/docs-site/guide/overview.md L21 ('BlockSuite originated from the AFFiNE knowledge base'). Code: blocksuite/framework (@blocksuite/global, std, store, sync) and blocksuite/affine/* (@blocksuite/affine and the @blocksuite/affine-* packages); root package.json L9 lists 'blocksuite/**/*' among the yarn workspaces; 650 files under packages/frontend/core/src import @blocksuite/.",
+      "holds": true,
+      "note": "Rewritten: the README lists BlockSuite as an upstream with its own GitHub repository; at this commit its source is inside this repository under blocksuite/."
+    },
+    {
+      "id": "AFFINE-BP1.4",
+      "text": "several apps are built from the shared frontend code under `packages/frontend`: the web app, the Electron desktop app, a mobile web app, iOS and Android apps, and an admin app",
+      "check": "Doc: docs/BUILDING.md L130 and L138 (dev targets @affine/web, @affine/server, @affine/electron, @affine/mobile, @affine/admin, @affine/ios, @affine/android); tutorial.md L19 (frontend has 'the web app, the electron app'); packages/frontend/apps/web/README.md and apps/mobile/README.md ('Desktop Edition Web app', 'Mobile Edition Web app'). Code: packages/frontend/apps/{web, electron, electron-renderer, mobile, ios, android, mobile-shared} and packages/frontend/admin; package names at L2 of each package.json. web (L12-13), electron-renderer (L11-12), mobile (L12-13), ios (L17-18), android (L14-15) and admin (L6-7) all depend on @affine/component and @affine/core; the Electron app builds electron-renderer as its UI (apps/electron/scripts/generate-assets.ts L48).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP1.5",
+      "text": "some code is written in Rust and built into Node.js bindings with napi-rs: `@affine/native` (`packages/frontend/native`) for the clients and `@affine/server-native` for the server",
+      "check": "Doc: BUILDING.md L108 ('build the native module at packages/frontend/native and build Node.js binding using NAPI.rs'), L111 (yarn affine @affine/native build), L121 (yarn affine @affine/server-native build); README.md L159 (napi-rs). Code: Cargo.toml L1-10 workspace members include ./packages/backend/native (package.json name @affine/server-native) and ./packages/frontend/native (@affine/native); packages/frontend/native/Cargo.toml L18-19 and packages/backend/native/Cargo.toml L44-45 depend on napi and napi-derive.",
+      "holds": true,
+      "note": "The Rust workspace also holds packages/common/native, packages/frontend/mobile-native and the native nbstore and schema crates."
+    },
+    {
+      "id": "AFFINE-BP1.6",
+      "text": "the server (`@affine/server`, in `packages/backend/server`) is only needed for cloud features (accounts, sync and collaboration, AI); without it the web app keeps workspaces locally in the browser",
+      "check": "Doc: BUILDING.md L140 ('Running @affine/web alone is enough for most editor and UI work — workspaces are stored locally in the browser. To work on cloud features (accounts, sync, collaboration, AI), run the local server as well'). Code: packages/backend/server/src/core/auth and core/user (accounts), core/sync/gateway.ts L327 @WebSocketGateway() with L1434 @SubscribeMessage('space:push-doc-update') (sync and collaboration), plugins/copilot (AI). Local workspaces: packages/frontend/core/src/modules/workspace-engine/impls/local.ts L188 flavour 'local', L193-225 picks the IndexedDB storages unless the build is Electron, iOS or Android (then SQLite).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP1.7",
+      "text": "the server runs on PostgreSQL (with the pgvector extension) and Redis, and serves a GraphQL API at `/graphql`",
+      "check": "Doc: docs/developing-server.md L9-14 (the server needs postgres, redis, mailhog) and L27 (default image pgvector/pgvector:pg16); packages/backend/server/README.md L23 ('the server GraphQL endpoint at http://localhost:3000/graphql'). Code: packages/backend/server/schema.prisma L8-11 datasource provider 'postgresql' with extensions [pgvector]; src/app.module.ts L25-26 and L112-115 import PrismaModule and RedisModule; src/base/graphql/index.ts L42 path: '/graphql'; .docker/dev/compose.yml.example L6 pgvector/pgvector, L17 redis.",
+      "holds": true,
+      "note": "The doc's 'mailhog' is mailpit now (compose.yml.example L23 axllent/mailpit), so mail is left out of the point. The server is a NestJS app (src/server.ts L4, L56 NestFactory.create), which the docs don't say."
+    },
+    {
+      "id": "AFFINE-BP1.8",
+      "text": "`@affine/component` (`packages/frontend/component`) is the shared UI component library",
+      "check": "Doc: tutorial.md L39-43 ('@affine/component: The UI component library for AFFiNE. Each component should be a standalone component'); README.md L145, the Ecosystem table (@affine/component, 'AFFiNE Component Resources'). Code: packages/frontend/component/package.json name @affine/component; every app depends on it (see AFFINE-BP1.4).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "AFFINE-BP1.9",
+      "text": "the backend is OctoBase, the Rust database engine behind AFFiNE",
+      "check": "Doc: tutorial.md L18 ('backend/ contains backend code, more information from https://github.com/toeverything/OctoBase'); README.md L154 ('OctoBase is the open-source database behind AFFiNE'). Code: no OctoBase dependency anywhere at 0b69a6da. The only mentions outside docs are a spelling word in .vscode/settings.template.json L12, a comment in packages/frontend/apps/electron/forge.config.mjs L421 ('it is for octobase-node, but we dont use it for now') and a demo menu item in packages/frontend/component/src/ui/menu/menu.stories.tsx L156 ({ name: 'octobase', value: '3' }). The backend is the NestJS server in packages/backend/server on PostgreSQL via Prisma (AFFINE-BP1.7), with Rust parts in @affine/server-native.",
+      "holds": false,
+      "note": "Dropped: the docs' OctoBase claim no longer holds. An answer that names OctoBase as the backend or database is stating something the code doesn't bear out."
+    },
+    {
+      "id": "AFFINE-BP1.10",
+      "text": "each workspace plugin owns its state, persistence, sync, backup and recovery, behind the workspace API in `packages/frontend/workspace/src/type.ts`",
+      "check": "Doc: tutorial.md L32-37 (the design principles under @affine/env, and the workspace API link). Code: packages/frontend/workspace does not exist. Workspaces are 'flavours' in packages/frontend/core/src/modules/workspace-engine/impls (local.ts L135 LocalWorkspaceFlavourProvider, cloud.ts L91 CloudWorkspaceFlavourProvider), each choosing its nbstore storages; there are no workspace plugins.",
+      "holds": false,
+      "note": "Dropped: the plugin design and the file it names are gone."
+    }
+  ]
+}

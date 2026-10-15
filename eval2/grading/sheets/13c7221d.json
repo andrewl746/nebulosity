@@ -1,0 +1,31 @@
+{
+  "id": "13c7221d",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Both builds share one workbench. Which feature code gets loaded is decided by which entry files import it.\n\n**How the code is shared**\n- `src/vs/workbench/workbench.common.main.ts` is the shared entry point. It pulls in the platform-neutral services and the `contrib/` features through side-effect imports, for example `contrib/chat/browser/chat.contribution.js` and `services/chat/common/...`. Importing a file runs its `registerSingleton(...)` and registry calls, and that registers the service or feature.\n- `workbench.desktop.main.ts` imports `./workbench.common.main.js` and then adds the Electron-specific parts: `electron-browser/` services and contributions such as `contrib/terminal/electron-browser/terminal.contribution.js` and `contrib/chat/electron-browser/chat.contribution.js`.\n- `workbench.web.main.ts` also imports `./workbench.common.main.js`. It then adds the browser implementations, such as `services/extensions/browser/extensionService.js`, `browserHostService`, `browserTextFileService` and `web.main.js`. `workbench.web.main.internal.ts` exposes the public API for embedders.\n- Folder names set the layering. `common/` has no UI or environment dependencies, `browser/` may use web APIs, and `electron-browser/` may also use Electron and Node. Code in `browser/` can't import `electron-browser/`. The `npm run valid-layers-check` script (mentioned in `.github/copilot-instructions.md`) enforces these rules.\n\n**What decides whether a feature loads**\n1. **Static imports.** There is no runtime registry of features. A feature is in the bundle only if some entry file imports it, directly or through another import. Put it in `common.main` and both builds get it. Put it in only the desktop or web entry and only that build gets it. The bundler starts from those entry points, so unreferenced files are left out.\n2. **Where the implementation lives.** A feature with a platform-specific implementation puts it in `browser/` or `electron-browser/`. Each entry file imports only its own. For example, the web build has no `electron-browser` terminal contribution.\n3. **Runtime gating.** After a file is loaded, its registrations can still be conditional. This can use context keys, configuration, or checks such as `isWeb` and `isNative`. It can also use product or entitlement flags, or whether an extension host is available. Code that is loaded can therefore stay inactive.\n\nI only read the entry files and a few import lists. I didn't trace the build scripts or check the runtime gating in detail."
+}

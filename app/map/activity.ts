@@ -32,9 +32,9 @@ export function activityLabel(event: LiveEvent): string {
         case "describe": return any ? `Reading ${list(paths)}` : "Reading";
         case "overview": return "Reading the repo overview";
         case "search": return any ? `Searching · ${list(paths)}` : "Searching";
-        case "dependents": return any ? `Finding what uses ${list(paths)}` : "Finding dependents";
-        case "dependencies": return any ? `Finding what ${list(paths)} uses` : "Finding dependencies";
-        case "path": return paths.length >= 2 ? `Tracing ${paths[0]} → ${paths[1]}` : "Tracing a path";
+        // a live event carries only the tool and its paths, so a chain is told by having two or more
+        case "imports": return paths.length >= 2 ? `Tracing ${paths[0]} → ${paths[1]}` : any ? `Following the imports of ${list(paths)}` : "Following imports";
+        case "architecture": return any ? `Reading how ${list(paths)} is organized` : "Reading how the code is organized";
         case "show_on_map": return any ? `Showing ${list(paths)} on the map` : "Showing on the map";
         default: return any ? `${tool} · ${list(paths)}` : tool;
     }

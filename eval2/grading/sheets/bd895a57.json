@@ -1,0 +1,39 @@
+{
+  "id": "bd895a57",
+  "question": "In BlockSuite, how is a block type defined, rendered and plugged into an editor? Name the functions, classes and conventions involved.",
+  "points": [
+    {
+      "id": "AFFINE-BP3.1",
+      "text": "every block type has a schema made with `defineBlockSchema`: a `flavour` string that names it uniquely (`namespace:name`, such as `affine:paragraph`), its `props`, and `metadata` with a `version` and a `role`"
+    },
+    {
+      "id": "AFFINE-BP3.2",
+      "text": "props can hold Yjs-backed values made with the `internal` helpers, such as `internal.Text()` for the block's rich text (a Y.Text)"
+    },
+    {
+      "id": "AFFINE-BP3.3",
+      "text": "the schema also says where a block may sit, with `parent` and `children` lists of flavours that accept `*` and glob patterns (minimatch); the `root` role marks the document's root block, which can't have a parent"
+    },
+    {
+      "id": "AFFINE-BP3.4",
+      "text": "a block's model is a class extending `BlockModel`, created from the schema, which can add its own methods"
+    },
+    {
+      "id": "AFFINE-BP3.5",
+      "text": "the block's view is a lit web component extending `BlockComponent`, which renders its children through the host, and it is registered for the flavour with `BlockViewExtension(flavour, literal`tag`)`"
+    },
+    {
+      "id": "AFFINE-BP3.6",
+      "text": "widgets are extra UI tied to a host block (toolbars, menus, the drag handle, the slash menu), written as `WidgetComponent`s and registered for a block flavour"
+    },
+    {
+      "id": "AFFINE-BP3.7",
+      "text": "blocks are packaged as extension providers: a `StoreExtensionProvider` registers the data side (the schema, adapters) and a `ViewExtensionProvider` the UI side (the view, widgets, keymaps, config), and an editor gets its extensions from a `StoreExtensionManager` and a `ViewExtensionManager` that collect the providers"
+    },
+    {
+      "id": "AFFINE-BP3.8",
+      "text": "view providers register per scope (`page`, `edgeless`, their preview and mobile variants), so a block can give each kind of editor a different view; one-time setup such as defining the lit elements goes in `effect()`, which runs once per provider class"
+    }
+  ],
+  "answer": "A block type has three parts: a schema and model, a Lit view component, and registration through extension providers. I read the `affine:divider` block as the worked example.\n\n## 1. Model and schema (`@blocksuite/store`)\nThe model lives in `blocksuite/affine/model/src/blocks/divider/divider-model.ts`.\n- `defineBlockSchema({ flavour, metadata, props?, toModel })` declares the block.\n  - `flavour` is the type id, written `affine:<name>`, e.g. `'affine:divider'`.\n  - `metadata` holds `version`, `role` (`'content'`, `'hub'` or `'root'`) and the allowed `children` and `parent` flavours.\n  - `toModel` returns `new DividerBlockModel()`.\n- `class XBlockModel extends BlockModel<Props>` is the data class.\n- `BlockSchemaExtension(Schema)` wraps the schema as an extension, exported as `DividerBlockSchemaExtension`.\n  - Naming convention: `<Name>BlockSchema`, `<Name>BlockModel`, `<Name>BlockSchemaExtension`.\n\n## 2. View component (`@blocksuite/std`)\nThe view is `blocks/divider/src/divider-block.ts`.\n- It is a Lit element, `class DividerBlockComponent extends CaptionedBlockComponent<Model>`.\n  - `CaptionedBlockComponent` comes from `affine-components`. It builds on `BlockComponent` from `@blocksuite/std`, which provides `this.model`, `this.blockId`, `this.host` and `this.handleEvent`.\n- `renderBlock()` returns the `html` template. It calls `this.renderChildren(this.model)` to render nested blocks.\n- The component uses `this.host.selection` and `BlockSelection` for selection.\n- The tag is declared in `HTMLElementTagNameMap`, as `'affine-divider'`.\n- `effects.ts` exports `effects()`, which calls `customElements.define('affine-divider', …)`. Defining the element is kept out of the component module on purpose.\n\n## 3. Plugging into an editor\nRegistration uses `@blocksuite/affine-ext-loader`. Each block package has two providers.\n- **`store.ts`** has `XStoreExtension extends StoreExtensionProvider`.\n  - `setup(context)` calls `context.register(DividerBlockSchemaExtension)`, plus adapter extensions such as `DividerBlockAdapterExtensions` (markdown, HTML and so on).\n  - This is what the `Store` (document) uses to know the flavour.\n- **`view.ts`** has `XViewExtension extends ViewExtensionProvider`.\n  - `effect()` calls `effects()` to define the custom element.\n  - `setup(context)` registers `BlockViewExtension('affine:divider', literal\\`affine-divider\\`)`. This maps the flavour to a static-html tag from `lit/static-html.js`, and `BlockViewExtension` comes from `@blocksuite/std`.\n  - It also registers other view-side extensions, such as `DividerMarkdownExtension` for input rules.\n- The package `index.ts` exports these providers. The editor or app (for example the `affine-shared`/`ext-loader` extension manager) then registers the Store and View providers. The `BlockStdScope` and the `<editor-host>` use the registered extensions to look up the view for each model's flavour and render it.\n\n## Conventions\n- Flavours are `affine:*`. Package layout is `src/{xxx-block.ts, store.ts, view.ts, effects.ts, adapters/, styles.ts, index.ts}`.\n- Providers have a `name` like `'affine-divider-block'`.\n- Model definitions live in the separate `affine-model` package, so the model can be shared without the UI.\n\nI read the divider files and did not trace the app-level wiring that registers the providers into an editor, so that last step is from the file layout rather than the code."
+}

@@ -21,7 +21,10 @@ export type ImportIndex = { paths: string[]; imports: Adjacency; importedBy: Adj
 export type Reached = { path: string; distance: number };
 
 /** dependents or dependencies of one file or folder (ADR-045): every file reached, ordered, and how many directly. */
-export type ReachAnswer = { path: string; kind: "folder" | "file"; direction: Direction; reached: Reached[]; direct: number; indexVersion: number };
+export type ReachAnswer = { path: string; kind: "folder" | "file"; direction: Direction; reached: Reached[]; direct: number; indexVersion: number;
+    /** Only files inside this folder are counted (ADR-045, amended). */
+    within?: string;
+};
 
 /** How one place reaches another through imports (ADR-045). */
 export type ChainAnswer = {
@@ -141,12 +144,12 @@ export function shortestChain(index: ImportIndex, from: [number, number], to: [n
 }
 
 /** What a path is in the index, or null when nothing is indexed there. */
-function kindAt(db: Db, repoId: number, targetPath: string): TargetKind | null {
+export function kindAt(db: Db, repoId: number, targetPath: string): TargetKind | null {
     if (loadFolderInfo(db, repoId, targetPath)) return targetPath === "" ? "repo" : "folder";
     return loadFileInfo(db, repoId, targetPath) ? "file" : null;
 }
 
-function requireKind(db: Db, repoId: number, targetPath: string): TargetKind {
+export function requireKind(db: Db, repoId: number, targetPath: string): TargetKind {
     const kind = kindAt(db, repoId, targetPath);
     if (kind === null) throw new PathNotFoundError(targetPath);
     return kind;
@@ -160,16 +163,31 @@ export function targetKinds(repoRoot: string, paths: readonly string[]): (Target
 }
 
 /** dependents and dependencies (PIVOT_SPEC.md §6.1, ADR-045). The whole repo has no outside, so it's refused. */
-export function reach(repoRoot: string, targetPath: string, direction: Direction): ReachAnswer {
+export function reach(repoRoot: string, targetPath: string, direction: Direction, options: { within?: string } = {}): ReachAnswer {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     // one read transaction: the version and the graph it names are one consistent picture
     return db.transaction(() => {
         const kind = requireKind(db, repoId, targetPath);
         if (kind === "repo") throw new BadInputError("Pass a folder or a file: the whole repo has nothing outside it.");
+        const within = options.within === undefined || options.within === "" ? undefined : options.within;
+        if (within !== undefined){
+            // the bare PathNotFoundError would read as if the target were missing, so within gets an error of its own
+            const withinKind = kindAt(db, repoId, within);
+            if (withinKind === null) throw new BadInputError(`within "${within}" isn't a folder in the index.`);
+            if (withinKind === "file") throw new BadInputError("within takes a folder.");
+            // a folder's dependents and dependencies lie outside it, so nothing inside it can ever match
+            if (kind === "folder" && (within === targetPath || within.startsWith(`${targetPath}/`))){
+                throw new BadInputError(`within "${within}" is inside ${targetPath}/, and a folder's importers and imports lie outside it: pick a folder elsewhere.`);
+            }
+        }
         const version = readIndexVersion(db, repoId);
-        const reached = reachFrom(importIndexFor(db, repoId, version), targetPath, kind, direction);
-        return { path: targetPath, kind, direction, reached, direct: reached.filter((r) => r.distance === 1).length, indexVersion: version };
+        const all = reachFrom(importIndexFor(db, repoId, version), targetPath, kind, direction);
+        const reached = within === undefined ? all : all.filter((r) => r.path.startsWith(`${within}/`));
+        return {
+            path: targetPath, kind, direction, reached, direct: reached.filter((r) => r.distance === 1).length, indexVersion: version,
+            ...(within !== undefined ? { within } : {}),
+        };
     });
 }
 
@@ -199,7 +217,7 @@ export function importChain(repoRoot: string, fromPath: string, toPath: string):
 }
 
 /** How each file of a chain imports the next, as written in its source. */
-function specifiersAlong(db: Db, repoId: number, files: readonly string[]): string[] {
+export function specifiersAlong(db: Db, repoId: number, files: readonly string[]): string[] {
     const specifiers: string[] = [];
     for (let i = 0; i + 1 < files.length; i++){
         const edge = loadImportEdgesFrom(db, repoId, [files[i]]).find((e) => e.target === files[i + 1]);

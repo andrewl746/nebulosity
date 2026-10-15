@@ -1,0 +1,10 @@
+{
+  "id": "vscode-s2-unused",
+  "kind": "unused",
+  "folder": "src/vs/editor/contrib/inlineCompletions/browser",
+  "files": [
+    "src/vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/inlineEditsViews/inlineEditsWordInsertView.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

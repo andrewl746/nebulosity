@@ -6,11 +6,11 @@ const GOOD: RunSummary = {
     model: "claude-sonnet-5-5", claudeVersion: "2.1.299", apiKeySource: "none", permissionMode: "dontAsk",
     tools: ["Bash", "Read", "Grep", "Glob", "Agent", "ToolSearch"], mcpServers: [{ name: "nebulosity", status: "connected" }],
     plugins: ["cc-plugin-agents-md"], skills: 0, finalText: "x", subtype: "success", isError: false, turns: 3, durationMs: 1, apiMs: 1, costUsd: 0.1,
-    usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 },
+    usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 }, firstCallContext: null,
     models: { "claude-sonnet-5-5": { costUsd: 0.1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
     toolCalls: {}, nestedToolCalls: {}, toolErrors: 0, toolSearchCalls: 0, nebulosityCalls: 0, utilization: { fiveHour: 0.4, sevenDay: 0.6 },
 };
-const EXPECT = { arm: "nebulosity" as const, model: "claude-sonnet-5-5", claudeVersion: "2.1.299", forbiddenPlugins: ["superpowers", "context7"] };
+const EXPECT = { arm: "nebulosity" as const, model: "claude-sonnet-5-5", claudeVersion: "2.1.299", forbiddenPlugins: ["superpowers", "context7"], scripts: false };
 
 describe("validateInit", () => {
     it("accepts the agreed setup", () => {
@@ -98,5 +98,14 @@ describe("firstInitLine", () => {
     it("returns the first of two init lines", () => {
         const second = JSON.stringify({ type: "system", subtype: "init", model: "other" });
         expect(firstInitLine([init, second].join("\n"))).toBe(init);
+    });
+});
+
+describe("validateInit with scripts allowed", () => {
+    it("with scripts on, expects Edit and Write and still refuses the web, skills and PowerShell", () => {
+        const run = { ...GOOD, tools: [...GOOD.tools, "Edit", "Write"] };
+        expect(validateInit(run, { ...EXPECT, scripts: true })).toEqual([]);
+        expect(validateInit({ ...run, tools: [...run.tools, "WebFetch"] }, { ...EXPECT, scripts: true })).toEqual(["WebFetch is present"]);
+        expect(validateInit(GOOD, { ...EXPECT, scripts: true })).toEqual(["Edit is missing", "Write is missing"]);
     });
 });

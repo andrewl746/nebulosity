@@ -2,7 +2,7 @@
 import { slug, spellings } from "../../lib/demo/privacy";
 
 export type Arm = "baseline" | "nebulosity";
-export type Pins = { model: string; effort: string; maxTurns: number; maxBudgetUsd: number };
+export type Pins = { model: string; effort: string; maxTurns: number; maxBudgetUsd: number; sessionMaxBudgetUsd?: number };
 export const PINS: Pins = { model: "claude-sonnet-5-5", effort: "medium", maxTurns: 80, maxBudgetUsd: 4 };
 
 /** Read-only built-in tools and the Agent tool (subagents); Nebulosity's tools exist only where its server runs. */
@@ -15,8 +15,26 @@ export const ALLOWED_TOOLS = [
 /** Nothing may change the repo, read the web (the rubric's source is a web page), load a skill, or use another shell. */
 export const DENIED_TOOLS = ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "PowerShell", "Monitor"];
 
+/**
+ * An eval's optional `shell` preset (eval.json; ADR-057, amended 2026-10-15): more Bash commands allowed, the same in
+ * both arms. "compound" adds the read-only commands of Eval #2's refused compound commands that the list above lacks:
+ * cd and echo. Left out: sed (-i and its w command write files), awk (writes files, runs commands), xargs (runs any
+ * command), tee (writes), python3 (runs any code), and mkdir (it writes, and the after-run check can't see an empty
+ * folder). Loops (for, while) are shell syntax, which no rule names. Unset, the arguments are Eval #2's.
+ */
+export const SHELL_PRESETS = { compound: ["Bash(cd:*)", "Bash(echo:*)"] } as const;
+export type ShellPreset = keyof typeof SHELL_PRESETS;
+
+/** What an eval turns on beyond the read-only list: scripts in a scratch folder (R6), and a shell preset. */
+export type RunOptions = { scratch?: string; shell?: ShellPreset };
+
 /** The claude -p arguments; the prompt goes on stdin. The two arms differ only in the MCP config file. */
-export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS): string[] {
+export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: RunOptions = {}): string[] {
+    const scratch = options.scratch;
+    // with scripts on, node and edits under the run's scratch folder are allowed, and Edit and Write leave the deny list (a deny would beat the path rule)
+    const scripts = scratch === undefined ? ALLOWED_TOOLS : [...ALLOWED_TOOLS, "Bash(node:*)", `Edit(${scratchRule(scratch)})`];
+    const allowed = options.shell === undefined ? scripts : [...scripts, ...SHELL_PRESETS[options.shell]];
+    const denied = scratch === undefined ? DENIED_TOOLS : DENIED_TOOLS.filter((tool) => tool !== "Edit" && tool !== "Write");
     return [
         "-p", "--output-format", "stream-json", "--verbose",
         "--model", pins.model, "--effort", pins.effort,
@@ -24,10 +42,59 @@ export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string },
         "--setting-sources", "project,local",
         "--strict-mcp-config", "--mcp-config", arm === "nebulosity" ? mcp.nebulosity : mcp.empty,
         "--permission-mode", "dontAsk", "--permission-prompts", "none",
-        "--allowedTools", ALLOWED_TOOLS.join(","),
-        "--disallowedTools", DENIED_TOOLS.join(","),
+        "--allowedTools", allowed.join(","),
+        "--disallowedTools", denied.join(","),
+        ...(scratch === undefined ? [] : ["--add-dir", scratch]),
         "--no-session-persistence",
     ];
+}
+
+/**
+ * A task session's arguments: claudeArgs, with one budget for the whole process (a session asks several questions, so
+ * pins.sessionMaxBudgetUsd replaces the single run's), and stream-json input so each question is a message written to
+ * stdin after the last answer. --replay-user-messages echoes each message into the transcript (the probe run used it).
+ */
+export function sessionArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: RunOptions = {}): string[] {
+    const budget = pins.sessionMaxBudgetUsd ?? pins.maxBudgetUsd;
+    return [...claudeArgs(arm, mcp, { ...pins, maxBudgetUsd: budget }, options), "--input-format", "stream-json", "--replay-user-messages"];
+}
+
+/** A permission rule's absolute path(code.claude.com permissions: "//" then the path, a Windows drive as /c): everything under the folder. */
+export function scratchRule(absPath: string): string {
+    const slashed = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
+    const drive = /^([A-Za-z]):\/(.*)$/.exec(slashed);
+    return drive ? `//${drive[1].toLowerCase()}/${drive[2]}/**` : `/${slashed}/**`;
+}
+
+/** A run's writable folder (R6, as the controller fixed it): opaque, arm-free, outside the checkout and every repo. Forward slashes, as claude and its permission rule are given it. */
+export function scratchFolder(tmp: string, hex: string): string {
+    return `${tmp.replace(/\\/g, "/").replace(/\/+$/, "")}/eval-scratch/${hex}`;
+}
+
+/**
+ * A question's format line: its family's, with `<file>` replaced by the question's file in backticks (Eval #2's cycle
+ * line names the file the cycle starts and ends with). Throws a sentence when the family has no line, or the line names
+ * `<file>` and the question names none.
+ */
+export function formatLine(question: { family: string; file?: string }, formats: Record<string, string>): string {
+    const line = formats[question.family];
+    if (typeof line !== "string") throw new Error(`"formats" has no line for its family ${question.family}`);
+    if (!line.includes("<file>")) return line;
+    if (question.file === undefined) throw new Error(`its format line (${question.family}) names <file>, and the question names no file`);
+    return line.split("<file>").join(`\`${question.file}\``);
+}
+
+/**
+ * The text a run sends: the question, its family's format line, and with scripts on the scratch sentence, the same in
+ * both arms. Its wording is the owner's (2026-10-14, "Name the way that works", replacing R6's): it names the way that
+ * works under the permission rules, Write into the scratch folder then node, or node -e, because in the dev set (Task 13)
+ * every script tried as a Bash heredoc was refused and no run wrote one with Write.
+ */
+export function promptFor(question: { prompt: string; family: string; file?: string }, formats: Record<string, string>, scratch?: string): string {
+    const base = `${question.prompt}\n\n${formatLine(question, formats)}`;
+    return scratch === undefined
+        ? base
+        : `${base}\n\nYou may write Node.js scripts in ${scratch} with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`;
 }
 
 /** Names that would bill an API key instead of the subscription, or override a pin. Windows ignores their case. */
@@ -81,7 +148,7 @@ export const QUESTION_ORDER = [
  * "By question" is the question's place in `order` (the whole list, which is `questions` itself unless only some of
  * them are asked), so the pilot and --only give a question the arm order the full run will give it.
  */
-export function schedule(questions: readonly string[], repeats: number, order: readonly string[] = questions): RunId[] {
+export function schedule(questions: readonly string[], repeats: number, order: readonly string[] = questions, options: { upfront: boolean } = { upfront: true }): RunId[] {
     const runs: RunId[] = [];
     for (let repeat = 1; repeat <= repeats; repeat++){
         for (const question of questions){
@@ -89,10 +156,53 @@ export function schedule(questions: readonly string[], repeats: number, order: r
             if (place < 0) throw new Error(`question ${question} is not in the order (${order.join(", ")})`);
             const arms: Arm[] = (place + repeat - 1) % 2 === 0 ? ["baseline", "nebulosity"] : ["nebulosity", "baseline"];
             for (const arm of arms) runs.push({ question, arm, repeat, toolSearch: true });
-            runs.push({ question, arm: "nebulosity", repeat, toolSearch: false });
+            if (options.upfront) runs.push({ question, arm: "nebulosity", repeat, toolSearch: false });
         }
     }
     return runs;
+}
+
+/**
+ * The questions a single-run schedule asks, in the file's order: the ones `ids` names (null: every one), leaving out the
+ * task sessions' questions (marked `"session"`), which are asked only inside their sessions (Task 14). Throws a sentence
+ * for an id that isn't a question, or one that belongs to a session.
+ */
+export function singleQuestionIds(questions: readonly { id: string; session?: string }[], ids: readonly string[] | null): string[] {
+    const singles = questions.filter((q) => q.session === undefined);
+    const unknown = (ids ?? []).filter((id) => !questions.some((q) => q.id === id));
+    if (unknown.length > 0) throw new Error(`no such question: ${unknown.join(", ")}. The questions are ${singles.map((q) => q.id).join(", ")}`);
+    const inSessions = questions.filter((q) => q.session !== undefined && (ids ?? []).includes(q.id));
+    if (inSessions.length > 0){
+        throw new Error(inSessions.map((q) => `${q.id} is a question of task session ${q.session}, asked only inside it (run it with --sessions --only ${q.session})`).join("; "));
+    }
+    return singles.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
+}
+
+/**
+ * The dev set's runs (Task 13, R1): each question once (repeat 1, Claude Code's default tool search), in the arms asked.
+ * With both arms, which goes first is schedule's, from the question's place in `order`.
+ */
+export function devSchedule(questions: readonly string[], order: readonly string[], arms: readonly Arm[]): RunId[] {
+    return schedule(questions, 1, order, { upfront: false }).filter((run) => arms.includes(run.arm));
+}
+
+const ARMS: readonly Arm[] = ["baseline", "nebulosity"];
+
+/** --arms: a comma list of the eval's arm names, each kept once in the order given. Throws a sentence otherwise. */
+export function parseArms(value: string): Arm[] {
+    const names = value.split(",").map((name) => name.trim()).filter(Boolean);
+    if (names.length === 0) throw new Error("--arms needs at least one arm (baseline, nebulosity)");
+    const unknown = names.filter((name) => !(ARMS as readonly string[]).includes(name));
+    if (unknown.length > 0) throw new Error(`--arms takes baseline and nebulosity, not ${unknown.join(", ")}`);
+    return [...new Set(names)] as Arm[];
+}
+
+/**
+ * The questions on the wrong side of R1: in a dev run, the ones not marked `"dev": true` (a real question would be tuned
+ * on); in a real run, the ones marked (a dev question would be scored). Their ids, in the file's order.
+ */
+export function devMismatch(questions: readonly { id: string; dev?: boolean }[], dev: boolean): string[] {
+    return questions.filter((q) => (q.dev === true) !== dev).map((q) => q.id);
 }
 
 export type UtilizationCheck = { unwatched: number; warning: string | null; stop: string | null; giveUp: string | null };
@@ -135,6 +245,25 @@ export function attemptsSoFar(name: string, files: readonly string[]): number {
 
 /** The paths `git status --porcelain` names: anything there means a run changed the repo. */
 export const parsePorcelain = (stdout: string): string[] => stdout.split(/\r?\n/).filter((line) => line.trim() !== "").map((line) => line.slice(3));
+
+/**
+ * The git arguments for the checkout's status snapshot, read before the batch and after each run. Every untracked file
+ * gets its own line (-uall): plain --porcelain collapses an untracked folder to one line, so a file a run added inside a
+ * folder that was already untracked would leave the snapshot as it was. It takes no lock, so it never writes there.
+ */
+export const statusArgs = (root: string): string[] => ["--no-optional-locks", "-C", root, "status", "--porcelain", "-uall"];
+
+/** How the checkout's status lines changed since the snapshot: "+ <line>" for each new one, then "- <line>" for each gone. */
+export function statusDifference(before: readonly string[], now: readonly string[]): string[] {
+    const [was, is] = [new Set(before), new Set(now)];
+    return [...now.filter((l) => !was.has(l)).map((l) => `+ ${l}`), ...before.filter((l) => !is.has(l)).map((l) => `- ${l}`)];
+}
+
+/** Why --repeat asks for more than the definition's repeats (Eval #1 ran 2), as a sentence, or null when it doesn't. */
+export function repeatProblem(repeat: number | null, definitionRepeats: number, evalName: string): string | null {
+    if (repeat === null || repeat <= definitionRepeats) return null;
+    return `--repeat ${repeat} asks for more repeats than ${evalName}/eval.json has: its repeats is ${definitionRepeats}, so --repeat takes 1 to ${definitionRepeats}.`;
+}
 
 /** One or more separators written any way: "/", "\" (as many as escaping stacked up), or %2f and %5c. */
 const SEPARATORS = String.raw`(?:[\\/]|%5c|%2f)+`;

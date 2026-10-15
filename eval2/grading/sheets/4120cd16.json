@@ -1,0 +1,39 @@
+{
+  "id": "4120cd16",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "The import graph for `src/vs` has these layers, listed from the bottom up. Each layer may import only from the layers below it.\n\n| Layer | Purpose |\n|---|---|\n| `nls.ts` | Localization helper (`localize`). |\n| `base/` | Foundation utilities with no knowledge of VS Code as a product: collections, strings, events, lifecycle, async helpers, DOM and generic UI widgets, and JSON. |\n| `platform/` | Services and dependency-injection infrastructure: the `IInstantiationService` container, files, configuration, storage, logging, quick input, and the agent host. Each service has an interface and implementations. |\n| `editor/` | The Monaco text editor. It covers the text model, languages, the diff computer, and the editor widget, and it also ships as a standalone library. |\n| `workbench/` | The VS Code application shell and features: parts such as the sidebar and panels, `contrib/` features (chat, search, SCM, debug and others), `services/`, and the extension host and API. |\n| `code/`, `server/`, `sessions/` | Top-level entry points: Electron main and desktop startup (`code/`), the remote or web server (`server/`), and the agent-sessions app (`sessions/`). |\n\n`amdX.ts`, an AMD/ESM loader shim, sits between `base/` and `platform/`. `monaco.d.ts` is a generated public API typing file that nothing imports.\n\n**Dependency rules**\n- Dependencies point downward only: `base` → `platform` → `editor` → `workbench` → entry points.\n- Layering is enforced by lint rules.\n\n**Environment folders inside each layer**\n- `common/` holds code that runs anywhere. It imports only `common`.\n- `browser/` needs the DOM. It imports `common` and `browser`.\n- `node/` needs Node.js. It imports `common` and `node`.\n- `electron-browser/` is the Electron renderer. It imports `browser`, `common` and `electron-browser`.\n- `electron-main/` is the Electron main process. It imports `common`, `node` and `electron-main`.\n- `test/` may import across these, but nothing production-side should import it.\n\n**Exceptions in the current code** (94 imports go against the order)\n- `workbench/` imports from `sessions/` in 89 cases. This is the main violation. It is mostly the chat and agent-host integration, plus some tests and fixtures.\n- `platform/agentHost/node/diffWorkerMain.ts` imports three diff modules from `editor/common`.\n- A `base` test imports `amdX.ts` and another imports `platform/quickinput`. Both are test-only.\n\nThe layer order and the exception counts come from the import graph. The purposes come from the folder names and my own knowledge of VS Code. I didn't read the lint configuration or the docs to confirm the rules."
+}

@@ -1,0 +1,27 @@
+{
+  "id": "vscode-cn2",
+  "kind": "chain",
+  "from": "src/vs/workbench/workbench.web.main.ts",
+  "to": "src/vs/workbench/contrib/debug/browser/debugSession.ts",
+  "connected": true,
+  "shortest": 5,
+  "example": [
+    "src/vs/workbench/workbench.web.main.ts",
+    "src/vs/workbench/workbench.common.main.ts",
+    "src/vs/workbench/contrib/debug/browser/debug.contribution.ts",
+    "src/vs/workbench/contrib/debug/browser/debug.service.contribution.ts",
+    "src/vs/workbench/contrib/debug/browser/debugService.ts",
+    "src/vs/workbench/contrib/debug/browser/debugSession.ts"
+  ],
+  "verified": true,
+  "notes": [
+    {
+      "check": "Each step read in its source (L16, L288, L68, L7, L60). Nebulosity's importChain returned the same 5-step chain; the widened graph also gives 5.",
+      "decision": "Truth kept: 5 steps, example as built. No alternative recorded."
+    },
+    {
+      "check": "Owner's rule ('refers to', 2026-10-14) applied: every non-relative `vs/…` module id in an import-like statement anywhere in the repo (781 specifiers, 682 edges the scanner lacks) and the 8 computed loaders read in the source (10 edges) were added to the graph. The shortest length stays 5 and the example is still a shortest chain.",
+      "decision": "Truth kept: 5 steps, example as built."
+    }
+  ]
+}

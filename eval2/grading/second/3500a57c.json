@@ -1,0 +1,10 @@
+{ "id": "3500a57c", "points": [
+  { "id": "AFFINE-BP3.1", "score": 1, "quote": "`defineBlockSchema({flavour, props, metadata, toModel})` ... `flavour` is the namespaced id, such as `'affine:paragraph'`. ... `metadata` holds `version`, `role` (such as `'content'`)" },
+  { "id": "AFFINE-BP3.2", "score": 1, "quote": "`internal.Text()` creates a collaborative text prop." },
+  { "id": "AFFINE-BP3.3", "score": 0.5, "quote": "`metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours." },
+  { "id": "AFFINE-BP3.4", "score": 1, "quote": "The model is a class extending `BlockModel<Props>`, for example `ParagraphBlockModel`." },
+  { "id": "AFFINE-BP3.5", "score": 1, "quote": "The component extends `BlockComponent<Model>` from `@blocksuite/std`. ... Children go through `this.std.host.renderChildren(model)` ... `BlockViewExtension('affine:paragraph', literal\\`affine-paragraph\\`)`, which maps the flavour to the tag name" },
+  { "id": "AFFINE-BP3.6", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP3.7", "score": 1, "quote": "`StoreExtensionProvider`, in `store.ts`. `setup(context)` calls `context.register(ParagraphBlockSchemaExtension)`, plus adapter extensions ... `ViewExtensionProvider`, in `view.ts`. ... `StoreExtensionManager` and `ViewExtensionManager` ... collect the providers." },
+  { "id": "AFFINE-BP3.8", "score": 0.5, "quote": "Its `effect()` calls `effects()` to define the custom elements." }
+] }

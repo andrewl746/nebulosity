@@ -13,7 +13,7 @@ loadLocalEnv();
 
 const send = process.send?.bind(process);
 if (!send){
-    console.error("[background] this is the Map server's worker: start it with npm run dev, not by hand");
+    console.error("[background] this is the Map server's worker: start it with nebulosity map (in a checkout: npm run dev), not by hand");
     process.exit(1);
 }
 

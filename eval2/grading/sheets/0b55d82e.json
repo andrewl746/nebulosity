@@ -1,0 +1,31 @@
+{
+  "id": "0b55d82e",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Desktop and web share one workbench. The only difference is which entry file pulls in which modules. This comes from the entry files and the folder layout. I didn't trace the bundler config, so the build-level details below are unchecked.\n\n**Shared code**\n- `src/vs/workbench/workbench.common.main.ts` is the shared entry point. It is a long list of side-effect imports (`import './contrib/notebook/browser/notebook.contribution.js'` and so on). It covers the core services and most feature contributions, including chat, notebook and extensions.\n- `workbench.web.main.ts` and `workbench.desktop.main.ts` each start with `import './workbench.common.main.js'`. They then add platform-specific pieces:\n  - **Web:** `browser/web.main.js`, `services/*/browser/*` implementations (for example `browserHostService`, `webExtensionsScannerService`), and `dialog.web.contribution`.\n  - **Desktop:** `electron-browser/desktop.main.js` and `desktop.contribution`, plus `services/*/electron-browser/*` (for example `nativeHostService`, `nativeTextFileService`, `menubarService`).\n- `workbench.web.main.internal.ts` is the public API for web embedders.\n- Services follow one pattern. The interface lives in `common/` or `browser/`, and each platform's implementation registers itself as a singleton when its file is imported. The same service interface therefore gets a different implementation on each platform.\n\n**Layering convention**\nThe folder names (`common`, `browser`, `electron-browser`, `node`) enforce a one-way dependency order. The index shows these imports:\n- `common` imports only `common`.\n- `browser` imports `browser` and `common`.\n- `electron-browser` imports `electron-browser`, `browser` and `common`.\n- `node` imports `common` and `node`.\n\nWeb can therefore never reach desktop-only code, while desktop reuses all the `browser` code, since its renderer is also a browser environment.\n\n**What decides whether a feature loads**\n1. **Static imports.** Code gets loaded only if some entry file imports it, directly or transitively. A contribution that isn't imported by `common.main`, `web.main` or `desktop.main` is never bundled or run. A feature's entry in one of those three files decides whether it ships on both platforms or on one.\n2. **Folder placement.** Where a file sits (`common`, `browser` or `electron-browser`) limits which entry files can legally import it.\n3. **Build entry points.** Web and desktop are bundled separately from different entry files (`src/vs/code/browser/workbench/workbench.ts` for web, `src/vs/code/electron-browser/workbench/workbench.ts` for desktop). Only those two bundles decide what each platform ships.\n4. **Runtime gating.** Once a module is loaded, its contribution can still be enabled or disabled at runtime. Contributions do this with context keys, `when` clauses, configuration, or checks such as `isWeb`."
+}

@@ -36,6 +36,13 @@ describe("pickSample", () => {
         // non-test files 7; the 2 most imported (main.ts and log.ts, 3 each), then 2 of the other 5 at positions 1 and 3
         expect(pickSample(FILES, 4).map((f) => f.path)).toEqual(["src/app/main.ts", "src/core/log.ts", "src/app/view.tsx", "src/index.ts"]);
     });
+
+    it("never takes a file over the size cap: it gets a template, as a test file does (ADR-053, amended)", () => {
+        // main.ts over the cap leaves 6 candidates: log.ts (3 importers) and strings.ts (2) first, then 2 of the other 4
+        // (build.js, view.tsx, core/index.ts, index.ts) at positions floor(0.5 × 4 / 2) = 1 and floor(1.5 × 4 / 2) = 3
+        const files = FILES.map((f) => (f.path === "src/app/main.ts" ? { ...f, sizeBytes: 1_000_001 } : f));
+        expect(pickSample(files, 4).map((f) => f.path)).toEqual(["src/core/log.ts", "src/util/strings.ts", "src/app/view.tsx", "src/index.ts"]);
+    });
 });
 
 describe("renderComparison", () => {

@@ -1,0 +1,14 @@
+{
+  "id": "vscode-s2-cycle",
+  "kind": "cycle",
+  "file": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+  "shortest": 3,
+  "example": [
+    "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+    "src/vs/editor/contrib/inlineCompletions/browser/controller/common.ts",
+    "src/vs/editor/contrib/inlineCompletions/browser/controller/inlineCompletionsController.ts",
+    "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

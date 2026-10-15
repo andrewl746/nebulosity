@@ -1,0 +1,26 @@
+{
+  "id": "vscode-cn3",
+  "kind": "chain",
+  "from": "src/vs/workbench/api/common/extHost.api.impl.ts",
+  "to": "src/vs/editor/common/model/textModel.ts",
+  "connected": true,
+  "shortest": 4,
+  "example": [
+    "src/vs/workbench/api/common/extHost.api.impl.ts",
+    "src/vs/workbench/api/common/extHost.protocol.ts",
+    "src/vs/workbench/contrib/notebook/common/notebookCommon.ts",
+    "src/vs/workbench/contrib/notebook/common/model/notebookTextModel.ts",
+    "src/vs/editor/common/model/textModel.ts"
+  ],
+  "verified": true,
+  "notes": [
+    {
+      "check": "Each step read in its source (L33, L74, L29, L19). Nebulosity's importChain returned the same 4-step chain through the notebook code; the widened graph also gives 4.",
+      "decision": "Truth kept: 4 steps, example as built. No alternative recorded."
+    },
+    {
+      "check": "Owner's rule ('refers to', 2026-10-14) applied: every non-relative `vs/…` module id in an import-like statement anywhere in the repo (781 specifiers, 682 edges the scanner lacks) and the 8 computed loaders read in the source (10 edges) were added to the graph. The shortest length stays 4 and the example is still a shortest chain.",
+      "decision": "Truth kept: 4 steps, example as built."
+    }
+  ]
+}

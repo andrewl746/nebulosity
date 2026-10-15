@@ -1,0 +1,559 @@
+{
+  "name": "Eval #2: Claude Code with and without Nebulosity, on VS Code and AFFiNE (V1.6, Task 14)",
+  "repos": {
+    "vscode": {
+      "slug": "microsoft/vscode",
+      "commit": "cc3fec8846d0e678357e476fa611774da26d7e24"
+    },
+    "affine": {
+      "slug": "toeverything/AFFiNE",
+      "commit": "0b69a6da21e8fd35beb85667bb8496d9b3852238"
+    }
+  },
+  "formats": {
+    "list": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "chain": "End with a line that says ANSWER: and then either the word none, or the chain as file paths relative to the repository root, one per line, from the first file to the last, where each file imports the next.",
+    "bigPicture": "Answer in at most 400 words.",
+    "impact": "End with a line that says ANSWER: and then one line for each folder named above, in the same order, as the folder, a colon and the number of files, then a line elsewhere: and the number of files outside them, then a line total: and the number of files in all.",
+    "cycle": "End with a line that says ANSWER: and then either the word none, or the cycle as file paths relative to the repository root, one per line, starting and ending with <file>, where each file imports the next.",
+    "pairs": "End with a line that says ANSWER: and then one line for each pair, as the importing folder's name, then ->, then the imported folder's name."
+  },
+  "questions": [
+    {
+      "id": "vscode-bp1",
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+      "rubric": "eval2/rubric/vscode-bp1.json"
+    },
+    {
+      "id": "vscode-bp2",
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+      "rubric": "eval2/rubric/vscode-bp2.json"
+    },
+    {
+      "id": "vscode-bp3",
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+      "rubric": "eval2/rubric/vscode-bp3.json"
+    },
+    {
+      "id": "vscode-bp4",
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+      "rubric": "eval2/rubric/vscode-bp4.json"
+    },
+    {
+      "id": "vscode-bp5",
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+      "rubric": "eval2/rubric/vscode-bp5.json"
+    },
+    {
+      "id": "vscode-cl1",
+      "repo": "vscode",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file that directly imports `src/vs/workbench/contrib/search/common/search.ts`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-cl1.json"
+    },
+    {
+      "id": "vscode-cl2",
+      "repo": "vscode",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file outside `src/vs/workbench/contrib/debug` that directly imports a file inside it. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-cl2.json"
+    },
+    {
+      "id": "vscode-cl3",
+      "repo": "vscode",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file outside `src/vs/editor/standalone` that directly imports a file inside it. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-cl3.json"
+    },
+    {
+      "id": "vscode-cl4",
+      "repo": "vscode",
+      "kind": "list-transitive",
+      "family": "list",
+      "prompt": "List every file that depends on `src/vs/workbench/contrib/markers/common/markers.ts`, directly or through other files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-cl4.json"
+    },
+    {
+      "id": "vscode-cl5",
+      "repo": "vscode",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file outside `src/vs/platform/undoRedo` that directly imports a file inside it. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-cl5.json"
+    },
+    {
+      "id": "vscode-cn1",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "How does `src/vs/workbench/workbench.desktop.main.ts` end up loading `src/vs/workbench/contrib/terminal/browser/terminalInstance.ts`? Give the shortest chain of imports.",
+      "truth": "eval2/truth/vscode-cn1.json"
+    },
+    {
+      "id": "vscode-cn2",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Give the shortest chain of imports from `src/vs/workbench/workbench.web.main.ts` to `src/vs/workbench/contrib/debug/browser/debugSession.ts`.",
+      "truth": "eval2/truth/vscode-cn2.json"
+    },
+    {
+      "id": "vscode-cn3",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Does `src/vs/workbench/api/common/extHost.api.impl.ts` depend on `src/vs/editor/common/model/textModel.ts`, directly or through other files? If it does, give the shortest chain of imports.",
+      "truth": "eval2/truth/vscode-cn3.json"
+    },
+    {
+      "id": "vscode-cn4",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Does `src/vs/base/common/strings.ts` depend on any file in `src/vs/workbench`, directly or through other files? If it does, give the chain.",
+      "truth": "eval2/truth/vscode-cn4.json"
+    },
+    {
+      "id": "vscode-cn5",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Give the shortest chain of imports from `src/vs/workbench/contrib/scm/browser/scmViewPane.ts` to `src/vs/platform/undoRedo/common/undoRedo.ts`.",
+      "truth": "eval2/truth/vscode-cn5.json"
+    },
+    {
+      "id": "vscode-impact",
+      "repo": "vscode",
+      "kind": "impact",
+      "family": "impact",
+      "prompt": "If I change `src/vs/platform/storage/common/storage.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/base`, `src/vs/platform`, `src/vs/editor`, `src/vs/workbench`, `src/vs/sessions`, `src/vs/code`, `src/vs/server`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-impact.json"
+    },
+    {
+      "id": "vscode-cycle",
+      "repo": "vscode",
+      "kind": "cycle",
+      "family": "cycle",
+      "file": "src/vs/workbench/contrib/chat/common/languageModels.ts",
+      "prompt": "Is `src/vs/workbench/contrib/chat/common/languageModels.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-cycle.json"
+    },
+    {
+      "id": "vscode-unused",
+      "repo": "vscode",
+      "kind": "unused",
+      "family": "list",
+      "prompt": "List every file in `src/vs/sessions/browser` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-unused.json"
+    },
+    {
+      "id": "vscode-violations",
+      "repo": "vscode",
+      "kind": "violations",
+      "family": "list",
+      "prompt": "List every file in `src/vs/workbench/services` that directly imports a file in `src/vs/workbench/contrib`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-violations.json"
+    },
+    {
+      "id": "vscode-entries",
+      "repo": "vscode",
+      "kind": "entries",
+      "family": "list",
+      "prompt": "Which files that no other file imports end up loading `src/vs/platform/environment/node/argv.ts`, directly or through other files? Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-entries.json"
+    },
+    {
+      "id": "vscode-pairs",
+      "repo": "vscode",
+      "kind": "pairs",
+      "family": "pairs",
+      "prompt": "Code under `src/vs` sits in folders named `common`, `browser`, `node`, `electron-browser`, `electron-utility`, `electron-main`, `worker`. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path. A pair may be a name with itself, when files under one such folder import others under the same name. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-pairs.json"
+    },
+    {
+      "id": "vscode-s1-impact",
+      "repo": "vscode",
+      "kind": "impact",
+      "family": "impact",
+      "session": "vscode-s1",
+      "prompt": "I'm about to change `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts`. If I change `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/workbench/contrib/notebook`, `src/vs/workbench/contrib/chat`, `src/vs/workbench/api`, `src/vs/sessions`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s1-impact.json"
+    },
+    {
+      "id": "vscode-s1-chain",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "session": "vscode-s1",
+      "prompt": "Give the shortest chain of imports from `src/vs/workbench/api/node/extensionHostProcess.ts` to `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts`.",
+      "truth": "eval2/truth/vscode-s1-chain.json"
+    },
+    {
+      "id": "vscode-s1-cycle",
+      "repo": "vscode",
+      "kind": "cycle",
+      "family": "cycle",
+      "session": "vscode-s1",
+      "file": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+      "prompt": "Is `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s1-cycle.json"
+    },
+    {
+      "id": "vscode-s1-unused",
+      "repo": "vscode",
+      "kind": "unused",
+      "family": "list",
+      "session": "vscode-s1",
+      "prompt": "List every file in `src/vs/workbench/contrib/notebook/common` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s1-unused.json"
+    },
+    {
+      "id": "vscode-s2-impact",
+      "repo": "vscode",
+      "kind": "impact",
+      "family": "impact",
+      "session": "vscode-s2",
+      "prompt": "I'm about to change `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts`. If I change `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/editor`, `src/vs/workbench`, `src/vs/sessions`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s2-impact.json"
+    },
+    {
+      "id": "vscode-s2-chain",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "session": "vscode-s2",
+      "prompt": "Give the shortest chain of imports from `src/vs/sessions/sessions.web.main.internal.ts` to `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts`.",
+      "truth": "eval2/truth/vscode-s2-chain.json"
+    },
+    {
+      "id": "vscode-s2-cycle",
+      "repo": "vscode",
+      "kind": "cycle",
+      "family": "cycle",
+      "session": "vscode-s2",
+      "file": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+      "prompt": "Is `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s2-cycle.json"
+    },
+    {
+      "id": "vscode-s2-unused",
+      "repo": "vscode",
+      "kind": "unused",
+      "family": "list",
+      "session": "vscode-s2",
+      "prompt": "List every file in `src/vs/editor/contrib/inlineCompletions/browser` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s2-unused.json"
+    },
+    {
+      "id": "vscode-s3-impact",
+      "repo": "vscode",
+      "kind": "impact",
+      "family": "impact",
+      "session": "vscode-s3",
+      "prompt": "I'm about to change `src/vs/platform/terminal/node/terminalEnvironment.ts`. If I change `src/vs/platform/terminal/node/terminalEnvironment.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/platform/terminal`, `src/vs/platform/agentHost`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s3-impact.json"
+    },
+    {
+      "id": "vscode-s3-chain",
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "session": "vscode-s3",
+      "prompt": "Give the shortest chain of imports from `src/vs/platform/agentHost/node/agentHostMain.ts` to `src/vs/platform/terminal/node/terminalEnvironment.ts`.",
+      "truth": "eval2/truth/vscode-s3-chain.json"
+    },
+    {
+      "id": "vscode-s3-cycle",
+      "repo": "vscode",
+      "kind": "cycle",
+      "family": "cycle",
+      "session": "vscode-s3",
+      "file": "src/vs/platform/terminal/node/terminalEnvironment.ts",
+      "prompt": "Is `src/vs/platform/terminal/node/terminalEnvironment.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s3-cycle.json"
+    },
+    {
+      "id": "vscode-s3-unused",
+      "repo": "vscode",
+      "kind": "unused",
+      "family": "list",
+      "session": "vscode-s3",
+      "prompt": "List every file in `src/vs/platform/terminal/node` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/vscode-s3-unused.json"
+    },
+    {
+      "id": "affine-bp1",
+      "repo": "affine",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "What are the main parts of the AFFiNE repository and what is each one for? Say which apps are built from it, what the server is for and what it needs to run.",
+      "rubric": "eval2/rubric/affine-bp1.json"
+    },
+    {
+      "id": "affine-bp2",
+      "repo": "affine",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How is BlockSuite, the editor framework under `blocksuite/`, structured: what are its main packages and kinds of components, and how does the AFFiNE app use it?",
+      "rubric": "eval2/rubric/affine-bp2.json"
+    },
+    {
+      "id": "affine-bp3",
+      "repo": "affine",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "In BlockSuite, how is a block type defined, rendered and plugged into an editor? Name the functions, classes and conventions involved.",
+      "rubric": "eval2/rubric/affine-bp3.json"
+    },
+    {
+      "id": "affine-bp4",
+      "repo": "affine",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does AFFiNE represent, store and sync a document's content: what form does the data take, how do local edits and other users' changes reach the editor, and where is the data kept on the device and synced to?",
+      "rubric": "eval2/rubric/affine-bp4.json"
+    },
+    {
+      "id": "affine-cl1",
+      "repo": "affine",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file that directly imports `packages/frontend/electron-api/src/index.ts`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-cl1.json"
+    },
+    {
+      "id": "affine-cl2",
+      "repo": "affine",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file that directly imports `packages/common/infra/src/op/index.ts`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-cl2.json"
+    },
+    {
+      "id": "affine-cl3",
+      "repo": "affine",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file outside `blocksuite/affine/widgets/slash-menu` that directly imports a file inside it. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-cl3.json"
+    },
+    {
+      "id": "affine-cl4",
+      "repo": "affine",
+      "kind": "list-transitive",
+      "family": "list",
+      "prompt": "List every file that depends on `packages/frontend/core/src/mobile/modules/haptics/index.ts`, directly or through other files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-cl4.json"
+    },
+    {
+      "id": "affine-cn1",
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "How does `packages/frontend/apps/web/src/index.tsx` end up loading `packages/common/nbstore/src/impls/idb/index.ts`? Give the shortest chain of imports.",
+      "truth": "eval2/truth/affine-cn1.json"
+    },
+    {
+      "id": "affine-cn2",
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Give the shortest chain of imports from `blocksuite/playground/apps/starter/main.ts` to `blocksuite/framework/std/src/gfx/viewport.ts`.",
+      "truth": "eval2/truth/affine-cn2.json"
+    },
+    {
+      "id": "affine-cn3",
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Does `packages/frontend/apps/electron/src/helper/index.ts` depend on `packages/common/nbstore/src/impls/sqlite/index.ts`, directly or through other files? If it does, give the shortest chain of imports.",
+      "truth": "eval2/truth/affine-cn3.json"
+    },
+    {
+      "id": "affine-cn4",
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Does `packages/frontend/apps/electron/src/main/index.ts` depend on any file in `packages/frontend/apps/electron/src/helper`, directly or through other files? If it does, give the chain.",
+      "truth": "eval2/truth/affine-cn4.json"
+    },
+    {
+      "id": "affine-impact",
+      "repo": "affine",
+      "kind": "impact",
+      "family": "impact",
+      "prompt": "If I change `packages/common/env/src/constant.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `packages/frontend/core`, `packages/frontend/apps`, `packages/common`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-impact.json"
+    },
+    {
+      "id": "affine-cycle",
+      "repo": "affine",
+      "kind": "cycle",
+      "family": "cycle",
+      "file": "packages/common/infra/src/framework/core/components/service.ts",
+      "prompt": "Is `packages/common/infra/src/framework/core/components/service.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-cycle.json"
+    },
+    {
+      "id": "affine-unused",
+      "repo": "affine",
+      "kind": "unused",
+      "family": "list",
+      "prompt": "List every file in `packages/frontend/core/src/components/page-list` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-unused.json"
+    },
+    {
+      "id": "affine-violations",
+      "repo": "affine",
+      "kind": "violations",
+      "family": "list",
+      "prompt": "List every file in `packages/frontend/core` that directly imports a file in `packages/frontend/apps`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-violations.json"
+    },
+    {
+      "id": "affine-entries",
+      "repo": "affine",
+      "kind": "entries",
+      "family": "list",
+      "prompt": "Which files that no other file imports end up loading `packages/frontend/core/src/modules/organize/services/organize.ts`, directly or through other files? Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-entries.json"
+    },
+    {
+      "id": "affine-pairs",
+      "repo": "affine",
+      "kind": "pairs",
+      "family": "pairs",
+      "prompt": "Which of the folders directly inside `packages/frontend` import from which others? A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-pairs.json"
+    },
+    {
+      "id": "affine-s1-impact",
+      "repo": "affine",
+      "kind": "impact",
+      "family": "impact",
+      "session": "affine-s1",
+      "prompt": "I'm about to change `blocksuite/affine/blocks/database/src/database-block.ts`. If I change `blocksuite/affine/blocks/database/src/database-block.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `blocksuite/affine`, `blocksuite/integration-test`, `packages/frontend/core`, `packages/frontend/apps`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s1-impact.json"
+    },
+    {
+      "id": "affine-s1-chain",
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "session": "affine-s1",
+      "prompt": "Give the shortest chain of imports from `packages/frontend/apps/android/src/index.tsx` to `blocksuite/affine/blocks/database/src/database-block.ts`.",
+      "truth": "eval2/truth/affine-s1-chain.json"
+    },
+    {
+      "id": "affine-s1-cycle",
+      "repo": "affine",
+      "kind": "cycle",
+      "family": "cycle",
+      "session": "affine-s1",
+      "file": "blocksuite/affine/blocks/database/src/database-block.ts",
+      "prompt": "Is `blocksuite/affine/blocks/database/src/database-block.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s1-cycle.json"
+    },
+    {
+      "id": "affine-s1-unused",
+      "repo": "affine",
+      "kind": "unused",
+      "family": "list",
+      "session": "affine-s1",
+      "prompt": "List every file in `blocksuite/affine/blocks/database/src` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s1-unused.json"
+    },
+    {
+      "id": "affine-s2-impact",
+      "repo": "affine",
+      "kind": "impact",
+      "family": "impact",
+      "session": "affine-s2",
+      "prompt": "I'm about to change `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts`. If I change `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `packages/frontend/core/src/blocksuite`, `packages/frontend/core/src/components`, `packages/frontend/core/src/desktop`, `packages/frontend/core/src/mobile`, `packages/frontend/apps`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s2-impact.json"
+    },
+    {
+      "id": "affine-s2-chain",
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "session": "affine-s2",
+      "prompt": "Give the shortest chain of imports from `packages/frontend/apps/electron-renderer/src/app/index.tsx` to `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts`.",
+      "truth": "eval2/truth/affine-s2-chain.json"
+    },
+    {
+      "id": "affine-s2-cycle",
+      "repo": "affine",
+      "kind": "cycle",
+      "family": "cycle",
+      "session": "affine-s2",
+      "file": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
+      "prompt": "Is `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s2-cycle.json"
+    },
+    {
+      "id": "affine-s2-unused",
+      "repo": "affine",
+      "kind": "unused",
+      "family": "list",
+      "session": "affine-s2",
+      "prompt": "List every file in `packages/frontend/core/src/components/affine/ai-onboarding` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s2-unused.json"
+    },
+    {
+      "id": "affine-s3-impact",
+      "repo": "affine",
+      "kind": "impact",
+      "family": "impact",
+      "session": "affine-s3",
+      "prompt": "I'm about to change `blocksuite/affine/blocks/surface/src/surface-block.ts`. If I change `blocksuite/affine/blocks/surface/src/surface-block.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `blocksuite/affine/blocks`, `blocksuite/affine/gfx`, `blocksuite/affine/widgets`, `packages/frontend/core`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s3-impact.json"
+    },
+    {
+      "id": "affine-s3-chain",
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "session": "affine-s3",
+      "prompt": "Give the shortest chain of imports from `packages/frontend/apps/ios/src/index.tsx` to `blocksuite/affine/blocks/surface/src/surface-block.ts`.",
+      "truth": "eval2/truth/affine-s3-chain.json"
+    },
+    {
+      "id": "affine-s3-cycle",
+      "repo": "affine",
+      "kind": "cycle",
+      "family": "cycle",
+      "session": "affine-s3",
+      "file": "blocksuite/affine/blocks/surface/src/surface-block.ts",
+      "prompt": "Is `blocksuite/affine/blocks/surface/src/surface-block.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s3-cycle.json"
+    },
+    {
+      "id": "affine-s3-unused",
+      "repo": "affine",
+      "kind": "unused",
+      "family": "list",
+      "session": "affine-s3",
+      "prompt": "List every file in `blocksuite/affine/blocks/surface/src` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval2/truth/affine-s3-unused.json"
+    }
+  ]
+}

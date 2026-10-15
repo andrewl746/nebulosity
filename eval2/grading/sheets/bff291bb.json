@@ -1,0 +1,31 @@
+{
+  "id": "bff291bb",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Inside each layer of `src/vs`, code is split into six environment folders. This comes from `.github/instructions/source-code-organization.instructions.md` and the `local/code-layering` rule in `eslint.config.js`. Both give the same table. Every environment may also import its own folder.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any environment, so only basic JavaScript | Only `common` |\n| `browser` | Web or DOM environments | `common` |\n| `node` | Node.js | `common` |\n| `electron-browser` | The Electron renderer: browser APIs plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | The Electron utility process | `common`, `node` |\n| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |\n\nSome consequences:\n- `common` imports nothing environment-specific.\n- `browser` and `node` are kept apart, so neither can import the other.\n- `electron-browser` builds on `browser`, but it can't use `node`.\n- `electron-main` is the widest. It sits on top of `node` and `electron-utility`, but it can't import `browser` or `electron-browser`.\n- `electron-utility` can't import `electron-main`, so the dependency runs one way.\n\nThe layer rule is separate from this. Layers are ordered `base`, `platform`, `editor`, `workbench`, `code` / `server`, and `sessions`. A layer may only import from layers below it. For example, `editor` can't depend on `node` or `electron-*` code, and `workbench` must never import from `sessions`.\n\nThe layering rule is set to `warn` in the ESLint config, not `error`."
+}

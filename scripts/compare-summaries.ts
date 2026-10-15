@@ -18,6 +18,7 @@ import { createClaudeSummarizer } from "../lib/index/summarize/claude";
 import { nextReviewNumber, pickSample, renderComparison, reviewDate, SUMMARY_REVIEW_HEADER, type ComparisonRow } from "../lib/index/summarize/compare";
 import { mapLimit } from "../lib/index/summarize/concurrency";
 import { FILE_SYSTEM_PROMPT, SUMMARY_EFFORT, SUMMARY_MODELS } from "../lib/index/summarize/prompts";
+import { writtenByModel } from "../lib/index/summarize/plan";
 import { buildFilePrompt } from "../lib/index/summarize/run";
 import type { SummaryOutcome } from "../lib/index/summarize/types";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
@@ -67,7 +68,7 @@ async function main(): Promise<void> {
 
     const section = renderComparison({
         title, repo: repoKey(root), effort, models, rows,
-        fullPass: { files: files.filter((f) => !f.isTest).length, folders: loadFolderFacts(db, repoId).length },
+        fullPass: { files: files.filter((f) => writtenByModel(f)).length, folders: loadFolderFacts(db, repoId).length },
     });
     fs.writeFileSync(out, `${existing || SUMMARY_REVIEW_HEADER}\n${section}`);
     console.log(`[compare] wrote "${title}" to ${out}`);

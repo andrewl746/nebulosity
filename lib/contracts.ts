@@ -111,6 +111,13 @@ export type LevelResponse = {
 /** A declaration in a file: top-level ones and class members (`Logger.info`), with the lines to jump to. */
 export type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
 
+/** A doc linked to a place (ADR-054), and why. describe always says why; overview says it for a doc that applies to a folder. */
+export type DocPointer = {
+  path: string;
+  title: string;
+  reason?: { kind: "applies" | "readme" | "mentions"; target: string; detail?: string; count: number };
+};
+
 /** GET /api/describe — docs/API_CONTRACTS.md §12 */
 export type DescribeResponse = {
   /** The repo's root: absolute, forward slashes (for vscode:// links). */
@@ -122,11 +129,15 @@ export type DescribeResponse = {
   summaryStatus: SummaryStatus;
   /** Why the last attempt failed, when summaryStatus is "failed". */
   summaryError?: string;
+  /** For a folder or file, the docs linked to it or the folders above it; for the repo, the docs to read first (ADR-054). Left out when none. */
+  docs?: DocPointer[];
   stats: { fileCount: number; lineCount: number };
   /** Folders and the repo: every child, in the Map's order (the order level() draws them in, page by page). */
   children?: MapNode[];
   /** Files: their declarations, in line order. */
   symbols?: SymbolInfo[];
+  /** A file over the 1 MB size cap: indexed for its imports only, so `symbols` is empty because they weren't read (ADR-053). */
+  importsOnly?: true;
   /** What the target imports, by area, most first. */
   uses: AreaCount[];
   /** What imports the target, by area, most first. */
@@ -266,7 +277,10 @@ export type IndexEventMap = {
     levelEdges: number;
     /** Per-file failures: indexing is per-file error-tolerant (ADR-021). */
     errors: Array<{ path: string; error: string }>;
-    /** Files left out (over 1 MB, unreadable). */
+    /**
+     * Files left out: code files over 20 MB, docs over 1 MB, and files that couldn't be read. A code file over 1 MB is
+     * indexed for its imports only (ADR-053).
+     */
     skipped: number;
     totalMs: number;
   };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapNode } from "@/lib/contracts";
-import { boxTitle, lineLabel } from "./labels";
+import { boxTitle, lineLabel, noDeclarationsText } from "./labels";
 
 const box = (path: string, extra: Partial<MapNode> = {}): MapNode =>
     ({ path, name: path.slice(path.lastIndexOf("/") + 1), kind: "folder", fileCount: 3, summaryStatus: "fresh", ...extra });
@@ -33,5 +33,12 @@ describe("boxTitle", () => {
 
     it("shows just the path when there's no summary yet", () => {
         expect(boxTitle(box("src/vs/editor"))).toBe("src/vs/editor");
+    });
+});
+
+describe("noDeclarationsText (ADR-053, amended)", () => {
+    it("says a file over the size cap had its declarations left unread, and otherwise that none were found", () => {
+        expect(noDeclarationsText({ importsOnly: true })).toBe("Not read (over the 1 MB size cap; imports only).");
+        expect(noDeclarationsText({})).toBe("None found.");
     });
 });

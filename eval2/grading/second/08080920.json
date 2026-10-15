@@ -1,0 +1,8 @@
+{ "id": "08080920", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "The desktop entry adds `electron-browser/desktop.main.js` and `desktop.contribution.js`. It also adds native service implementations ... and other desktop-only contributions." },
+  { "id": "BP5.2", "score": 1, "quote": "The web entry adds `browser/web.main.ts`, which comes with `web.factory.ts` and `web.api.ts`. It also adds web variants" },
+  { "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the common entry. ... Both `workbench.desktop.main.ts` and `workbench.web.main.ts` start with `import './workbench.common.main.js'`." },
+  { "id": "BP5.4", "score": 0.5, "quote": "Platform-specific implementations register against the same service interfaces, so the shared code never needs to know which one it got." },
+  { "id": "BP5.5", "score": 1, "quote": "Everything reachable from the common entry is therefore in both builds. ... Leaving it out of an entry file leaves it out of that build." },
+  { "id": "BP5.6", "score": 1, "quote": "A feature's code is loaded only if some entry file imports its `*.contribution.ts` file, directly or transitively." }
+] }

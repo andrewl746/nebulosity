@@ -92,7 +92,7 @@ describe("the MCP server over stdio (node mcp/launch.mjs)", () => {
         onTestFinished(() => client.close());
 
         // nothing indexed: the tools are listed, and the answer says what to do
-        expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["overview", "describe", "search", "dependents", "dependencies", "path", "show_on_map"]);
+        expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["overview", "describe", "search", "imports", "architecture", "show_on_map"]);
         const early = await client.callTool({ name: "overview", arguments: {} });
         expect(early.isError).toBe(true);
         expect(textOf(early)).toMatch(/^No repository indexed yet/);
@@ -105,6 +105,7 @@ describe("the MCP server over stdio (node mcp/launch.mjs)", () => {
         expect(textOf(await client.callTool({ name: "overview", arguments: {} }))).toBe([
             `${path.basename(repo)}: 8 files, 48 lines, 11 imports between files.`,
             S,
+            "Docs to read first:", "  README.md — mini-repo",
             "Areas, largest first:", "  src/  7 files, 45 lines", "  scripts/  1 file, 3 lines",
             "Most imported files:",
             "  src/app/main.ts  imported by 3", "  src/core/log.ts  imported by 3", "  src/util/strings.ts  imported by 2",
@@ -114,9 +115,9 @@ describe("the MCP server over stdio (node mcp/launch.mjs)", () => {
         const calls: [string, Record<string, unknown>][] = [
             ["describe", { path: "src/core" }],
             ["search", { query: "banner" }],
-            ["dependents", { path: "src/core/log.ts", transitive: true }],
-            ["dependencies", { path: "src/app/main.ts" }],
-            ["path", { from: "scripts/build.js", to: "src/core/log.ts" }],
+            ["imports", { path: "src/core/log.ts", transitive: true }],
+            ["imports", { path: "src/app/main.ts", direction: "dependencies" }],
+            ["imports", { path: "scripts/build.js", to: "src/core/log.ts" }],
             ["show_on_map", { paths: ["src/core"] }],
         ];
         for (const [name, args] of calls){
@@ -126,7 +127,7 @@ describe("the MCP server over stdio (node mcp/launch.mjs)", () => {
 
         // one live event per answered call, the last carrying show_on_map's action
         await waitFor(() => map.events.length >= 7);
-        expect(map.events.map((e) => e.tool).sort()).toEqual(["dependencies", "dependents", "describe", "overview", "path", "search", "show_on_map"]);
+        expect(map.events.map((e) => e.tool).sort()).toEqual(["describe", "imports", "imports", "imports", "overview", "search", "show_on_map"]);
         expect(map.events.find((e) => e.tool === "show_on_map")).toMatchObject({ paths: ["src/core"], action: { type: "highlight_nodes", nodeIds: ["src/core"] } });
         // nothing but protocol on stdout (Review Focus 1): a stray line would have surfaced here as a parse error
         expect(transportErrors, serverLog).toEqual([]);

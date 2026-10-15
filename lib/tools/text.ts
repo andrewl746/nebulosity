@@ -71,7 +71,7 @@ export type MapDelivery = "shown" | "no-map" | "live-off" | "other-repo";
 export function deliveryNote(delivery: MapDelivery, where: { port: number; mapRepo: string | null; repo: string }): string {
     switch (delivery){
         case "shown": return `Sent to the Map at http://localhost:${where.port}; any open Map tab shows it.`;
-        case "no-map": return `No Map answered at http://localhost:${where.port}, so nothing is shown. The user can start it with npm run dev in the Nebulosity folder.`;
+        case "no-map": return `No Map answered at http://localhost:${where.port}, so nothing is shown. The user can start it with nebulosity map (in a checkout of Nebulosity: npm run dev).`;
         case "live-off": return "Nothing was sent: live updates are off in this session (NEBULOSITY_LIVE=off).";
         case "other-repo": return `Nothing was sent: the Map shows ${where.mapRepo ?? "no repository"}, not ${where.repo}. The user can pick ${where.repo} in the Map's repo menu.`;
     }

@@ -45,7 +45,7 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
   and the CLI                                        and the CLI)
 ```
 
-The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout>/mcp/launch.mjs` (ADR-048) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
+The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout or package>/mcp/launch.mjs` (ADR-048; `nebulosity setup` registers it, ADR-058) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
 
 The static demo (ADR-049) is two more adapters, and runs no server. `scripts/export-demo.ts` reads the database without writing and writes the Map's answers for every folder to files, with the repo named instead of rooted, then scans them for any path of this machine. `app/map/staticApi.ts` is the Map's transport in the demo build: it answers the same calls from those files (refusing the ones that need a server), searches in the browser with `lib/engine/staticSearch.ts`, and is chosen in place of `app/map/api.ts`'s HTTP calls when `npm run build-demo` builds the site.
 
@@ -75,7 +75,7 @@ Rules an implementer MUST follow:
 2. **Route handlers contain no business logic.** They validate input, call one core function, and shape the response. If a route handler grows past ~50 lines, logic is leaking into the adapter.
 3. **The UI never calls core directly.** Today `app/page.tsx` (a server component) calls `scanProject()` directly — that was expedient for the MVP and is scheduled to move behind `GET /api/graph` in Phase 1. After that, the UI's only knowledge of the backend is the contract types. *(Amended 2026-10-14, V1.5, ADR-052 and ADR-049: the UI may also import `lib/` modules that are pure and browser-safe, meaning they never touch a database, a disk or the network. Today that is three modules. `lib/engine/rank.ts` is the ranking core: the search palette uses it to name a hit's code, and the static demo's search ranks with it. `lib/engine/staticSearch.ts` is the static demo's search, which its transport `app/map/staticApi.ts` calls. `lib/index/identifiers.ts` splits identifiers into words, and the UI bundles it through the other two. The import-line test in `lib/engine/rank.test.ts` pins what each may import. Everything else under `lib/` stays behind the API.)*
 4. **Shared request/response types live in `lib/contracts.ts`** — one file, imported by both UI and adapters, so the two sides cannot drift apart silently. Persistence shapes are the one exception: they live in `lib/db/schema.ts` (ADR-013), because the database schema is its own compiler-enforced contract.
-5. **Only `lib/db/*` touches the database; only `lib/scanner-bridge.ts` chooses a scan engine.** The native C++ scanner (ADR-014) is an optional accelerator behind the same `ScannedFile[]` contract as the Node scanner — nothing above the bridge knows or cares which engine ran.
+5. **Only `lib/db/*` touches the database; only `lib/scanner-bridge.ts` chooses a scan engine.** The native C++ scanner (ADR-014) is an optional accelerator behind the same `ScannedFile[]` contract as the Node scanner — nothing above the bridge knows or cares which engine ran. Where the files live: `NEBULOSITY_HOME` is the code root (migrations, scripts), and `NEBULOSITY_DATA` is the data folder (database, config, demo export; `lib/home.ts` `dataDir()`), by default `<code root>/.nebulosity` and, for an installed copy, the user's own data folder (ADR-044, amended).
 
 ---
 
@@ -110,15 +110,18 @@ nebulosity/
 ├── lib/
 │   ├── contracts.ts · config.ts · home.ts · embed.ts · chunks.ts
 │   ├── db/                  # schema, client, batch, store/{structure, summaries, summary-vectors, search, stages, lock, map, version}
-│   ├── engine/              # level, describe, graph, freshness, search, rank, staticSearch, status, repos, git-remote, errors
+│   ├── engine/              # level, describe, graph, freshness, search, rank, staticSearch, status, repos, git-remote, errors, reach, impact, architecture, docs
 │   ├── demo/                # export (the static demo's files), privacy (the scanner for paths of this machine)
 │   ├── index/               # discover, languages/, resolve, aggregate, pipeline, update, watch, embed, summarize/
 │   ├── background/          # service, supervisor, protocol, child, start
 │   ├── live/                # hub, event, sse, local, client
 │   └── agent/               # E1: tools.ts (ported in V1.3), state.ts
-├── scripts/                 # index, summarize, search, live, background (the worker), bench-map, bench-update,
+├── bin/                     # nebulosity.mjs, the one command (ADR-058); boot.mjs, what both launchers do first
+├── mcp/                     # launch.mjs and server.ts: the MCP server over stdio (ADR-048)
+├── scripts/                 # cli.ts and commands/ (the nebulosity command), index, summarize, search, live,
+│                            #   background (the worker), mcp-smoke and prepare-package (the package), bench-map, bench-update,
 │                            #   export-demo, build-demo, serve-demo (the static demo), …
-├── test/                    # fixtures/mini-repo, helpers
+├── test/                    # fixtures/{mini-repo,arch-repo}, helpers
 └── docs/
 ```
 
