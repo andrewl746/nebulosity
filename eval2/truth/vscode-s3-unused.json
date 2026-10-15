@@ -5,6 +5,6 @@
   "files": [
     "src/vs/platform/terminal/node/ptyHostMain.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

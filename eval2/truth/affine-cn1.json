@@ -12,6 +12,6 @@
     "packages/frontend/core/src/modules/workspace-engine/impls/cloud.ts",
     "packages/common/nbstore/src/impls/idb/index.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

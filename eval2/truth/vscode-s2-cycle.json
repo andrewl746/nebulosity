@@ -9,6 +9,6 @@
     "src/vs/editor/contrib/inlineCompletions/browser/controller/inlineCompletionsController.ts",
     "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

@@ -10,6 +10,6 @@
     "src/vs/workbench/services/policies/test/browser/accountPolicyService.test.ts",
     "src/vs/workbench/services/textfile/test/browser/textEditorService.test.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

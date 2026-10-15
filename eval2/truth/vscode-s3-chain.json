@@ -11,6 +11,6 @@
     "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
     "src/vs/platform/terminal/node/terminalEnvironment.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

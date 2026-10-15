@@ -5,6 +5,6 @@
   "files": [
     "src/vs/workbench/contrib/notebook/common/services/notebookWebWorkerMain.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

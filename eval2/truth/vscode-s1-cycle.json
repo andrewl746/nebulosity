@@ -9,6 +9,6 @@
     "src/vs/workbench/contrib/notebook/common/model/notebookTextModel.ts",
     "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

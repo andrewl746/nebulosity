@@ -10,6 +10,6 @@
     "blocksuite/affine/blocks/surface/src/index.ts",
     "blocksuite/affine/blocks/surface/src/surface-block.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

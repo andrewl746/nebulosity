@@ -10,6 +10,6 @@
     "packages/common/infra/src/framework/core/event.ts",
     "packages/common/infra/src/framework/core/components/service.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

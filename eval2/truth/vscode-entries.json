@@ -13,6 +13,6 @@
     "src/vs/platform/terminal/node/ptyHostMain.ts",
     "src/vs/workbench/api/node/extensionHostProcess.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

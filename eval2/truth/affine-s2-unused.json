@@ -6,6 +6,6 @@
     "packages/frontend/core/src/components/affine/ai-onboarding/general.dialog.tsx",
     "packages/frontend/core/src/components/affine/ai-onboarding/index.tsx"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

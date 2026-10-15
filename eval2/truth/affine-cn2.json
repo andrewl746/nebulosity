@@ -13,6 +13,6 @@
     "blocksuite/framework/std/src/gfx/index.ts",
     "blocksuite/framework/std/src/gfx/viewport.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

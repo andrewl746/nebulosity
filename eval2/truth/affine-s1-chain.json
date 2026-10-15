@@ -15,6 +15,6 @@
     "blocksuite/affine/blocks/database/src/index.ts",
     "blocksuite/affine/blocks/database/src/database-block.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

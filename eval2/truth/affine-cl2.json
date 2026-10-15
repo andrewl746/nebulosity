@@ -29,6 +29,6 @@
     "packages/frontend/core/src/modules/workspace-engine/impls/worker-ops.ts",
     "packages/frontend/core/src/modules/workspace-engine/impls/workspace-profile.worker.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

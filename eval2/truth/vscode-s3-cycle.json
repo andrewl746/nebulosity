@@ -4,6 +4,6 @@
   "file": "src/vs/platform/terminal/node/terminalEnvironment.ts",
   "shortest": null,
   "example": null,
-  "verified": false,
+  "verified": true,
   "notes": []
 }

@@ -11,6 +11,6 @@
     "packages/frontend/core/src/mobile/components/navigation/tree/root.tsx",
     "packages/frontend/core/src/mobile/views/all-docs/tag/empty.tsx"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

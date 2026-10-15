@@ -12,6 +12,6 @@
     "src/vs/workbench/contrib/notebook/common/notebookExecutionService.ts",
     "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

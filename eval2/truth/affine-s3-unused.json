@@ -6,6 +6,6 @@
     "blocksuite/affine/blocks/surface/src/adapters/html-adapter/html.ts",
     "blocksuite/affine/blocks/surface/src/utils/rough/rough.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

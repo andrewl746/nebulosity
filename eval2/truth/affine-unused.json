@@ -9,6 +9,6 @@
     "packages/frontend/core/src/components/page-list/use-page-selection-events.ts",
     "packages/frontend/core/src/components/page-list/view/use-action.tsx"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

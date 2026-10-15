@@ -5,6 +5,6 @@
   "files": [
     "src/vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/inlineEditsViews/inlineEditsWordInsertView.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

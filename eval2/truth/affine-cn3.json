@@ -12,6 +12,6 @@
     "packages/frontend/apps/electron/src/helper/nbstore/handlers.ts",
     "packages/common/nbstore/src/impls/sqlite/index.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

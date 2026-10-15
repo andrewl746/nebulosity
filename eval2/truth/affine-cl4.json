@@ -61,6 +61,6 @@
     "packages/frontend/core/src/mobile/views/search/search-results.tsx",
     "packages/frontend/core/src/mobile/workbench-router.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

@@ -5,6 +5,6 @@
   "files": [
     "blocksuite/affine/blocks/database/src/widgets/index.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

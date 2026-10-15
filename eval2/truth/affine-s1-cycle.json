@@ -9,6 +9,6 @@
     "blocksuite/affine/blocks/database/src/effects.ts",
     "blocksuite/affine/blocks/database/src/database-block.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

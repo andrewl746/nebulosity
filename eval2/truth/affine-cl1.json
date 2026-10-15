@@ -31,6 +31,6 @@
     "tests/affine-desktop/e2e/disk-sync.spec.ts",
     "tests/affine-desktop/e2e/workspace.spec.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

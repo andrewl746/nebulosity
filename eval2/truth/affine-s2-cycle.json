@@ -4,6 +4,6 @@
   "file": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
   "shortest": null,
   "example": null,
-  "verified": false,
+  "verified": true,
   "notes": []
 }

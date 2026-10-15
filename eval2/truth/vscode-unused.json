@@ -8,6 +8,6 @@
     "src/vs/sessions/browser/parts/mobile/mobileEdgeSwipe.ts",
     "src/vs/sessions/browser/parts/projectBarPart.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }

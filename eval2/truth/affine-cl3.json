@@ -39,6 +39,6 @@
     "blocksuite/affine/blocks/table/src/view.ts",
     "blocksuite/integration-test/src/__tests__/main/editor-semantics.spec.ts"
   ],
-  "verified": false,
+  "verified": true,
   "notes": []
 }
