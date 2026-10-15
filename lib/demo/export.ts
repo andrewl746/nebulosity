@@ -208,7 +208,7 @@ export function exportDemo(repoRoot: string, outDir: string, options: DemoExport
     } satisfies DemoManifest);
 
     // the marker goes only once the scan is clean; a leaking export stays "unfinished" and is replaced by the next run
-    const leaks = scanForLeaks(outDir, leakNeedles({ folders: [root, nebulosityHome(), os.homedir()], email: options.email }));
+    const leaks = scanForLeaks(outDir, leakNeedles({ folders: [root, nebulosityHome()], email: options.email, home: os.homedir() }));
     if (leaks.length === 0) fs.rmSync(path.join(outDir, IN_PROGRESS));
     return { folders: paths.length, levelFiles, bundles: bundles.length, pageIndexes, files, bytes, indexVersion: version, leaks };
 }

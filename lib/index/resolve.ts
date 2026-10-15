@@ -63,7 +63,10 @@ export function createSourceFinder(fileSet: ReadonlySet<string>, workspace: Work
         const direct = findFile(fileSet, base);
         if (direct !== null) return direct;
         for (const { outDir, rootDir } of workspace.outDirs){
-            if (base === outDir || base.startsWith(`${outDir}/`)) return findFile(fileSet, rootDir + base.slice(outDir.length));
+            if (base !== outDir && !base.startsWith(`${outDir}/`)) continue;
+            // joined, not concatenated: a root tsconfig's rootDir "." is "" here, and "" + "/index.js" would name no file
+            const source = joinRepoPath(rootDir, base.slice(outDir.length + 1));
+            return source === null ? null : findFile(fileSet, source);
         }
         return null;
     };
@@ -141,18 +144,25 @@ export function createResolver(repoRoot: string, fileSet: ReadonlySet<string>, o
     };
 
     // packages of the repo's own that aren't the root or a declared workspace: their names stand in for nothing (ADR-053),
-    // so a module id can't reach into one either ("gulp/src/main" read against extensions/ would name extensions/gulp)
-    const undeclared = new Set(workspace.packages.map((p) => p.name).filter((name) => !workspace.byName.has(name)));
+    // so a module id can't reach into one's folder either ("gulp/src/main" read against extensions/ would name
+    // extensions/gulp/src/main.ts). Only a hit inside such a folder is blocked, by name: a test fixture whose package is
+    // called "common" leaves src/common/strings.ts reachable as "common/strings".
+    const undeclaredDirs = new Map<string, string[]>();
+    for (const p of workspace.packages){
+        if (!workspace.byName.has(p.name)) undeclaredDirs.set(p.name, [...(undeclaredDirs.get(p.name) ?? []), p.dir]);
+    }
 
     /** A module id read against the folders that hold a tsconfig (R3): the one file exactly one of them holds, or null. */
     const moduleId = (importer: string, specifier: string): string | null => {
         if (specifier.startsWith("@") || /^[a-z][a-z0-9+.-]*:/i.test(specifier) || !specifier.includes("/")) return null;
-        if (undeclared.has(packageNameOf(specifier))) return null;
+        const blocked = undeclaredDirs.get(packageNameOf(specifier)) ?? [];
         let found: string | null = null;
         for (const root of workspace.idRoots){
             const base = joinRepoPath(root, specifier);
             const hit = base === null ? null : findFile(fileSet, base);
             if (hit === null || hit === importer || hit === found) continue;
+            // the id names that undeclared package, which no package manager links: it means an npm package, not this file
+            if (blocked.some((dir) => hit.startsWith(`${dir}/`))) return null;
             if (found !== null) return null;   // two roots hold it: not one file the id can mean
             found = hit;
         }

@@ -1,4 +1,5 @@
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
+import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -128,6 +129,65 @@ describe("main", () => {
         expect(printed(errors)).toBe('nebulosity has no command "serve". Commands: index, summarize, map, mcp, setup, doctor.');
         expect(await main(["--version"])).toBe(0);
         expect(printed(logs)).toBe("0.2.0");
+    });
+});
+
+describe("nebulosity map (final review, C-M2)", () => {
+    const saved = { home: process.env.NEBULOSITY_HOME, data: process.env.NEBULOSITY_DATA };
+
+    afterEach(() => {
+        vi.mocked(spawn).mockReset();
+        for (const [name, value] of [["NEBULOSITY_HOME", saved.home], ["NEBULOSITY_DATA", saved.data]] as const){
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }
+    });
+
+    /**
+     * A copy with a built Map (a BUILD_ID) and a stand-in next to start, and a data folder whose config names an active
+     * repo on the default port. Returns the config file and the config each stubbed `next start` saw when it was started.
+     */
+    function builtCopy(): { configFile: string; seen: unknown[] } {
+        const home = makeTempDir("neb-map-");
+        fs.mkdirSync(path.join(home, ".next"));
+        fs.writeFileSync(path.join(home, ".next", "BUILD_ID"), "build-1");
+        fs.writeFileSync(path.join(home, "package.json"), JSON.stringify({ name: "nebulosity", version: "0.0.0" }));
+        fs.mkdirSync(path.join(home, "node_modules", "next", "dist", "bin"), { recursive: true });
+        fs.writeFileSync(path.join(home, "node_modules", "next", "dist", "bin", "next"), "");
+        process.env.NEBULOSITY_HOME = home;
+        process.env.NEBULOSITY_DATA = path.join(home, "data");
+        const configFile = path.join(home, "data", "config.json");
+        fs.mkdirSync(path.dirname(configFile));
+        fs.writeFileSync(configFile, JSON.stringify({ activeRepo: "/r/app", port: 3000 }));
+
+        const seen: unknown[] = [];
+        vi.mocked(spawn).mockImplementation((() => {
+            seen.push(JSON.parse(fs.readFileSync(configFile, "utf8")));
+            const child = new EventEmitter();
+            setImmediate(() => child.emit("exit", 0));   // next start stops at once
+            return child;
+        }) as unknown as typeof spawn);
+        return { configFile, seen };
+    }
+
+    it("saves --port in the config before next starts, keeping the active repo, so live events follow the Map", async () => {
+        const { seen } = builtCopy();
+        expect(await main(["map", "--port", "3123"])).toBe(0);
+        // the first argument is the stand-in next, as require resolves it (macOS's temp folder sits behind a link)
+        expect((vi.mocked(spawn).mock.calls[0][1] as string[]).slice(1)).toEqual(["start", "-H", "127.0.0.1", "-p", "3123"]);
+        expect(seen).toEqual([{ activeRepo: "/r/app", port: 3123 }]);
+    });
+
+    it("puts the default back when started without --port, and saves nothing for a port it refuses", async () => {
+        const { configFile, seen } = builtCopy();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        expect(await main(["map", "--port", "3123"])).toBe(0);
+        expect(await main(["map"])).toBe(0);
+        expect(seen).toEqual([{ activeRepo: "/r/app", port: 3123 }, { activeRepo: "/r/app", port: 3000 }]);
+
+        expect(await main(["map", "--port", "70000"])).toBe(1);
+        expect(spawn).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: "/r/app", port: 3000 });
     });
 });
 

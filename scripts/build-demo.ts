@@ -73,7 +73,7 @@ fs.rmSync(path.join(out, "demo"), { recursive: true, force: true });
 fs.cpSync(data, path.join(out, "demo"), { recursive: true });
 
 const activeRepo = readConfig().activeRepo;
-const leaks = scanForLeaks(out, leakNeedles({ folders: [nebulosityHome(), os.homedir(), ...(activeRepo ? [activeRepo] : [])], email: gitEmail("build-demo") }));
+const leaks = scanForLeaks(out, leakNeedles({ folders: [nebulosityHome(), ...(activeRepo ? [activeRepo] : [])], email: gitEmail("build-demo"), home: os.homedir() }));
 const size = walk(out);
 console.log(`[build-demo] out/: ${size.files.toLocaleString("en-US")} files, ${(size.bytes / 1e6).toFixed(1)} MB`
     + ` (limits ${MAX_FILES.toLocaleString("en-US")} files, ${MAX_BYTES / 1e6} MB)`);

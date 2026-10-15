@@ -18,10 +18,14 @@
 // any link or any spelling of the build folder or the home folder. It runs whenever .next exists, and a .next without a
 // BUILD_ID (a build that didn't finish, or a dev server's) is refused, not passed as "no Map": it would ship as it is.
 //
+// Before any of that, in a git checkout, it refuses a file git doesn't track in a folder the package ships whole (bin,
+// lib, mcp, app, public, scripts/commands): npm packs what is on disk, so a work-in-progress file there would ship.
+//
 // The spellings are lib/demo/privacy.ts's, the rules the demo export and the eval's transcripts are held to (ADR-049,
 // ADR-051): forward and back slashes, JSON's escapes, URL-encoded either way (Ann%20Lee), Git Bash's /c/…, Claude Code's
 // folder name (C--Users-Ann), and any mix of separators or deeper escaping. This script loads that file through tsx (a
 // dependency, which bin/boot.mjs loads the same way) rather than keeping a plain-JS copy: one copy of the rules can't drift.
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -36,6 +40,22 @@ const NEXT = path.join(ROOT, ".next");
 const SHIPPED_OUT = new Set(["cache", "dev"]);   // package.json's files leaves .next/cache and .next/dev out
 const HASHED = /^(.+)-[0-9a-f]{16}$/;
 const checkOnly = process.argv.includes("--check");
+/** The folders package.json's `files` ships whole; its other entries are single files, which a stray file can't join. */
+const SHIPPED_FOLDERS = ["bin", "lib", "mcp", "app", "public", "scripts/commands"];
+
+/**
+ * The files git doesn't track in the folders the package ships whole (ignored ones left out, as npm leaves them out
+ * too). Nothing outside a git checkout. It throws when git can't answer, rather than call the folders clean.
+ */
+function untrackedShipped(){
+    if (!fs.existsSync(path.join(ROOT, ".git"))) return [];   // a folder or, in a worktree, a file
+    // -z: one NUL after each path, written as it is (no quoting of unusual characters)
+    const git = spawnSync("git", ["ls-files", "-z", "--others", "--exclude-standard", "--", ...SHIPPED_FOLDERS], { cwd: ROOT, encoding: "utf8" });
+    if (git.error || git.status !== 0){
+        throw new Error(`prepare-package: git couldn't list the untracked files (${git.error?.message ?? git.stderr.trim()}), so nothing can be called clean.`);
+    }
+    return git.stdout.split("\0").filter(Boolean);
+}
 
 /** Each folder in .next/node_modules that stands for a package (scoped ones one level down), with its real name. */
 function externals(){
@@ -113,7 +133,9 @@ function shippedFiles(dir = NEXT, top = true){
  */
 function problems(){
     const found = [];
-    const needles = machineNeedles([ROOT, fs.realpathSync.native(ROOT), os.homedir()], leakNeedles);
+    // the home folder also names the pair a path cut off at its front still holds (privacy.ts), when it's deep enough to scan for
+    const home = os.homedir();
+    const needles = machineNeedles([ROOT, fs.realpathSync.native(ROOT), home], (input) => leakNeedles({ ...input, home: input.folders.includes(home) ? home : null }));
     for (const { file, link } of shippedFiles()){
         const shown = path.relative(ROOT, file);
         if (link){
@@ -130,7 +152,20 @@ function problems(){
     return found;
 }
 
+let untracked;
+try{
+    untracked = untrackedShipped().map((file) => `${file} isn't tracked by git, so npm would ship it: commit it, or move it out of ${SHIPPED_FOLDERS.join(", ")}`);
+} catch (err){
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+}
+
 if (!fs.existsSync(NEXT)){
+    if (untracked.length > 0){
+        for (const problem of untracked) console.error(`prepare-package: ${problem}`);
+        console.error("prepare-package: this can't be packed as it is (above).");
+        process.exit(1);
+    }
     // no built Map: the package works without one (`nebulosity map` says so, and doctor warns)
     console.log("prepare-package: no built Map (.next) to prepare or check");
     process.exit(0);
@@ -154,6 +189,7 @@ try{
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
 }
+found.unshift(...untracked);
 if (!built) found.unshift(".next has no BUILD_ID: a build that didn't finish, or a dev server's. Build the Map with npm run build:package, or remove .next.");
 for (const external of externals()){
     if (external.real === null) found.push(`.next/node_modules/${external.hashed} isn't a package Turbopack names <name>-<hash>`);
@@ -165,4 +201,4 @@ if (found.length > 0){
         : "prepare-package: the build still can't be packed (above).");
     process.exit(1);
 }
-console.log(`prepare-package: ok (${externals().length} external packages, no links, no machine paths)`);
+console.log(`prepare-package: ok (${externals().length} external packages, no links, no machine paths, no untracked files)`);

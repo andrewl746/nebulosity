@@ -119,7 +119,11 @@ const importsTool: ToolEntry<typeof importsInput> = {
         if (input.to !== undefined){
             const answer = importChain(context.repoRoot, target, repoPathOf(input.to, context));
             const middle = answer.files.filter((file) => file !== answer.from && file !== answer.to);
-            return { text: finish(chainAnswer(answer), context), paths: [answer.from, answer.to, ...middle] };
+            // `to` wins over the other modes; a model that combined them is told so, rather than handed a chain it reads as filtered
+            const ignored = input.within !== undefined || input.group_by !== undefined || input.transitive;
+            const parts = chainAnswer(answer);
+            if (ignored) parts.notes = [...(parts.notes ?? []), "within, group_by and transitive don't apply to a chain."];
+            return { text: finish(parts, context), paths: [answer.from, answer.to, ...middle] };
         }
         const within = input.within === undefined ? undefined : repoPathOf(input.within, context);
         const page = { transitive: input.transitive, limit: input.limit, offset: input.offset };

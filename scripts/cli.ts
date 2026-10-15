@@ -2,7 +2,8 @@
  * The `nebulosity` command (ADR-058). One command for each thing a user does:
  *   nebulosity index <repo> [--no-activate]   build or update a repo's index (free)
  *   nebulosity summarize <repo> [--yes] …     write summaries: shows the estimate and asks first (S11)
- *   nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000)
+ *   nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000); the port is saved
+ *                                             in config.json, where the MCP server sends live updates and show_on_map
  *   nebulosity mcp                            the MCP server Claude Code starts (stdio)
  *   nebulosity setup [--print]                register the server with Claude Code for the repo in this folder
  *   nebulosity doctor                         check Node, the data folder, the database, git and claude
@@ -10,7 +11,7 @@
 import { spawn, spawnSync, type SpawnSyncReturns, type StdioOptions } from "child_process";
 import fs from "fs";
 import { createRequire } from "module";
-import { DEFAULT_PORT } from "../lib/config";
+import { DEFAULT_PORT, readConfig, writeConfig } from "../lib/config";
 import { dataDir, dataPath, nebulosityHome, nebulosityPath } from "../lib/home";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
@@ -21,7 +22,8 @@ const USAGE = [
     "usage: nebulosity <command>",
     "  nebulosity index <repo> [--no-activate]   build or update a repo's index (free)",
     "  nebulosity summarize <repo> [--yes] …     write summaries: shows the estimate and asks first",
-    "  nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000)",
+    "  nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000); the port is saved,",
+    "                                            so Claude Code's live updates and show_on_map reach this Map",
     "  nebulosity mcp                            the MCP server Claude Code starts (stdio)",
     "  nebulosity setup [--print]                register the server with Claude Code for the repo in this folder",
     "  nebulosity doctor                         check Node, the data folder, the database, git and claude",
@@ -169,7 +171,9 @@ function mapPort(args: readonly string[]): number | null {
 
 /**
  * The Map: `next start` on this copy's prebuilt `.next`, on 127.0.0.1 only (proxy.ts refuses other hosts anyway).
- * The background worker starts with it (instrumentation.ts) unless NEBULOSITY_WORKER=off.
+ * The background worker starts with it (instrumentation.ts) unless NEBULOSITY_WORKER=off. Its port is saved in the
+ * config first, because the MCP server posts live events and show_on_map to the config's port (lib/live/client.ts):
+ * a Map on --port <n> gets them, and they never go to a port the user didn't start the Map on.
  */
 async function runMap(args: readonly string[]): Promise<number> {
     const port = mapPort(args);
@@ -181,6 +185,9 @@ async function runMap(args: readonly string[]): Promise<number> {
         console.error("This copy of Nebulosity has no built Map. In a checkout, run npm run build first.");
         return 1;
     }
+
+    const config = readConfig();
+    if (config.port !== port) writeConfig({ ...config, port });
 
     // next resolves from this copy's own node_modules, whatever the working folder
     const next = createRequire(nebulosityPath("package.json")).resolve("next/dist/bin/next");

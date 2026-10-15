@@ -75,6 +75,37 @@ describe("findLeak", () => {
     });
 });
 
+describe("a path cut off at its front (final review, B-I1)", () => {
+    // a model's script printed path.slice(n) of an absolute path: "ers/Ann/Programming/…", which holds no whole folder
+    const cut = "ers/Ann/Programming/vscode/src/vs/base/browser/animatedValue.ts";
+    const folders = ["C:/Users/Ann/Programming/Nebulosity", "C:/Users/Ann/Programming/vscode", "D:/work/affine"];
+
+    it("is missed by the whole-folder needles alone", () => {
+        expect(findLeak(cut, leakNeedles({ folders: ["C:/Users/Ann", ...folders] }))).toBeNull();
+    });
+
+    it("is found by the home's user-name segment and the next one, in any spelling, once the home folder is given", () => {
+        const needles = leakNeedles({ folders, home: "C:\\Users\\Ann" });
+        // one pair for both folders inside the home; D:/work/affine is outside it and adds none
+        expect(needles.filter((n) => n.startsWith("ann/"))).toEqual(["ann/programming"]);
+        // the home's own spellings come with it, as if it were one of the folders
+        expect(needles).toContain("c:/users/ann");
+        expect(findLeak(cut, needles)).toBe("ann/programming");
+        expect(findLeak("s\\Ann\\Programming\\vscode\\x.ts", needles)).toBe("ann/programming");   // runtime: s\Ann\Programming\vscode\x.ts
+        expect(findLeak('{"p":"rs\\\\ANN\\\\programming\\\\y"}', needles)).toBe("ann/programming");   // JSON-escaped, any case
+        expect(findLeak("ers%2FAnn%2FProgramming%2Fz", needles)).toBe("ann/programming");
+        // another user's path, or the same words apart, is no leak
+        expect(findLeak("/Users/jrieken/Code/vscode/src/x.ts", needles)).toBeNull();
+        expect(findLeak("Ann wrote the Programming guide", needles)).toBeNull();
+    });
+
+    it("adds no pair for the home itself or a folder outside it", () => {
+        const needles = leakNeedles({ folders: ["C:/Users/Ann", "D:/work/affine"], home: "C:/Users/Ann" });
+        expect(findLeak("ers/Ann/Desktop/notes.txt", needles)).toBeNull();
+        expect(needles.some((n) => n.startsWith("ann/"))).toBe(false);
+    });
+});
+
 describe("scanForLeaks", () => {
     it("names every file under a folder that holds a needle", () => {
         const dir = makeTempDir("neb-leaks-");

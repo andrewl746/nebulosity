@@ -140,6 +140,24 @@ describe("which packages resolve by name: the root and the declared workspaces (
         expect(resolve("build/lib/task.ts", "shared/util")).toBe("extensions/shared/util.ts");
     });
 
+    it("blocks a module id only inside the undeclared package's own folder: a fixture named common leaves src/common reachable (final review, A row 429)", () => {
+        // the review's probe, case 2: test/fixtures/common/package.json is called "common" and declared nowhere, while
+        // src/ holds a tsconfig, so "common/strings" read against src/ names src/common/strings.ts, outside that folder
+        const root = makeRepo({
+            "package.json": { name: "app" },
+            "src/tsconfig.json": {},
+            "src/common/strings.ts": "export const s = 1;\n",
+            "src/browser/view.ts": "import { s } from 'common/strings';\n",
+            "test/fixtures/common/package.json": { name: "common" },
+            "test/fixtures/common/index.js": "",
+        });
+        const ws = readWorkspace(root, ["package.json", "src/tsconfig.json", "test/fixtures/common/package.json"]);
+        expect([...ws.byName.keys()]).toEqual(["app"]);
+        const resolve = createResolver(root, new Set(["src/browser/view.ts", "src/common/strings.ts", "test/fixtures/common/index.js"]), { workspace: ws });
+        expect(resolve("src/browser/view.ts", "common/strings")).toBe("src/common/strings.ts");
+        expect(resolve("src/browser/view.ts", "common")).toBeNull();   // the bare name still names no folder of the repo's
+    });
+
     it("with no workspaces declared, resolves only the root package by name", () => {
         const root = makeRepo({
             "package.json": { name: "app", main: "src/main.ts" },
@@ -205,6 +223,24 @@ describe("which packages resolve by name: the root and the declared workspaces (
             "other/o/package.json": { name: "@x/o" },
         });
         expect([...readWorkspace(root, ["modules/m/package.json", "other/o/package.json"]).byName.keys()]).toEqual(["@x/m"]);
+    });
+});
+
+describe("compiled paths to sources", () => {
+    it("maps a root package's dist/ to the repo root when its tsconfig's rootDir is \".\" (final review, A-I1)", () => {
+        // a one-package library or CLI: the sources sit at the root and compile to dist/, so dist/index.js is index.ts
+        const root = makeRepo({
+            "package.json": { name: "solo", main: "dist/index.js", bin: "dist/cli.js" },
+            "tsconfig.json": { compilerOptions: { outDir: "dist", rootDir: "." } },
+            "index.ts": "export const a = 1;\n",
+            "cli.ts": "import './index';\n",
+        });
+        const ws = readWorkspace(root, ["package.json", "tsconfig.json"]);
+        expect(ws.outDirs).toEqual([{ outDir: "dist", rootDir: "" }]);
+        expect(declaredEntries(ws, createSourceFinder(new Set(["cli.ts", "index.ts"]), ws))).toEqual([
+            { path: "cli.ts", declaredBy: "package.json bin" },
+            { path: "index.ts", declaredBy: "package.json main" },
+        ]);
     });
 });
 

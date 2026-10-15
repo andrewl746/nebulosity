@@ -111,7 +111,6 @@ export type LevelResponse = {
 /** A declaration in a file: top-level ones and class members (`Logger.info`), with the lines to jump to. */
 export type SymbolInfo = { name: string; kind: string; startLine: number; endLine: number; exported: boolean };
 
-/** GET /api/describe — docs/API_CONTRACTS.md §12 */
 /** A doc linked to a place (ADR-054), and why. describe always says why; overview says it for a doc that applies to a folder. */
 export type DocPointer = {
   path: string;
@@ -119,6 +118,7 @@ export type DocPointer = {
   reason?: { kind: "applies" | "readme" | "mentions"; target: string; detail?: string; count: number };
 };
 
+/** GET /api/describe — docs/API_CONTRACTS.md §12 */
 export type DescribeResponse = {
   /** The repo's root: absolute, forward slashes (for vscode:// links). */
   repo: string;

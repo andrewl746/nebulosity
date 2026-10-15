@@ -1,4 +1,4 @@
-import { spawnSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
@@ -126,6 +126,51 @@ describe("prepare-package (ADR-058: a built Map npm can pack, with nothing of th
         expect(result.status).toBe(1);
         for (const file of ["encoded.js", "mixed.js", "slug.js"]) expect(result.stderr).toContain(`${path.join(".next", "server", file)} names this machine's folders`);
         expect(result.stderr).not.toContain("clean.js");
+    });
+});
+
+describe("untracked files in the shipped folders (final review, C-M5)", () => {
+    /** A git checkout with no built Map: lib/a.ts tracked (staged is enough), the rest as each test writes it. */
+    function checkout(files: Record<string, string>): string {
+        const root = makeTempDir("neb-untracked-");
+        execFileSync("git", ["init", "-q"], { cwd: root });
+        for (const [rel, text] of Object.entries({ "lib/a.ts": "export {};\n", ...files })){
+            fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+            fs.writeFileSync(path.join(root, rel), text);
+        }
+        // autocrlf off: the test's own line endings, and no warning about them on a Windows machine that converts
+        execFileSync("git", ["-c", "core.autocrlf=false", "add", "lib/a.ts", ...(files[".gitignore"] === undefined ? [] : [".gitignore"])], { cwd: root });
+        return root;
+    }
+
+    it("refuses an untracked file in a folder the package ships whole, naming it, with or without a built Map", () => {
+        const root = checkout({
+            "lib/agent/wip.ts": "export {};\n",   // an owner's work in progress, never to ship
+            "scripts/commands/new-command.ts": "export {};\n",
+            "scripts/notes.ts": "export {};\n",   // scripts/ isn't shipped whole, so this one can't ship
+            "draft.md": "notes\n",   // nor the root
+            "lib/ignored.ts": "export {};\n",
+            ".gitignore": "lib/ignored.ts\n",   // ignored, so npm and git both leave it out
+        });
+        const result = run(root, "--check");
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("prepare-package: lib/agent/wip.ts isn't tracked by git, so npm would ship it: commit it, or move it out of bin, lib, mcp, app, public, scripts/commands");
+        expect(result.stderr).toContain("prepare-package: scripts/commands/new-command.ts isn't tracked by git");
+        for (const name of ["scripts/notes.ts", "draft.md", "lib/ignored.ts", "lib/a.ts"]) expect(result.stderr).not.toContain(name);
+
+        // a built Map changes nothing: the untracked files are refused beside the build's own checks
+        fs.mkdirSync(path.join(root, ".next"));
+        fs.writeFileSync(path.join(root, ".next", "BUILD_ID"), "build-1");
+        const built = run(root, "--check");
+        expect(built.status).toBe(1);
+        expect(built.stderr).toContain("prepare-package: lib/agent/wip.ts isn't tracked by git");
+    });
+
+    it("passes once every file in the shipped folders is tracked", () => {
+        const root = checkout({ "draft.md": "notes\n" });
+        const result = run(root, "--check");
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toContain("prepare-package: no built Map (.next) to prepare or check");
     });
 });
 

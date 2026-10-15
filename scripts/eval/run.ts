@@ -416,6 +416,8 @@ type Context = {
     options: Options; questions: QuestionFile; claude: string; gitBash: string; forbiddenPlugins: string[];
     mcp: { empty: string; nebulosity: string }; replacements: { folder: string; with: string }[]; needles: string[];
     folders: string[]; email: string | null;
+    /** The user's home folder: each folder inside it also gives a needle for a path cut off at its front (privacy.ts). */
+    home: string;
     /** The checkout's `git status --porcelain` lines before the batch (and after each kept run, which writes its own files): any difference after a run is a change that run made. */
     snapshot: string[];
 };
@@ -485,7 +487,7 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
     if ("problem" in found && run.arm === "nebulosity") throw new Stop(1, `${name}: ${found.problem}, so Nebulosity's tools would fail. Nothing was run.`);
     const indexVersion = "version" in found ? found.version : null;
     const replacements = scratch === undefined ? ctx.replacements : [...ctx.replacements, { folder: scratch, with: "<scratch>" }];
-    const needles = scratch === undefined ? ctx.needles : leakNeedles({ folders: [...ctx.folders, scratch], email: ctx.email });
+    const needles = scratch === undefined ? ctx.needles : leakNeedles({ folders: [...ctx.folders, scratch], email: ctx.email, home: ctx.home });
     const startedAt = new Date();
     // one raw file per attempt, named by its start time, so a re-run after an outage keeps the earlier evidence
     const attempt = attemptsSoFar(name, rawFiles()) + 1;
@@ -720,10 +722,10 @@ async function main(): Promise<void> {
     const ctx: Context = {
         options, questions, claude, gitBash, forbiddenPlugins, mcp,
         // each repo's folder becomes <its id> (<vscode> stays <vscode>), the checkout <nebulosity>, home ~
-        folders: [home, CHECKOUT, ...Object.keys(DEF.repos).map(repoRoot)], email,
+        folders: [home, CHECKOUT, ...Object.keys(DEF.repos).map(repoRoot)], email, home,
         snapshot: statusLines(CHECKOUT),
         replacements: [...Object.keys(DEF.repos).map((id) => ({ folder: repoRoot(id), with: `<${id}>` })), { folder: CHECKOUT, with: "<nebulosity>" }, { folder: home, with: "~" }],
-        needles: leakNeedles({ folders: [home, CHECKOUT, ...Object.keys(DEF.repos).map(repoRoot)], email }),
+        needles: leakNeedles({ folders: [home, CHECKOUT, ...Object.keys(DEF.repos).map(repoRoot)], email, home }),
     };
 
     process.on("exit", () => killTree(running?.pid));

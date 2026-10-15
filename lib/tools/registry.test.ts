@@ -194,6 +194,20 @@ describe("imports with to (the chain)", () => {
             .toBe("No chain of imports joins src/app/view.tsx and src/util/strings.test.ts, in either direction.");
         await expect(call("imports", { path: "src", to: "src/core" }, context)).rejects.toThrow(BadInputError);
     });
+
+    it("says so when within, group_by or transitive came with to, since a chain ignores them (final review, A row 298)", async () => {
+        const context = freeFixture();
+        const chain = [
+            "scripts/build.js reaches src/core/log.ts in 2 steps:",
+            "  scripts/build.js", '  → src/app/main.ts  (import "../src/app/main")', '  → src/core/log.ts  (import "../core/log")',
+        ];
+        const note = "Note: within, group_by and transitive don't apply to a chain.";
+        expect(lines(await call("imports", { path: "scripts/build.js", to: "src/core/log.ts", within: "src/app" }, context))).toEqual([...chain, note]);
+        expect(lines(await call("imports", { path: "scripts/build.js", to: "src/core/log.ts", group_by: "src" }, context))).toEqual([...chain, note]);
+        expect(lines(await call("imports", { path: "scripts/build.js", to: "src/core/log.ts", transitive: true }, context))).toEqual([...chain, note]);
+        // transitive: false is the default, so saying it changes nothing
+        expect(lines(await call("imports", { path: "scripts/build.js", to: "src/core/log.ts", transitive: false }, context))).toEqual(chain);
+    });
 });
 
 describe("imports and architecture on the arch-repo", () => {

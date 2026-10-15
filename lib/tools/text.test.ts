@@ -41,7 +41,7 @@ describe("text helpers", () => {
     it("tells the model what happened to a Map event", () => {
         const where = { port: 3000, mapRepo: "vscode", repo: "mini-repo" };
         expect(deliveryNote("shown", where)).toBe("Sent to the Map at http://localhost:3000; any open Map tab shows it.");
-        expect(deliveryNote("no-map", where)).toBe("No Map answered at http://localhost:3000, so nothing is shown. The user can start it with npm run dev in the Nebulosity folder.");
+        expect(deliveryNote("no-map", where)).toBe("No Map answered at http://localhost:3000, so nothing is shown. The user can start it with nebulosity map (in a checkout of Nebulosity: npm run dev).");
         expect(deliveryNote("live-off", where)).toBe("Nothing was sent: live updates are off in this session (NEBULOSITY_LIVE=off).");
         expect(deliveryNote("other-repo", where)).toBe("Nothing was sent: the Map shows vscode, not mini-repo. The user can pick mini-repo in the Map's repo menu.");
         expect(deliveryNote("other-repo", { ...where, mapRepo: null })).toBe("Nothing was sent: the Map shows no repository, not mini-repo. The user can pick mini-repo in the Map's repo menu.");
