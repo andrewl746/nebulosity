@@ -11,7 +11,7 @@ import { DEMO } from "./mode";
 import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
 import { linkedFrom, portalCaption, portalLinks } from "./portals";
-import { placeholderFor, wantsSummary } from "./summaries";
+import { failureFor, summaryLine, wantsSummary } from "./summaries";
 import SourceViewer from "./SourceViewer";
 import { inlineCode, splitSummary } from "./text";
 
@@ -350,13 +350,13 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
     // a "summarize now" answer is newer than the description it was asked from
     const shown = fresh ?? data;
     const { lead, rest } = splitSummary(shown.summary ?? "");
-    const failure = shown.summaryError ?? (summaryError && summaryError.code !== "NOT_READY" ? summaryError.message : null);
+    const failure = failureFor(shown.summaryError, summaryError);
 
     return (
         <section aria-label="Summary">
             {shown.tagline
                 ? <p className="text-[15px] font-medium leading-snug text-title"><Rich text={shown.tagline} /></p>
-                : <p className="text-text-2">{summaryError?.code === "NOT_READY" ? "Waiting for what's inside to be summarized first." : placeholderFor(shown.summaryStatus)}</p>}
+                : <p className="text-text-2">{summaryLine(shown.summaryStatus, summaryError)}</p>}
             {lead && <p className="mt-2 text-text-body"><Rich text={lead} /></p>}
             {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2 text-text-body"><Rich text={paragraph} /></p>)}
             {/* it folds back, so a long summary doesn't push the rest of the panel away for good (owner review) */}

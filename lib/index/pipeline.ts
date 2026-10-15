@@ -13,7 +13,7 @@ import {
 } from "../db/store/structure";
 import { replaceDocs } from "../db/store/docs";
 import { pruneSummaries } from "../db/store/summaries";
-import { bumpIndexVersion, readAdapterVersion, writeAdapterVersion } from "../db/store/version";
+import { bumpIndexVersion, readAdapterVersion, recordAdapterVersion } from "../db/store/version";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { docLinks, folderSuffixes, type KnownPaths } from "./docs";
 import { discoverFiles, isTestPath, readGitHead, type DiscoveredFile, type SkippedFile } from "./discover";
@@ -217,11 +217,10 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const indexedHead = readGitHead(root);
         markIndexed(db, repoId, indexedHead);
         // A file that failed keeps its previous row (ADR-022). After a forced re-parse that row is the older adapter's, and
-        // its hash still matches the bytes, so recording this version now would leave it as it is for good. The next full
-        // run parses everything again instead; a file that fails every time makes every full run do so, and its run's
-        // errors name it.
-        const olderRowsKept = reparseAll && errors.some((e) => stored.has(e.path));
-        if (!olderRowsKept) writeAdapterVersion(db, repoId, ADAPTER_VERSION);
+        // its hash still matches the bytes, so it would stay as it is for good. Its hash is cleared as this version is
+        // recorded, so the next full run parses that file again, and no other.
+        const unparsed = reparseAll ? errors.map((e) => e.path).filter((p) => stored.has(p)) : [];
+        recordAdapterVersion(db, repoId, ADAPTER_VERSION, unparsed);
         writeStage(db, repoId, "structure", {
             state: "ready",
             done: fileSet.size,

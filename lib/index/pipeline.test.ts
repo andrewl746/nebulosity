@@ -390,7 +390,7 @@ describe("indexRepository on the architecture fixture", () => {
         expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 0, unchanged: 21, edges: 31 });
     });
 
-    it("keeps the older adapter's version while a file it parsed failed the re-parse, so the next full run tries again", () => {
+    it("clears the hash of a file that failed the forced re-parse, so the next full run parses it, and only it, again", () => {
         const copy = copyFixture(ARCH_FIXTURE);
         const { repoId } = indexRepository(copy);
         const db = getDb();
@@ -405,10 +405,14 @@ describe("indexRepository on the architecture fixture", () => {
         // its old row stays (ADR-022), with the old adapter's empty specifiers: edge #5 is still missing
         expect(failed).toMatchObject({ files: 21, changed: 20, edges: 30 });
         expect(failed.errors.map((e) => e.path)).toEqual(["src/app/loader.ts"]);
-        expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION - 1);
+        // the other 20 were parsed by this adapter, so its version is recorded; loader.ts's hash no longer claims its bytes
+        expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION);
+        const hashOf = (p: string) => db.select({ h: files.contentHash }).from(files).where(and(eq(files.repoId, repoId), eq(files.path, p))).get()?.h;
+        expect(hashOf("src/app/loader.ts")).toBe("");
+        expect(hashOf("src/app/main.ts")).not.toBe("");
 
-        // the next full run parses everything again, so loader.ts's bytes, unchanged, are read by this adapter at last
-        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 21, edges: 31, errors: [] });
+        // the next full run parses loader.ts alone, with this adapter, and edge #5 is back
+        expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 1, unchanged: 20, edges: 31, errors: [] });
         expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION);
     });
 });

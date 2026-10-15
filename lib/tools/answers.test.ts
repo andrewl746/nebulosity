@@ -430,6 +430,18 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         ]);
     });
 
+    it("the default summary with through, or on a file, answers with that file's cycle", () => {
+        const cycle = [
+            "The shortest import cycle through src/editor/common/model.ts (3 steps):",
+            "  src/editor/common/model.ts",
+            '  → src/editor/common/tokens.ts  (import "./tokens")',
+            '  → src/editor/common/textModel.ts  (import "./textModel")',
+            '  → src/editor/common/model.ts  (import "./model")',
+        ];
+        expect(text("src", "summary", { through: "src/editor/common/model.ts" })).toEqual(cycle);
+        expect(text("src/editor/common/model.ts", "summary")).toEqual(cycle);
+    });
+
     it("no cycle through storage.ts", () => {
         expect(text("src/platform/common/storage.ts", "cycles")).toEqual(["src/platform/common/storage.ts is in no import cycle."]);
     });

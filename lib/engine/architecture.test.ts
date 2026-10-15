@@ -112,12 +112,20 @@ describe("architecture(), against the ground truth", () => {
         expect(architecture(root, "src/editor/common/model.ts", "cycles").through?.cycle).toHaveLength(4);
     });
 
-    it("takes through only with cycles: a summary would have printed no cycles for a folder that has one", () => {
+    it("reads through, or a file, on the default summary as a cycles question; with any other report it refuses through", () => {
+        // model.ts → tokens.ts → textModel.ts → model.ts: the ground truth's one cycle, 3 steps, 4 entries
+        const cycle = ["src/editor/common/model.ts", "src/editor/common/tokens.ts", "src/editor/common/textModel.ts", "src/editor/common/model.ts"];
+        const viaThrough = architecture(root, "src", "summary", { through: "src/editor/common/model.ts" });
+        expect(viaThrough).toMatchObject({ report: "cycles", through: { file: "src/editor/common/model.ts", cycle } });
+        expect(viaThrough.cycles).toBeUndefined();   // no summary that would read "Import cycles: none"
+        expect(architecture(root, "src/editor/common/model.ts", "summary")).toMatchObject({ report: "cycles", kind: "file", through: { cycle } });
+
         const sentence = 'through goes with report "cycles": ask again with report "cycles" for the shortest import cycle through that file.';
-        expect(() => architecture(root, "src", "summary", { through: "src/editor/common/model.ts" })).toThrow(sentence);
+        expect(() => architecture(root, "src", "layers", { through: "src/editor/common/model.ts" })).toThrow(sentence);
+        expect(() => architecture(root, "src", "conventions", { through: "src/editor/common/model.ts" })).toThrow(sentence);
         expect(() => architecture(root, "src", "unused", { through: "src/editor/common/model.ts" })).toThrow(sentence);
-        expect(architecture(root, "src", "cycles", { through: "src/editor/common/model.ts" }).through?.cycle).toHaveLength(4);
-        // the summary of src counts its one group of three files (the ground truth's cycle)
-        expect(architecture(root, "src", "summary").cycles).toEqual([{ size: 3, files: ["src/editor/common/model.ts", "src/editor/common/textModel.ts", "src/editor/common/tokens.ts"] }]);
+        expect(() => architecture(root, "src/app/main.ts", "unused")).toThrow('architecture reads a folder ("" for the repo); for one file, ask for report "cycles".');
+        // the summary of src with no through counts its one group of three files
+        expect(architecture(root, "src", "summary")).toMatchObject({ report: "summary", cycles: [{ size: 3, files: ["src/editor/common/model.ts", "src/editor/common/textModel.ts", "src/editor/common/tokens.ts"] }] });
     });
 });

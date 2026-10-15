@@ -326,9 +326,12 @@ export function architecture(repoRoot: string, targetPath: string, report: Archi
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     return db.transaction(() => {
         const kind = requireKind(db, repoId, targetPath);
-        if (kind === "file" && report !== "cycles") throw new BadInputError('architecture reads a folder ("" for the repo); for one file, ask for report "cycles".');
-        // through answers one file's cycle, in place of the groups: with the summary it would have left "Import cycles: none"
-        if (options.through !== undefined && report !== "cycles"){
+        // through, or a file as the path, asks about one file's cycle. On the default report (summary) that is the
+        // question, so it's answered as cycles; with the summary itself through took the place of the groups and a folder
+        // with cycles read "Import cycles: none". Only a report that can't use them (layers, conventions, unused) refuses.
+        const effective: ArchitectureReport = report === "summary" && (options.through !== undefined || kind === "file") ? "cycles" : report;
+        if (kind === "file" && effective !== "cycles") throw new BadInputError('architecture reads a folder ("" for the repo); for one file, ask for report "cycles".');
+        if (options.through !== undefined && effective !== "cycles"){
             throw new BadInputError('through goes with report "cycles": ask again with report "cycles" for the shortest import cycle through that file.');
         }
         const through = kind === "file" ? targetPath : options.through;
@@ -336,25 +339,25 @@ export function architecture(repoRoot: string, targetPath: string, report: Archi
 
         const index = importIndexFor(db, repoId, readIndexVersion(db, repoId));
         const range = rangeOf(index, targetPath, kind);
-        const answer: ArchitectureAnswer = { path: targetPath, kind, report };
-        const all = report === "summary";
+        const answer: ArchitectureAnswer = { path: targetPath, kind, report: effective };
+        const all = effective === "summary";
 
-        if (all || report === "layers"){
+        if (all || effective === "layers"){
             const parts: Part[] = [
                 ...loadChildFolders(db, repoId, targetPath).map((f) => ({ path: f.path, kind: "folder" as const })),
                 ...loadChildFiles(db, repoId, targetPath).map((f) => ({ path: f.path, kind: "file" as const })),
             ];
             answer.layers = layersOf(parts, loadLevelEdgeRows(db, repoId, targetPath), (from, to) => importsBetween(index, from, to));
         }
-        if (all || report === "conventions") answer.conventions = conventionsOf(index, targetPath);
-        if (all || report === "cycles"){
+        if (all || effective === "conventions") answer.conventions = conventionsOf(index, targetPath);
+        if (all || effective === "cycles"){
             if (through !== undefined){
                 const node = rangeOf(index, through, "file")[0];
                 const cycle = shortestCycleThrough(index, node, stronglyConnected(index).group)?.map((i) => index.paths[i]) ?? null;
                 answer.through = { file: through, cycle, specifiers: cycle ? specifiersAlong(db, repoId, cycle) : [] };
             } else answer.cycles = groupsTouching(index, range);
         }
-        if (all || report === "unused") answer.unused = unusedIn(index, range, loadEntryPoints(db, repoId));
+        if (all || effective === "unused") answer.unused = unusedIn(index, range, loadEntryPoints(db, repoId));
         return answer;
     });
 }
