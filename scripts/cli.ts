@@ -39,17 +39,65 @@ export function parseCli(argv: readonly string[]): { command: Command; args: str
 /** A `claude` command line: the command, its arguments, and whether it runs through the shell. */
 export type ClaudeCommand = { command: string; args: string[]; shell: boolean };
 
+/** A stdio registration of the server named nebulosity: its scope, what it runs, and its environment. */
+export type Registration = { scope: string; command: string; args: string[]; env: Record<string, string> };
+
 /**
- * How `setup` registers the MCP server for the repo in the current folder (ADR-048's line, per repo with --scope local).
- * On Windows `claude` is a .cmd shim that Node can only start through the shell, so the launcher's path is quoted there.
+ * The `claude mcp add` line for a registration. The environment goes as -e after the name (claude's own example: a
+ * variadic -e before the name would take the name for a value). On Windows `claude` is a .cmd shim that Node can only
+ * start through the shell, so each value and argument is quoted there.
  */
-export function setupCommand(launcher: string, platform: NodeJS.Platform = process.platform): ClaudeCommand {
-    const slashed = launcher.replace(/\\/g, "/");
+export function addCommand(registration: Registration, platform: NodeJS.Platform = process.platform): ClaudeCommand {
     const windows = platform === "win32";
+    const quoted = (arg: string): string => (windows ? `"${arg}"` : arg);
     return {
         command: "claude",
-        args: ["mcp", "add", "--scope", "local", "--transport", "stdio", "nebulosity", "--", "node", windows ? `"${slashed}"` : slashed],
+        args: [
+            "mcp", "add", "--scope", registration.scope, "--transport", "stdio", "nebulosity",
+            ...Object.entries(registration.env).flatMap(([name, value]) => ["-e", quoted(`${name}=${value}`)]),
+            "--", registration.command, ...registration.args.map(quoted),
+        ],
         shell: windows,
+    };
+}
+
+/**
+ * How `setup` registers the MCP server for a repo (ADR-048's line, per repo with --scope local): node and the launcher,
+ * written with forward slashes. A custom data folder (NEBULOSITY_DATA, absolute) goes with it, so the server Claude Code
+ * starts reads the index this copy wrote, not the default folder's.
+ */
+export function setupCommand(launcher: string, platform: NodeJS.Platform = process.platform, dataFolder?: string): ClaudeCommand {
+    const slashed = (p: string): string => p.replace(/\\/g, "/");
+    return addCommand({
+        scope: "local", command: "node", args: [slashed(launcher)], env: dataFolder === undefined ? {} : { NEBULOSITY_DATA: slashed(dataFolder) },
+    }, platform);
+}
+
+const SCOPES: Record<string, string> = { Local: "local", Project: "project", User: "user" };
+
+/**
+ * The registration `claude mcp get nebulosity` prints (Claude Code 2.1.300: `Scope: Local config (…)`, `Command:`, `Args:`
+ * with the arguments joined by spaces, then `Environment:` and one `NAME=value` per line), or null when it prints no stdio
+ * server. node's arguments are read as one (the launcher, whose path may hold spaces); another command's are split on spaces.
+ */
+export function parseRegistration(stdout: string): Registration | null {
+    const lines = stdout.split(/\r?\n/);
+    const field = (name: string): string | undefined => lines.map((line) => new RegExp(`^\\s+${name}:\\s?(.*)$`).exec(line)?.[1]).find((v) => v !== undefined);
+    const command = field("Command")?.trim();
+    if (command === undefined || command === "") return null;
+    const label = field("Scope") ?? "";
+    const argsText = (field("Args") ?? "").trim();
+    const env: Record<string, string> = {};
+    const at = lines.findIndex((line) => /^\s+Environment:\s*$/.test(line));
+    for (const line of at < 0 ? [] : lines.slice(at + 1)){
+        const pair = /^\s{3,}([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+        if (pair === null) break;
+        env[pair[1]] = pair[2];
+    }
+    return {
+        scope: SCOPES[label.split(" ")[0]] ?? label, command,
+        args: argsText === "" ? [] : command === "node" ? [argsText] : argsText.split(/\s+/),
+        env,
     };
 }
 
@@ -162,8 +210,11 @@ function runClaude(command: ClaudeCommand, cwd: string, stdio: StdioOptions): Sp
 }
 
 /**
- * `nebulosity setup [--print]`: registers the MCP server with Claude Code for the repo holding `cwd` (ADR-046's rule
- * picks it, as the server will), with ADR-048's line and no alwaysLoad (R4). It writes no file in the repo (R5).
+ * `nebulosity setup [--print]`: registers the MCP server with Claude Code for the indexed repo holding `cwd` (ADR-046's
+ * rule picks it, as the server will), in that repo's root, where --scope local files it, with ADR-048's line and no
+ * alwaysLoad (R4). It only reads the index (ADR-044's read-only open) and writes no file in the repo (R5). It first reads
+ * any registration Claude Code already has (`claude mcp get`, which changes nothing), so a different one is shown before
+ * it is replaced, and can be restored if the new one fails.
  */
 export async function runSetup(args: readonly string[], cwd: string = process.cwd()): Promise<number> {
     if (args.some((arg) => arg !== "--print")){
@@ -171,30 +222,64 @@ export async function runSetup(args: readonly string[], cwd: string = process.cw
         return 1;
     }
 
-    const { getDb } = await import("../lib/db/client");
+    const client = await import("../lib/db/client");
     const { listStagedRepositories } = await import("../lib/db/store/stages");
     const { chooseRepo } = await import("../lib/tools/repo");
-    const roots = listStagedRepositories(getDb()).map((repo) => repo.rootPath);
-    if (chooseRepo(cwd, roots, null) === null){
+    // setup only reads the index: no migration, nothing written (ADR-044), so it can't race the Map or the worker
+    client.useReadOnlyDatabase();
+    let roots: string[];
+    try{
+        roots = listStagedRepositories(client.getDb()).map((repo) => repo.rootPath);
+    } catch (err){
+        if (err instanceof client.DatabaseMissingError){
+            console.error(`Nebulosity hasn't indexed any repository yet (there's no index at ${dataPath("nebulosity.db")}). Index it first: nebulosity index .`);
+        } else console.error(messageOf(err));
+        return 1;
+    }
+    const choice = chooseRepo(cwd, roots, null);
+    if (choice === null){
         console.error(`Nebulosity hasn't indexed a repository holding ${cwd}. Index it first: nebulosity index .`);
         return 1;
     }
+    // --scope local files the registration under the folder claude runs in: the repo's root, wherever inside it setup ran
+    const root = choice.root;
 
-    const add = setupCommand(nebulosityPath("mcp", "launch.mjs"));
+    const add = setupCommand(nebulosityPath("mcp", "launch.mjs"), process.platform, process.env.NEBULOSITY_DATA ? dataDir() : undefined);
+    const remove: ClaudeCommand = { ...add, args: ["mcp", "remove", "--scope", "local", "nebulosity"] };
+    const got = runClaude({ ...add, args: ["mcp", "get", "nebulosity"] }, root, "pipe");
+    const earlier = got.error || got.status !== 0 ? null : parseRegistration(String(got.stdout ?? ""));
+    const earlierLine = earlier === null ? null : commandLine(addCommand(earlier));
+    const replacing = earlier !== null && earlier.scope === "local";
+    const same = earlierLine === commandLine(add);
+
     if (args.includes("--print")){
-        console.log(commandLine(add));
+        console.log(replacing ? `Run these in ${root}:` : `Run this in ${root}:`);
+        if (replacing) console.log(`  ${commandLine(remove)}`);
+        console.log(`  ${commandLine(add)}`);
+        if (earlier !== null && !replacing) console.log(`(Claude Code also has a ${earlier.scope} registration named nebulosity; this repo's local one takes its place here.)`);
     } else{
+        if (earlierLine !== null && !same){
+            console.log([
+                replacing ? "Claude Code already has a nebulosity server for this repo:" : `Claude Code already has a nebulosity server in its ${earlier!.scope} config:`,
+                `  ${earlierLine}`,
+                replacing ? "It is replaced by this one:" : "This repo's local one, registered now, takes its place here:",
+                `  ${commandLine(add)}`,
+            ].join("\n"));
+        }
         // A second setup (after an upgrade moved the package, ADR-058) replaces the first: claude mcp add refuses a name
         // the scope already has. Its own message when there's nothing to remove isn't shown.
-        const removed = runClaude({ ...add, args: ["mcp", "remove", "--scope", "local", "nebulosity"] }, cwd, "ignore");
-        const added = runClaude(add, cwd, "inherit");
+        const removed = runClaude(remove, root, "ignore");
+        const added = runClaude(add, root, "inherit");
         if (added.error || added.status !== 0){
-            console.error(`Claude Code didn't register the server${added.error ? ` (${added.error.message})` : ""}. Is Claude Code installed? You can run this yourself, in this folder:`);
-            console.error(`  ${commandLine(add)}`);
+            console.error(`Claude Code didn't register the server${added.error ? ` (${added.error.message})` : ""}. Is Claude Code installed?`);
+            if (replacing && removed.status === 0){
+                console.error(`The earlier registration was removed. To restore it, run this in ${root}:\n  ${earlierLine}`);
+                console.error(`To try this one again:\n  ${commandLine(add)}`);
+            } else console.error(`You can run this yourself, in ${root}:\n  ${commandLine(add)}`);
             return 1;
         }
-        console.log(`Registered Nebulosity with Claude Code for ${cwd}${removed.status === 0 ? ", in place of the earlier registration" : ""}.`
-            + " A Claude Code session started here can now use its tools.");
+        console.log(`Registered Nebulosity with Claude Code for ${root}${replacing ? same ? " (the same registration as before)" : ", in place of the earlier registration" : ""}.`);
+        console.log(`Start Claude Code sessions in ${root} (the registration is that folder's): a session there can use Nebulosity's tools.`);
     }
 
     console.log("");

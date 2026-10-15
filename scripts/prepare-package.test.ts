@@ -7,10 +7,14 @@ import { makeTempDir } from "../test/helpers/temp";
 const SCRIPT = path.resolve("scripts", "prepare-package.mjs");
 const HASHED = "better-sqlite3-0123456789abcdef";
 
+/** The package folder the temp build's link points at: its own, so a removal that followed the link could only delete this. */
+const FAKE_PACKAGE = path.join("fake-packages", "better-sqlite3");
+
 /**
  * A built Map as Turbopack leaves it: a BUILD_ID, one server external linked under its hashed name (a junction on
  * Windows, as Turbopack makes it), the build folder's path in the server files manifest, and that path in the build
- * cache too, which the package never ships.
+ * cache too, which the package never ships. The link points at a stand-in package folder inside the temp build, never at
+ * the checkout's node_modules: a regression that removed through the link would otherwise delete the owner's package.
  */
 function turbopackBuild(): string {
     const root = makeTempDir("neb-build-");
@@ -18,7 +22,10 @@ function turbopackBuild(): string {
     fs.mkdirSync(path.join(next, "node_modules"), { recursive: true });
     fs.mkdirSync(path.join(next, "cache"));
     fs.writeFileSync(path.join(next, "BUILD_ID"), "build-1");
-    fs.symlinkSync(path.resolve("node_modules", "better-sqlite3"), path.join(next, "node_modules", HASHED), process.platform === "win32" ? "junction" : "dir");
+    fs.mkdirSync(path.join(root, FAKE_PACKAGE), { recursive: true });
+    fs.writeFileSync(path.join(root, FAKE_PACKAGE, "package.json"), JSON.stringify({ name: "better-sqlite3", main: "index.js" }));
+    fs.writeFileSync(path.join(root, FAKE_PACKAGE, "index.js"), "module.exports = {};\n");
+    fs.symlinkSync(path.join(root, FAKE_PACKAGE), path.join(next, "node_modules", HASHED), process.platform === "win32" ? "junction" : "dir");
     const manifest = { config: { outputFileTracingRoot: root, turbopack: { root } }, appDir: root, relativeAppDir: "" };
     fs.writeFileSync(path.join(next, "required-server-files.json"), JSON.stringify(manifest, null, 2));
     fs.writeFileSync(path.join(next, "required-server-files.js"), `self.__SERVER_FILES_MANIFEST=${JSON.stringify(manifest, null, 2)};`);
@@ -27,6 +34,22 @@ function turbopackBuild(): string {
 }
 
 const run = (root: string, ...args: string[]) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: "utf8" });
+
+/** Whether a path is the folder or inside it, both resolved through their links (a junction's target is where it points). */
+const inside = (p: string, folder: string): boolean => {
+    const [a, b] = [fs.realpathSync.native(p), fs.realpathSync.native(folder)].map((x) => x.toLowerCase());
+    return a === b || a.startsWith(`${b}${path.sep}`);
+};
+
+describe("the test's own build (sweep B, item 20)", () => {
+    it("links the hashed name at a package folder inside the temp build, never at the checkout's node_modules", () => {
+        const root = turbopackBuild();
+        const link = path.join(root, ".next", "node_modules", HASHED);
+        expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+        expect(inside(link, root)).toBe(true);
+        expect(inside(link, path.resolve("node_modules"))).toBe(false);
+    });
+});
 
 describe("prepare-package (ADR-058: a built Map npm can pack, with nothing of the build machine in it)", () => {
     it("--check refuses a Turbopack build as it stands: the link and the build folder's path, never the cache", () => {
@@ -52,7 +75,7 @@ describe("prepare-package (ADR-058: a built Map npm can pack, with nothing of th
         expect(fs.readFileSync(path.join(stub, "index.mjs"), "utf8")).toBe('export * from "better-sqlite3";\nexport { default } from "better-sqlite3";\n');
         expect(JSON.parse(fs.readFileSync(path.join(stub, "package.json"), "utf8")).exports).toEqual({ import: "./index.mjs", require: "./index.cjs" });
         // the link's target is untouched: only the link was removed
-        expect(fs.existsSync(path.resolve("node_modules", "better-sqlite3", "package.json"))).toBe(true);
+        expect(fs.readFileSync(path.join(root, FAKE_PACKAGE, "index.js"), "utf8")).toBe("module.exports = {};\n");
 
         const manifest = JSON.parse(fs.readFileSync(path.join(root, ".next", "required-server-files.json"), "utf8"));
         expect(manifest).toEqual({ config: { outputFileTracingRoot: ".", turbopack: { root: "." } }, appDir: ".", relativeAppDir: "" });
@@ -63,5 +86,40 @@ describe("prepare-package (ADR-058: a built Map npm can pack, with nothing of th
     it("passes a folder with no built Map: the package works without one", () => {
         const result = run(makeTempDir("neb-unbuilt-"), "--check");
         expect(result.status).toBe(0);
+    });
+
+    it("refuses a .next with no BUILD_ID, and still scans what it holds (sweep B, item 18)", () => {
+        const root = makeTempDir("neb-half-built-");
+        fs.mkdirSync(path.join(root, ".next", "server"), { recursive: true });
+        // the folder as the script sees it (its working folder, links resolved), written into a built file
+        fs.writeFileSync(path.join(root, ".next", "server", "page.js"), `const dir = ${JSON.stringify(fs.realpathSync.native(root))};\n`);
+        for (const args of [["--check"], []]){
+            const result = run(root, ...args);
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain("prepare-package: .next has no BUILD_ID: a build that didn't finish, or a dev server's. Build the Map with npm run build:package, or remove .next.");
+            expect(result.stderr).toContain(`${path.join(".next", "server", "page.js")} names this machine's folders`);
+        }
+    });
+
+    it("finds the build folder however a file writes it: URL-encoded, with mixed separators, as Claude Code's folder name (sweep B, item 19)", () => {
+        const root = makeTempDir("neb-built-");
+        const next = path.join(root, ".next");
+        fs.mkdirSync(path.join(next, "server"), { recursive: true });
+        fs.writeFileSync(path.join(next, "BUILD_ID"), "build-1");
+        const real = fs.realpathSync.native(root);
+        const names = real.replace(/\\/g, "/").split("/");
+        const back = String.fromCharCode(92);
+        // every other separator a backslash: C:\Users/Ann\AppData/… (or \tmp/neb-built-… on a system whose paths start with /)
+        const mixed = names.map((name, i) => (i === 0 ? name : `${i % 2 === 1 ? back : "/"}${name}`)).join("");
+        fs.writeFileSync(path.join(next, "server", "encoded.js"), `const url = "file:///${encodeURIComponent(real)}";\n`);
+        fs.writeFileSync(path.join(next, "server", "mixed.js"), `const dir = "${mixed}";\n`);
+        // C:/Users/Ann becomes C--Users-Ann (lib/demo/privacy.ts's slug)
+        fs.writeFileSync(path.join(next, "server", "slug.js"), `const project = "${real.replace(/\\/g, "/").replace(/[^a-zA-Z0-9]/g, "-")}";\n`);
+        fs.writeFileSync(path.join(next, "server", "clean.js"), "const nothing = 1;\n");
+
+        const result = run(root, "--check");
+        expect(result.status).toBe(1);
+        for (const file of ["encoded.js", "mixed.js", "slug.js"]) expect(result.stderr).toContain(`${path.join(".next", "server", file)} names this machine's folders`);
+        expect(result.stderr).not.toContain("clean.js");
     });
 });

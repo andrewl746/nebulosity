@@ -15,10 +15,19 @@
 //    outputFileTracingRoot, repoRoot and turbopack.root. `next start` reads only its config flags, so each becomes ".":
 //    nothing of the build machine goes into anything published (ADR-051).
 // The check then reads every file under .next that package.json's `files` ships (cache and dev left out) and fails on
-// any link or any spelling of the build folder or the home folder.
+// any link or any spelling of the build folder or the home folder. It runs whenever .next exists, and a .next without a
+// BUILD_ID (a build that didn't finish, or a dev server's) is refused, not passed as "no Map": it would ship as it is.
+//
+// The spellings are lib/demo/privacy.ts's, the rules the demo export and the eval's transcripts are held to (ADR-049,
+// ADR-051): forward and back slashes, JSON's escapes, URL-encoded either way (Ann%20Lee), Git Bash's /c/…, Claude Code's
+// folder name (C--Users-Ann), and any mix of separators or deeper escaping. This script loads that file through tsx (a
+// dependency, which bin/boot.mjs loads the same way) rather than keeping a plain-JS copy: one copy of the rules can't drift.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+await import("tsx");
+const { findLeak, leakNeedles } = await import("../lib/demo/privacy.ts");
 
 const ROOT = process.cwd();
 const NEXT = path.join(ROOT, ".next");
@@ -60,20 +69,24 @@ async function replaceLink(external){
     fs.writeFileSync(path.join(external.at, "index.mjs"), `${esm.join("\n")}\n`);
 }
 
-/** Every spelling of a folder a built file might hold: as given, with forward slashes, and with JSON's escaped backslashes. */
-function spellings(folder){
+/**
+ * How Next writes the build folder in its server files manifest: as given, with forward slashes, and with JSON's escaped
+ * backslashes. These are what the fix rewrites to "."; the check after it looks for every spelling privacy.ts knows.
+ */
+function manifestSpellings(folder){
     const forward = folder.replace(/\\/g, "/");
     return [...new Set([folder, forward, folder.replace(/\\/g, "\\\\")])];
 }
 
 /** The build folder's path in the server files manifest becomes "." (see 2. above). */
 function scrubServerFiles(){
+    const folders = [...new Set([ROOT, fs.realpathSync.native(ROOT)])];
     for (const name of ["required-server-files.json", "required-server-files.js"]){
         const file = path.join(NEXT, name);
         if (!fs.existsSync(file)) continue;
         let text = fs.readFileSync(file, "utf8");
-        // the JSON-escaped spelling first: it's how both files write a Windows path
-        for (const spelling of spellings(ROOT).sort((a, b) => b.length - a.length)) text = text.split(spelling).join(".");
+        // the longest spelling first (the JSON-escaped one, how both files write a Windows path)
+        for (const spelling of folders.flatMap(manifestSpellings).sort((a, b) => b.length - a.length)) text = text.split(spelling).join(".");
         fs.writeFileSync(file, text);
     }
 }
@@ -91,33 +104,46 @@ function shippedFiles(dir = NEXT, top = true){
     return files;
 }
 
+/**
+ * The folders whose every spelling is a leak: the build folder (as the working folder and with its links resolved) and
+ * the home folder. privacy.ts refuses a folder too shallow to scan for (a home of "/root" would match every path under
+ * /root), so such a one is left out, and said.
+ */
+function machineFolders(){
+    const folders = [...new Set([ROOT, fs.realpathSync.native(ROOT), os.homedir()])];
+    const deep = folders.filter((folder) => folder.replace(/\\/g, "/").split("/").filter(Boolean).length >= 2);
+    for (const folder of folders.filter((f) => !deep.includes(f))) console.log(`prepare-package: ${folder} is too shallow to scan for, so it isn't`);
+    return deep;
+}
+
 /** Links (npm drops them) and machine paths (ADR-051) in what the package would ship. */
 function problems(){
     const found = [];
-    const machine = [...new Set([...spellings(ROOT), ...spellings(os.homedir())])];
-    const windows = process.platform === "win32";
-    const needles = windows ? machine.map((m) => m.toLowerCase()) : machine;
+    const needles = leakNeedles({ folders: machineFolders() });
     for (const { file, link } of shippedFiles()){
         const shown = path.relative(ROOT, file);
         if (link){
             found.push(`${shown} is a link, which npm leaves out of the tarball`);
             continue;
         }
-        // latin1 keeps every byte, so a path inside a binary file is found too
-        const text = fs.readFileSync(file, "latin1");
-        const haystack = windows ? text.toLowerCase() : text;
-        if (needles.some((needle) => haystack.includes(needle))) found.push(`${shown} names this machine's folders`);
+        // as privacy.ts's scanForLeaks reads a file: UTF-8, latin1 (every byte, so a path inside a binary file is found
+        // too) and latin1 without its NULs (UTF-16 text)
+        const bytes = fs.readFileSync(file);
+        const latin1 = bytes.toString("latin1");
+        const leak = findLeak(bytes.toString("utf8"), needles) ?? findLeak(latin1, needles) ?? findLeak(latin1.replace(/\0/g, ""), needles);
+        if (leak !== null) found.push(`${shown} names this machine's folders`);
     }
     return found;
 }
 
-if (!fs.existsSync(path.join(NEXT, "BUILD_ID"))){
+if (!fs.existsSync(NEXT)){
     // no built Map: the package works without one (`nebulosity map` says so, and doctor warns)
-    console.log("prepare-package: no built Map (.next/BUILD_ID) to prepare or check");
+    console.log("prepare-package: no built Map (.next) to prepare or check");
     process.exit(0);
 }
+const built = fs.existsSync(path.join(NEXT, "BUILD_ID"));
 
-if (!checkOnly){
+if (!checkOnly && built){
     for (const external of externals()){
         if (external.real === null || !fs.lstatSync(external.at).isSymbolicLink()) continue;
         await replaceLink(external);
@@ -127,6 +153,7 @@ if (!checkOnly){
 }
 
 const found = problems();
+if (!built) found.unshift(".next has no BUILD_ID: a build that didn't finish, or a dev server's. Build the Map with npm run build:package, or remove .next.");
 for (const external of externals()){
     if (external.real === null) found.push(`.next/node_modules/${external.hashed} isn't a package Turbopack names <name>-<hash>`);
 }

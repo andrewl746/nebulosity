@@ -2,10 +2,11 @@ import { spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DatabaseMissingError, getDb, useReadOnlyDatabase } from "../lib/db/client";
 import { indexRepository } from "../lib/index/pipeline";
 import { copyFixture } from "../test/helpers/fixture";
 import { makeTempDir } from "../test/helpers/temp";
-import { main, parseCli, runDoctor, runSetup, setupCommand, SNIPPET } from "./cli";
+import { main, parseCli, parseRegistration, runDoctor, runSetup, setupCommand, SNIPPET } from "./cli";
 
 // No test starts claude, git or npm (the plan's global constraints): the CLI's child processes are stubbed. Everything
 // else in child_process stays real (the indexer's own git calls only run in a folder with a .git, which no copy here has).
@@ -14,6 +15,13 @@ vi.mock("child_process", async (importOriginal) => ({
     spawn: vi.fn(),
     spawnSync: vi.fn(),
 }));
+
+// setup's read-only switch (ADR-044) is watched, not run: under Vitest every getDb is one in-memory database the tests
+// already opened read-write to index a fixture, and the real switch refuses to come after that first open
+vi.mock("../lib/db/client", async (importOriginal) => {
+    const real = await importOriginal<typeof import("../lib/db/client")>();
+    return { ...real, useReadOnlyDatabase: vi.fn(), getDb: vi.fn(real.getDb) };
+});
 
 type SpawnResult = ReturnType<typeof spawnSync>;
 
@@ -33,6 +41,8 @@ const printed = (spy: { mock: { calls: unknown[][] } }): string => spy.mock.call
 
 beforeEach(() => {
     vi.mocked(spawnSync).mockReset();
+    vi.mocked(useReadOnlyDatabase).mockClear();
+    vi.mocked(getDb).mockClear();
 });
 
 afterEach(() => {
@@ -68,6 +78,39 @@ describe("setupCommand (Review Focus 5)", () => {
             shell: true,
         });
     });
+
+    it("carries a custom NEBULOSITY_DATA into the registration as -e after the name, quoted for the shell like the launcher (sweep B, item 16)", () => {
+        const data = path.win32.join("C:", "Users", "Ann Lee", "neb-data");
+        expect(setupCommand(path.win32.join("C:", "pkg", "mcp", "launch.mjs"), "win32", data).args).toEqual([
+            "mcp", "add", "--scope", "local", "--transport", "stdio", "nebulosity", "-e", '"NEBULOSITY_DATA=C:/Users/Ann Lee/neb-data"', "--", "node", '"C:/pkg/mcp/launch.mjs"',
+        ]);
+        expect(setupCommand("/pkg/mcp/launch.mjs", "linux", "/home/ann lee/neb-data").args).toEqual([
+            "mcp", "add", "--scope", "local", "--transport", "stdio", "nebulosity", "-e", "NEBULOSITY_DATA=/home/ann lee/neb-data", "--", "node", "/pkg/mcp/launch.mjs",
+        ]);
+    });
+});
+
+/** What `claude mcp get nebulosity` prints for a stdio server (the 2.1.300 binary's format): its scope, command, args and environment. */
+function registered(launcher: string, env: Record<string, string> = {}, scope = "Local config (private to you in this project)"): string {
+    return [
+        "nebulosity:", `  Scope: ${scope}`, "  Status: ✓ Connected", "  Type: stdio", "  Command: node", `  Args: ${launcher}`,
+        ...(Object.keys(env).length > 0 ? ["  Environment:", ...Object.entries(env).map(([k, v]) => `    ${k}=${v}`)] : []),
+        "", 'To remove this server, run: claude mcp remove "nebulosity" -s local', "",
+    ].join("\n");
+}
+
+describe("parseRegistration (sweep B, item 14)", () => {
+    it("reads the scope, the command, the launcher (one argument, spaces and all) and the environment", () => {
+        expect(parseRegistration(registered("C:/Users/Ann Lee/old/mcp/launch.mjs", { NEBULOSITY_DATA: "C:/data", OTHER: "a=b" }))).toEqual({
+            scope: "local", command: "node", args: ["C:/Users/Ann Lee/old/mcp/launch.mjs"], env: { NEBULOSITY_DATA: "C:/data", OTHER: "a=b" },
+        });
+        expect(parseRegistration(registered("/old/launch.mjs", {}, "User config (available in all your projects)"))).toMatchObject({ scope: "user", env: {} });
+    });
+
+    it("is null when there is no stdio registration to read", () => {
+        expect(parseRegistration("")).toBeNull();
+        expect(parseRegistration("No MCP server found with name: nebulosity")).toBeNull();
+    });
 });
 
 describe("SNIPPET (R5)", () => {
@@ -91,34 +134,139 @@ describe("main", () => {
 describe("runSetup (ADR-058: R4's registration, R5's snippet)", () => {
     // the launcher setup registers: this checkout's (NEBULOSITY_HOME is unset under Vitest, so the code root is cwd)
     const launcher = path.resolve("mcp", "launch.mjs");
-    const launcherArg = process.platform === "win32" ? `"${launcher.replace(/\\/g, "/")}"` : launcher;
+    const windows = process.platform === "win32";
+    /** An argument as setup writes it: through the shell on Windows, so quoted there (setupCommand's rule). */
+    const q = (arg: string): string => (windows ? `"${arg}"` : arg);
+    const forward = (p: string): string => p.replace(/\\/g, "/");
+    const launcherArg = windows ? q(forward(launcher)) : launcher;
+    const GET = "claude mcp get nebulosity";
+    const REMOVE = "claude mcp remove --scope local nebulosity";
+    const ADD = `claude mcp add --scope local --transport stdio nebulosity -- node ${launcherArg}`;
+    // an earlier registration of an older copy, with its own data folder
+    const OLD = registered("/old/place/mcp/launch.mjs", { NEBULOSITY_DATA: "/old/data" });
+    const OLD_LINE = `claude mcp add --scope local --transport stdio nebulosity -e ${q("NEBULOSITY_DATA=/old/data")} -- node ${q("/old/place/mcp/launch.mjs")}`;
 
-    it("replaces any earlier local registration, registers the launcher in the repo's folder, writes no file there, and prints the snippet", async () => {
-        vi.mocked(spawnSync).mockReturnValue({ status: 0 } as SpawnResult);
-        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    const saved = process.env.NEBULOSITY_DATA;
+    beforeEach(() => {
+        delete process.env.NEBULOSITY_DATA;
+    });
+    afterEach(() => {
+        if (saved === undefined) delete process.env.NEBULOSITY_DATA;
+        else process.env.NEBULOSITY_DATA = saved;
+    });
+
+    /** claude as the stub answers it: `mcp get` prints `registration` (or finds none when null); remove and add exit as given. */
+    function stubClaude(registration: string | null, codes: { remove?: number; add?: number } = {}): void {
+        vi.mocked(spawnSync).mockImplementation(((command: string, args?: unknown) => {
+            const line = Array.isArray(args) ? [command, ...args].join(" ") : command;
+            if (line.startsWith(GET)) return registration === null ? { status: 1, stdout: "", stderr: "No MCP server found with name: nebulosity" } : { status: 0, stdout: registration, stderr: "" };
+            return { status: line.startsWith(REMOVE) ? codes.remove ?? 0 : codes.add ?? 0 };
+        }) as unknown as typeof spawnSync);
+    }
+
+    /** A private copy of the mini-repo, indexed; its root as the index spells it (forward slashes). */
+    function indexedRepo(): { repo: string; root: string } {
         const repo = copyFixture();
         indexRepository(repo);
+        return { repo, root: forward(repo) };
+    }
+
+    it("reads any earlier registration first, then replaces it and registers the launcher in the repo's folder, writes no file there, and prints the snippet", async () => {
+        stubClaude(null);
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const { repo, root } = indexedRepo();
         const before = fs.readdirSync(repo).sort();
 
         expect(await runSetup([], repo)).toBe(0);
-        expect(commandLines()).toEqual([
-            "claude mcp remove --scope local nebulosity",
-            `claude mcp add --scope local --transport stdio nebulosity -- node ${launcherArg}`,
-        ]);
-        expect(callOptions().map((options) => options.cwd)).toEqual([repo, repo]);
+        expect(commandLines()).toEqual([GET, REMOVE, ADD]);
+        expect(callOptions().map((options) => forward(String(options.cwd)))).toEqual([root, root, root]);
         expect(fs.readdirSync(repo).sort()).toEqual(before);   // no CLAUDE.md, no .mcp.json (R5)
         expect(printed(logs)).toContain(SNIPPET);
     });
 
-    it("with --print prints the registration and the snippet, and starts nothing", async () => {
+    it("prints an earlier registration that differs and says it is replaced (sweep B, item 14)", async () => {
+        stubClaude(OLD);
         const logs = vi.spyOn(console, "log").mockImplementation(() => {});
-        const repo = copyFixture();
-        indexRepository(repo);
+        const { repo } = indexedRepo();
+
+        expect(await runSetup([], repo)).toBe(0);
+        expect(commandLines()).toEqual([GET, REMOVE, ADD]);
+        expect(printed(logs)).toContain(`Claude Code already has a nebulosity server for this repo:\n  ${OLD_LINE}\nIt is replaced by this one:\n  ${ADD}`);
+    });
+
+    it("says the earlier registration was removed, and how to restore it, when the add then fails (sweep B, item 14)", async () => {
+        stubClaude(OLD, { add: 1 });
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const { repo, root } = indexedRepo();
+
+        expect(await runSetup([], repo)).toBe(1);
+        expect(printed(errors)).toContain(`The earlier registration was removed. To restore it, run this in ${root}:\n  ${OLD_LINE}`);
+        expect(printed(errors)).toContain(`To try this one again:\n  ${ADD}`);
+    });
+
+    it("with --print prints the registration and the snippet, and starts only the read-only claude mcp get", async () => {
+        stubClaude(null);
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const { repo } = indexedRepo();
 
         expect(await runSetup(["--print"], repo)).toBe(0);
-        expect(spawnSync).not.toHaveBeenCalled();
-        expect(printed(logs)).toContain(`claude mcp add --scope local --transport stdio nebulosity -- node ${launcherArg}`);
+        expect(commandLines()).toEqual([GET]);
+        expect(printed(logs)).toContain(ADD);
+        expect(printed(logs)).not.toContain(REMOVE);
         expect(printed(logs)).toContain(SNIPPET);
+    });
+
+    it("with --print prints the remove line too when a registration exists (sweep B, item 14)", async () => {
+        stubClaude(OLD);
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const { repo, root } = indexedRepo();
+
+        expect(await runSetup(["--print"], repo)).toBe(0);
+        expect(commandLines()).toEqual([GET]);
+        expect(printed(logs)).toContain(`Run these in ${root}:\n  ${REMOVE}\n  ${ADD}`);
+    });
+
+    it("registers in the repo's root when run in a folder inside it, and says where sessions start (sweep B, item 15)", async () => {
+        stubClaude(null);
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const { repo, root } = indexedRepo();
+
+        expect(await runSetup([], path.join(repo, "src", "app"))).toBe(0);
+        expect(callOptions().map((options) => forward(String(options.cwd)))).toEqual([root, root, root]);
+        expect(printed(logs)).toContain(`Start Claude Code sessions in ${root} (the registration is that folder's): a session there can use Nebulosity's tools.`);
+    });
+
+    it("carries a custom NEBULOSITY_DATA into the registration, as an absolute path (sweep B, item 16)", async () => {
+        stubClaude(null);
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        const { repo } = indexedRepo();
+        process.env.NEBULOSITY_DATA = "neb-data-elsewhere";
+
+        expect(await runSetup([], repo)).toBe(0);
+        const data = forward(path.resolve("neb-data-elsewhere"));
+        expect(commandLines()[2]).toBe(`claude mcp add --scope local --transport stdio nebulosity -e ${q(`NEBULOSITY_DATA=${windows ? data : path.resolve("neb-data-elsewhere")}`)} -- node ${launcherArg}`);
+    });
+
+    it("opens the index read-only: ADR-044's switch comes before the first getDb (sweep B, item 17)", async () => {
+        stubClaude(null);
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        const { repo } = indexedRepo();
+        vi.mocked(getDb).mockClear();
+
+        expect(await runSetup(["--print"], repo)).toBe(0);
+        expect(useReadOnlyDatabase).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(getDb)).toHaveBeenCalled();
+        expect(vi.mocked(useReadOnlyDatabase).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(getDb).mock.invocationCallOrder[0]);
+    });
+
+    it("with no index at all says to index first, and starts nothing (sweep B, item 17)", async () => {
+        vi.mocked(getDb).mockImplementationOnce(() => { throw new DatabaseMissingError("/data/nebulosity.db"); });
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await runSetup([], makeTempDir("neb-no-index-"))).toBe(1);
+        expect(printed(errors)).toContain("Index it first: nebulosity index .");
+        expect(spawnSync).not.toHaveBeenCalled();
     });
 
     it("refuses a folder no indexed repo holds, and starts nothing", async () => {
