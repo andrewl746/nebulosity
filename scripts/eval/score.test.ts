@@ -5,7 +5,7 @@ import zlib from "zlib";
 import { describe, expect, it } from "vitest";
 import { runName } from "./run-config";
 import {
-    cleanliness, cleanlinessLine, familyArmRows, familyOfKind, kindArmRows, kindOf, lastPerName, loadRuns, loadScorerVerdicts, makeImports, median, missingForGate, openSteps, renderAdjudicate, repoScoreContext, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
+    cleanliness, cleanlinessLine, familyArmRows, familyOfKind, kindArmRows, kindOf, lastPerName, loadRuns, loadScorerVerdicts, makeImports, median, missingForGate, openSteps, renderAdjudicate, renderRecheck, repoScoreContext, stepsOnTruths, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
     renderQuestionTable, renderTable, repoIdFor, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, scoreSession, sumTokens, toGateRun, toGateSession, type Adjudicated, type FamilyArmRow, type SessionResult, type QuestionArmRow, type QuestionData,
     type RunResult, type ScoreContext,
 } from "./score";
@@ -915,5 +915,52 @@ describe("F1 lists count only what reads as a listed file (sweep B, item 10)", (
         const s = scoreAnswer(answer("In src/vs.old:", inside, "src/vs.old/gone.ts"), q, dotted);
         expect(s.score).toBeCloseTo(2 / 3, 10);
         expect(s.flags).toContain("names non-files");
+    });
+});
+
+describe("an entries answer that names its target (sweep B fix round 1, item 3)", () => {
+    const roots = ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => `src/vs/root${n}.ts`);
+    const target = "src/vs/target.ts";
+    const withRoots: ScoreContext = { ...ctx, known: new Set([...known, ...roots, target]) };
+    const entriesQ = (files: string[]): QuestionData => ({ id: "ge1", family: "grepHard", kind: "entries", truth: { id: "ge1", kind: "entries", target, files, verified: true, notes: [] } });
+
+    it("doesn't count the target named in a lead-in as a wrong entry: the 9 roots and the target is F1 1", () => {
+        // without the rule: 10 listed, 9 right, precision 0.9, recall 1, F1 2·0.9/1.9 ≈ 0.947
+        const s = scoreAnswer(answer(`The files that end up loading ${target}:`, ...roots), entriesQ(roots), withRoots);
+        expect(s.score).toBe(1);
+        expect(s.precision).toBe(1);
+        expect(s.extra).toEqual([]);
+    });
+
+    it("still counts the target when the truth holds it", () => {
+        // a hand-made truth that lists the target among its roots: listed and wanted alike, F1 1
+        expect(scoreAnswer(answer(target, ...roots), entriesQ([target, ...roots]), withRoots).score).toBe(1);
+    });
+});
+
+describe("a steps.json 'out' on an edge an approved truth rests on (sweep B fix round 1, item 4)", () => {
+    // ctx's graph: a → b → c → d and a → x → b
+    const graph = { files: [A, B, C, D, X], edges: EDGES };
+    const chain = { id: "cn1", kind: "chain" as const, from: A, to: D, connected: true, shortest: 3, example: [A, B, C, D], verified: true, notes: [] };
+    const direct = { id: "cl1", kind: "list" as const, target: D, scope: "direct" as const, files: [C], verified: true, notes: [] };
+    const step = (from: string, to: string, decision: "in" | "out" = "out", repo = "r") => ({ repo, from, to, decision, why: "read" });
+
+    it("names each such step with the truths that rest on it; an 'in', another repo's verdict or an edge no truth uses names nothing", () => {
+        // cn1 rests on a → b, b → c and c → d; cl1 (direct importers of d) on c → d
+        const steps = [step(B, C), step(C, D), step(A, X), step(B, C, "in"), step(B, C, "out", "other")];
+        expect(stepsOnTruths(steps, "r", graph, [direct, chain])).toEqual([
+            { repo: "r", from: B, to: C, truths: ["cn1"] },
+            { repo: "r", from: C, to: D, truths: ["cl1", "cn1"] },
+        ]);
+    });
+
+    it("prints them as a recheck of the truth", () => {
+        expect(renderRecheck([{ repo: "r", from: C, to: D, truths: ["cl1", "cn1"] }], "eval2")).toBe([
+            "## Truths to recheck",
+            "",
+            "A grading-time verdict in eval2/truth/steps.json says each step below is not an import, but an approved truth rests on it. Recheck the truth: it stays as approved until the owner rules on it.",
+            "",
+            `- r: ${C} → ${D}: recheck the truth (cl1, cn1)`,
+        ].join("\n"));
     });
 });

@@ -32,19 +32,40 @@ export const userMessage = (text: string): string => JSON.stringify({ type: "use
 export const resultCount = (jsonl: string): number => streamEvents(jsonl).filter((e) => e.type === "result").length;
 
 /**
+ * What the runner does next in a session, `sent` messages of `total` written so far: wait while the last one has no
+ * result; else send the next; else close stdin. It also closes after a message that ran out of the session's budget
+ * (error_max_budget_usd): that budget is the whole process's, so no later message can be answered, and the session ends
+ * cleanly with them unanswered (each scores 0, D1). A message that ran out of turns is that message's limit alone, so
+ * the next one is still sent.
+ */
+export function feedStep(jsonl: string, sent: number, total: number): "wait" | "send" | "close" {
+    const results = streamEvents(jsonl).filter((e) => e.type === "result");
+    if (results.length < sent) return "wait";
+    if (results.length > 0 && results[results.length - 1].subtype === "error_max_budget_usd") return "close";
+    return sent < total ? "send" : "close";
+}
+
+/**
  * Why a session's transcript is an outage, or null. Fewer results than messages sent means it stopped early; more
  * is refused (turnQuestions would no longer line up with the results). Then every message's own stretch of the
  * transcript (it has its own init and result) gets infrastructureFailure's tests, because that reads only the last result
  * and an error in the middle would be kept as an answer. A message that ran into its turn or budget limit is an answer
  * that scores 0, not an outage (infrastructureFailure already says so). That holds when the process then ends with
  * messages never answered, too (D1: a message never answered scores 0): the last result being a limit's, the session is
- * kept, and its index line names the unanswered messages (sessionIndexFields), which the scorer gives 0.
+ * kept, and its index line names the unanswered messages (sessionIndexFields), which the scorer gives 0. But only when
+ * nothing after that result shows work on the next message: an assistant event there means the next message had started,
+ * and its missing result is a crash, an outage like any other.
  */
 export function sessionOutage(jsonl: string, messagesSent: number): string | null {
-    const results = streamEvents(jsonl).filter((e) => e.type === "result");
-    const answered = results.length;
-    const endedAtLimit = answered > 0 && LIMITS.includes(results[answered - 1].subtype);
-    if (answered < messagesSent && !endedAtLimit) return `the session ended after ${answered} of ${messagesSent} results (killed, crashed or timed out before the last answer)`;
+    const events = streamEvents(jsonl);
+    const lastResult = events.map((e) => e.type).lastIndexOf("result");
+    const answered = events.filter((e) => e.type === "result").length;
+    const limit: string | null = lastResult >= 0 && LIMITS.includes(events[lastResult].subtype) ? events[lastResult].subtype : null;
+    const workedOn = events.slice(lastResult + 1).some((e) => e.type === "assistant");
+    if (answered < messagesSent && limit !== null && workedOn){
+        return `the session ended after ${answered} of ${messagesSent} results: message ${answered + 1} had started work after message ${answered}'s ${limit}, and has no result (killed or crashed)`;
+    }
+    if (answered < messagesSent && limit === null) return `the session ended after ${answered} of ${messagesSent} results (killed, crashed or timed out before the last answer)`;
     if (answered > messagesSent) return `the session has ${answered} results for ${messagesSent} messages sent, so the questions can't be matched to the answers`;
     let message = 0;
     let segment: Json[] = [];

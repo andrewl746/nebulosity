@@ -2,7 +2,9 @@ import { spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { leakNeedles } from "../lib/demo/privacy";
 import { makeTempDir } from "../test/helpers/temp";
+import { machineNeedles } from "./package-needles.mjs";
 
 const SCRIPT = path.resolve("scripts", "prepare-package.mjs");
 const HASHED = "better-sqlite3-0123456789abcdef";
@@ -121,5 +123,25 @@ describe("prepare-package (ADR-058: a built Map npm can pack, with nothing of th
         expect(result.status).toBe(1);
         for (const file of ["encoded.js", "mixed.js", "slug.js"]) expect(result.stderr).toContain(`${path.join(".next", "server", file)} names this machine's folders`);
         expect(result.stderr).not.toContain("clean.js");
+    });
+});
+
+describe("machineNeedles (sweep B fix round 1, item 5)", () => {
+    it("throws when every folder is too shallow to scan for, rather than call every file clean", () => {
+        // a build at /build with a home of /root (a container): both one segment deep, so privacy.ts would give no needle
+        const notes: string[] = [];
+        expect(() => machineNeedles(["/build", "/root"], leakNeedles, (note: string) => notes.push(note))).toThrow(
+            "prepare-package: nothing to scan for: every folder (/build, /root) is too shallow, and scanning for nothing would call every file clean.",
+        );
+    });
+
+    it("gives the deep folders' needles, and says which shallow one it left out", () => {
+        const notes: string[] = [];
+        const needles = machineNeedles(["/home/ann/build", "/home/ann/build", "/root"], leakNeedles, (note: string) => notes.push(note));
+        // the build folder's own spelling and its slug (C:/Users/Ann becomes C--Users-Ann; here -home-ann-build)
+        expect(needles).toContain("/home/ann/build");
+        expect(needles).toContain("-home-ann-build");
+        expect(needles.some((needle: string) => needle === "/root" || needle === "-root")).toBe(false);
+        expect(notes).toEqual(["prepare-package: /root is too shallow to scan for, so it isn't"]);
     });
 });

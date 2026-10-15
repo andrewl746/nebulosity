@@ -30,7 +30,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import zlib from "zlib";
-import { buildRepoGraphs, EVAL1, parseAdjudications, type Adjudication, type ChainTruthFile, type CycleTruthFile, type ImpactTruthFile, type ListTruthFile, type PairsTruthFile, type TruthFile } from "./build-truth";
+import { buildRepoGraphs, EVAL1, parseAdjudications, restingEdges, type Adjudication, type ChainTruthFile, type CycleTruthFile, type ImpactTruthFile, type ListTruthFile, type PairsTruthFile, type TruthFile } from "./build-truth";
 import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreList, scorePairs } from "./answer";
 import { loadDefinition } from "./definition";
 import { gateVerdict, type GateRun, type GateSession, type QuestionKind, type Verdict } from "./gate";
@@ -38,6 +38,7 @@ import type { Arm, RunId } from "./run-config";
 import { scanRepo } from "./scan";
 import { summarizeSession, type SessionDef, type SessionFile, type SessionSummary } from "./session";
 import { summarizeRun, type RunSummary } from "./transcript";
+import type { Graph } from "./truth";
 
 export type Family = "bigPicture" | "list" | "chain" | "grepHard";
 export type Rubric = { id: string; source: string; points: { id: string; text: string; check: string; holds: boolean | null; note: string }[] };
@@ -174,11 +175,15 @@ function scoreNewKind(out: AnswerScore, section: string, truth: TruthFile, ctx: 
     // unused, violations and entries: a set of files, scored by F1 (recall and precision beside it)
     // a listed path that isn't a file of the repo is a false positive, and is flagged; but only one that reads as a file
     const wanted = (truth as { files: string[] }).files;
-    const listed = [...out.files, ...listedNonFiles(out.notFiles, ownFolders(truth))];
+    // an entries answer's lead-in may name the file it asks about ("The files that end up loading src/x.ts:"), a real
+    // file that isn't an entry: it lists nothing, unless the truth itself holds it
+    const target = truth.kind === "entries" && !wanted.includes(truth.target) ? truth.target : null;
+    const nonFiles = listedNonFiles(out.notFiles, ownFolders(truth));
+    const listed = [...out.files.filter((f) => f !== target), ...nonFiles];
     const s = scoreList(listed, wanted);
     return {
         ...out, score: f1(listed, wanted), recall: s.recall, precision: s.precision, hits: s.hits, missed: s.missed, extra: s.extra,
-        flags: listed.length > out.files.length ? [...out.flags, "names non-files"] : out.flags,
+        flags: nonFiles.length > 0 ? [...out.flags, "names non-files"] : out.flags,
     };
 }
 
@@ -382,10 +387,10 @@ export function loadScorerVerdicts(dir: string, repoIds: readonly string[]): { t
  */
 export function repoScoreContext(
     root: string, repoId: string, firstEval: boolean, adjudicated: readonly Adjudicated[], verdicts: readonly Adjudication[], steps: readonly Adjudication[] = [],
-): { ctx: ScoreContext; edges: [string, string][] } {
+): { ctx: ScoreContext; edges: [string, string][]; graph: Graph } {
     if (firstEval){
         const g = scanRepo(root);
-        return { edges: g.edges, ctx: { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicatedFor(adjudicated, repoId)) } };
+        return { edges: g.edges, graph: g, ctx: { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicatedFor(adjudicated, repoId)) } };
     }
     const built = buildRepoGraphs(root, repoId, verdicts, { resolveBare: true });
     // the truth's graph already holds every "in", and lacks every "out" unless an "in" on the same edge put it back
@@ -393,7 +398,7 @@ export function repoScoreContext(
     const inGraph = new Set(built.graph.edges.map(([a, b]) => `${a}${SEP}${b}`));
     const outs = fromTruthVerdicts(built.verdicts.filter((v) => v.decision === "out")).filter((j) => !inGraph.has(`${j.from}${SEP}${j.to}`));
     return {
-        edges: built.scanner.edges.map(([a, b]): [string, string] => [a, b]),
+        edges: built.scanner.edges.map(([a, b]): [string, string] => [a, b]), graph: built.graph,
         ctx: { repoRoot: `<${repoId}>`, known: built.known, imports: makeImports(built.graph.edges, [...outs, ...adjudicatedFor(fromTruthVerdicts(steps), repoId)]) },
     };
 }
@@ -555,6 +560,33 @@ export function renderAdjudicate(steps: readonly OpenStep[], options: { firstEva
             `- ${repo}: ${a} → ${b}`,
             `  {"repo": ${JSON.stringify(repo)}, "from": ${JSON.stringify(a)}, "to": ${JSON.stringify(b)}, "decision": "", "why": ""}`,
         ]),
+    ].join("\n");
+}
+
+/** A grading-time "out" on an edge approved truths rest on, and those truths' ids. */
+export type TruthRecheck = { repo: string; from: string; to: string; truths: string[] };
+
+/**
+ * The steps.json "out" verdicts of one repo that land on an edge an approved truth rests on (restingEdges: a chain's or a
+ * cycle's steps, a list's imports, each dependent's way to an impact or entries target, …), with those truths' ids,
+ * sorted. Such a verdict and the truth can't both be right: the truth stays as approved, and the owner rechecks it.
+ */
+export function stepsOnTruths(steps: readonly Adjudication[], repo: string, graph: Graph, truths: readonly TruthFile[]): TruthRecheck[] {
+    const outs = steps.filter((v) => v.repo === repo && v.decision === "out" && v.to !== null);
+    if (outs.length === 0) return [];
+    const resting = truths.map((t) => ({ id: t.id, edges: new Set(restingEdges(graph, t).map(([a, b]) => `${a}${SEP}${b}`)) }));
+    return outs.flatMap((v) => {
+        const ids = resting.filter((t) => t.edges.has(`${v.from}${SEP}${v.to}`)).map((t) => t.id).sort();
+        return ids.length === 0 ? [] : [{ repo, from: v.from, to: v.to as string, truths: ids }];
+    });
+}
+
+/** The "Truths to recheck" section: each grading-time "out" on a truth's edge, with the truths that rest on it. */
+export function renderRecheck(items: readonly TruthRecheck[], evalName: string): string {
+    return [
+        "## Truths to recheck", "",
+        `A grading-time verdict in ${evalName}/truth/steps.json says each step below is not an import, but an approved truth rests on it. Recheck the truth: it stays as approved until the owner rules on it.`, "",
+        ...items.map((r) => `- ${r.repo}: ${r.from} → ${r.to}: recheck the truth (${r.truths.join(", ")})`),
     ].join("\n");
 }
 
@@ -853,6 +885,7 @@ function main(): void {
     let sessionResults: SessionResult[] = [];
     // each repo has its own graph: its scanner's edges, the verdicts that apply to it, and so its own context
     const edgesByRepo = new Map<string, [string, string][]>();
+    const rechecks: TruthRecheck[] = [];
     if (wanted.length > 0 || sessionRuns.length > 0){
         // one score context per repo the runs touch; each repo's HEAD is checked against its pinned commit
         const contexts = new Map<string, ScoreContext>();
@@ -865,6 +898,11 @@ function main(): void {
             const built = repoScoreContext(repoPath, repoId, firstEval, adjudicated, truthVerdicts, stepVerdicts);
             edgesByRepo.set(repoId, built.edges);
             contexts.set(repoId, built.ctx);
+            // a grading-time "out" on an edge an approved truth rests on: every truth of the repo, --only or not
+            if (stepVerdicts.some((v) => v.repo === repoId && v.decision === "out")){
+                const truths = file.questions.filter((q) => q.truth !== undefined && repoOfQuestion.get(q.id) === repoId).map((q) => readJson<TruthFile>(`${checkout}/${q.truth}`));
+                rechecks.push(...stepsOnTruths(stepVerdicts, repoId, built.graph, truths));
+            }
         }
         results = wanted.map((r) => {
             const id = parseRunName(r.name)!;
@@ -914,6 +952,7 @@ function main(): void {
         const where = firstEval ? `${name}/truth/adjudicated.json` : `${name}/truth/steps.json ({"repo", "from", "to", "decision": "out", "why"})`;
         console.log(`\n## Chain steps to read\n\nThese steps of scored chains are the scanner's alone and are not steps of the truth's own chain, which was read by hand. They count as imports; read each in the source, and add a verdict to ${where} if the scanner is wrong. They do not stop the scorer.\n\n${toRead.map((t) => `- ${many ? `${t.repo}: ` : ""}${t.step[0]} → ${t.step[1]} (${t.runs.join(", ")})`).join("\n")}`);
     }
+    if (rechecks.length > 0) console.log(`\n${renderRecheck(rechecks, name)}`);
     const steps = openSteps(results, sessionResults, (r) => repoOfQuestion.get(r.question)!);
     if (steps.length > 0){
         console.log(`\n${renderAdjudicate(steps, { firstEval, evalName: name })}`);

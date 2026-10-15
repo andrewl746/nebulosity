@@ -59,7 +59,7 @@ import {
     type Arm, type RunId,
 } from "./run-config";
 import { archiveScratch } from "./scratch";
-import { chosenSessions, resultCount, scheduleSessions, sessionIndexFields, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef } from "./session";
+import { chosenSessions, feedStep, scheduleSessions, sessionIndexFields, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef } from "./session";
 import { summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
@@ -329,7 +329,8 @@ function readHead(file: string): string {
 /**
  * Starts claude with the prompt on stdin, its stdout and stderr going straight into files. Resolves when it has ended.
  * With a list of prompts (a task session) the first is written as a stream-json user message; each next one is written
- * when the raw file holds one more `result` event than messages answered so far, and stdin closes after the last result.
+ * when the raw file holds one more `result` event than messages answered so far, and stdin closes after the last result,
+ * or after a result that ran out of the session's budget (session.ts's feedStep).
  * While it runs, the raw file is polled for the init message; `checkInit` judges it the moment it is complete, and a
  * run it faults is killed with its whole process tree there and then (the problems come back in `initProblems`).
  */
@@ -361,8 +362,11 @@ async function runClaude(
             let sent = 1;
             feed = setInterval(() => {
                 try{
-                    if (resultCount(fs.readFileSync(rawFile, "utf8")) < sent) return;
-                    if (sent < messages.length) stdin.write(`${userMessage(messages[sent++])}\n`);
+                    // feedStep: wait for the last message's result, then send the next, or close stdin after the last
+                    // answer or after the session's budget ran out (no later message could be answered)
+                    const step = feedStep(fs.readFileSync(rawFile, "utf8"), sent, messages.length);
+                    if (step === "wait") return;
+                    if (step === "send") stdin.write(`${userMessage(messages[sent++])}\n`);
                     else {
                         stdin.end();
                         clearInterval(feed);

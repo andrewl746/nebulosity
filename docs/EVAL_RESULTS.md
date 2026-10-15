@@ -99,6 +99,7 @@ Both arms may run Node.js scripts (the owner's pick on the options memo, 2026-10
   - The new sentence invites a script written with Write and run with node, so it may change how often either arm scripts and how often N reaches for its tools. The pilot checks both.
 - **Limits:** as in the setup table.
   - A run that hits its turn or budget limit scores 0 and counts. In a session, the message that hit it scores 0, and so does any message never answered.
+  - In a session, after a message runs out of the session's budget (`error_max_budget_usd`), no more messages are sent and stdin closes: that budget is the whole process's, so the later messages go unanswered and score 0. After `error_max_turns`, a limit of that message alone, the next message is sent.
   - A run killed at its time limit is an outage.
 
 ### Isolation from the owner's own Claude Code setup
@@ -137,7 +138,7 @@ Variables:
   - an API error, including one reported as a success;
   - no result;
   - a run killed at its time limit;
-  - a session with fewer results than messages sent, or with an error in any one message's stretch of the transcript. A session whose last result hit its turn or budget limit is not an outage, even when the process then ended with messages unanswered: it is kept, its index line names the unanswered questions, and each of them scores 0, as the limited message does.
+  - a session with fewer results than messages sent, or with an error in any one message's stretch of the transcript. A session whose last result hit its turn or budget limit is not an outage, even when the process then ended with messages unanswered: it is kept, its index line names the unanswered questions, and each of them scores 0, as the limited message does. That holds only when nothing after that result shows work on the next message; an assistant event there means the next message had started, and its missing result is a crash, an outage.
 
   An outage is not scored. It is re-run later (Eval #1's rule), and every attempt's raw transcript is kept.
 - **Usage:** the runner stops cleanly when the 7-day window reaches 0.85 or the 5-hour window reaches 0.9. It stops if two runs in a row report neither.
@@ -303,7 +304,7 @@ The truth never comes from Nebulosity's index (R2).
   - Valid means it starts and ends at the file and every step is an import.
   - A step nobody has read waits, as a chain's does.
   - A cycle shorter than the truth's, or a valid one where the truth says none, is flagged for a recheck of the truth.
-- **Files nothing imports, violations and entries:** F1 of the listed files against the truth's. A listed path that isn't a file of the repo counts as a false positive and is flagged, when it reads as a file: its last name has an extension, and it isn't one of the question's own folders. A folder named in a lead-in ("Unused files in `src/vs/base/common`:") or a slash-word like "and/or" lists nothing.
+- **Files nothing imports, violations and entries:** F1 of the listed files against the truth's. A listed path that isn't a file of the repo counts as a false positive and is flagged, when it reads as a file: its last name has an extension, and it isn't one of the question's own folders. A folder named in a lead-in ("Unused files in `src/vs/base/common`:") or a slash-word like "and/or" lists nothing, and neither does an entries question's target named in a lead-in, unless the truth holds it. A grading-time "out" in `steps.json` on an edge an approved truth rests on is printed as a recheck of that truth; the truth stays as approved until the owner rules.
 - **Pairs:** F1 over the pairs (`a -> b`), with names compared in lowercase.
 - **Big-picture:** as in Eval #1 (R4). A blind grader per answer sees only the points that hold and the answer. A second blind grader grades every answer, and the owner rules on each point where the two disagree.
 - **Task sessions:** each message is scored as its question.

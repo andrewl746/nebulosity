@@ -1,7 +1,7 @@
 import { validateInit } from "./validate";
 import { describe, expect, it } from "vitest";
 import { scoreSession, type QuestionData, type ScoreContext } from "./score";
-import { chosenSessions, resultCount, scheduleSessions, sessionIndexFields, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
+import { chosenSessions, feedStep, resultCount, scheduleSessions, sessionIndexFields, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
 import { summarizeRun } from "./transcript";
 
 /**
@@ -281,5 +281,42 @@ describe("a session that hits its limit and then ends (sweep B, item 7; D1)", ()
         const s = scoreSession("s1-baseline-1", { question: "s1", arm: "baseline", repeat: 1, toolSearch: true }, ["q1", "q2", "q3", "q4"], summarizeSession(raw), questions, ctx);
         expect(s.turns.map((t) => t.score)).toEqual([1, 0, 0, 0]);
         expect(s.score).toBe(0.25);
+    });
+});
+
+describe("a crash after a limit (sweep B fix round 1, item 1)", () => {
+    const answered = [...work(1), result("success", "ANSWER:\nsrc/a.ts", 3, { i: 1, cw: 1, cr: 1, o: 1 }, 0.5), ...work(2), result("error_max_turns", "", 80, { i: 1, cw: 1, cr: 1, o: 1 }, 1.0)];
+    const replay3 = { type: "user", isReplay: true, message: { role: "user", content: "question 3" } };
+
+    it("is an outage when the next message had started work (an assistant event after the limit's result) and has no result", () => {
+        // the reviewer's probe: message 3 starts (its init, its replay, a tool call) and the process dies
+        const raw = [...answered, init, replay3, assistant([toolUse("x", "Grep")])].map(line).join("\n");
+        expect(sessionOutage(raw, 4)).toBe("the session ended after 2 of 4 results: message 3 had started work after message 2's error_max_turns, and has no result (killed or crashed)");
+    });
+
+    it("counts when the process ended at the limit, before any work on the next message", () => {
+        // message 3 was written and replayed, but no assistant event followed: nothing was lost but the limit's own
+        expect(sessionOutage([...answered, init, replay3].map(line).join("\n"), 4)).toBeNull();
+        expect(sessionOutage(answered.map(line).join("\n"), 4)).toBeNull();
+    });
+});
+
+describe("feedStep: what the runner does next in a session (sweep B fix round 1, item 2)", () => {
+    const ok = (n: number): unknown[] => [...work(n), result("success", "a", 1, { i: 1, cw: 1, cr: 1, o: 1 }, n * 0.1)];
+    const text = (events: unknown[]): string => events.map(line).join("\n");
+
+    it("waits while the last message sent has no result", () => {
+        expect(feedStep("", 1, 4)).toBe("wait");
+        expect(feedStep(text([...ok(1), ...work(2)]), 2, 4)).toBe("wait");
+    });
+
+    it("sends the next message after an answer, and after a message that ran out of turns (a limit of that message alone)", () => {
+        expect(feedStep(text(ok(1)), 1, 4)).toBe("send");
+        expect(feedStep(text([...ok(1), ...work(2), result("error_max_turns", "", 80, { i: 1, cw: 1, cr: 1, o: 1 }, 0.5)]), 2, 4)).toBe("send");
+    });
+
+    it("closes stdin after the last answer, and after the session's budget ran out, whatever is left unsent", () => {
+        expect(feedStep(text([...ok(1), ...ok(2)]), 2, 2)).toBe("close");
+        expect(feedStep(text([...ok(1), ...work(2), result("error_max_budget_usd", "", 4, { i: 1, cw: 1, cr: 1, o: 1 }, 2.0)]), 2, 4)).toBe("close");
     });
 });

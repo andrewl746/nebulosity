@@ -26,6 +26,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { machineNeedles } from "./package-needles.mjs";
+
 await import("tsx");
 const { findLeak, leakNeedles } = await import("../lib/demo/privacy.ts");
 
@@ -105,21 +107,13 @@ function shippedFiles(dir = NEXT, top = true){
 }
 
 /**
- * The folders whose every spelling is a leak: the build folder (as the working folder and with its links resolved) and
- * the home folder. privacy.ts refuses a folder too shallow to scan for (a home of "/root" would match every path under
- * /root), so such a one is left out, and said.
+ * Links (npm drops them) and machine paths (ADR-051) in what the package would ship. The machine's folders are the build
+ * folder (as the working folder and with its links resolved) and the home folder; machineNeedles leaves out one too
+ * shallow to scan for, and throws when none is left, rather than call every file clean.
  */
-function machineFolders(){
-    const folders = [...new Set([ROOT, fs.realpathSync.native(ROOT), os.homedir()])];
-    const deep = folders.filter((folder) => folder.replace(/\\/g, "/").split("/").filter(Boolean).length >= 2);
-    for (const folder of folders.filter((f) => !deep.includes(f))) console.log(`prepare-package: ${folder} is too shallow to scan for, so it isn't`);
-    return deep;
-}
-
-/** Links (npm drops them) and machine paths (ADR-051) in what the package would ship. */
 function problems(){
     const found = [];
-    const needles = leakNeedles({ folders: machineFolders() });
+    const needles = machineNeedles([ROOT, fs.realpathSync.native(ROOT), os.homedir()], leakNeedles);
     for (const { file, link } of shippedFiles()){
         const shown = path.relative(ROOT, file);
         if (link){
@@ -152,7 +146,14 @@ if (!checkOnly && built){
     scrubServerFiles();
 }
 
-const found = problems();
+let found;
+try{
+    found = problems();
+} catch (err){
+    // no needles: nothing can be called clean, so nothing is packed
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+}
 if (!built) found.unshift(".next has no BUILD_ID: a build that didn't finish, or a dev server's. Build the Map with npm run build:package, or remove .next.");
 for (const external of externals()){
     if (external.real === null) found.push(`.next/node_modules/${external.hashed} isn't a package Turbopack names <name>-<hash>`);
