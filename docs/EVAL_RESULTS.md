@@ -95,6 +95,8 @@ Both arms may run Node.js scripts (the owner's pick on the options memo, 2026-10
   - PowerShell (`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`), so every arm uses one shell.
   - Edit and Write work only under the scratch folder.
 - **Tool search:** Claude Code's default. N's five question tools are always loaded through their own `_meta` (ADR-056), which is what a user who runs `nebulosity setup` gets. On the dev set, every one of the 16 runs used them, with no ToolSearch call (MCP Dev Set #1 in `docs/BENCHMARKS.md`).
+  - Those 16 runs were the N arm only, and they ran with R6's old scripts sentence.
+  - The new sentence invites a script written with Write and run with node, so it may change how often either arm scripts and how often N reaches for its tools. The pilot checks both.
 - **Limits:** as in the setup table.
   - A run that hits its turn or budget limit scores 0 and counts. In a session, the message that hit it scores 0, and so does any message never answered.
   - A run killed at its time limit is an outage.
@@ -162,18 +164,22 @@ Prompts are the same in both arms and never name Nebulosity. Each ends with its 
 - cycle: `End with a line that says ANSWER: and then either the word none, or the cycle as file paths relative to the repository root, one per line, starting and ending with <file>, where each file imports the next.`, with the question's file in backticks in place of `<file>`;
 - pairs: `End with a line that says ANSWER: and then one line for each pair, as the importing folder's name, then ->, then the imported folder's name.`
 
-**The import rule** is Eval #1's sentence, unchanged. It ends every list, impact, files nothing imports, violations and entries prompt: `Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.` "Refers to" is Eval #1's rule, with its three ways (see Eval #1's "The questions" below). A `declare module '…'` augmentation is not one of the rule's statements.
+**The import rule** is Eval #1's sentence, unchanged: `Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.`
+- It ends every list, impact, files nothing imports, violations and entries prompt.
+- It also ends every cycle and pairs prompt, introduced by `A file imports another when this rule counts it:`. Their truths count type-only imports as the rule says, and 5 of the 6 example cycles have an `import type` step, so the question has to state the rule.
 
-**The prompts' templates** were fixed in Task 14 so that both repos ask the same way. The table leaves out the import rule.
+"Refers to" is Eval #1's rule, with its three ways (see Eval #1's "The questions" below). A `declare module '…'` augmentation is not one of the rule's statements.
+
+**The prompts' templates** were fixed in Task 14 so that both repos ask the same way. The table writes `<the import rule>` for the import rule's sentence. The kinds whose row doesn't show it end with the sentence on its own.
 
 | Kind | Prompt |
 |---|---|
 | impact | If I change `<file>`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `<f1>`, `<f2>`, …, and how many are elsewhere. |
-| cycle | Is `<file>` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. |
+| cycle | Is `<file>` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: `<the import rule>` |
 | files nothing imports | List every file in `<folder>` that no other file in the repository imports. Leave out test files. |
 | violations | List every file in `<folderA>` that directly imports a file in `<folderB>`. |
 | entries | Which files that no other file imports end up loading `<file>`, directly or through other files? Leave out test files. |
-| pairs | Code under `<folder>` sits in folders named `<n1>`, `<n2>`, …. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path. For a folder's children: Which of the folders directly inside `<folder>` import from which others? |
+| pairs | Code under `<folder>` sits in folders named `<n1>`, `<n2>`, …. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path. A pair may be a name with itself, when files under one such folder import others under the same name. A file imports another when this rule counts it: `<the import rule>`. For a folder's children: Which of the folders directly inside `<folder>` import from which others? A file imports another when this rule counts it: `<the import rule>` |
 | lists, chains | Eval #1's wordings. AFFiNE's four chains take Eval #1's four chain wordings in order. Every session chain is: Give the shortest chain of imports from `<entry>` to `<file>`. |
 | a session's first question | I'm about to change `<file>`. followed by the impact template for the same file. |
 
@@ -360,7 +366,8 @@ How `scripts/eval/gate.ts` computes it:
 - Each run's scratch folder is an opaque temp folder outside the checkout, archived beside the raw transcript and scrubbed. This replaces R6's location (`<checkout>/.nebulosity/eval2/scratch/<run name>/`), which pointed every run, in both arms, into the folder holding the eval's own answer key, and put the arm's name into the prompt.
 - N's registration is the shape `nebulosity setup` writes, plus `NEBULOSITY_LIVE: "off"`.
 - Condition 2's "lists" pools the direct and the transitive lists. A family of one transitive question per repo (three runs an arm) would turn on a single run against a 0.03 margin.
-- Wall time is the result's `duration_ms`, for single runs and sessions alike, as D1 defines it. Eval #1's tables used the process's wall clock, about 1–2 s more per run, and so does the D1 table's Eval #1 column.
+- Wall time is the result's `duration_ms`, for single runs and sessions alike, as D1 defines it. Eval #1's tables used the process's wall clock, about 1–2 s more per run, and so does the D1 table's Eval #1 column. `duration_ms` leaves the process's start-up out of the measure, N's MCP server start-up included, which leans slightly in N's favour on conditions 3a and 4 (see "Threats to validity").
+- Every cycle and pairs prompt states the import rule, introduced by "A file imports another when this rule counts it:", and the named-folder pairs prompt says a name may pair with itself (Task 14's review, the controller's ruling). Their truths use those definitions: the example cycles of 5 of the 6 cycle questions with a cycle have an `import type` step (AFFINE-CYCLE's `service.ts` has no cycle through value imports at all), 2 of AFFINE-PAIRS' 17 pairs come only from `import type`, and 7 of VSCODE-PAIRS' 21 pairs pair a name with itself. No truth, target or id changed.
 - The gate is computed only on complete data: every repo, and every scheduled run kept in both arms.
 - The truth's test rule and its set of files nothing imports are the ones under "The questions". The set counts every code file, `.d.ts` and build config included.
 - Impact truths of thousands of files were checked by method and sample, not entry by entry (R2's stated change).
@@ -385,11 +392,21 @@ How `scripts/eval/gate.ts` computes it:
   - AFFiNE and BlockSuite are popular public projects, and BlockSuite's docs site is likely in training data. The rubric's author listed 11 of the 32 points as answerable from memory or the README (AFFINE-BP1.1–BP1.3, BP1.5, BP2.2, BP2.4, BP2.6, BP4.1, BP4.2, BP4.5 and BP4.8).
   - Two of the four questions (BP2, BP3) are on BlockSuite, and BP4's first half is BlockSuite's store. The app layer (its dependency-injection framework, its modules) isn't asked about, because the framework has no prose docs to grade against.
 - **The dev set and the eval share kinds, not targets.** The tools' wording was checked on the dev set's 16 questions, one of each kind per repo, with the same templates. The overlap check refuses any shared target, but the wording may suit these kinds better than a user's own questions.
+  - VSCODE-PAIRS is the closest case: it widens the dev set's pairs question (`src/vs/platform`, 6 environment names) to `src/vs` with 7 names. The overlap check passes it by its definition, because a pairs question's target is its folder and `src/vs` isn't `src/vs/platform`.
+  - No tool wording was tuned on the dev set: Task 13 changed none.
+  - The dev set's cycle and pairs prompts didn't state the import rule. Eval #2's do.
 - **Three repeats is still a small sample.** Repeats of one arm differ, and the tables will show every run. Each grep-hard kind has one question per repo, so condition 1's floor of −0.05 per question turns on three runs an arm.
 - **D1's thresholds are the owner's, set after Eval #1**, knowing where Eval #1 fell short. They were fixed with the plan, before Eval #2's questions existed, and they don't change after the first run.
 - **The truths were read by models, and no person read every entry.** A misreading shared by the readers is possible. The third graph lowers the odds of a graph error, but not of a misread rule.
 - **The index's two known gaps cost N** on three impact questions (see "Decisions made since the plan").
-- **Type-only edges carry weight.** All 4 of AFFINE-VIOLATIONS' files are `import type`. The 112 `tests` dependents in affine-s1's impact reach the target only through one `typeof import('@blocksuite/affine/blocks/database')`. An answer that drops type-only imports loses these, but the rule says they count.
+- **Type-only edges carry weight.** An answer that drops type-only imports loses these, but the rule, which every one of these prompts states, says they count:
+  - all 4 of AFFINE-VIOLATIONS' files are `import type`;
+  - the 112 `tests` dependents in affine-s1's impact reach the target only through one `typeof import('@blocksuite/affine/blocks/database')`;
+  - the example cycles of 5 of the 6 cycle questions with a cycle have an `import type` step (VSCODE-CYCLE, the vscode-s2 and affine-s1 cycles, AFFINE-CYCLE and the affine-s3 cycle; only vscode-s1's is all value imports);
+  - 2 of AFFINE-PAIRS' 17 pairs come only from `import type`.
+
+  VSCODE-PAIRS also counts 7 pairs of a name with itself (`common -> common`, …) among its 21, which its prompt now says may count.
+- **Wall time leaves out start-up.** Wall time is `duration_ms`, Claude Code's own measure of the work, as D1 defines it. It leaves out the process's start-up, N's MCP server start-up included (about 0.7 s in MCP Benchmark #1, V1.4), which leans slightly in N's favour on conditions 3a and 4. Eval #1's tables, and the D1 table's Eval #1 column, used the process's wall clock instead.
 - **Files started by name count as files nothing imports.** An answer that leaves out a process's main "because it is an entry point" disagrees with the rule as written. The answers to vscode-s1's and vscode-s3's last questions are such files.
 - **AFFiNE's impact sizes ride on barrel files.** Most of AFFINE-IMPACT's 1,620 come through `@toeverything/infra`'s index. A count reasoned from "who uses this symbol" undercounts badly, in either arm.
 - **The session chains run long.** affine-s2's chain is 9 steps, affine-s1's 7 and vscode-s2's 6. These are the costliest for the baseline, which is the point of the kind.

@@ -784,6 +784,8 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 **Revisit when:** V1.6 publishes to npm (check the package's `license` field and files list), or the owner wants a different license before the first outside contribution.
 **Amended (2026-10-14, after Eval #1):** going public waits. The owner's decision: the repo stays private and the demo undeployed until Nebulosity shows better measured results and efficiency than Eval #1 did (its tools didn't raise accuracy, and at Claude Code's default tool search they were loaded in 12 of 30 runs). V1.5 merges to `main` as usual; the deploy, the public switch and the video follow a re-measured eval in V1.6. Everything this ADR prepared (the license, the leak scanner, the reviewed docs) stays in place for then.
 
+**Amended (2026-10-14, V1.6):** the re-measured eval this waits for is Eval #2 (ADR-057). Its ship gate, fixed before the first run, decides whether going public (S8) starts.
+
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
 **Context:** ADR-027 fused code keywords, summary keywords and meaning; V1.3.1 added folder names. V1.2 and V1.3 left ranking cases for V1.5's query set: "lifecycle" ranked `src/vs/base/common/lifecycle.ts` 6th then, and by V1.5's planning probe it was outside the top 8, as it was for "Disposable", though it's the most imported file in VS Code. "registerSingleton" ranked its own file 2nd; "terminal" put a smoke-test folder 2nd; a file's snippet was often its imports listing with a `File: <path> Imports:` header.

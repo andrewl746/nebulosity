@@ -153,7 +153,7 @@
       "kind": "cycle",
       "family": "cycle",
       "file": "src/vs/workbench/contrib/chat/common/languageModels.ts",
-      "prompt": "Is `src/vs/workbench/contrib/chat/common/languageModels.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `src/vs/workbench/contrib/chat/common/languageModels.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-cycle.json"
     },
     {
@@ -185,7 +185,7 @@
       "repo": "vscode",
       "kind": "pairs",
       "family": "pairs",
-      "prompt": "Code under `src/vs` sits in folders named `common`, `browser`, `node`, `electron-browser`, `electron-utility`, `electron-main`, `worker`. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path.",
+      "prompt": "Code under `src/vs` sits in folders named `common`, `browser`, `node`, `electron-browser`, `electron-utility`, `electron-main`, `worker`. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path. A pair may be a name with itself, when files under one such folder import others under the same name. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-pairs.json"
     },
     {
@@ -213,7 +213,7 @@
       "family": "cycle",
       "session": "vscode-s1",
       "file": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
-      "prompt": "Is `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-s1-cycle.json"
     },
     {
@@ -250,7 +250,7 @@
       "family": "cycle",
       "session": "vscode-s2",
       "file": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
-      "prompt": "Is `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-s2-cycle.json"
     },
     {
@@ -287,7 +287,7 @@
       "family": "cycle",
       "session": "vscode-s3",
       "file": "src/vs/platform/terminal/node/terminalEnvironment.ts",
-      "prompt": "Is `src/vs/platform/terminal/node/terminalEnvironment.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `src/vs/platform/terminal/node/terminalEnvironment.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/vscode-s3-cycle.json"
     },
     {
@@ -409,7 +409,7 @@
       "kind": "cycle",
       "family": "cycle",
       "file": "packages/common/infra/src/framework/core/components/service.ts",
-      "prompt": "Is `packages/common/infra/src/framework/core/components/service.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `packages/common/infra/src/framework/core/components/service.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-cycle.json"
     },
     {
@@ -441,7 +441,7 @@
       "repo": "affine",
       "kind": "pairs",
       "family": "pairs",
-      "prompt": "Which of the folders directly inside `packages/frontend` import from which others?",
+      "prompt": "Which of the folders directly inside `packages/frontend` import from which others? A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-pairs.json"
     },
     {
@@ -469,7 +469,7 @@
       "family": "cycle",
       "session": "affine-s1",
       "file": "blocksuite/affine/blocks/database/src/database-block.ts",
-      "prompt": "Is `blocksuite/affine/blocks/database/src/database-block.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `blocksuite/affine/blocks/database/src/database-block.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-s1-cycle.json"
     },
     {
@@ -506,7 +506,7 @@
       "family": "cycle",
       "session": "affine-s2",
       "file": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
-      "prompt": "Is `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `packages/frontend/core/src/components/affine/ai-onboarding/apis.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-s2-cycle.json"
     },
     {
@@ -543,7 +543,7 @@
       "family": "cycle",
       "session": "affine-s3",
       "file": "blocksuite/affine/blocks/surface/src/surface-block.ts",
-      "prompt": "Is `blocksuite/affine/blocks/surface/src/surface-block.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle.",
+      "prompt": "Is `blocksuite/affine/blocks/surface/src/surface-block.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval2/truth/affine-s3-cycle.json"
     },
     {
