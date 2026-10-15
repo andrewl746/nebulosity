@@ -52,7 +52,7 @@ The setup: 15 questions on VS Code at commit `cc3fec88`, 2 runs per question and
 
 ### Install
 
-You need Node 24 or later and git. Claude Code is what the MCP server plugs into.
+You need Node 24 or later and git, and Claude Code 2.1.300 or later for the MCP server.
 
 Once Nebulosity is published to npm:
 
@@ -83,7 +83,9 @@ nebulosity setup      # connect Claude Code to this repo
 ```
 
 - **`index`** takes about a minute for VS Code's 15,000 files and a few seconds for most repos. Run it again whenever you like; it only re-reads files that changed. While the Map runs, it keeps the index up to date as you save files.
-- **`setup`** registers Nebulosity's MCP server with Claude Code for this repo only (`claude mcp add --scope local`). Do it once per repo. Afterwards `claude mcp list` shows `nebulosity` as connected. `nebulosity setup --print` shows the command instead of running it.
+- **`setup`** registers Nebulosity's MCP server with Claude Code for this repo only (`claude mcp add --scope local`). Do it once per repo. Afterwards `claude mcp list` shows `nebulosity` as connected.
+  - `nebulosity setup --print` shows the commands instead of running them: the add line, and before it a remove line when the repo already has a registration.
+  - Running `nebulosity setup` again replaces the registration. That drops anything you added to it by hand, such as an `-e` setting.
 - **Where the index lives:** in your user data folder (`%LOCALAPPDATA%\Nebulosity` on Windows, `~/Library/Application Support/Nebulosity` on macOS, `~/.local/share/nebulosity` on Linux), or in `.nebulosity/` inside a checkout. Nothing is written into your repo.
 
 ### Without an API key (free mode)
@@ -116,8 +118,8 @@ A big first run goes through Anthropic's Batch API at half price, so it can take
 
 Good to know:
 - The server answers about the indexed repo that holds the folder Claude Code runs in. It only reads the index, so keep `nebulosity map` running to have changes picked up as you edit.
-- Claude Code loads MCP tools when it decides it needs them. In Eval #1 it used Nebulosity's on the questions that walk the import graph, and not on big-picture ones. Starting Claude Code with `ENABLE_TOOL_SEARCH=false` loads them up front, at about 13,000 tokens of context per turn.
-- To keep tool calls off the Map, run `nebulosity setup --print`, add `-e NEBULOSITY_LIVE=off` right after the name `nebulosity` in the line it prints, and run that line.
+- The five tools that answer questions load at the start of every session, with no setting to change; their definitions and instructions take about 2,000 tokens. `show_on_map` loads when Claude Code needs it.
+- To keep tool calls off the Map, run `nebulosity setup --print`, add `-e NEBULOSITY_LIVE=off` right after the name `nebulosity` in the add line it prints, and run what it prints. A later plain `nebulosity setup` drops that setting again.
 
 ### Windows, macOS and Linux
 
