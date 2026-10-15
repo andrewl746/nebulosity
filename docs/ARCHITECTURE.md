@@ -121,7 +121,7 @@ nebulosity/
 ├── scripts/                 # cli.ts and commands/ (the nebulosity command), index, summarize, search, live,
 │                            #   background (the worker), mcp-smoke and prepare-package (the package), bench-map, bench-update,
 │                            #   export-demo, build-demo, serve-demo (the static demo), …
-├── test/                    # fixtures/mini-repo, helpers
+├── test/                    # fixtures/{mini-repo,arch-repo}, helpers
 └── docs/
 ```
 

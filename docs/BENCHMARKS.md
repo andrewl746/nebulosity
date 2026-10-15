@@ -460,11 +460,11 @@ Each row covers 10 runs. The score is the mean share of rubric points for big-pi
 | Peak memory (rss) | 5,067 MB |
 | Method calls in VS Code's own files | 778,624 |
 | Sampled, resolved to a declaration | 1,750 of 2,000, 4.74 ms each |
-| …to an interface method (the injected-service case) | 768: one implementing class 114, several 175, none 479 |
+| …to an interface method (these include the injected services) | 768: one implementing class 114, several 175, none 479 |
 | …to a class method / other / unresolved | 880 / 102 / 250 |
 
 **Limits:** `../vscode` has no `node_modules`, so calls into outside types (Node, Electron) don't resolve. "Implementing class" is counted by name from `implements` clauses, which is what a heuristic fallback would see. The 4.74 ms per call is the whole second phase divided by 2,000 calls, so it includes walking all 10,237 files once and the checker's first-use work; the true cost per call is lower.
-**What it means for E2:** The program for VS Code's main project built in 18.2 s and peaked at 5.1 GB of memory, well under the 16 GB cap and this machine's 31.3 GB, so a type-checked call graph fits here. A full pass over all 778,624 method calls at 4.74 ms each would take about 3,700 s (about 62 minutes); that is an upper estimate, because the per-call figure includes the one-time walk. Of the 2,000 sampled calls, 768 (38%) resolved to an interface method. Of those 768, 114 (15%) have exactly one implementing class by name, 175 (23%) have several, and 479 (62%) have none we could see. So a unique-implementer rule would settle about 6% of all sampled calls (114 of 2,000), and the injected-service calls would mostly need the type-checker's own answer or stay unresolved. Memory of 5 GB is a heavy cost to ask of a user's machine. The owner decides E2's fate after Eval #2 (ADR-043).
+**What it means for E2:** The program for VS Code's main project built in 18.2 s and peaked at 5.1 GB of memory, well under the 16 GB cap and this machine's 31.3 GB, so a type-checked call graph fits here. A full pass over all 778,624 method calls at 4.74 ms each would take about 3,700 s (about 62 minutes); that is an upper estimate, because the per-call figure includes the one-time walk. Of the 2,000 sampled calls, 768 (38%) resolved to an interface method. Of those 768, 114 (15%) have exactly one implementing class by name, 175 (23%) have several, and 479 (62%) have none we could see. Those 479 are not all injected services: they can be interfaces from TypeScript's lib files (the DOM's, say) or from elsewhere outside VS Code's sources, which no VS Code class implements by name, and the benchmark didn't tell them apart *(wording corrected 2026-10-15, V1.6's final review: this table first called every interface-method call "the injected-service case")*. So a unique-implementer rule would settle about 6% of all sampled calls (114 of 2,000), and calls to interface methods, which include the injected services, would mostly need the type-checker's own answer or stay unresolved. Memory of 5 GB is a heavy cost to ask of a user's machine. The owner decides E2's fate after Eval #2 (ADR-043).
 
 ## 2026 10 14 Index Benchmark #4 — the structure stage with V1.6's resolution
 
@@ -691,7 +691,7 @@ The first version of the change token-scanned every one of these. The scan gave 
 | final, 3 | 0.8 s | 29.2 s | 20.3 s | 3.2 s | 1.0 s | **54.5 s** | 5.3 s |
 
 **S1 (≤ 60 s): PASS at 55.7 s worst of three.**
-- **The machine kept slowing through the session.** Two later runs of the code before the change took 53.8 and 50.0 s. Two interleaved pairs, before then after, took 56.3 / 57.9 s and then 71.7 / 69.2 s: the second pair is over 60 s with either code. A stray `python -` process left by another shell had been using one of the 16 logical processors fully since 18:43 the day before, and Chrome and other apps were busy.
+- **The machine kept slowing through the session.** Two later runs of the code before the change took 53.8 and 50.0 s. Two interleaved pairs, before then after, took 56.3 / 57.9 s and then 71.7 / 69.2 s: the second pair is over 60 s with either code. This build session's own runaway shell command, a `python -` probe started 2026-10-14 at 18:43 that never exited, had been using one of the 16 logical processors fully since then, and Chrome and other apps were busy. *(Corrected 2026-10-15, V1.6's final review: this note first called it a stray process left by another shell. It was ours. It ran through this benchmark, MCP Benchmark #4, Task 20's summaries and all of Eval #2, and was still running at the final review; the owner has been asked to stop it.)*
 - **Timed apart, the change adds about 0.6 s:** the full parse of the four 1.0–1.6 MB files (88–148 ms each) and the token scan of the 8.5 MB fixture. Between runs of the same code this machine varied by 2–4 s. S1 should be measured again on a quiet machine.
 
 ## 2026 10 15 MCP Benchmark #4 — S5 after the pre-freeze sweep
@@ -715,7 +715,7 @@ The first version of the change token-scanned every one of these. The scan gave 
 | `show_on_map` | 79 ms | 20 | 75 ms | 90 ms | 91 ms | 167 |
 
 **S5 (every warm call ≤ 500 ms): PASS (worst 388 ms, a `search`).** The second run also passed, at worst 291 ms (an `architecture (summary)`).
-- **`search` varied most between the runs:** p50 221 ms and max 388 ms in the first, 187 ms and 256 ms in the second (#3: 173 ms and 256 ms). Its first call, which loads the MiniLM model inside the server, took 3,430 ms and then 1,424 ms. The stray `python -` process noted under Index Benchmark #5 was still using one of the 16 logical processors fully through both runs.
+- **`search` varied most between the runs:** p50 221 ms and max 388 ms in the first, 187 ms and 256 ms in the second (#3: 173 ms and 256 ms). Its first call, which loads the MiniLM model inside the server, took 3,430 ms and then 1,424 ms. This build session's own runaway `python -` command, noted under Index Benchmark #5, was still using one of the 16 logical processors fully through both runs.
 - **The other rows** stayed near #3's: every warm p50 within 25 ms of it, `architecture (summary)` the slowest at p50 204–223 ms (#3: 198 ms).
 - **Answers:** the same sizes as #3 except `overview`, 2,661 characters against 2,611. The repo's summary has been out of date since Task 14e's re-index (Index Benchmark #5), so its line now ends "(Out of date: changed since it was summarized.)". Task 20 is to refresh it.
 
@@ -778,7 +778,7 @@ With it, Task 20 spent about $6.03 of the owner's $12.
 | AFFiNE | 6,987 | 26,261 | 17.3 s | 14,473/14,475 (99.99%) | 636 (.svg 472, .json 69, .png 39, .node 30, .jpg 9) | 11,795/20,671 (57.1%) | lit 1,637, react 924, @toeverything/theme 719, @blocksuite/icons 606, @vanilla-extract/css 431 |
 | VS Code | 14,849 | 140,583 | 62.7 s * | 139,022/139,763 (99.5%) | 822 (.css 773, .json 49) | 1,563/11,350 (13.8%) | assert 2,921, vscode 725, fs 684, path 552, vitest 468 |
 
-\* The machine was shared with another job during this run. S1 is measured on a quiet machine (Index Benchmark #5: 55.7 s at worst of three).
+\* The machine was shared with another job during this run, and this build session's own runaway shell command (a `python -` probe started 2026-10-14 at 18:43 that never exited) was using one of its 16 logical processors fully. S1's latest figure, Index Benchmark #5's 55.7 s at worst of three, was measured on a loaded machine too, with the same process running; a measurement on a quiet machine is still owed. *(Corrected 2026-10-15, V1.6's final review: this note first said S1 was measured on a quiet machine.)*
 
 **S10: every repo indexed without a crash, and every repo resolves at least 99% of its relative imports of code.**
 - **Every unresolved bare name above is outside the repo,** except vite's own `vite` (below). The others are Node's built-ins, npm packages and VS Code's extension API (`vscode`). Among the next names, VS Code's `@vscode/prompt-tsx` (292) is an npm package that a test fixture's package.json also carries. The fixture is no declared workspace, so it doesn't capture the name (ADR-053).
@@ -813,7 +813,7 @@ With it, Task 20 spent about $6.03 of the owner's $12.
 ## 2026 10 15 Eval #2 — Claude Code with and without Nebulosity's MCP server on VS Code and AFFiNE (S12)
 
 This is the re-measured eval that ADR-051 waits for (ADR-057). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
-- **Targets and machine:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6da`, with Nebulosity's engine frozen at `EVAL2_ENGINE` (`90f9f63`) and index versions 152 and 131. It ran on the owner's laptop on 2026-10-15, 08:36–10:57 UTC, with the machine kept quiet.
+- **Targets and machine:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6da`, with Nebulosity's engine frozen at `EVAL2_ENGINE` (`90f9f63`) and index versions 152 and 131. It ran on the owner's laptop on 2026-10-15, 08:36–10:57 UTC, with the machine otherwise kept quiet: this build session's own runaway `python -` command (Index Benchmark #5) used one of the 16 logical processors fully throughout, in both arms alike.
 - **How:**
   - `npm run eval:run -- --eval eval2 --pilot` and `-- --eval eval2 --sessions --pilot`, then the full schedules (`--eval eval2` and `--eval eval2 --sessions`).
   - 39 single questions and 6 four-question task sessions, three repeats, in two arms: A, Claude Code alone, and N, with Nebulosity. 270 runs in all.

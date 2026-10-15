@@ -16,7 +16,7 @@ Some questions about a big repo are walks over its import graph. What depends on
 
 - **The Map**: one folder at a time, at most 50 boxes, lines for imports between them; big folders split into pages of related boxes; a panel with each box's summary, contents, what it uses and what uses it; a read-only source viewer; search with Ctrl K.
 - **Six MCP tools for Claude Code**: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports) and `show_on_map`.
-- **Fresh**: while the Map runs, a background worker reflects a saved file in about 1.2 seconds and, with a key, refreshes its summary after a quiet minute.
+- **Fresh**: while the Map runs, a background worker reflects a saved file in about ‹S6 PLACEHOLDER: Update Benchmark #2's worst, in seconds, measured after V1.6's final fix wave; the controller fills this in› and, with a key, refreshes its summary after a quiet minute.
 
 ## How it compares with Claude Code alone
 
@@ -150,7 +150,7 @@ Good to know:
 
 ### Windows, macOS and Linux
 
-Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map.
+Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. `nebulosity setup` has been run against a real Claude Code on Windows; on macOS and Linux that check, and the Map's background worker in an installed copy, wait for the next CI run.
 
 ### Tested on
 
@@ -161,7 +161,7 @@ Five real repos of different shapes, each indexed from a fresh clone ([Variety B
 | [express](https://github.com/expressjs/express) | plain JavaScript, one package | 141 | 153 | 100% |
 | [vite](https://github.com/vitejs/vite) | pnpm monorepo, packages built by a bundler | 1,599 | 2,059 | 99.1% |
 | [excalidraw](https://github.com/excalidraw/excalidraw) | yarn workspaces, a React app with path aliases | 710 | 3,678 | 100% |
-| [AFFiNE](https://github.com/toeverything/AFFiNE) | a large yarn monorepo, 124 packages | 6,987 | 26,261 | 99.99% |
+| [AFFiNE](https://github.com/toeverything/AFFiNE) | a large yarn monorepo, 124 package.json files | 6,987 | 26,261 | 99.99% |
 | [VS Code](https://github.com/microsoft/vscode) | one very large repo, no workspaces | 14,849 | 140,583 | 99.5% |
 
 Imports of style sheets, images, fonts and JSON aren't counted: the index reads code. Imports of npm packages stay outside the graph on purpose. A monorepo's imports of its own packages by name are linked, with one known gap: a package whose entry file exists only after a build, like vite's own `vite`.
@@ -185,7 +185,7 @@ engine (lib/): level · describe · search · imports · architecture
 
 Core logic in `lib/` never imports the UI framework. The MCP server, the Map's API routes and the static exporter are thin adapters over the same engine.
 
-Measured on VS Code (20,342 files, 14,844 of them indexed): the structure index in under a minute (S1: 58.5 s at worst), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 261 ms at worst), and a saved file reflected in about 1.2 s (S6: 1,235 ms at worst, 1 s of it the watcher's debounce). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index in under a minute (S1: 55.7 s at worst of three, Index Benchmark #5, on a loaded machine), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 388 ms at worst, MCP Benchmark #4), and a saved file reflected in ‹S6 PLACEHOLDER: Update Benchmark #2's worst, in ms, 1 s of it the watcher's debounce; the controller fills this in after measuring› (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Decisions worth reading
 
