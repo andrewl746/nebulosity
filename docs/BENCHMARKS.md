@@ -860,3 +860,17 @@ How fast Claude Code got the context a question needs (medians, A / N; the score
 - `applyFileChanges` alone took 0.55–0.72 s per update (the worker's log; 115–224 ms in Update Benchmark #1), so the V1.6 workspace read roughly added 0.4–0.5 s on this loaded machine.
 - **Batch 1's first three runs were the dev server's cold start** (the first requests compile the routes; the log printed "watching" only during that batch), not steady state. Batches 2 and 3 are warm.
 - **S6 (≤ 2 s): FAIL as first run (worst 11,029 ms, the cold start); PASS warm (worst 1,975 ms, median 1,904 ms), with only 25–155 ms of margin.** The README quotes the warm worst.
+
+## 2026 10 15 Index Benchmark #6 — S1 on a quiet machine
+
+- **Target and machine:** VS Code @ `cc3fec88`, the owner's laptop, Node 24.14.0, code at `11e031e`. This is the quiet-machine S1 that #5 and Update Benchmark #2 asked for.
+- **The machine:** the build session's runaway `python -` process (PID 39512, one of 16 logical processors fully busy since 2026-10-14 18:43) was stopped by the owner just before these runs, and the processor load read 2–17% beforehand. Chrome and VS Code were open.
+- **Command:** `NEBULOSITY_DATA=<a fresh scratch folder per run> npx tsx scripts/index.ts ../vscode`, three runs back to back (a cold database each run; the owner's index untouched).
+
+| Run | Files | Edges | discover | parse | write | resolve | aggregate | **structure (S1)** | code search fill |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 14849 | 140583 | 1.3 s | 19.1 s | 12.7 s | 2.0 s | 0.7 s | **35.9 s** | 5.6 s |
+| 2 | 14849 | 140583 | 0.7 s | 28.6 s | 18.3 s | 2.3 s | 0.7 s | **50.7 s** | 3.8 s |
+| 3 | 14849 | 140583 | 0.7 s | 16.9 s | 11.2 s | 1.7 s | 0.6 s | **31.3 s** | 3.4 s |
+
+**S1 (≤ 60 s): PASS at 50.7 s worst of three** (median 35.9 s). Run 2 was slower in parse and write alike, which points to the machine rather than the code: the same work took 31–36 s on either side of it. The loaded-machine figures before it (55.7 s in #5, 66.9 s in Update Benchmark #2's cold index) carried the runaway process. Files and edges match #5's final code exactly.
