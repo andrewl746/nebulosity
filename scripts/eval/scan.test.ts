@@ -211,12 +211,12 @@ describe("the scanner's independence (R3)", () => {
     });
 
     it("imports nothing from lib/: the scanner, the truths, the truth's resolver and the second extractor (R2)", () => {
-        for (const file of ["scripts/eval/scan.ts", "scripts/eval/truth.ts", "scripts/eval/resolve-truth.ts", "scripts/eval/ts-graph.ts"]){
+        for (const file of ["scripts/eval/scan.ts", "scripts/eval/truth.ts", "scripts/eval/resolve-truth.ts", "scripts/eval/ts-graph.ts", "scripts/eval/context.ts", "scripts/eval/stats.ts", "scripts/eval/needed.ts"]){
             const specifiers = moduleSpecifiers(fs.readFileSync(file, "utf8"));
             expect({ file, fromLib: specifiers.filter(reachesLib) }).toEqual({ file, fromLib: [] });
             // A reader that stopped matching would pass the check above for any file, so the files that import must be seen
-            // importing (truth.ts imports nothing).
-            if (!file.endsWith("truth.ts") || file.endsWith("resolve-truth.ts")) expect({ file, found: specifiers.length > 0 }).toEqual({ file, found: true });
+            // importing (truth.ts and stats.ts import nothing).
+            if ((!file.endsWith("truth.ts") || file.endsWith("resolve-truth.ts")) && !file.endsWith("stats.ts")) expect({ file, found: specifiers.length > 0 }).toEqual({ file, found: true });
         }
     });
 });

@@ -59,6 +59,8 @@
     "eval:score": "tsx scripts/eval/score.ts",
     "eval:grading": "tsx scripts/eval/grading.ts",
     "eval:overlap": "tsx scripts/eval/overlap.ts",
+    "eval:needed": "tsx scripts/eval/needed.ts",
+    "eval:context": "tsx scripts/eval/context-report.ts",
     "export-demo": "tsx scripts/export-demo.ts",
     "build-demo": "tsx scripts/build-demo.ts",
     "serve-demo": "tsx scripts/serve-demo.ts",
