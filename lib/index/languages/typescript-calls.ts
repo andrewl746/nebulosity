@@ -350,11 +350,8 @@ function findDeclaration(id: ts.Identifier): ts.ParameterDeclaration | ts.Variab
             }
         }
         if (ts.isBlock(node) || ts.isSourceFile(node) || ts.isModuleBlock(node) || ts.isCaseClause(node) || ts.isDefaultClause(node)){
-            for (const statement of node.statements){
-                if (!ts.isVariableStatement(statement)) continue;
-                const found = inDeclarations(statement.declarationList);
-                if (found) return found;
-            }
+            const found = declaredIn(node).get(name);
+            if (found) return found;
         }
         if ((ts.isForStatement(node) || ts.isForOfStatement(node) || ts.isForInStatement(node)) && node.initializer && ts.isVariableDeclarationList(node.initializer)){
             const found = inDeclarations(node.initializer);
@@ -365,6 +362,40 @@ function findDeclaration(id: ts.Identifier): ts.ParameterDeclaration | ts.Variab
         }
     }
     return null;
+}
+
+/**
+ * Each scope's variable names → declaration, built once per scope node and first declaration wins (what a linear scan of its
+ * statements finds first). Without it every `x.m()` re-scans all the statements of its scope: a flat generated file with
+ * tens of thousands of them would take minutes (ADR-053's aim: a giant generated file can't stall a run).
+ */
+const declaredNames = new WeakMap<ts.Node, Map<string, ts.VariableDeclaration | ts.BindingElement>>();
+
+function declaredIn(scope: ts.Block | ts.SourceFile | ts.ModuleBlock | ts.CaseClause | ts.DefaultClause): Map<string, ts.VariableDeclaration | ts.BindingElement> {
+    let names = declaredNames.get(scope);
+    if (names) return names;
+    const map = new Map<string, ts.VariableDeclaration | ts.BindingElement>();
+    const add = (name: string, declaration: ts.VariableDeclaration | ts.BindingElement): void => {
+        if (!map.has(name)) map.set(name, declaration);
+    };
+    const addPattern = (binding: ts.BindingName): void => {
+        if (ts.isIdentifier(binding)) return;
+        for (const el of binding.elements){
+            if (ts.isOmittedExpression(el)) continue;
+            if (ts.isIdentifier(el.name)) add(el.name.text, el);
+            else addPattern(el.name);
+        }
+    };
+    for (const statement of scope.statements){
+        if (!ts.isVariableStatement(statement)) continue;
+        for (const d of statement.declarationList.declarations){
+            if (ts.isIdentifier(d.name)) add(d.name.text, d);
+            else addPattern(d.name);
+        }
+    }
+    names = map;
+    declaredNames.set(scope, names);
+    return names;
 }
 
 /** The top-level class a `this` belongs to: not past a function (it has its own this), nor an object literal's method. */

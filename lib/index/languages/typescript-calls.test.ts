@@ -149,6 +149,29 @@ describe("collectCallFacts: calls and injection sites", () => {
     });
 });
 
+describe("collectCallFacts: scopes", () => {
+    it("takes the first of two declarations of a name in one scope, and lets a nested block shadow an outer name", () => {
+        const source = lines(
+            "export function f(): void {",
+            "    var a: IOne = make();",
+            "    var a: ITwo = make();",
+            "    const b: IOuter = make();",
+            "    {",
+            "        const b: IInner = make();",
+            "        b.run();",
+            "    }",
+            "    a.go();",
+            "    b.stop();",
+            "}",
+        );
+        expect(facts(source).calls).toEqual([
+            { line: 7, member: "run", receiver: "type", ref: "IInner", inClass: null, how: "local" },
+            { line: 9, member: "go", receiver: "type", ref: "IOne", inClass: null, how: "local" },
+            { line: 10, member: "stop", receiver: "type", ref: "IOuter", inClass: null, how: "local" },
+        ]);
+    });
+});
+
 describe("collectCallFacts: bindings", () => {
     it("keeps the imports the facts name, and every re-export and export (openCommand.ts, the barrel)", () => {
         expect(fixture("src/workbench/commands/openCommand.ts").bindings).toEqual([
