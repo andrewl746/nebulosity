@@ -693,3 +693,28 @@ The first version of the change token-scanned every one of these. The scan gave 
 **S1 (≤ 60 s): PASS at 55.7 s worst of three.**
 - **The machine kept slowing through the session.** Two later runs of the code before the change took 53.8 and 50.0 s. Two interleaved pairs, before then after, took 56.3 / 57.9 s and then 71.7 / 69.2 s: the second pair is over 60 s with either code. A stray `python -` process left by another shell had been using one of the 16 logical processors fully since 18:43 the day before, and Chrome and other apps were busy.
 - **Timed apart, the change adds about 0.6 s:** the full parse of the four 1.0–1.6 MB files (88–148 ms each) and the token scan of the 8.5 MB fixture. Between runs of the same code this machine varied by 2–4 s. S1 should be measured again on a quiet machine.
+
+## 2026 10 15 MCP Benchmark #4 — S5 after the pre-freeze sweep
+
+- **Target and machine:** VS Code @ `cc3fec88`, on the owner's laptop, Node 24.14.0. The owner's index after the sweep's re-index (index version 143: 14,849 files, 140,583 edges, the same as before it), read-only through the server. The engine as of `3e8083d`, the sweep's code (ADR-053, ADR-054, ADR-056 and ADR-058 amended). `NEBULOSITY_LIVE=off`: nothing was sent to any port.
+- **Command:** `npm run bench-mcp -- ../vscode`, twice. The rows and inputs are MCP Benchmark #3's: each row's first call apart, then 20 warm calls.
+- **Server start** (spawn → initialized): 716 ms (second run: 689 ms).
+- **Where the figures come from:** the table is the first run's own output; the second run's differences are listed below it.
+
+| Row | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |
+|---|---|---|---|---|---|---|
+| `overview` | 200 ms | 20 | 54 ms | 58 ms | 62 ms | 2,661 |
+| `describe` | 68 ms | 20 | 46 ms | 57 ms | 72 ms | 3,991 |
+| `search` | 3430 ms | 20 | 221 ms | 383 ms | 388 ms | 2,440 |
+| `imports (dependents)` | 86 ms | 20 | 88 ms | 119 ms | 124 ms | 5,944 |
+| `imports (dependencies)` | 79 ms | 20 | 68 ms | 92 ms | 97 ms | 2,491 |
+| `imports (to)` | 79 ms | 20 | 82 ms | 90 ms | 92 ms | 323 |
+| `imports (group_by)` | 93 ms | 20 | 85 ms | 103 ms | 105 ms | 2,035 |
+| `architecture (summary)` | 236 ms | 20 | 204 ms | 288 ms | 298 ms | 449 |
+| `architecture (cycles)` | 74 ms | 20 | 71 ms | 90 ms | 91 ms | 7,788 |
+| `show_on_map` | 79 ms | 20 | 75 ms | 90 ms | 91 ms | 167 |
+
+**S5 (every warm call ≤ 500 ms): PASS (worst 388 ms, a `search`).** The second run also passed, at worst 291 ms (an `architecture (summary)`).
+- **`search` varied most between the runs:** p50 221 ms and max 388 ms in the first, 187 ms and 256 ms in the second (#3: 173 ms and 256 ms). Its first call, which loads the MiniLM model inside the server, took 3,430 ms and then 1,424 ms. The stray `python -` process noted under Index Benchmark #5 was still using one of the 16 logical processors fully through both runs.
+- **The other rows** stayed near #3's: every warm p50 within 25 ms of it, `architecture (summary)` the slowest at p50 204–223 ms (#3: 198 ms).
+- **Answers:** the same sizes as #3 except `overview`, 2,661 characters against 2,611. The repo's summary has been out of date since Task 14e's re-index (Index Benchmark #5), so its line now ends "(Out of date: changed since it was summarized.)". Task 20 is to refresh it.
