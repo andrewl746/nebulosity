@@ -184,13 +184,32 @@ describe("indexRepository — files over the size cap (ADR-053, amended)", () =>
     it("indexes a file over the cap for its imports only: its edges, no declarations, no chunks; past the hard bound it is skipped", () => {
         const result = indexRepository(repoWithBigFile(), { maxFileBytes: 100, hardMaxFileBytes: 200 });
 
-        expect(result).toMatchObject({ files: 3, changed: 3, edges: 2, errors: [], importsOnly: [{ path: "big.ts", sizeBytes: 123 }] });
+        expect(result).toMatchObject({ files: 3, changed: 3, edges: 2, errors: [], importsOnly: [{ path: "big.ts", sizeBytes: 123, importsOnly: "parse" }] });
         expect(result.skipped).toEqual([{ path: "huge.ts", reason: "too large (329 bytes)" }]);
         expect(loadImportEdges(getDb(), result.repoId).map((e) => `${e.source} -> ${e.target}`).sort()).toEqual(["big.ts -> a.ts", "big.ts -> c.ts"]);
 
         expect(declarationsOf(result.repoId, "big.ts")).toEqual({ lineCount: 4, sizeBytes: 123, symbols: [], chunks: [] });
         // a file under the cap is read in full, as before
         expect(declarationsOf(result.repoId, "a.ts").symbols).toEqual(["a"]);
+    });
+
+    it("parses a file up to the parse bound with the full adapter, and scans one past it: each gives an edge only its reader finds", () => {
+        const dir = makeTempDir("neb-importsonly-tiers-");
+        fs.writeFileSync(path.join(dir, "a.ts"), "export const a = 1;\n");                                   // 20 bytes
+        fs.writeFileSync(path.join(dir, "c.ts"), "export const c = 2;\n");                                   // 20 bytes
+        // the token scan misses export * as; 26 + 64 = 90 bytes, between the cap (60) and the parse bound (150)
+        fs.writeFileSync(path.join(dir, "parsed.ts"), `export * as c from "./c";\n// ${"x".repeat(60)}\n`);
+        // the adapter doesn't count a member require, the token scan does; 20 + 204 = 224 bytes, past the parse bound
+        fs.writeFileSync(path.join(dir, "scanned.ts"), `foo.require("./a");\n// ${"x".repeat(200)}\n`);
+
+        const result = indexRepository(dir, { maxFileBytes: 60, parseMaxFileBytes: 150, hardMaxFileBytes: 400 });
+
+        expect(result.importsOnly).toEqual([
+            { path: "parsed.ts", sizeBytes: 90, importsOnly: "parse" },
+            { path: "scanned.ts", sizeBytes: 224, importsOnly: "scan" },
+        ]);
+        expect(loadImportEdges(getDb(), result.repoId).map((e) => `${e.source} -> ${e.target}`).sort()).toEqual(["parsed.ts -> c.ts", "scanned.ts -> a.ts"]);
+        expect(declarationsOf(result.repoId, "parsed.ts")).toMatchObject({ symbols: [], chunks: [] });
     });
 
     it("keeps an imports-only file unchanged on the next run, edges and all", () => {

@@ -1,4 +1,4 @@
-import type { MapNode } from "@/lib/contracts";
+import type { DescribeResponse, MapNode } from "@/lib/contracts";
 import { formatCount } from "./format";
 
 /**
@@ -26,4 +26,9 @@ export function lineLabel(source: MapNode, target: MapNode, count: number): stri
 export function boxTitle(box: Pick<MapNode, "path" | "name" | "tagline">): string {
     const where = box.path || box.name;
     return box.tagline ? `${where}: ${box.tagline}` : where;
+}
+
+/** The detail panel's words for a file with no declarations: a file over the size cap had them left unread (ADR-053). */
+export function noDeclarationsText(file: Pick<DescribeResponse, "importsOnly">): string {
+    return file.importsOnly ? "Not read (over the 1 MB size cap; imports only)." : "None found.";
 }

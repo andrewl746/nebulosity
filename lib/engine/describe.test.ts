@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
 import { describe as group, expect, it } from "vitest";
 import { copyFixture } from "../../test/helpers/fixture";
+import { makeTempDir } from "../../test/helpers/temp";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../db/client";
 import { requireRepository } from "../db/store/structure";
@@ -55,6 +58,21 @@ group("describe — the fixture", () => {
             { path: "src/core/index.ts", kind: "file", count: 1 },
             { path: "src/index.ts", kind: "file", count: 1 },
         ]);
+    });
+
+    it("says a file over the 1 MB size cap was indexed for its imports only, its declarations not read (ADR-053, amended)", () => {
+        const root = makeTempDir("neb-describe-cap-");
+        fs.writeFileSync(path.join(root, "a.ts"), "export const a = 1;\n");
+        // 25 + 1,000,004 = 1,000,029 bytes: over the cap, so read for its imports only
+        fs.writeFileSync(path.join(root, "big.ts"), `import { a } from "./a";\n// ${"x".repeat(1_000_000)}\n`);
+        indexRepository(root);
+
+        const big = describe(root, "big.ts");
+        expect(big).toMatchObject({ kind: "file", importsOnly: true, symbols: [], stats: { fileCount: 1, lineCount: 2 } });
+        expect(big.uses).toEqual([{ path: "a.ts", kind: "file", count: 1 }]);
+        const a = describe(root, "a.ts");
+        expect(a.importsOnly).toBeUndefined();
+        expect(a.symbols).toEqual([{ name: "a", kind: "const", startLine: 1, endLine: 1, exported: true }]);
     });
 
     it("describes the repo: every file and line, its top folders, nothing across its edge", () => {

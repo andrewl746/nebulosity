@@ -10,9 +10,10 @@ export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", 
  * What this adapter reads from a file, versioned. Bump it whenever a change gives an unchanged file different imports,
  * symbols or chunks: a full run then parses every file again once, where it would otherwise keep what the older
  * adapter stored for every file whose bytes haven't changed (ADR-053). 1: V1.1–V1.5. 2: computed import() (ADR-053).
- * 3: import type expressions, `typeof import("x")` (ADR-053, amended).
+ * 3: import type expressions, `typeof import("x")` (ADR-053, amended). 4: files of 1–5 MB parsed in full for their
+ * imports, not token-scanned (ADR-053, amended).
  */
-export const ADAPTER_VERSION = 3;
+export const ADAPTER_VERSION = 4;
 
 /** files.language for a path this adapter claims. TypeScript's parser reads both languages. */
 export function languageOf(filePath: string): "typescript" | "javascript" {
@@ -39,20 +40,34 @@ export function parseTypeScriptFile(filePath: string, text: string): ParsedFile 
     };
 }
 
-/** What comes just before a module augmentation's name: `declare module "x"`. No import statement ends this way. */
-const AUGMENTATION = /\bmodule\s*$/;
-
 /**
- * A file over the size cap (ADR-053, amended): only its imports, read by TypeScript's preProcessFile, a scanner pass
- * with no syntax tree. On VS Code's 1–1.6 MB test files it takes 15–30 ms where a full parse takes 90–170 ms and 30–60 MB
- * of heap, and on a 3.8 MB minified bundle 65 ms against 830 ms and 180 MB. It reads the same statements as
- * collectImports, with three differences: a module augmentation (`declare module "x"`), which it reports, is dropped
- * here; it misses `export * as ns from "x"` and a computed import(); and it reads an AMD `define([...])` list.
+ * A file over the 1 MB cap, up to 5 MB (ADR-053, amended): parsed in full, but only its imports are kept, so they
+ * follow exactly the rule every other file's do. Its declarations and chunks are dropped: no code search, no summary.
+ * The full parse of VS Code's 1.0–1.6 MB agent-host tests takes 90–150 ms.
  */
 export function parseTypeScriptImportsOnly(filePath: string, text: string): ParsedFile {
+    return { chunks: [], symbols: [], imports: collectImports(parseSourceFile(filePath, text)), lineCount: countLines(text) };
+}
+
+/** What comes just before a module augmentation's name. No import statement ends this way. */
+const AUGMENTATION = /\bdeclare\s+module\s*$/;
+
+/**
+ * A file over 5 MB, up to the 20 MB bound (ADR-053, amended): only its imports, read by TypeScript's preProcessFile, a
+ * token scan with no syntax tree and so no idea where a regex literal or JSX text starts. On a 3.8 MB minified bundle
+ * it takes 65 ms and 23 MB of heap where a full parse takes 830 ms and 180 MB, so a giant generated file can't stall a
+ * run. It reads the statements collectImports reads, except that:
+ * - a regex literal holding a backtick hides every import up to the next backtick, and one holding a quote hides the
+ *   rest of its line (` and ' or " start a template or a string to the scan);
+ * - the words inside a regex literal or JSX text can make up an import (`/import x from "y"/` gives "y");
+ * - it counts a member call `foo.require("x")` and a two-argument `require("x", y)`, and an AMD `define([...])` list;
+ * - it misses `export * as ns from "x"`, `export type * as ns from "x"` and a computed import();
+ * - it reports a module augmentation (`declare module "x"` in a module) as an import, which is dropped here.
+ */
+export function scanTypeScriptImports(filePath: string, text: string): ParsedFile {
     const preProcessed = ts.preProcessFile(text, true, true);   // readImportFiles, detectJavaScriptImports (require)
     const imports = preProcessed.importedFiles
-        .filter((ref) => !AUGMENTATION.test(text.slice(Math.max(0, ref.pos - 32), ref.pos)))
+        .filter((ref) => !AUGMENTATION.test(text.slice(Math.max(0, ref.pos - 64), ref.pos)))   // ref.pos is the quote's
         .map((ref) => ref.fileName);
 
     return { chunks: [], symbols: [], imports: [...new Set(imports)], lineCount: countLines(text) };

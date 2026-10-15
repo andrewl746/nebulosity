@@ -6,8 +6,11 @@ import { normalizeSlashes } from "./paths";
 export type DiscoveredFile = {
     path: string;
     sizeBytes: number;
-    /** A code file over the size cap: indexed for its imports only, with no declarations, chunks or summary (ADR-053). */
-    importsOnly?: true;
+    /**
+     * A code file over the size cap: indexed for its imports only, with no declarations, chunks or summary (ADR-053).
+     * "parse" up to the parse bound (the full adapter), "scan" past it (the token scan).
+     */
+    importsOnly?: "parse" | "scan";
 };
 export type SkippedFile = { path: string; reason: string };
 export type DiscoveryResult = {
@@ -36,11 +39,32 @@ const byPath = (a: { path: string }, b: { path: string }): number => (a.path < b
 export const DEFAULT_MAX_FILE_BYTES = 1_000_000;
 
 /**
+ * Up to this, a code file over the cap is still parsed in full for its imports, so they follow the adapter's own rule:
+ * about 90–150 ms for VS Code's 1.0–1.6 MB tests, 830 ms and 180 MB of heap for AFFiNE's 3.8 MB minified yarn release.
+ * Past it the token scan reads them, which costs a tenth of that but misreads some code (scanTypeScriptImports).
+ */
+export const DEFAULT_PARSE_MAX_FILE_BYTES = 5_000_000;
+
+/**
  * Past this a code file isn't read at all, so a giant generated blob can't stall a run or run the process out of
- * memory: reading its imports costs about 15 ms a megabyte (about 0.3 s at the bound). VS Code's largest code file is an
+ * memory: the token scan costs about 15 ms a megabyte (about 0.3 s at the bound). VS Code's largest code file is an
  * 8.5 MB colorizer fixture, AFFiNE's a 3.8 MB yarn release.
  */
 export const DEFAULT_HARD_MAX_FILE_BYTES = 20_000_000;
+
+/** How a code file is read: in full, parsed for its imports only, scanned for its imports only, or not at all. */
+export type FileReading = "full" | "parse" | "scan" | "skip";
+
+/**
+ * The reading for a code file of `size` bytes (ADR-053, amended): in full up to `maxBytes` (1 MB), parsed for its
+ * imports up to `parseMaxBytes` (5 MB), token-scanned for them up to `hardMaxBytes` (20 MB), skipped past that.
+ * A full run and the incremental update both ask this, so a file is read the same way by either.
+ */
+export function readingFor(size: number, caps: { maxBytes?: number; parseMaxBytes?: number; hardMaxBytes?: number } = {}): FileReading {
+    if (size > (caps.hardMaxBytes ?? DEFAULT_HARD_MAX_FILE_BYTES)) return "skip";
+    if (size <= (caps.maxBytes ?? DEFAULT_MAX_FILE_BYTES)) return "full";
+    return size <= (caps.parseMaxBytes ?? DEFAULT_PARSE_MAX_FILE_BYTES) ? "parse" : "scan";
+}
 
 /**
  * Folders never indexed, in either mode: dependency trees and tool output. Git mode
@@ -63,17 +87,17 @@ export const WALK_ONLY_IGNORED_DIRS: ReadonlySet<string> = new Set(["dist", "out
  * what keeps build output and vendored code out of a big repo's index. Without git,
  * it walks the tree and skips the usual heavy folders and build output.
  *
- * A code file over `maxBytes` is listed with `importsOnly` set, and one over `hardMaxBytes` is skipped (ADR-053).
+ * A code file over `maxBytes` is listed with `importsOnly` set to how its imports are read, and one over `hardMaxBytes`
+ * is skipped (readingFor, ADR-053).
  */
 export function discoverFiles(
     repoRoot: string,
-    opts: { extensions: readonly string[]; maxBytes?: number; hardMaxBytes?: number }
+    opts: { extensions: readonly string[]; maxBytes?: number; parseMaxBytes?: number; hardMaxBytes?: number }
 ): DiscoveryResult {
     const usedGit = fs.existsSync(path.join(repoRoot, ".git"));
     const skipped: SkippedFile[] = [];
     const candidates = usedGit ? listWithGit(repoRoot) : listByWalking(repoRoot, skipped);
     const maxBytes = opts.maxBytes ?? DEFAULT_MAX_FILE_BYTES;
-    const hardMaxBytes = opts.hardMaxBytes ?? DEFAULT_HARD_MAX_FILE_BYTES;
     const files: DiscoveredFile[] = [];
     const manifests: string[] = [];
     const docs: DiscoveredFile[] = [];
@@ -104,12 +128,13 @@ export function discoverFiles(
             continue;
         }
 
-        if (size > hardMaxBytes){
+        const reading = readingFor(size, opts);
+        if (reading === "skip"){
             skipped.push({ path: rel, reason: `too large (${size} bytes)` });
             continue;
         }
 
-        files.push(size > maxBytes ? { path: rel, sizeBytes: size, importsOnly: true } : { path: rel, sizeBytes: size });
+        files.push(reading === "full" ? { path: rel, sizeBytes: size } : { path: rel, sizeBytes: size, importsOnly: reading });
     }
 
     // plain code-unit order: deterministic on every OS and locale

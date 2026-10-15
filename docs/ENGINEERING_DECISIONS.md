@@ -827,20 +827,29 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 **Revisit when:** a repo's packages resolve only through a bundler's own config (webpack aliases, Vite `resolve.alias`): read those, or let the user name aliases.
 
 **Amended (2026-10-15, V1.6, before Eval #2's freeze): import type expressions count, and files over the size cap keep their import edges.** Two gaps were found while checking Eval #2's answer key against the index (V1.6 Task 14a): the index agreed with 41 of the 44 truths. The owner decided to fix them before the freeze (2026-10-14, "Fix before the freeze").
-- **Import type expressions.** `typeof import("x")` and `import("x").T` in a type position are import specifiers, like a type-only import, which the import rule counts (ADR-050). The argument must be a string literal; anything else gives nothing. An `import("x")` type inside a JSDoc comment stays a comment, since the adapter never walks into JSDoc. AFFiNE's `tests/blocksuite/e2e/utils/declare-test-window.ts` L16 (`database: typeof import('@blocksuite/affine/blocks/database')`) is how 100 end-to-end tests reach `database-block.ts`. `ADAPTER_VERSION` is now 3, so the first full run after this parses every file again once.
+- **Import type expressions.** `typeof import("x")` and `import("x").T` in a type position are import specifiers, like a type-only import, which the import rule counts (ADR-050). The argument must be a string literal; anything else gives nothing. An `import("x")` type inside a JSDoc comment stays a comment, since the adapter never walks into JSDoc. AFFiNE's `tests/blocksuite/e2e/utils/declare-test-window.ts` L16 (`database: typeof import('@blocksuite/affine/blocks/database')`) is how 100 end-to-end tests reach `database-block.ts`.
 - **Files over the size cap keep their import edges.** A code file over 1 MB (`DEFAULT_MAX_FILE_BYTES`) used to be skipped. VS Code's three agent-host tests of 1.0–1.6 MB import 297 real files that way. Such a file is now indexed for its imports only:
-  - its specifiers are read by TypeScript's `preProcessFile`, a scanner pass with no syntax tree;
   - it gets no declarations and no chunks, so no code search;
   - it gets no model summary: the planner gives it a template ("Over the size cap: imports only"), as it does a test file;
-  - a run lists it under `importsOnly`, not `skipped`.
+  - a run lists it under `importsOnly`, not `skipped`;
+  - `describe` marks it `importsOnly` (API_CONTRACTS.md §12, additive). The MCP answer says "Declarations: not read (over the 1 MB size cap; imports only).", and the Map's panel says "Not read (over the 1 MB size cap; imports only)." where it would say "None found.".
+- **How its imports are read depends on its size** (`readingFor`, which the full run and the incremental update share):
+  - **Up to 5 MB** (`DEFAULT_PARSE_MAX_FILE_BYTES`), the adapter parses it in full and keeps only its imports, so they follow exactly the rule every other file's do. VS Code's 1.0–1.6 MB tests parse in 90–150 ms each.
+  - **From 5 MB to 20 MB** (`DEFAULT_HARD_MAX_FILE_BYTES`), TypeScript's `preProcessFile` reads them. It is a token scan with no syntax tree, about 15 ms a megabyte (0.3 s at the bound) and a tenth of a full parse's heap. A full parse of a minified file costs about 220 ms and 50 MB a megabyte (AFFiNE's 3.8 MB yarn release: 830 ms and 180 MB), so a 20 MB generated file could stall a run.
+  - **Past 20 MB** the file is skipped, as every file over 1 MB used to be.
 
-  Past a hard bound of 20 MB (`DEFAULT_HARD_MAX_FILE_BYTES`) a code file is still skipped, so a giant generated blob can't stall a run or exhaust memory: `preProcessFile` reads about 15 ms a megabyte, about 0.3 s at the bound. The incremental update treats both bounds the same way. Docs keep the 1 MB cap.
-- **Why `preProcessFile`, not the adapter's own reader.** On five of the six code files over 1 MB in VS Code and AFFiNE, a full parse took 5–13 times as long and 8–30 times the heap (the sixth is one data statement): 830 ms and 180 MB for AFFiNE's 3.8 MB minified yarn release, against 65 ms and 23 MB. Its reading differs from the adapter's in three ways:
-  - it also reports module augmentations (`declare module "x"`), which are dropped here, as the full parse never reads them;
-  - it misses `export * as ns from "x"` and a computed `import()`;
-  - it reads an AMD `define([...])` list.
+  Docs keep the 1 MB cap.
+- **What the token scan gets wrong.** Unlike the adapter, it doesn't know where a regex literal or JSX text starts. So:
+  - a regex literal holding a backtick hides every import up to the next backtick, and one holding a quote hides the rest of its line. One minified line such as ``var r=/['"]/,a=require("./a")`` gives nothing;
+  - the words inside a regex literal or JSX text can make up an import: `/import x from "y"/` gives `y`;
+  - it counts a member call `foo.require("x")`, a two-argument `require("x", y)` and an AMD `define([...])` list, which the adapter doesn't;
+  - it misses `export * as ns from "x"`, `export type * as ns from "x"` and a computed `import()`;
+  - it reports a module augmentation (`declare module "x"` in a module) as an import. Those are dropped: a reference whose text before it ends in `declare module` is left out.
 
-  On those six files both readers gave the same specifiers, apart from the yarn release's `fs` and `path`, which resolve to nothing.
+  Hand-built tests pin each of these. Only files of 5–20 MB are read this way; neither repo has one that imports anything (VS Code's 8.5 MB colorizer fixture names 3 specifiers, none of which resolves).
+- **The first version of this amendment** read every file of 1–20 MB with the token scan. The task's review probed it and found the differences above, and the controller ruled for the full parse up to 5 MB. On the six files over 1 MB in the two repos, the only stored difference is AFFiNE's yarn release: the scan read `require('fs')` and `require('path')` out of template literals of generated code, and the full parse reads nothing.
+- `ADAPTER_VERSION` is now 4 (3 with import types, 4 with the 1–5 MB files parsed in full), so the first full run after this parses every file again once.
+
 **Consequences of the amendment:**
 - On VS Code, 14,844 → 14,849 files and 140,248 → 140,583 edges, none removed:
   - 297 come from the three agent-host tests (`agentService.test.ts` 88, `copilotAgent.test.ts` 106, `copilotAgentSession.test.ts` 103);
@@ -849,8 +858,9 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 
   The other two files over 1 MB import nothing that resolves.
 - On AFFiNE, 6,986 → 6,987 files (the yarn release, which yields no edge) and 26,254 → 26,261 edges, all 7 from import types in 3 files (5 in `declare-test-window.ts`).
+- Parsing the 1–5 MB files in full instead of scanning them left every edge as it was, on both repos (the re-index at adapter version 4).
 - The index now agrees with all 44 of Eval #2's truths, and still with Eval #1's ten list and chain truths.
-- S1 on VS Code, cold: 52.6 s at worst of three, against 49.2–51.9 s for the code before it in the same session, on a machine running far slower than for Index Benchmark #4 (BENCHMARKS.md, Index Benchmark #5).
+- S1 on VS Code, cold: 55.7 s at worst of three with the final code (54.5–55.7 s). The first version (every over-cap file scanned) measured 52.1–52.6 s, and the code before the change 49.2–51.9 s, earlier in the same session. The machine ran far slower than for Index Benchmark #4, and slower as the session went on. Interleaved before/after pairs differed by +1.6 s and −2.5 s. Timed apart, the change adds about 0.6 s: the full parse of the four 1.0–1.6 MB files and the scan of the 8.5 MB one (BENCHMARKS.md, Index Benchmark #5).
 - The re-index left 9 of VS Code's summaries out of date: 8 folders above the newly indexed files, and the repo. Their child lists changed, and they are redone when opened.
 
 ## ADR-054 — Docs pointers: which docs talk about which folders, read from the repo's Markdown (2026-10-14)

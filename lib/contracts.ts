@@ -136,6 +136,8 @@ export type DescribeResponse = {
   children?: MapNode[];
   /** Files: their declarations, in line order. */
   symbols?: SymbolInfo[];
+  /** A file over the 1 MB size cap: indexed for its imports only, so `symbols` is empty because they weren't read (ADR-053). */
+  importsOnly?: true;
   /** What the target imports, by area, most first. */
   uses: AreaCount[];
   /** What imports the target, by area, most first. */

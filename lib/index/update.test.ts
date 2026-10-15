@@ -205,6 +205,21 @@ describe("applyFileChanges — files over the size cap (ADR-053, amended)", () =
         expect(edgesOf(repoId)).toEqual([]);
     });
 
+    it("reads a file past the parse bound with the token scan, as a full run does", () => {
+        const root = makeTempDir("neb-update-scan-");
+        const caps = { maxFileBytes: 60, parseMaxFileBytes: 150, hardMaxFileBytes: 400 };
+        write(root, "a.ts", "export const a = 1;\n");
+        const { repoId } = indexRepository(root, caps);
+
+        // the adapter doesn't count a member require, the token scan does; 20 + 204 = 224 bytes
+        write(root, "scanned.ts", `foo.require("./a");\n// ${"x".repeat(200)}\n`);
+        expect(applyFileChanges(root, ["scanned.ts"], caps)).toMatchObject({ changed: ["scanned.ts"], edgesAdded: 1 });
+        expect(edgesOf(repoId)).toEqual(["scanned.ts -> a.ts"]);
+        const twin = makeTempDir("neb-twin-");
+        fs.cpSync(root, twin, { recursive: true });
+        expect(tables(repoId)).toEqual(tables(indexRepository(twin, caps).repoId));
+    });
+
     it("a new file over the cap enters the index with its edges", () => {
         const root = makeTempDir("neb-update-new-");
         write(root, "a.ts", "export const a = 1;\n");

@@ -121,6 +121,17 @@ describe("describeAnswer", () => {
         ]);
     });
 
+    it("a file over the size cap: its declarations weren't read, not that it has none (ADR-053, amended)", () => {
+        const d: DescribeResponse = {
+            repo: "C:/r/mini-repo", path: "src/big.ts", kind: "file", ...off, stats: { fileCount: 1, lineCount: 2 }, importsOnly: true,
+            symbols: [], uses: [{ path: "src/a.ts", kind: "file", count: 1 }], usedBy: [], stalePaths: 0, indexVersion: 1,
+        };
+        expect(describeAnswer(d, "mini-repo").body).toEqual([
+            "src/big.ts — file: 2 lines.", S, "Declarations: not read (over the 1 MB size cap; imports only).",
+            "Uses (1 import):", "  src/a.ts  1", "Used by: nothing outside it.",
+        ]);
+    });
+
     it("the repo: no outside, so no uses or used by", () => {
         const d: DescribeResponse = {
             repo: "C:/r/mini-repo", path: "", kind: "repo", ...off, stats: { fileCount: 8, lineCount: 48 },

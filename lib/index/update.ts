@@ -14,7 +14,7 @@ import {
 import { pruneSummaries } from "../db/store/summaries";
 import { bumpIndexVersion, readIndexVersion } from "../db/store/version";
 import { buildFolders, levelEdgeDeltas } from "./aggregate";
-import { DEFAULT_HARD_MAX_FILE_BYTES, DEFAULT_MAX_FILE_BYTES, gitIgnored, isExcludedPath, listManifests, readGitHead } from "./discover";
+import { gitIgnored, isExcludedPath, listManifests, readGitHead, readingFor } from "./discover";
 import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript";
 import { normalizeSlashes, repoKey } from "./paths";
 import { toFileRecord } from "./pipeline";
@@ -61,14 +61,14 @@ export function resolvesEverything(changedPath: string): boolean {
  * A file over the size cap is read for its imports only, and one past the hard bound leaves the index, as in a full run.
  */
 export function applyFileChanges(
-    repoRoot: string, changedPaths: readonly string[], options: { maxFileBytes?: number; hardMaxFileBytes?: number } = {}
+    repoRoot: string, changedPaths: readonly string[],
+    options: { maxFileBytes?: number; parseMaxFileBytes?: number; hardMaxFileBytes?: number } = {}
 ): FileChangeResult {
     const started = performance.now();
     const root = path.resolve(repoRoot);
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
-    const maxBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
-    const hardMaxBytes = options.hardMaxFileBytes ?? DEFAULT_HARD_MAX_FILE_BYTES;
+    const caps = { maxBytes: options.maxFileBytes, parseMaxBytes: options.parseMaxFileBytes, hardMaxBytes: options.hardMaxFileBytes };
     const usedGit = fs.existsSync(path.join(root, ".git"));
     const excluded = (rel: string): boolean => isExcludedPath(rel, { extensions: TYPESCRIPT_EXTENSIONS, usedGit });
 
@@ -89,7 +89,8 @@ export function applyFileChanges(
 
         for (const rel of paths){
             const size = fileSize(path.join(root, rel));
-            if (size === null || size > hardMaxBytes || excluded(rel) || ignored.has(rel)){
+            const reading = size === null ? "skip" : readingFor(size, caps);
+            if (size === null || reading === "skip" || excluded(rel) || ignored.has(rel)){
                 // not a source file now: if the index has it, it goes
                 if (stored.has(rel)) gone.push(rel);
                 else unchanged++;
@@ -112,7 +113,7 @@ export function applyFileChanges(
             }
 
             try{
-                records.push(toFileRecord(rel, text, contentHash, size, { importsOnly: size > maxBytes }));
+                records.push(toFileRecord(rel, text, contentHash, size, reading === "full" ? {} : { importsOnly: reading }));
             } catch (err){
                 errors.push({ path: rel, error: messageOf(err) });
             }

@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { FIXTURE } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
-import { discoverFiles, gitIgnored, isExcludedPath, isTestPath, readGitHead } from "./discover";
+import { discoverFiles, gitIgnored, isExcludedPath, isTestPath, readGitHead, readingFor } from "./discover";
 
 const TS_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
@@ -39,24 +39,39 @@ describe("discoverFiles — walking (no .git)", () => {
         expect(discoverFiles(dir, { extensions: TS_EXTENSIONS }).files.map((f) => f.path)).toEqual(["src/f.ts"]);
     });
 
-    it("lists a code file over the size cap for its imports only, up to the hard bound; past the bound it is skipped (ADR-053, amended)", () => {
+    it("lists a code file over the size cap for its imports only, parsed or scanned by size; past the hard bound it is skipped (ADR-053, amended)", () => {
         const dir = makeTempDir("neb-discover-importsonly-");
         fs.writeFileSync(path.join(dir, "small.ts"), "export {};\n");                                     // 11 bytes
         fs.writeFileSync(path.join(dir, "mid.ts"), `import "./small";\n// ${"x".repeat(30)}\n`);        // 18 + 34 = 52 bytes
+        fs.writeFileSync(path.join(dir, "large.ts"), `// ${"x".repeat(86)}\n`);                         // 90 bytes
         fs.writeFileSync(path.join(dir, "huge.ts"), `// ${"x".repeat(120)}\n`);                         // 124 bytes
         fs.writeFileSync(path.join(dir, "mid.md"), `# ${"x".repeat(50)}\n`);                            // 53 bytes: a doc keeps the cap
 
-        const result = discoverFiles(dir, { extensions: TS_EXTENSIONS, maxBytes: 40, hardMaxBytes: 100 });
+        const result = discoverFiles(dir, { extensions: TS_EXTENSIONS, maxBytes: 40, parseMaxBytes: 80, hardMaxBytes: 100 });
 
         expect(result.files).toEqual([
-            { path: "mid.ts", sizeBytes: 52, importsOnly: true },
+            { path: "large.ts", sizeBytes: 90, importsOnly: "scan" },
+            { path: "mid.ts", sizeBytes: 52, importsOnly: "parse" },
             { path: "small.ts", sizeBytes: 11 },
         ]);
-        expect(result.files[1].importsOnly).toBeUndefined();
+        expect(result.files[2].importsOnly).toBeUndefined();
         expect([...result.skipped].sort((a, b) => (a.path < b.path ? -1 : 1))).toEqual([   // walk order is the OS's
             { path: "huge.ts", reason: "too large (124 bytes)" },
             { path: "mid.md", reason: "too large (53 bytes)" },
         ]);
+    });
+});
+
+describe("readingFor — how a code file of a given size is read (ADR-053, amended)", () => {
+    it("reads in full up to 1 MB, parses for imports up to 5 MB, scans for imports up to 20 MB, and skips past that", () => {
+        expect([1_000_000, 1_000_001, 5_000_000, 5_000_001, 20_000_000, 20_000_001].map((size) => readingFor(size)))
+            .toEqual(["full", "parse", "parse", "scan", "scan", "skip"]);
+    });
+
+    it("takes the bounds from the options, and a cap above the parse bound still reads in full", () => {
+        const caps = { maxBytes: 40, parseMaxBytes: 80, hardMaxBytes: 100 };
+        expect([40, 41, 80, 81, 100, 101].map((size) => readingFor(size, caps))).toEqual(["full", "parse", "parse", "scan", "scan", "skip"]);
+        expect(readingFor(70, { maxBytes: 90, parseMaxBytes: 50 })).toBe("full");
     });
 });
 

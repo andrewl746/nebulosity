@@ -5,6 +5,7 @@ import { IconArrowLeft, IconArrowRight, IconCode, IconFile, IconFolder, IconX } 
 import type { AreaCount, DescribeResponse, LevelResponse, MapNode, SummarizeResponse, SymbolInfo } from "@/lib/contracts";
 import { api, ApiError, demoGithub, type GitHubSource } from "./api";
 import { formatCompact, formatCount } from "./format";
+import { noDeclarationsText } from "./labels";
 import { editorLink, githubLink } from "./links";
 import { DEMO } from "./mode";
 import { nameOf, shortPath } from "./paths";
@@ -323,7 +324,7 @@ function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOp
             )}
 
             {data.symbols && (
-                <Rows title="Declarations" items={data.symbols} empty="None found." render={(symbol: SymbolInfo) => (
+                <Rows title="Declarations" items={data.symbols} empty={noDeclarationsText(data)} render={(symbol: SymbolInfo) => (
                     <li key={`${symbol.name}:${symbol.startLine}`}>
                         <button
                             type="button"

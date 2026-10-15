@@ -4,6 +4,7 @@ import { getDb, type Db } from "../db/client";
 import { loadFileInfo, loadFileSymbols, loadFolderInfo, loadSummaryState, sumLinesInside } from "../db/store/map";
 import { requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
+import { DEFAULT_MAX_FILE_BYTES } from "../index/discover";
 import { repoKey } from "../index/paths";
 import { docsAbout, docsToReadFirst } from "./docs";
 import { stalePaths } from "./freshness";
@@ -78,6 +79,8 @@ function describeUncached(db: Db, repo: string, repoId: number, version: number,
         ...(folder
             ? { children: loadMapChildren(db, repoId, targetPath, summariesOff) }
             : { symbols: loadFileSymbols(db, repoId, targetPath) }),
+        // over the cap, the indexer read only its imports: no declarations isn't "none" (ADR-053, amended)
+        ...(file && file.sizeBytes > DEFAULT_MAX_FILE_BYTES ? { importsOnly: true as const } : {}),
         uses,
         usedBy,
         stalePaths: stalePaths(db, repoId, targetPath, kind),

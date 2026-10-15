@@ -618,7 +618,7 @@ N − A is within gate 5b's 2,500 tokens on both repos. The probes cost $0.12, s
 - **Targets and machine:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6da`, the owner's laptop, Node 24.14.0.
 - **The change:** ADR-053's amendment, made before Eval #2's freeze at the owner's decision (2026-10-14). Import type expressions (`typeof import("x")`) count, and a code file over 1 MB is indexed for its imports only, up to 20 MB.
 - **Commands:**
-  - S1, cold: `NEBULOSITY_HOME=<scratch folder holding only the migrations> NEBULOSITY_DATA=<scratch>/.nebulosity npx tsx scripts/index.ts ../vscode`. Three runs with the change, then three with the code before it (`2b79d71`, from a `git archive` copy), in the same session.
+  - S1, cold: `NEBULOSITY_HOME=<scratch folder holding only the migrations> NEBULOSITY_DATA=<scratch>/.nebulosity npx tsx scripts/index.ts ../vscode`. Three runs with the change's first version (every file over 1 MB token-scanned), then three with the code before it (`2b79d71`, from a `git archive` copy), in the same session. The final code's runs are under "The final code" below.
   - The owner's index: `npm run index -- ../vscode`, then `npm run index -- ../affine --no-activate`.
   - Index vs truth: Task 14a's read-only script in the V1.6 ledger (`task-14a-index.ts`), run before and after the re-index. It runs the eval's own truth functions over each repo's import graph as the engine holds it, and compares the result with the 44 truths in `eval2/truth/`. A second read-only script does the same for Eval #1's ten list and chain truths.
 
@@ -646,16 +646,18 @@ N − A is within gate 5b's 2,500 tokens on both repos. The probes cost $0.12, s
 
 No edge was removed, and no code file in either repo is over 20 MB, so nothing is skipped for size now (VS Code skipped 5 files before).
 
-**The files now indexed for their imports only:**
+**The files now indexed for their imports only** (read by the final code: the full adapter up to 5 MB, the token scan past it):
 
-| File | Bytes | Specifiers | Edges |
-|---|---|---|---|
-| `extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts` | 8,535,324 | 3 | 0 |
-| `src/vs/platform/agentHost/test/node/agentService.test.ts` | 1,560,935 | 97 | 88 |
-| `src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts` | 1,377,567 | 0 | 0, and 1 into it from `extHostDocumentData.test.ts` |
-| `src/vs/platform/agentHost/test/node/copilotAgentSession.test.ts` | 1,202,919 | 109 | 103 |
-| `src/vs/platform/agentHost/test/node/copilotAgent.test.ts` | 1,027,075 | 114 | 106 |
-| AFFiNE's `.yarn/releases/yarn-4.18.0.cjs` | 3,784,908 | 2 (`fs`, `path`) | 0 |
+| File | Bytes | Read by | Specifiers | Edges |
+|---|---|---|---|---|
+| `extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts` | 8,535,324 | token scan | 3 | 0 |
+| `src/vs/platform/agentHost/test/node/agentService.test.ts` | 1,560,935 | full parse | 97 | 88 |
+| `src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts` | 1,377,567 | full parse | 0 | 0, and 1 into it from `extHostDocumentData.test.ts` |
+| `src/vs/platform/agentHost/test/node/copilotAgentSession.test.ts` | 1,202,919 | full parse | 109 | 103 |
+| `src/vs/platform/agentHost/test/node/copilotAgent.test.ts` | 1,027,075 | full parse | 114 | 106 |
+| AFFiNE's `.yarn/releases/yarn-4.18.0.cjs` | 3,784,908 | full parse | 0 | 0 |
+
+The first version of the change token-scanned every one of these. The scan gave the same specifiers for the five VS Code files. For the yarn release it read `require('fs')` and `require('path')` from template literals of generated code, which the full parse rightly leaves out.
 
 **The import-type edges:**
 - VS Code's 37 come from 26 files. 11 are in the two desktop loaders: `src/vs/code/electron-browser/workbench/workbench.ts` has 6 (sandbox types, globals, theme service, both window modules, `desktop.main.ts`) and `src/vs/sessions/electron-browser/sessions.ts` has 5. The rest are mostly in Copilot's tests (5 of them reach its `vscode` types shim) and the agent-host tests and helpers.
@@ -673,6 +675,21 @@ No edge was removed, and no code file in either repo is over 20 MB, so nothing i
 **44 of 44 identical** (41 before). Eval #1's ten list and chain truths (`eval/truth/cl1.json` … `cn5.json` and their copies in `eval2/truth/`) still match the index: no file is missing or extra.
 
 **The owner's index:**
-- **VS Code.** `npm run index -- ../vscode` parsed every file once, because the adapter version moved to 3. It took 87.0 s (discover 1.6, parse 28.1, write 52.0, resolve 3.8, aggregate 1.4), since it writes over every existing row, then filled code search in 8.2 s. Index version 140.
+- **VS Code, with the first version of the change.** `npm run index -- ../vscode` parsed every file once, because the adapter version moved to 3. It took 87.0 s (discover 1.6, parse 28.1, write 52.0, resolve 3.8, aggregate 1.4), since it writes over every existing row, then filled code search in 8.2 s. Index version 140.
 - **VS Code's summaries:** 18,633 of 18,642 ready. 9 are out of date: 8 folders above the newly indexed files (`src`, `src/vs`, `src/vs/platform`, `src/vs/platform/agentHost`, `src/vs/workbench`, `src/vs/workbench/api`, `extensions`, `extensions/vscode-colorize-perf-tests`) and the repo. Their child lists changed, so they are redone when opened.
 - **AFFiNE** took 20.5 s (discover 0.6, parse 4.6, write 13.2, resolve 1.6, aggregate 0.5), then code search in 1.7 s. Index version 5. The active repo stayed VS Code.
+
+**The final code** (the review's fix round: files of 1–5 MB parsed in full for their imports, adapter version 4):
+- **The owner's index, re-indexed.** VS Code took 69.1 s (discover 1.1, parse 29.1, write 34.4, resolve 3.2, aggregate 1.3), then code search in 7.8 s; index version 141. AFFiNE took 20.8 s (0.5, 5.4, 12.5, 1.8, 0.5), then code search in 3.1 s; index version 6.
+- **Edges:** unchanged on both, 140,583 and 26,261. Index vs truth is still **44 of 44**.
+- **S1, cold, three runs:**
+
+| Run | discover | parse | write | resolve | aggregate | **structure (S1)** | code search fill |
+|---|---|---|---|---|---|---|---|
+| final, 1 | 0.8 s | 28.6 s | 20.9 s | 3.0 s | 1.2 s | **54.6 s** | 5.8 s |
+| final, 2 | 0.8 s | 29.6 s | 20.8 s | 3.4 s | 1.1 s | **55.7 s** | 5.6 s |
+| final, 3 | 0.8 s | 29.2 s | 20.3 s | 3.2 s | 1.0 s | **54.5 s** | 5.3 s |
+
+**S1 (≤ 60 s): PASS at 55.7 s worst of three.**
+- **The machine kept slowing through the session.** Two later runs of the code before the change took 53.8 and 50.0 s. Two interleaved pairs, before then after, took 56.3 / 57.9 s and then 71.7 / 69.2 s: the second pair is over 60 s with either code. A stray `python -` process left by another shell had been using one of the 16 logical processors fully since 18:43 the day before, and Chrome and other apps were busy.
+- **Timed apart, the change adds about 0.6 s:** the full parse of the four 1.0–1.6 MB files (88–148 ms each) and the token scan of the 8.5 MB fixture. Between runs of the same code this machine varied by 2–4 s. S1 should be measured again on a quiet machine.

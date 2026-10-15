@@ -209,12 +209,13 @@ type DescribeResponse = { repo: string; path: string; kind: "repo" | "folder" | 
   tagline?: string; summary?: string; summaryStatus: SummaryStatus; summaryError?: string;
   docs?: DocPointer[];
   stats: { fileCount: number; lineCount: number };
-  children?: MapNode[]; symbols?: SymbolInfo[];
+  children?: MapNode[]; symbols?: SymbolInfo[]; importsOnly?: true;
   uses: AreaCount[]; usedBy: AreaCount[]; stalePaths: number; indexVersion: number };
 ```
 
 - **`children`** (folders and the repo) lists every child in the Map's order, the order `level()` draws each page's boxes in. A client shows 20 at a time.
 - **`symbols`** (files) are the top-level declarations and class members in line order, members by qualified name (`Logger.info`). The lines are the declaration's own, for jumping to it.
+- **`importsOnly`** (files; ADR-053, amended, additive; `CONTRACTS_VERSION` stays 3) is `true` for a file over the 1 MB size cap, which the indexer read for its imports only. Its `symbols` is empty because they weren't read, not because it has none: the MCP answer says "Declarations: not read (over the 1 MB size cap; imports only).", and the detail panel says "Not read (over the 1 MB size cap; imports only).". It is set from the file's stored size and left out otherwise.
 - **`uses` / `usedBy`** count imports across the target's boundary, grouped by the area on the other side (PIVOT_SPEC.md §4.2), most first. An area is a folder, or a file when the other file sits directly in the lowest folder both share. Test files count like any other file. A file's summary was written from an "Imported by" line that counts tests apart (RAG_PIPELINE.md), so the numbers in its text can differ; the detail panel labels both.
 - **`docs`** (ADR-054, additive; `CONTRACTS_VERSION` stays 3) points at the repo's own Markdown. For a folder or file it is up to 5 docs linked to the target or the folders above it (the root left out), each by its strongest link, ranked by kind (`applies`, `readme`, `mentions`), deeper target, a plain-folder glob, a name about architecture, count, then path; `reason` always says why (`target` is the place the link names, `detail` the glob of an `applies` link). For the repo it is up to 5 docs to read first: the root README, then docs named for architecture, then docs that apply to a folder (`reason` only on those). Left out when none.
 - **`summaryStatus`** follows §11's rule. **`summaryError`** says why the last attempt failed, and only appears when the status is `failed`.

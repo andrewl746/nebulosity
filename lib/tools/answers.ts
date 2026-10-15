@@ -70,7 +70,8 @@ export function describeAnswer(d: DescribeResponse, repoName: string): AnswerPar
     }
 
     if (d.symbols){
-        if (d.symbols.length === 0) body.push("Declarations: none.");
+        if (d.importsOnly) body.push("Declarations: not read (over the 1 MB size cap; imports only).");
+        else if (d.symbols.length === 0) body.push("Declarations: none.");
         else{
             body.push(`Declarations (${formatCount(d.symbols.length)}):`);
             for (const s of d.symbols.slice(0, SHOWN.declarations)){

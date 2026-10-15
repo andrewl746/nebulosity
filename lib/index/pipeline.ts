@@ -18,7 +18,9 @@ import { buildFolders, buildLevelEdges } from "./aggregate";
 import { docLinks, folderSuffixes, type KnownPaths } from "./docs";
 import { discoverFiles, isTestPath, readGitHead, type DiscoveredFile, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
-import { ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile, parseTypeScriptImportsOnly } from "./languages/typescript";
+import {
+    ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile, parseTypeScriptImportsOnly, scanTypeScriptImports,
+} from "./languages/typescript";
 import { repoKey } from "./paths";
 import { createResolver, createSourceFinder, edgesFrom } from "./resolve";
 import { declaredEntries, readWorkspace } from "./workspace";
@@ -32,6 +34,8 @@ export type IndexOptions = {
     batchSize?: number;
     /** A code file over this is indexed for its imports only (ADR-053). Default DEFAULT_MAX_FILE_BYTES (1 MB). */
     maxFileBytes?: number;
+    /** Up to this, such a file is parsed in full for them; past it, token-scanned. Default DEFAULT_PARSE_MAX_FILE_BYTES (5 MB). */
+    parseMaxFileBytes?: number;
     /** A code file over this is skipped. Default DEFAULT_HARD_MAX_FILE_BYTES (20 MB). */
     hardMaxFileBytes?: number;
     /**
@@ -107,7 +111,8 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         // ---- discover ---------------------------------------------------------
         let t = performance.now();
         const discovered = discoverFiles(root, {
-            extensions: TYPESCRIPT_EXTENSIONS, maxBytes: options.maxFileBytes, hardMaxBytes: options.hardMaxFileBytes,
+            extensions: TYPESCRIPT_EXTENSIONS,
+            maxBytes: options.maxFileBytes, parseMaxBytes: options.parseMaxFileBytes, hardMaxBytes: options.hardMaxFileBytes,
         });
         const stored = loadStoredFiles(db, repoId);
         timingsMs.discover = performance.now() - t;
@@ -150,7 +155,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 }
 
                 try{
-                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, { importsOnly: file.importsOnly === true }));
+                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, { importsOnly: file.importsOnly }));
                 } catch (err){
                     errors.push({ path: file.path, error: message(err) });
                 }
@@ -270,12 +275,15 @@ function isDirectory(p: string): boolean {
 
 /**
  * One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed.
- * A file over the size cap is read for its imports only: no declarations and no chunks, so no code search (ADR-053).
+ * A file over the size cap is read for its imports only, parsed or token-scanned by size: no declarations and no chunks,
+ * so no code search (ADR-053).
  */
 export function toFileRecord(
-    filePath: string, text: string, contentHash: string, sizeBytes: number, opts: { importsOnly?: boolean } = {}
+    filePath: string, text: string, contentHash: string, sizeBytes: number, opts: { importsOnly?: "parse" | "scan" } = {}
 ): FileRecord {
-    const parsed = opts.importsOnly ? parseTypeScriptImportsOnly(filePath, text) : parseTypeScriptFile(filePath, text);
+    const parsed = opts.importsOnly === "scan" ? scanTypeScriptImports(filePath, text)
+        : opts.importsOnly === "parse" ? parseTypeScriptImportsOnly(filePath, text)
+        : parseTypeScriptFile(filePath, text);
     return {
         path: filePath,
         kind: /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",

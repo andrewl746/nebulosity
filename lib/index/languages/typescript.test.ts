@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countLines, languageOf, parseTypeScriptFile, parseTypeScriptImportsOnly } from "./typescript";
+import { countLines, languageOf, parseTypeScriptFile, parseTypeScriptImportsOnly, scanTypeScriptImports } from "./typescript";
 
 const LOG_TS = [
     "/** Writes a message. */",
@@ -165,7 +165,7 @@ describe("import type expressions (ADR-053, amended)", () => {
     });
 });
 
-describe("parseTypeScriptImportsOnly — a file over the size cap (ADR-053, amended)", () => {
+describe("parseTypeScriptImportsOnly — a file over the 1 MB cap, up to 5 MB (ADR-053, amended)", () => {
     it("reads every import form in source order, and no declarations or chunks", () => {
         const source = [
             "import a from \"./a\";",
@@ -207,5 +207,75 @@ describe("parseTypeScriptImportsOnly — a file over the size cap (ADR-053, amen
 
     it("reports each specifier once", () => {
         expect(parseTypeScriptImportsOnly("x.ts", "import { a } from \"./a\";\nconst b = require(\"./a\");\n").imports).toEqual(["./a"]);
+    });
+
+    it("reads by the adapter's own rule, where the token scan goes wrong (a 1–5 MB file is parsed in full)", () => {
+        const source = [
+            'export * as ns from "./a";',            // a re-export of a namespace
+            'export type * as t from "./t";',
+            "const r = /`/;",                         // a regex, not the start of a template
+            'import b from "./b";',
+            'foo.require("./m");',                    // a member call, not require
+            'require("./n", 1);',                     // two arguments
+            'export const s = /import x from "y"/;',  // regex text, not an import
+            "",
+        ].join("\n");
+        expect(parseTypeScriptImportsOnly("x.ts", source).imports).toEqual(["./a", "./t", "./b"]);
+        expect(parseTypeScriptImportsOnly("x.tsx", 'export const a = <p>import x from "./jsx"</p>;\n').imports).toEqual([]);
+    });
+});
+
+describe("scanTypeScriptImports — the token scan, for a file over 5 MB (ADR-053, amended)", () => {
+    const scan = (text: string, filePath = "x.ts"): string[] => scanTypeScriptImports(filePath, text).imports;
+
+    it("reads the statement forms in source order, with no declarations or chunks", () => {
+        const source = [
+            "import a from \"./a\";",
+            "import type { B } from \"../b\";",
+            "import \"./side-effect\";",
+            "export { c } from \"./c\";",
+            "export * from \"./d\";",
+            "import e = require(\"./e\");",
+            "const f = require(\"./f\");",
+            "async function g() { await import(\"./g\"); }",
+            "let h: typeof import(\"./h\");",
+            "export class Big { run(): void {} }",
+            "",
+        ].join("\n");
+        expect(scanTypeScriptImports("src/huge.ts", source)).toEqual({
+            imports: ["./a", "../b", "./side-effect", "./c", "./d", "./e", "./f", "./g", "./h"],
+            symbols: [],
+            chunks: [],
+            lineCount: 10,
+        });
+    });
+
+    it("drops a module augmentation, and keeps an import() whose comment ends in \"module\"", () => {
+        expect(scan("import { x } from \"./b\";\ndeclare module \"./a\" {\n    interface X { y: number }\n}\n")).toEqual(["./b"]);
+        expect(scan("import(// module\n\"./a\");\n")).toEqual(["./a"]);
+    });
+
+    it("misses export * as ns and export type * as ns", () => {
+        expect(scan('export * as ns from "./a";\nexport type * as t from "./t";\n')).toEqual([]);
+    });
+
+    it("reads a member require and a two-argument require, which the adapter doesn't", () => {
+        expect(scan('foo.require("./a");\nrequire("./b", 1);\n')).toEqual(["./a", "./b"]);
+    });
+
+    it("loses imports after a regex literal holding a backtick (to the next backtick) or a quote (to the line's end)", () => {
+        // with no regex context, ` opens a template and ' a string
+        expect(scan('const r = /`/;\nimport a from "./a";\nimport b from "./b";\n')).toEqual([]);
+        expect(scan('const r = /[\'"]/; import x from "./same-line";\nimport y from "./next-line";\n')).toEqual(["./next-line"]);
+    });
+
+    it("can invent a specifier from a regex literal's or JSX text's words", () => {
+        expect(scan('export const r = /import x from "y"/;\n')).toEqual(["y"]);
+        expect(scan('export const a = <p>import x from "./jsx"</p>;\n', "x.tsx")).toEqual(["./jsx"]);
+    });
+
+    it("reads an AMD define list, and doesn't follow a computed import()", () => {
+        expect(scan('define(["./a", "./b"], function (a, b) {});\n')).toEqual(["./a", "./b"]);
+        expect(scan('const u = "./a"; import(u);\n')).toEqual([]);
     });
 });
