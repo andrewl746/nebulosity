@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "test/fixtures/**",
     // Planning and review scratch (gitignored, never shipped)
     ".superpowers/**",
+    // The local data folder (gitignored): indexes, eval transcripts and the scripts eval runs wrote in their scratch folders
+    ".nebulosity/**",
   ]),
 ]);
 
