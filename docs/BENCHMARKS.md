@@ -836,4 +836,11 @@ How fast Claude Code got the context a question needs (medians, A / N; the score
 
 - **The measures:** time is `duration_ms` and the cost is Claude Code's own list-price estimate. "Context read" is input + cache writes + cache reads over every model call of the run. A session's row is the whole session.
 - **The totals:** the 270 runs came to $22.26 by that estimate. The 5-hour window went from 0.18 to 0.71 and the 7-day from 0.31 to 0.37 (upper bounds).
-- **The losses**, named in the results: VS Code's big-picture questions (−0.083), the grep-hard margin (+0.088 against +0.15), VS Code's graph-question cost (0.57 of A's against 0.5), and tool use (80 of 90 against 0.90). It was also slower and costlier on VSCODE-PAIRS (1.73 times the time, 1.92 times the cost).
+- **A confound in the cost:** the runs' permission rules refused shell commands outside an allowlist. Claude Code alone had commands refused in 42 of its 69 graph runs and in all 18 of its sessions. On the graph runs without a refusal, N's time ratio was 0.37 (VS Code) and 0.38 (AFFiNE), and its cost ratio 0.63 and 0.72 (0.39 and 0.74 pooled), scoring 1.00 against 0.995 and 0.86. The time advantage holds; part of the cost advantage is the refusals.
+- **The losses**, named in the results:
+  - VS Code's big-picture questions (−0.083);
+  - the grep-hard margin (+0.088 against +0.15);
+  - VS Code's graph-question cost (0.57 of A's against 0.5);
+  - tool use (80 of 90 against 0.90).
+
+  It was also slower and costlier on VSCODE-PAIRS (1.73 times the time, 1.92 times the cost, at 0.99 against 1.00). The conventions report skips rare folder names, and two of N's three runs then had their scripts refused and grepped by hand. The third was faster and cheaper than every A run.

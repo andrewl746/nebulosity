@@ -1,8 +1,8 @@
 # Nebulosity
 
-**Nebulosity does the import walk a dependency question needs in one call. Measured on VS Code and AFFiNE, Claude Code with it answered those questions in about a third of the time and half the cost estimate of Claude Code alone, at the same or a higher score. It didn't make big-picture answers better, and it failed the ship gate it was measured against.**
+**Nebulosity does the import walk a dependency question needs in one call. Measured on VS Code and AFFiNE, Claude Code with it answered those questions in under half the time of Claude Code alone, at the same or a higher score, and for less. It didn't make big-picture answers better, and it failed the ship gate it was measured against.**
 
-Nebulosity indexes a big TypeScript or JavaScript repository once and keeps the index fresh as files change: its folder tree, every import between its files, and, with an Anthropic API key, a short summary of every file and folder. It serves that index two ways: to AI agents like Claude Code through an MCP server, and to people through a zoomable Map. In Eval #2, 270 runs on VS Code and AFFiNE against Claude Code alone, which could write its own Node.js scripts, it made the questions that walk the import graph faster and cheaper: a median 8.4 s against 28.1 s and $0.031 against $0.066, scoring 1.00 against 0.94. Sessions of four related questions took 0.29 of the time and 0.39 of the cost. It didn't help on big-picture questions: 0.84 against 0.93 on VS Code and 0.68 against 0.70 on AFFiNE. On the hardest dependency questions it raised the score by 0.09, where the ship gate set before the eval asked for 0.15, and the gate failed on four of its seven conditions.
+Nebulosity indexes a big TypeScript or JavaScript repository once and keeps the index fresh as files change: its folder tree, every import between its files, and, with an Anthropic API key, a short summary of every file and folder. It serves that index two ways: to AI agents like Claude Code through an MCP server, and to people through a zoomable Map. In Eval #2, 270 runs on VS Code and AFFiNE against Claude Code alone, which could write its own Node.js scripts, it made the questions that walk the import graph faster and cheaper. Over both repos the medians were 8.4 s against 28.1 s and $0.031 against $0.066, scoring 1.00 against 0.94. The gate compares each repo, and on VS Code the cost was 0.57 of Claude Code alone's, where it asked for 0.5. Part of the cost gap comes from the eval's own rules: shell commands outside an allowlist were refused instead of asked about, and Claude Code alone had one refused in 42 of its 69 runs on these questions. On the runs without a refusal, the ratios were 0.39 for time and 0.74 for cost, scoring 1.00 against 0.96. Sessions of four related questions took 0.29 of the time and 0.39 of the cost, though every one of Claude Code alone's sessions had a refused command. It didn't help on big-picture questions: 0.84 against 0.93 on VS Code and 0.68 against 0.70 on AFFiNE. On the hardest dependency questions it raised the score by 0.09, where the ship gate set before the eval asked for 0.15, and the gate failed on four of its seven conditions.
 
 [How it compares with Claude Code alone](docs/EVAL_RESULTS.md)
 
@@ -39,16 +39,20 @@ The score is the share of rubric points for big-picture questions, recall for li
 
 **Where it helped.**
 - **Getting the context a graph question needs.** With Nebulosity, Claude Code answered in a median 2 turns and one Nebulosity call. On its own it took 4.5 turns on VS Code and 8 on AFFiNE. With Nebulosity it was 2.4 and 4.2 times as fast, at 0.57 and 0.43 of the cost estimate, and scored 1.00 against 0.94 and 0.93.
-- **Task sessions:** 2.9 and 4.2 times as fast, at 0.47 and 0.49 of the cost, scoring 1.00 in every session.
-- **The longest walks:** listing every file that depends on a file, directly or through other files, was 6–8 times as fast, at a fifth of the cost or less.
+- **Task sessions:** 2.9 and 4.2 times as fast, at 0.47 and 0.49 of the cost, scoring 1.00 in every session against 0.98 and 0.91.
+- **The longest walks:** listing every file that depends on a file, directly or through other files, was 5.9 times as fast on VS Code (scoring 1.00 against 0.92) and 8.7 times on AFFiNE (1.00 against 1.00), at 0.19 and 0.12 of the cost.
+- **Part of the cost saving is the eval's.**
+  - The eval ran Claude Code non-interactively, so a shell command outside its allowlist was refused, not asked about. Claude Code alone hit that in 42 of its 69 graph runs and in all 18 sessions, usually when it tried to run a script. It then often walked the imports with grep instead.
+  - On the graph runs without a refusal, Nebulosity was 2.7 times as fast on VS Code and 2.6 on AFFiNE, but at 0.63 and 0.72 of the cost, not 0.57 and 0.43. On those runs Nebulosity scored 1.00 against 0.995 on VS Code, and 1.00 against 0.86 on AFFiNE.
+  - The time advantage holds. Part of the cost advantage is the refusals.
 
 **Where it lost.**
 - **Big-picture on VS Code: 0.84 against 0.93**, as in Eval #1 (0.82 against 0.91). The answers leaned on Nebulosity's computed layers and import counts instead of VS Code's own written rules, even where a tool's answer pointed to that file. On AFFiNE it scored 0.68 against 0.70, at 1.20 times the cost.
 - **Accuracy on the graph questions rose less than the gate asked.** Claude Code alone wrote its own import walkers and scored 0.91 on the hardest of them. Nebulosity's 1.00 is +0.09, where the gate asked for +0.15.
 - **Not faster everywhere.**
-  - On one VS Code question, which folders import which, Nebulosity's runs took 1.7 times as long and cost 1.9 times as much: its folder-conventions report skips rare folder names.
-  - On two other VS Code questions, they cost 1.1–1.4 times as much.
-  - On VS Code's graph questions as a whole, the cost was 0.57 of Claude Code alone's, where the gate asked for 0.5.
+  - On one VS Code question, which folders import which, Nebulosity's runs took 1.7 times as long and cost 1.9 times as much, scoring 0.99 against 1.00. Its folder-conventions report skips rare folder names, so each run had to work out the rest. One run's script did it faster and more cheaply than every run of Claude Code alone. The other two had their scripts refused and grepped by hand.
+  - On two other VS Code questions, they cost 1.1–1.4 times as much, scoring 1.00 against 0.87 and 1.00 against 1.00.
+  - On VS Code's graph questions as a whole, the cost was 0.57 of Claude Code alone's (scoring 1.00 against 0.94), where the gate asked for 0.5.
 - **Its tools weren't always used.** In 10 of the 90 runs that should have used a tool, all on VS Code, Claude Code with Nebulosity wrote its own script instead.
 
 **The ship gate failed.** Its seven conditions were fixed before the first run. Four failed: the accuracy gain on graph questions, no loss on VS Code's big-picture questions, the cost on VS Code's graph questions, and the tools used in 90% of the runs that need them. Three passed: no extra cost on other questions, the task sessions, and the added prompt, about 2,100 tokens a turn.

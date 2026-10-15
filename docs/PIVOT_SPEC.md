@@ -330,7 +330,7 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 *(Run as ADR-050 says: 90 runs in three arms, Sonnet 5.5 at medium effort, Claude Code 2.1.299.)*
 
-*(Eval #2, V1.6, ADR-057: 270 runs on VS Code and AFFiNE in two arms, three repeats each, Claude Code 2.1.300, scripts allowed in both arms. With Nebulosity, Claude Code was faster and cheaper on the questions that walk the import graph and in task sessions, at an equal or higher score. It was lower on VS Code's big-picture questions. The ship gate failed on conditions 1, 2, 3a and 5a (S12). docs/EVAL_RESULTS.md.)*
+*(Eval #2, V1.6, ADR-057: 270 runs on VS Code and AFFiNE in two arms, three repeats each, Claude Code 2.1.300, scripts allowed in both arms. With Nebulosity, Claude Code was faster and cheaper on the questions that walk the import graph and in task sessions, at an equal or higher score. Part of the cost difference came from the alone arm's refused shell commands. It was lower on VS Code's big-picture questions. The ship gate failed on conditions 1, 2, 3a and 5a (S12). docs/EVAL_RESULTS.md.)*
 
 ---
 

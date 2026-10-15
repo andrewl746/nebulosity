@@ -201,7 +201,7 @@
 **Consequences:** Phases 6 and S are superseded. Phase 5's orchestration design survives as extra E1 (the Guide). Most `lib/` implementation files are rewritten (`PIVOT_SPEC.md` §3), while the layering, the contracts discipline, the SQLite store, the incremental-indexing pattern and UI-actions-as-tools carry over. An evaluation against Claude Code alone is part of v1's definition of done.
 **Revisit when:** the eval shows Nebulosity's tools don't improve Claude Code's answers on VS Code. At that point the value proposition itself, not just the tuning, needs rethinking.
 
-**Amended (2026-10-15, Eval #2):** two evals now say the same thing about the value proposition: Nebulosity's tools make Claude Code faster and cheaper on the questions that walk the import graph, at the same or a higher score, but they don't make its answers clearly better, and on VS Code's big-picture questions they made them worse both times (−0.09 in Eval #1, −0.08 in Eval #2), so this ADR's revisit condition holds a second time (docs/EVAL_RESULTS.md).
+**Amended (2026-10-15, Eval #2):** two evals now say the same thing about the value proposition: Nebulosity's tools make Claude Code faster and cheaper on the questions that walk the import graph, at the same or a higher score (part of the cost difference in Eval #2 came from the alone arm's refused shell commands), but they don't make its answers clearly better, and on VS Code's big-picture questions they made them worse both times (−0.09 in Eval #1, −0.08 in Eval #2), so this ADR's revisit condition holds a second time (docs/EVAL_RESULTS.md).
 
 ## ADR-025 — Drop the native C++ scanner (2026-10-11) — supersedes ADR-014 and ADR-015
 
@@ -638,7 +638,7 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
 **Amended (2026-10-15, Eval #2): E2's case, and the order after V1.6, for the owner to decide.**
 - **E2's case.** Typecheck Benchmark #1 measured what it would cost: 18.2 s and 5.1 GB of memory to type-check VS Code's main project, and up to about 62 minutes to resolve every method call. A unique implementer settles only about 6% of the sampled calls; the rest of the injected-service calls need the type checker's own answer or stay unresolved. Eval #2 adds no case for E2. No question asked about calls, and none of its four failed conditions came from a missing call edge:
-  - condition 1: Claude Code alone, writing its own import walkers, scored 0.91 on the grep-hard questions, which left at most +0.088 to gain;
+  - condition 1: Claude Code alone, writing its own import walkers, scored 0.91 on the grep-hard questions, which left at most +0.089 to gain;
   - condition 2: VS Code's big-picture answers took the tools' answers over the repo's own docs;
   - condition 3a: N's cost floor is about $0.02 a run (two turns over a prompt of about 23,500 tokens), against Claude Code alone's scripts at about $0.03;
   - condition 5a: ten VS Code runs wrote a script instead of calling a tool.
@@ -648,7 +648,7 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
   - (b) repositioning first, ADR-024's question;
   - (c) shipping as a measured tool with the losses stated, which amends ADR-051's bar, then E4 → E5 → E1.
 
-  E2 stays parked in each, unless the owner wants it for its own sake.
+  In each, E2 would stay parked unless the owner wants it for its own sake: that is the owner's call.
 
 ## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
 
