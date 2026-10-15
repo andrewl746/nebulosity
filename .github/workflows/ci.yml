@@ -2,7 +2,9 @@
 # then builds the Map the way the package ships it (npm run build:package, so prepack's check passes), packs, installs
 # the tarball into a scratch prefix and uses the installed copy: --version, doctor, two fixtures indexed, an MCP session
 # through the installed launcher (scripts/mcp-smoke.mjs, which turns live events off), and the Map on port 3123 with its
-# worker off. Everything the installed copy writes goes to a scratch data folder (NEBULOSITY_DATA).
+# worker off. Then, on a temp copy of arch-repo: setup against a real Claude Code (installed with no key; only its mcp
+# commands run), the installed Map's background worker picking up a saved file (port 3124), and summarize's refusals
+# without a key and without a terminal. Everything the installed copy writes goes to a scratch data folder (NEBULOSITY_DATA).
 #
 # How it runs: never by itself, on pull requests or on the working branches. The repo is private and macOS minutes count
 # ten times, so each run is asked for. GitHub offers "Run workflow" only for a workflow on the default branch, and main
@@ -128,4 +130,131 @@ jobs:
           fi
           echo "--- the Map's output"
           cat "$SCRATCH/map.log"
+          test -z "$failed"
+      # What S9 claims beyond the steps above (V1.6's final review, C-I1): setup against a real Claude Code, the installed
+      # Map's background worker, and summarize's refusals. Each runs on a temp copy of arch-repo, so the checkout's fixture
+      # is never edited, and each step has its own time limit.
+      - name: Install Claude Code
+        id: claude
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 5
+        env:
+          DISABLE_AUTOUPDATER: "1"
+        run: |
+          # the version Eval #2 pinned, whose `claude mcp get` output setup reads (scripts/cli.ts, parseRegistration).
+          # No key and no login: only its mcp commands run here, and they call no model.
+          npm i -g @anthropic-ai/claude-code@2.1.300
+          claude --version
+      - name: Index a temp copy of arch-repo
+        id: copy
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 5
+        run: |
+          export NEBULOSITY_DATA="$SCRATCH/nebulosity-data"
+          cp -R test/fixtures/arch-repo "$SCRATCH/setup-repo"
+          # without --no-activate: the copy becomes the active repo, the one the worker step's Map watches
+          "$BIN/nebulosity" index "$SCRATCH/setup-repo"
+          echo "COPY=$SCRATCH/setup-repo" >> "$GITHUB_ENV"
+      - name: nebulosity setup with the real Claude Code
+        if: ${{ !cancelled() && steps.claude.outcome == 'success' && steps.copy.outcome == 'success' }}
+        timeout-minutes: 5
+        env:
+          DISABLE_AUTOUPDATER: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+        run: |
+          export NEBULOSITY_DATA="$SCRATCH/nebulosity-data"
+          LAUNCHER="$PKG/mcp/launch.mjs"
+          # on Windows claude is a .cmd shim that runs through cmd.exe, so setup quotes each value and argument
+          if [ "$RUNNER_OS" = "Windows" ]; then Q='"'; else Q=''; fi
+          ADD="claude mcp add --scope local --transport stdio nebulosity -e ${Q}NEBULOSITY_DATA=$NEBULOSITY_DATA${Q} -- node ${Q}$LAUNCHER${Q}"
+          cd "$COPY"
+          before=$(find . | sort)
+          failed=""
+          "$BIN/nebulosity" setup || { echo "nebulosity setup failed"; failed=yes; }
+          got=$(claude mcp get nebulosity) || { echo "claude mcp get nebulosity failed"; failed=yes; }
+          echo "$got"
+          # the registration as Claude Code holds it: this repo's local scope, node and the installed launcher, the data
+          # folder an installed copy always passes, and the health check's answer (the server started and listed its tools)
+          for want in "Scope: Local config" "Command: node" "Args: $LAUNCHER" "NEBULOSITY_DATA=$NEBULOSITY_DATA" "Connected"; do
+            grep -qF -- "$want" <<< "$got" || { echo "claude mcp get doesn't show: $want"; failed=yes; }
+          done
+          printed=$("$BIN/nebulosity" setup --print) || { echo "nebulosity setup --print failed"; failed=yes; }
+          echo "$printed"
+          # a registration exists now, so --print gives the remove line before the add line
+          grep -qF -- "  claude mcp remove --scope local nebulosity" <<< "$printed" || { echo "setup --print has no remove line"; failed=yes; }
+          grep -qF -- "  $ADD" <<< "$printed" || { echo "setup --print doesn't print: $ADD"; failed=yes; }
+          after=$(find . | sort)
+          if [ "$before" != "$after" ]; then
+            echo "the repo gained or lost a file:"; diff <(echo "$before") <(echo "$after") || true; failed=yes
+          fi
+          test -z "$failed"
+      - name: The installed Map's background worker picks up a saved file
+        if: ${{ !cancelled() && steps.copy.outcome == 'success' }}
+        timeout-minutes: 6
+        run: |
+          export NEBULOSITY_DATA="$SCRATCH/nebulosity-data"
+          # the worker on (no NEBULOSITY_WORKER=off): the installed Map forks scripts/background.ts through its own tsx
+          "$BIN/nebulosity" map --port 3124 > "$SCRATCH/map-worker.log" 2>&1 &
+          MAP=$!
+          version() { curl -sf http://127.0.0.1:3124/api/status | node -e "process.stdout.write(String(JSON.parse(require('fs').readFileSync(0, 'utf8')).indexVersion))"; }
+          up=""
+          for i in $(seq 1 120); do
+            if curl -sf http://127.0.0.1:3124/api/status > /dev/null; then up=yes; break; fi
+            kill -0 "$MAP" 2> /dev/null || break   # the command ended: nothing to wait for
+            sleep 1
+          done
+          failed=""
+          watching=""
+          if [ -n "$up" ]; then
+            # the worker logs "watching <repo>" once its watcher is ready and its startup check (a full run, which moves
+            # the index version) is done; only after that does a moved version mean the saved file was picked up
+            for i in $(seq 1 60); do
+              if grep -qF "[background] watching" "$SCRATCH/map-worker.log"; then watching=yes; break; fi
+              sleep 1
+            done
+            [ -n "$watching" ] || { echo "the worker never said it was watching the repo"; failed=yes; }
+          else
+            echo "the Map didn't answer /api/status"; failed=yes
+          fi
+          if [ -n "$watching" ]; then
+            start=$(version || true)
+            echo "index version once the worker watches: $start"
+            moved=""
+            # at most about 60 s; the line is written again every 15 s, should the first save be missed
+            for i in $(seq 0 59); do
+              if [ $((i % 15)) -eq 0 ]; then echo "export const ciSaved$i = $i;" >> "$COPY/src/app/main.ts"; fi
+              sleep 1
+              now=$(version || true)
+              if [ -n "$start" ] && [ -n "$now" ] && [ "$now" -gt "$start" ]; then moved=yes; echo "index version $now, about $((i + 1)) s after the save"; break; fi
+            done
+            [ -n "$moved" ] || { echo "the index version didn't move within 60 s of saving a file"; failed=yes; }
+          fi
+          # stop the command, the next start it spawned and the worker next forked
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            taskkill //F //T //PID "$(cat "/proc/$MAP/winpid" 2> /dev/null)" > /dev/null 2>&1 || true
+            powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3124 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id \$_.OwningProcess -Force }" || true
+          else
+            stop_tree(){ for child in $(pgrep -P "$1"); do stop_tree "$child"; done; kill "$1" 2> /dev/null || true; }
+            stop_tree "$MAP"
+          fi
+          echo "--- the Map's output"
+          cat "$SCRATCH/map-worker.log"
+          test -z "$failed"
+      - name: nebulosity summarize needs a key, and asks before it spends
+        if: ${{ !cancelled() && steps.copy.outcome == 'success' }}
+        timeout-minutes: 5
+        run: |
+          export NEBULOSITY_DATA="$SCRATCH/nebulosity-data"
+          unset ANTHROPIC_API_KEY
+          failed=""
+          # no key: free mode writes the test files' templates only, and exits 0
+          code=0; out=$("$BIN/nebulosity" summarize "$COPY" < /dev/null 2>&1) || code=$?
+          echo "$out"
+          [ "$code" -eq 0 ] || { echo "with no key: exit $code, not 0"; failed=yes; }
+          grep -qF "summaries need a key" <<< "$out" || { echo "with no key: no \"summaries need a key\""; failed=yes; }
+          # a key but no terminal and no --yes: the estimate, then nothing is sent (this key is fake and never used)
+          code=0; out=$(ANTHROPIC_API_KEY=sk-ant-ci-not-a-real-key "$BIN/nebulosity" summarize "$COPY" < /dev/null 2>&1) || code=$?
+          echo "$out"
+          [ "$code" -eq 1 ] || { echo "with a key and no terminal: exit $code, not 1"; failed=yes; }
+          grep -qF "Nothing was sent" <<< "$out" || { echo "with a key and no terminal: no \"Nothing was sent\""; failed=yes; }
           test -z "$failed"
