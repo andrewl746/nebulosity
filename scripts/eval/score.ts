@@ -3,7 +3,9 @@
  *
  * The eval's scorer (D2, R4 in docs/plans/2026-10-13-v1-5-ship.md). It reads eval/questions.json, each question's truth
  * (eval/truth) or rubric (eval/rubric), eval/truth/adjudicated.json, the rubric grades (eval/grading/grades.json, once
- * Task 19 writes them) and the kept runs (eval/runs/*.jsonl.gz, with the index line for each), and scores every run:
+ * Task 19 writes them) and the kept runs (eval/runs/*.jsonl.gz, with the index line for each), and scores every run. Any
+ * eval but Eval #1 also reads <dir>/truth/steps.json, the grading-time verdicts on the models' steps (the truth builder
+ * never reads it, so a ruling there leaves the truths as approved):
  *   lists:        recall against the truth (precision reported beside it)
  *   chains:       1 for a valid chain of the shortest length or a right "none", 0.5 for a valid longer one, 0 otherwise.
  *                 A step is real by eval/truth/adjudicated.json (reading the source beats the scanner, either way), else
@@ -170,14 +172,33 @@ function scoreNewKind(out: AnswerScore, section: string, truth: TruthFile, ctx: 
         };
     }
     // unused, violations and entries: a set of files, scored by F1 (recall and precision beside it)
-    // a listed path that isn't a file of the repo is a false positive, and is flagged
+    // a listed path that isn't a file of the repo is a false positive, and is flagged; but only one that reads as a file
     const wanted = (truth as { files: string[] }).files;
-    const listed = [...out.files, ...out.notFiles];
+    const listed = [...out.files, ...listedNonFiles(out.notFiles, ownFolders(truth))];
     const s = scoreList(listed, wanted);
     return {
         ...out, score: f1(listed, wanted), recall: s.recall, precision: s.precision, hits: s.hits, missed: s.missed, extra: s.extra,
-        flags: out.notFiles.length > 0 ? [...out.flags, "names non-files"] : out.flags,
+        flags: listed.length > out.files.length ? [...out.flags, "names non-files"] : out.flags,
     };
+}
+
+/** The folders a question names itself: an answer's lead-in may repeat them ("Unused files in src/vs/base/common:"). */
+function ownFolders(truth: TruthFile): string[] {
+    if (truth.kind === "unused") return [truth.folder];
+    if (truth.kind === "violations") return [truth.from, truth.to];
+    if (truth.kind === "entries") return [truth.target];
+    return [];
+}
+
+/**
+ * The path-like tokens of an F1 answer that aren't files of the repo, kept only when they read as a listed file: the last
+ * name has an extension (every code file's does), and the token isn't one of the question's own folders. A folder named in
+ * a lead-in, or a slash-word like "and/or", lists nothing, so a right answer isn't marked down for its prose (sweep B).
+ */
+function listedNonFiles(notFiles: readonly string[], own: readonly string[]): string[] {
+    const trimmed = (p: string): string => p.replace(/\/+$/, "").toLowerCase();
+    const mine = new Set(own.map(trimmed));
+    return notFiles.filter((p) => /\.[A-Za-z0-9]+$/.test(p.slice(p.lastIndexOf("/") + 1)) && !mine.has(trimmed(p)));
 }
 
 /** Scores one answer's final text against its question's truth or rubric. `grade` is the run's rubric grade, for big-picture questions. */
@@ -334,21 +355,46 @@ export function fromTruthVerdicts(verdicts: readonly Adjudication[]): Adjudicate
 }
 
 /**
+ * The verdicts an eval other than Eval #1 is scored with: the truths' own (<dir>/truth/adjudicated.json, as the truth builder
+ * reads it) and the grading-time verdicts on the models' steps (<dir>/truth/steps.json, the same shape, [] when missing),
+ * which only the scorer reads, so a ruling on a model's step never moves an approved truth. A problem names its file.
+ */
+export function loadScorerVerdicts(dir: string, repoIds: readonly string[]): { truth: Adjudication[]; steps: Adjudication[] } {
+    const read = (name: string): Adjudication[] => {
+        const file = path.join(dir, "truth", name);
+        if (!fs.existsSync(file)) return [];
+        let raw: unknown;
+        try{
+            raw = JSON.parse(fs.readFileSync(file, "utf8"));
+        } catch(e){
+            throw new Error(`${name}: it isn't valid JSON (${(e as Error).message})`);
+        }
+        return parseAdjudications(raw, repoIds, name);
+    };
+    return { truth: read("adjudicated.json"), steps: read("steps.json") };
+}
+
+/**
  * One repo's score context. Eval #1 is scored on the regex scanner's graph and its own verdict format, as it always was. Any
- * other eval is scored on the graph the truth builder builds (buildRepoGraphs with the truth's resolver, so workspace
- * packages and module ids resolve) and on Task 10's verdicts: the same graph and judgments its truths were made from.
+ * other eval is scored on the truth's own graph (buildRepoGraphs with the truth's resolver and adjudicated.json's verdicts,
+ * the graph its truths were made from): an edge there is an import, an edge a verdict took out of it is not, and nothing
+ * else is known. The grading-time verdicts of steps.json come last and decide the steps they name.
  */
 export function repoScoreContext(
-    root: string, repoId: string, firstEval: boolean, adjudicated: readonly Adjudicated[], verdicts: readonly Adjudication[],
+    root: string, repoId: string, firstEval: boolean, adjudicated: readonly Adjudicated[], verdicts: readonly Adjudication[], steps: readonly Adjudication[] = [],
 ): { ctx: ScoreContext; edges: [string, string][] } {
     if (firstEval){
         const g = scanRepo(root);
         return { edges: g.edges, ctx: { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicatedFor(adjudicated, repoId)) } };
     }
     const built = buildRepoGraphs(root, repoId, verdicts, { resolveBare: true });
+    // the truth's graph already holds every "in", and lacks every "out" unless an "in" on the same edge put it back
+    // (applyAdjudications); an "out" whose edge isn't there is a known "no", not an unknown step
+    const inGraph = new Set(built.graph.edges.map(([a, b]) => `${a}${SEP}${b}`));
+    const outs = fromTruthVerdicts(built.verdicts.filter((v) => v.decision === "out")).filter((j) => !inGraph.has(`${j.from}${SEP}${j.to}`));
     return {
         edges: built.scanner.edges.map(([a, b]): [string, string] => [a, b]),
-        ctx: { repoRoot: `<${repoId}>`, known: built.known, imports: makeImports(built.scanner.edges, adjudicatedFor(fromTruthVerdicts(verdicts), repoId)) },
+        ctx: { repoRoot: `<${repoId}>`, known: built.known, imports: makeImports(built.graph.edges, [...outs, ...adjudicatedFor(fromTruthVerdicts(steps), repoId)]) },
     };
 }
 
@@ -474,6 +520,42 @@ export function familyArmRows(results: readonly RunResult[]): FamilyArmRow[] {
     }));
     return rows.sort((a, b) => rank(FAMILY_ORDER, a.family) - rank(FAMILY_ORDER, b.family) || rank(KIND_ORDER, a.kind ?? "") - rank(KIND_ORDER, b.kind ?? "")
         || rank(ARM_ORDER, a.arm) - rank(ARM_ORDER, b.arm) || (a.arm < b.arm ? -1 : a.arm > b.arm ? 1 : 0));
+}
+
+/** A chain or cycle step still to adjudicate, and the repo it is a step of. */
+export type OpenStep = { repo: string; step: [string, string] };
+
+/** Each step still to adjudicate in the runs and the sessions, once per repo however many left it open, sorted by repo, then step. */
+export function openSteps(results: readonly RunResult[], sessions: readonly SessionResult[], repoOf: (r: RunResult) => string): OpenStep[] {
+    const open = new Map<string, OpenStep>();
+    const add = (repo: string, step: [string, string]): void => { open.set(`${repo}${SEP}${step.join(SEP)}`, { repo, step }); };
+    for (const r of results) if (r.unknown !== null) add(repoOf(r), r.unknown);
+    for (const s of sessions) for (const u of s.unknown) add(s.repo, u);
+    return [...open.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, o]) => o);
+}
+
+/**
+ * The "Chain steps to adjudicate" section. Eval #1's verdicts go in its adjudicated.json, in its own format, as they always
+ * did. Any other eval's are grading-time verdicts: each step is printed with its repo and the verdict to fill in, in
+ * steps.json's format, which the scorer reads after adjudicated.json and the truth builder never reads.
+ */
+export function renderAdjudicate(steps: readonly OpenStep[], options: { firstEval: boolean; evalName: string }): string {
+    const head = ["## Chain steps to adjudicate", ""];
+    if (options.firstEval){
+        return [
+            ...head, `Read the source for each step and add {"from", "to", "imports", "note"} (and "repo" when the step is one repo's alone) to ${options.evalName}/truth/adjudicated.json:`, "",
+            ...steps.map(({ step: [a, b] }) => `- ${a} → ${b}`),
+        ].join("\n");
+    }
+    return [
+        ...head,
+        `Read the source for each step, then add its verdict to ${options.evalName}/truth/steps.json, the grading-time verdicts: "decision" is "in" when the first file imports the second and "out" when it doesn't, and "why" says what the source shows. The scorer reads steps.json after adjudicated.json; the truth builder never reads it, so the truths stay as they were approved.`,
+        "",
+        ...steps.flatMap(({ repo, step: [a, b] }) => [
+            `- ${repo}: ${a} → ${b}`,
+            `  {"repo": ${JSON.stringify(repo)}, "from": ${JSON.stringify(a)}, "to": ${JSON.stringify(b)}, "decision": "", "why": ""}`,
+        ]),
+    ].join("\n");
 }
 
 /** Each chain step still to adjudicate, once, however many runs left it open. */
@@ -723,18 +805,21 @@ function main(): void {
     });
     const questions: QuestionData[] = file.questions.filter((q) => only === null || only.includes(q.id)).map(toData);
     const order = questions.map((q) => q.id);
-    // Eval #1's verdicts are { from, to, imports, note }; every other eval's are Task 10's { repo, from, to, decision, why }
+    // Eval #1's verdicts are { from, to, imports, note }; every other eval's are Task 10's { repo, from, to, decision, why },
+    // in adjudicated.json (the truths') and steps.json (grading-time verdicts on the models' steps, the scorer's alone)
     const firstEval = definition.name === EVAL1;
-    const rawVerdicts = fs.existsSync(`${dir}/truth/adjudicated.json`) ? readJson<unknown>(`${dir}/truth/adjudicated.json`) : [];
     let truthVerdicts: Adjudication[] = [];
+    let stepVerdicts: Adjudication[] = [];
     if (!firstEval){
         try{
-            truthVerdicts = parseAdjudications(rawVerdicts);
+            ({ truth: truthVerdicts, steps: stepVerdicts } = loadScorerVerdicts(dir, repoIds));
         } catch(e){
-            throw new Stop((e as Error).message);
+            throw new Stop(`${name}/truth/${(e as Error).message}`);
         }
     }
-    const adjudicated: Adjudicated[] = firstEval ? (rawVerdicts as Adjudicated[]) : fromTruthVerdicts(truthVerdicts);
+    const adjudicated: Adjudicated[] = firstEval
+        ? (fs.existsSync(`${dir}/truth/adjudicated.json`) ? readJson<Adjudicated[]>(`${dir}/truth/adjudicated.json`) : [])
+        : fromTruthVerdicts([...truthVerdicts, ...stepVerdicts]);
     const grades = fs.existsSync(`${dir}/grading/grades.json`) ? readJson<Record<string, RunGrade>>(`${dir}/grading/grades.json`) : {};
     const sessionDefs = fs.existsSync(`${dir}/sessions.json`) ? readJson<SessionFile>(`${dir}/sessions.json`).sessions : [];
 
@@ -777,7 +862,7 @@ function main(): void {
             const pinned = definition.repos[repoId].commit;
             const head = execFileSync("git", ["-C", repoPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
             if (head !== pinned) throw new Stop(`${repoPath} is at ${head}, not ${pinned}: the truth is for that commit.`);
-            const built = repoScoreContext(repoPath, repoId, firstEval, adjudicated, truthVerdicts);
+            const built = repoScoreContext(repoPath, repoId, firstEval, adjudicated, truthVerdicts, stepVerdicts);
             edgesByRepo.set(repoId, built.edges);
             contexts.set(repoId, built.ctx);
         }
@@ -825,14 +910,13 @@ function main(): void {
 
     if (toRead.length > 0){
         const many = edgesByRepo.size > 1;
-        console.log(`\n## Chain steps to read\n\nThese steps of scored chains are the scanner's alone and are not steps of the truth's own chain, which was read by hand. They count as imports; read each in the source, and add a verdict to ${name}/truth/adjudicated.json if the scanner is wrong. They do not stop the scorer.\n\n${toRead.map((t) => `- ${many ? `${t.repo}: ` : ""}${t.step[0]} → ${t.step[1]} (${t.runs.join(", ")})`).join("\n")}`);
+        // a verdict on a model's step is a grading-time one: Eval #1 kept them in adjudicated.json; any other eval in steps.json, so the truths never move
+        const where = firstEval ? `${name}/truth/adjudicated.json` : `${name}/truth/steps.json ({"repo", "from", "to", "decision": "out", "why"})`;
+        console.log(`\n## Chain steps to read\n\nThese steps of scored chains are the scanner's alone and are not steps of the truth's own chain, which was read by hand. They count as imports; read each in the source, and add a verdict to ${where} if the scanner is wrong. They do not stop the scorer.\n\n${toRead.map((t) => `- ${many ? `${t.repo}: ` : ""}${t.step[0]} → ${t.step[1]} (${t.runs.join(", ")})`).join("\n")}`);
     }
-    const open = new Map<string, [string, string]>();
-    for (const s of pendingSteps(results)) open.set(s.join(SEP), s);
-    for (const s of sessionResults) for (const u of s.unknown) open.set(u.join(SEP), u);
-    const steps = [...open.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, step]) => step);
+    const steps = openSteps(results, sessionResults, (r) => repoOfQuestion.get(r.question)!);
     if (steps.length > 0){
-        console.log(`\n## Chain steps to adjudicate\n\nRead the source for each step and add ${firstEval ? '{"from", "to", "imports", "note"} (and "repo" when the step is one repo\'s alone)' : '{"repo", "from", "to", "decision": "in" or "out", "why"}'} to ${name}/truth/adjudicated.json:\n\n${steps.map(([a, b]) => `- ${a} → ${b}`).join("\n")}`);
+        console.log(`\n${renderAdjudicate(steps, { firstEval, evalName: name })}`);
         process.exitCode = 1;
     }
 

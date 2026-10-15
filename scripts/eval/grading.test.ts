@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyReview, buildSheet, mergeGrades, validateReply, type Review, type Sheet } from "./grading";
+import { GRADING_USAGE, applyReview, buildSheet, mergeGrades, parseGradingArgs, validateReply, type Review, type Sheet } from "./grading";
 import type { Rubric } from "./score";
 
 const rubric: Rubric = {
@@ -94,5 +94,20 @@ describe("applyReview", () => {
         const g = grades();
         applyReview(g, review([{ sheet: "0a1b2c3d", point: "BP9.1", grader1: 1, grader2: 0.5, score: 0.5, sentence: "g2" }]), key);
         expect(g["bp9-nebulosity-2"]["BP9.1"].score).toBe(1);
+    });
+});
+
+describe("parseGradingArgs (sweep B, item 13)", () => {
+    it("reads the command and --eval in any order, eval by default", () => {
+        expect(parseGradingArgs(["sheets"])).toEqual({ command: "sheets", evalDir: "eval" });
+        expect(parseGradingArgs(["merge", "--eval", "eval2"])).toEqual({ command: "merge", evalDir: "eval2" });
+        expect(parseGradingArgs(["--eval", "eval2", "sheets"])).toEqual({ command: "sheets", evalDir: "eval2" });
+    });
+
+    it("stops with the usage line for --eval without a value, an unknown command, or none", () => {
+        for (const argv of [["sheets", "--eval"], ["sheets", "--eval", "--force"], ["grade"], [], ["sheets", "merge"]]){
+            expect(parseGradingArgs(argv)).toEqual({ error: GRADING_USAGE });
+        }
+        expect(GRADING_USAGE).toBe("usage: npm run eval:grading -- sheets | merge [--eval <dir> (default eval)]");
     });
 });

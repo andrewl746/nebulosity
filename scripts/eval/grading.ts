@@ -16,9 +16,9 @@
  */
 import crypto from "crypto";
 import fs from "fs";
-import { loadDefinition } from "./definition";
 import path from "path";
 import zlib from "zlib";
+import { loadDefinition } from "./definition";
 import { parseRunName, type Rubric, type RunGrade } from "./score";
 import { summarizeRun } from "./transcript";
 
@@ -206,17 +206,41 @@ function merge(checkout: string, evalName: string): void {
     console.log(`${Object.keys(grades).length} runs graded -> ${evalName}/grading/grades.json; the key is published as ${evalName}/grading/key.json`);
 }
 
+export const GRADING_USAGE = "usage: npm run eval:grading -- sheets | merge [--eval <dir> (default eval)]";
+
+/** The command and the eval folder, in any order; the usage line for --eval without a value, or anything but one command. */
+export function parseGradingArgs(argv: readonly string[]): { command: "sheets" | "merge"; evalDir: string } | { error: string } {
+    let command: "sheets" | "merge" | null = null;
+    let evalDir = "eval";
+    for (let i = 0; i < argv.length; i++){
+        const arg = argv[i];
+        if (arg === "--eval"){
+            const value = argv[++i];
+            if (value === undefined || value.startsWith("--")) return { error: GRADING_USAGE };
+            evalDir = value;
+        } else if ((arg === "sheets" || arg === "merge") && command === null) command = arg;
+        else return { error: GRADING_USAGE };
+    }
+    return command === null ? { error: GRADING_USAGE } : { command, evalDir };
+}
+
 function main(): void {
     const checkout = forward(path.resolve(__dirname, "..", ".."));
-    const command = process.argv[2];
-    const given = process.argv.indexOf("--eval");
-    const evalName = path.basename(loadDefinition(path.resolve(checkout, given >= 0 ? process.argv[given + 1] ?? "" : "eval")).dir);
-    if (command === "sheets") sheets(checkout, evalName);
-    else if (command === "merge") merge(checkout, evalName);
-    else{
-        console.error("usage: npm run eval:grading -- sheets | merge [--eval <dir> (default eval)]");
+    const args = parseGradingArgs(process.argv.slice(2));
+    if ("error" in args){
+        console.error(args.error);
         process.exit(1);
     }
+    let evalName: string;
+    try{
+        evalName = path.basename(loadDefinition(path.resolve(checkout, args.evalDir)).dir);
+    } catch(e){
+        // a folder with no eval.json, or one that isn't valid: a sentence, not a stack trace
+        console.error(`${args.evalDir}: ${(e as Error).message.split("\n")[0]}`);
+        process.exit(1);
+    }
+    if (args.command === "sheets") sheets(checkout, evalName);
+    else merge(checkout, evalName);
 }
 
 // runs only as a script, so the tests can import the functions above

@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import {
-    TRUTH_TABLE, applyAdjudications, buildRepoGraphs, buildTruth, checkVerdicts, edgeDifferences, importLines, parseAdjudications, parseArgs,
+    TRUTH_TABLE, applyAdjudications, buildRepoGraphs, buildTruth, checkVerdicts, edgeDifferences, importLines, loadTruthAdjudications, parseAdjudications, parseArgs,
     parseTruthSpecs, restingEdges, sampleEdges, specsFor, successors, type Adjudication,
 } from "./build-truth";
 import { loadDefinition } from "./definition";
@@ -348,5 +348,29 @@ describe("the specs and the arguments", () => {
         expect(() => parseArgs(["--out"])).toThrow(/usage/);
         expect(() => parseArgs(["--eval", "--force"])).toThrow(/usage/);
         expect(() => parseArgs(["--frobnicate"])).toThrow(/usage/);
+    });
+});
+
+describe("grading-time step verdicts stay out of the truths (sweep B, item 9)", () => {
+    it("reads only <dir>/truth/adjudicated.json, so an 'out' on a step neither extractor finds, in steps.json, can't stop eval:truth", () => {
+        const root = path.resolve("test/fixtures/arch-repo");
+        // arrays.ts imports strings.ts alone (the arch-repo's edge table): a model's arrays.ts → main.ts step is neither extractor's
+        const hallucinated: Adjudication = { repo: "fx", from: "src/base/common/arrays.ts", to: "src/app/main.ts", decision: "out", why: "a model's step" };
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "truth-verdicts-"));
+        try{
+            fs.mkdirSync(path.join(dir, "truth"));
+            fs.writeFileSync(path.join(dir, "truth", "adjudicated.json"), "[]\n");
+            fs.writeFileSync(path.join(dir, "truth", "steps.json"), JSON.stringify([hallucinated]));
+            const verdicts = loadTruthAdjudications(dir, ["fx"]);
+            expect(verdicts).toEqual([]);
+            expect(() => checkVerdicts(buildRepoGraphs(root, "fx", verdicts, { resolveBare: true }))).not.toThrow();
+            // the same verdict in adjudicated.json is what would stop the build
+            expect(() => checkVerdicts(buildRepoGraphs(root, "fx", [hallucinated], { resolveBare: true }))).toThrow("matches an edge neither extractor finds");
+            // and a missing adjudicated.json is no verdicts
+            fs.rmSync(path.join(dir, "truth", "adjudicated.json"));
+            expect(loadTruthAdjudications(dir, ["fx"])).toEqual([]);
+        } finally{
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

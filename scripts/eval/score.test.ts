@@ -5,7 +5,7 @@ import zlib from "zlib";
 import { describe, expect, it } from "vitest";
 import { runName } from "./run-config";
 import {
-    cleanliness, cleanlinessLine, familyArmRows, familyOfKind, kindArmRows, kindOf, lastPerName, loadRuns, makeImports, median, missingForGate, repoScoreContext, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
+    cleanliness, cleanlinessLine, familyArmRows, familyOfKind, kindArmRows, kindOf, lastPerName, loadRuns, loadScorerVerdicts, makeImports, median, missingForGate, openSteps, renderAdjudicate, repoScoreContext, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
     renderQuestionTable, renderTable, repoIdFor, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, scoreSession, sumTokens, toGateRun, toGateSession, type Adjudicated, type FamilyArmRow, type SessionResult, type QuestionArmRow, type QuestionData,
     type RunResult, type ScoreContext,
 } from "./score";
@@ -787,5 +787,133 @@ describe("fix round 1", () => {
         expect(judged.imports(main, view)).toBe(false);
         expect(judged.imports(view, main)).toBe(true);
         expect(judged.imports(main, ui)).toBe(true);
+    });
+});
+
+// ---- pre-freeze sweep B
+
+describe("grading-time step verdicts in steps.json (sweep B, item 9)", () => {
+    const root = path.resolve("test/fixtures/arch-repo");
+    // arrays.ts imports strings.ts alone (the arch-repo's edge table), so a model's arrays.ts → main.ts step is neither extractor's
+    const arrays = "src/base/common/arrays.ts", main = "src/app/main.ts";
+    const hallucinated = { repo: "fx", from: arrays, to: main, decision: "out", why: "arrays.ts imports only ./strings" };
+    const evalDir = (files: Record<string, unknown>): string => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "score-verdicts-"));
+        fs.mkdirSync(path.join(dir, "truth"));
+        for (const [name, value] of Object.entries(files)) fs.writeFileSync(path.join(dir, "truth", name), JSON.stringify(value));
+        return dir;
+    };
+
+    it("reads steps.json beside adjudicated.json, and applies an 'out' there to a step neither extractor finds", () => {
+        const dir = evalDir({ "adjudicated.json": [], "steps.json": [hallucinated] });
+        try{
+            const { truth, steps } = loadScorerVerdicts(dir, ["fx"]);
+            expect(truth).toEqual([]);
+            expect(steps).toEqual([hallucinated]);
+            expect(repoScoreContext(root, "fx", false, [], truth, steps).ctx.imports(arrays, main)).toBe(false);
+            // without the verdict the step is unknown, and the run would wait for it
+            expect(repoScoreContext(root, "fx", false, [], [], []).ctx.imports(arrays, main)).toBeNull();
+        } finally{
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("has no step verdicts when steps.json is missing, and names steps.json in a problem with it", () => {
+        const none = evalDir({ "adjudicated.json": [] });
+        const bad = evalDir({ "adjudicated.json": [], "steps.json": [{ repo: "fx", from: arrays }] });
+        try{
+            expect(loadScorerVerdicts(none, ["fx"]).steps).toEqual([]);
+            expect(() => loadScorerVerdicts(bad, ["fx"])).toThrow(/^steps\.json: /);
+        } finally{
+            for (const dir of [none, bad]) fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe("the truth's own graph decides a step (sweep B, item 11)", () => {
+    const root = path.resolve("test/fixtures/arch-repo");
+    const main = "src/app/main.ts", view = "src/editor/browser/editorView.ts";
+
+    it("takes an edge given both 'in' and 'out' in adjudicated.json as in, as applyAdjudications builds the truth's graph", () => {
+        // applyAdjudications takes the outs away, then adds the ins: view → main ends up in the truth's graph
+        const both = [
+            { repo: "fx", from: view, to: main, decision: "in" as const, why: "read" },
+            { repo: "fx", from: view, to: main, decision: "out" as const, why: "read again" },
+        ];
+        expect(repoScoreContext(root, "fx", false, [], both).ctx.imports(view, main)).toBe(true);
+        // a lone "out" on a scanner edge is still a known "no", not an unknown step
+        expect(repoScoreContext(root, "fx", false, [], [{ repo: "fx", from: main, to: view, decision: "out", why: "x" }]).ctx.imports(main, view)).toBe(false);
+    });
+});
+
+describe("the steps to adjudicate, each with its repo (sweep B, item 12)", () => {
+    it("collects the open steps of runs and sessions once per repo, sorted by repo, then step", () => {
+        const runs = [
+            result("cn1-baseline-1", { repo: "vscode", unknown: [A, E] }),
+            result("cn2-nebulosity-1", { repo: "affine", unknown: [A, E] }),
+            result("cn1-nebulosity-1", { repo: "vscode", unknown: [A, E] }),
+            result("cn3-baseline-1", { repo: "vscode", unknown: null }),
+        ];
+        const session: SessionResult = {
+            name: "s1-baseline-1", session: "s1", repo: "affine", arm: "baseline", repeat: 1, score: null, pending: "chain step to adjudicate", turns: [], costUsd: 0, wallMs: 0, firstCallContext: null, unknown: [[B, E]], flags: [],
+        };
+        expect(openSteps(runs, [session], (r) => r.repo!)).toEqual([
+            { repo: "affine", step: [A, E] }, { repo: "affine", step: [B, E] }, { repo: "vscode", step: [A, E] },
+        ]);
+    });
+
+    it("prints each step as <repo>: <from> → <to>, with the verdict to add to steps.json under it", () => {
+        expect(renderAdjudicate([{ repo: "affine", step: [C, D] }, { repo: "vscode", step: [A, B] }], { firstEval: false, evalName: "eval2" })).toBe([
+            "## Chain steps to adjudicate",
+            "",
+            "Read the source for each step, then add its verdict to eval2/truth/steps.json, the grading-time verdicts: \"decision\" is \"in\" when the first file imports the second and \"out\" when it doesn't, and \"why\" says what the source shows. The scorer reads steps.json after adjudicated.json; the truth builder never reads it, so the truths stay as they were approved.",
+            "",
+            `- affine: ${C} → ${D}`,
+            `  {"repo": "affine", "from": "${C}", "to": "${D}", "decision": "", "why": ""}`,
+            `- vscode: ${A} → ${B}`,
+            `  {"repo": "vscode", "from": "${A}", "to": "${B}", "decision": "", "why": ""}`,
+        ].join("\n"));
+    });
+
+    it("keeps Eval #1's own format", () => {
+        expect(renderAdjudicate([{ repo: "vscode", step: [A, B] }], { firstEval: true, evalName: "eval" })).toBe([
+            "## Chain steps to adjudicate",
+            "",
+            "Read the source for each step and add {\"from\", \"to\", \"imports\", \"note\"} (and \"repo\" when the step is one repo's alone) to eval/truth/adjudicated.json:",
+            "",
+            `- ${A} → ${B}`,
+        ].join("\n"));
+    });
+});
+
+describe("F1 lists count only what reads as a listed file (sweep B, item 10)", () => {
+    const unusedQ: QuestionData = { id: "gu1", family: "grepHard", kind: "unused", truth: { id: "gu1", kind: "unused", folder: "src/vs", files: [A, B], verified: true, notes: [] } };
+
+    it("doesn't count a lead-in that names the question's folder", () => {
+        // without the rule: listed a, b and "src/vs" against a and b, precision 2/3, recall 1, F1 0.8
+        const s = scoreAnswer(answer("Unused files in src/vs:", A, B), unusedQ, ctx);
+        expect(s.score).toBe(1);
+        expect(s.flags).toEqual([]);
+    });
+
+    it("doesn't count a slash-word", () => {
+        const s = scoreAnswer(answer(A, B, "Neither is imported and/or loaded."), unusedQ, ctx);
+        expect(s.score).toBe(1);
+        expect(s.flags).not.toContain("names non-files");
+    });
+
+    it("doesn't count either folder of a violations question", () => {
+        const q: QuestionData = { id: "gv1", family: "grepHard", kind: "violations", truth: { id: "gv1", kind: "violations", from: "src/vs", to: "src/base", files: [A], verified: true, notes: [] } };
+        expect(scoreAnswer(answer("Files in src/vs that import src/base:", A), q, ctx).score).toBe(1);
+    });
+
+    it("leaves out the question's own folder even when its name has a dot, and still counts a file that isn't there", () => {
+        const inside = "src/vs.old/a.ts";
+        const dotted: ScoreContext = { ...ctx, known: new Set([...known, inside]) };
+        const q: QuestionData = { id: "gu2", family: "grepHard", kind: "unused", truth: { id: "gu2", kind: "unused", folder: "src/vs.old", files: [inside], verified: true, notes: [] } };
+        // listed a.ts (a hit) and gone.ts (not a file: a false positive): precision 1/2, recall 1, F1 2/3
+        const s = scoreAnswer(answer("In src/vs.old:", inside, "src/vs.old/gone.ts"), q, dotted);
+        expect(s.score).toBeCloseTo(2 / 3, 10);
+        expect(s.flags).toContain("names non-files");
     });
 });

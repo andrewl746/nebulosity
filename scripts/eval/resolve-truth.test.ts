@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { createTruthResolver } from "./resolve-truth";
+import { createTruthResolver, pnpmWorkspaceGlobs } from "./resolve-truth";
 import { scanRepo } from "./scan";
 
 const FIXTURE = path.resolve("test/fixtures/arch-repo");
@@ -114,5 +114,29 @@ describe("createTruthResolver: only declared workspaces resolve by name (ADR-053
         expect(resolve("apps/web/src/main.ts", "@m/core")).toBe("libs/core/src/index.ts");
         expect(resolve("apps/web/src/main.ts", "@m/old")).toBeNull();
         expect(resolve("apps/web/src/main.ts", "a-mod")).toBe("modules/a/a.ts");
+    });
+});
+
+describe("a byte-order mark (sweep B, item 8)", () => {
+    let bomRepo = "";
+    beforeAll(() => {
+        bomRepo = writeRepo({
+            // Windows editors save files with a BOM: pnpm reads this list as apps/*, so "web" is a declared workspace
+            "pnpm-workspace.yaml": "\uFEFFpackages:\n  - 'apps/*'\n",
+            "apps/web/package.json": "\uFEFF" + JSON.stringify({ name: "web", main: "src/main.ts" }),
+            "apps/web/src/main.ts": "export {};\n",
+            "lib/x.ts": "export {};\n",
+        });
+    });
+    afterAll(() => fs.rmSync(bomRepo, { recursive: true, force: true }));
+
+    it("is dropped from pnpm-workspace.yaml as it is from package.json, so the workspace resolves", () => {
+        expect(pnpmWorkspaceGlobs("\uFEFFpackages:\n  - 'apps/*'\n")).toEqual(["apps/*"]);
+        const resolve = createTruthResolver(bomRepo, scanRepo(bomRepo).files);
+        expect(resolve("lib/x.ts", "web")).toBe("apps/web/src/main.ts");
+    });
+
+    it("is written as an escape in the source, never as the invisible character itself", () => {
+        expect(fs.readFileSync(path.resolve("scripts", "eval", "resolve-truth.ts"), "utf8")).not.toContain("\uFEFF");
     });
 });

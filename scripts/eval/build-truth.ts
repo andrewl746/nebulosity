@@ -9,7 +9,8 @@
  *     own resolver (resolve-truth.ts) always on. A checkout given picks one of them.
  * Per repo it builds two graphs, the regex scanner's (scan.ts) and TypeScript's preProcessFile's (ts-graph.ts), and the
  * truths come from the scanner's plus the verdicts in <dir>/truth/adjudicated.json (edges decided by reading the source:
- * a disagreement or a computed import() site; [] when missing). Every verdict is checked against the two graphs and the
+ * a disagreement or a computed import() site; [] when missing). The grading-time verdicts on a model's steps, in
+ * <dir>/truth/steps.json, are the scorer's alone and never read here. Every verdict is checked against the two graphs and the
  * computed sites first (checkVerdicts): one that can't take effect stops the build, naming it, before anything is written. It writes
  *   <dir>/truth/<id>.json                      one truth per spec, unverified: the hand check turns it on
  *   .nebulosity/<dir>/truth-evidence.md        each list entry's and chain or cycle step's import line(s), for that check
@@ -267,20 +268,34 @@ export function restingEdges(g: Graph, truth: TruthFile): [string, string][] {
  */
 export type Adjudication = { repo: string; from: string; to: string | null; line?: number; decision: "in" | "out"; why: string };
 
-/** adjudicated.json, checked for shape; with `repoIds`, every verdict's repo must be one of them. */
-export function parseAdjudications(raw: unknown, repoIds?: readonly string[]): Adjudication[] {
-    if (!Array.isArray(raw)) throw new Error("adjudicated.json: it must be a list of verdicts, each { repo, from, to, line?, decision, why }.");
+/**
+ * adjudicated.json (or steps.json, the scorer's grading-time verdicts in the same shape: `file` names it in a problem),
+ * checked for shape; with `repoIds`, every verdict's repo must be one of them.
+ */
+export function parseAdjudications(raw: unknown, repoIds?: readonly string[], file = "adjudicated.json"): Adjudication[] {
+    if (!Array.isArray(raw)) throw new Error(`${file}: it must be a list of verdicts, each { repo, from, to, line?, decision, why }.`);
     for (const item of raw as unknown[]){
         const v = (item ?? {}) as Record<string, unknown>;
         const ok = typeof v.repo === "string" && typeof v.from === "string" && (typeof v.to === "string" || v.to === null)
             && (v.decision === "in" || v.decision === "out") && typeof v.why === "string" && (v.line === undefined || Number.isInteger(v.line))
             && !(v.decision === "in" && v.to === null);
-        if (!ok) throw new Error(`adjudicated.json: ${JSON.stringify(item)} needs repo, from, to (a repo path; null only for an "out" site that loads nothing in the repo), decision "in" or "out", why, and optionally line.`);
+        if (!ok) throw new Error(`${file}: ${JSON.stringify(item)} needs repo, from, to (a repo path; null only for an "out" site that loads nothing in the repo), decision "in" or "out", why, and optionally line.`);
         if (repoIds !== undefined && !repoIds.includes(v.repo as string)){
-            throw new Error(`adjudicated.json: the verdict on ${v.from as string} → ${(v.to as string | null) ?? "nothing"} is for the repo ${JSON.stringify(v.repo)}, which the eval doesn't have (${repoIds.join(", ")}).`);
+            throw new Error(`${file}: the verdict on ${v.from as string} → ${(v.to as string | null) ?? "nothing"} is for the repo ${JSON.stringify(v.repo)}, which the eval doesn't have (${repoIds.join(", ")}).`);
         }
     }
     return raw as Adjudication[];
+}
+
+/**
+ * The verdicts an eval's truths are built from: <dir>/truth/adjudicated.json alone ([] when it's missing). The grading-time
+ * verdicts on a model's chain and cycle steps go in <dir>/truth/steps.json, which only the scorer reads: such a step is
+ * often one neither extractor finds (a model's invention), which checkVerdicts rightly refuses, and the approved truths
+ * must not move when a grader rules on one.
+ */
+export function loadTruthAdjudications(dir: string, repoIds: readonly string[]): Adjudication[] {
+    const file = path.join(dir, "truth", "adjudicated.json");
+    return fs.existsSync(file) ? parseAdjudications(JSON.parse(fs.readFileSync(file, "utf8")), repoIds) : [];
 }
 
 /**
@@ -759,8 +774,8 @@ function main(): void {
         args = parseArgs(process.argv.slice(2));
         definition = loadDefinition(path.resolve(checkout, args.evalDir));
         specs = specsFor(definition);
-        const file = adjudicatedFile(definition);
-        adjudications = fs.existsSync(file) ? parseAdjudications(JSON.parse(fs.readFileSync(file, "utf8")), Object.keys(definition.repos)) : [];
+        // adjudicated.json alone: steps.json (grading-time verdicts) is the scorer's, never the truths'
+        adjudications = loadTruthAdjudications(definition.dir, Object.keys(definition.repos));
     } catch (error){
         console.error((error as Error).message);
         process.exitCode = 1;

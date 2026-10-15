@@ -46,9 +46,15 @@ function join(folder: string, relative: string): string | null {
     return joined === "." ? "" : joined;
 }
 
+/** A byte-order mark: Windows editors start a saved file with one, and neither JSON.parse nor a line reader skips it. */
+const BOM = /^\uFEFF/;
+
+/** A repo file's text, without a byte-order mark. */
+const readText = (root: string, file: string): string => fs.readFileSync(path.join(root, file), "utf8").replace(BOM, "");
+
 function readJson(root: string, file: string): PackageJson | null {
     try {
-        const value: unknown = JSON.parse(fs.readFileSync(path.join(root, file), "utf8").replace(/^﻿/, ""));
+        const value: unknown = JSON.parse(readText(root, file));
         return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as PackageJson) : null;
     } catch {
         return null;
@@ -65,7 +71,8 @@ export function pnpmWorkspaceGlobs(text: string): string[] {
     const unquote = (s: string): string => s.trim().replace(/^(['"])(.*)\1$/, "$2");
     const globs: string[] = [];
     let inPackages = false;
-    for (const raw of text.split(/\r?\n/)){
+    // a BOM is whitespace to \s, so a first line "\uFEFFpackages:" wouldn't read as a top-level key
+    for (const raw of text.replace(BOM, "").split(/\r?\n/)){
         const line = raw.replace(/(^|\s)#.*$/, "");
         if (line.trim() === "") continue;
         if (/^\S/.test(line)){
@@ -100,7 +107,7 @@ function workspaceGlobs(root: string, all: ReadonlySet<string>, rootJson: Packag
     const workspaces = rootJson?.workspaces;
     const globs = Array.isArray(workspaces) ? strings(workspaces)
         : workspaces !== null && typeof workspaces === "object" ? strings((workspaces as PackageJson).packages) : [];
-    if (all.has("pnpm-workspace.yaml")) globs.push(...pnpmWorkspaceGlobs(fs.readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8")));
+    if (all.has("pnpm-workspace.yaml")) globs.push(...pnpmWorkspaceGlobs(readText(root, "pnpm-workspace.yaml")));
     if (all.has("lerna.json")) globs.push(...strings(readJson(root, "lerna.json")?.packages));
     return globs;
 }

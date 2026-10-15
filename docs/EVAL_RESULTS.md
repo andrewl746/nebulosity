@@ -7,7 +7,7 @@ This is the re-measured eval that ADR-051's amendment waits for. Nothing ships (
 Where things are:
 - The definition (repos, pins, arms, repeats, scripts and the pilot): `eval2/eval.json`.
 - The questions and format lines: `eval2/questions.json`. The task sessions: `eval2/sessions.json`.
-- The truths: `eval2/truth/<id>.json`, built from `eval2/truth-specs.json`, with every hand decision in `eval2/truth/adjudicated.json`. The rubrics: `eval2/rubric/<id>.json`.
+- The truths: `eval2/truth/<id>.json`, built from `eval2/truth-specs.json`, with every hand decision in `eval2/truth/adjudicated.json`. Grading-time verdicts on the models' own chain and cycle steps go in `eval2/truth/steps.json`, which only the scorer reads, so the truths stay as approved. The rubrics: `eval2/rubric/<id>.json`.
 - The dev set, which is never scored and whose targets appear nowhere here: `eval2/dev/`.
 - The truth builder, its resolver and its two extractors, the runner, the scorer and the gate: `scripts/eval/`.
 - Kept transcripts will go in `eval2/runs/` (scrubbed, leak-scanned, gzipped). Raw ones and each run's scratch folder go in `.nebulosity/eval2/raw/`, which git ignores.
@@ -296,14 +296,14 @@ The truth never comes from Nebulosity's index (R2).
 `npm run eval:score -- --eval eval2` scores everything but the big-picture answers, each repo against its own truth graph and verdicts (`scripts/eval/score.ts` and `answer.ts`).
 - **Reading an answer:** as in Eval #1. The scorer reads the text after the last `ANSWER:` line, reads files tolerantly, and matches them without regard to case.
 - **Direct and transitive lists:** recall, with precision beside it, as in Eval #1.
-- **Chains:** as in Eval #1. 1 for a valid shortest chain or a right "none", 0.5 for a valid longer chain, 0 otherwise. A step that neither the truth's graph nor a verdict knows waits to be read in the source and decided.
+- **Chains:** as in Eval #1. 1 for a valid shortest chain or a right "none", 0.5 for a valid longer chain, 0 otherwise. A step is an import when the truth's own graph has it (the scanner's edges with `adjudicated.json`'s verdicts applied, the graph the truths were built from), and not one when a verdict took it out. A step that neither knows waits to be read in the source and decided in `eval2/truth/steps.json`: the scorer prints each such step with its repo and the verdict to fill in, and reads that file after `adjudicated.json`. The truth builder never reads it: a model's step is often one neither extractor finds, which the builder's own check refuses.
 - **Impact:** the mean, over the truth's lines (each named folder, then elsewhere, then total), of max(0, 1 − |answer − truth| / max(truth, 1)). A line the answer lacks scores 0. A number may carry thousands separators or a "~".
 - **Cycle:**
   - 1 for a valid cycle of the shortest length or a right "none", 0.5 for a valid longer cycle, 0 otherwise.
   - Valid means it starts and ends at the file and every step is an import.
   - A step nobody has read waits, as a chain's does.
   - A cycle shorter than the truth's, or a valid one where the truth says none, is flagged for a recheck of the truth.
-- **Files nothing imports, violations and entries:** F1 of the listed files against the truth's. A listed path that isn't a file of the repo counts as a false positive and is flagged.
+- **Files nothing imports, violations and entries:** F1 of the listed files against the truth's. A listed path that isn't a file of the repo counts as a false positive and is flagged, when it reads as a file: its last name has an extension, and it isn't one of the question's own folders. A folder named in a lead-in ("Unused files in `src/vs/base/common`:") or a slash-word like "and/or" lists nothing.
 - **Pairs:** F1 over the pairs (`a -> b`), with names compared in lowercase.
 - **Big-picture:** as in Eval #1 (R4). A blind grader per answer sees only the points that hold and the answer. A second blind grader grades every answer, and the owner rules on each point where the two disagree.
 - **Task sessions:** each message is scored as its question.

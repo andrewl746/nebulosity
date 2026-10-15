@@ -979,6 +979,13 @@ They need the whole graph, and the index already holds it.
 - **The checkout's snapshot is `git status --porcelain -uall`,** so a file a run adds inside a folder that was already untracked stops the batch.
 - **The scratch archive** never throws (a throw there replaced the run's own stop and skipped the removal), never follows a link, copies at most 50 MB, records what it left out in `ARCHIVE-NOTE.txt`, and removes the temp folder even when the copy failed.
 
+**Amended (2026-10-15, V1.6, pre-freeze sweep B): the truth builder and the scorer.** No truth, question or gate condition changes, and Eval #1 re-scores exactly.
+- **Grading-time step verdicts go in `eval2/truth/steps.json`,** the shape of `adjudicated.json`. The scorer reads it after `adjudicated.json`; the truth builder never does. A model's step is often one neither extractor finds, and the builder's check refuses an "out" on such an edge, so the hint that sent graders to `adjudicated.json` would have stopped every later `eval:truth`. The scorer prints each step to adjudicate with its repo and the verdict to fill in.
+- **A step is judged on the truth's own graph** (`buildRepoGraphs`' graph), not on the scanner's edges plus the verdicts again. The two disagreed on an edge given both "in" and "out".
+- **F1 lists count as listed only what reads as a file:** a path that isn't the repo's counts as a false positive when its last name has an extension and it isn't one of the question's own folders. A lead-in naming the folder, or "and/or", made a right answer score 0.8.
+- **A byte-order mark** is dropped from `pnpm-workspace.yaml` as it was from `package.json`, and the source writes it as an escape. Neither repo's workspace files has one, so no truth moves.
+- `npm run eval:grading` with `--eval` and no value stops with its usage line.
+
 ## ADR-058 — Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (2026-10-15) — implements ADR-043's V1.6; amends ADR-048
 
 **Context:** ADR-043 asked for one command each to index a repo, open the Map and connect Claude Code, on Windows, macOS and Linux, with a free mode. Until now Nebulosity ran only from a checkout, through npm scripts, with its data inside the checkout.
