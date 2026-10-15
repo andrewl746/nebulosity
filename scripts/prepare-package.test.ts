@@ -17,9 +17,12 @@ const FAKE_PACKAGE = path.join("fake-packages", "better-sqlite3");
  * Windows, as Turbopack makes it), the build folder's path in the server files manifest, and that path in the build
  * cache too, which the package never ships. The link points at a stand-in package folder inside the temp build, never at
  * the checkout's node_modules: a regression that removed through the link would otherwise delete the owner's package.
+ * The folder is spelled with its links resolved, as `next build` writes it and the script reads it: both use their
+ * working folder, which macOS and Linux give with links resolved. macOS's temp folder sits behind a link (/var is
+ * /private/var), so a manifest holding the temp folder's unresolved spelling would be a path no real build writes.
  */
 function turbopackBuild(): string {
-    const root = makeTempDir("neb-build-");
+    const root = fs.realpathSync.native(makeTempDir("neb-build-"));
     const next = path.join(root, ".next");
     fs.mkdirSync(path.join(next, "node_modules"), { recursive: true });
     fs.mkdirSync(path.join(next, "cache"));
