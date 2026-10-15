@@ -12,7 +12,7 @@
 - **S6** (`lib/index/update.ts`, `lib/background/service.ts`): the background worker keeps the workspace manifests it read until a resolution input or the file set changes.
 - **Eval #3's harness** (`scripts/eval/`, `eval3/`): a definition with the rules sentence and a gate selector; time to relevant context and its statistics; the call truth from TypeScript's own type checker, independent of the index; the new kinds and their scores; Eval #3's gate; grader redaction; V1.6's three harness minors. Eval #1 and Eval #2 re-score exactly as before.
 
-**Tech Stack:** TypeScript 5, Node 24.14.0, Next.js 16.4.0, React 19, better-sqlite3 + Drizzle (WAL), Vitest 4, tsx, `@modelcontextprotocol/sdk` 1.32.1 (pinned), the TypeScript compiler API (the adapter's parse; the type checker only in `scripts/eval/ts-calls.ts`). Claude Code 2.1.300 on this machine, pinned at Eval #3's pilot. No new dependency.
+**Tech Stack:** TypeScript 5, Node 24.14.0, Next.js 16.4.0, React 19, better-sqlite3 + Drizzle (WAL), Vitest 4, tsx, `@modelcontextprotocol/sdk` 1.32.1 (pinned), the TypeScript compiler API (the adapter's parse; the type checker only in `scripts/eval/ts-calls.ts`). Claude Code (2.1.301 at the plan's approval; it updates itself), pinned at Eval #3's pilot. No new dependency.
 
 **Spec:** `.superpowers/sdd/2026-10-15-v1-7-calls-and-context/design.md`, approved 2026-10-15 (the owner's decisions verbatim in §2, the design in §5, the rulings in §6). Its evidence beside it: `report-e2-feasibility.md`, `report-ttrc-and-cost-floor.md`, `report-code-survey.md` and `evidence/`. Also: `docs/PIVOT_SPEC.md` §2, §6, §9, §10, §12; ADR-024, 043, 045, 051 and 053–058 with their 2026-10-15 amendments; `docs/EVAL_RESULTS.md` (Eval #2); `docs/API_CONTRACTS.md` §17; `docs/ARCHITECTURE.md` §3. This plan adds ADR-059 and ADR-060 and amends ADR-024, 043, 051, 053, 056 and 057, all written as proposed in the plan's own commit.
 
@@ -20,8 +20,8 @@
 
 ## What the code and the machine have today (checked 2026-10-15, planning)
 
-- **Branch.** `pivot/v1` at `49f8bbd`, pushed; `main` untouched; PR #8 (`pivot/v1 → main`) open, not merged. Uncommitted: `docs/LEARNING_NOTES.md` (modified) and `lib/agent/state.ts` (untracked), both the owner's. **The gate:** tsc clean, lint 0 errors and 4 warnings (all pre-existing), **vitest 1,340/1,340** in 125 files (12.4 s).
-- **The machine.** Nothing listens on port 3000. `claude --version` is 2.1.300. `../vscode` is at `cc3fec88` and `../affine` at `0b69a6d`, both clean. `../theia` doesn't exist.
+- **Branch.** `pivot/v1` at `49f8bbd`, pushed. PR #8 (`pivot/v1 → main`) was merged into `main` on 2026-10-15, as checked at the plan's approval. Nothing in this plan touches `main`. Uncommitted: `docs/LEARNING_NOTES.md` (modified) and `lib/agent/state.ts` (untracked), both the owner's. **The gate:** tsc clean, lint 0 errors and 4 warnings (all pre-existing), **vitest 1,340/1,340** in 125 files (12.4 s).
+- **The machine.** Nothing listens on port 3000. `claude --version` was 2.1.300 at planning and 2.1.301 at the plan's approval: it updates itself, so Task 15 checks it before the dev set and Task 19 pins it for good. `../vscode` is at `cc3fec88` and `../affine` at `0b69a6d`, both clean. `../theia` doesn't exist.
 - **The adapter** (`lib/index/languages/typescript.ts`). `ADAPTER_VERSION = 4`. `parseTypeScriptFile` parses once (`parseSourceFile`, parent nodes set) and returns `ParsedFile = { chunks, symbols, imports, lineCount }`. The imports-only path (1–5 MB, parsed in full) and the token scan (5–20 MB) return empty chunks and symbols, and two tests compare their whole result with `toEqual` (`typescript.test.ts` L183 and L245). Nothing reads import bindings, heritage clauses, constructor parameter properties, decorators, interface members or calls.
 - **The store** (`lib/db/store/structure.ts`). `writeOne` upserts the file row, deletes its chunks and symbols by `fileId`, and inserts the new ones with `forEachBatch`. `FileRecord` literals are built by hand in `structure.test.ts`'s `record()` helper and in `pipeline.test.ts` L294. Migrations go up to `0008_v1_6_docs.sql`, made with `npx drizzle-kit generate --name <name>`. Row types the store needs live in `lib/db/schema.ts`, so `lib/db` never imports `lib/index` (ARCHITECTURE.md §3, rule 4).
 - **The engine.** `importGraphFor` (`lib/engine/graph.ts`) loads the import graph once per repo and index version; `importIndexFor` (`reach.ts`) keeps the compressed rows in a `WeakMap` keyed on that graph object, so a new version gets a new index (ADR-044's rule for caches). `areasOf` (`impact.ts`) counts files by area, with describe's used-by rule when no folder is given.
@@ -167,7 +167,7 @@ An **arm** is one of the two set-ups compared: **A**, Claude Code alone (`baseli
 - **R-B. Calls resolve at query time, cached per index version.** Index-time resolution only if the first answer takes more than 1.5 s (Task 6's fallback). *Cost if wrong:* every eval run pays the first call's build, inside N's TTRC (conservative).
 - **R-C. No Map UI for calls in V1.7.** *Cost if wrong:* the Map can't show calls until E5 or later; `show_on_map` can still highlight the files.
 - **R-D. "Who to ask" is dropped from the tasks.** *Cost if wrong:* one task part fewer.
-- **R-E. Model and version:** `claude-sonnet-5-5` at medium effort; Claude Code pinned at the pilot (2.1.300 today). *Cost if wrong:* comparability with Eval #2.
+- **R-E. Model and version:** `claude-sonnet-5-5` at medium effort; Claude Code pinned at the pilot (2.1.300 at design, 2.1.301 at the plan's approval; Eval #2 ran on 2.1.300). *Cost if wrong:* comparability with Eval #2.
 - **R-F. TTRC's start** is `startedAt`, conservative toward N; the query start is reported beside it; single runs keep stdin prompts. *Cost if wrong:* N's ratio carries about 0.57 s of its server's start.
 - **R-G. Count answers are left out of TTRC;** impact and pairs report time and score.
 - **R-H. No work on N's cost floor;** the server instructions stay short. *Cost if wrong:* at most about 5% of N's floor.
@@ -2963,11 +2963,11 @@ export function refusedCalls(jsonl: string): number {
 ```
   `RunSummary` doesn't change (R-V).
 - `run.ts`: `const rules = DEF.sentence === "rules" ? { repoRoot: repo.root } : undefined;` and `promptFor(q, ctx.questions.formats, scratch, rules)` in `runOneIn`, and the same in the dry run's two prompt lines (with `repoRoot(id)`); the index line gains `refusals: refusedCalls(raw)`; the header comment names `sentence` and `refusals`.
-- `eval3/eval.json` (Theia joins it in Task 17; `pilot` and `pilotSessions` are filled in Task 18; `claudeVersion` is checked before the dev set runs, Task 15, and pinned for good at the pilot, Task 19):
+- `eval3/eval.json` (Theia joins it in Task 17; `pilot` and `pilotSessions` are filled in Task 18; `claudeVersion` starts as the installed version, `claude --version` when this task runs, is checked again before the dev set runs, Task 15, and is pinned for good at the pilot, Task 19):
 ```json
 {
   "name": "Eval #3",
-  "claudeVersion": "2.1.300",
+  "claudeVersion": "2.1.301",
   "pins": { "model": "claude-sonnet-5-5", "effort": "medium", "maxTurns": 80, "maxBudgetUsd": 4, "sessionMaxBudgetUsd": 10 },
   "repos": {
     "vscode": { "path": "../vscode", "commit": "cc3fec8846d0e678357e476fa611774da26d7e24", "slug": "microsoft/vscode", "project": "src/tsconfig.json" },
