@@ -3,8 +3,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import {
-    TRUTH_TABLE, applyAdjudications, buildRepoGraphs, buildTruth, edgeDifferences, importLines, parseArgs, parseTruthSpecs, restingEdges,
-    sampleEdges, specsFor, successors, type Adjudication,
+    TRUTH_TABLE, applyAdjudications, buildRepoGraphs, buildTruth, checkVerdicts, edgeDifferences, importLines, parseAdjudications, parseArgs,
+    parseTruthSpecs, restingEdges, sampleEdges, specsFor, successors, type Adjudication,
 } from "./build-truth";
 import { loadDefinition } from "./definition";
 import type { Graph } from "./truth";
@@ -179,6 +179,11 @@ describe("buildRepoGraphs on the arch-repo fixture", () => {
         });
     });
 
+    it("checks the verdicts against the graphs: the loader's verdict decides its site and adds one edge", () => {
+        // built.verdicts holds only this repo's (the "other" repo's verdict is left out), and LOADER names loader.ts's site at L5
+        expect(checkVerdicts(built)).toEqual({ in: 1, out: 0, edgesAdded: 1, edgesRemoved: 0, leftOut: 0, sitesDecided: 1 });
+    });
+
     it("leaves an undecided site out of the truths: without #5, main.ts is imported by nothing and loader.ts loads nothing", () => {
         const undecided = buildRepoGraphs(FIXTURE, "arch", [], { resolveBare: true });
         expect(undecided.sites).toEqual([{ file: "src/app/loader.ts", line: 5, expression: "url", verdicts: [] }]);
@@ -221,6 +226,13 @@ describe("adjudications, the two graphs' differences and the sample", () => {
         expect(applyAdjudications(g, verdicts)).toEqual({ files: g.files, edges: [["b.ts", "c.ts"], ["c.ts", "a.ts"]] });
     });
 
+    it("refuses a verdict for a repo the eval doesn't have, naming it", () => {
+        const verdict = { repo: "nope", from: "a.ts", to: "b.ts", decision: "out", why: "" };
+        expect(parseAdjudications([verdict])).toEqual([verdict]);
+        expect(() => parseAdjudications([verdict], ["vscode", "affine"])).toThrow(/nope/);
+        expect(parseAdjudications([{ ...verdict, repo: "affine" }], ["vscode", "affine"])).toEqual([{ ...verdict, repo: "affine" }]);
+    });
+
     it("lists the edges one graph has and the other lacks, sorted", () => {
         const other: Graph = { files: g.files, edges: [["b.ts", "c.ts"], ["c.ts", "a.ts"], ["a.ts", "c.ts"]] };
         expect(edgeDifferences(g, other)).toEqual({ scannerOnly: [["a.ts", "b.ts"]], preProcessOnly: [["a.ts", "c.ts"], ["c.ts", "a.ts"]] });
@@ -235,6 +247,68 @@ describe("adjudications, the two graphs' differences and the sample", () => {
         expect(sampleEdges([...edges].reverse(), 30)).toEqual(sample);
         expect(sample).toEqual([...sample].sort(([a], [b]) => (a < b ? -1 : 1)));
         expect(sampleEdges(edges.slice(0, 5), 30)).toEqual(edges.slice(0, 5));
+    });
+});
+
+describe("checkVerdicts: every verdict must take effect, or the build stops with a sentence naming it", () => {
+    // The regex scanner's graph: a → b, b → c, and c → d (say, a path inside a string). preProcessFile's: a → b, b → c and
+    // a → e (say, a statement the regex can't read). s.ts holds two computed import() sites, at L5 and L9.
+    const FILES = ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts", "s.ts"];
+    const base = {
+        scanner: { files: FILES, edges: [["a.ts", "b.ts"], ["b.ts", "c.ts"], ["c.ts", "d.ts"]] as [string, string][] },
+        preProcess: { files: FILES, edges: [["a.ts", "b.ts"], ["b.ts", "c.ts"], ["a.ts", "e.ts"]] as [string, string][] },
+        known: new Set(FILES),
+        sites: [{ file: "s.ts", line: 5, expression: "url" }, { file: "s.ts", line: 9, expression: "mod" }],
+    };
+    const v = (x: Pick<Adjudication, "from" | "to" | "decision"> & { line?: number }): Adjudication => ({ repo: "r", why: "read", ...x });
+    const check = (...verdicts: Adjudication[]): ReturnType<typeof checkVerdicts> => checkVerdicts({ ...base, verdicts });
+
+    it("counts what each kind of verdict did", () => {
+        // c → d out: a scanner edge removed. a → e in: preProcessFile's edge added. s → a and s → b in at L5: one site decided,
+        // two edges added (a site may load several files). s at L9 out with to null: a second site decided, loading nothing here.
+        expect(check(
+            v({ from: "c.ts", to: "d.ts", decision: "out" }),
+            v({ from: "a.ts", to: "e.ts", decision: "in" }),
+            v({ from: "s.ts", to: "a.ts", line: 5, decision: "in" }),
+            v({ from: "s.ts", to: "b.ts", line: 5, decision: "in" }),
+            v({ from: "s.ts", to: null, line: 9, decision: "out" }),
+        )).toEqual({ in: 3, out: 2, edgesAdded: 3, edgesRemoved: 1, leftOut: 0, sitesDecided: 2 });
+        // a → e out: preProcessFile's edge decided out, so the truth's graph (the scanner's) is unchanged
+        expect(check(v({ from: "a.ts", to: "e.ts", decision: "out" }))).toEqual({ in: 0, out: 1, edgesAdded: 0, edgesRemoved: 0, leftOut: 1, sitesDecided: 0 });
+        // b → a in, from a file with no computed site: an import read by hand that neither extractor finds
+        expect(check(v({ from: "b.ts", to: "a.ts", decision: "in" }))).toEqual({ in: 1, out: 0, edgesAdded: 1, edgesRemoved: 0, leftOut: 0, sitesDecided: 0 });
+        expect(check()).toEqual({ in: 0, out: 0, edgesAdded: 0, edgesRemoved: 0, leftOut: 0, sitesDecided: 0 });
+    });
+
+    it("stops on an out that matches no edge of either extractor", () => {
+        expect(() => check(v({ from: "a.ts", to: "c.ts", decision: "out" }))).toThrow(/a\.ts → c\.ts.*neither extractor/);
+    });
+
+    it("stops on an in that names a file the repo doesn't have", () => {
+        expect(() => check(v({ from: "a.ts", to: "zz.ts", decision: "in" }))).toThrow(/a\.ts → zz\.ts.*zz\.ts isn't/);
+        expect(() => check(v({ from: "zz.ts", to: "a.ts", decision: "in" }))).toThrow(/zz\.ts → a\.ts.*zz\.ts isn't/);
+    });
+
+    it("stops on a line that is no computed site's", () => {
+        expect(() => check(v({ from: "s.ts", to: "a.ts", line: 7, decision: "in" }))).toThrow(/s\.ts → a\.ts \(L7\).*L5, L9/);
+        expect(() => check(v({ from: "a.ts", to: "b.ts", line: 1, decision: "in" }))).toThrow(/a\.ts → b\.ts \(L1\).*no computed import\(\) site/);
+    });
+
+    it("stops on a site verdict without its line, and on an out that names both a site and a file", () => {
+        expect(() => check(v({ from: "s.ts", to: null, decision: "out" }))).toThrow(/s\.ts → nothing.*line/);
+        // an in from a file with computed sites, on an edge neither extractor finds, must say which site it decides
+        expect(() => check(v({ from: "s.ts", to: "c.ts", decision: "in" }))).toThrow(/s\.ts → c\.ts.*L5, L9/);
+        expect(() => check(v({ from: "s.ts", to: "a.ts", line: 5, decision: "out" }))).toThrow(/s\.ts → a\.ts \(L5\).*to: null/);
+    });
+
+    it("stops on a verdict that changes nothing: an in on an edge the scanner already has, without a site's line", () => {
+        expect(() => check(v({ from: "a.ts", to: "b.ts", decision: "in" }))).toThrow(/a\.ts → b\.ts.*already/);
+    });
+
+    it("stops on a verdict given twice, and on an edge or a site decided both ways", () => {
+        expect(() => check(v({ from: "c.ts", to: "d.ts", decision: "out" }), v({ from: "c.ts", to: "d.ts", decision: "out" }))).toThrow(/c\.ts → d\.ts.*twice/);
+        expect(() => check(v({ from: "a.ts", to: "e.ts", decision: "in" }), v({ from: "a.ts", to: "e.ts", decision: "out" }))).toThrow(/a\.ts → e\.ts.*both/);
+        expect(() => check(v({ from: "s.ts", to: "a.ts", line: 9, decision: "in" }), v({ from: "s.ts", to: null, line: 9, decision: "out" }))).toThrow(/L9.*both/);
     });
 });
 

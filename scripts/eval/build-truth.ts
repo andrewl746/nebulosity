@@ -9,7 +9,8 @@
  *     own resolver (resolve-truth.ts) always on. A checkout given picks one of them.
  * Per repo it builds two graphs, the regex scanner's (scan.ts) and TypeScript's preProcessFile's (ts-graph.ts), and the
  * truths come from the scanner's plus the verdicts in <dir>/truth/adjudicated.json (edges decided by reading the source:
- * a disagreement or a computed import() site; [] when missing). It writes
+ * a disagreement or a computed import() site; [] when missing). Every verdict is checked against the two graphs and the
+ * computed sites first (checkVerdicts): one that can't take effect stops the build, naming it, before anything is written. It writes
  *   <dir>/truth/<id>.json                      one truth per spec, unverified: the hand check turns it on
  *   .nebulosity/<dir>/truth-evidence.md        each list entry's and chain or cycle step's import line(s), for that check
  *   .nebulosity/<dir>/truth-disagreements.md   every edge one graph has and the other lacks, with its line
@@ -266,7 +267,8 @@ export function restingEdges(g: Graph, truth: TruthFile): [string, string][] {
  */
 export type Adjudication = { repo: string; from: string; to: string | null; line?: number; decision: "in" | "out"; why: string };
 
-export function parseAdjudications(raw: unknown): Adjudication[] {
+/** adjudicated.json, checked for shape; with `repoIds`, every verdict's repo must be one of them. */
+export function parseAdjudications(raw: unknown, repoIds?: readonly string[]): Adjudication[] {
     if (!Array.isArray(raw)) throw new Error("adjudicated.json: it must be a list of verdicts, each { repo, from, to, line?, decision, why }.");
     for (const item of raw as unknown[]){
         const v = (item ?? {}) as Record<string, unknown>;
@@ -274,8 +276,82 @@ export function parseAdjudications(raw: unknown): Adjudication[] {
             && (v.decision === "in" || v.decision === "out") && typeof v.why === "string" && (v.line === undefined || Number.isInteger(v.line))
             && !(v.decision === "in" && v.to === null);
         if (!ok) throw new Error(`adjudicated.json: ${JSON.stringify(item)} needs repo, from, to (a repo path; null only for an "out" site that loads nothing in the repo), decision "in" or "out", why, and optionally line.`);
+        if (repoIds !== undefined && !repoIds.includes(v.repo as string)){
+            throw new Error(`adjudicated.json: the verdict on ${v.from as string} → ${(v.to as string | null) ?? "nothing"} is for the repo ${JSON.stringify(v.repo)}, which the eval doesn't have (${repoIds.join(", ")}).`);
+        }
     }
     return raw as Adjudication[];
+}
+
+/**
+ * What one repo's verdicts did, every one of them having taken effect (checkVerdicts): how many said in and out, the edges
+ * added to and taken out of the scanner's graph, preProcessFile's edges decided out (the truth's graph unchanged), and the
+ * computed import() sites decided.
+ */
+export type VerdictEffects = { in: number; out: number; edgesAdded: number; edgesRemoved: number; leftOut: number; sitesDecided: number };
+
+/**
+ * Checks one repo's verdicts against its two graphs before any truth is built from them (R2: a verdict that silently does
+ * nothing, or adds an edge to a file that isn't there, would hide a mistake in the truths). Each verdict must take effect:
+ *   - an "out" with a `to` takes out an edge one of the extractors found (the scanner's, or one only preProcessFile has);
+ *   - an "in" names two files the repo has, and adds an edge the scanner lacks or decides a computed site;
+ *   - a `line` is a computed import() site's in `from`: "in" with the file it loads, or "out" with `to: null` (loads nothing
+ *     here); a `to: null` always needs its site's line, and an "in" on an edge neither extractor finds, from a file that
+ *     holds computed sites, must name the site it decides;
+ *   - no verdict is given twice, and no edge or site is decided both ways.
+ * Otherwise it throws a sentence naming the verdict. Returns what the verdicts did.
+ */
+export function checkVerdicts(built: {
+    scanner: Graph; preProcess: Graph; known: ReadonlySet<string>; sites: readonly ComputedSite[]; verdicts: readonly Adjudication[];
+}): VerdictEffects {
+    const [scanned, preProcessed] = [new Set(built.scanner.edges.map(edgeKey)), new Set(built.preProcess.edges.map(edgeKey))];
+    const siteLines = new Map<string, number[]>();
+    for (const s of built.sites) siteLines.set(s.file, [...(siteLines.get(s.file) ?? []), s.line]);
+    const linesOf = (file: string): string => (siteLines.get(file) ?? []).map((l) => `L${l}`).join(", ");
+    const effects: VerdictEffects = { in: 0, out: 0, edgesAdded: 0, edgesRemoved: 0, leftOut: 0, sitesDecided: 0 };
+    const added = new Set<string>();
+    const decidedSites = new Set<string>();
+    const edgeDecisions = new Map<string, Adjudication["decision"]>();
+    const siteDecisions = new Map<string, "loads" | "nothing">();
+    const given = new Set<string>();
+    for (const v of built.verdicts){
+        const named = `adjudicated.json: ${v.repo}'s verdict "${v.decision}" on ${v.from} → ${v.to ?? "nothing"}${v.line !== undefined ? ` (L${v.line})` : ""}`;
+        const stop = (why: string): never => { throw new Error(`${named} ${why}`); };
+        const whole = JSON.stringify([v.from, v.to, v.line ?? null, v.decision]);
+        if (given.has(whole)) stop("is given twice.");
+        given.add(whole);
+        for (const file of v.decision === "in" ? [v.from, v.to!] : [v.from]){
+            if (!built.known.has(file)) stop(`can't take effect: ${file} isn't a code file of the repo.`);
+        }
+        if (v.line !== undefined){
+            if (!(siteLines.get(v.from) ?? []).includes(v.line)){
+                stop(siteLines.has(v.from) ? `names a line that holds none of ${v.from}'s computed import() sites (${linesOf(v.from)}).` : `names a line, but ${v.from} holds no computed import() site.`);
+            }
+            if (v.decision === "out" && v.to !== null) stop(`names a site and a file: a site's verdict is "in" with the file it loads, or "out" with to: null when it loads nothing in the repo.`);
+            const site = `${v.from}\0${v.line}`;
+            const what = v.to === null ? "nothing" : "loads";
+            if (siteDecisions.has(site) && siteDecisions.get(site) !== what) stop("decides the site both ways: it loads a file, and it loads nothing here.");
+            siteDecisions.set(site, what);
+            if (!decidedSites.has(site)){ decidedSites.add(site); effects.sitesDecided++; }
+        } else if (v.to === null) stop(`needs the line of the computed import() site it decides${siteLines.has(v.from) ? ` (${linesOf(v.from)})` : ""}.`);
+        if (v.to !== null){
+            const key = edgeKey([v.from, v.to]);
+            if (edgeDecisions.has(key) && edgeDecisions.get(key) !== v.decision) stop("decides the edge both ways, in and out.");
+            edgeDecisions.set(key, v.decision);
+            if (v.decision === "out"){
+                if (scanned.has(key)) effects.edgesRemoved++;
+                else if (preProcessed.has(key)) effects.leftOut++;
+                else stop("matches an edge neither extractor finds, so it changes nothing: check its from and to.");
+            } else if (!scanned.has(key)){
+                if (v.line === undefined && !preProcessed.has(key) && siteLines.has(v.from)){
+                    stop(`names no line, and ${v.from} holds computed import() sites (${linesOf(v.from)}): give the line of the site that loads it.`);
+                }
+                if (!added.has(key)){ added.add(key); effects.edgesAdded++; }
+            } else if (v.line === undefined) stop("changes nothing: the scanner already has this edge, and the verdict names no computed site.");
+        }
+        effects[v.decision]++;
+    }
+    return effects;
 }
 
 /** A graph with the verdicts applied: "out" edges taken away, then "in" edges added (each once). */
@@ -679,7 +755,7 @@ function main(): void {
         definition = loadDefinition(path.resolve(checkout, args.evalDir));
         specs = specsFor(definition);
         const file = adjudicatedFile(definition);
-        adjudications = fs.existsSync(file) ? parseAdjudications(JSON.parse(fs.readFileSync(file, "utf8"))) : [];
+        adjudications = fs.existsSync(file) ? parseAdjudications(JSON.parse(fs.readFileSync(file, "utf8")), Object.keys(definition.repos)) : [];
     } catch (error){
         console.error((error as Error).message);
         process.exitCode = 1;
@@ -712,6 +788,21 @@ function main(): void {
         heads.set(repo, head);
     }
 
+    // every repo's graphs first, and every verdict checked against them, so a verdict that can't take effect stops the build
+    // before any truth or sheet is written
+    const builds = new Map<string, { built: RepoGraphs; effects: VerdictEffects; seconds: string }>();
+    for (const repo of repos){
+        const started = Date.now();
+        const built = buildRepoGraphs(rootOf(repo), repo, adjudications, { resolveBare });
+        try {
+            builds.set(repo, { built, effects: checkVerdicts(built), seconds: ((Date.now() - started) / 1000).toFixed(1) });
+        } catch (error){
+            console.error((error as Error).message);
+            process.exitCode = 1;
+            return;
+        }
+    }
+
     const reference = `${forward(definition.dir)}/truth`;
     const truthDir = args.out !== null ? forward(path.resolve(checkout, args.out)) : reference;
     const sheetDir = args.out !== null ? truthDir : `${checkout}/.nebulosity/${evalName}`;
@@ -731,10 +822,11 @@ function main(): void {
 
     for (const repo of repos){
         const root = rootOf(repo);
-        const started = Date.now();
-        const built = buildRepoGraphs(root, repo, adjudications, { resolveBare });
+        const { built, effects: fx, seconds } = builds.get(repo)!;
         const { scannerOnly, preProcessOnly } = built.differences;
-        console.log(`scanned ${root} at ${heads.get(repo)!.slice(0, 8)}: ${built.scanner.files.length} code files, ${built.scanner.edges.length} edges (preProcessFile ${built.preProcess.edges.length}; ${scannerOnly.length} only the scanner's, ${preProcessOnly.length} only preProcessFile's), ${plural(built.sites.length, "computed import() site")} (${built.sites.filter((s) => s.verdicts.length === 0).length} undecided), ${plural(built.verdicts.length, "verdict")} applied, ${((Date.now() - started) / 1000).toFixed(1)} s`);
+        const applied = fx.in + fx.out === 0 ? "no verdicts"
+            : `${plural(fx.in + fx.out, "verdict")} (${fx.in} in, ${fx.out} out: ${plural(fx.edgesAdded, "edge")} added, ${fx.edgesRemoved} taken out, ${fx.leftOut} of preProcessFile's left out, ${plural(fx.sitesDecided, "site")} decided)`;
+        console.log(`scanned ${root} at ${heads.get(repo)!.slice(0, 8)}: ${built.scanner.files.length} code files, ${built.scanner.edges.length} edges (preProcessFile ${built.preProcess.edges.length}; ${scannerOnly.length} only the scanner's, ${preProcessOnly.length} only preProcessFile's), ${plural(built.sites.length, "computed import() site")} (${built.sites.filter((s) => s.verdicts.length === 0).length} undecided), ${applied}, ${seconds} s`);
         const e: Evidence = { root, known: built.known, g: built.graph, resolve: built.resolve, verdicts: built.verdicts };
         const preImporters = adjacency(built.preProcess, true);
         evidence.push(`## ${repo} (${definition.repos[repo].slug}) at ${heads.get(repo)!.slice(0, 8)}`, "");
