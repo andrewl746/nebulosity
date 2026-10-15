@@ -540,3 +540,75 @@ Each row covers 10 runs. The score is the mean share of rubric points for big-pi
 | `show_on_map` | 65 ms | 20 | 65 ms | 75 ms | 78 ms | 167 |
 
 **S5 (every warm call ≤ 500 ms): PASS (worst 256 ms, a `search`).** Every row's worst warm call is under 500 ms; the slowest new row is `architecture (summary)` (p50 198 ms, max 229 ms), which does four reports in one call. The first `search` (2,701 ms against #2's 1,011 ms) loads the MiniLM model inside the server; it was a single run on a laptop, and I did not look for the cause of the slower load. The `search` rows' warm times (p50 173 ms) are also above #2's (132 ms), with everything else near #2. This run had no after-a-write table.
+
+## 2026 10 14 MCP Dev Set #1 — tool use and per-turn cost before Eval #2
+
+- **Purpose (R1 of V1.6's plan):** before Eval #2's questions exist, check two things on 16 dev questions whose targets Eval #2 may not use:
+  - whether Claude Code calls Nebulosity's tools on graph questions;
+  - how much the server adds to each turn's context.
+
+  Nothing is scored.
+- **Setup:**
+  - Claude Code 2.1.300, claude-sonnet-5-5 at medium effort.
+  - Isolated as Eval #2's runs are (`eval2/eval.json`; scripts allowed under a fresh scratch folder).
+  - Nebulosity's arm only, one run per question: `npm run eval:run -- --eval eval2 --dev`.
+  - Nebulosity is registered as `nebulosity setup` registers it: no `alwaysLoad`, and the five question tools load through their own `_meta`.
+  - The owner's index: VS Code version 138, AFFiNE version 3. Live events off.
+  - Every init had `apiKeySource: "none"`.
+  - The tools' wording is ADR-056's, unchanged.
+- **The questions** (`eval2/dev/questions.json`):
+  - Eight per repo, one of each kind: impact, a transitive list, a cycle, files nothing imports, violations, entries, pairs and a chain.
+  - Prompts and format lines are Task 14's (Eval #1's for lists and chains).
+  - VS Code's targets are the plan's.
+  - AFFiNE's (at `0b69a6da`) were picked with the eval's own scanner and truth resolver (`scripts/eval/scan.ts`, `resolve-truth.ts`, `truth.ts`), never with Nebulosity's index. Each one's size by that scan is in the table below. No AFFiNE file has 200–700 dependents spread over three or more top folders, so the impact target is the smallest spread-out one: anything `packages/frontend/core/src`'s 405-file import cycle imports has 680 or more.
+
+| AFFiNE question | Target | Size by the eval's scan |
+|---|---|---|
+| impact | `blocksuite/affine/blocks/bookmark/src/bookmark-block.ts`, per `blocksuite/affine`, `blocksuite/integration-test`, `packages/frontend`, `tests` | 37 / 21 / 681 / 199, 9 elsewhere, 947 in all |
+| transitive list | dependents of `packages/frontend/admin/src/use-query.ts` | 40 (9 direct) |
+| cycle | `packages/frontend/apps/electron/src/main/events.ts` | 3 steps |
+| unused | `packages/frontend/core/src/components/hooks` | 3 of 41 |
+| violations | `packages/frontend/core/src/modules` → `packages/frontend/core/src/desktop` | 4 files |
+| entries | `packages/frontend/apps/mobile-shared/src/auth/endpoint.ts` | 5 roots |
+| pairs | the folders directly inside `packages/common` | 11 pairs |
+| chain | `packages/backend/server/src/index.ts` → `packages/common/realtime/src/index.ts` | 5 steps |
+
+**Round 1: 16 of 16 runs called a Nebulosity tool (1.00, against gate 5a's 0.90). ToolSearch was called 0 times.** The 16 runs cost $1.70 (Claude Code's estimate at list price). One run was most of it: listing 1,843 files cost $1.07.
+
+| Run | Nebulosity tools called | Turns | Cost est. | First-call context |
+|---|---|---|---|---|
+| vscode-dev-impact | imports (group_by) | 2 | $0.106 | 23,630 |
+| vscode-dev-transitive | imports (transitive) ×5, paging | 6 | $1.069 | 23,521 |
+| vscode-dev-cycle | architecture (cycles, through) | 2 | $0.020 | 23,530 |
+| vscode-dev-unused | architecture (unused) | 4 | $0.047 | 23,505 |
+| vscode-dev-violations | imports (within) | 4 | $0.039 | 23,504 |
+| vscode-dev-entries | imports (transitive), imports ×3 | 5 | $0.031 | 23,532 |
+| vscode-dev-pairs | architecture (conventions) | 5 | $0.050 | 23,541 |
+| vscode-dev-chain | imports (to) | 2 | $0.018 | 23,499 |
+| affine-dev-impact | imports (group_by) ×3 | 4 | $0.034 | 23,406 |
+| affine-dev-transitive | imports (transitive) | 2 | $0.032 | 23,280 |
+| affine-dev-cycle | architecture (cycles, through) | 2 | $0.018 | 23,310 |
+| affine-dev-unused | architecture (unused) | 5 | $0.038 | 23,287 |
+| affine-dev-violations | imports (within) | 4 | $0.047 | 23,289 |
+| affine-dev-entries | imports (transitive), architecture (unused) | 4 | $0.080 | 23,302 |
+| affine-dev-pairs | imports ×13 (one per folder) | 16 | $0.055 | 23,234 |
+| affine-dev-chain | imports (to) | 2 | $0.017 | 23,276 |
+
+**Per-turn cost.** These are one-turn probes ("Reply with the single word ready.") through `npm run eval:probe -- --eval eval2 --config a,n --repo <id>`. A is Claude Code alone; N is with Nebulosity.
+
+| Repo | A first call | N first call | N − A |
+|---|---|---|---|
+| VS Code | 21,239 | 23,330 | **+2,091** |
+| AFFiNE | 21,017 | 23,108 | **+2,091** |
+
+N − A is within gate 5b's 2,500 tokens on both repos. The probes cost $0.12, so the round cost $1.82.
+
+**Wording:** none changed. Both targets were met in round 1, so there was no second round.
+
+**Two observations:**
+- **Scripts were hard to use as configured.** 5 runs tried a script through Bash, as a heredoc (`mkdir -p … && cd … && cat > s.js <<'EOF' … node s.js`):
+  - all 5 were denied under `--permission-mode dontAsk`, because the allowlist holds only `Bash(node:*)` and read-only commands;
+  - no run wrote a script with Write and then ran `node`, so every scratch folder was empty.
+
+  Nebulosity's tools answered in those runs. In Eval #2's arm without them, scripting as configured would mostly fail the same way.
+- **The plan's VS Code dev picks share `src/vs/platform` with Eval #2's planned violations question** (`src/vs/platform` → `src/vs/editor`). The dev set uses `src/vs/platform` twice: as the imported folder of its violations question (`src/vs/base` → `src/vs/platform`), and as its pairs folder. Task 14 therefore moves that Eval #2 question.
