@@ -43,7 +43,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 
 **Non-goals.** Editing code. Replacing Claude Code. Multi-user, SaaS or paid tiers (CLAUDE.md's non-goals stand). Non-TS/JS languages before E4. The native C++ scanner (dropped, ADR-025).
 
-**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names, S12 on VS Code and AFFiNE, S13 and S14 on VS Code, AFFiNE and Theia (proposed, V1.7 plan):
+**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names, S12 on VS Code and AFFiNE, S13 on VS Code, AFFiNE and Theia, and S14 on VS Code with AFFiNE reported (proposed, V1.7 plan):
 
 | # | Criterion | Threshold |
 |---|---|---|
@@ -60,7 +60,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S11 | Free mode (V1.6): no API key | the Map, structure and stats, `imports`/`architecture`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed *(V1.6: met; the estimate and the yes, ADR-035 and ADR-038 amended, the Map's on-open summary included since the pre-freeze sweep; the Map checked with no key)* |
 | S12 | Eval #2 passes the ship gate (ADR-057) | all seven of D1's conditions hold *(V1.6: **failed**, 2026-10-15: conditions 1, 2, 3a and 5a failed; 3b, 4 and 5b passed. docs/EVAL_RESULTS.md, Eval #2)* |
 | S13 | Eval #3 passes its gate (ADR-060) *(proposed, V1.7 plan, 2026-10-15)* | V and conditions 1–6 hold (the gate approved by the owner 2026-10-15, fixed before the first run) |
-| S14 | Calls index (ADR-059) *(proposed, V1.7 plan, 2026-10-15)* | file-level recall ≥ 0.98 and precision ≥ 0.99 against the type checker on its benchmark methods; first `calls` answer ≤ 1.5 s |
+| S14 | Calls index (ADR-059) *(proposed, V1.7 plan, 2026-10-15)* | file-level recall ≥ 0.98 and precision ≥ 0.99 against the type checker, pooled over its benchmark methods, each reported; first `calls` answer ≤ 1.5 s |
 
 ---
 

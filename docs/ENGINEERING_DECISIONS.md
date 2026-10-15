@@ -1133,7 +1133,7 @@ They need the whole graph, and the index already holds it.
   - Every answer has totals, tests counted apart, areas (`group_by`), `within`, and pages of 50. It ends with what declared types can't see: calls on a value whose type is only inferred.
 - **The `calls` tool** is the seventh tool and the sixth always loaded (ADR-056, amended). API_CONTRACTS.md §17 pins its text.
 - **Measured targets** (PIVOT_SPEC.md §2, S14):
-  - file-level recall ≥ 0.98 and precision ≥ 0.99 against the checker on the benchmark methods (Calls Benchmark #1);
+  - file-level recall ≥ 0.98 and precision ≥ 0.99 against the checker, pooled over the five VS Code benchmark methods with each one reported (Calls Benchmark #1; AFFiNE reported against its adjudicated sets);
   - S1 still ≤ 60 s (Index Benchmark #7);
   - the first `calls` answer in a fresh MCP process ≤ 1.5 s, and warm calls ≤ 500 ms (MCP Benchmark #5).
 - **No Map UI for calls in V1.7.** `show_on_map` can highlight the files.

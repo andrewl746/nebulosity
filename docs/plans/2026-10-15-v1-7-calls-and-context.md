@@ -32,8 +32,8 @@
   - `run-config.ts`: `promptFor(question, formats, scratch?)` appends Eval #2's scripts sentence; `claudeArgs` and `sessionArgs` take `{ scratch, shell }`; `scratchFolder` gives forward slashes.
   - `run.ts`: each repo's root is forward-slashed (`C:/Users/…/vscode`); the index line is `{ name, startedAt, endedAt, ...RunSummary, resultNotes, repo, indexVersion, scratch }`.
   - `transcript.ts`: `RunSummary` has no refusal count. `score.ts` writes each run's `summary` into `results.json`, so a new `RunSummary` field would change Eval #2's re-score bytes.
-  - `score.ts`: `gated` for several repos or any `kind`; the heading is "Ship gate (D1)"; `results.json`'s `commit` is `file.commit`, which `eval2/questions.json` lacks (V1.6 final review B-12); `missingForGate` counts repeats 1..`repeats`, but the gate takes every loaded run (B-9).
-  - `gate.ts`: D1's seven conditions with fixed kind lists.
+  - `score.ts`: `gated` for several repos or any `kind`; the heading is "Ship gate (D1)", Eval #2's gate (the V1.6 plan's D1); `results.json`'s `commit` is `file.commit`, which `eval2/questions.json` lacks (V1.6 final review B-12); `missingForGate` counts repeats 1..`repeats`, but the gate takes every loaded run (B-9).
+  - `gate.ts`: Eval #2's gate, the V1.6 plan's D1: seven conditions with fixed kind lists.
   - `build-truth.ts`: eight kinds; the independence pin (`scan.test.ts` L213) covers `scan.ts`, `truth.ts`, `resolve-truth.ts` and `ts-graph.ts`, not `build-truth.ts` or `definition.ts` (B-8).
   - `grading.ts`: sheets carry the answer unredacted and print how many mention "nebulosity" or "mcp__".
 - **The evidence.** `evidence/e2/out/checker.json`: TypeScript's checker over VS Code's `src/tsconfig.json` (10,237 roots, 10,038 files under `src/` analysed), 7,347 calls named one of the five planning methods, each with its owners (an interface, or a class with `implementsTarget`); 21.5 s to build, 4,998 MB at peak, 0 errors. `evidence/e2/out/affine-sites.json`: the syntactic L3 sets for AFFiNE's three planning methods. `evidence/ttrc/`: the reference scripts for time to relevant context (`ttrc.js`, `confound.js`: mulberry32, a percentile bootstrap with linear interpolation).
@@ -47,6 +47,14 @@
 ### Settled by the owner in design (2026-10-15, verbatim, design §2)
 
 "Items 3 and 4"="Plan carries them (Recommended)" (moot: both landed, `9a81681`, `7d994e1`, `49f8bbd`), "How should Eval #3's questions be sourced?"="Real issues, PRs, docs (Recommended)", "Which shell set-up should Claude Code get in Eval #3, the same alone and with Nebulosity?"="Rules sentence + checks (Recommended)", "What should V1.7 build for E2, the call graph through injected services?"="Calls index + calls tool (Recommended)", "Which repos should Eval #3 use?"="Add Theia, held out (Recommended)", "What size and budget for Eval #3?"="Full, 3 repeats (Recommended)", "How high should the time-to-context bar be (condition 1, on each repo)?"="4x, as drafted (Recommended)", "Accuracy condition (condition 2): what should Eval #3 require?"="Half the errors (Recommended)", "Given what the floor did on Eval #2's data, which "seen" rule should the gate use?"="Named anywhere (Recommended)", "With those set, write the V1.7 plan from this design?"="yes, write the plan as planned. but give me the prompt for the plan so i can write it in a new session".
+
+### The plan's approval (2026-10-15, verbatim)
+
+The owner, after the pre-flight scan's fixes: "ik the session got compacted midway so i wanna make sure everything is correct and aligned and consistent. do one runthrough of it, and if it looks good then i approve and u give me the prompt so i can start in a new session".
+
+The runthrough (a fresh end-to-end reader, plus mechanical checks) found no blocking issue and nothing that changes a decision. Its fixes are in this text, R-AL among them. The ledger lists them (`progress.md`, "## Planning").
+
+### Terms
 
 An **arm** is one of the two set-ups compared: **A**, Claude Code alone (`baseline` in run names), and **N**, Claude Code with Nebulosity's MCP server (`nebulosity`). Everything else is the same. Prose says "alone" and "with Nebulosity"; tables say A and N.
 
@@ -141,7 +149,7 @@ An **arm** is one of the two set-ups compared: **A**, Claude Code alone (`baseli
   - *Reached:* the first event after which every needed file has been seen. *TTRC:* that event's `timestamp` minus the run's `startedAt` (from process start: the gate's). Also reported: from the query start, the last event's timestamp minus `duration_ms` (R-F).
   - *Tokens to relevant context:* input + cache-write + cache-read of every main-conversation API call before that event, counted once per message id.
   - *Never reached:* infinitely late in medians; the run's final coverage and the reached share are reported.
-  - *Eval #2's references* (references, not bars): plain rule from process start, matched per question, VS Code 0.33 and AFFiNE 0.29 with all runs, pooled 0.31 [0.23–0.58] on refusal-free runs; pooled 0.27; the floor version pooled 0.17 from process start, with N's entries runs never reaching under it.
+  - *Eval #2's references* (references, not bars): plain rule from process start, matched per question, VS Code 0.33 and AFFiNE 0.29 with all runs, pooled 0.29 [0.21–0.33] with all runs, pooled 0.31 [0.23–0.58] on refusal-free runs; pooled 0.27; the floor version pooled 0.17 from process start, with N's entries runs never reaching under it.
 - **The checks before the first run:** the guard probe (Task 14); the shell check (Task 15: at most 1 refused command per 10 runs in each arm, and no run that gives up after a refusal); the pilot's refusals against V (Task 19, its two sessions included).
 - **Spending, asked for each time with the count:** the guard probe (1 run), the shell check (38 runs: 19 dev questions in both arms), a re-run after a rewording (its count), the dev set's further tool-use rounds (at most 16 N runs), Theia's clone (its size), the pilot (28 runs: 24 single and 4 session), the full count (the remaining 356 runs: 348 single and 8 session). Estimate $35–55 at list price (Eval #2 was $22.26 for 270).
 
@@ -202,7 +210,8 @@ An **arm** is one of the two set-ups compared: **A**, Claude Code alone (`baseli
 - **R-AH. The tests rule's import clause** is Eval #1's import rule, reworded to fit the sentence (D2's text). *Cost if wrong:* wording only.
 - **R-AI. A call candidate may be scoped** (`within`) only to a folder its source names; VS Code's are at least `src/`. Its size for the 10–80 filter is counted within that folder. *Cost if wrong:* fewer candidates pass the filter.
 - **R-AJ. Eval #2's verdicts carry over:** `eval2/truth/adjudicated.json` and `steps.json` become Eval #3's for VS Code and AFFiNE, since they are facts about the same commits. *Cost if wrong:* none.
-- **R-AK. ADR-051's amendment follows the owner's call after design** (design §5.8, verbatim there): after Eval #3 the hold lifts whatever the outcome, and the gate decides what the README may claim. Three older lines say the hold waits on a passed gate, and all were written before that call: design §8, §9, and CLAUDE.md's "stays until a gate passes". CLAUDE.md is the owner's file to update. *Cost if wrong:* one ADR sentence.
+- **R-AK. ADR-051's amendment follows the owner's call after design** (design §5.8, verbatim there): after Eval #3 the hold lifts whatever the outcome, and the gate decides what the README may claim. Three older lines say the hold waits on a passed gate, and all were written before that call: design §8, §9, and CLAUDE.md's "stays until a gate passes". CLAUDE.md is gitignored and the owner's: its line on the hold is brought up to date with the rest of its current state at Task 23 (local only, never staged), unless the owner changes it first. *Cost if wrong:* one ADR sentence.
+- **R-AL. Calls Benchmark #1's bar is judged on the five VS Code methods pooled:** file-level sums over the methods, for interface calls and for interface + implementation calls, since design §5.1 states one bar, not one per method. Each method's recall and precision are reported beside the pooled numbers, and a method under 0.98 or 0.99 has its misses read and classed. AFFiNE's three methods are reported against their adjudicated L3 sets. *Cost if wrong:* one method can sit under the bar while the pool passes; the per-method numbers show it.
 
 ---
 
@@ -275,7 +284,7 @@ Five inputs most likely to hurt a real user that the design doesn't spell out. E
 | `lib/index/pipeline.ts` (+ test), `lib/index/update.ts` (+ test) | modify | `toFileRecord` carries the facts; the update takes and returns the workspace (S6) |
 | `lib/engine/calls.ts` (+ test) | create | the call index per index version (resolution through bindings, re-exports, heritage), `calls()`: callers, implementations, what breaks, injection sites |
 | `lib/tools/answers.ts`, `lib/tools/registry.ts` (+ tests) | modify | `callsAnswer`; the `calls` entry; the instructions bullet; R-Q's trimmed texts and the 6,650 budget |
-| `mcp/stdio.test.ts`, `scripts/mcp-smoke.mjs`, `scripts/bench-mcp.ts`, `scripts/cli.ts`, `app/map/activity.ts` (+ test) | modify | seven tools; `calls`' live event words; `--fresh-calls` |
+| `mcp/stdio.test.ts`, `mcp/server.test.ts`, `scripts/mcp-smoke.mjs`, `scripts/bench-mcp.ts`, `scripts/cli.ts`, `app/map/activity.ts` (+ test) | modify | seven tools; `calls`' live event words; `--fresh-calls` |
 | `scripts/bench-calls.ts` | create | Calls Benchmark #1: file-level recall and precision against the checker's call sets |
 | `lib/background/service.ts` (+ test) | modify | the workspace kept per worker run (S6) |
 | `scripts/eval/definition.ts`, `run-config.ts`, `run.ts`, `transcript.ts` (+ tests) | modify | `sentence` and `gate` in eval.json; the rules sentence; `refusedCalls`; refusals in the index line; `SHELL_PRESETS` moves into `definition.ts` (Task 10) |
@@ -286,7 +295,7 @@ Five inputs most likely to hurt a real user that the design doesn't spell out. E
 | `scripts/eval/redact.ts` (+ test), `scripts/eval/grading.ts` | create / modify | redaction before the blind sheets |
 | `scripts/eval/overlap.ts` (+ test) | modify | calls targets (`T.m`, `T`) compared too |
 | `scripts/eval/prompts.ts` (+ test) | create | the call and task prompts from D2's stems and rule sentences |
-| `scripts/eval/gate.ts` | modify | `QuestionKind` gains the five new kinds (Task 11); D1's lists and conditions stay |
+| `scripts/eval/gate.ts` | modify | `QuestionKind` gains the five new kinds (Task 11); Eval #2's gate (the V1.6 plan's D1) stays as it is |
 | `.gitignore` | modify | `eval3/runs/*.tmp` and `eval3/dev/runs/*.tmp` (Task 8) |
 | `test/helpers/fixture.ts` | modify | `DI_FIXTURE` beside `ARCH_FIXTURE` (Task 2) |
 | `scripts/eval/draw.ts` (+ test), `scripts/eval/questions3.test.ts` | create | the seeded draw of Eval #3's questions; the pin on `eval3/questions.json` |
@@ -2461,7 +2470,7 @@ git add -A -- lib/engine/calls.ts lib/engine/calls.test.ts docs/ARCHITECTURE.md 
 ### Task 4: The `calls` tool, seven tools, a tighter budget (ADR-056 amended)
 
 **Files:**
-- Modify: `lib/tools/answers.ts` (+ `answers.test.ts`), `lib/tools/registry.ts` (+ `registry.test.ts`), `mcp/stdio.test.ts`, `scripts/mcp-smoke.mjs`, `scripts/bench-mcp.ts`, `scripts/cli.ts` (+ `cli.test.ts`), `app/map/activity.ts` (+ `activity.test.ts`)
+- Modify: `lib/tools/answers.ts` (+ `answers.test.ts`), `lib/tools/registry.ts` (+ `registry.test.ts`), `mcp/stdio.test.ts`, `mcp/server.test.ts` (test titles), `scripts/mcp-smoke.mjs`, `scripts/bench-mcp.ts`, `scripts/cli.ts` (+ `cli.test.ts`), `app/map/activity.ts` (+ `activity.test.ts`)
 - Modify (docs): `docs/API_CONTRACTS.md` §17 (the proposed `calls` text becomes the built one), `docs/ENGINEERING_DECISIONS.md` (ADR-056's proposed amendment, with the measured sizes), `docs/PIVOT_SPEC.md` §6.2, `README.md` (four places, Step 7)
 
 **Interfaces:**
@@ -2479,7 +2488,7 @@ git add -A -- lib/engine/calls.ts lib/engine/calls.test.ts docs/ARCHITECTURE.md 
 
 `lib/tools/answers.test.ts`, Review Focus 3. A hand-built `MemberAnswer` with 2,000 files whose paths are long (`src/${"deep/".repeat(15)}f${i}.ts`, about 90 characters, each one call, lines `[1]`, receivers `[]`), and 500 declaring files:
 - `callsAnswer(a, { limit: 500, offset: 0 })` stays under `MAX_ANSWER_CHARS`;
-- it lists k < 500 files, since the size cap cuts the page (count the file lines in the text), and its cut line is ``  … ${(2000 - k).toLocaleString("en-US")} more (next page: offset ${k})``;
+- it lists k < 500 files, since the size cap cuts the page (count the file lines in the text), and its cut line is ``… ${(2000 - k).toLocaleString("en-US")} more (next page: offset ${k})``, unindented as in the paging test above;
 - its declaring block lists 30 paths, then `  … 470 more`;
 - `callsAnswer(a, { limit: 500, offset: 1500 })` also stays under the cap, and its files block starts `Showing 1,501–`.
 
@@ -2652,7 +2661,7 @@ Expected: PASS (about 6 new). Then print the budget the way the test measures it
 
 - [ ] **Step 7: The docs**
 
-- `docs/API_CONTRACTS.md` §17: the `calls` row and paragraph written as proposed with this plan lose "proposed"; the "Always loaded" paragraph says six tools and 6,650 characters; "Live events" gains `calls` (the declaring file, then the page's files).
+- `docs/API_CONTRACTS.md` §17: the `calls` row and paragraph written as proposed with this plan lose "proposed"; the "Always loaded" paragraph says six tools and 6,650 characters; "Live events" gains `calls` (the declaring file, then up to 49 of the page's files: the Map takes at most 50 paths).
 - `docs/ENGINEERING_DECISIONS.md`: ADR-056's proposed amendment loses "proposed" and gains the measured characters per tool.
 - `docs/PIVOT_SPEC.md` §6.2: the `calls` row loses "proposed".
 - `README.md`, four places:
@@ -2725,7 +2734,7 @@ npm run bench-calls -- --repo ../vscode --checker .superpowers/sdd/2026-10-15-v1
 npm run bench-calls -- --repo ../affine --sites .superpowers/sdd/2026-10-15-v1-7-calls-and-context/evidence/e2/out/affine-sites.json
 ```
 
-**The bar (S14, judged on VS Code against the checker):** recall ≥ 0.98 and precision ≥ 0.99, file level, for interface calls and for interface + implementation calls, per method and in all. Read AFFiNE's disagreements in the source, write each verdict with its deciding line into `.superpowers/sdd/2026-10-15-v1-7-calls-and-context/calls-benchmark-affine-verdicts.json` (the ledger), and re-run with `--verdicts`.
+**The bar (S14, judged on VS Code against the checker, R-AL):** recall ≥ 0.98 and precision ≥ 0.99, file level, for interface calls and for interface + implementation calls, on the five methods pooled. Each method's numbers are reported beside the pooled ones, and a method under the bar has its misses read and classed in Step 4. Read AFFiNE's disagreements in the source, write each verdict with its deciding line into `.superpowers/sdd/2026-10-15-v1-7-calls-and-context/calls-benchmark-affine-verdicts.json` (the ledger), and re-run with `--verdicts`.
 
 - [ ] **Step 4: A round, only if under the bar (at most three)**
 
@@ -2737,6 +2746,7 @@ After three rounds under the bar: **STOP.** Show the owner the table, the miss c
 
 In `docs/BENCHMARKS.md`, `## ‹today› Calls Benchmark #1 — calls through declared types against TypeScript's checker (S14)`: the method (the checker's evidence run, the program's files, R-AB's sets), the table per method (checker files, index files, recall, precision; both sets), the sums, every miss and extra by class with one example each, AFFiNE's table with its verdicts' count, each round's change, and the rows stored per table. ADR-059 gains its measured line; PIVOT_SPEC §2's S14 gains its result for recall and precision (the speed half comes in Task 6).
 
+Run the gate. Then:
 ```bash
 git add -A -- scripts/bench-calls.ts package.json docs/BENCHMARKS.md docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md && git commit -m "feat(bench): Calls Benchmark #1, the calls index against TypeScript's checker on VS Code's five planning methods and AFFiNE's three (S14)" -- scripts/bench-calls.ts package.json docs/BENCHMARKS.md docs/ENGINEERING_DECISIONS.md docs/PIVOT_SPEC.md && git push origin pivot/v1
 ```
@@ -2772,13 +2782,14 @@ Both give every `calls` input its declaring file as `path` (Task 4 Step 5), so t
 - A post-structure step in `indexRepository`, inside the lock and before `bumpIndexVersion`, builds `buildCallIndex` from the just-written facts and writes every call's `target` in batches; `applyFileChanges` does the same for the changed files' calls, and for every call when `resolvedAll` (a new file or a resolution input can change any resolution).
 - `calls()` reads `target` instead of calling `receiverType` (the type index is still built for the hierarchy, and is cheaper without the calls).
 - Its tests: the pipeline test on di-repo checks the stored targets of `editorPane.ts`'s three calls; an update test checks a renamed base class re-targets `textEditor.ts`'s call.
-- Announce, then re-index `../vscode` in the owner's database, one more write than R-AC's three. The read-only server refuses a database behind the checkout's migrations, and only an index run fills the new `target` column.
+- Announce, then re-index `../vscode` and `../affine` in the owner's database, two more writes than R-AC's three. The read-only server refuses a database behind the checkout's migrations, and only an index run fills the new `target` column; a repo left out would answer every call empty.
 - Then re-measure S1 (Step 2), MCP Benchmark #5 (Step 3), and Update Benchmark #3 in Task 7. ADR-059 records the fallback as taken.
 
 - [ ] **Step 5: Record, commit, push**
 
-`docs/BENCHMARKS.md` gains `## ‹today› Index Benchmark #7 — S1 with the call facts` and `## ‹today› MCP Benchmark #5 — S5 with seven tools, and the first calls answer in a fresh process (S14)`. PIVOT_SPEC S14 gains its speed result; ADR-059 its measured line.
+`docs/BENCHMARKS.md` gains `## ‹today› Index Benchmark #7 — S1 with the call facts` and `## ‹today› MCP Benchmark #5 — S5 with seven tools, and the first calls answer in a fresh process (S14)`. PIVOT_SPEC S14 gains its speed result; ADR-059 its measured line. On the fallback, Step 4's code, migration and tests join both path lists below.
 
+Run the gate. Then:
 ```bash
 git add -A -- docs/BENCHMARKS.md docs/PIVOT_SPEC.md docs/ENGINEERING_DECISIONS.md && git commit -m "docs: Index Benchmark #7 (S1 with the call facts) and MCP Benchmark #5 (S5, and the first calls answer in a fresh process, S14)" -- docs/BENCHMARKS.md docs/PIVOT_SPEC.md docs/ENGINEERING_DECISIONS.md && git push origin pivot/v1
 ```
@@ -2819,17 +2830,22 @@ Expected: FAIL.
 - [ ] **Step 4: Run the tests and see them pass**
 
 Run: `npx vitest run lib/index lib/background`
-Expected: PASS (about 4 new).
+Expected: PASS (about 4 new). Then run the gate and commit the code, so Step 5 benchmarks a commit:
+```bash
+git add -A -- lib/index/update.ts lib/index/update.test.ts lib/background/service.ts lib/background/service.test.ts && git commit -m "perf(worker): keep the workspace manifests per worker run and read them again only when a resolution input or the file set changes (ADR-053 amended)" -- lib/index/update.ts lib/index/update.test.ts lib/background/service.ts lib/background/service.test.ts && git push origin pivot/v1
+```
 
 - [ ] **Step 5: Update Benchmark #3**
 
-As Update Benchmark #2: in `../Nebulosity-build` (checked out at this commit), `npx next dev -p 3130` with `NEBULOSITY_DATA` a scratch folder holding a fresh index of VS Code and a `config.json` with `port: 3130`, no API key; then `npm run bench-update -- ../vscode src/vs/base/common/strings.ts` as the first batch after the server starts, `src/vs/editor/common/model/textModel.ts` second, `strings.ts` again third (five runs each). Port 3000 untouched; VS Code clean afterwards. **S6 (≤ 2 s): warm, and the first batch after start.** Record `applyFileChanges`' own times from the worker's log against Update Benchmark #2's 0.55–0.72 s.
+Check port 3000 first. Then, as Update Benchmark #2: in `../Nebulosity-build` (checked out at Step 4's commit), `npx next dev -p 3130` with `NEBULOSITY_DATA` a scratch folder holding a fresh index of VS Code and a `config.json` with `port: 3130`, no API key; then `npm run bench-update -- ../vscode src/vs/base/common/strings.ts` as the first batch after the server starts, `src/vs/editor/common/model/textModel.ts` second, `strings.ts` again third (five runs each). Port 3000 untouched; VS Code clean afterwards. **S6 (≤ 2 s): warm, and the first batch after start.** Record `applyFileChanges`' own times from the worker's log against Update Benchmark #2's 0.55–0.72 s.
 
 - [ ] **Step 6: Docs, gate, commit, push**
 
 BENCHMARKS gains `## ‹today› Update Benchmark #3 — S6 with the workspace kept per worker run`; ADR-053's proposed amendment loses "proposed" and gains the numbers.
+
+Run the gate. Then:
 ```bash
-git add -A -- lib/index/update.ts lib/index/update.test.ts lib/background/service.ts lib/background/service.test.ts docs/BENCHMARKS.md docs/ENGINEERING_DECISIONS.md && git commit -m "perf(worker): keep the workspace manifests per worker run and read them again only when a resolution input or the file set changes; Update Benchmark #3 (S6)" -- lib/index/update.ts lib/index/update.test.ts lib/background/service.ts lib/background/service.test.ts docs/BENCHMARKS.md docs/ENGINEERING_DECISIONS.md && git push origin pivot/v1
+git add -A -- docs/BENCHMARKS.md docs/ENGINEERING_DECISIONS.md && git commit -m "docs: Update Benchmark #3, S6 with the workspace kept per worker run (ADR-053 amended)" -- docs/BENCHMARKS.md docs/ENGINEERING_DECISIONS.md && git push origin pivot/v1
 ```
 
 ---
@@ -2918,7 +2934,7 @@ Expected: FAIL.
 
 - [ ] **Step 4: Implement**
 
-- `definition.ts`: the type gains `sentence?: "scripts" | "rules"` (`/** The sentence that ends every prompt with scripts on: Eval #2's ("scripts", the default) or Eval #3's rules sentence (ADR-060). */`), `gate?: "eval3"` (`/** The ship gate this eval is judged by: absent, D1 for an eval with several repos or kinds (Eval #2); "eval3", ADR-060's. */`) and, on each repo, `project?: string` (`/** The tsconfig the call truth's program is built from (VS Code's src/tsconfig.json); absent, every .ts file with the truth's own resolver. */`). `loadDefinition` refuses other values with the sentences of the test.
+- `definition.ts`: the type gains `sentence?: "scripts" | "rules"` (`/** The sentence that ends every prompt with scripts on: Eval #2's ("scripts", the default) or Eval #3's rules sentence (ADR-060). */`), `gate?: "eval3"` (`/** The ship gate this eval is judged by: absent, Eval #2's (the V1.6 plan's D1, gate.ts) for an eval with several repos or kinds; "eval3", ADR-060's. */`) and, on each repo, `project?: string` (`/** The tsconfig the call truth's program is built from (VS Code's src/tsconfig.json); absent, every .ts file with the truth's own resolver. */`). `loadDefinition` refuses other values with the sentences of the test.
 - `run-config.ts`: `rulesSentence` (the test's text, built from the two paths) and the fourth parameter of `promptFor`:
 ```ts
 /** Eval #3's rules sentence (D2 of V1.7's plan, R-L), the same in both arms: the repo root and the scratch folder, forward-slashed. */
@@ -3405,7 +3421,7 @@ export function relevantContext(input: ContextInput): ContextResult {
 
 - [ ] **Step 6: `scripts/eval/context-report.ts` (`npm run eval:context -- --eval <dir> [--needed <file>] [--runs <dir>]`)**
 
-Read-only. For every kept single run with a needed set: `relevantContext` with the run's `startedAt` (its index line), its repo's id, and its repo's tracked files (`git -C <repo> ls-files`, lower-cased, once per repo). Print, per kind and per repo and pooled: each arm's reached share and median TTRC from `startedAt` and from the query start, N ÷ A; the matched per-question ratios' median and bootstrap interval (`ratioOfMedians`, `bootstrapMedianInterval`) per repo and pooled; the same for the mostly-relevant version; and the median tokens to context per arm. With `--refusal-free`, A's runs with a refused call are left out (the design check's Follow-up 1).
+Read-only. For every kept single run with a needed set: `relevantContext` with the run's `startedAt` (its index line), its repo's id, and its repo's tracked files (`git -C <repo> ls-files`, lower-cased, once per repo). Print, per kind and per repo and pooled: each arm's reached share and median TTRC from `startedAt` and from the query start, N ÷ A; the matched per-question ratios' median and bootstrap interval (`ratioOfMedians`, `bootstrapMedianInterval`, questions in order of their ids) per repo and pooled; the same for the mostly-relevant version; and the median tokens to context per arm. With `--refusal-free`, A's runs with a refused call are left out (the design check's Follow-up 1).
 
 - [ ] **Step 7: Run the tests, then check against Eval #2's references**
 
@@ -3676,15 +3692,15 @@ export function callTruth(program: ts.Program, root: string, kind: CallTruthKind
 
 - [ ] **Step 5: `scripts/eval/calls-candidates.ts` (the index's side; imports `lib/`, read-only)**
 
-`npx tsx scripts/eval/calls-candidates.ts --eval <dir>`: opens the database read-only, and for each call or task spec asks `calls()` (the spec's `within`); the index's set for the kind (callers and adopt: every category's files; breaks: those and `declaring`; injects: the type answer's files; a task: breaks), and the truth's set from `<dir>/truth/<id>.json`. It writes `.nebulosity/<dir>/calls-disagreements.md`: per question, every file only one side has, with the index's lines and the checker's. The index is consulted only here, for candidates; every line of the sheet is read in the source and decided in `calls-adjudicated.json`.
+`npx tsx scripts/eval/calls-candidates.ts --eval <dir>`: opens the database read-only (`useReadOnlyDatabase()`, with the `react-hooks/rules-of-hooks` disable line above it, as Task 5's script has), and for each call or task spec asks `calls(root, { symbol: <T.m, or T for injects>, path: <the spec's file> }, { groupBy: null, within: <the spec's within> })`. With `path`, a name two types share can't come back as the list of candidates; an ambiguous or error answer stops the script, naming the spec. It compares the index's set for the kind (callers and adopt: every category's files; breaks: those and `declaring`; injects: the type answer's files; a task: breaks) with the truth's set from `<dir>/truth/<id>.json`, and writes `.nebulosity/<dir>/calls-disagreements.md`: per question, every file only one side has, with the index's lines and the checker's. The index is consulted only here, for candidates; every line of the sheet is read in the source and decided in `calls-adjudicated.json`.
 
 - [ ] **Step 6: Run the tests and see them pass**
 
-Run: `npx vitest run scripts/eval` → PASS (about 7 new), then Task 8 Step 5's re-score checks. Check: `npm run eval:truth` (Eval #1) prints its truths as kept, unchanged; `npm run eval:truth -- --eval eval2 --out .nebulosity/eval2/rebuild` reports no difference against `eval2/truth`.
+Run: `npx vitest run scripts/eval` → PASS (about 10 new), then Task 8 Step 5's re-score checks. Check: `npm run eval:truth` (Eval #1) prints its truths as kept, unchanged; `npm run eval:truth -- --eval eval2 --out .nebulosity/eval2/rebuild` reports no difference against `eval2/truth`.
 
 - [ ] **Step 7: Gate, commit, push**
 
-Run the gate (about 1,409/1,409). Then:
+Run the gate (about 1,412/1,412). Then:
 ```bash
 git add -A -- scripts/eval && git commit -m "feat(eval): the call truth from TypeScript's own checker (callers, breaks, adopt, injects, tasks), adjudicated by reading, independent of the index; the independence pin covers the truth builder and the definition (B-8)" -- scripts/eval && git push origin pivot/v1
 ```
@@ -3692,7 +3708,7 @@ git add -A -- scripts/eval && git commit -m "feat(eval): the call truth from Typ
 ### Task 11: Scoring the new kinds, and the overlap check's calls targets
 
 **Files:**
-- Modify: `scripts/eval/gate.ts` (the `QuestionKind` type only; D1's lists stay), `scripts/eval/answer.ts` (+ test), `scripts/eval/score.ts` (+ test), `scripts/eval/overlap.ts` (+ test)
+- Modify: `scripts/eval/gate.ts` (the `QuestionKind` type only; Eval #2's gate stays), `scripts/eval/answer.ts` (+ test), `scripts/eval/score.ts` (+ test), `scripts/eval/overlap.ts` (+ test)
 
 **Interfaces:**
 - Consumes: `CallTruthFile`, `TaskTruthFile` (Task 10).
@@ -3850,11 +3866,11 @@ and the header comment: a calls question's targets are its type's file and the m
 
 - [ ] **Step 4: Run the tests, then check Eval #1 and Eval #2 are unchanged**
 
-Run: `npx vitest run scripts/eval` → PASS (about 8 new). Then Task 8 Step 5's re-score checks (Eval #2 byte for byte, Eval #1's headline, Eval #2's dry run), and `npm run eval:overlap -- --eval eval2` prints nothing.
+Run: `npx vitest run scripts/eval` → PASS (about 8 new). Then Task 8 Step 5's re-score checks (Eval #2 byte for byte, Eval #1's headline), and `npm run eval:overlap -- --eval eval2` prints nothing.
 
 - [ ] **Step 5: Gate, commit, push**
 
-Run the gate (about 1,417/1,417). Then:
+Run the gate (about 1,420/1,420). Then:
 ```bash
 git add -A -- scripts/eval && git commit -m "feat(eval): Eval #3's kinds scored: callers, breaks, adopt and injects by F1, a task by its two blocks' mean; the overlap check compares calls targets" -- scripts/eval && git push origin pivot/v1
 ```
@@ -4004,13 +4020,13 @@ Expected: FAIL.
  * "bigPicture" (Eval #2's and the new ones). A ratio is per question (N's median over A's), then the median over the set's
  * questions; intervals resample questions. Means run over runs. A per-repo condition fails when any repo fails, and
  * reports the worst repo. A condition with nothing to compare fails. Values are compared unrounded (1e-9) and rounded to
- * 4 decimal places. D1's gate (gate.ts) is untouched: Eval #2 keeps it.
+ * 4 decimal places. Eval #2's gate (gate.ts, the V1.6 plan's D1) is untouched: Eval #2 keeps it.
  */
 import { median as medianOf, bootstrapMedianInterval, ratioOfMedians, ratioOfPlainMedians } from "./stats";
 import type { GateArm, GateRun, GateSession, QuestionKind } from "./gate";
 
 export type QuestionSet = "new" | "eval2" | "bigPicture";
-/** A single run as the gate takes it: D1's fields, its question's set, its refused calls, and its TTRC from process start (null: never reached; absent: its question has no needed set). */
+/** A single run as the gate takes it: Eval #2's gate's fields (GateRun), its question's set, its refused calls, and its TTRC from process start (null: never reached; absent: its question has no needed set). */
 export type Gate3Run = GateRun & { set: QuestionSet; refusals: number; ttrcMs?: number | null };
 export type Gate3Session = GateSession & { refusals: number };
 export type Gate3Id = "V" | "1" | "2" | "3" | "4" | "5" | "6";
@@ -4225,18 +4241,18 @@ export function ttrcRows(results: readonly RunResult[]): TtrcRow[] {
 - In `main()`:
   - `const eval3 = definition.gate === "eval3";` and `loadRuns(runsDir, { raw: eval3 })`.
   - Eval #3 only: read `<dir>/truth/needed.json` (stop with "eval3/truth/needed.json doesn't exist: run npm run eval:needed -- --eval eval3 first." when missing); list each touched repo's tracked files once (`git -C <repo> ls-files`, lower-cased); a question's set is `"bigPicture"` for big-picture, `"eval2"` when its `questions.json` entry has `"origin": "eval2"`, else `"new"`; each single run goes through `withEval3Fields` after `withGateFields`, and each session gets `refusals: refusedCalls(raw)`.
-  - The gate takes `inRepeats(…, definition.repeats)` of the runs and the sessions, for D1 and for Eval #3 (B-9; Eval #2's runs are all repeats 1–3, so its output doesn't move).
+  - The gate takes `inRepeats(…, definition.repeats)` of the runs and the sessions, for Eval #2's gate and for Eval #3's (B-9; Eval #2's runs are all repeats 1–3, so its output doesn't move).
   - Eval #3 only, after "Per repo and kind": `## Time to relevant context` (`renderTtrcTable(ttrcRows(results))`) and `## Refusals`. The gate's heading is `## Ship gate (ADR-060)`, and its body `renderGate(gate3Verdict(…toGate3Run…, …toGate3Session…))`.
   - Eval #3's `results.json` adds `commits` (each repo's id and pinned commit, B-12) and `verdict` (when computed). JSON has no infinity, so an infinite number in Eval #3's file is written as the string `"infinite"` and a missing one (NaN) as `"n/a"`, with a `JSON.stringify` replacer. Eval #2's keys and bytes stay as they are (R-V).
   - The header comment describes Eval #3's gate, fields and tables.
 
 - [ ] **Step 5: Run the tests, then check Eval #1 and Eval #2 are unchanged**
 
-Run: `npx vitest run scripts/eval` → PASS (about 8 new). Then Task 8 Step 5's re-score checks (Eval #2 byte for byte, Eval #1's headline, Eval #2's dry run).
+Run: `npx vitest run scripts/eval` → PASS (about 8 new). Then Task 8 Step 5's re-score checks (Eval #2 byte for byte, Eval #1's headline).
 
 - [ ] **Step 6: Gate, commit, push**
 
-Run the gate (about 1,425/1,425). Then:
+Run the gate (about 1,428/1,428). Then:
 ```bash
 git add -A -- scripts/eval && git commit -m "feat(eval): Eval #3's gate (V and conditions 1-6, ADR-060) behind the definition's selector; time to relevant context and refused calls per run in its results; the gate takes repeats 1..n (B-9) and results name each repo's commit (B-12)" -- scripts/eval && git push origin pivot/v1
 ```
@@ -4347,7 +4363,7 @@ Run: `npx vitest run scripts/eval` → PASS (about 3 new), then Task 8 Step 5's 
 
 - [ ] **Step 6: Gate, commit, push**
 
-Run the gate (about 1,428/1,428). Then:
+Run the gate (about 1,431/1,431). Then:
 ```bash
 git add -A -- scripts/eval && git commit -m "feat(eval): Eval #3's blind sheets redact Nebulosity and its tools' names into neutral words, the redactions recorded and published at merge (R-M, R-AD)" -- scripts/eval && git push origin pivot/v1
 ```
@@ -4367,7 +4383,7 @@ Nothing in this part touches Theia or Eval #3's questions (R1 of V1.6, kept): th
 - [ ] **Step 1: Write the probe from V1.6's live check**
 
 Copy the set-up of `.superpowers/sdd/2026-10-14-v1-6-works-on-your-repo/items-3-4-live-check.ts` (read it first):
-- the runner's own `claudeArgs("baseline", <eval3/mcp/empty.json>, <eval3's pins>, { scratch })` with a fresh scratch folder (removed afterwards) and no `shell`;
+- the runner's own `claudeArgs("baseline", { empty: <eval3/mcp/empty.json>, nebulosity: <the runner's Nebulosity config, unused by this arm> }, <eval3's pins>, { scratch })` with a fresh scratch folder (`scratchFolder`, removed afterwards) and no `shell`;
 - `childEnv` (it strips `ANTHROPIC_API_KEY` and the session's `CLAUDE*` variables and sets `CLAUDE_CODE_GIT_BASH_PATH`);
 - the working folder `../vscode`, `--strict-mcp-config` and `--setting-sources project,local`, as the runner passes them.
 
@@ -4408,7 +4424,7 @@ git add -A -- docs/ENGINEERING_DECISIONS.md && git commit -m "docs: the guard pr
 - Modify: `scripts/eval/scan.test.ts` (the independence pin gains `prompts.ts`)
 
 **Interfaces:**
-- Produces: `CallKind`, `CallTarget`, `callRule(kind, type, member?)`, `callPrompt(kind, target, change?)`, `TESTS_RULE`. Task 18 builds every call and task prompt with them, and `questions3.test.ts` checks every prompt against them.
+- Produces: `CallKind`, `PromptTarget`, `callRule(kind, type, member?)`, `callPrompt(kind, target, change?)`, `TESTS_RULE`. Task 18 builds every call and task prompt with them, and `questions3.test.ts` checks every prompt against them.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4472,7 +4488,7 @@ Expected: FAIL (no module).
  * sentence. Pure; imports nothing.
  */
 export type CallKind = "callers" | "breaks" | "adopt" | "injects" | "task";
-export type CallTarget = { type: string; file: string; member?: string; within?: string };
+export type PromptTarget = { type: string; file: string; member?: string; within?: string };
 
 export const TESTS_RULE = "A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name.";
 
@@ -4488,7 +4504,7 @@ export function callRule(kind: CallKind, type: string, member?: string): string 
 }
 
 /** A call or task question's whole prompt, before the format line. `change` is an adopt's or a task's change, in its source's words. */
-export function callPrompt(kind: CallKind, target: CallTarget, change?: string): string {
+export function callPrompt(kind: CallKind, target: PromptTarget, change?: string): string {
     const { type, file, member, within } = target;
     if (kind !== "injects" && member === undefined) throw new Error(`a ${kind} question needs a member`);
     if (kind === "adopt" && change === undefined) throw new Error("an adopt question needs the change, in its source's words");
@@ -4508,7 +4524,7 @@ export function callPrompt(kind: CallKind, target: CallTarget, change?: string):
 
 - [ ] **Step 4: Run it and see it pass; gate**
 
-Run: `npx vitest run scripts/eval` → PASS (5 new). Run the gate (about 1,433/1,433).
+Run: `npx vitest run scripts/eval` → PASS (5 new). Run the gate (about 1,436/1,436).
 
 - [ ] **Step 5: Write the dev set, and check it shares no target with Eval #3**
 
@@ -4531,7 +4547,7 @@ Run: `npx vitest run scripts/eval` → PASS (5 new). Run the gate (about 1,433/1
 | `affine-dev-bp` | bigPicture | How does AFFiNE handle signing in and accounts: where do the sign-in flows live, and how does the app know who is signed in? |
 
 - **The targets.** The call targets are the planning methods (R-A). The graph targets are Eval #2's dev targets, which Eval #2's own overlap check kept apart from its questions, the reused ones included. The VS Code call folders keep each answer to about 20–60 files: the design's checker evidence counts 22, 24, 29 and 21 caller files there for `executeCommand`, `getValue`, `readFile` and `openEditor`.
-- **The prompts.** Each call and task question's `prompt` is `callPrompt(kind, target, change)`, built by a scratch script and pasted; `questions3.test.ts` (Task 18) checks every one. The entries carry `kind`, `family` (the kind: the runner's key to its format line), `repo` and `prompt`. Call and task entries also carry `target` (`{ type, file, member?, within? }`), and `change` and `source` (a URL) where they apply.
+- **The prompts.** Each call and task question's `prompt` is `callPrompt(kind, target, change)`, built by a scratch script and pasted; `questions3.test.ts` (Task 18) checks every one. The entries carry `kind`, `family` (the runner's key to its format line: the kind for the five new kinds, `list` for the direct list, and Eval #2's family for the questions copied from its dev set), `repo` and `prompt`. Call and task entries also carry `target` (`{ type, file, member?, within? }`), and `change` and `source` (a URL) where they apply.
 - **The overlap check, now.** A scratch script runs overlap.ts's `overlaps()` on the dev questions against the Eval #2 questions Eval #3 reuses (D2's list, read from `eval2/questions.json` with `askedOfQuestion` and their truths). It must print nothing. This is why the storage service is not a dev target: Eval #2's `vscode-impact` asks about `src/vs/platform/storage/common/storage.ts`.
 
 - [ ] **Step 6: The dry run**
@@ -4567,7 +4583,7 @@ git add -A -- scripts/eval eval3/dev && git commit -m "test(eval3): the dev set 
 ### Task 16: Tool use on the dev set (at most 16 more runs with Nebulosity). Ask before each round; STOP if under 0.90 after three rounds
 
 **Files:**
-- Modify: `lib/tools/registry.ts` (+ test; the wording, only if a round changes it), `lib/tools/answers.ts` (`calls`' default page, only under R-J's condition), `docs/BENCHMARKS.md` (MCP Dev Set #2), `docs/API_CONTRACTS.md` (§17, if a description changes)
+- Modify: `lib/tools/registry.ts` (+ test; the wording, only if a round changes it, and `calls`' default `limit`, only under R-J's condition), `docs/BENCHMARKS.md` (MCP Dev Set #2), `docs/API_CONTRACTS.md` (§17, if a description changes), `README.md` and `docs/ENGINEERING_DECISIONS.md` (the measured tokens and characters, if a trim or the measurement moves them)
 
 - [ ] **Step 1: Read round 1 (Task 15's 19 runs with Nebulosity)**
 
@@ -4603,9 +4619,11 @@ In `docs/BENCHMARKS.md`, "‹today› MCP Dev Set #2 — the shell check and too
 - the first-call difference per repo;
 - every wording change, and R-J's outcome.
 
+README's "about 2,400 tokens" (Task 4) and ADR-056's characters per tool are corrected if a trim or the measurement moved them.
+
 Run the gate. Then:
 ```bash
-git add -A -- eval3/dev lib/tools docs/BENCHMARKS.md docs/API_CONTRACTS.md && git commit -m "test(eval3): MCP Dev Set #2, tool use ‹n›/12 with Nebulosity and the first-call difference per repo, measured before Eval #3's questions exist" -- eval3/dev lib/tools docs/BENCHMARKS.md docs/API_CONTRACTS.md && git push origin pivot/v1
+git add -A -- eval3/dev lib/tools docs/BENCHMARKS.md docs/API_CONTRACTS.md README.md docs/ENGINEERING_DECISIONS.md && git commit -m "test(eval3): MCP Dev Set #2, tool use ‹n›/17 with Nebulosity and the first-call difference per repo, measured before Eval #3's questions exist" -- eval3/dev lib/tools docs/BENCHMARKS.md docs/API_CONTRACTS.md README.md docs/ENGINEERING_DECISIONS.md && git push origin pivot/v1
 ```
 
 ---
@@ -4714,8 +4732,9 @@ describe("draw (the seeded draw of Eval #3's questions)", () => {
  *
  * The seeded draw of Eval #3's questions (design §5.4, step 3). Each call or task candidate in <dir>/candidates.json gets its
  * truth's size from TypeScript's checker (ts-calls.ts, one program per repo), and passes when its size is 10-80 files, it
- * isn't a planning method (R-A), and it shares no target with the dev set (overlap.ts). A graph candidate brings its size
- * and its pass from Step 3's ranges, and is checked against the dev set too. Then, per repo and kind, in the order breaks, task, callers, adopt, injects and the graph kinds, n of
+ * isn't a planning method (R-A), and it shares no target with the dev set or with the questions of the sessions Eval #3
+ * reuses (overlap.ts). A graph candidate brings its size and its pass from Step 3's ranges, and is checked for overlap
+ * too. Then, per repo and kind, in the order breaks, task, callers, adopt, injects and the graph kinds, n of
  * the passing candidates are drawn: sorted by id, shuffled with mulberry32(1), the first n. A type drawn once leaves the
  * repo's later pools (R-AF). It writes the sizes, the verdicts and the draw back into candidates.json. Nobody sees how
  * either arm does on a candidate before this runs. Imports nothing from lib/.
@@ -4733,7 +4752,7 @@ export function draw<T extends { id: string }>(candidates: readonly T[], n: numb
 }
 ```
 The command (`main()`, run only as a script):
-- Reads the definition, `<dir>/candidates.json` (`{ candidates: [{ id, repo, kind, target?, change?, source, quote, truthSize?, passes?, why?, drawn? }] }`) and `<dir>/dev/questions.json`.
+- Reads the definition, `<dir>/candidates.json` (`{ candidates: [{ id, repo, kind, target?, change?, source, quote, truthSize?, passes?, why?, drawn? }] }`) and `<dir>/dev/questions.json`, and the questions of the two sessions Eval #3 reuses (`vscode-s1` and `affine-s1` in `eval2/questions.json`): Step 8's `eval:overlap` refuses a single question that shares a target with a session question, so the draw does too.
 - Builds each repo's checker program once, only for a repo with call or task candidates (`programFor(root, { project })`).
 - Sizes each candidate: `callTruth` for callers and adopt (`"callers"`), breaks and tasks (`"breaks"`), and injects. A task's size is its CHANGE.
 - Applies the three tests to the call and task candidates. A graph candidate keeps the pass its enumeration gave it (Step 3's ranges), and only the overlap test is applied to it. The planning methods are a constant, `PLANNING`, holding R-A's eight `Type.member` pairs.
@@ -4831,7 +4850,7 @@ const read = (p: string): any => JSON.parse(fs.readFileSync(path.join(ROOT, p), 
 const bytes = (p: string): Buffer => fs.readFileSync(path.join(ROOT, p));
 const file = read("eval3/questions.json");
 const eval2 = new Map(read("eval2/questions.json").questions.map((q: { id: string }) => [q.id, q]));
-const CALL_KINDS = ["callers", "breaks", "adopt", "injects", "task"];
+const CALL_AND_TASK_KINDS = ["callers", "breaks", "adopt", "injects", "task"];
 const LIST_LINE = "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.";
 const TASK_LINE = "End with a line that says ANSWER CHANGE: and then every file to change, one path per line relative to the repository root; then a line that says ANSWER TESTS: and then every test file to run, one per line, with nothing after the list.";
 
@@ -4862,7 +4881,7 @@ describe("eval3/questions.json", () => {
 
     it("builds every call and task prompt from its target with D2's templates, and gives it its format line", () => {
         expect([file.formats.callers, file.formats.breaks, file.formats.adopt, file.formats.injects, file.formats.task]).toEqual([LIST_LINE, LIST_LINE, LIST_LINE, LIST_LINE, TASK_LINE]);
-        for (const q of file.questions.filter((x: { kind: string }) => CALL_KINDS.includes(x.kind))){
+        for (const q of file.questions.filter((x: { kind: string }) => CALL_AND_TASK_KINDS.includes(x.kind))){
             expect(q.prompt, q.id).toBe(callPrompt(q.kind, q.target, q.change));
             expect(q.family, q.id).toBe(q.kind);
             if (q.repo === "vscode") expect(q.target.within === "src" || q.target.within.startsWith("src/"), q.id).toBe(true);
@@ -4875,7 +4894,7 @@ describe("eval3/questions.json", () => {
         const dev = read("eval3/dev/questions.json");
         for (const q of dev.questions){
             expect(q.dev, q.id).toBe(true);
-            if (CALL_KINDS.includes(q.kind)) expect(q.prompt, q.id).toBe(callPrompt(q.kind, q.target, q.change));
+            if (CALL_AND_TASK_KINDS.includes(q.kind)) expect(q.prompt, q.id).toBe(callPrompt(q.kind, q.target, q.change));
         }
     });
 
@@ -4917,7 +4936,7 @@ ADR-060's heading changes from proposed to `(accepted ‹today›, before the fi
 
 - [ ] **Step 10: Gate, commit, push**
 
-Run the gate (about 1,440/1,440: `draw.test.ts` 2 and `questions3.test.ts` 5 new). Then:
+Run the gate (about 1,443/1,443: `draw.test.ts` 2 and `questions3.test.ts` 5 new). Then:
 ```bash
 git add -A -- scripts/eval eval3 package.json docs/EVAL_RESULTS.md docs/ENGINEERING_DECISIONS.md && git commit -m "feat(eval): Eval #3's questions, drawn from real issues, PRs and docs with a fixed seed, their truths from TypeScript's checker checked by reading, the rubrics, and the method with the gate fixed before any run (ADR-060)" -- scripts/eval eval3 package.json docs/EVAL_RESULTS.md docs/ENGINEERING_DECISIONS.md && git push origin pivot/v1
 ```
@@ -4943,7 +4962,7 @@ Ask for changes before any run, and record the owner's answer verbatim.
 
 - [ ] **Step 1: Freeze and pin**
 
-- Check the owner's index is current for all three repos, at adapter version 5: VS Code and AFFiNE re-indexed in Task 5, Theia in Task 17. If an engine change after Task 5 changed the adapter or the call facts, re-index first. Ask, since it writes the owner's index once more (R-AC).
+- Check the owner's index is current for all three repos, at the current `ADAPTER_VERSION` (5, or higher after a Task 5 round): VS Code and AFFiNE re-indexed in Task 5, Theia in Task 17. If an engine change after Task 5 changed the adapter or the call facts, re-index first. Ask, since it writes the owner's index once more (R-AC).
 - Run `claude --version` and write the version into `eval3/eval.json`'s `claudeVersion`, recording any change since the shell check (Task 15). Run the gate, then commit (`test(eval3): pin Claude Code <version>`).
 - Record that commit as `EVAL3_ENGINE` in the ledger and in Eval #3's method section.
 - From here until Task 22 is committed, nothing changes in `lib/engine`, `lib/tools`, `lib/index`, `lib/db`, `lib/home.ts`, `lib/config.ts` or `mcp/` (R-N). A bug found is recorded, not fixed, and reported with the results.
@@ -4953,7 +4972,7 @@ Ask for changes before any run, and record the owner's answer verbatim.
 
 Run: `npm run eval:run -- --eval eval3 --pilot --dry-run` and `npm run eval:run -- --eval eval3 --pilot --sessions --dry-run`
 Expected: every command shows:
-- the scripts rules (`Bash(node:*)`, `Edit(//c/…/scratch/<run>/**)`, `--add-dir`);
+- the scripts rules (`Bash(node:*)`, `Edit(//c/…/eval-scratch/<16 random hex digits>/**)`, `--add-dir`);
 - each repo's `cwd`, Theia's included;
 - D2's rules sentence at the end of each prompt, with that run's root and scratch folder;
 - no `alwaysLoad` in Nebulosity's config: the tools' own `_meta` carries it.
@@ -5034,7 +5053,7 @@ Show each point where the graders differ: the rubric point, both scores, both qu
 
 Run `npm run eval:grading -- --eval eval3 merge`, then `npm run eval:score -- --eval eval3`, then the gate. Then:
 ```bash
-git add -A -- eval3/grading eval3/results.json && git commit -m "test(eval3): big-picture answers graded blind by two models from redacted sheets, the owner ruling on each disagreement" -- eval3/grading eval3/results.json && git push origin pivot/v1
+git add -A -- eval3/grading eval3/results.json scripts/eval && git commit -m "test(eval3): big-picture answers graded blind by two models from redacted sheets, the owner ruling on each disagreement" -- eval3/grading eval3/results.json scripts/eval && git push origin pivot/v1
 ```
 
 ### Task 22: The results, the gate's verdict, losses included. STOP for the owner's call
@@ -5088,8 +5107,20 @@ Show the gate table and the losses. Then say what follows:
 
 - `docs/IMPLEMENTATION_ROADMAP.md`: the V1.7 row marked DONE, pointing at this plan and Eval #3.
 - `PIVOT_SPEC.md`: §12's V1.7 row; §15's ADR table gains ADR-059 and ADR-060.
-- `CLAUDE.md`'s current state (gitignored, so local only, never staged): V1.7 done, Eval #3's verdict, what's next.
+- `CLAUDE.md`'s current state (gitignored, so local only, never staged): V1.7 done, Eval #3's verdict, what's next, and its line on the hold (R-AK).
+- Every text this plan wrote as proposed now says what happened:
+  - ADR-059's heading (accepted, with Calls Benchmark #1's and MCP Benchmark #5's lines);
+  - the amendments to ADR-024, 043, 051, 053, 056 and 057;
+  - PIVOT_SPEC's §2 lead-in and S13 and S14 rows, §6.1, §6.2's note, §9, §10 and §12;
+  - API_CONTRACTS §17 and the roadmap's row.
+
+  `git grep -n "proposed, V1.7 plan"` then prints nothing.
 - Copy anything useful from the session scratchpad into the ledger folder.
+
+Run the gate. Then:
+```bash
+git add -A -- docs/IMPLEMENTATION_ROADMAP.md docs/PIVOT_SPEC.md docs/ENGINEERING_DECISIONS.md docs/API_CONTRACTS.md && git commit -m "docs: V1.7 closed: the roadmap and spec rows, and every text the plan wrote as proposed now says what happened" -- docs/IMPLEMENTATION_ROADMAP.md docs/PIVOT_SPEC.md docs/ENGINEERING_DECISIONS.md docs/API_CONTRACTS.md && git push origin pivot/v1
+```
 
 - [ ] **Step 2: A final review**
 
@@ -5101,7 +5132,7 @@ A fresh read-only reviewer reads the whole branch from this plan's commit, with 
 - Eval #3's gate and headline numbers recomputed from the data, independently of `gate3.ts`;
 - the docs against the code.
 
-It writes `final-review.md` in the ledger (dated header, "2026 10 ‹dd› V1.7 Final Review #1"). Fix what it calls SHOULD-FIX in one wave, then have the wave re-reviewed.
+It writes `final-review.md` in the ledger (dated header, "2026 10 ‹dd› V1.7 Final Review #1"). Fix what it calls SHOULD-FIX in one wave, then have the wave re-reviewed. The wave is gated, committed by path and pushed like any task.
 
 - [ ] **Step 3: STOP before the PR**
 
@@ -5189,7 +5220,7 @@ The owner's ship list (design §5.8), after the verdict, whatever it is:
 - `gate3Verdict`, `Gate3Run`, `Gate3Session`, `QuestionSet`, `FILE_SET_KINDS`, `DI_AND_TASK`, `withEval3Fields`, `toGate3Run`, `toGate3Session`, `ttrcRows`, `inRepeats`;
 - `redact`, `sheetAnswer`, `callRule`, `callPrompt`, `TESTS_RULE`, `draw`.
 
-**Review Focus:** each of the five lines has its test in the task named: 3 (and 1), 1 (and 3), 4, 9 and 8.
+**Review Focus:** each of the five lines has its test in the task named: 3, 1 (and 3), 4, 9 and 8.
 
 **What's honest about the gate:**
 - It was fixed before any run, by the owner, after Eval #2's failure, and condition 1 asks the new kinds to beat Eval #2's 3–3.5×.
