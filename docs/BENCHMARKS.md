@@ -861,6 +861,22 @@ How fast Claude Code got the context a question needs (medians, A / N; the score
 - **Batch 1's first three runs were the dev server's cold start** (the first requests compile the routes; the log printed "watching" only during that batch), not steady state. Batches 2 and 3 are warm.
 - **S6 (≤ 2 s): FAIL as first run (worst 11,029 ms, the cold start); PASS warm (worst 1,975 ms, median 1,904 ms), with only 25–155 ms of margin.** The README quotes the warm worst.
 
+## 2026 10 15 Update Benchmark #3 — S6 with the workspace kept per worker run
+
+- **Command:** `npm run bench-update -- ../vscode <file>` (five runs each) against `npx next dev -p 3130`, as in Update Benchmark #2: the watcher (1 s debounce) → `applyFileChanges` → `GET /api/describe` showing the new export, polled every 25 ms.
+- **Setup:** the sandbox worktree `../Nebulosity-build` at `00e3293` (the commit that keeps the workspace), port 3130 (port 3000 untouched), a scratch data folder holding a fresh cold index of VS Code @ `cc3fec88` (structure 59.3 s on this run) and a `config.json` with `port: 3130`; no API key, so summaries off. VS Code was clean afterwards and the scratch folder and server were removed.
+- **Change measured:** the worker passes the workspace it read back into `applyFileChanges`, which reads the manifests again only when a tsconfig or package.json, `pnpm-workspace.yaml`, `lerna.json` or the file set changed (ADR-053, amended). Nothing else differs from #2's code.
+
+| Batch | File | Each run | Median | Worst |
+|---|---|---|---|---|
+| 1, first after server start | `src/vs/base/common/strings.ts` | 1,787, 1,399, 1,359, 1,355, 1,371 ms | 1,371 ms | 1,787 ms |
+| 2 | `src/vs/editor/common/model/textModel.ts` | 1,501, 1,374, 1,379, 1,424, 1,415 ms | 1,415 ms | 1,501 ms |
+| 3, repeat of batch 1's file | `src/vs/base/common/strings.ts` | 1,458, 1,382, 1,403, 1,352, 1,364 ms | 1,382 ms | 1,458 ms |
+
+- `applyFileChanges` alone (the worker's log, 31 updates: each run saves the file and restores it): the first update after the server started took 507 ms, which reads the manifests; every later one took 112–250 ms (typically 130–180 ms), against 0.55–0.72 s per update in Update Benchmark #2 and 115–224 ms in #1, before V1.6 read the workspace each time.
+- The remaining time is the watcher's 1 s debounce plus the poll and the route.
+- **S6 (≤ 2 s): PASS, warm (worst 1,501 ms, median 1,415 ms) and on the first batch after start (worst 1,787 ms; its first run, 1,787 ms, includes the dev server's first compile and the 507 ms manifest read).** Margin is 213 ms on the first batch and about 500 ms warm, against 25 ms in #2. The manifest cache for full runs stays recommended.
+
 ## 2026 10 15 Index Benchmark #6 — S1 on a quiet machine
 
 - **Target and machine:** VS Code @ `cc3fec88`, the owner's laptop, Node 24.14.0, code at `11e031e`. This is the quiet-machine S1 that #5 and Update Benchmark #2 asked for.
