@@ -1,6 +1,8 @@
 import { validateInit } from "./validate";
 import { describe, expect, it } from "vitest";
-import { chosenSessions, resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
+import { scoreSession, type QuestionData, type ScoreContext } from "./score";
+import { chosenSessions, resultCount, scheduleSessions, sessionIndexFields, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
+import { summarizeRun } from "./transcript";
 
 /**
  * A hand-made two-message session in the shape the probe run of Task 9 showed (docs: task-9-report.md), with round numbers:
@@ -75,7 +77,7 @@ describe("summarizeSession", () => {
     });
 
     it("has no turns and no context for an empty transcript, and a message still waiting for its result is not a turn", () => {
-        expect(summarizeSession("")).toEqual({ turns: [], costUsd: 0, durationMs: 0, firstCallContext: null });
+        expect(summarizeSession("")).toEqual({ turns: [], costUsd: 0, durationMs: 0, firstCallContext: null, numTurns: 0, usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } });
         const cut = [...turnOne, ...turnTwo.slice(0, -1)].map(line).join("\n");
         expect(summarizeSession(cut).turns).toHaveLength(1);
     });
@@ -191,5 +193,93 @@ describe("sessionInitProblems", () => {
         const problems = sessionInitProblems(build(dropped), (i) => validateInit(i, expect_));
         expect(problems).toHaveLength(1);
         expect(problems[0]).toBe("message 2: MCP servers are [], not [nebulosity:connected]");
+    });
+});
+
+// ---- pre-freeze sweep B
+
+/** A result event as Claude Code writes one (the probe's shape): per-message num_turns and usage, cumulative cost. */
+const result = (subtype: string, text: string, turns: number, usage: { i: number; cw: number; cr: number; o: number }, total: number): unknown => ({
+    type: "result", subtype, is_error: subtype !== "success", result: text, num_turns: turns, duration_ms: 1000, total_cost_usd: total,
+    usage: { input_tokens: usage.i, cache_creation_input_tokens: usage.cw, cache_read_input_tokens: usage.cr, output_tokens: usage.o },
+});
+const work = (n: number): unknown[] => [init, { type: "user", isReplay: true, message: { role: "user", content: `question ${n}` } }, assistant([{ type: "text", text: "..." }])];
+
+describe("sessionIndexFields: a session's index line sums its messages (sweep B, item 5)", () => {
+    // message 1: 3 turns, usage 6 / 1150 / 62100 / 33, success; message 2: 2 turns, usage 4 / 310 / 43300 / 27, ran out of turns
+    const raw = [
+        ...work(1), result("success", "ANSWER:\nfirst", 3, { i: 6, cw: 1150, cr: 62100, o: 33 }, 0.02),
+        ...work(2), result("error_max_turns", "", 2, { i: 4, cw: 310, cr: 43300, o: 27 }, 0.03),
+    ].map(line).join("\n");
+
+    it("gives the whole session's turns and usage, not the last message's, and names the message that hit its limit", () => {
+        const fields = sessionIndexFields(summarizeRun(raw), summarizeSession(raw), { id: "s1", questions: ["q1", "q2"] }, ["claude-sonnet-5-5"]);
+        // 3 + 2 turns; 6 + 4, 1150 + 310, 62100 + 43300, 33 + 27
+        expect(fields.turns).toBe(5);
+        expect(fields.usage).toEqual({ input: 10, cacheWrite: 1460, cacheRead: 105400, output: 60 });
+        // the first message that didn't end in success, and whether any ended on an error
+        expect(fields.subtype).toBe("error_max_turns");
+        expect(fields.isError).toBe(true);
+        expect(fields.resultNotes).toEqual(["message 2 ended with error_max_turns"]);
+        expect(fields.sessionTurns.map((t) => [t.subtype, t.numTurns])).toEqual([["success", 3], ["error_max_turns", 2]]);
+        expect(fields.unanswered).toBeUndefined();
+        // the totals the runner already took from the session summary: the last cumulative cost, the summed times
+        expect(fields).toMatchObject({ session: "s1", turnQuestions: ["q1", "q2"], costUsd: 0.03, durationMs: 2000 });
+    });
+
+    it("says success and no error for a session whose every message succeeded", () => {
+        const ok = [...work(1), result("success", "a", 3, { i: 1, cw: 1, cr: 1, o: 1 }, 0.01), ...work(2), result("success", "b", 1, { i: 1, cw: 1, cr: 1, o: 1 }, 0.02)].map(line).join("\n");
+        const fields = sessionIndexFields(summarizeRun(ok), summarizeSession(ok), { id: "s1", questions: ["q1", "q2"] }, ["claude-sonnet-5-5"]);
+        expect(fields).toMatchObject({ turns: 4, subtype: "success", isError: false, resultNotes: [] });
+    });
+});
+
+describe("sessionProblems: sessions that would break the runner (sweep B, item 6)", () => {
+    const questions = [{ id: "q1", repo: "vscode" }, { id: "q2", repo: "vscode" }];
+
+    it("refuses a session whose id is a question's: their runs would share a name in <dir>/runs", () => {
+        expect(sessionProblems({ sessions: [{ id: "q1", repo: "vscode", title: "t", questions: ["q2"] }] }, questions, ["vscode"]))
+            .toEqual(["session q1 has the id of a question, so their runs would share names in <dir>/runs (q1-baseline-1.jsonl.gz): give the session another id"]);
+    });
+
+    it("refuses a malformed entry in a sentence instead of throwing a TypeError", () => {
+        const problems = sessionProblems({ sessions: [null, { id: "s2", repo: "vscode", title: "t" }, { id: 3, repo: "vscode", questions: ["q1"] }] } as never, questions, ["vscode"]);
+        expect(problems).toEqual([
+            "session entry 1 (null) needs an id, a repo and a list of question ids",
+            'session entry 2 ({"id":"s2","repo":"vscode","title":"t"}) needs an id, a repo and a list of question ids',
+            'session entry 3 ({"id":3,"repo":"vscode","questions":["q1"]}) needs an id, a repo and a list of question ids',
+        ]);
+    });
+});
+
+describe("a session that hits its limit and then ends (sweep B, item 7; D1)", () => {
+    // 4 messages: message 1 answers, message 2 ends error_max_budget_usd, and the process ends with 3 and 4 never answered
+    const raw = [
+        ...work(1), result("success", "ANSWER:\nsrc/a.ts", 3, { i: 1, cw: 1, cr: 1, o: 1 }, 0.5),
+        ...work(2), result("error_max_budget_usd", "", 4, { i: 1, cw: 1, cr: 1, o: 1 }, 1.2),
+    ].map(line).join("\n");
+
+    it("is not an outage: the limited message and every message after it count, at 0", () => {
+        expect(sessionOutage(raw, 4)).toBeNull();
+    });
+
+    it("still calls it an outage when the process ends after an answer, with messages unsent", () => {
+        const cut = [...work(1), result("success", "ANSWER:\nsrc/a.ts", 3, { i: 1, cw: 1, cr: 1, o: 1 }, 0.5)].map(line).join("\n");
+        expect(sessionOutage(cut, 4)).toBe("the session ended after 1 of 4 results (killed, crashed or timed out before the last answer)");
+    });
+
+    it("records the unanswered messages on the index line", () => {
+        const fields = sessionIndexFields(summarizeRun(raw), summarizeSession(raw), { id: "s1", questions: ["q1", "q2", "q3", "q4"] }, ["claude-sonnet-5-5"]);
+        expect(fields.unanswered).toEqual(["q3", "q4"]);
+        expect(fields.resultNotes).toEqual(["message 2 ended with error_max_budget_usd", "messages 3-4 (q3, q4) were never answered: the session ended after message 2's error_max_budget_usd, so they score 0"]);
+    });
+
+    it("scores message 1 as answered and messages 2 to 4 at 0: a mean of 0.25", () => {
+        const list = (id: string): QuestionData => ({ id, family: "list", truth: { id, kind: "list", target: "src/b.ts", scope: "direct", files: ["src/a.ts"], verified: true, notes: [] } });
+        const questions = new Map(["q1", "q2", "q3", "q4"].map((id) => [id, list(id)] as const));
+        const ctx: ScoreContext = { repoRoot: "<r>", known: new Set(["src/a.ts", "src/b.ts"]), imports: () => null };
+        const s = scoreSession("s1-baseline-1", { question: "s1", arm: "baseline", repeat: 1, toolSearch: true }, ["q1", "q2", "q3", "q4"], summarizeSession(raw), questions, ctx);
+        expect(s.turns.map((t) => t.score)).toEqual([1, 0, 0, 0]);
+        expect(s.score).toBe(0.25);
     });
 });

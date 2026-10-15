@@ -232,6 +232,25 @@ export function attemptsSoFar(name: string, files: readonly string[]): number {
 /** The paths `git status --porcelain` names: anything there means a run changed the repo. */
 export const parsePorcelain = (stdout: string): string[] => stdout.split(/\r?\n/).filter((line) => line.trim() !== "").map((line) => line.slice(3));
 
+/**
+ * The git arguments for the checkout's status snapshot, read before the batch and after each run. Every untracked file
+ * gets its own line (-uall): plain --porcelain collapses an untracked folder to one line, so a file a run added inside a
+ * folder that was already untracked would leave the snapshot as it was. It takes no lock, so it never writes there.
+ */
+export const statusArgs = (root: string): string[] => ["--no-optional-locks", "-C", root, "status", "--porcelain", "-uall"];
+
+/** How the checkout's status lines changed since the snapshot: "+ <line>" for each new one, then "- <line>" for each gone. */
+export function statusDifference(before: readonly string[], now: readonly string[]): string[] {
+    const [was, is] = [new Set(before), new Set(now)];
+    return [...now.filter((l) => !was.has(l)).map((l) => `+ ${l}`), ...before.filter((l) => !is.has(l)).map((l) => `- ${l}`)];
+}
+
+/** Why --repeat asks for more than the definition's repeats (Eval #1 ran 2), as a sentence, or null when it doesn't. */
+export function repeatProblem(repeat: number | null, definitionRepeats: number, evalName: string): string | null {
+    if (repeat === null || repeat <= definitionRepeats) return null;
+    return `--repeat ${repeat} asks for more repeats than ${evalName}/eval.json has: its repeats is ${definitionRepeats}, so --repeat takes 1 to ${definitionRepeats}.`;
+}
+
 /** One or more separators written any way: "/", "\" (as many as escaping stacked up), or %2f and %5c. */
 const SEPARATORS = String.raw`(?:[\\/]|%5c|%2f)+`;
 

@@ -77,7 +77,7 @@ Both arms may run Node.js scripts (the owner's pick on the options memo, 2026-10
 - **The folder:** a fresh, empty folder per run, at `<system temp folder>/eval-scratch/<16 random hex digits>/`.
   - It sits outside the Nebulosity checkout and outside both repos.
   - Its name carries no arm and no run name, so the prompt, `--add-dir` and the Edit rule are the same text in both arms. The hex is recorded in the run's index line.
-  - After the run, its contents are copied beside the raw transcript (`.nebulosity/eval2/raw/<run>.scratch/`) and the temp folder is removed.
+  - After the run, its contents are copied beside the raw transcript (`.nebulosity/eval2/raw/<run>.scratch/`) and the temp folder is removed. The copy never follows a link and stops at 50 MB; anything left out, and a copy that fails, is listed in the archive's `ARCHIVE-NOTE.txt` and printed. The folder is removed even then, and nothing in this step can replace a run's own stop.
   - The scrubber turns its path into `<scratch>` in kept transcripts.
 - **The sentence** is the same in both arms and comes after the format line, with the folder's absolute path (forward slashes) in place of `<scratch>`: `You may write Node.js scripts in <scratch> with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`
 
@@ -130,14 +130,14 @@ Variables:
   - the right tools present and absent.
 
   A run that differs is killed with its whole process tree.
-- **After the run:** each repo of the definition must be at its commit with a clean `git status`, and the Nebulosity checkout's `git status --porcelain` must match the one before the batch (the owner's work in progress stays). A change stops the batch, and nothing is restored automatically.
+- **After the run:** each repo of the definition must be at its commit with a clean `git status`, and the Nebulosity checkout's `git status --porcelain -uall` must match the one before the batch (the owner's work in progress stays). `-uall` gives every untracked file its own line, so a file added inside a folder that was already untracked shows. A change stops the batch, and nothing is restored automatically.
 - **Nebulosity's index:** each repo's index version is printed before the batch. A batch stops if an N run asks about a repo with no index version.
 - **Transcripts:** scrubbed of the machine's paths, the scratch folder and the owner's email, then scanned for them. A hit stops the batch.
 - **An outage is not an answer.** These count as outages:
   - an API error, including one reported as a success;
   - no result;
   - a run killed at its time limit;
-  - a session with fewer results than messages sent, or with an error in any one message's stretch of the transcript.
+  - a session with fewer results than messages sent, or with an error in any one message's stretch of the transcript. A session whose last result hit its turn or budget limit is not an outage, even when the process then ended with messages unanswered: it is kept, its index line names the unanswered questions, and each of them scores 0, as the limited message does.
 
   An outage is not scored. It is re-run later (Eval #1's rule), and every attempt's raw transcript is kept.
 - **Usage:** the runner stops cleanly when the 7-day window reaches 0.85 or the 5-hour window reaches 0.9. It stops if two runs in a row report neither.

@@ -10,10 +10,20 @@
  */
 import { schedule, type RunId } from "./run-config";
 import { streamEvents, summarizeRun, type Json, type RunSummary } from "./transcript";
-import { infrastructureFailure } from "./validate";
+import { infrastructureFailure, resultNotes } from "./validate";
 
-export type SessionTurn = { finalText: string | null; subtype: string | null; costUsd: number; durationMs: number; toolCalls: Record<string, number>; nebulosityCalls: number };
-export type SessionSummary = { turns: SessionTurn[]; costUsd: number; durationMs: number; firstCallContext: number | null };
+type Usage = RunSummary["usage"];
+/** One message of a session: its final text and result subtype (so a message that hit its limit shows), and its own figures. */
+export type SessionTurn = {
+    finalText: string | null; subtype: string | null; costUsd: number; durationMs: number; toolCalls: Record<string, number>; nebulosityCalls: number;
+    /** That message's num_turns and usage (both are per message in a session's results). */
+    numTurns: number; usage: Usage;
+};
+/** The messages, and the session's totals: the last cumulative cost, and the sums of the messages' times, turns and usage. */
+export type SessionSummary = { turns: SessionTurn[]; costUsd: number; durationMs: number; firstCallContext: number | null; numTurns: number; usage: Usage };
+
+/** The result subtypes of a message that ran into its turn or budget limit: an answer that scores 0 (D1), never an outage. */
+const LIMITS = ["error_max_turns", "error_max_budget_usd"];
 
 /** One line of stdin that sends a user message (the newline is the writer's). */
 export const userMessage = (text: string): string => JSON.stringify({ type: "user", message: { role: "user", content: text } });
@@ -26,11 +36,15 @@ export const resultCount = (jsonl: string): number => streamEvents(jsonl).filter
  * is refused (turnQuestions would no longer line up with the results). Then every message's own stretch of the
  * transcript (it has its own init and result) gets infrastructureFailure's tests, because that reads only the last result
  * and an error in the middle would be kept as an answer. A message that ran into its turn or budget limit is an answer
- * that scores 0, not an outage (infrastructureFailure already says so).
+ * that scores 0, not an outage (infrastructureFailure already says so). That holds when the process then ends with
+ * messages never answered, too (D1: a message never answered scores 0): the last result being a limit's, the session is
+ * kept, and its index line names the unanswered messages (sessionIndexFields), which the scorer gives 0.
  */
 export function sessionOutage(jsonl: string, messagesSent: number): string | null {
-    const answered = resultCount(jsonl);
-    if (answered < messagesSent) return `the session ended after ${answered} of ${messagesSent} results (killed, crashed or timed out before the last answer)`;
+    const results = streamEvents(jsonl).filter((e) => e.type === "result");
+    const answered = results.length;
+    const endedAtLimit = answered > 0 && LIMITS.includes(results[answered - 1].subtype);
+    if (answered < messagesSent && !endedAtLimit) return `the session ended after ${answered} of ${messagesSent} results (killed, crashed or timed out before the last answer)`;
     if (answered > messagesSent) return `the session has ${answered} results for ${messagesSent} messages sent, so the questions can't be matched to the answers`;
     let message = 0;
     let segment: Json[] = [];
@@ -59,7 +73,7 @@ export function sessionInitProblems(jsonl: string, check: (init: RunSummary) => 
 
 const count = (into: Record<string, number>, name: string): void => { into[name] = (into[name] ?? 0) + 1; };
 
-/** Per message: the final text, its own cost, its time and its tool calls; and the session's totals and first call. */
+/** Per message: the final text, its own cost, its time, turns, usage and tool calls; and the session's totals and first call. */
 export function summarizeSession(jsonl: string): SessionSummary {
     const turns: SessionTurn[] = [];
     let toolCalls: Record<string, number> = {};
@@ -78,13 +92,63 @@ export function summarizeSession(jsonl: string): SessionSummary {
             if (firstCallContext === null && usage) firstCallContext = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
         } else if (e.type === "result"){
             const total: number = e.total_cost_usd ?? previousTotal;
-            turns.push({ finalText: e.result ?? null, subtype: e.subtype ?? null, costUsd: total - previousTotal, durationMs: e.duration_ms ?? 0, toolCalls, nebulosityCalls });
+            const u: Json = e.usage ?? {};
+            turns.push({
+                finalText: e.result ?? null, subtype: e.subtype ?? null, costUsd: total - previousTotal, durationMs: e.duration_ms ?? 0, toolCalls, nebulosityCalls,
+                numTurns: e.num_turns ?? 0,
+                usage: { input: u.input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, output: u.output_tokens ?? 0 },
+            });
             previousTotal = total;
             toolCalls = {};
             nebulosityCalls = 0;
         }
     }
-    return { turns, costUsd: previousTotal, durationMs: turns.reduce((sum, t) => sum + t.durationMs, 0), firstCallContext };
+    const sum = (pick: (t: SessionTurn) => number): number => turns.reduce((s, t) => s + pick(t), 0);
+    return {
+        turns, costUsd: previousTotal, durationMs: sum((t) => t.durationMs), firstCallContext, numTurns: sum((t) => t.numTurns),
+        usage: { input: sum((t) => t.usage.input), cacheWrite: sum((t) => t.usage.cacheWrite), cacheRead: sum((t) => t.usage.cacheRead), output: sum((t) => t.usage.output) },
+    };
+}
+
+/** What a session's index line says in place of the last message's figures (which are all a single run's summary holds). */
+export type SessionIndexFields = {
+    session: string; turnQuestions: string[];
+    /** Every message's num_turns and usage summed; the first message's subtype that isn't success (else success), and whether any ended on an error. */
+    turns: number; usage: Usage; subtype: string | null; isError: boolean;
+    /** The last cumulative cost, the summed times, the session's first call. */
+    costUsd: number; durationMs: number; firstCallContext: number | null;
+    /** The model notes, then one per message that didn't end in success, then the unanswered messages. */
+    resultNotes: string[];
+    /** Each message's own figures, without its text (that stays in the transcript). */
+    sessionTurns: (Omit<SessionTurn, "finalText"> & { finalText: undefined })[];
+    /** The questions of the messages a session that ended at its limit never answered (they score 0); absent when every one was. */
+    unanswered?: string[];
+};
+
+/**
+ * The index line's fields for a session (`run` is summarizeRun's reading of the transcript, which holds the last message's
+ * turns, usage and subtype alone): the session's totals, each message's own figures, notes for every message that didn't
+ * end in success, and the questions never answered when the session ended at a limit.
+ */
+export function sessionIndexFields(run: RunSummary, s: SessionSummary, def: { id: string; questions: readonly string[] }, allowedModels: readonly string[]): SessionIndexFields {
+    // resultNotes's own "ended with" reads the last message's subtype alone, so it is asked for the model notes only
+    const notes = resultNotes({ ...run, subtype: "success" }, allowedModels);
+    s.turns.forEach((t, i) => { if (t.subtype !== "success") notes.push(`message ${i + 1} ended with ${t.subtype ?? "no subtype"}`); });
+    const unanswered = def.questions.slice(s.turns.length);
+    if (unanswered.length > 0){
+        const [from, to] = [s.turns.length + 1, def.questions.length];
+        const last = s.turns[s.turns.length - 1];
+        notes.push(`${from === to ? `message ${from}` : `messages ${from}-${to}`} (${unanswered.join(", ")}) ${unanswered.length === 1 ? "was" : "were"} never answered: the session ended after message ${s.turns.length}'s ${last?.subtype ?? "start"}, so ${unanswered.length === 1 ? "it scores" : "they score"} 0`);
+    }
+    const failed = s.turns.find((t) => t.subtype !== "success");
+    return {
+        session: def.id, turnQuestions: [...def.questions],
+        turns: s.numTurns, usage: s.usage, subtype: failed === undefined ? (s.turns.length > 0 ? "success" : null) : failed.subtype, isError: s.turns.some((t) => t.subtype !== "success"),
+        costUsd: s.costUsd, durationMs: s.durationMs, firstCallContext: s.firstCallContext,
+        resultNotes: notes,
+        sessionTurns: s.turns.map((t) => ({ ...t, finalText: undefined })),
+        ...(unanswered.length > 0 ? { unanswered } : {}),
+    };
 }
 
 /** Task sessions as RunIds (the id in `question`), arms alternating by session and repeat like single runs; there is no up-front arm. */
@@ -108,11 +172,28 @@ export function chosenSessions(sessionIds: readonly string[], options: { pilot: 
 export type SessionDef = { id: string; repo: string; title: string; questions: string[] };
 export type SessionFile = { sessions: SessionDef[] };
 
-/** What is wrong with a sessions file, in sentences ([] when nothing): `questions` are the questions file's (id and the repo each asks about). */
-export function sessionProblems(file: SessionFile, questions: readonly { id: string; repo: string }[], repoIds: readonly string[]): string[] {
+/** An entry of sessions.json with the shape the runner reads: an id, a repo, and a list of question ids. */
+const isSessionDef = (x: unknown): x is SessionDef => {
+    const s = x as Partial<SessionDef> | null;
+    return s !== null && typeof s === "object" && typeof s.id === "string" && s.id !== "" && typeof s.repo === "string"
+        && Array.isArray(s.questions) && s.questions.every((q) => typeof q === "string");
+};
+
+/**
+ * What is wrong with a sessions file, in sentences ([] when nothing): `questions` are the questions file's (id and the repo
+ * each asks about). A malformed entry is named, not thrown on. A session may not share a question's id: a run is kept as
+ * <dir>/runs/<id>-<arm>-<repeat>.jsonl.gz, so the two would overwrite each other's files.
+ */
+export function sessionProblems(file: { sessions: readonly unknown[] }, questions: readonly { id: string; repo: string }[], repoIds: readonly string[]): string[] {
     const problems: string[] = [];
     const seen = new Set<string>();
-    for (const s of file.sessions){
+    for (const [i, entry] of file.sessions.entries()){
+        if (!isSessionDef(entry)){
+            problems.push(`session entry ${i + 1} (${JSON.stringify(entry)}) needs an id, a repo and a list of question ids`);
+            continue;
+        }
+        const s = entry;
+        if (questions.some((q) => q.id === s.id)) problems.push(`session ${s.id} has the id of a question, so their runs would share names in <dir>/runs (${s.id}-baseline-1.jsonl.gz): give the session another id`);
         if (seen.has(s.id)) problems.push(`session ${s.id} is listed twice`);
         seen.add(s.id);
         if (!repoIds.includes(s.repo)) problems.push(`session ${s.id} names the repo ${s.repo}, which eval.json doesn't list`);

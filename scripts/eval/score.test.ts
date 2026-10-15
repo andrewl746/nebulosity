@@ -13,6 +13,7 @@ import type { SessionSummary, SessionTurn } from "./session";
 import type { RunSummary } from "./transcript";
 
 const A = "src/vs/a.ts", B = "src/vs/b.ts", C = "src/vs/c.ts", D = "src/vs/d.ts", E = "src/vs/e.ts", X = "src/vs/x.ts";
+const NO_USAGE = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
 const known = new Set([A, B, C, D, E, X]);
 // a → b → c → d, and the longer way a → x → b. Anything going to or from e.ts is unknown (nobody has read it yet).
 const EDGES: [string, string][] = [[A, B], [B, C], [C, D], [A, X], [X, B]];
@@ -526,8 +527,8 @@ describe("scoreRun: limits", () => {
 describe("scoreSession", () => {
     const questions = new Map<string, QuestionData>([["cl1", listQ], ["cn1", chainQ(3)]]);
     const id = { question: "s1", arm: "nebulosity" as const, repeat: 2, toolSearch: true };
-    const turn = (finalText: string | null, subtype: string | null = "success"): SessionTurn => ({ finalText, subtype, costUsd: 0.1, durationMs: 3000, toolCalls: {}, nebulosityCalls: 1 });
-    const summaryOf = (turns: SessionTurn[]): SessionSummary => ({ turns, costUsd: 0.5, durationMs: 9000, firstCallContext: 20000 });
+    const turn = (finalText: string | null, subtype: string | null = "success"): SessionTurn => ({ finalText, subtype, costUsd: 0.1, durationMs: 3000, toolCalls: {}, nebulosityCalls: 1, numTurns: 2, usage: NO_USAGE });
+    const summaryOf = (turns: SessionTurn[]): SessionSummary => ({ turns, costUsd: 0.5, durationMs: 9000, firstCallContext: 20000, numTurns: 2 * turns.length, usage: NO_USAGE });
 
     it("scores each message against its own question and takes the mean, with the session's totals", () => {
         // message 1: a and b of the list a b c d (recall 0.5); message 2: the chain a b c d, its shortest (3 steps): 1
@@ -694,8 +695,8 @@ describe("fix round 1", () => {
         const s = scoreAnswer(answer(A, B, E, A), cycleQ(4), cyc);
         expect(s).toMatchObject({ score: null, pending: "chain step to adjudicate", unknown: [B, E] });
         const questions = new Map([["gc1", cycleQ(4)]]);
-        const turn = { finalText: answer(A, B, E, A), subtype: "success", costUsd: 0, durationMs: 1, toolCalls: {}, nebulosityCalls: 0 };
-        const session = scoreSession("s1-baseline-1", { question: "s1", arm: "baseline", repeat: 1, toolSearch: true }, ["gc1"], { turns: [turn], costUsd: 0, durationMs: 1, firstCallContext: null }, questions, cyc);
+        const turn = { finalText: answer(A, B, E, A), subtype: "success", costUsd: 0, durationMs: 1, toolCalls: {}, nebulosityCalls: 0, numTurns: 1, usage: NO_USAGE };
+        const session = scoreSession("s1-baseline-1", { question: "s1", arm: "baseline", repeat: 1, toolSearch: true }, ["gc1"], { turns: [turn], costUsd: 0, durationMs: 1, firstCallContext: null, numTurns: 1, usage: NO_USAGE }, questions, cyc);
         expect(session).toMatchObject({ score: null, pending: "chain step to adjudicate", unknown: [[B, E]] });
     });
 

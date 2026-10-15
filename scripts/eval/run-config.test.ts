@@ -1,8 +1,13 @@
+import { execFileSync } from "child_process";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
 import {
-    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, singleQuestionIds,
-    scratchRule, scrub, sessionArgs, utilizationCheck,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, repeatProblem, runName, schedule, scratchFolder, singleQuestionIds,
+    scratchRule, scrub, sessionArgs, statusArgs, statusDifference, utilizationCheck,
 } from "./run-config";
 
 describe("claudeArgs", () => {
@@ -346,5 +351,55 @@ describe("the dev set (Task 13, R1)", () => {
         expect(devMismatch(questions, true)).toEqual(["q1", "q2"]);
         expect(devMismatch(questions, false)).toEqual(["d1", "d2"]);
         expect(devMismatch([{ id: "d1", dev: true }], true)).toEqual([]);
+    });
+});
+
+// ---- pre-freeze sweep B
+
+describe("the harness's messages (sweep B, item 1)", () => {
+    // a "${…}" inside a plain string prints the placeholder itself (run.ts once printed "already in ${P.name}/runs")
+    it("no plain string literal in scripts/eval's sources holds a ${…} placeholder", () => {
+        const dir = path.resolve("scripts", "eval");
+        const found: string[] = [];
+        for (const name of fs.readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))){
+            const source = ts.createSourceFile(name, fs.readFileSync(path.join(dir, name), "utf8"), ts.ScriptTarget.Latest, true);
+            const visit = (node: ts.Node): void => {
+                if (ts.isStringLiteral(node) && /\$\{\w/.test(node.text)) found.push(`${name}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1} ${node.getText()}`);
+                ts.forEachChild(node, visit);
+            };
+            visit(source);
+        }
+        expect(found).toEqual([]);
+    });
+});
+
+describe("repeatProblem (sweep B, item 2)", () => {
+    it("refuses more repeats than the definition has, in a sentence, and accepts up to that many", () => {
+        expect(repeatProblem(3, 2, "eval")).toBe("--repeat 3 asks for more repeats than eval/eval.json has: its repeats is 2, so --repeat takes 1 to 2.");
+        expect(repeatProblem(2, 2, "eval")).toBeNull();
+        expect(repeatProblem(1, 3, "eval2")).toBeNull();
+        expect(repeatProblem(3, 3, "eval2")).toBeNull();
+        expect(repeatProblem(null, 2, "eval")).toBeNull();
+    });
+});
+
+describe("the checkout's status snapshot (sweep B, item 4)", () => {
+    it("shows a new file inside a folder that was already untracked, so the after-run comparison sees it", () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "eval-status-"));
+        try{
+            execFileSync("git", ["init", "-q", root]);
+            fs.mkdirSync(path.join(root, "notes"));
+            fs.writeFileSync(path.join(root, "notes", "a.txt"), "a");
+            const lines = (): string[] => execFileSync("git", statusArgs(root), { encoding: "utf8" }).split(/\r?\n/).filter((l) => l.trim() !== "");
+            const before = lines();
+            expect(before).toEqual(["?? notes/a.txt"]);
+            fs.writeFileSync(path.join(root, "notes", "b.txt"), "b");
+            // without -uall both snapshots would be the one line "?? notes/", and the run's new file would go unseen
+            expect(statusDifference(before, lines())).toEqual(["+ ?? notes/b.txt"]);
+            fs.rmSync(path.join(root, "notes", "a.txt"));
+            expect(statusDifference(before, lines())).toEqual(["+ ?? notes/b.txt", "- ?? notes/a.txt"]);
+        } finally{
+            fs.rmSync(root, { recursive: true, force: true });
+        }
     });
 });

@@ -971,6 +971,14 @@ They need the whole graph, and the index already holds it.
 **Consequences:** 234 single runs and 36 session runs, on the owner's subscription (the pilot measures the share of the windows; the owner approves the count). The results, losses included, go in docs/EVAL_RESULTS.md as Eval #2, and the gate's verdict decides whether S8 (going public) starts. Two index gaps found while checking the truths (files over 1 MB were skipped, and `typeof import('…')` wasn't followed) were fixed before the freeze at the owner's decision (2026-10-14, "Fix before the freeze"; ADR-053, amended). The index now agrees with 44 of the 44 truths (41 before). They were found through Eval #2's answer key, a threat the method names.
 **Revisit when:** the gate passes or fails (the verdict amends this ADR), or a new Claude Code version or model changes the baseline enough to matter for the README's claims.
 
+**Amended (2026-10-15, V1.6, pre-freeze sweep B): the runner, before the pilot.** None of these changes a question, truth, rubric, session or the gate's conditions.
+- **A session that hits its limit and then ends counts.** When a session's last result is `error_max_turns` or `error_max_budget_usd` and the process ends with messages unanswered, it is not an outage: it is kept, its index line lists the questions never answered (`unanswered`), and those score 0 with the limited message, as D1 and the method say. A session that ends after an answer, with messages left, is still an outage and runs again.
+- **A session's index line is the session's own,** not its last message's: turns and usage summed over the messages, the first subtype that isn't success, and a note for each message that didn't end in success. Each message's turns and usage are kept beside its cost and time.
+- **sessions.json is checked for shape,** and a session may not share a question's id (their runs would share a file name).
+- **`--repeat`** takes at most the definition's repeats (Eval #1's two).
+- **The checkout's snapshot is `git status --porcelain -uall`,** so a file a run adds inside a folder that was already untracked stops the batch.
+- **The scratch archive** never throws (a throw there replaced the run's own stop and skipped the removal), never follows a link, copies at most 50 MB, records what it left out in `ARCHIVE-NOTE.txt`, and removes the temp folder even when the copy failed.
+
 ## ADR-058 — Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (2026-10-15) — implements ADR-043's V1.6; amends ADR-048
 
 **Context:** ADR-043 asked for one command each to index a repo, open the Map and connect Claude Code, on Windows, macOS and Linux, with a free mode. Until now Nebulosity ran only from a checkout, through npm scripts, with its data inside the checkout.

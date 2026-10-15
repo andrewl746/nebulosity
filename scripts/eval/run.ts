@@ -12,8 +12,10 @@
  * With --sessions the runs are task sessions (<dir>/sessions.json): several questions asked in one Claude Code process
  * over --input-format stream-json, the next written to stdin when the last one's `result` event appears. Every check a
  * single run gets applies (init, each repo and the checkout, scrub, leak), with session.ts's outage check (fewer results
- * than messages is an outage). A session is kept as <dir>/runs/<session>-<arm>-<repeat>.jsonl.gz, its index line carrying
- * `session`, each message's question id (`turnQuestions`) and each message's own figures (`sessionTurns`). With --pilot it
+ * than messages is an outage, unless the last result hit a limit: then the messages never answered score 0, D1). A session
+ * is kept as <dir>/runs/<session>-<arm>-<repeat>.jsonl.gz, its index line carrying `session`, each message's question id
+ * (`turnQuestions`), each message's own figures (`sessionTurns`), the session's summed turns and usage, and `unanswered`
+ * when it ended at a limit with messages left. With --pilot it
  * asks the definition's `pilotSessions`, one repeat in each arm. A session's questions (marked "session" in questions.json)
  * are asked only inside it: the single-run schedule, --pilot and --only leave them out.
  *
@@ -52,11 +54,12 @@ import { requireRepository } from "../../lib/db/store/structure";
 import { repoKey } from "../../lib/index/paths";
 import { loadDefinition, type EvalDefinition } from "./definition";
 import {
-    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub,
-    sessionArgs, singleQuestionIds, utilizationCheck,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, repeatProblem, runName, schedule, scratchFolder, scrub,
+    sessionArgs, singleQuestionIds, statusArgs, statusDifference, utilizationCheck,
     type Arm, type RunId,
 } from "./run-config";
-import { chosenSessions, resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef, type SessionFile } from "./session";
+import { archiveScratch } from "./scratch";
+import { chosenSessions, resultCount, scheduleSessions, sessionIndexFields, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef } from "./session";
 import { summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
@@ -112,7 +115,7 @@ type Options = {
     dev: boolean; arms: Arm[] | null;
 };
 
-const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--sessions (with --pilot or --only <session ids>)] [--dev [--arms baseline,nebulosity (default nebulosity)]] [--dry-run]";
+const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (at most the definition's repeats, its default)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--sessions (with --pilot or --only <session ids>)] [--dev [--arms baseline,nebulosity (default nebulosity)]] [--dry-run]";
 
 function parseArgs(argv: string[]): Options {
     const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false, evalDir: "eval", sessions: false, dev: false, arms: null };
@@ -231,16 +234,17 @@ function loadQuestions(dryRun: boolean, dev: boolean): { file: QuestionFile; pla
 function loadSessions(questions: QuestionFile): SessionDef[] {
     const file = path.join(P.dir, "sessions.json");
     if (!fs.existsSync(file)) throw new Stop(1, `${P.name}/sessions.json doesn't exist yet, so there are no sessions to run. Nothing was run.`);
-    let parsed: Partial<SessionFile> | null;
+    let parsed: { sessions?: unknown } | null;
     try{
-        parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<SessionFile> | null;
+        parsed = JSON.parse(fs.readFileSync(file, "utf8")) as { sessions?: unknown } | null;
     } catch(e){
         throw new Stop(1, `${P.name}/sessions.json isn't valid JSON: ${(e as Error).message}`);
     }
     if (!parsed || !Array.isArray(parsed.sessions)) throw new Stop(1, `${P.name}/sessions.json needs a "sessions" list.`);
-    const problems = sessionProblems(parsed as SessionFile, questions.questions.map((q) => ({ id: q.id, repo: questionRepo(q).id })), Object.keys(DEF.repos));
+    // sessionProblems names a malformed entry and a session sharing a question's id, so nothing below meets either
+    const problems = sessionProblems({ sessions: parsed.sessions }, questions.questions.map((q) => ({ id: q.id, repo: questionRepo(q).id })), Object.keys(DEF.repos));
     if (problems.length > 0) throw new Stop(1, `${P.name}/sessions.json:\n  - ${problems.join("\n  - ")}`);
-    return (parsed as SessionFile).sessions;
+    return parsed.sessions as SessionDef[];
 }
 
 /** What a failed git call stops the runner with: before the first run it's a check that failed; after a run, the repo's state is unknown. */
@@ -260,8 +264,12 @@ function git(args: string[], failure: GitFailure = BEFORE_RUNS): string {
 const repoChanges = (root: string, failure?: GitFailure): string[] => parsePorcelain(git(["--no-optional-locks", "-C", root, "status", "--porcelain"], failure));
 
 let readOnlyDb = false;
-/** The raw lines of `git status --porcelain`, status codes included: a file edited a second time changes its line only if its code does, so this is the snapshot the checkout is compared with. */
-const statusLines = (root: string, failure?: GitFailure): string[] => git(["--no-optional-locks", "-C", root, "status", "--porcelain"], failure).split(/\r?\n/).filter((l) => l.trim() !== "");
+/**
+ * The raw lines of `git status --porcelain -uall` (statusArgs), status codes included: a file edited a second time changes
+ * its line only if its code does, so this is the snapshot the checkout is compared with. Every untracked file has its own
+ * line, so a file a run added inside a folder that was already untracked shows.
+ */
+const statusLines = (root: string, failure?: GitFailure): string[] => git(statusArgs(root), failure).split(/\r?\n/).filter((l) => l.trim() !== "");
 
 /**
  * The index version of a repo, read from Nebulosity's database without ever writing it: { version } or { problem }, a
@@ -429,10 +437,21 @@ async function runOne(run: RunId, ctx: Context, session?: SessionDef): Promise<R
     try{
         return await runOneIn(run, ctx, { folder: scratch, hex }, session);
     } finally{
-        fs.mkdirSync(P.raw, { recursive: true });
-        const kept = fs.existsSync(`${P.raw}/${name}.scratch`) ? `${P.raw}/${name}.scratch-${attemptsSoFar(name, rawFiles())}` : `${P.raw}/${name}.scratch`;
-        fs.cpSync(scratch, kept, { recursive: true });
-        fs.rmSync(scratch, { recursive: true, force: true });
+        // nothing here may throw: a throw would replace the run's own Stop. archiveScratch never follows a link, copies at
+        // most 50 MB, and removes the temp folder even when the copy failed; what it left out is said here and in the
+        // archive's ARCHIVE-NOTE.txt
+        let kept = `${P.raw}/${name}.scratch`;
+        try{
+            fs.mkdirSync(P.raw, { recursive: true });
+            if (fs.existsSync(kept)) kept = `${P.raw}/${name}.scratch-${attemptsSoFar(name, rawFiles())}`;
+        } catch{
+            // archiveScratch's copy says what failed
+        }
+        const archived = archiveScratch(scratch, kept);
+        if (archived.leftOut.length > 0 || archived.failure !== null || !archived.removed){
+            console.error(`${name}: the scratch archive ${kept} has ${archived.files} files (${archived.bytes} bytes)${archived.leftOut.length > 0 ? `; left out: ${archived.leftOut.join(", ")}` : ""}`
+                + `${archived.failure !== null ? `; ${archived.failure}` : ""}${archived.removed ? "" : `; the temp folder ${scratch} is still there`}.`);
+        }
     }
 }
 
@@ -446,10 +465,7 @@ function checkNothingChanged(name: string, ctx: Context, rawFile: string): void 
         if (changed.length > 0) throw new Stop(3, `${name}: git status in ${repo.root} names changes:\n  ${changed.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
     }
     // the checkout can't be required clean (the owner's work in progress is there), so it is compared with the snapshot
-    const now = statusLines(CHECKOUT, AFTER_A_RUN);
-    const before = new Set(ctx.snapshot);
-    const after = new Set(now);
-    const difference = [...now.filter((l) => !before.has(l)).map((l) => `+ ${l}`), ...ctx.snapshot.filter((l) => !after.has(l)).map((l) => `- ${l}`)];
+    const difference = statusDifference(ctx.snapshot, statusLines(CHECKOUT, AFTER_A_RUN));
     if (difference.length > 0) throw new Stop(3, `${name}: git status in the Nebulosity checkout (${CHECKOUT}) differs from before the batch:\n  ${difference.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
 }
 
@@ -511,14 +527,14 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
     if (leak !== null) throw new Stop(4, `${name}: the scrubbed transcript still holds "${leak}". The raw transcript is ${rawFile}. Nothing was kept.`);
 
     // finalText stays in the transcript only: undefined leaves JSON.stringify's output
-    // a session's last result holds that message's duration_ms, num_turns and usage only (session.ts): the totals come from the session summary
-    const sessionSummary = session === undefined ? null : summarizeSession(raw);
+    // a session's last result holds that message's duration_ms, num_turns, usage and subtype only (session.ts): the session's
+    // own figures replace them (summed turns and usage, the first subtype that isn't success, a note per such message, and
+    // the questions never answered when it ended at a limit)
+    const models = [DEF.pins.model, EXPLORE_MODEL];
+    const own = session === undefined ? null : sessionIndexFields(summary, summarizeSession(raw), session, models);
     const entry = {
-        name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, [DEF.pins.model, EXPLORE_MODEL]), repo: repo.id, indexVersion, scratch: scratchRun?.hex,
-        ...(session === undefined || sessionSummary === null ? {} : {
-            session: session.id, turnQuestions: session.questions, durationMs: sessionSummary.durationMs, costUsd: sessionSummary.costUsd, firstCallContext: sessionSummary.firstCallContext,
-            sessionTurns: sessionSummary.turns.map((t) => ({ ...t, finalText: undefined })),
-        }),
+        name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, models), repo: repo.id, indexVersion, scratch: scratchRun?.hex,
+        ...(own ?? {}),
     };
     const indexLine = JSON.stringify(entry);
     const indexLeak = findLeak(indexLine, needles);
@@ -535,9 +551,10 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
     // the files this run just wrote are the checkout's new normal for the next run's comparison
     ctx.snapshot = statusLines(CHECKOUT, AFTER_A_RUN);
 
-    const u = summary.usage;
+    // a session's figures are its own totals (entry), not its last message's
+    const u = entry.usage;
     const n = (x: number): string => x.toLocaleString("en-US");
-    console.log(`${name}: ${summary.turns} turns, $${summary.costUsd.toFixed(2)} est., in ${n(u.input)} (cache write ${n(u.cacheWrite)}, read ${n(u.cacheRead)}) out ${n(u.output)}, `
+    console.log(`${name}: ${entry.turns} turns, $${entry.costUsd.toFixed(2)} est., in ${n(u.input)} (cache write ${n(u.cacheWrite)}, read ${n(u.cacheRead)}) out ${n(u.output)}, `
         + `${Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)} s, nebulosity calls ${summary.nebulosityCalls}, ToolSearch calls ${summary.toolSearchCalls}, `
         + `5-hour ${fixed(summary.utilization.fiveHour)}, 7-day ${fixed(summary.utilization.sevenDay)}${entry.resultNotes.length ? ` [${entry.resultNotes.join("; ")}]` : ""}`);
     return summary;
@@ -551,6 +568,8 @@ async function main(): Promise<void> {
         throw new Stop(1, `${options.evalDir}: ${(e as Error).message}`);
     }
     P = pathsFor(DEF, options.dev);
+    const tooMany = repeatProblem(options.repeat, DEF.repeats, P.name);
+    if (tooMany !== null) throw new Stop(1, tooMany);
     const dry = options.dryRun;
     console.log(`${dry ? "Dry run: nothing is started, written or changed. " : ""}${DEF.name} (${P.name}).`);
 
