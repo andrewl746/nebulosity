@@ -2,7 +2,7 @@
 import { slug, spellings } from "../../lib/demo/privacy";
 
 export type Arm = "baseline" | "nebulosity";
-export type Pins = { model: string; effort: string; maxTurns: number; maxBudgetUsd: number };
+export type Pins = { model: string; effort: string; maxTurns: number; maxBudgetUsd: number; sessionMaxBudgetUsd?: number };
 export const PINS: Pins = { model: "claude-sonnet-5-5", effort: "medium", maxTurns: 80, maxBudgetUsd: 4 };
 
 /** Read-only built-in tools and the Agent tool (subagents); Nebulosity's tools exist only where its server runs. */
@@ -35,7 +35,17 @@ export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string },
     ];
 }
 
-/** A permission rule's absolute path (code.claude.com permissions: "//" then the path, a Windows drive as /c): everything under the folder. */
+/**
+ * A task session's arguments: claudeArgs, with one budget for the whole process (a session asks several questions, so
+ * pins.sessionMaxBudgetUsd replaces the single run's), and stream-json input so each question is a message written to
+ * stdin after the last answer. --replay-user-messages echoes each message into the transcript (the probe run used it).
+ */
+export function sessionArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: { scratch?: string } = {}): string[] {
+    const budget = pins.sessionMaxBudgetUsd ?? pins.maxBudgetUsd;
+    return [...claudeArgs(arm, mcp, { ...pins, maxBudgetUsd: budget }, options), "--input-format", "stream-json", "--replay-user-messages"];
+}
+
+/** A permission rule's absolute path(code.claude.com permissions: "//" then the path, a Windows drive as /c): everything under the folder. */
 export function scratchRule(absPath: string): string {
     const slashed = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
     const drive = /^([A-Za-z]):\/(.*)$/.exec(slashed);

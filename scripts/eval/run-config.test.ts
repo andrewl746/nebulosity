@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
-import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scratchRule, scrub, utilizationCheck } from "./run-config";
+import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scratchRule, scrub, sessionArgs, utilizationCheck } from "./run-config";
 
 describe("claudeArgs", () => {
     it("pins the model and effort, drops user settings, allows read-only tools, and differs between arms only in the MCP config", () => {
@@ -247,5 +247,32 @@ describe("an opaque scratch folder (R6 as fixed)", () => {
         const text = `{"cmd":"node ${scratch}/count.js","note":"home C:/Users/Ann/code"}`;
         expect(scrub(text, [{ folder: "C:/Users/Ann", with: "~" }, { folder: scratch, with: "<scratch>" }]))
             .toBe('{"cmd":"node <scratch>/count.js","note":"home ~/code"}');
+    });
+});
+
+describe("sessionArgs", () => {
+    const mcp = { empty: "E.json", nebulosity: "N.json" };
+    const pins = { model: "claude-sonnet-5-5", effort: "medium", maxTurns: 80, maxBudgetUsd: 4, sessionMaxBudgetUsd: 10 };
+
+    it("is claudeArgs with stream-json input and the replayed user messages, and the session's budget in place of a single run's", () => {
+        const single = claudeArgs("nebulosity", mcp, pins);
+        const session = sessionArgs("nebulosity", mcp, pins);
+        expect(session.slice(-3)).toEqual(["--input-format", "stream-json", "--replay-user-messages"]);
+        expect(session[session.indexOf("--max-budget-usd") + 1]).toBe("10");
+        expect(single[single.indexOf("--max-budget-usd") + 1]).toBe("4");
+        // nothing else differs
+        expect(session.slice(0, -3).filter((x, i) => x !== single[i])).toEqual(["10"]);
+    });
+
+    it("keeps the scripts rules and still differs between arms only in the MCP config", () => {
+        const a = sessionArgs("baseline", mcp, pins, { scratch: "C:/tmp/eval-scratch/ab" });
+        const n = sessionArgs("nebulosity", mcp, pins, { scratch: "C:/tmp/eval-scratch/ab" });
+        expect(a).toContain("--add-dir");
+        expect(a.filter((x, i) => x !== n[i])).toEqual(["E.json"]);
+    });
+
+    it("uses the single-run budget when the pins name no session budget", () => {
+        const session = sessionArgs("baseline", mcp, { ...pins, sessionMaxBudgetUsd: undefined });
+        expect(session[session.indexOf("--max-budget-usd") + 1]).toBe("4");
     });
 });

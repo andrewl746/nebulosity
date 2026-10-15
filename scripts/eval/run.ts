@@ -1,6 +1,13 @@
 /**
  * npm run eval:run -- [--pilot | --only bp1,cl2,...] [--repeat 1|2 (default 2)] [--limit n]
  *                     [--stop-at-seven-day 0.85] [--stop-at-five-hour 0.9] [--config-dir dir] [--dry-run]
+ * npm run eval:run -- --eval eval2 --sessions [--only <session ids>] [--repeat 1|2|3] [--limit n] [--dry-run]
+ *
+ * With --sessions the runs are task sessions (<dir>/sessions.json): several questions asked in one Claude Code process
+ * over --input-format stream-json, the next written to stdin when the last one's `result` event appears. Every check a
+ * single run gets applies (init, each repo and the checkout, scrub, leak), with session.ts's outage check (fewer results
+ * than messages is an outage). A session is kept as <dir>/runs/<session>-<arm>-<repeat>.jsonl.gz, its index line carrying
+ * `session`, each message's question id (`turnQuestions`) and each message's own figures (`sessionTurns`).
  *
  * The eval's runner (D3, D4 in docs/plans/2026-10-13-v1-5-ship.md). It starts `claude -p` headless on each question in
  * three arms (A: no MCP server; B: Nebulosity's, its tools deferred as in Claude Code's default; U: B with its tools
@@ -37,13 +44,17 @@ import { requireRepository } from "../../lib/db/store/structure";
 import { repoKey } from "../../lib/index/paths";
 import { loadDefinition, type EvalDefinition } from "./definition";
 import {
-    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub, utilizationCheck,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub, sessionArgs, utilizationCheck,
     type RunId,
 } from "./run-config";
+import { resultCount, scheduleSessions, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef, type SessionFile } from "./session";
 import { summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
 const TIMEOUT_MS = 30 * 60 * 1000;
+/** A task session asks several questions in one process. */
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+const FEED_POLL_MS = 500;
 const VERSION_TIMEOUT_MS = 30 * 1000;
 const INIT_POLL_MS = 500;
 /** The init message is among a transcript's first lines; a run still without one after this many bytes is left to the end-of-run check. */
@@ -80,13 +91,13 @@ class Stop extends Error {
 
 type Options = {
     pilot: boolean; only: string[] | null; repeat: number | null; limit: number;
-    sevenDay: number; fiveHour: number; configDir: string | null; dryRun: boolean; evalDir: string;
+    sevenDay: number; fiveHour: number; configDir: string | null; dryRun: boolean; evalDir: string; sessions: boolean;
 };
 
-const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--dry-run]";
+const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--sessions (with --only <session ids>)] [--dry-run]";
 
 function parseArgs(argv: string[]): Options {
-    const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false, evalDir: "eval" };
+    const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false, evalDir: "eval", sessions: false };
     for (let i = 0; i < argv.length; i++){
         const arg = argv[i];
         const value = (): string => {
@@ -117,8 +128,10 @@ function parseArgs(argv: string[]): Options {
         else if (arg === "--stop-at-five-hour") options.fiveHour = fraction();
         else if (arg === "--config-dir") options.configDir = forward(path.resolve(value()));
         else if (arg === "--eval") options.evalDir = value();
+        else if (arg === "--sessions") options.sessions = true;
         else throw new Stop(1, `unknown argument ${arg}. ${USAGE}`);
     }
+    if (options.sessions && options.pilot) throw new Stop(1, "--pilot is for single questions, so it can't be combined with --sessions.");
     if (options.pilot && options.only) throw new Stop(1, "--pilot already names its questions (the definition's), so it can't be combined with --only.");
     if (options.pilot && options.repeat !== null) throw new Stop(1, "--pilot is one run of each pilot question, so it can't be combined with --repeat.");
     return options;
@@ -167,6 +180,22 @@ function loadQuestions(dryRun: boolean): { file: QuestionFile; placeholder: bool
         }
     }
     return { file: parsed as QuestionFile, placeholder: false };
+}
+
+/** <dir>/sessions.json, checked against the questions and the definition's repos. */
+function loadSessions(questions: QuestionFile): SessionDef[] {
+    const file = path.join(P.dir, "sessions.json");
+    if (!fs.existsSync(file)) throw new Stop(1, `${P.name}/sessions.json doesn't exist yet, so there are no sessions to run. Nothing was run.`);
+    let parsed: Partial<SessionFile> | null;
+    try{
+        parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<SessionFile> | null;
+    } catch(e){
+        throw new Stop(1, `${P.name}/sessions.json isn't valid JSON: ${(e as Error).message}`);
+    }
+    if (!parsed || !Array.isArray(parsed.sessions)) throw new Stop(1, `${P.name}/sessions.json needs a "sessions" list.`);
+    const problems = sessionProblems(parsed as SessionFile, questions.questions.map((q) => ({ id: q.id, repo: questionRepo(q).id })), Object.keys(DEF.repos));
+    if (problems.length > 0) throw new Stop(1, `${P.name}/sessions.json:\n  - ${problems.join("\n  - ")}`);
+    return (parsed as SessionFile).sessions;
 }
 
 /** What a failed git call stops the runner with: before the first run it's a check that failed; after a run, the repo's state is unknown. */
@@ -246,17 +275,20 @@ function readHead(file: string): string {
 
 /**
  * Starts claude with the prompt on stdin, its stdout and stderr going straight into files. Resolves when it has ended.
+ * With a list of prompts (a task session) the first is written as a stream-json user message; each next one is written
+ * when the raw file holds one more `result` event than messages answered so far, and stdin closes after the last result.
  * While it runs, the raw file is polled for the init message; `checkInit` judges it the moment it is complete, and a
  * run it faults is killed with its whole process tree there and then (the problems come back in `initProblems`).
  */
 async function runClaude(
-    claude: string, args: string[], env: Record<string, string>, prompt: string, cwd: string, rawFile: string, errFile: string,
-    checkInit: (init: RunSummary) => string[],
+    claude: string, args: string[], env: Record<string, string>, prompt: string | string[], cwd: string, rawFile: string, errFile: string,
+    checkInit: (init: RunSummary) => string[], timeoutMs: number = TIMEOUT_MS,
 ): Promise<{ timedOut: boolean; initProblems: string[] }> {
     const out = fs.openSync(rawFile, "w");
     const err = fs.openSync(errFile, "w");
     let timer: NodeJS.Timeout | undefined;
     let watch: NodeJS.Timeout | undefined;
+    let feed: NodeJS.Timeout | undefined;
     try{
         let timedOut = false;
         let initProblems: string[] = [];
@@ -268,11 +300,29 @@ async function runClaude(
             throw new Error("claude was started without a stdin pipe");
         }
         child.stdin.on("error", () => {});   // claude may end before reading all of the prompt
-        child.stdin.end(prompt);
+        if (typeof prompt === "string") child.stdin.end(prompt);
+        else {
+            const messages = prompt;
+            const stdin = child.stdin;
+            stdin.write(`${userMessage(messages[0])}\n`);
+            let sent = 1;
+            feed = setInterval(() => {
+                try{
+                    if (resultCount(fs.readFileSync(rawFile, "utf8")) < sent) return;
+                    if (sent < messages.length) stdin.write(`${userMessage(messages[sent++])}\n`);
+                    else {
+                        stdin.end();
+                        clearInterval(feed);
+                    }
+                } catch{
+                    // the file couldn't be read this time, or claude has ended: the next tick tries again, or the run is over
+                }
+            }, FEED_POLL_MS);
+        }
         timer = setTimeout(() => {
             timedOut = true;
             killTree(child.pid);
-        }, TIMEOUT_MS);
+        }, timeoutMs);
         let looking = true;
         watch = setInterval(() => {
             if (!looking) return;
@@ -298,6 +348,7 @@ async function runClaude(
     } finally{
         if (timer) clearTimeout(timer);
         if (watch) clearInterval(watch);
+        if (feed) clearInterval(feed);
         running = null;
         fs.closeSync(out);
         fs.closeSync(err);
@@ -323,15 +374,15 @@ const rawFiles = (): string[] => (fs.existsSync(P.raw) ? fs.readdirSync(P.raw) :
  * the Edit rule are the same text in both arms. Whatever the run left there is copied to the raw folder beside its
  * transcript (<run name>.scratch) and the temp folder is removed, whether the run was kept or stopped the batch.
  */
-async function runOne(run: RunId, ctx: Context): Promise<RunSummary> {
+async function runOne(run: RunId, ctx: Context, session?: SessionDef): Promise<RunSummary> {
     const name = runName(run);
-    if (!DEF.scripts) return runOneIn(run, ctx, undefined);
+    if (!DEF.scripts) return runOneIn(run, ctx, undefined, session);
     const hex = crypto.randomBytes(8).toString("hex");
     const scratch = scratchFolder(fs.realpathSync.native(os.tmpdir()), hex);
     fs.rmSync(scratch, { recursive: true, force: true });
     fs.mkdirSync(scratch, { recursive: true });
     try{
-        return await runOneIn(run, ctx, { folder: scratch, hex });
+        return await runOneIn(run, ctx, { folder: scratch, hex }, session);
     } finally{
         fs.mkdirSync(P.raw, { recursive: true });
         const kept = fs.existsSync(`${P.raw}/${name}.scratch`) ? `${P.raw}/${name}.scratch-${attemptsSoFar(name, rawFiles())}` : `${P.raw}/${name}.scratch`;
@@ -357,12 +408,13 @@ function checkNothingChanged(name: string, ctx: Context, rawFile: string): void 
     if (difference.length > 0) throw new Stop(3, `${name}: git status in the Nebulosity checkout (${CHECKOUT}) differs from before the batch:\n  ${difference.join("\n  ")}\nNothing was restored. Ask the owner. The raw transcript is ${rawFile}.`);
 }
 
-async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; hex: string } | undefined): Promise<RunSummary> {
+async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; hex: string } | undefined, session?: SessionDef): Promise<RunSummary> {
     const name = runName(run);
-    const question = ctx.questions.questions.find((q) => q.id === run.question)!;
-    const repo = questionRepo(question);
     const scratch = scratchRun?.folder;
-    const prompt = promptFor(question, ctx.questions.formats, scratch);
+    // a session is one process over one repo with the prompts of its questions in order; a single run has one
+    const asked = session === undefined ? [ctx.questions.questions.find((q) => q.id === run.question)!] : session.questions.map((id) => ctx.questions.questions.find((q) => q.id === id)!);
+    const repo = session === undefined ? questionRepo(asked[0]) : repoOf(session.repo);
+    const prompts = asked.map((q) => promptFor(q, ctx.questions.formats, scratch));
     // the N arm's tools answer from the index, so a repo without one stops the batch; the A arm just records what there is
     const found = indexVersionOf(repo.root);
     if ("problem" in found && run.arm === "nebulosity") throw new Stop(1, `${name}: ${found.problem}, so Nebulosity's tools would fail. Nothing was run.`);
@@ -378,7 +430,11 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
 
     const env = childEnv(process.env, { gitBash: ctx.gitBash, toolSearch: run.toolSearch, configDir: ctx.options.configDir ?? undefined });
     const expected = { arm: run.arm, model: DEF.pins.model, claudeVersion: DEF.claudeVersion, forbiddenPlugins: ctx.forbiddenPlugins, scripts: DEF.scripts };
-    const { timedOut, initProblems } = await runClaude(ctx.claude, claudeArgs(run.arm, ctx.mcp, DEF.pins, { scratch }), env, prompt, repo.root, rawFile, errFile, (init) => validateInit(init, expected));
+    const args = session === undefined ? claudeArgs(run.arm, ctx.mcp, DEF.pins, { scratch }) : sessionArgs(run.arm, ctx.mcp, DEF.pins, { scratch });
+    const { timedOut, initProblems } = await runClaude(
+        ctx.claude, args, env, session === undefined ? prompts[0] : prompts, repo.root, rawFile, errFile,
+        (init) => validateInit(init, expected), session === undefined ? TIMEOUT_MS : SESSION_TIMEOUT_MS,
+    );
     const endedAt = new Date();
 
     // 0. the init message was judged the moment it appeared, and a run that differed was killed there
@@ -387,7 +443,7 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
     }
     const raw = fs.readFileSync(rawFile, "utf8");
     const summary = summarizeRun(raw);
-    const outage = timedOut ? "the run was killed after 30 minutes" : infrastructureFailure(raw);
+    const outage = timedOut ? `the run was killed after ${session === undefined ? 30 : 60} minutes` : session === undefined ? infrastructureFailure(raw) : sessionOutage(raw, prompts.length);
 
     // 1. the init message again, from the finished transcript. A run that never started has no init to check: it is the outage below.
     const neverStarted = outage !== null && summary.model === null;
@@ -409,7 +465,15 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
     if (leak !== null) throw new Stop(4, `${name}: the scrubbed transcript still holds "${leak}". The raw transcript is ${rawFile}. Nothing was kept.`);
 
     // finalText stays in the transcript only: undefined leaves JSON.stringify's output
-    const entry = { name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, [DEF.pins.model, EXPLORE_MODEL]), repo: repo.id, indexVersion, scratch: scratchRun?.hex };
+    // a session's last result holds that message's duration_ms, num_turns and usage only (session.ts): the totals come from the session summary
+    const sessionSummary = session === undefined ? null : summarizeSession(raw);
+    const entry = {
+        name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, [DEF.pins.model, EXPLORE_MODEL]), repo: repo.id, indexVersion, scratch: scratchRun?.hex,
+        ...(session === undefined || sessionSummary === null ? {} : {
+            session: session.id, turnQuestions: session.questions, durationMs: sessionSummary.durationMs, costUsd: sessionSummary.costUsd, firstCallContext: sessionSummary.firstCallContext,
+            sessionTurns: sessionSummary.turns.map((t) => ({ ...t, finalText: undefined })),
+        }),
+    };
     const indexLine = JSON.stringify(entry);
     const indexLeak = findLeak(indexLine, needles);
     if (indexLeak !== null) throw new Stop(4, `${name}: its index line holds "${indexLeak}". The raw transcript is ${rawFile}. Nothing was kept.`);
@@ -476,21 +540,33 @@ async function main(): Promise<void> {
     }
     console.log("check: apart from the pins, no CLAUDE*, ANTHROPIC_* or MCP_* variable (nor any other stripped name) is left in a child's environment");
 
-    // The questions and the runs
-    if (options.pilot && DEF.pilot.length === 0) throw new Stop(1, `${P.name}/eval.json lists no pilot questions.`);
-    const ids = options.pilot ? DEF.pilot : options.only;
-    const unknown = (ids ?? []).filter((id) => !questions.questions.some((q) => q.id === id));
-    if (unknown.length > 0) throw new Stop(1, `no such question: ${unknown.join(", ")}. The questions are ${questions.questions.map((q) => q.id).join(", ")}.`);
-    const chosen = questions.questions.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
-    // which arm goes first comes from a question's place in the whole list (D2's order for the placeholders), however few are asked
-    const order = placeholder && chosen.every((id) => QUESTION_ORDER.includes(id)) ? QUESTION_ORDER : questions.questions.map((q) => q.id);
-    const planned: RunId[] = schedule(chosen, options.pilot ? 1 : options.repeat ?? DEF.repeats, order, { upfront: DEF.arms.includes("nebulosity-upfront") });
+    // The questions and the runs (or, with --sessions, the task sessions)
+    let sessionDefs: SessionDef[] = [];
+    let planned: RunId[];
+    if (options.sessions){
+        sessionDefs = loadSessions(questions);
+        const unknownSessions = (options.only ?? []).filter((id) => !sessionDefs.some((x) => x.id === id));
+        if (unknownSessions.length > 0) throw new Stop(1, `no such session: ${unknownSessions.join(", ")}. The sessions are ${sessionDefs.map((x) => x.id).join(", ")}.`);
+        const chosenSessions = sessionDefs.filter((x) => options.only === null || options.only.includes(x.id)).map((x) => x.id);
+        planned = scheduleSessions(chosenSessions, options.repeat ?? DEF.repeats, sessionDefs.map((x) => x.id));
+    } else {
+        if (options.pilot && DEF.pilot.length === 0) throw new Stop(1, `${P.name}/eval.json lists no pilot questions.`);
+        const ids = options.pilot ? DEF.pilot : options.only;
+        const unknown = (ids ?? []).filter((id) => !questions.questions.some((q) => q.id === id));
+        if (unknown.length > 0) throw new Stop(1, `no such question: ${unknown.join(", ")}. The questions are ${questions.questions.map((q) => q.id).join(", ")}.`);
+        const chosen = questions.questions.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
+        // which arm goes first comes from a question's place in the whole list (D2's order for the placeholders), however few are asked
+        const order = placeholder && chosen.every((id) => QUESTION_ORDER.includes(id)) ? QUESTION_ORDER : questions.questions.map((q) => q.id);
+        planned = schedule(chosen, options.pilot ? 1 : options.repeat ?? DEF.repeats, order, { upfront: DEF.arms.includes("nebulosity-upfront") });
+    }
+    const sessionOf = (run: RunId): SessionDef | undefined => (options.sessions ? sessionDefs.find((x) => x.id === run.question) : undefined);
+    const repoIdOf = (run: RunId): string => sessionOf(run)?.repo ?? questionRepo(questions.questions.find((q) => q.id === run.question)!).id;
     const isDone = (run: RunId): boolean => fs.existsSync(`${P.runs}/${runName(run)}.jsonl.gz`);
     const todo = planned.filter((run) => !isDone(run));
     const batch = todo.slice(0, options.limit);
 
     // every repo the batch touches: HEAD at its commit, git status clean (all read-only)
-    const touched = [...new Set(batch.map((run) => questionRepo(questions.questions.find((q) => q.id === run.question)!).id))];
+    const touched = [...new Set(batch.map(repoIdOf))];
     for (const id of touched){
         const repo = repoOf(id);
         const head = git(["-C", repo.root, "rev-parse", "HEAD"]).trim();
@@ -499,7 +575,7 @@ async function main(): Promise<void> {
         if (dirty.length > 0) throw new Stop(1, `git status in ${repo.root} names changes (${dirty.slice(0, 5).join(", ")}${dirty.length > 5 ? ", ..." : ""}). Nothing was run; ask the owner before restoring.`);
         console.log(`${repo.root}: HEAD ${head}, git status clean`);
         const index = indexVersionOf(repo.root);
-        const needsIndex = batch.some((run) => run.arm === "nebulosity" && questionRepo(questions.questions.find((q) => q.id === run.question)!).id === id);
+        const needsIndex = batch.some((run) => run.arm === "nebulosity" && repoIdOf(run) === id);
         if ("version" in index) console.log(`${repo.root}: Nebulosity's index version ${index.version}`);
         else if (!needsIndex) console.log(`${repo.root}: ${index.problem} (only A-arm runs ask about it, so the runs record no index version)`);
         else if (dry) console.log(`${repo.root}: WOULD STOP a real run: ${index.problem}, and an N-arm run asks about it.`);
@@ -516,15 +592,26 @@ async function main(): Promise<void> {
         console.log(`MCP config for B, which a real run writes to ${P.nebulosityMcp}:\n${text.trimEnd()}`);
         for (const run of batch){
             const pins = childEnv({}, { gitBash, toolSearch: run.toolSearch, configDir: options.configDir ?? undefined });
-            const q = questions.questions.find((x) => x.id === run.question)!;
+            const session = sessionOf(run);
             // a real run makes a new random folder under the system temp folder; this is its shape
             const scratch = DEF.scripts ? scratchFolder(forward(os.tmpdir()), "<16 random hex digits>") : undefined;
-            const stdin = promptFor(q, questions.formats, scratch);
             const attempt = attemptsSoFar(runName(run), rawFiles()) + 1;
             console.log(`\n${runName(run)} (attempt ${attempt})`);
-            console.log(`  command: ${quote(claude)} ${claudeArgs(run.arm, mcp, DEF.pins, { scratch }).map(quote).join(" ")}`);
-            console.log(`  cwd: ${questionRepo(q).root}`);
-            console.log(`  stdin (${stdin.length} characters): ${JSON.stringify(stdin)}`);
+            if (session !== undefined){
+                console.log(`  command: ${quote(claude)} ${sessionArgs(run.arm, mcp, DEF.pins, { scratch }).map(quote).join(" ")}`);
+                console.log(`  cwd: ${repoRoot(session.repo)}`);
+                session.questions.forEach((id, i) => {
+                    const message = userMessage(promptFor(questions.questions.find((x) => x.id === id)!, questions.formats, scratch));
+                    console.log(`  stdin line ${i + 1}, written ${i === 0 ? "at once" : "after the previous result"} (${message.length} characters): ${message}`);
+                });
+                console.log(`  then stdin closes after result ${session.questions.length}; limit 60 minutes`);
+            } else {
+                const q = questions.questions.find((x) => x.id === run.question)!;
+                const stdin = promptFor(q, questions.formats, scratch);
+                console.log(`  command: ${quote(claude)} ${claudeArgs(run.arm, mcp, DEF.pins, { scratch }).map(quote).join(" ")}`);
+                console.log(`  cwd: ${questionRepo(q).root}`);
+                console.log(`  stdin (${stdin.length} characters): ${JSON.stringify(stdin)}`);
+            }
             console.log(`  environment: ${Object.entries(pins).map(([k, v]) => `set ${k}=${v}`).join("; ")}; remove the ${stripped.length} names listed above`);
         }
         console.log("\nNothing was started.");
@@ -563,7 +650,7 @@ async function main(): Promise<void> {
     let started = 0;
     let unwatched = 0;
     for (const run of batch){
-        const summary = await runOne(run, ctx);
+        const summary = await runOne(run, ctx, sessionOf(run));
         started++;
         const check = utilizationCheck(summary.utilization, { fiveHour: options.fiveHour, sevenDay: options.sevenDay }, unwatched);
         unwatched = check.unwatched;

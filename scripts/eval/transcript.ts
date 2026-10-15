@@ -15,11 +15,12 @@ export type RunSummary = {
     utilization: { fiveHour: number | null; sevenDay: number | null };
 };
 
-type Json = Record<string, any>;   // eslint-disable-line @typescript-eslint/no-explicit-any -- stream-json lines are read field by field
+export type Json = Record<string, any>;   // eslint-disable-line @typescript-eslint/no-explicit-any -- stream-json lines are read field by field
 
 const count = (into: Record<string, number>, name: string): void => { into[name] = (into[name] ?? 0) + 1; };
 
-export function summarizeRun(jsonl: string): RunSummary {
+/** The JSON objects of a stream-json transcript, in order; a partial or non-JSON line is skipped. */
+export function streamEvents(jsonl: string): Json[] {
     const events: Json[] = [];
     for (const line of jsonl.split(/\r?\n/)){
         try{
@@ -29,6 +30,11 @@ export function summarizeRun(jsonl: string): RunSummary {
             // a partial or non-JSON line: skipped
         }
     }
+    return events;
+}
+
+export function summarizeRun(jsonl: string): RunSummary {
+    const events = streamEvents(jsonl);
     const init = events.find((e) => e.type === "system" && e.subtype === "init") ?? {};
     const result = [...events].reverse().find((e) => e.type === "result") ?? {};
     const limits = [...events].reverse().find((e) => e.type === "rate_limit_event")?.rate_limit_info?.unifiedWindows ?? {};

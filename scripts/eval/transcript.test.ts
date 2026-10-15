@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeRun } from "./transcript";
+import { streamEvents, summarizeRun } from "./transcript";
 
 const LINES: unknown[] = [
     { type: "system", subtype: "init", model: "claude-sonnet-5-5", claude_code_version: "2.1.296", apiKeySource: "none", permissionMode: "dontAsk",
@@ -55,5 +55,11 @@ describe("firstCallContext", () => {
 
     it("is null when no assistant message reported usage", () => {
         expect(summarizeRun(JSON.stringify({ type: "result", subtype: "success" })).firstCallContext).toBeNull();
+    });
+});
+
+describe("streamEvents", () => {
+    it("returns the JSON objects in order and skips partial, non-JSON and non-object lines", () => {
+        expect(streamEvents('{"type":"a"}\r\nnot json\n42\nnull\n{"type":"b"}\n{"type":"c"')).toEqual([{ type: "a" }, { type: "b" }]);
     });
 });
