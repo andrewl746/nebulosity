@@ -203,6 +203,8 @@
 
 **Amended (2026-10-15, Eval #2):** two evals now say the same thing about the value proposition: Nebulosity's tools make Claude Code faster and cheaper on the questions that walk the import graph, at the same or a higher score (part of the cost difference in Eval #2 came from the alone arm's refused shell commands), but they don't make its answers clearly better, and on VS Code's big-picture questions they made them worse both times (−0.09 in Eval #1, −0.08 in Eval #2), so this ADR's revisit condition holds a second time (docs/EVAL_RESULTS.md).
 
+**Amended (proposed, V1.7 plan, 2026-10-15):** Eval #3 (ADR-060) is the third measurement of the value proposition, with calls through injected services (ADR-059), time to relevant context, and a gate fixed before its first run.
+
 ## ADR-025 — Drop the native C++ scanner (2026-10-11) — supersedes ADR-014 and ADR-015
 
 **Context:** ADR-014 justified the C++ scanner only as a benchmarked accelerator, and ADR-015 deferred it to last. v1 parses with the TypeScript Compiler API (all of VS Code in 22.3 s, single-threaded), so there's no measured bottleneck for a native scanner to remove. The regex extractor it was meant to port is being retired anyway (ADR-026).
@@ -650,6 +652,8 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
   In each, E2 would stay parked unless the owner wants it for its own sake: that is the owner's call.
 
+**Amended (proposed, V1.7 plan, 2026-10-15): E2 is built in V1.7, as declared types rather than the type checker** (ADR-059), after the owner chose a V1.7 aimed at Eval #2's failed conditions (option (a)). It is measured against the checker (Calls Benchmark #1) and in Eval #3 (ADR-060). The order after V1.7 is decided at Eval #3's verdict. The default stays E4 → E5 → E1, with E3 optional.
+
 ## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
 
 **Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
@@ -814,6 +818,11 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 
 **Amended (2026-10-15, V1.6's final review): a path cut off at its front.** The leak check matched whole folders only, so a model's script that printed `path.slice(n)` of a path (`ers/<user>/Programming/vscode/…`) passed it, and one such path reached a committed transcript (docs/EVAL_RESULTS.md, Eval #2, "What the runs showed about the method"). `leakNeedles` (`lib/demo/privacy.ts`) now also takes the home folder: each scanned folder inside it adds one needle, the home's last segment and the folder's first segment below it (`<user>/programming`), compared after separators and escapes are folded, as every needle is. The eval runner, the demo export, the demo build and the package check all pass the home folder. Such a pair could also match ordinary text where those two words sit side by side with a slash between; a leak scanner errs toward reporting. The cut-off path in `4538032`'s history is untouched: rewriting it is the owner's call.
 
+**Amended (proposed, V1.7 plan, 2026-10-15): the hold now waits on Eval #3, and lifts after its verdict whatever it is.** The owner's call after V1.7's design (2026-10-15, verbatim): "im just gonna go ahead with it and see how it does, then if the results arent that meaningful then wtv and ill just ship it regardless", and right after: "nah but i still WANT to see improvement".
+- V1.7 aims to pass Eval #3's gate as approved (ADR-060), and no bar moves.
+- After the verdict the hold lifts either way, and the gate decides what the README may claim: on a pass, the measured wins; on a fail, the results as measured, with each failed condition named and nothing claimed beyond them.
+- The deploy, the public switch, the package and the video stay the owner's.
+
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
 **Context:** ADR-027 fused code keywords, summary keywords and meaning; V1.3.1 added folder names. V1.2 and V1.3 left ranking cases for V1.5's query set: "lifecycle" ranked `src/vs/base/common/lifecycle.ts` 6th then, and by V1.5's planning probe it was outside the top 8, as it was for "Disposable", though it's the most imported file in VS Code. "registerSingleton" ranked its own file 2nd; "terminal" put a smoke-test folder 2nd; a file's snippet was often its imports listing with a `File: <path> Imports:` header.
@@ -926,6 +935,8 @@ None of these changes what the TypeScript adapter stores, so `ADAPTER_VERSION` s
 
 Neither changes what the TypeScript adapter stores, so `ADAPTER_VERSION` stays 4. A probe compared the old and new code on six real repos (VS Code, AFFiNE, vite, excalidraw, express, Rocket.Chat) without the database: none has a root tsconfig with `rootDir: "."`, the entry points came out the same, and every import-like literal naming an undeclared package (405 on VS Code, none on the others) resolved the same. So Eval #2's truths and the index still agree.
 
+**Amended (proposed, V1.7 plan, 2026-10-15): S6's first cut.** The background worker keeps the workspace manifests it read (`readWorkspace`) across its updates. It reads them again only when a resolution input changes (a package.json, a tsconfig*.json, pnpm-workspace.yaml or lerna.json) or the set of files does. Update Benchmark #3 measures it, warm and on the first batch after start. The manifest cache for full runs stays recommended.
+
 ## ADR-054 — Docs pointers: which docs talk about which folders, read from the repo's Markdown (2026-10-14)
 
 **Context:** In Eval #1, big-picture scores followed whether a run read VS Code's `.github/instructions/source-code-organization.instructions.md`. The five runs that read it scored 0.88–1.00 on BP2 and BP4; the seven that didn't scored 0.44–0.83. Both U runs on BP4 called `describe` on `src/vs/workbench`, got its layout and counts, and never found the file, whose front matter says `applyTo: src/vs/**`. Nebulosity's summaries say what a folder holds, not its rules. The rules are often already written down, in a README, an architecture doc, or instructions for agents.
@@ -996,6 +1007,12 @@ They need the whole graph, and the index already holds it.
 
 **Amended (2026-10-15, V1.6, the pre-freeze sweep): two answers corrected.** With the summary (the default report), `through` took the place of the cycle groups, so a folder with cycles read "Import cycles: none". Now `through`, or a file as `path`, on the summary is answered as `cycles`: the shortest cycle through that file, and the answer's report says `cycles`. With `layers`, `conventions` or `unused`, `through` is refused in one sentence that says to ask with `cycles`, and so is a file. *(The sweep's first version refused `through` on the summary too, which cost a model that left the report at its default one more call; the controller ruled for reading it as the question.)* And a page of the files nothing imports that starts past the end of the list now says "Nothing at offset N: the list has M.", as the cycles report does, instead of an empty heading.
 
+**Amended (proposed, V1.7 plan, 2026-10-15): seven tools, six always loaded, and a tighter budget.** `calls` (ADR-059) is the seventh tool and the sixth always loaded; `show_on_map` stays deferred, and the instructions gain one bullet.
+- In Eval #2 a definition or an instruction cost about 2.75 characters a token, so the old 7,000-character budget is about 2,545 tokens, over gate condition 6's 2,500.
+- The six definitions and the instructions now stay under 6,650 characters (a test).
+- To fit `calls`, the shared path description, `imports`' `to` and `group_by`, and `describe`'s and `search`'s descriptions get shorter, and `architecture`'s `report` and `through` lose their own descriptions (its description says both).
+- The planning draft measured 6,614 characters, about 2,400 tokens. The dev set measures the real difference (MCP Dev Set #2).
+
 ## ADR-057 — Eval #2's method and the ship gate (2026-10-14) — amends ADR-050 and ADR-051
 
 **Context:** Eval #1 showed Claude Code alone at the ceiling on its questions, the tools loaded in 12 of 30 runs, and savings only where a question walks the graph, with a read-only baseline. The owner decided nothing ships until a re-measured eval shows clearly better results and efficiency (ADR-051, amended). V1.6 built tools for what grep can't answer cheaply (ADR-053–ADR-056).
@@ -1059,6 +1076,8 @@ They need the whole graph, and the index already holds it.
   cd on its own was rarely the cause: 161 kept commands with a cd ran, against the 113 refused. The reading in EVAL_RESULTS ("one that starts with `cd` or `mkdir`") was too simple, and the preset would have let at most 1 of the 131 run (unverified, and possibly none). What would remove more of them lies outside the allow list (the prompt's wording, or the spelling of the repo's path) and is the owner's call.
 - **The live check** (2 runs; Claude Code 2.1.300, `claude-sonnet-5-5`; the A arm's empty MCP config; the runner's init check clean: `apiKeySource` none, no MCP servers, only Claude Code's three built-in plugins). `cd <vscode> && git ls-files | wc -l` with the drive-letter path ran with no denial and printed 20,342; `../vscode` and the checkout were unchanged. The `/c/…` form, asked for twice, was run both times without its cd (the model or Claude Code dropped a `cd` to the current folder before `&&`), so the guard wasn't exercised. Cost estimate: $0.109 for both runs.
 
+**Amended (proposed, V1.7 plan, 2026-10-15): Eval #2's gate stays its own.** Eval #3 has its own method and gate (ADR-060), chosen by its definition's `"gate": "eval3"`. Eval #2 keeps D1 (`scripts/eval/gate.ts`) and re-scores byte for byte. The two harness minors that touch the gate change none of its numbers: only repeats 1..n are taken (B-9), and only Eval #3's results name each repo's commit (B-12).
+
 ## ADR-058 — Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (2026-10-15) — implements ADR-043's V1.6; amends ADR-048
 
 **Context:** ADR-043 asked for one command each to index a repo, open the Map and connect Claude Code, on Windows, macOS and Linux, with a free mode. Until now Nebulosity ran only from a checkout, through npm scripts, with its data inside the checkout.
@@ -1089,3 +1108,70 @@ They need the whole graph, and the index already holds it.
 - **`prepack --check` refuses untracked files** in the folders the package ships whole (`bin`, `lib`, `mcp`, `app`, `public`, `scripts/commands`) when it runs in a git checkout: `git ls-files --others --exclude-standard`, each file named, with or without a built Map. Ignored files stay out, as npm leaves them out. npm packs what is on disk, so an untracked work-in-progress file in `lib/` would otherwise ship from a checkout that isn't clean. When git can't answer, the check refuses rather than call the folders clean.
 - **How CI starts** (Task 18's ruling, recorded here). `ci.yml` runs only when asked: by hand (`workflow_dispatch`, which GitHub offers once the file is on `main`), or by pushing the commit to test to a `ci/` branch. It has no `pull_request` trigger, because the repo is private and macOS minutes count ten times; the owner can add one. Since this review, CI also runs `nebulosity setup` against a real Claude Code (installed with no key; only its `mcp` commands run), starts the installed Map with its background worker and checks a saved file reaches the index, and checks `summarize`'s refusals without a key and without a terminal. These checks first ran in run 38743531951 (2026-10-15, at `73cbff7`) and passed on Windows, macOS and Linux.
 - **An installed copy's registration always carries its data folder** as `-e NEBULOSITY_DATA=<folder>`: `bin/boot.mjs` sets that variable for an installed copy, and `setup` forwards any value that is set. A checkout's registration carries it only when `NEBULOSITY_DATA` was set by hand. Checked on Windows against Claude Code 2.1.300 with Claude Code's config isolated (`CLAUDE_CONFIG_DIR`): `claude mcp get` showed the launcher and the data folder, both with spaces in their paths, intact through `cmd.exe`, and the server connected.
+
+## ADR-059 — Calls through declared types: a calls index and the `calls` tool (proposed, V1.7 plan, 2026-10-15) — amends ADR-043 and ADR-056
+
+**Context:** "Who calls this method, even through an injected service, and what has to change if its signature changes?" is the question grep answers worst on big repos. VS Code, AFFiNE and Theia reach their services through dependency injection, so a call like `this.fileService.readFile(…)` names neither the interface nor its file. V1.7's design measured it on VS Code's five planning methods (its report-e2-feasibility.md). Literal greps found as little as 0.21 of a method's callers. A pass over declared types matched TypeScript's type checker at precision 1.00 and recall 0.94–1.00. The checker itself took 21.5 s and 5.0 GB to build VS Code's program, and resolving every call was measured at up to about an hour (Typecheck Benchmark #1). Eval #2 failed its gate with no question about calls (ADR-057).
+**Decision:**
+- **Call facts from the adapter's one parse** (`ADAPTER_VERSION` 5):
+  - import bindings and re-exports;
+  - class and interface declarations, with their heritage (`extends mock<I>()` recorded as a test double of I), members and field types (constructor parameter properties and `new C()` fields included);
+  - typed call sites `recv.m(…)`, with how the receiver's type is known: a field through the class and its bases, a parameter, a local, a typed destructuring, a type parameter's constraint, a cast, a provider call (`accessor.get(T)`, `useService(T)`, `useServices({ T })`), `new C()` (through `store.add` or `_register` too), an alias, or `this`;
+  - injection sites: a constructor parameter typed T, an `@inject(T)` field, a provider asked for T.
+  - Files of 1–5 MB, parsed in full for their imports, get call facts too; the token-scanned files over 5 MB get none.
+- **Migration 0009:** three tables (`type_decls`, `call_bindings`, `typed_calls`), replaced per file with its chunks and symbols. The facts' types live in `lib/db/schema.ts`, so `lib/db` never imports `lib/index`.
+- **Resolution at query time** (`lib/engine/calls.ts`), cached per index version as the import index is:
+  - a name goes to its binding, then to the stored import edge whose specifier matches, then to the declaring file, following re-exports with a visited set;
+  - local declarations win over imports;
+  - heritage gives supertypes, and its reverse gives subtypes and implementations.
+  - Index-time resolution comes in only if the first answer takes more than 1.5 s.
+- **The answers:**
+  - a method's callers, each file labelled as calling on the type, a subtype or an implementation;
+  - its implementations, ranked: implements, then through a sub-interface, then through a base class, then test doubles; each says whether it declares the method;
+  - what a change to its signature touches: the callers, plus the files that declare the method on T, a subtype or an implementation;
+  - a type's injection sites.
+  - Every answer has totals, tests counted apart, areas (`group_by`), `within`, and pages of 50. It ends with what declared types can't see: calls on a value whose type is only inferred.
+- **The `calls` tool** is the seventh tool and the sixth always loaded (ADR-056, amended). API_CONTRACTS.md §17 pins its text.
+- **Measured targets** (PIVOT_SPEC.md §2, S14):
+  - file-level recall ≥ 0.98 and precision ≥ 0.99 against the checker on the benchmark methods (Calls Benchmark #1);
+  - S1 still ≤ 60 s (Index Benchmark #7);
+  - the first `calls` answer in a fresh MCP process ≤ 1.5 s, and warm calls ≤ 500 ms (MCP Benchmark #5).
+- **No Map UI for calls in V1.7.** `show_on_map` can highlight the files.
+**Alternatives:** (a) The type checker in the product: exact, but about 5 GB and 20 s per program build on VS Code, and up to an hour to resolve every call. (b) Grep at query time: what Claude Code already does, and where it misses most. (c) Resolution at index time: faster first answers, but an update must re-resolve every file that imports a changed one. It is kept as the fallback.
+**Consequences:** Each repo is re-parsed once (adapter version 5). Calls on a value whose type is only inferred (a function's return, say) stay unseen, and every answer says so. JavaScript without declared types gets little from it. The V1.7 plan pins the facts and the answers on `test/fixtures/di-repo`.
+**Revisit when:** Calls Benchmark #1 misses its bar after three rounds (the plan stops for the owner); the first answer takes over 1.5 s (the fallback); or Eval #3 shows `calls` unused or wrong.
+
+## ADR-060 — Eval #3's method: the rules sentence, time to relevant context, the call kinds, and the gate (proposed, V1.7 plan, 2026-10-15; the gate approved by the owner 2026-10-15) — amends ADR-057
+
+**Context:** Eval #2 failed its gate on conditions 1, 2, 3a and 5a (ADR-057). V1.7's design found two things that blurred it:
+- Claude Code alone had shell commands refused in 42 of its 69 graph runs (131 refusals in all, mostly file writes and cd-then-git on `/c/…` paths);
+- no question asked what Nebulosity does that grep can't, such as calls through injected services.
+
+Speed was measured end to end, while what an agent needs is to reach the right files fast. On Eval #2's own transcripts, Claude Code with Nebulosity reached the files an answer needs in about 0.3 of the time Claude Code alone took (0.31 [0.23–0.58] on the runs without refusals).
+**Decision:**
+- **Repos:** VS Code at `cc3fec88`, AFFiNE at `0b69a6da`, and Theia (`eclipse-theia/theia`) at the head of `master` when it is cloned. Theia is held out from all tuning and indexed in free mode.
+- **Arms and pins as in Eval #2:** Claude Code alone (A) and with Nebulosity (N); Sonnet 5.5 at medium effort; Claude Code pinned at the pilot; scripts allowed in both arms; three repeats.
+- **The rules sentence** ends every prompt of both arms, in place of Eval #2's scripts sentence (the V1.7 plan's D2 pins it). Run commands from the repository root, without cd. Compute with Node scripts written into the scratch folder with the Write tool. Shell writes, loops, sed, awk, xargs and paths through `..` are refused. No allow rule is added.
+- **Checked before the first run:** one live probe of Claude Code's cd-then-git guard, and a shell check on a 19-question dev set in both arms, covering every kind. The check passes with at most 1 refused command per 10 runs in each arm, and no run giving up after a refusal.
+- **384 runs**, each question in both arms three times:
+  - 15 DI questions (callers, what breaks, adopt, injects) and 8 tasks;
+  - 24 graph questions: Eval #2's first of each kind per repo, unchanged, and Theia's six new ones;
+  - 15 big-picture questions: Eval #2's, plus two new per repo from its docs;
+  - Eval #2's first session on each repo.
+- **Sourcing:** the DI and task questions come from real issues, pull requests and docs. They are filtered (a truth of 10–80 files; none of the design's planning methods; no dev-set target) and drawn with a fixed seed, before anyone sees how either arm does on them.
+- **The new kinds' truth** comes from TypeScript's own type checker over each repo's program, independent of the index (R2). Every disagreement with the index is read in the source and decided in `calls-adjudicated.json`.
+- **Scores:** F1 over files for the call kinds. A task has two parts, the files to change and the tests to run, each F1, and the task scores their mean. Eval #2's kinds score as before.
+- **Time to relevant context (TTRC):** when a run had first seen every file its answer needs, counted from process start. The needed files are fixed from the truth before the first run, and "seen" means named anywhere in a tool result or its call. Each question gets a ratio, N's median over A's; the statistic is the median over questions, with a seeded 95% bootstrap interval.
+- **The ship gate** (approved 2026-10-15, fixed before any run, computed by `scripts/eval/gate3.ts`):
+  - V: at most 5% of each arm's runs have a refused command; otherwise the comparison is confounded, and the gate fails;
+  - 1: on each repo, N reaches the relevant context 4× faster: a median ratio ≤ 0.25, and the interval's upper end ≤ 0.50;
+  - 2: half the errors on the new questions (N's mean error ≤ 0.5 × A's), and no repo below A by more than 0.02;
+  - 3: on each repo's DI and task questions, the median ratios of time and of cost each ≤ 0.5;
+  - 4: no loss elsewhere: big-picture N ≥ A − 0.03 with a cost ratio ≤ 1.15; Eval #2's graph questions N ≥ A − 0.03 with a cost ratio ≤ 1.0; the session N ≥ A − 0.03;
+  - 5: N calls a Nebulosity tool in ≥ 0.90 of its runs on new and graph questions;
+  - 6: N's median first-call context ≤ A's + 2,500 tokens on each repo.
+- **Grading** as Eval #2's, with the answers redacted before the blind sheets: Nebulosity and its tools' names become neutral words.
+- **Eval #1 and Eval #2 re-score as before** (Eval #2 byte for byte). Eval #3's fields and gate apply only when an eval's definition says `"gate": "eval3"`.
+**Alternatives:** (a) Eval #2's set-up again: the refusals would blur the comparison again. (b) Allow rules for compound commands: item 4 showed they lift at most 1 of Eval #2's 131 refusals. (c) A precision floor on "seen": on Eval #2 it took away N's exact one-call answers, and it depended on how answers are laid out. (d) Questions picked by hand: the seeded draw keeps the picker's hand off them.
+**Consequences:** About $35–55 at list price on the owner's subscription, and every batch is asked for first. The results, losses included, go in docs/EVAL_RESULTS.md as Eval #3. By the owner's call (ADR-051, amended), the hold lifts after the verdict whatever it is, and the gate decides what the README may claim.
+**Revisit when:** the gate's verdict is in (it amends this ADR), or a new Claude Code version or model changes the baseline enough to matter for the README's claims.
