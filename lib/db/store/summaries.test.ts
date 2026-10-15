@@ -11,8 +11,8 @@ import { indexRepository } from "../../index/pipeline";
 import { runSummaries } from "../../index/summarize/run";
 import { upsertRepository } from "./structure";
 import {
-    addUsage, applyTargetUpdates, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
-    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, pruneSummaries, targetKey, writeResults,
+    addUsage, applyTargetUpdates, confirmSummaries, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
+    loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, pruneSummaries, summariesConfirmed, targetKey, writeResults,
 } from "./summaries";
 import { writeSummaryVectors } from "./summary-vectors";
 
@@ -258,5 +258,21 @@ describe("summary store — a template over model text", () => {
         await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });
         expect(loadSummaries(db, repoId).find((s) => s.id === testFile.id)).toMatchObject({ model: "template", tagline: "Tests for strings" });
         expect(vectorsOf()).toEqual([]);
+    });
+});
+
+describe("summariesConfirmed (S11)", () => {
+    it("is false for a repo nobody confirmed, true after a yes, and true once a model has written a summary", async () => {
+        const db = getDb();
+        const { repoId } = indexRepository(copyFixture());
+        expect(summariesConfirmed(db, repoId)).toBe(false);   // the test file's template doesn't count
+        confirmSummaries(db, repoId);
+        expect(summariesConfirmed(db, repoId)).toBe(true);
+
+        const root = copyFixture();
+        const other = indexRepository(root);
+        expect(summariesConfirmed(db, other.repoId)).toBe(false);
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        expect(summariesConfirmed(db, other.repoId)).toBe(true);   // VS Code's existing summaries keep it confirmed
     });
 });

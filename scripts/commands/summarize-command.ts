@@ -1,6 +1,6 @@
 /**
  * nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>]
- *                      [--release-batch <batch id>]...
+ *                      [--release-batch <batch id>]... [--yes]
  * (in a checkout: npm run summarize -- <path-to-repo> …)
  *
  * Writes summaries for an indexed repository (PIVOT_SPEC.md §5.3), then embeds them for search (§5.4).
@@ -14,28 +14,34 @@
  *   Anthropic + this submission + the rest. If that would pass the budget, the run stops
  *   sending but keeps collecting what's already at Anthropic, which is paid for (ADR-035).
  *   Running again with a bigger --budget goes on from there.
+ * - A full run first prints its estimate (every request it would send, priced as the cap prices them) and asks before it
+ *   spends (S11, ADR-035 amended). Without a terminal it needs --yes. The yes is recorded per repo, which is what lets the
+ *   Map's background worker refresh summaries afterwards (ADR-038 amended). --path and a run with nothing to send skip it.
  * - --path summarizes one file or folder right now through the regular API (an empty path
  *   means the repo itself). It's one request, so no budget applies.
  * - --release-batch <batch id> (repeatable) gives up on a batch whose results keep failing to download: its
  *   requests are sent again in this run, and paid for again. The summaries stage's note names such a batch.
  */
 import path from "path";
+import readline from "readline/promises";
 import { getDb } from "../../lib/db/client";
 import { IndexLockedError } from "../../lib/db/store/lock";
 import { readStages } from "../../lib/db/store/stages";
 import { RepoNotIndexedError, requireRepository } from "../../lib/db/store/structure";
-import { loadUsage } from "../../lib/db/store/summaries";
+import { confirmSummaries, loadUsage } from "../../lib/db/store/summaries";
 import { embedSummaries } from "../../lib/index/embed";
 import { repoKey } from "../../lib/index/paths";
 import { summarizerFromEnv } from "../../lib/index/summarize/claude";
-import { costUsd } from "../../lib/index/summarize/pricing";
+import { estimateSpend } from "../../lib/index/summarize/estimate";
+import { costUsd, formatUsd } from "../../lib/index/summarize/pricing";
 import {
-    BatchesUnreachableError, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError,
+    BATCH_THRESHOLD, BatchesUnreachableError, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError,
     TargetNotReadyError, UnknownBatchError, type Transport,
 } from "../../lib/index/summarize/run";
+import { SUMMARY_MODELS } from "../../lib/index/summarize/prompts";
 import { loadLocalEnv } from "../env";
 
-const USAGE = "usage: nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>] [--release-batch <batch id>]..."
+const USAGE = "usage: nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>] [--release-batch <batch id>]... [--yes]"
     + "   (in a checkout: npm run summarize -- <path-to-repo> …)";
 
 /** The arguments as a run uses them, or null when they can't be run as given. */
@@ -46,6 +52,8 @@ type SummarizeOptions = {
     wait: boolean;
     budgetUsd: number;
     releaseBatches: string[];
+    /** --yes: spend without being asked (the only way without a terminal). */
+    yes: boolean;
 };
 
 /**
@@ -59,7 +67,7 @@ function parseSummarizeArgs(args: readonly string[]): SummarizeOptions | null {
     const target = args[0];
     if (!target || target.startsWith("--")) return null;
 
-    const SWITCHES = ["--direct", "--batch", "--no-wait"];
+    const SWITCHES = ["--direct", "--batch", "--no-wait", "--yes"];
     const OPTIONS = ["--budget", "--path"];
     const REPEATABLE = ["--release-batch"];
     const repeated = new Map<string, string[]>();
@@ -96,6 +104,7 @@ function parseSummarizeArgs(args: readonly string[]): SummarizeOptions | null {
         wait: !switches.has("--no-wait"),
         budgetUsd,
         releaseBatches,
+        yes: switches.has("--yes"),
     };
 }
 
@@ -145,7 +154,8 @@ async function summarize(options: SummarizeOptions): Promise<number> {
         say(`${row.kind} ${row.path || "(repo)"}: ${row.status}${row.error ? ` (${row.error})` : ""}`);
         if (row.tagline) say(`${row.tagline} — ${row.summary}`);
     } else{
-        if (!summarizer) say("ANTHROPIC_API_KEY is not set: writing test-file templates only (put the key in .env.local).");
+        if (!summarizer) say("ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key; put it in .env.local).");
+        else if (!(await confirmSpend(options))) return 1;
         const result = await runSummaries(root, {
             summarizer, transport: options.transport, wait: options.wait, budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,
         });
@@ -164,6 +174,43 @@ async function summarize(options: SummarizeOptions): Promise<number> {
 
     printSpend(root);
     return 0;
+}
+
+/**
+ * The estimate and the yes (S11): prints what a full run would send and cost, then asks. Without a terminal it needs --yes.
+ * A run with nothing to send needs no yes. A yes is recorded for the repo. Returns false when the run must not start.
+ */
+async function confirmSpend(options: SummarizeOptions): Promise<boolean> {
+    const { root } = options;
+    const requests = plannedRequests(root);
+    if (requests.length === 0) return true;
+
+    const db = getDb();
+    const repoId = requireRepository(db, repoKey(root));
+    const files = requests.filter((r) => r.kind === "file").length;
+    // the runner's own rule: auto goes through the Batch API (half price) for waves of BATCH_THRESHOLD or more
+    const batch = options.transport === "batch" || (options.transport === "auto" && files >= BATCH_THRESHOLD);
+    const estimate = estimateSpend(requests, loadUsage(db, repoId), batch ? "batch" : "direct");
+    const noPrice = estimate.unpriced.length > 0 ? ` (no price on file for: ${estimate.unpriced.join(", ")})` : "";
+    say(`${path.basename(root)}: about ${estimate.requests.toLocaleString("en-US")} requests (${files.toLocaleString("en-US")} files to ${SUMMARY_MODELS.file},`
+        + ` ${requests.filter((r) => r.kind === "folder").length.toLocaleString("en-US")} folders and the repo to ${SUMMARY_MODELS.folder}), about ${formatUsd(estimate.usd)} at list prices`
+        + `${batch ? ", by the Batch API" : ""}${noPrice}. Writing summaries sends each file's code to Anthropic.`);
+
+    if (!options.yes){
+        if (!process.stdin.isTTY){
+            console.error("[summarize] Nothing was sent. Run it again with --yes to spend this, or in a terminal to be asked.");
+            return false;
+        }
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await rl.question(`Spend up to ${formatUsd(options.budgetUsd)} on this repo's summaries? [y/N] `);
+        rl.close();
+        if (!/^y(es)?$/i.test(answer.trim())){
+            say("Nothing was sent.");
+            return false;
+        }
+    }
+    confirmSummaries(db, repoId);
+    return true;
 }
 
 /** The summaries stage's note, which a stopped run fills in with why it stopped. */

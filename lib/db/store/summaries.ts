@@ -2,7 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
 import {
-    chunks, files, folders, imports, summaries, summaryUsage, summaryVectors,
+    chunks, files, folders, imports, meta, summaries, summaryUsage, summaryVectors,
     type StoredSummaryStatus, type SummaryTargetKind,
 } from "../schema";
 import { columnCount, forEachBatch } from "../batch";
@@ -311,4 +311,24 @@ export function releaseBatch(db: Db, repoId: number, batchId: string, reason: st
 export function countStaleFolders(db: Db, repoId: number): number {
     return db.select({ n: sql<number>`count(*)` }).from(summaries)
         .where(and(eq(summaries.repoId, repoId), eq(summaries.status, "stale"), sql`${summaries.targetKind} != 'file'`)).get()?.n ?? 0;
+}
+
+/** The `meta` key holding the time a person said yes to this repo's summary spend (S11). */
+const confirmedKey = (repoId: number): string => `summaries-confirmed:${repoId}`;
+
+/** Records a yes to spending on this repo's summaries (S11): from now on the background worker may refresh them. */
+export function confirmSummaries(db: Db, repoId: number): void {
+    const value = new Date().toISOString();
+    db.insert(meta).values({ key: confirmedKey(repoId), value })
+        .onConflictDoUpdate({ target: meta.key, set: { value } }).run();
+}
+
+/**
+ * Whether summaries may be written for this repo without asking again: a yes was recorded (confirmSummaries), or a model
+ * has already written one (a template doesn't count). Repos summarized before the question existed stay confirmed.
+ */
+export function summariesConfirmed(db: Db, repoId: number): boolean {
+    if (db.select({ id: meta.id }).from(meta).where(eq(meta.key, confirmedKey(repoId))).get() !== undefined) return true;
+    return db.select({ id: summaries.id }).from(summaries)
+        .where(and(eq(summaries.repoId, repoId), isNotNull(summaries.model), sql`${summaries.model} <> 'template'`)).limit(1).get() !== undefined;
 }

@@ -13,7 +13,7 @@ import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, t
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
-import { buildFilePrompt, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
+import { buildFilePrompt, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
 import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
@@ -963,5 +963,26 @@ describe("runSummaries — incremental runs and summarizeNow", () => {
             summarizer: stub.summarizer, transport: "direct", refreshStaleFolders: false, budgetUsd: 0.001, budgetScope: "run",
         })).toMatchObject({ summarized: 1, stopped: false });
         expect(row(root, "src/core/log.ts")?.status).toBe("fresh");
+    });
+});
+
+describe("plannedRequests", () => {
+    it("lists what a full run would send to a model: not the test file's template, and nothing is written", () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const before = loadSummaries(db, requireRepository(db, repoKey(root)));
+        // mini-repo: 7 non-test files, then 5 folders (scripts, src, src/app, src/core, src/util) and the repo; the root folder is the repo
+        const requests = plannedRequests(root);
+        expect(requests.filter((r) => r.kind === "file")).toEqual(Array.from({ length: 7 }, () => ({ kind: "file", model: "claude-haiku-5-5" })));
+        expect(requests.filter((r) => r.kind === "folder")).toEqual(Array.from({ length: 5 }, () => ({ kind: "folder", model: "claude-sonnet-5-5" })));
+        expect(requests.filter((r) => r.kind === "repo")).toEqual([{ kind: "repo", model: "claude-sonnet-5-5" }]);
+        expect(requests).toHaveLength(13);
+        expect(loadSummaries(db, requireRepository(db, repoKey(root)))).toEqual(before);
+    });
+
+    it("leaves out what is already written, so a second run is priced for what is left", async () => {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        expect(plannedRequests(root)).toEqual([]);
     });
 });

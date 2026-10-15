@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { copyFixture } from "../../../test/helpers/fixture";
 import { FILES, FOLDERS } from "../../../test/helpers/mini-repo-facts";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../db/client";
+import { files } from "../../db/schema";
 import { requireRepository } from "../../db/store/structure";
 import { loadSummaries, loadUsage, type StoredSummary, type SummaryText } from "../../db/store/summaries";
 import { repoKey } from "../paths";
@@ -382,5 +384,19 @@ describe("previewRepoFolders", () => {
             "Folder: src", "Folder: src/app", "Folder: src/core", "Folder: src/util",
         ]);
         for (const request of previewStub.requests) expect(sent(request)).toEqual(ran.get(firstLine(request)));
+    });
+});
+
+describe("previewRepoFolders' full-pass counts (Task 14e's minor)", () => {
+    it("leaves out a file over the size cap, which gets a template and no request", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        // src/index.ts is 140 bytes; making it 1,000,001 puts it over the 1 MB cap, so 6 of the 7 non-test files remain
+        db.update(files).set({ sizeBytes: 1_000_001 }).where(and(eq(files.repoId, repoId), eq(files.path, "src/index.ts"))).run();
+
+        const result = await previewRepoFolders(db, repoId, root, [{ path: "src", why: "w" }], stubSummarizer().summarizer);
+        expect(result.fullPass).toEqual({ files: 6, folders: 6 });
     });
 });

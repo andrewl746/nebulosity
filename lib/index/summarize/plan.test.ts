@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FILES, FOLDERS } from "../../../test/helpers/mini-repo-facts";
 import type { FileFacts, FolderFacts, StoredSummary } from "../../db/store/summaries";
-import { inputHash, planSummaries, type PlanOptions, type PlannedTarget } from "./plan";
+import { inputHash, planSummaries, writtenByModel, type PlanOptions, type PlannedTarget } from "./plan";
 import { PROMPT_VERSION, SUMMARY_MODELS } from "./prompts";
 
 const options = (overrides: Partial<PlanOptions> = {}): PlanOptions => ({
@@ -283,5 +283,17 @@ describe("inputHash", () => {
         expect(inputHash("claude-sonnet-5-5", PROMPT_VERSION, "input")).not.toBe(base);
         expect(inputHash("claude-haiku-5-5", PROMPT_VERSION + 1, "input")).not.toBe(base);
         expect(inputHash("claude-haiku-5-5", PROMPT_VERSION, "input2")).not.toBe(base);
+    });
+});
+
+describe("writtenByModel", () => {
+    const file = (over: Partial<FileFacts>): FileFacts => ({ path: "a.ts", contentHash: "h", lineCount: 1, isTest: false, importedBy: 0, sizeBytes: 100, ...over });
+
+    it("is true only for a non-test file within the size cap: tests and over-cap files get templates", () => {
+        expect(writtenByModel(file({}))).toBe(true);
+        expect(writtenByModel(file({ sizeBytes: 1_000_000 }))).toBe(true);    // exactly the cap is still read in full
+        expect(writtenByModel(file({ sizeBytes: 1_000_001 }))).toBe(false);   // indexed for its imports only (ADR-053)
+        expect(writtenByModel(file({ isTest: true }))).toBe(false);
+        expect(writtenByModel(file({ sizeBytes: 500 }), 400)).toBe(false);    // a smaller cap, as planSummaries' option
     });
 });

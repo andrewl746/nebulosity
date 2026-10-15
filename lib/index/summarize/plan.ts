@@ -40,6 +40,14 @@ export type PlanOptions = {
     maxFileBytes?: number;
 };
 
+/**
+ * Whether a model writes this file's summary: a test file and a file over the size cap get a template instead (ADR-053).
+ * The planner and every full-pass cost estimate ask here, so they count the same files.
+ */
+export function writtenByModel(file: Pick<FileFacts, "isTest" | "sizeBytes">, maxFileBytes: number = DEFAULT_MAX_FILE_BYTES): boolean {
+    return !file.isTest && file.sizeBytes <= maxFileBytes;
+}
+
 /** hash(model, prompt version, input) (PIVOT_SPEC.md §5.3): identical input is never summarized twice. */
 export function inputHash(model: string, promptVersion: number, input: string): string {
     return createHash("sha256").update(`${model}\n${promptVersion}\n${input}`).digest("hex");
@@ -77,7 +85,7 @@ export function planSummaries(
         const row = storedByKey.get(key);
 
         // a test file, and a file over the size cap (indexed for its imports only), get a template rather than a model
-        if (file.isTest || file.sizeBytes > maxFileBytes){
+        if (!writtenByModel(file, maxFileBytes)){
             const text = file.isTest ? testFileSummary(file.path, file.lineCount) : importsOnlyFileSummary(file.lineCount, maxFileBytes);
             const hash = inputHash("template", PROMPT_VERSION, `${file.path}\n${text.tagline}\n${text.summary}`);
             const current = row?.inputHash === hash;

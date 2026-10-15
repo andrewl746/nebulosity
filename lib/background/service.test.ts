@@ -7,7 +7,7 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { acquireSummaryLock, releaseSummaryLock } from "../db/store/lock";
 import { requireRepository } from "../db/store/structure";
-import { addUsage, loadSummaries } from "../db/store/summaries";
+import { addUsage, confirmSummaries, loadSummaries } from "../db/store/summaries";
 import { countEmbedded } from "../db/store/summary-vectors";
 import { describe as describeTarget } from "../engine/describe";
 import { RepoSwitchingError, SummariesOffError } from "../engine/errors";
@@ -80,6 +80,33 @@ describe("background service", () => {
         expect(rowStatus(root, "src/core/log.ts")).toBe("fresh");
         expect(rowStatus(root, "src/core")).toBe("stale");   // its folder waits to be opened or swept
         expect(embedded(root)).toBe(13);                     // the new summary has its vector again
+        await service.stop();
+    });
+
+    it("never starts spending on a repo whose summaries nobody confirmed (S11); a yes starts it", async () => {
+        const root = copyFixture();
+        indexRepository(root);   // structure only: no model has written anything, and no yes is recorded
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.requests).toHaveLength(0);
+
+        const db = getDb();
+        confirmSummaries(db, requireRepository(db, repoKey(root)));
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const more = 2;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
         await service.stop();
     });
 

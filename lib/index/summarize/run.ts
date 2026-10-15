@@ -330,6 +330,19 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
 }
 
 /**
+ * What a full run would send to a model right now (S11): every target still to be written, as the kind and model of its
+ * request, planned the way runSummaries' first pass plans (stale folders redone). A template is no request. Reads only.
+ */
+export function plannedRequests(repoRoot: string): ProjectedRequest[] {
+    const db = getDb();
+    const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
+    const toWrite: ReadonlySet<TargetState> = new Set(["ready", "waiting", "lazy", "failed"]);
+    return planSnapshot(db, repoId, true, new Set()).targets
+        .filter((t) => toWrite.has(t.state) && t.model !== "template")
+        .map((t) => ({ kind: t.kind, model: t.model }));
+}
+
+/**
  * summarizeNow calls running in this process, by repo and path. A second call for a target already being summarized
  * joins the first instead of paying again: the Map can ask twice (a double click, a second tab) before the answer lands.
  */

@@ -2,7 +2,7 @@ import path from "path";
 import { getDb } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { findRepository } from "../db/store/structure";
-import { countStaleFolders, targetKey, type StoredSummary } from "../db/store/summaries";
+import { countStaleFolders, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
 import { NoActiveRepoError, RepoSwitchingError, SummariesOffError } from "../engine/errors";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
@@ -146,7 +146,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             } else{
                 const result = applyFileChanges(repo, paths);
                 log(`updated ${result.changed.length} changed and ${result.deleted.length} deleted files in ${Math.round(result.totalMs)} ms`);
-                armSummaryTimers(result.changed);
+                if (deps.summarizer !== null && mayRefresh(repo)) armSummaryTimers(result.changed);
                 for (const p of result.deleted) cancelSummaryTimer(p);
             }
             refreshSummaryStatus(repo, { summarizerAvailable });
@@ -158,6 +158,16 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     }
 
     // ---- summaries --------------------------------------------------------------------
+    /**
+     * Whether this repo's summaries may be written without asking (S11, ADR-038 amended): a yes was recorded by
+     * `nebulosity summarize`, or a model has already written some. A key alone never starts spending on a new repo.
+     */
+    function mayRefresh(repo: string): boolean {
+        const db = getDb();
+        const repoId = findRepository(db, repoKey(repo));
+        return repoId !== null && summariesConfirmed(db, repoId);
+    }
+
     /**
      * Starts the quiet wait (PIVOT_SPEC.md §5.6) for files that just changed together, on one timer, so they come due
      * as one refresh and MAX_AUTO_REFRESH_FILES bounds it. A timer per file wouldn't: timers due at the same moment fire
@@ -202,7 +212,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         const repo = root;
         const paths = [...pendingRefresh].sort();
         pendingRefresh.clear();
-        if (repo === null || paths.length === 0 || deps.summarizer === null) return;
+        if (repo === null || paths.length === 0 || deps.summarizer === null || !mayRefresh(repo)) return;
         const allowance = MAX_AUTO_REFRESH_FILES - refreshedInWindow;
         if (allowance <= 0){
             log(`${paths.length} changed files keep their old summaries: ${MAX_AUTO_REFRESH_FILES} were refreshed in the last ${AUTO_REFRESH_WINDOW_MS / 60_000} minutes; they're redone when opened, or by npm run summarize`);
@@ -249,7 +259,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     /** Out-of-date folders whose children are settled, deepest first, at most SWEEP_MAX_FOLDERS (PIVOT_SPEC.md §5.6). */
     async function runSweep(): Promise<void> {
         const repo = root;
-        if (repo === null || deps.summarizer === null) return;
+        if (repo === null || deps.summarizer === null || !mayRefresh(repo)) return;
         const db = getDb();
         const repoId = findRepository(db, repoKey(repo));
         if (repoId === null || countStaleFolders(db, repoId) === 0) return;
