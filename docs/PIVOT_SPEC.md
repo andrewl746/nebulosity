@@ -55,7 +55,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S6 | From saving one file until `level`/`describe` reflect the change | ≤ 2 s |
 | S7 | Evaluation run and published, losses included *(done 2026-10-14: docs/EVAL_RESULTS.md, Eval #1)* | done |
 | S8 | Public repo, README, video, live demo link | done |
-| S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux |
+| S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux *(V1.6: CI on Windows, macOS and Linux installs the package, indexes two fixtures, answers through MCP and serves the Map: run 38701608458)* |
 | S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo |
 | S11 | Free mode (V1.6): no API key | the Map, structure and stats, `imports`/`architecture`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed *(V1.6: met; the estimate and the yes, ADR-035 and ADR-038 amended, the Map's on-open summary included since the pre-freeze sweep; the Map checked with no key)* |
 
