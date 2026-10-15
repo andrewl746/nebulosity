@@ -1,6 +1,6 @@
 # 2026 10 14 Eval #2 — Claude Code with and without Nebulosity, on VS Code and AFFiNE
 
-**Status: the method is fixed and no run has started (2026-10-14).** Everything in this section down to "Results" was written before the first run: the arms, the setup, the questions and their truths, the scoring and the ship gate. The gate does not change after the first run.
+**Status: the method is fixed (2026-10-14). Claude Code 2.1.300; the engine frozen at `90f9f63` (2026-10-15, before the pilot).** Everything in this section down to "Results" was written before the first run: the arms, the setup, the questions and their truths, the scoring and the ship gate. The gate does not change after the first run.
 
 This is the re-measured eval that ADR-051's amendment waits for. Nothing ships (the demo deploy, the public repo, the video) until Eval #2 shows clearly better results and efficiency than Eval #1 did. It asks whether Claude Code answers questions about two big repos better and more cheaply with Nebulosity's MCP server than without it. It asks Eval #1's questions again, plus questions grep can't answer cheaply. Losses will be reported beside wins. The decisions are ADR-057, which amends ADR-050 and ADR-051. The plan is `docs/plans/2026-10-14-v1-6-works-on-your-repo.md` (D1, D2, R1–R6 and Task 14).
 
@@ -28,13 +28,13 @@ A and N differ only in the MCP config file. The prompts, the scratch folder's ru
 
 | What | Value |
 |---|---|
-| Claude Code | Pinned at the pilot: Task 21 re-pins `eval2/eval.json`'s `claudeVersion`. It was 2.1.300 when this was written, and the dev set ran on 2.1.300. The runner refuses to start on any other version, and refuses any run whose init message reports another. |
+| Claude Code | 2.1.300, pinned at the pilot (Task 21, 2026-10-15) in `eval2/eval.json`'s `claudeVersion`; `claude --version` said 2.1.300, so the pin didn't move. The dev set ran on 2.1.300 too. The runner refuses to start on any other version, and refuses any run whose init message reports another. |
 | Model | `claude-sonnet-5-5` |
 | Effort | `medium` |
 | Limits | A single run: 80 turns, $4 (Claude Code's estimate) and 30 minutes. A task session: one budget of $10 for its four messages, and 60 minutes. |
 | Repos | VS Code at `cc3fec8846d0e678357e476fa611774da26d7e24` (`../vscode`). AFFiNE at `0b69a6da21e8fd35beb85667bb8496d9b3852238` (`../affine`, the head of its canary branch on 2026-10-14, a shallow clone). The runner stops if either HEAD is anything else. |
-| Nebulosity's engine | Frozen at `EVAL2_ENGINE`, which is filled in at the pilot (Task 21). Nothing in `lib/engine`, `lib/tools`, `lib/index`, `lib/db`, `lib/home.ts`, `lib/config.ts` or `mcp/` changes from then until the results are committed. |
-| Nebulosity's index | The owner's database: VS Code with the V1.2 summaries, AFFiNE with Task 20's. The index versions are filled in at the pilot (VS Code was at 138 and AFFiNE at 3 when this was written). Every run records the version it saw, and the server opens the database read-only. |
+| Nebulosity's engine | Frozen at `EVAL2_ENGINE` = `90f9f636d62abaed5389a6bc02333de847cbfa6a` (`90f9f63`), the commit the pilot started from (Task 21, 2026-10-15). Nothing in `lib/engine`, `lib/tools`, `lib/index`, `lib/db`, `lib/home.ts`, `lib/config.ts` or `mcp/` changes from then until the results are committed. |
+| Nebulosity's index | The owner's database: VS Code with the V1.2 summaries, AFFiNE with Task 20's. At the freeze the index versions were VS Code 152 and AFFiNE 131 (138 and 3 when this was written; the pre-freeze re-index left 143 and 8, and Task 20's summary writes, which bump the version, took them to 152 and 131 with no file changed). Every run records the version it saw, and the server opens the database read-only. |
 | Working folder | The repo the question asks about. |
 
 ### The command
