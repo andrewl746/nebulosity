@@ -289,3 +289,49 @@ export type TypedCallFact = {
 
 /** The adapter's fourth product of its one parse (ADR-059). */
 export type CallFacts = { types: TypeDeclFact[]; bindings: BindingFact[]; calls: TypedCallFact[] };
+
+/** Classes and interfaces, per file (ADR-059). Lists and maps are JSON text, read back by lib/db/store/calls.ts. */
+export const typeDecls = sqliteTable("type_decls", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    name: text("name"),
+    kind: text("kind", { enum: ["class", "interface"] }).notNull(),
+    line: integer("line").notNull(),
+    exported: integer("exported", { mode: "boolean" }).notNull().default(false),
+    nested: integer("nested", { mode: "boolean" }).notNull().default(false),
+    extendsRefs: text("extends_refs").notNull().default("[]"),
+    implementsRefs: text("implements_refs").notNull().default("[]"),
+    testDoubleOf: text("test_double_of"),
+    members: text("members").notNull().default("[]"),
+    fields: text("fields").notNull().default("{}"),
+}, (t) => [
+    index("type_decls_file_idx").on(t.fileId),
+    index("type_decls_name_idx").on(t.name),
+]);
+
+/** Imports the call facts name, and every re-export and local export, per file (ADR-059). */
+export const callBindings = sqliteTable("call_bindings", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["import", "reexport", "export"] }).notNull(),
+    local: text("local").notNull(),
+    imported: text("imported").notNull(),
+    specifier: text("specifier"),
+}, (t) => [
+    index("call_bindings_file_idx").on(t.fileId),
+]);
+
+/** Typed calls and injection sites (member null), per file (ADR-059); looked up by member. */
+export const typedCalls = sqliteTable("typed_calls", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    line: integer("line").notNull(),
+    member: text("member"),
+    receiver: text("receiver", { enum: ["type", "field", "this"] }).notNull(),
+    ref: text("ref"),
+    inClass: text("in_class"),
+    how: text("how", { enum: CALL_RULES }).notNull(),
+}, (t) => [
+    index("typed_calls_file_idx").on(t.fileId),
+    index("typed_calls_member_idx").on(t.member),
+]);

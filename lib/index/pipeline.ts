@@ -302,5 +302,6 @@ export function toFileRecord(
         importSpecifiers: parsed.imports,
         chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
         symbols: parsed.symbols,
+        calls: parsed.calls,
     };
 }

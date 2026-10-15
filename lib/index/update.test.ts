@@ -3,11 +3,12 @@ import { execFileSync } from "child_process";
 import { and, eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
-import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture, DI_FIXTURE } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, symbols } from "../db/schema";
+import { loadCallsOf } from "../db/store/calls";
 import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { loadImportEdges } from "../db/store/structure";
@@ -57,6 +58,16 @@ function folderCounts(repoId: number, paths: string[]): number[][] {
 }
 
 describe("applyFileChanges", () => {
+    it("replaces a changed file's call facts on an update (ADR-059)", () => {
+        const root = copyFixture(DI_FIXTURE);
+        const { repoId } = indexRepository(root);
+        const file = "src/workbench/history/history.ts";
+        fs.appendFileSync(path.join(root, file), "\nexport function late(f: IFileService): string { return f.readFile(\"z\"); }\n");
+        applyFileChanges(root, [file]);
+        const lines = loadCallsOf(getDb(), repoId, "readFile").filter((c) => c.path === file).map((c) => c.line);
+        expect(lines).toEqual([4, 8, 11]);
+    });
+
     it("an edit that adds an import re-resolves only that file and moves one level-edge count", () => {
         const root = copyFixture();
         const { repoId } = indexRepository(root);

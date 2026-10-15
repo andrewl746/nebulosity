@@ -3,8 +3,9 @@ import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
 import {
     chunks, files, folders, imports, levelEdges, repositories, symbols,
-    type FolderRow, type LevelEdgeRow, type SymbolRow,
+    type CallFacts, type FolderRow, type LevelEdgeRow, type SymbolRow,
 } from "../schema";
+import { replaceCallFacts } from "./calls";
 import { chunkRows, columnCount, forEachBatch } from "../batch";
 import type { CodeChunk } from "../../contracts";
 import { commandHint } from "../../hints";
@@ -32,6 +33,8 @@ export type FileRecord = {
     importSpecifiers: string[];
     chunks: ChunkRecord[];
     symbols: SymbolRow[];
+    /** Call facts (ADR-059). */
+    calls: CallFacts;
 };
 
 export type StoredFile = { id: number; contentHash: string; importSpecifiers: string[] };
@@ -142,6 +145,8 @@ function writeOne(tx: Tx, repoId: number, r: FileRecord): void {
 
     const symbolRows = r.symbols.map((s) => ({ fileId, ...s }));
     forEachBatch(symbolRows, columnCount(symbols), (batch) => { tx.insert(symbols).values(batch).run(); });
+
+    replaceCallFacts(tx, fileId, r.calls);
 }
 
 /** Deletes files that are no longer on disk (cascading their chunks, symbols and imports) and returns their paths. */
