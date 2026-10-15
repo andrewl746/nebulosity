@@ -718,3 +718,33 @@ The first version of the change token-scanned every one of these. The scan gave 
 - **`search` varied most between the runs:** p50 221 ms and max 388 ms in the first, 187 ms and 256 ms in the second (#3: 173 ms and 256 ms). Its first call, which loads the MiniLM model inside the server, took 3,430 ms and then 1,424 ms. The stray `python -` process noted under Index Benchmark #5 was still using one of the 16 logical processors fully through both runs.
 - **The other rows** stayed near #3's: every warm p50 within 25 ms of it, `architecture (summary)` the slowest at p50 204–223 ms (#3: 198 ms).
 - **Answers:** the same sizes as #3 except `overview`, 2,661 characters against 2,611. The repo's summary has been out of date since Task 14e's re-index (Index Benchmark #5), so its line now ends "(Out of date: changed since it was summarized.)". Task 20 is to refresh it.
+
+## 2026 10 15 Summary Benchmark #2 — AFFiNE's summaries against their estimate
+
+- **Target and machine:** AFFiNE @ `0b69a6da` (repo 2), on the owner's laptop. Its index after sweep A's re-index had 8,036 summaries never written.
+- **The estimate before the run** (Task 17's estimator; nothing sent): about 8,036 requests, 6,250 files to `claude-haiku-5-5` and 1,785 folders and the repo to `claude-sonnet-5-5`, about **$5.86** at list prices by the Batch API.
+- **Command:** `npm run summarize -- ../affine --yes --budget 9`, in the background. The budget is $9, 1.5 × the estimate rounded up (the plan's rule), within the owner's approved $12 ("Task 20: summaries ≤ $12"). The transport is chosen per wave, as in #1: the Batch API for 100+ requests, the regular API below that (ADR-033).
+
+| | Summarized | Failed | Templated | Waves | Batches | Run time |
+|---|---|---|---|---|---|---|
+| AFFiNE, one run (2026-10-15) | 8,036 | 0 | 0 | 16 | 6 | about 23 min (02:38:49 → 03:01:35) |
+
+Afterwards 8,971/8,971 summaries were up to date, and all 8,036 new ones were embedded.
+
+| Model | Transport | Requests | Cost |
+|---|---|---|---|
+| claude-haiku-5-5 | batch | 6,250 | $0.9753 |
+| claude-sonnet-5-5 | batch | 1,669 | $4.3032 |
+| claude-sonnet-5-5 | direct | 117 | $0.7395 |
+| **total** | | **8,036** | **$6.02** |
+
+**Against the estimate: $6.02 for $5.86, +2.7%, under the $9 budget.**
+- **The requests matched the estimate exactly:** 6,250 files, and 1,669 + 117 = 1,786 folders and the repo.
+- **Why it cost a little more:** the estimate prices every request at the Batch API's rate. The 117 requests in waves under 100 went direct, at twice that rate.
+
+**VS Code's refresh, in the same session before the AFFiNE run.** The re-indexes had left 9 VS Code summaries out of date: 8 folders and the repo.
+- **Estimate:** 9 requests to `claude-sonnet-5-5`, about $0.0502.
+- **Run:** `--yes --budget 11` (the budget is the repo's recorded total). 9 summarized, 0 failed, 18,642/18,642 up to date, and 9 embedded (12,939 vectors).
+- **Recorded spend:** VS Code's total went from $10.40 to $10.41.
+
+With it, Task 20 spent about $6.03 of the owner's $12.
