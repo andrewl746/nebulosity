@@ -1,0 +1,20 @@
+{
+  "id": "affine-s1-chain",
+  "kind": "chain",
+  "from": "packages/frontend/apps/android/src/index.tsx",
+  "to": "blocksuite/affine/blocks/database/src/database-block.ts",
+  "connected": true,
+  "shortest": 7,
+  "example": [
+    "packages/frontend/apps/android/src/index.tsx",
+    "packages/frontend/apps/android/src/app.tsx",
+    "packages/frontend/core/src/modules/index.ts",
+    "packages/frontend/core/src/modules/doc-info/index.ts",
+    "packages/frontend/core/src/modules/doc-info/services/doc-database-backlinks.ts",
+    "blocksuite/affine/all/src/blocks/database/index.ts",
+    "blocksuite/affine/blocks/database/src/index.ts",
+    "blocksuite/affine/blocks/database/src/database-block.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

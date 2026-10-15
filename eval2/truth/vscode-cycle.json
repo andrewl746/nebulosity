@@ -1,0 +1,15 @@
+{
+  "id": "vscode-cycle",
+  "kind": "cycle",
+  "file": "src/vs/workbench/contrib/chat/common/languageModels.ts",
+  "shortest": 4,
+  "example": [
+    "src/vs/workbench/contrib/chat/common/languageModels.ts",
+    "src/vs/workbench/contrib/chat/common/constants.ts",
+    "src/vs/workbench/contrib/chat/common/chatSessionsService.ts",
+    "src/vs/workbench/contrib/chat/common/chatService/chatService.ts",
+    "src/vs/workbench/contrib/chat/common/languageModels.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

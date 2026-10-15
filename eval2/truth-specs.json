@@ -1,0 +1,294 @@
+[
+  {
+    "id": "vscode-impact", "repo": "vscode", "kind": "impact",
+    "target": "src/vs/platform/storage/common/storage.ts",
+    "folders": ["src/vs/base", "src/vs/platform", "src/vs/editor", "src/vs/workbench", "src/vs/sessions", "src/vs/code", "src/vs/server"],
+    "planning": "4503 files: base 0, platform 224, editor 183, workbench 3274, sessions 780, code 11, server 6, elsewhere 25 (the plan's scan: 4,484)",
+    "why": "Named by Task 14's plan: the storage service, counted per src/vs's seven layers. The eval's scanner with the truth resolver and the verdicts gives 4,503 dependents, 850 of them direct, so only a walk of the graph counts them."
+  },
+  {
+    "id": "vscode-cycle", "repo": "vscode", "kind": "cycle",
+    "file": "src/vs/workbench/contrib/chat/common/languageModels.ts",
+    "planning": "4 steps",
+    "why": "A file of the 48-file group around src/vs/workbench/contrib/chat/common (the plan's rule: shortest cycle 3-6 steps). The language-model service (202 importers), not a barrel file: languageModels.ts > constants.ts > chatSessionsService.ts > chatService/chatService.ts > languageModels.ts."
+  },
+  {
+    "id": "vscode-unused", "repo": "vscode", "kind": "unused",
+    "folder": "src/vs/sessions/browser",
+    "planning": "4 files of 87 non-test",
+    "why": "The plan's rule (20-120 non-test files, 2-10 imported by nothing): 4 of 87 (parts/mobile/contributions/mobilePulldownDismiss.ts, parts/mobile/longPress.ts, parts/mobile/mobileEdgeSwipe.ts, parts/projectBarPart.ts). None is named anywhere else in the repo (git grep), and none is a .d.ts or a build-config file, so the answer doesn't hinge on the file set."
+  },
+  {
+    "id": "vscode-violations", "repo": "vscode", "kind": "violations",
+    "from": "src/vs/workbench/services", "to": "src/vs/workbench/contrib",
+    "planning": "5 files",
+    "why": "Replaces the plan's src/vs/platform -> src/vs/editor (R1: the dev set ran on src/vs/platform). VS Code's own rule, .github/instructions/source-code-organization.instructions.md L44: 'No dependency from outside contrib/ into contrib/'. 5 files in src/vs/workbench/services break it (all tests). Other pairs measured: base -> editor 0, editor -> workbench 0, workbench/browser|common|electron-browser -> contrib 0, code -> workbench 2, server -> workbench 7 (allowed), workbench -> sessions 21."
+  },
+  {
+    "id": "vscode-entries", "repo": "vscode", "kind": "entries",
+    "target": "src/vs/platform/environment/node/argv.ts",
+    "planning": "9 files (160 dependents)",
+    "why": "The plan's rule (5-30 roots): the command-line parser, loaded by 9 non-test files nothing imports, one per process: src/cli.ts, src/main.ts, src/server-cli.ts, src/server-main.ts, the shared process, the agent host and its server, the pty host and the extension host. Reached through 160 dependents."
+  },
+  {
+    "id": "vscode-pairs", "repo": "vscode", "kind": "pairs",
+    "folder": "src/vs",
+    "names": ["common", "browser", "node", "electron-browser", "electron-utility", "electron-main", "worker"],
+    "planning": "21 pairs (the plan's scan: 21)",
+    "why": "Named by the plan: the seven environment folder names under src/vs. 21 pairs, among them common -> worker and worker -> browser."
+  },
+
+  {
+    "id": "vscode-s1-impact", "repo": "vscode", "kind": "impact", "session": "vscode-s1",
+    "target": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+    "folders": ["src/vs/workbench/contrib/notebook", "src/vs/workbench/contrib/chat", "src/vs/workbench/api", "src/vs/sessions"],
+    "planning": "3152 files: notebook 225, chat 1068, api 325, sessions 703, elsewhere 831",
+    "why": "Session 1, 'I'm about to change the notebook cell model': X is the cell text model (33 direct importers), counted where it matters (the notebook feature, chat, the extension API, the sessions app)."
+  },
+  {
+    "id": "vscode-s1-chain", "repo": "vscode", "kind": "chain", "session": "vscode-s1",
+    "from": "src/vs/workbench/api/node/extensionHostProcess.ts",
+    "to": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+    "planning": "4 steps",
+    "why": "The extension host's entry (a file nothing imports) to X: extensionHostProcess.ts > extHostExtensionService.ts > extHost.protocol.ts > notebookExecutionService.ts > notebookCellTextModel.ts."
+  },
+  {
+    "id": "vscode-s1-cycle", "repo": "vscode", "kind": "cycle", "session": "vscode-s1",
+    "file": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+    "planning": "3 steps",
+    "why": "X is in the notebook model's 8-file group: notebookCellTextModel.ts > notebookCommon.ts > notebookTextModel.ts > notebookCellTextModel.ts."
+  },
+  {
+    "id": "vscode-s1-unused", "repo": "vscode", "kind": "unused", "session": "vscode-s1",
+    "folder": "src/vs/workbench/contrib/notebook/common",
+    "planning": "1 file of 29 non-test",
+    "why": "X's area folder (X sits in its model/ subfolder, which has none): services/notebookWebWorkerMain.ts, a worker's main loaded by name."
+  },
+
+  {
+    "id": "vscode-s2-impact", "repo": "vscode", "kind": "impact", "session": "vscode-s2",
+    "target": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+    "folders": ["src/vs/editor", "src/vs/workbench", "src/vs/sessions"],
+    "planning": "1794 files: editor 46, workbench 1400, sessions 336, elsewhere 12",
+    "why": "Session 2, 'I'm about to change the inline completions model': an editor contribution whose 11 direct importers fan out to 1,794 files, mostly outside the editor layer."
+  },
+  {
+    "id": "vscode-s2-chain", "repo": "vscode", "kind": "chain", "session": "vscode-s2",
+    "from": "src/vs/sessions/sessions.web.main.internal.ts",
+    "to": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+    "planning": "6 steps",
+    "why": "The sessions app's web entry (nothing imports it) to X through static imports only: sessions.web.main.ts > sessions.common.main.ts > editor.all.ts > inlineCompletions.contribution.ts > inlineCompletionsController.ts > X. (The desktop loader sessions.ts also reaches X in 6 steps, but through its computed import().)"
+  },
+  {
+    "id": "vscode-s2-cycle", "repo": "vscode", "kind": "cycle", "session": "vscode-s2",
+    "file": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+    "planning": "3 steps",
+    "why": "X is in the 21-file group of inline completions, suggest and snippet: inlineCompletionsModel.ts > controller/common.ts > inlineCompletionsController.ts > inlineCompletionsModel.ts."
+  },
+  {
+    "id": "vscode-s2-unused", "repo": "vscode", "kind": "unused", "session": "vscode-s2",
+    "folder": "src/vs/editor/contrib/inlineCompletions/browser",
+    "planning": "1 file of 56 non-test",
+    "why": "The contribution's folder (X's model/ subfolder has none): view/inlineEdits/inlineEditsViews/inlineEditsWordInsertView.ts."
+  },
+
+  {
+    "id": "vscode-s3-impact", "repo": "vscode", "kind": "impact", "session": "vscode-s3",
+    "target": "src/vs/platform/terminal/node/terminalEnvironment.ts",
+    "folders": ["src/vs/platform/terminal", "src/vs/platform/agentHost"],
+    "planning": "59 files: terminal 5, agentHost 54, elsewhere 0",
+    "why": "Session 3, 'I'm about to change the pty host's shell environment': a node-only file with 4 direct importers, whose dependents sit mostly in the agent host, not the terminal."
+  },
+  {
+    "id": "vscode-s3-chain", "repo": "vscode", "kind": "chain", "session": "vscode-s3",
+    "from": "src/vs/platform/agentHost/node/agentHostMain.ts",
+    "to": "src/vs/platform/terminal/node/terminalEnvironment.ts",
+    "planning": "3 steps",
+    "why": "The agent host process's entry (nothing imports it) to X: agentHostMain.ts > agentService.ts > agentHostTerminalManager.ts > terminalEnvironment.ts. (ptyHostMain.ts, X's own process entry, is the unused question's answer, so it isn't the start.)"
+  },
+  {
+    "id": "vscode-s3-cycle", "repo": "vscode", "kind": "cycle", "session": "vscode-s3",
+    "file": "src/vs/platform/terminal/node/terminalEnvironment.ts",
+    "planning": "none",
+    "why": "The session's 'none': no file X reaches imports X back."
+  },
+  {
+    "id": "vscode-s3-unused", "repo": "vscode", "kind": "unused", "session": "vscode-s3",
+    "folder": "src/vs/platform/terminal/node",
+    "planning": "1 file of 13 non-test",
+    "why": "X's folder: ptyHostMain.ts, the pty host process's main, started by name."
+  },
+
+  {
+    "id": "affine-impact", "repo": "affine", "kind": "impact",
+    "target": "packages/common/env/src/constant.ts",
+    "folders": ["packages/frontend/core", "packages/frontend/apps", "packages/common", "tests"],
+    "planning": "1620 files: core 1398, apps 104, common 38, tests 76, elsewhere 4",
+    "why": "The plan's rule on AFFiNE: a file whose dependents spread over the repo's main areas. 23 files import it directly through @affine/env/constant (a workspace package's exports), 1,620 depend on it. (No AFFiNE file has 200-700 dependents over three or more areas: the 405-file cycle in packages/frontend/core/src puts anything it imports at 680 or more, as Task 13 found.)"
+  },
+  {
+    "id": "affine-cycle", "repo": "affine", "kind": "cycle",
+    "file": "packages/common/infra/src/framework/core/components/service.ts",
+    "planning": "4 steps",
+    "why": "AFFiNE's own dependency-injection framework (a 15-file group in packages/common/infra/src/framework/core): service.ts > components/component.ts > provider.ts > event.ts > service.ts."
+  },
+  {
+    "id": "affine-unused", "repo": "affine", "kind": "unused",
+    "folder": "packages/frontend/core/src/components/page-list",
+    "planning": "5 files of 70 non-test",
+    "why": "The plan's rule (20-120 non-test, 2-10 imported by nothing): docs/page-tags.css.ts, operation-menu-items/types.ts, use-block-suite-workspace-page.ts, use-page-selection-events.ts, view/use-action.tsx. None is named elsewhere (git grep; the hit for use-block-suite-workspace-page names components/hooks', a different file), none is a .d.ts, config or story file."
+  },
+  {
+    "id": "affine-violations", "repo": "affine", "kind": "violations",
+    "from": "packages/frontend/core", "to": "packages/frontend/apps",
+    "planning": "4 files",
+    "why": "The shared core reaching into an app package (left for Eval #2 by the dev set): 4 files. Other pairs measured: blocksuite/framework -> blocksuite/affine 0, blocksuite -> packages 0, packages/common -> packages/frontend 0, component -> core 0, model -> shared 1, blocks -> all 1."
+  },
+  {
+    "id": "affine-entries", "repo": "affine", "kind": "entries",
+    "target": "packages/frontend/core/src/modules/organize/services/organize.ts",
+    "planning": "7 files (104 dependents)",
+    "why": "The plan's rule (5-30 roots): the five app entries (android, electron-renderer, ios, mobile, web) and two mobile components nothing imports (core/src/mobile/components/navigation/tree/root.tsx, core/src/mobile/views/all-docs/tag/empty.tsx)."
+  },
+  {
+    "id": "affine-pairs", "repo": "affine", "kind": "pairs",
+    "folder": "packages/frontend",
+    "planning": "17 pairs",
+    "why": "A folder's children, left for Eval #2 by the dev set (which took packages/common's): admin, apps, component, core, electron-api, i18n, native, routes, templates, track; 17 pairs, among them core -> apps and electron-api -> apps."
+  },
+
+  {
+    "id": "affine-cl1", "repo": "affine", "kind": "list", "scope": "direct",
+    "target": "packages/frontend/electron-api/src/index.ts",
+    "planning": "26 files",
+    "why": "A direct list (10-100): the @affine/electron-api package's entry, imported by 26 files in core (14), apps (10) and the desktop e2e tests (2)."
+  },
+  {
+    "id": "affine-cl2", "repo": "affine", "kind": "list", "scope": "direct",
+    "target": "packages/common/infra/src/op/index.ts",
+    "planning": "24 files",
+    "why": "A direct list (10-100): the infra package's op (worker RPC) entry, imported by 24 files in apps (10), core (10) and nbstore (4), through @toeverything/infra/op."
+  },
+  {
+    "id": "affine-cl3", "repo": "affine", "kind": "list", "scope": "outside",
+    "target": "blocksuite/affine/widgets/slash-menu",
+    "planning": "34 files",
+    "why": "A folder's outside importers (10-100): the slash menu widget, imported from outside by 34 files, 30 of them blocks that add menu items."
+  },
+  {
+    "id": "affine-cl4", "repo": "affine", "kind": "list", "scope": "transitive",
+    "target": "packages/frontend/core/src/mobile/modules/haptics/index.ts",
+    "planning": "56 files (4 direct)",
+    "why": "A transitive list (10-100): 56 dependents, only 4 direct, through the mobile UI to the iOS, Android and mobile app entries."
+  },
+
+  {
+    "id": "affine-cn1", "repo": "affine", "kind": "chain",
+    "from": "packages/frontend/apps/web/src/index.tsx",
+    "to": "packages/common/nbstore/src/impls/idb/index.ts",
+    "planning": "4 steps",
+    "why": "The web app's entry to its local storage (IndexedDB): index.tsx > app.tsx > core/src/modules/workspace-engine/index.ts > workspace-engine/impls/cloud.ts > idb/index.ts."
+  },
+  {
+    "id": "affine-cn2", "repo": "affine", "kind": "chain",
+    "from": "blocksuite/playground/apps/starter/main.ts",
+    "to": "blocksuite/framework/std/src/gfx/viewport.ts",
+    "planning": "5 steps",
+    "why": "BlockSuite's playground entry to the canvas viewport: main.ts > all/src/blocks/note/index.ts > blocks/note/src/index.ts > edgeless-note-background.ts > std/src/gfx/index.ts > viewport.ts."
+  },
+  {
+    "id": "affine-cn3", "repo": "affine", "kind": "chain",
+    "from": "packages/frontend/apps/electron/src/helper/index.ts",
+    "to": "packages/common/nbstore/src/impls/sqlite/index.ts",
+    "planning": "4 steps",
+    "why": "The Electron helper process's entry to the SQLite storage it hosts: helper/index.ts > exposed.ts > helper/nbstore/index.ts > handlers.ts > sqlite/index.ts."
+  },
+  {
+    "id": "affine-cn4", "repo": "affine", "kind": "chain",
+    "from": "packages/frontend/apps/electron/src/main/index.ts",
+    "to": "packages/frontend/apps/electron/src/helper",
+    "planning": "none",
+    "why": "The chain with none: the Electron main process's entry never imports the helper process's code (it starts it by path), so nothing it reaches is in electron/src/helper. It reaches no nbstore file either."
+  },
+
+  {
+    "id": "affine-s1-impact", "repo": "affine", "kind": "impact", "session": "affine-s1",
+    "target": "blocksuite/affine/blocks/database/src/database-block.ts",
+    "folders": ["blocksuite/affine", "blocksuite/integration-test", "packages/frontend/core", "packages/frontend/apps", "tests"],
+    "planning": "1546 files: blocksuite/affine 52, integration-test 20, core 1277, apps 58, tests 112, elsewhere 27",
+    "why": "Session 1, 'I'm about to change the database block': its 5 direct importers fan out to 1,546 files, most of them in the app."
+  },
+  {
+    "id": "affine-s1-chain", "repo": "affine", "kind": "chain", "session": "affine-s1",
+    "from": "packages/frontend/apps/android/src/index.tsx",
+    "to": "blocksuite/affine/blocks/database/src/database-block.ts",
+    "planning": "7 steps",
+    "why": "The Android app's entry to X: index.tsx > app.tsx > core/src/modules/index.ts > doc-info/index.ts > doc-database-backlinks.ts > all/src/blocks/database/index.ts > database/src/index.ts > database-block.ts."
+  },
+  {
+    "id": "affine-s1-cycle", "repo": "affine", "kind": "cycle", "session": "affine-s1",
+    "file": "blocksuite/affine/blocks/database/src/database-block.ts",
+    "planning": "3 steps",
+    "why": "X is in the database block's 12-file group: database-block.ts > view.ts > effects.ts > database-block.ts."
+  },
+  {
+    "id": "affine-s1-unused", "repo": "affine", "kind": "unused", "session": "affine-s1",
+    "folder": "blocksuite/affine/blocks/database/src",
+    "planning": "1 file of 50 non-test",
+    "why": "X's folder: widgets/index.ts, named nowhere else."
+  },
+
+  {
+    "id": "affine-s2-impact", "repo": "affine", "kind": "impact", "session": "affine-s2",
+    "target": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
+    "folders": ["packages/frontend/core/src/blocksuite", "packages/frontend/core/src/components", "packages/frontend/core/src/desktop", "packages/frontend/core/src/mobile", "packages/frontend/apps"],
+    "planning": "681 files: blocksuite 187, components 145, desktop 128, mobile 92, apps 19, elsewhere 110",
+    "why": "Session 2, 'I'm about to change the AI onboarding's API': 4 direct importers, 681 dependents through the AI provider's setup in core/src/blocksuite."
+  },
+  {
+    "id": "affine-s2-chain", "repo": "affine", "kind": "chain", "session": "affine-s2",
+    "from": "packages/frontend/apps/electron-renderer/src/app/index.tsx",
+    "to": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
+    "planning": "9 steps",
+    "why": "The desktop renderer's entry to X: app/index.tsx > app.tsx > desktop/router.tsx > pages/workspace/index.tsx > workspace-layout.tsx > workspace-side-effects.tsx > blocksuite/ai/index.ts > ai/provider/index.ts > setup-provider.tsx > apis.ts (every app entry is 9 or 10 steps away)."
+  },
+  {
+    "id": "affine-s2-cycle", "repo": "affine", "kind": "cycle", "session": "affine-s2",
+    "file": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
+    "planning": "none",
+    "why": "The session's 'none', in the part of the repo with a 405-file cycle: nothing X reaches imports it back."
+  },
+  {
+    "id": "affine-s2-unused", "repo": "affine", "kind": "unused", "session": "affine-s2",
+    "folder": "packages/frontend/core/src/components/affine/ai-onboarding",
+    "planning": "2 files of 13 non-test",
+    "why": "X's folder: general.dialog.tsx and index.tsx, the folder's own index among them."
+  },
+
+  {
+    "id": "affine-s3-impact", "repo": "affine", "kind": "impact", "session": "affine-s3",
+    "target": "blocksuite/affine/blocks/surface/src/surface-block.ts",
+    "folders": ["blocksuite/affine/blocks", "blocksuite/affine/gfx", "blocksuite/affine/widgets", "packages/frontend/core", "tests"],
+    "planning": "2192 files: blocks 230, gfx 185, widgets 73, core 1287, tests 201, elsewhere 216",
+    "why": "Session 3, 'I'm about to change the edgeless surface block': 4 direct importers, 2,192 dependents across BlockSuite and the app."
+  },
+  {
+    "id": "affine-s3-chain", "repo": "affine", "kind": "chain", "session": "affine-s3",
+    "from": "packages/frontend/apps/ios/src/index.tsx",
+    "to": "blocksuite/affine/blocks/surface/src/surface-block.ts",
+    "planning": "6 steps",
+    "why": "The iOS app's entry to X: index.tsx > app.tsx > core/src/modules/workspace/index.ts > global-schema.ts > blocksuite/affine/all/src/schemas.ts > surface/src/index.ts > surface-block.ts."
+  },
+  {
+    "id": "affine-s3-cycle", "repo": "affine", "kind": "cycle", "session": "affine-s3",
+    "file": "blocksuite/affine/blocks/surface/src/surface-block.ts",
+    "planning": "4 steps",
+    "why": "X is in the surface block's 17-file group: surface-block.ts > canvas-renderer.ts > two index files > surface-block.ts."
+  },
+  {
+    "id": "affine-s3-unused", "repo": "affine", "kind": "unused", "session": "affine-s3",
+    "folder": "blocksuite/affine/blocks/surface/src",
+    "planning": "2 files of 79 non-test",
+    "why": "X's folder: adapters/html-adapter/html.ts and utils/rough/rough.ts, named nowhere else."
+  }
+]

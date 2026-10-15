@@ -1,0 +1,132 @@
+[
+  {
+    "repo": "vscode", "from": ".eslint-plugin-local/tests/code-no-sync-fs.test.ts", "to": "src/vs/base/node/pfs.ts", "decision": "out",
+    "why": "L150 `const results = await eslint.lintText(`import { writeFileSync } from 'vs/base/node/pfs'; writeFileSync('file', 'data');`, ...)`: the import is text inside a template literal, the source a lint-rule test hands to ESLint. The file itself never imports pfs.ts (preProcessFile, which skips strings, finds nothing)."
+  },
+  {
+    "repo": "vscode", "from": "build/lib/test/codeNoLegacyNotificationParsing.test.ts", "to": "src/vs/platform/notification/common/notificationLegacy.ts", "decision": "out",
+    "why": "L60 `` `import { legacyExtensionLinkParsing } from 'vs/platform/notification/common/notificationLegacy.js';` ``: a template literal in the test's list of sources to check; L23-24 (`const source = '../../../../platform/notification/common/notificationLegacy.js';`) are path strings, not imports."
+  },
+  {
+    "repo": "vscode", "from": "extensions/copilot/.esbuild.mts", "to": "extensions/copilot/src/util/common/test/shims/vscodeTypesShim.ts", "decision": "out",
+    "why": "L151 `vscode = require('./src/util/common/test/shims/vscodeTypesShim.ts');` sits inside the template literal `contents: `...`` (L142-155) that an esbuild onLoad hook returns as the source of the virtual module `vscode-dynamic`; .esbuild.mts never runs that require itself (and L223 `'vscode': './src/util/common/test/shims/vscodeTypesShim.ts'` is an alias string). Not one of the file's own statements."
+  },
+  {
+    "repo": "vscode", "from": "extensions/copilot/test/inline/fixing.stest.ts", "to": "src/vs/base/test/common/utils.ts", "decision": "out",
+    "why": "L710 `fileContents: `/*---...import { ensureNoDisposablesAreLeakedInTestSuite } from 'vs/base/test/common/utils';...``: a whole file's text in a template literal, the input of a simulation test, not an import of this file."
+  },
+  {
+    "repo": "vscode", "from": "extensions/html-language-features/server/src/modes/javascriptMode.ts", "to": "extensions/html-language-features/server/src/modes/javascriptLibs.ts", "decision": "in",
+    "why": "L26 `const jsLanguageService = import(/* webpackChunkName: \"javascriptLibs\" */ './javascriptLibs.js').then(libs => {`: a real import() with a bundler hint comment before the path, which TypeScript 5.9's preProcessFile doesn't report. The scanner is right."
+  },
+  {
+    "repo": "vscode", "from": "scripts/chat-simulation/common/perf-scenarios.js", "to": "src/vs/base/common/event.ts", "decision": "out",
+    "why": "L192 `'import { Emitter, Event } from \"vs/base/common/event\";` + newline: a string literal among the lines of a scenario file's text (L190-194), and L234-235 list paths as strings. The script imports nothing from src/vs."
+  },
+  {
+    "repo": "vscode", "from": "scripts/chat-simulation/common/perf-scenarios.js", "to": "src/vs/base/common/lifecycle.ts", "decision": "out",
+    "why": "L191 `'import { Disposable, DisposableStore } from \"vs/base/common/lifecycle\";` + newline: a string literal among the lines of a scenario file's text; L234 `'src/vs/base/common/lifecycle.ts',` is a path string. Not an import."
+  },
+  {
+    "repo": "vscode", "from": "scripts/chat-simulation/common/perf-scenarios.js", "to": "src/vs/base/common/uri.ts", "decision": "out",
+    "why": "L193 `'import { URI } from \"vs/base/common/uri\";` + two newlines: a string literal among the lines of a scenario file's text. Not an import."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/editor/test/common/model/tokensStore.test.ts", "to": "src/vs/base/common/uri.ts", "decision": "out",
+    "why": "L121 `` `import { |URI| } from 'vs/base/common/uri';` `` (and L128-174, the same text): test inputs in template literals, with |...| marking token ranges. The test's own imports don't name uri.ts."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/platform/agentHost/node/codex/protocol/generated/index.ts", "to": "src/vs/platform/agentHost/node/codex/protocol/generated/v2/index.ts", "decision": "in",
+    "why": "L108 `export * as v2 from \"./v2/index.js\";`: a real namespace re-export, which TypeScript 5.9's preProcessFile doesn't report. The scanner is right."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/workbench/contrib/mergeEditor/test/browser/model.test.ts", "to": "src/vs/base/browser/dom.ts", "decision": "out",
+    "why": "L177 `'base': `import { h } from 'vs/base/browser/dom';...`` (and L178-211): the merge inputs of a test, held in template literals. The test's own imports don't name dom.ts."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/workbench/contrib/mergeEditor/test/browser/model.test.ts", "to": "src/vs/editor/common/config/editorOptions.ts", "decision": "out",
+    "why": "L177 `'base': `...import { EditorOption } from 'vs/editor/common/config/editorOptions';...`` and L188 `` `⟦import { EditorOption } from 'vs/editor/common/config/editorOptions';` ``: test inputs in template literals, not imports."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/workbench/contrib/mergeEditor/test/browser/model.test.ts", "to": "src/vs/workbench/contrib/mergeEditor/browser/model/lineRange.ts", "decision": "out",
+    "why": "L177-180 `'base': `...import { LineRange } from 'vs/workbench/contrib/mergeEditor/browser/model/lineRange';...`` and L190-220 `` `⟧₁import { LineRange } from '...lineRange';` ``: test inputs in template literals. The test's own imports (preProcessFile's) don't name lineRange.ts."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/workbench/contrib/testing/common/testTypes.ts", "to": "src/vs/platform/uriIdentity/common/uriIdentity.ts", "decision": "out",
+    "why": "L164 `/** @link import('vs/platform/uriIdentity/common/uriIdentity').IUriIdentityService */`: a JSDoc comment (the scanner skips lines starting // or *, not /**). No statement of testTypes.ts imports uriIdentity.ts."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.contribution.ts", "to": "src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedIcons.ts", "decision": "in",
+    "why": "L38 `export * as icons from './gettingStartedIcons.js';`: a real namespace re-export, which TypeScript 5.9's preProcessFile doesn't report. The scanner is right."
+  },
+
+  {
+    "repo": "vscode", "from": "build/lib/test/agentHostDependencies.test.ts", "line": 55, "to": null, "decision": "out",
+    "why": "L55 `` `import('node-pty'); ...; import(variable);` ``: text inside a template literal, the source of a test case handed to ts.createSourceFile (L52-56). No import runs here."
+  },
+  {
+    "repo": "vscode", "from": "build/next/test/resources.test.ts", "line": 186, "to": null, "decision": "out",
+    "why": "L186 `const result: { answer: number; reexported: number; moduleThis: boolean; url: string } = await import(url);` with L185 `const url = pathToFileURL(path.join(outDir, serviceWorkerPath)).href;`: a file the test itself wrote into a temporary output folder, not a file of the repo."
+  },
+  {
+    "repo": "vscode", "from": "build/vite/vite.config.ts", "line": 151, "to": null, "decision": "out",
+    "why": "L151 `if (msg.indexOf('const result2 = await import(workbenchUrl);') !== -1) {`: the import() is text inside a string the logger compares warnings against. No import runs here."
+  },
+  {
+    "repo": "vscode", "from": "extensions/vscode-api-tests/src/singlefolder-tests/module.test.ts", "line": 42, "to": null, "decision": "out",
+    "why": "L42 `const asyncImport = new Function('url', 'return import(url)');`: the import() is a string body, and the url (L43) is a temporary test file the test wrote, not a file of the repo."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/code/electron-browser/workbench/workbench.ts", "line": 517, "to": "src/vs/workbench/workbench.desktop.main.ts", "decision": "in",
+    "why": "L517 `const result = await import(workbenchUrl);` where workbenchUrl is `'../../../workbench/workbench.desktop.main.js'` (L512, dev) or `new URL(`vs/workbench/workbench.desktop.main.js`, baseUrl).href` (L514, from out/): src/vs/workbench/workbench.desktop.main.ts either way. Counted as Eval #1 counted the computed loaders (the owner's ruling on cl4)."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/code/node/cli.ts", "line": 141, "to": "src/vs/code/node/cliProcessMain.ts", "decision": "in",
+    "why": "L141 `const cli = await import(cliProcessMain);` where cliProcessMain is `'./cliProcessMain.js'` (L136, dev) or `'./vs/code/node/cliProcessMain.js'` (L138, built, from out/): src/vs/code/node/cliProcessMain.ts either way."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/platform/extensionManagement/node/extensionSignatureVerificationService.ts", "line": 71, "to": null, "decision": "out",
+    "why": "L71 `return import(mod);` where L70 `const mod = '@vscode/vsce-sign';`: an npm package, not a file of the repo."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/platform/sign/node/signService.ts", "line": 33, "to": null, "decision": "out",
+    "why": "L33 `const { default: vsda } = await import(mod);` where L32 `const mod = 'vsda';`: an npm package, not a file of the repo."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/sessions/electron-browser/sessions.ts", "line": 130, "to": "src/vs/sessions/sessions.desktop.main.ts", "decision": "in",
+    "why": "L130 `const result = await import(workbenchUrl);` where workbenchUrl is `new URL(`vs/sessions/sessions.desktop.main.js`, baseUrl).href` (L127, from out/): src/vs/sessions/sessions.desktop.main.ts. The dev branch's `'./sessions.desktop.main.js'` (L125) would name src/vs/sessions/electron-browser/sessions.desktop.main.js, which the repo doesn't have. Counted as workbench.ts's loader is."
+  },
+  {
+    "repo": "vscode", "from": "src/vs/workbench/contrib/notebook/browser/view/renderers/webviewPreloads.ts", "line": 3183, "to": null, "decision": "out",
+    "why": "L3183 `const __import = (x) => import(x);` sits inside the template literal preloadsScriptStr returns (L3182-3186): the notebook webview's script text, whose x is a renderer's URL at run time. No import runs in this file."
+  },
+  {
+    "repo": "vscode", "from": "test/unit/electron/renderer.js", "line": 125, "to": null, "decision": "out",
+    "why": "L125 `return import(url).catch(err => {` where L124 `const url = new URL(`./${mod}.js`, baseUrl).href;` and mod is a parameter of importModules: the unit-test runner loads whatever modules it is given. A parameter pins down no file (ADR-053), so no edge."
+  },
+
+  {
+    "repo": "affine", "from": "packages/backend/server/src/core/version/config.ts", "to": "packages/backend/server/src/base/guard/index.ts", "decision": "out",
+    "why": "L16 `declare module '../../base/guard' {`: a module augmentation, which preProcessFile reports, but not one of the import rule's statements (import, export ... from, side-effect import, import() or require()). The file has no import of base/guard."
+  },
+  {
+    "repo": "affine", "from": "packages/backend/server/src/plugins/captcha/config.ts", "to": "packages/backend/server/src/base/guard/index.ts", "decision": "out",
+    "why": "L15 `declare module '../../base/guard' {`: a module augmentation, not one of the import rule's statements. The file has no import of base/guard."
+  },
+  {
+    "repo": "affine", "from": "packages/common/infra/src/orm/core/adapters/mixins/hook.ts", "to": "packages/common/infra/src/orm/core/types.ts", "decision": "out",
+    "why": "L2 `declare module '../../types' {`: a module augmentation, not one of the import rule's statements (L1 `import type { TableAdapter, TableAdapterOptions } from '../types';` names adapters/types.ts, a different file)."
+  },
+  {
+    "repo": "affine", "from": "tools/@types/env/__all.d.ts", "to": "blocksuite/affine/all/src/store/index.ts", "decision": "out",
+    "why": "L4 `declare module '@blocksuite/affine/store' {`: a module augmentation in a global declaration file, not one of the import rule's statements."
+  },
+  {
+    "repo": "affine", "from": "packages/frontend/core/src/modules/code-block-preview-renderer/mermaid-preview.integration.spec.ts", "line": 87, "to": null, "decision": "out",
+    "why": "L87 `const browserImport = new Function('url', 'return import(url)') as <T>(`: the import() is a string body run in a Playwright page, and its url (L92) is '/node_modules/mermaid/dist/mermaid.esm.mjs', a package file, not one of the repo's."
+  },
+  {
+    "repo": "affine", "from": "packages/frontend/core/src/modules/code-block-preview-renderer/typst-preview.integration.spec.ts", "line": 75, "to": null, "decision": "out",
+    "why": "L75 `const browserImport = new Function('url', 'return import(url)') as <`: the import() is a string body run in a Playwright page, and url is a parameter given `/@fs/${resolve('packages/frontend/core/src/modules/typst/renderer/runtime.ts')}` and `/@fs/${resolve('blocksuite/affine/shared/src/utils/svg.ts')}` (L36-41), dev-server addresses built with path.resolve, not import statements. A parameter pins down no file (ADR-053), so no edge."
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "id": "affine-s2-chain",
+  "kind": "chain",
+  "from": "packages/frontend/apps/electron-renderer/src/app/index.tsx",
+  "to": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
+  "connected": true,
+  "shortest": 9,
+  "example": [
+    "packages/frontend/apps/electron-renderer/src/app/index.tsx",
+    "packages/frontend/apps/electron-renderer/src/app/app.tsx",
+    "packages/frontend/core/src/desktop/router.tsx",
+    "packages/frontend/core/src/desktop/pages/workspace/index.tsx",
+    "packages/frontend/core/src/desktop/pages/workspace/layouts/workspace-layout.tsx",
+    "packages/frontend/core/src/components/providers/workspace-side-effects.tsx",
+    "packages/frontend/core/src/blocksuite/ai/index.ts",
+    "packages/frontend/core/src/blocksuite/ai/provider/index.ts",
+    "packages/frontend/core/src/blocksuite/ai/provider/setup-provider.tsx",
+    "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

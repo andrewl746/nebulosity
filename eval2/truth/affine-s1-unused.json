@@ -1,0 +1,10 @@
+{
+  "id": "affine-s1-unused",
+  "kind": "unused",
+  "folder": "blocksuite/affine/blocks/database/src",
+  "files": [
+    "blocksuite/affine/blocks/database/src/widgets/index.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

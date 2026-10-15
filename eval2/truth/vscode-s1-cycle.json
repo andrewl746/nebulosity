@@ -1,0 +1,14 @@
+{
+  "id": "vscode-s1-cycle",
+  "kind": "cycle",
+  "file": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+  "shortest": 3,
+  "example": [
+    "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+    "src/vs/workbench/contrib/notebook/common/notebookCommon.ts",
+    "src/vs/workbench/contrib/notebook/common/model/notebookTextModel.ts",
+    "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

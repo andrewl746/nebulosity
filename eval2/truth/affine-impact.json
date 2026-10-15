@@ -1,0 +1,27 @@
+{
+  "id": "affine-impact",
+  "kind": "impact",
+  "target": "packages/common/env/src/constant.ts",
+  "counts": [
+    [
+      "packages/frontend/core",
+      1398
+    ],
+    [
+      "packages/frontend/apps",
+      104
+    ],
+    [
+      "packages/common",
+      38
+    ],
+    [
+      "tests",
+      76
+    ]
+  ],
+  "elsewhere": 4,
+  "total": 1620,
+  "verified": false,
+  "notes": []
+}

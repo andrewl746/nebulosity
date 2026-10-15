@@ -1,0 +1,14 @@
+{
+  "id": "affine-unused",
+  "kind": "unused",
+  "folder": "packages/frontend/core/src/components/page-list",
+  "files": [
+    "packages/frontend/core/src/components/page-list/docs/page-tags.css.ts",
+    "packages/frontend/core/src/components/page-list/operation-menu-items/types.ts",
+    "packages/frontend/core/src/components/page-list/use-block-suite-workspace-page.ts",
+    "packages/frontend/core/src/components/page-list/use-page-selection-events.ts",
+    "packages/frontend/core/src/components/page-list/view/use-action.tsx"
+  ],
+  "verified": false,
+  "notes": []
+}

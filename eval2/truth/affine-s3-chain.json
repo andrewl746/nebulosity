@@ -1,0 +1,19 @@
+{
+  "id": "affine-s3-chain",
+  "kind": "chain",
+  "from": "packages/frontend/apps/ios/src/index.tsx",
+  "to": "blocksuite/affine/blocks/surface/src/surface-block.ts",
+  "connected": true,
+  "shortest": 6,
+  "example": [
+    "packages/frontend/apps/ios/src/index.tsx",
+    "packages/frontend/apps/ios/src/app.tsx",
+    "packages/frontend/core/src/modules/workspace/index.ts",
+    "packages/frontend/core/src/modules/workspace/global-schema.ts",
+    "blocksuite/affine/all/src/schemas.ts",
+    "blocksuite/affine/blocks/surface/src/index.ts",
+    "blocksuite/affine/blocks/surface/src/surface-block.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

@@ -1,0 +1,23 @@
+{
+  "id": "vscode-s2-impact",
+  "kind": "impact",
+  "target": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+  "counts": [
+    [
+      "src/vs/editor",
+      46
+    ],
+    [
+      "src/vs/workbench",
+      1400
+    ],
+    [
+      "src/vs/sessions",
+      336
+    ]
+  ],
+  "elsewhere": 12,
+  "total": 1794,
+  "verified": false,
+  "notes": []
+}

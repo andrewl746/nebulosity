@@ -1,0 +1,15 @@
+{
+  "id": "affine-s3-cycle",
+  "kind": "cycle",
+  "file": "blocksuite/affine/blocks/surface/src/surface-block.ts",
+  "shortest": 4,
+  "example": [
+    "blocksuite/affine/blocks/surface/src/surface-block.ts",
+    "blocksuite/affine/blocks/surface/src/renderer/canvas-renderer.ts",
+    "blocksuite/affine/blocks/surface/src/renderer/elements/index.ts",
+    "blocksuite/affine/blocks/surface/src/index.ts",
+    "blocksuite/affine/blocks/surface/src/surface-block.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

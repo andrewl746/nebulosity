@@ -1,0 +1,13 @@
+{
+  "id": "vscode-unused",
+  "kind": "unused",
+  "folder": "src/vs/sessions/browser",
+  "files": [
+    "src/vs/sessions/browser/parts/mobile/contributions/mobilePulldownDismiss.ts",
+    "src/vs/sessions/browser/parts/mobile/longPress.ts",
+    "src/vs/sessions/browser/parts/mobile/mobileEdgeSwipe.ts",
+    "src/vs/sessions/browser/parts/projectBarPart.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

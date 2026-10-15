@@ -1,0 +1,11 @@
+{
+  "id": "affine-s3-unused",
+  "kind": "unused",
+  "folder": "blocksuite/affine/blocks/surface/src",
+  "files": [
+    "blocksuite/affine/blocks/surface/src/adapters/html-adapter/html.ts",
+    "blocksuite/affine/blocks/surface/src/utils/rough/rough.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

@@ -24,6 +24,7 @@
     "eval:truth": "tsx scripts/eval/build-truth.ts",
     "eval:score": "tsx scripts/eval/score.ts",
     "eval:grading": "tsx scripts/eval/grading.ts",
+    "eval:overlap": "tsx scripts/eval/overlap.ts",
     "export-demo": "tsx scripts/export-demo.ts",
     "build-demo": "tsx scripts/build-demo.ts",
     "serve-demo": "tsx scripts/serve-demo.ts",

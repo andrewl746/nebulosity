@@ -1,0 +1,10 @@
+{
+  "id": "vscode-s3-unused",
+  "kind": "unused",
+  "folder": "src/vs/platform/terminal/node",
+  "files": [
+    "src/vs/platform/terminal/node/ptyHostMain.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

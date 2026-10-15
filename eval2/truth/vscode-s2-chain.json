@@ -1,0 +1,19 @@
+{
+  "id": "vscode-s2-chain",
+  "kind": "chain",
+  "from": "src/vs/sessions/sessions.web.main.internal.ts",
+  "to": "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts",
+  "connected": true,
+  "shortest": 6,
+  "example": [
+    "src/vs/sessions/sessions.web.main.internal.ts",
+    "src/vs/sessions/sessions.web.main.ts",
+    "src/vs/sessions/sessions.common.main.ts",
+    "src/vs/editor/editor.all.ts",
+    "src/vs/editor/contrib/inlineCompletions/browser/inlineCompletions.contribution.ts",
+    "src/vs/editor/contrib/inlineCompletions/browser/controller/inlineCompletionsController.ts",
+    "src/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.ts"
+  ],
+  "verified": false,
+  "notes": []
+}

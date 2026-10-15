@@ -1,0 +1,102 @@
+{
+  "id": "vscode-pairs",
+  "kind": "pairs",
+  "folder": "src/vs",
+  "names": [
+    "common",
+    "browser",
+    "node",
+    "electron-browser",
+    "electron-utility",
+    "electron-main",
+    "worker"
+  ],
+  "pairs": [
+    [
+      "browser",
+      "browser"
+    ],
+    [
+      "browser",
+      "common"
+    ],
+    [
+      "browser",
+      "worker"
+    ],
+    [
+      "common",
+      "common"
+    ],
+    [
+      "common",
+      "worker"
+    ],
+    [
+      "electron-browser",
+      "browser"
+    ],
+    [
+      "electron-browser",
+      "common"
+    ],
+    [
+      "electron-browser",
+      "electron-browser"
+    ],
+    [
+      "electron-browser",
+      "worker"
+    ],
+    [
+      "electron-main",
+      "common"
+    ],
+    [
+      "electron-main",
+      "electron-main"
+    ],
+    [
+      "electron-main",
+      "electron-utility"
+    ],
+    [
+      "electron-main",
+      "node"
+    ],
+    [
+      "electron-utility",
+      "common"
+    ],
+    [
+      "electron-utility",
+      "electron-utility"
+    ],
+    [
+      "electron-utility",
+      "node"
+    ],
+    [
+      "node",
+      "common"
+    ],
+    [
+      "node",
+      "node"
+    ],
+    [
+      "worker",
+      "browser"
+    ],
+    [
+      "worker",
+      "common"
+    ],
+    [
+      "worker",
+      "worker"
+    ]
+  ],
+  "verified": false,
+  "notes": []
+}

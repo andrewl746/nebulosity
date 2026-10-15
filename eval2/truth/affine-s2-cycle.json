@@ -1,0 +1,9 @@
+{
+  "id": "affine-s2-cycle",
+  "kind": "cycle",
+  "file": "packages/frontend/core/src/components/affine/ai-onboarding/apis.ts",
+  "shortest": null,
+  "example": null,
+  "verified": false,
+  "notes": []
+}

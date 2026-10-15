@@ -1,0 +1,18 @@
+{
+  "id": "vscode-entries",
+  "kind": "entries",
+  "target": "src/vs/platform/environment/node/argv.ts",
+  "files": [
+    "src/cli.ts",
+    "src/main.ts",
+    "src/server-cli.ts",
+    "src/server-main.ts",
+    "src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts",
+    "src/vs/platform/agentHost/node/agentHostMain.ts",
+    "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+    "src/vs/platform/terminal/node/ptyHostMain.ts",
+    "src/vs/workbench/api/node/extensionHostProcess.ts"
+  ],
+  "verified": false,
+  "notes": []
+}
