@@ -43,6 +43,10 @@ try{
         + ` · aggregate ${seconds(result.timingsMs.aggregate)} · total ${seconds(result.totalMs)}`);
     if (result.searchIndexMs > 0) console.log(`[index] code search filled in ${seconds(result.searchIndexMs)} after the structure stage`);
 
+    if (result.importsOnly.length > 0){
+        const first = result.importsOnly[0];
+        console.log(`[index] imports only ${result.importsOnly.length} (over the size cap; first: ${first.path}: ${first.sizeBytes} bytes)`);
+    }
     if (result.skipped.length > 0){
         console.log(`[index] skipped ${result.skipped.length} (first: ${result.skipped[0].path}: ${result.skipped[0].reason})`);
     }

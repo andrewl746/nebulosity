@@ -612,3 +612,67 @@ N − A is within gate 5b's 2,500 tokens on both repos. The probes cost $0.12, s
 
   Nebulosity's tools answered in those runs. In Eval #2's arm without them, scripting as configured would mostly fail the same way.
 - **The plan's VS Code dev picks share `src/vs/platform` with Eval #2's planned violations question** (`src/vs/platform` → `src/vs/editor`). The dev set uses `src/vs/platform` twice: as the imported folder of its violations question (`src/vs/base` → `src/vs/platform`), and as its pairs folder. Task 14 therefore moves that Eval #2 question.
+
+## 2026 10 15 Index Benchmark #5 — the structure stage after the two index gaps
+
+- **Targets and machine:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6da`, the owner's laptop, Node 24.14.0.
+- **The change:** ADR-053's amendment, made before Eval #2's freeze at the owner's decision (2026-10-14). Import type expressions (`typeof import("x")`) count, and a code file over 1 MB is indexed for its imports only, up to 20 MB.
+- **Commands:**
+  - S1, cold: `NEBULOSITY_HOME=<scratch folder holding only the migrations> NEBULOSITY_DATA=<scratch>/.nebulosity npx tsx scripts/index.ts ../vscode`. Three runs with the change, then three with the code before it (`2b79d71`, from a `git archive` copy), in the same session.
+  - The owner's index: `npm run index -- ../vscode`, then `npm run index -- ../affine --no-activate`.
+  - Index vs truth: Task 14a's read-only script in the V1.6 ledger (`task-14a-index.ts`), run before and after the re-index. It runs the eval's own truth functions over each repo's import graph as the engine holds it, and compares the result with the 44 truths in `eval2/truth/`. A second read-only script does the same for Eval #1's ten list and chain truths.
+
+| Run | Files | Edges | discover | parse | write | resolve | aggregate | **structure (S1)** | code search fill |
+|---|---|---|---|---|---|---|---|---|---|
+| before (`2b79d71`), 1 | 14844 | 140248 | 0.8 s | 25.4 s | 19.2 s | 3.2 s | 1.2 s | **49.8 s** | 6.0 s |
+| before, 2 | 14844 | 140248 | 0.8 s | 25.4 s | 18.9 s | 3.0 s | 1.0 s | **49.2 s** | 5.4 s |
+| before, 3 | 14844 | 140248 | 0.9 s | 27.2 s | 19.5 s | 3.1 s | 1.3 s | **51.9 s** | 5.4 s |
+| after, 1 | 14849 | 140583 | 0.7 s | 27.5 s | 19.8 s | 3.2 s | 1.2 s | **52.6 s** | 5.8 s |
+| after, 2 | 14849 | 140583 | 0.8 s | 27.8 s | 20.1 s | 2.7 s | 1.0 s | **52.5 s** | 5.7 s |
+| after, 3 | 14849 | 140583 | 0.8 s | 27.4 s | 19.7 s | 2.9 s | 1.2 s | **52.1 s** | 5.4 s |
+
+**S1 (≤ 60 s): PASS at 52.6 s worst of three.**
+- **The machine was much slower this session than for #4.** The code before this change took 49.2–51.9 s here, where #4's runs took 30.4–31.8 s for nearly the same work. Compare rows within this table, not with #4. The margin to 60 s is 7.4 s on this session's machine.
+- **The change costs about 2 s on average here** (52.4 s against 50.3 s): parse +1.6 s, write +0.7 s, resolve −0.2 s.
+  - The five files over 1 MB (13.7 MB in all) took 0.18–0.23 s to read, hash and read for imports, timed apart.
+  - The adapter's new branch was timed apart too: four alternating passes of the old and new adapters over the same 10,073 `src/vs` files, in one process. They differed by −0.3, +1.3, +2.3 and 0.0 s on passes of 18–20 s (mean +0.8 s). That is within this session's spread between runs of the same code (parse 25.4–27.2 s before).
+
+**Edges.**
+
+| Repo | Files before → after | Edges before → after | From files over 1 MB | Into a file now indexed | From import types |
+|---|---|---|---|---|---|
+| VS Code | 14,844 → 14,849 | 140,248 → 140,583 (+335) | 297 (3 files) | 1 | 37 (26 files) |
+| AFFiNE | 6,986 → 6,987 | 26,254 → 26,261 (+7) | 0 | 0 | 7 (3 files) |
+
+No edge was removed, and no code file in either repo is over 20 MB, so nothing is skipped for size now (VS Code skipped 5 files before).
+
+**The files now indexed for their imports only:**
+
+| File | Bytes | Specifiers | Edges |
+|---|---|---|---|
+| `extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts` | 8,535,324 | 3 | 0 |
+| `src/vs/platform/agentHost/test/node/agentService.test.ts` | 1,560,935 | 97 | 88 |
+| `src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts` | 1,377,567 | 0 | 0, and 1 into it from `extHostDocumentData.test.ts` |
+| `src/vs/platform/agentHost/test/node/copilotAgentSession.test.ts` | 1,202,919 | 109 | 103 |
+| `src/vs/platform/agentHost/test/node/copilotAgent.test.ts` | 1,027,075 | 114 | 106 |
+| AFFiNE's `.yarn/releases/yarn-4.18.0.cjs` | 3,784,908 | 2 (`fs`, `path`) | 0 |
+
+**The import-type edges:**
+- VS Code's 37 come from 26 files. 11 are in the two desktop loaders: `src/vs/code/electron-browser/workbench/workbench.ts` has 6 (sandbox types, globals, theme service, both window modules, `desktop.main.ts`) and `src/vs/sessions/electron-browser/sessions.ts` has 5. The rest are mostly in Copilot's tests (5 of them reach its `vscode` types shim) and the agent-host tests and helpers.
+- AFFiNE's 7 come from 3 files: `tests/blocksuite/e2e/utils/declare-test-window.ts` (5), `packages/backend/native/dts-header.d.ts` (1) and `packages/backend/server/src/global.d.ts` (1).
+
+**Index vs Eval #2's truths:**
+
+| Truth | Index before | Index after | Truth |
+|---|---|---|---|
+| vscode-impact | 4,501 | 4,503 | 4,503 |
+| vscode-s3-impact | 56 (agentHost 51) | 59 (agentHost 54) | 59 (agentHost 54) |
+| affine-s1-impact | 1,446 (tests 12) | 1,546 (tests 112) | 1,546 (tests 112) |
+| the other 41 | the same | the same | |
+
+**44 of 44 identical** (41 before). Eval #1's ten list and chain truths (`eval/truth/cl1.json` … `cn5.json` and their copies in `eval2/truth/`) still match the index: no file is missing or extra.
+
+**The owner's index:**
+- **VS Code.** `npm run index -- ../vscode` parsed every file once, because the adapter version moved to 3. It took 87.0 s (discover 1.6, parse 28.1, write 52.0, resolve 3.8, aggregate 1.4), since it writes over every existing row, then filled code search in 8.2 s. Index version 140.
+- **VS Code's summaries:** 18,633 of 18,642 ready. 9 are out of date: 8 folders above the newly indexed files (`src`, `src/vs`, `src/vs/platform`, `src/vs/platform/agentHost`, `src/vs/workbench`, `src/vs/workbench/api`, `extensions`, `extensions/vscode-colorize-perf-tests`) and the repo. Their child lists changed, so they are redone when opened.
+- **AFFiNE** took 20.5 s (discover 0.6, parse 4.6, write 13.2, resolve 1.6, aggregate 0.5), then code search in 1.7 s. Index version 5. The active repo stayed VS Code.

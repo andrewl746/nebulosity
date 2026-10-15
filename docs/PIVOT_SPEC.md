@@ -157,14 +157,14 @@ For every import edge `a → b`, take `L = LCA(dir(a), dir(b))`, the deepest fol
 ## 5. Indexing pipeline
 
 ### 5.1 Discover
-Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree, skipping `node_modules`, `.git`, `.next` and `.nebulosity` (skipped in git mode too), plus `dist`, `out`, `build` and `coverage` (skipped only when walking: in a git repo `.gitignore` decides, and a tracked `build/` can be real source, as in VS Code). Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. Files larger than 1 MB are recorded as skipped. The scan is no longer limited to `app/` and `lib/`.
+Use `git ls-files` when `.git` exists, so `.gitignore` is respected for free; otherwise walk the tree, skipping `node_modules`, `.git`, `.next` and `.nebulosity` (skipped in git mode too), plus `dist`, `out`, `build` and `coverage` (skipped only when walking: in a git repo `.gitignore` decides, and a tracked `build/` can be real source, as in VS Code). Keep files the active language adapters claim (v1: `.ts .tsx .mts .cts .js .jsx .mjs .cjs`). Never index `.env*`. A code file larger than 1 MB is indexed for its imports only (no declarations, chunks or model summary), and one larger than 20 MB, or a doc larger than 1 MB, is recorded as skipped (ADR-053, amended). The scan is no longer limited to `app/` and `lib/`.
 
 ### 5.2 Structure (blocking; target S1 ≤ 60 s)
 1. Hash every file and skip unchanged ones (ADR-022's contentHash rule), unless an older version of the adapter parsed the repo: then every file is parsed again once (ADR-053).
 2. Parse changed files with the **TypeScript adapter** (`ts.createSourceFile`, no type checker):
    - **Chunks.** The existing chunker, keeping ADR-018/019/020.
    - **Symbols.** Top-level declarations plus class members.
-   - **Imports, read from the AST.** Static, side-effect, re-export, dynamic `import()` and `require`. This retires the regex extractor and its string-literal false positives (ADR-003/016 revisit triggers).
+   - **Imports, read from the AST.** Static, side-effect, re-export, dynamic `import()`, `require`, and import types (`typeof import("x")`, ADR-053). This retires the regex extractor and its string-literal false positives (ADR-003/016 revisit triggers). A file over the 1 MB cap is read for its imports only, by TypeScript's `preProcessFile` (ADR-053).
    - **Metadata.** Line count, and whether it's a test file (`/test/`, `.test.`, `.spec.`).
 3. Resolve imports:
    - relative paths

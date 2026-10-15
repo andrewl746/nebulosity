@@ -1,4 +1,5 @@
 import type { FileFacts } from "../../db/store/summaries";
+import { DEFAULT_MAX_FILE_BYTES } from "../discover";
 import { ASSUMED_TOKENS } from "./budget";
 import { costUsd, formatUsd, pricePerMTok } from "./pricing";
 import { plural, PROMPT_VERSION } from "./prompts";
@@ -40,12 +41,12 @@ export type ComparisonReport = {
 
 /**
  * The checkpoint's sample (PIVOT_SPEC.md §5.3): the most-imported half (central code is
- * read first), then the rest spread evenly through the path-sorted tree. Test files are
- * left out, because they get a template. Expects files in path order, as loadFileFacts
- * returns them.
+ * read first), then the rest spread evenly through the path-sorted tree. Test files and
+ * files over the size cap are left out, because they get a template. Expects files in path
+ * order, as loadFileFacts returns them.
  */
 export function pickSample(files: readonly FileFacts[], count: number): FileFacts[] {
-    const candidates = files.filter((f) => !f.isTest);
+    const candidates = files.filter((f) => !f.isTest && f.sizeBytes <= DEFAULT_MAX_FILE_BYTES);
     const central = [...candidates]
         .sort((a, b) => b.importedBy - a.importedBy || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
         .slice(0, Math.ceil(count / 2));

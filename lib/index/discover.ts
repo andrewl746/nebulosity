@@ -3,7 +3,12 @@ import fs from "fs";
 import path from "path";
 import { normalizeSlashes } from "./paths";
 
-export type DiscoveredFile = { path: string; sizeBytes: number };
+export type DiscoveredFile = {
+    path: string;
+    sizeBytes: number;
+    /** A code file over the size cap: indexed for its imports only, with no declarations, chunks or summary (ADR-053). */
+    importsOnly?: true;
+};
 export type SkippedFile = { path: string; reason: string };
 export type DiscoveryResult = {
     files: DiscoveredFile[];
@@ -23,8 +28,19 @@ export const DOC_EXTENSIONS: readonly string[] = [".md", ".mdx", ".mdc"];
 
 const byPath = (a: { path: string }, b: { path: string }): number => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
-/** Bigger than this is almost always generated or minified code, not something to read. */
+/**
+ * Bigger than this is almost always generated or minified code, not something to read: a code file over it is indexed
+ * for its imports only (ADR-053, amended), and a doc over it is skipped. VS Code's three agent-host tests of 1.0–1.6 MB
+ * import real files, which is why the cap no longer drops a file outright.
+ */
 export const DEFAULT_MAX_FILE_BYTES = 1_000_000;
+
+/**
+ * Past this a code file isn't read at all, so a giant generated blob can't stall a run or run the process out of
+ * memory: reading its imports costs about 15 ms a megabyte (about 0.3 s at the bound). VS Code's largest code file is an
+ * 8.5 MB colorizer fixture, AFFiNE's a 3.8 MB yarn release.
+ */
+export const DEFAULT_HARD_MAX_FILE_BYTES = 20_000_000;
 
 /**
  * Folders never indexed, in either mode: dependency trees and tool output. Git mode
@@ -46,15 +62,18 @@ export const WALK_ONLY_IGNORED_DIRS: ReadonlySet<string> = new Set(["dist", "out
  * In a git repo this asks git (`ls-files`), which honours .gitignore for free. That's
  * what keeps build output and vendored code out of a big repo's index. Without git,
  * it walks the tree and skips the usual heavy folders and build output.
+ *
+ * A code file over `maxBytes` is listed with `importsOnly` set, and one over `hardMaxBytes` is skipped (ADR-053).
  */
 export function discoverFiles(
     repoRoot: string,
-    opts: { extensions: readonly string[]; maxBytes?: number }
+    opts: { extensions: readonly string[]; maxBytes?: number; hardMaxBytes?: number }
 ): DiscoveryResult {
     const usedGit = fs.existsSync(path.join(repoRoot, ".git"));
     const skipped: SkippedFile[] = [];
     const candidates = usedGit ? listWithGit(repoRoot) : listByWalking(repoRoot, skipped);
     const maxBytes = opts.maxBytes ?? DEFAULT_MAX_FILE_BYTES;
+    const hardMaxBytes = opts.hardMaxBytes ?? DEFAULT_HARD_MAX_FILE_BYTES;
     const files: DiscoveredFile[] = [];
     const manifests: string[] = [];
     const docs: DiscoveredFile[] = [];
@@ -85,12 +104,12 @@ export function discoverFiles(
             continue;
         }
 
-        if (size > maxBytes){
+        if (size > hardMaxBytes){
             skipped.push({ path: rel, reason: `too large (${size} bytes)` });
             continue;
         }
 
-        files.push({ path: rel, sizeBytes: size });
+        files.push(size > maxBytes ? { path: rel, sizeBytes: size, importsOnly: true } : { path: rel, sizeBytes: size });
     }
 
     // plain code-unit order: deterministic on every OS and locale

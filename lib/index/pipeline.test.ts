@@ -151,6 +151,55 @@ describe("indexRepository — edges of the world", () => {
     });
 });
 
+describe("indexRepository — files over the size cap (ADR-053, amended)", () => {
+    const BIG = [
+        'import { a } from "./a";',                       // 25 bytes with its newline
+        'export type C = typeof import("./c");',          // 38
+        "export function f(): number { return a; }",      // 42
+        "export class K {}",                              // 18
+        "",
+    ].join("\n");                                         // 123 bytes, 4 lines
+
+    function repoWithBigFile(): string {
+        const dir = makeTempDir("neb-importsonly-");
+        fs.writeFileSync(path.join(dir, "a.ts"), "export const a = 1;\n");                                  // 20 bytes
+        fs.writeFileSync(path.join(dir, "c.ts"), "export const c = 2;\n");                                  // 20 bytes
+        fs.writeFileSync(path.join(dir, "big.ts"), BIG);
+        fs.writeFileSync(path.join(dir, "huge.ts"), `import { a } from "./a";\n// ${"x".repeat(300)}\n`);   // 25 + 304 = 329 bytes
+        return dir;
+    }
+
+    function declarationsOf(repoId: number, filePath: string){
+        const db = getDb();
+        const file = db.select({ id: files.id, lineCount: files.lineCount, sizeBytes: files.sizeBytes })
+            .from(files).where(and(eq(files.repoId, repoId), eq(files.path, filePath))).get()!;
+        return {
+            lineCount: file.lineCount,
+            sizeBytes: file.sizeBytes,
+            symbols: db.select({ q: symbols.qualifiedName }).from(symbols).where(eq(symbols.fileId, file.id)).all().map((s) => s.q),
+            chunks: db.select({ name: chunks.name }).from(chunks).where(eq(chunks.fileId, file.id)).all().map((c) => c.name),
+        };
+    }
+
+    it("indexes a file over the cap for its imports only: its edges, no declarations, no chunks; past the hard bound it is skipped", () => {
+        const result = indexRepository(repoWithBigFile(), { maxFileBytes: 100, hardMaxFileBytes: 200 });
+
+        expect(result).toMatchObject({ files: 3, changed: 3, edges: 2, errors: [], importsOnly: [{ path: "big.ts", sizeBytes: 123 }] });
+        expect(result.skipped).toEqual([{ path: "huge.ts", reason: "too large (329 bytes)" }]);
+        expect(loadImportEdges(getDb(), result.repoId).map((e) => `${e.source} -> ${e.target}`).sort()).toEqual(["big.ts -> a.ts", "big.ts -> c.ts"]);
+
+        expect(declarationsOf(result.repoId, "big.ts")).toEqual({ lineCount: 4, sizeBytes: 123, symbols: [], chunks: [] });
+        // a file under the cap is read in full, as before
+        expect(declarationsOf(result.repoId, "a.ts").symbols).toEqual(["a"]);
+    });
+
+    it("keeps an imports-only file unchanged on the next run, edges and all", () => {
+        const root = repoWithBigFile();
+        indexRepository(root, { maxFileBytes: 100, hardMaxFileBytes: 200 });
+        expect(indexRepository(root, { maxFileBytes: 100, hardMaxFileBytes: 200 })).toMatchObject({ files: 3, changed: 0, unchanged: 3, edges: 2 });
+    });
+});
+
 describe("indexRepository — progress", () => {
     it("reports every stage in order, each ending at its total", () => {
         const root = copyFixture();

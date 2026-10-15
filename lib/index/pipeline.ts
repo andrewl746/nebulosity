@@ -16,9 +16,9 @@ import { pruneSummaries } from "../db/store/summaries";
 import { bumpIndexVersion, readAdapterVersion, writeAdapterVersion } from "../db/store/version";
 import { buildFolders, buildLevelEdges } from "./aggregate";
 import { docLinks, folderSuffixes, type KnownPaths } from "./docs";
-import { discoverFiles, isTestPath, readGitHead, type SkippedFile } from "./discover";
+import { discoverFiles, isTestPath, readGitHead, type DiscoveredFile, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
-import { ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile } from "./languages/typescript";
+import { ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile, parseTypeScriptImportsOnly } from "./languages/typescript";
 import { repoKey } from "./paths";
 import { createResolver, createSourceFinder, edgesFrom } from "./resolve";
 import { declaredEntries, readWorkspace } from "./workspace";
@@ -30,7 +30,10 @@ export type IndexOptions = {
     onProgress?: (stage: IndexStage, done: number, total: number) => void;
     /** Files parsed and committed per transaction. */
     batchSize?: number;
+    /** A code file over this is indexed for its imports only (ADR-053). Default DEFAULT_MAX_FILE_BYTES (1 MB). */
     maxFileBytes?: number;
+    /** A code file over this is skipped. Default DEFAULT_HARD_MAX_FILE_BYTES (20 MB). */
+    hardMaxFileBytes?: number;
     /**
      * At least this many files to parse (new, or with no stored hash) and code search is filled in one go after the
      * structure stage instead of by a trigger per chunk (ADR-031, amended). Default 2,000.
@@ -49,7 +52,10 @@ export type IndexResult = {
     folders: number;
     levelEdges: number;
     errors: FileError[];
+    /** Files left out: over the hard bound, unreadable, or a doc over the cap. */
     skipped: SkippedFile[];
+    /** Code files over the size cap, in the index for their imports only: no declarations, code search or summary (ADR-053). */
+    importsOnly: DiscoveredFile[];
     timingsMs: Record<IndexStage, number>;
     totalMs: number;
     /** Filling code search after a bulk run (0 when it wasn't deferred); not part of totalMs (S1). */
@@ -100,7 +106,9 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         // ---- discover ---------------------------------------------------------
         let t = performance.now();
-        const discovered = discoverFiles(root, { extensions: TYPESCRIPT_EXTENSIONS, maxBytes: options.maxFileBytes });
+        const discovered = discoverFiles(root, {
+            extensions: TYPESCRIPT_EXTENSIONS, maxBytes: options.maxFileBytes, hardMaxBytes: options.hardMaxFileBytes,
+        });
         const stored = loadStoredFiles(db, repoId);
         timingsMs.discover = performance.now() - t;
         options.onProgress?.("discover", discovered.files.length, discovered.files.length);
@@ -142,7 +150,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 }
 
                 try{
-                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes));
+                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, { importsOnly: file.importsOnly === true }));
                 } catch (err){
                     errors.push({ path: file.path, error: message(err) });
                 }
@@ -225,6 +233,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             levelEdges: levelRows.length,
             errors,
             skipped,
+            importsOnly: discovered.files.filter((f) => f.importsOnly),
             timingsMs,
             totalMs,
             searchIndexMs,
@@ -259,9 +268,14 @@ function isDirectory(p: string): boolean {
     }
 }
 
-/** One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed. */
-export function toFileRecord(filePath: string, text: string, contentHash: string, sizeBytes: number): FileRecord {
-    const parsed = parseTypeScriptFile(filePath, text);
+/**
+ * One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed.
+ * A file over the size cap is read for its imports only: no declarations and no chunks, so no code search (ADR-053).
+ */
+export function toFileRecord(
+    filePath: string, text: string, contentHash: string, sizeBytes: number, opts: { importsOnly?: boolean } = {}
+): FileRecord {
+    const parsed = opts.importsOnly ? parseTypeScriptImportsOnly(filePath, text) : parseTypeScriptFile(filePath, text);
     return {
         path: filePath,
         kind: /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",

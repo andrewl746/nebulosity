@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countLines, languageOf, parseTypeScriptFile } from "./typescript";
+import { countLines, languageOf, parseTypeScriptFile, parseTypeScriptImportsOnly } from "./typescript";
 
 const LOG_TS = [
     "/** Writes a message. */",
@@ -135,5 +135,77 @@ describe("computed import() (ADR-053)", () => {
 
     it("keeps a plain string import() as before", () => {
         expect(importsOf('import("./c.js");')).toEqual(["./c.js"]);
+    });
+});
+
+describe("import type expressions (ADR-053, amended)", () => {
+    const importsOf = (text: string): string[] => parseTypeScriptFile("x.ts", text).imports;
+
+    it("reads typeof import('…') and import('…').T in a type position as imports, like a type-only import", () => {
+        const source = [
+            "export interface TestWindow {",
+            "    database: typeof import('@blocksuite/affine/blocks/database');",   // AFFiNE's declare-test-window.ts L16
+            "}",
+            'let model: import("./model").Model;',
+            'type Default = typeof import("./ns.js").default;',
+        ].join("\n");
+        expect(importsOf(source)).toEqual(["@blocksuite/affine/blocks/database", "./model", "./ns.js"]);
+    });
+
+    it("gives nothing for an import type whose argument isn't a string literal", () => {
+        expect(importsOf("type T = typeof import(Foo);")).toEqual([]);
+    });
+
+    it("leaves an import('…') type inside a JSDoc comment out: it is a comment", () => {
+        expect(importsOf("/** @type {import('./a').X} */\nlet x;\n")).toEqual([]);
+    });
+
+    it("counts a specifier once when both a statement and an import type name it", () => {
+        expect(importsOf('import type { A } from "./a";\nlet b: typeof import("./a");\n')).toEqual(["./a"]);
+    });
+});
+
+describe("parseTypeScriptImportsOnly — a file over the size cap (ADR-053, amended)", () => {
+    it("reads every import form in source order, and no declarations or chunks", () => {
+        const source = [
+            "import a from \"./a\";",
+            "import type { B } from \"../b\";",
+            "import \"./side-effect\";",
+            "export { c } from \"./c\";",
+            "export * from \"./d\";",
+            "import e = require(\"./e\");",
+            "const f = require(\"./f\");",
+            "async function g() { await import(\"./g\"); }",
+            "let h: typeof import(\"./h\");",
+            "export class Big { run(): void {} }",
+            "",
+        ].join("\n");
+        expect(parseTypeScriptImportsOnly("src/big.ts", source)).toEqual({
+            imports: ["./a", "../b", "./side-effect", "./c", "./d", "./e", "./f", "./g", "./h"],
+            symbols: [],
+            chunks: [],
+            lineCount: 10,
+        });
+    });
+
+    it("ignores import-looking strings, templates and comments", () => {
+        const source = [
+            "const s = \"import x from './s'\";",
+            "const t = `import y from './t'`;",
+            "// import z from './c'",
+            "/* require('./r') */",
+            "",
+        ].join("\n");
+        expect(parseTypeScriptImportsOnly("x.ts", source).imports).toEqual([]);
+    });
+
+    it("leaves out a module augmentation (declare module \"…\"), as the full parse does", () => {
+        const source = "import { x } from \"./b\";\ndeclare module \"./a\" {\n    interface X { y: number }\n}\n";
+        expect(parseTypeScriptImportsOnly("x.ts", source).imports).toEqual(["./b"]);
+        expect(parseTypeScriptFile("x.ts", source).imports).toEqual(["./b"]);
+    });
+
+    it("reports each specifier once", () => {
+        expect(parseTypeScriptImportsOnly("x.ts", "import { a } from \"./a\";\nconst b = require(\"./a\");\n").imports).toEqual(["./a"]);
     });
 });

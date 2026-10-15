@@ -70,7 +70,7 @@ describe("selectSample", () => {
 
     it("compares whole path segments, and names the sample folders the index doesn't have", () => {
         // src/application.ts starts with "src/app" but isn't inside src/app
-        const files = [...FILES, { path: "src/application.ts", contentHash: "h-x", lineCount: 1, isTest: false, importedBy: 0 }];
+        const files = [...FILES, { path: "src/application.ts", contentHash: "h-x", lineCount: 1, isTest: false, importedBy: 0, sizeBytes: 10 }];
         const scope = selectSample(files, FOLDERS, ["src/app", "lib/missing"]);
 
         expect(scope.files.map((f) => f.path)).toEqual(["src/app/main.ts", "src/app/view.tsx"]);

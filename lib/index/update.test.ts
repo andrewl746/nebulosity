@@ -7,7 +7,7 @@ import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
-import { folders, levelEdges } from "../db/schema";
+import { chunks, files, folders, levelEdges, symbols } from "../db/schema";
 import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { loadImportEdges } from "../db/store/structure";
@@ -160,6 +160,60 @@ describe("applyFileChanges", () => {
         } finally{
             releaseIndexLock(db);
         }
+    });
+});
+
+describe("applyFileChanges — files over the size cap (ADR-053, amended)", () => {
+    const CAPS = { maxFileBytes: 100, hardMaxFileBytes: 200 };
+
+    function declarationsOf(repoId: number, filePath: string){
+        const db = getDb();
+        const file = db.select({ id: files.id }).from(files).where(and(eq(files.repoId, repoId), eq(files.path, filePath))).get()!;
+        return {
+            symbols: db.select({ q: symbols.qualifiedName }).from(symbols).where(eq(symbols.fileId, file.id)).all().map((s) => s.q),
+            chunks: db.select({ name: chunks.name }).from(chunks).where(eq(chunks.fileId, file.id)).all().map((c) => c.name),
+        };
+    }
+
+    const edgesOf = (repoId: number): string[] => loadImportEdges(getDb(), repoId).map((e) => `${e.source} -> ${e.target}`).sort();
+
+    it("a file grown over the cap keeps its import edges and loses its declarations and chunks, as a full run stores it", () => {
+        const root = makeTempDir("neb-update-cap-");
+        write(root, "a.ts", "export const a = 1;\n");
+        write(root, "b.ts", 'import { a } from "./a";\nexport function b(): number { return a; }\n');    // 25 + 42 = 67 bytes
+        const { repoId } = indexRepository(root, CAPS);
+        expect(declarationsOf(repoId, "b.ts").symbols).toEqual(["b"]);
+
+        fs.appendFileSync(path.join(root, "b.ts"), `// ${"x".repeat(60)}\n`);                                // 67 + 64 = 131 bytes
+        expect(applyFileChanges(root, ["b.ts"], CAPS)).toMatchObject({ changed: ["b.ts"], deleted: [], edgesAdded: 0, edgesRemoved: 0 });
+
+        expect(edgesOf(repoId)).toEqual(["b.ts -> a.ts"]);
+        expect(declarationsOf(repoId, "b.ts")).toEqual({ symbols: [], chunks: [] });
+        const twin = makeTempDir("neb-twin-");
+        fs.cpSync(root, twin, { recursive: true });
+        expect(tables(repoId)).toEqual(tables(indexRepository(twin, CAPS).repoId));
+    });
+
+    it("a file grown past the hard bound leaves the index, its edges with it", () => {
+        const root = makeTempDir("neb-update-bound-");
+        write(root, "a.ts", "export const a = 1;\n");
+        write(root, "b.ts", 'import { a } from "./a";\nexport function b(): number { return a; }\n');    // 67 bytes
+        const { repoId } = indexRepository(root, CAPS);
+
+        fs.appendFileSync(path.join(root, "b.ts"), `// ${"x".repeat(140)}\n`);                               // 67 + 144 = 211 bytes
+        expect(applyFileChanges(root, ["b.ts"], CAPS)).toMatchObject({ changed: [], deleted: ["b.ts"], edgesRemoved: 1 });
+        expect(edgesOf(repoId)).toEqual([]);
+    });
+
+    it("a new file over the cap enters the index with its edges", () => {
+        const root = makeTempDir("neb-update-new-");
+        write(root, "a.ts", "export const a = 1;\n");
+        const { repoId } = indexRepository(root, CAPS);
+
+        write(root, "big.ts", `import { a } from "./a";\nexport const big = a;\n// ${"x".repeat(80)}\n`);       // 25 + 22 + 84 = 131 bytes
+        expect(applyFileChanges(root, ["big.ts"], CAPS)).toMatchObject({ changed: ["big.ts"], edgesAdded: 1 });
+        expect(edgesOf(repoId)).toEqual(["big.ts -> a.ts"]);
+        expect(declarationsOf(repoId, "big.ts")).toEqual({ symbols: [], chunks: [] });
     });
 });
 

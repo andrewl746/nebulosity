@@ -826,6 +826,33 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 - A repo with internal packages but no workspace declaration resolves only its root package by name; report-resolution lists what stays unresolved.
 **Revisit when:** a repo's packages resolve only through a bundler's own config (webpack aliases, Vite `resolve.alias`): read those, or let the user name aliases.
 
+**Amended (2026-10-15, V1.6, before Eval #2's freeze): import type expressions count, and files over the size cap keep their import edges.** Two gaps were found while checking Eval #2's answer key against the index (V1.6 Task 14a): the index agreed with 41 of the 44 truths. The owner decided to fix them before the freeze (2026-10-14, "Fix before the freeze").
+- **Import type expressions.** `typeof import("x")` and `import("x").T` in a type position are import specifiers, like a type-only import, which the import rule counts (ADR-050). The argument must be a string literal; anything else gives nothing. An `import("x")` type inside a JSDoc comment stays a comment, since the adapter never walks into JSDoc. AFFiNE's `tests/blocksuite/e2e/utils/declare-test-window.ts` L16 (`database: typeof import('@blocksuite/affine/blocks/database')`) is how 100 end-to-end tests reach `database-block.ts`. `ADAPTER_VERSION` is now 3, so the first full run after this parses every file again once.
+- **Files over the size cap keep their import edges.** A code file over 1 MB (`DEFAULT_MAX_FILE_BYTES`) used to be skipped. VS Code's three agent-host tests of 1.0–1.6 MB import 297 real files that way. Such a file is now indexed for its imports only:
+  - its specifiers are read by TypeScript's `preProcessFile`, a scanner pass with no syntax tree;
+  - it gets no declarations and no chunks, so no code search;
+  - it gets no model summary: the planner gives it a template ("Over the size cap: imports only"), as it does a test file;
+  - a run lists it under `importsOnly`, not `skipped`.
+
+  Past a hard bound of 20 MB (`DEFAULT_HARD_MAX_FILE_BYTES`) a code file is still skipped, so a giant generated blob can't stall a run or exhaust memory: `preProcessFile` reads about 15 ms a megabyte, about 0.3 s at the bound. The incremental update treats both bounds the same way. Docs keep the 1 MB cap.
+- **Why `preProcessFile`, not the adapter's own reader.** On five of the six code files over 1 MB in VS Code and AFFiNE, a full parse took 5–13 times as long and 8–30 times the heap (the sixth is one data statement): 830 ms and 180 MB for AFFiNE's 3.8 MB minified yarn release, against 65 ms and 23 MB. Its reading differs from the adapter's in three ways:
+  - it also reports module augmentations (`declare module "x"`), which are dropped here, as the full parse never reads them;
+  - it misses `export * as ns from "x"` and a computed `import()`;
+  - it reads an AMD `define([...])` list.
+
+  On those six files both readers gave the same specifiers, apart from the yarn release's `fs` and `path`, which resolve to nothing.
+**Consequences of the amendment:**
+- On VS Code, 14,844 → 14,849 files and 140,248 → 140,583 edges, none removed:
+  - 297 come from the three agent-host tests (`agentService.test.ts` 88, `copilotAgent.test.ts` 106, `copilotAgentSession.test.ts` 103);
+  - 1 goes into `src/vs/workbench/api/test/browser/extHostDocumentData.test.perf-data.ts`, now indexed, from its test;
+  - 37 come from import types in 26 files, 11 of them in the two desktop loaders (`src/vs/code/electron-browser/workbench/workbench.ts` 6, `src/vs/sessions/electron-browser/sessions.ts` 5).
+
+  The other two files over 1 MB import nothing that resolves.
+- On AFFiNE, 6,986 → 6,987 files (the yarn release, which yields no edge) and 26,254 → 26,261 edges, all 7 from import types in 3 files (5 in `declare-test-window.ts`).
+- The index now agrees with all 44 of Eval #2's truths, and still with Eval #1's ten list and chain truths.
+- S1 on VS Code, cold: 52.6 s at worst of three, against 49.2–51.9 s for the code before it in the same session, on a machine running far slower than for Index Benchmark #4 (BENCHMARKS.md, Index Benchmark #5).
+- The re-index left 9 of VS Code's summaries out of date: 8 folders above the newly indexed files, and the repo. Their child lists changed, and they are redone when opened.
+
 ## ADR-054 — Docs pointers: which docs talk about which folders, read from the repo's Markdown (2026-10-14)
 
 **Context:** In Eval #1, big-picture scores followed whether a run read VS Code's `.github/instructions/source-code-organization.instructions.md`. The five runs that read it scored 0.88–1.00 on BP2 and BP4; the seven that didn't scored 0.44–0.83. Both U runs on BP4 called `describe` on `src/vs/workbench`, got its layout and counts, and never found the file, whose front matter says `applyTo: src/vs/**`. Nebulosity's summaries say what a folder holds, not its rules. The rules are often already written down, in a README, an architecture doc, or instructions for agents.
@@ -906,5 +933,5 @@ They need the whole graph, and the index already holds it.
   It is computed only on complete data: every repo, and every scheduled run kept in both arms.
 - Everything else as ADR-050: pinned versions, the isolation and init checks, outages re-run, blind grading with the owner ruling on disagreements, losses published.
 **Alternatives:** (a) Read-only like Eval #1: comparable, but the savings would stay conditioned on a baseline that can't script, Eval #1's own caveat. (b) VS Code only: the model knows it from training and it ships an agent guide; Eval #1 showed both help Claude Code alone. (c) Questions where Nebulosity can't lose: the owner's gate keeps Eval #1's families and requires no loss there. (d) Two repeats: cheaper, and the noise Eval #1 warned about.
-**Consequences:** 234 single runs and 36 session runs, on the owner's subscription (the pilot measures the share of the windows; the owner approves the count). The results, losses included, go in docs/EVAL_RESULTS.md as Eval #2, and the gate's verdict decides whether S8 (going public) starts. Two index gaps found while checking the truths stay until the results (R1), because they were found through Eval #2's answer key: files over 1 MB are skipped, and `typeof import('…')` isn't followed. They cost N on three impact questions, and are fixed after the results.
+**Consequences:** 234 single runs and 36 session runs, on the owner's subscription (the pilot measures the share of the windows; the owner approves the count). The results, losses included, go in docs/EVAL_RESULTS.md as Eval #2, and the gate's verdict decides whether S8 (going public) starts. Two index gaps found while checking the truths (files over 1 MB were skipped, and `typeof import('…')` wasn't followed) were fixed before the freeze at the owner's decision (2026-10-14, "Fix before the freeze"; ADR-053, amended). The index now agrees with 44 of the 44 truths (41 before). They were found through Eval #2's answer key, a threat the method names.
 **Revisit when:** the gate passes or fails (the verdict amends this ADR), or a new Claude Code version or model changes the baseline enough to matter for the README's claims.

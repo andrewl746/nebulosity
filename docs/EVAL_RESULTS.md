@@ -373,10 +373,10 @@ How `scripts/eval/gate.ts` computes it:
 - Impact truths of thousands of files were checked by method and sample, not entry by entry (R2's stated change).
 - The computed-site sweep lists only `import(<name>)`. 36 other non-literal sites (35 in VS Code, 1 in AFFiNE) are not listed; counting them changes no truth.
 - The VS Code violations question moved from the plan's `src/vs/platform` → `src/vs/editor` to `src/vs/workbench/services` → `src/vs/workbench/contrib` (R1: the dev set used `src/vs/platform`). The new pair breaks VS Code's own rule, "No dependency from outside `contrib/` into `contrib/`" (`.github/instructions/source-code-organization.instructions.md` L44).
-- Two gaps in the index, found while checking the truths, are not fixed before the eval.
-  - Files over 1 MB are skipped. On VSCODE-IMPACT the index finds 4,501 dependents against the truth's 4,503. On vscode-s3's impact it finds 56 against 59, with the `agentHost` line at 51 against 54.
-  - `typeof import('…')` isn't followed. On affine-s1's impact the index finds 1,446 against 1,546, with the `tests` line at 12 against 112.
-  - Both cost N on those three impact questions. They were found by comparing the index with Eval #2's answer key, so fixing them before the freeze would tune on the eval (R1). They are fixed after the results.
+- Two gaps in the index, found while checking the answer key, were fixed before the freeze at the owner's decision (2026-10-14, "Fix before the freeze"; ADR-053, amended).
+  - Files over 1 MB were skipped. They are now indexed for their imports only, up to 20 MB. Before the fix, the index found 4,501 dependents on VSCODE-IMPACT against the truth's 4,503, and 56 against 59 on vscode-s3's impact, with the `agentHost` line at 51 against 54.
+  - `typeof import('…')` wasn't followed; now it is. Before the fix, the index found 1,446 against 1,546 on affine-s1's impact, with the `tests` line at 12 against 112.
+  - The index now agrees with 44 of the 44 truths (41 before), and still with Eval #1's ten list and chain truths (BENCHMARKS.md, Index Benchmark #5). Both fixes follow the import rule (type-only imports and test files count); neither was tuned to a number.
 - The truths were read by an independent reader, who also built a third graph (44 of 44 truths agree), and the session that ran the eval read a sample.
 - AFFiNE's rubrics come from its own docs. The rubric's author listed 11 of the 32 graded points as answerable from training or the README. Two of the four questions are on BlockSuite.
 - Each session's first question opens with "I'm about to change `<X>`.", X being the session's area file (Task 14's ruling). The other three prompts are the templates unchanged.
@@ -398,7 +398,7 @@ How `scripts/eval/gate.ts` computes it:
 - **Three repeats is still a small sample.** Repeats of one arm differ, and the tables will show every run. Each grep-hard kind has one question per repo, so condition 1's floor of −0.05 per question turns on three runs an arm.
 - **D1's thresholds are the owner's, set after Eval #1**, knowing where Eval #1 fell short. They were fixed with the plan, before Eval #2's questions existed, and they don't change after the first run.
 - **The truths were read by models, and no person read every entry.** A misreading shared by the readers is possible. The third graph lowers the odds of a graph error, but not of a misread rule.
-- **The index's two known gaps cost N** on three impact questions (see "Decisions made since the plan").
+- **Two index fixes were found through the answer key.** Files over the size cap and `typeof import('…')` were found by comparing the index with Eval #2's truths, and fixed before the freeze (see "Decisions made since the plan"). Each follows the stated import rule, but the eval's own key is what found them, so they favour N on the three impact questions they touch: VSCODE-IMPACT, vscode-s3's and affine-s1's.
 - **Type-only edges carry weight.** An answer that drops type-only imports loses these, but the rule, which every one of these prompts states, says they count:
   - all 4 of AFFINE-VIOLATIONS' files are `import type`;
   - the 112 `tests` dependents in affine-s1's impact reach the target only through one `typeof import('@blocksuite/affine/blocks/database')`;

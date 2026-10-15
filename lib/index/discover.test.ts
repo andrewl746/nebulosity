@@ -38,10 +38,30 @@ describe("discoverFiles — walking (no .git)", () => {
         }
         expect(discoverFiles(dir, { extensions: TS_EXTENSIONS }).files.map((f) => f.path)).toEqual(["src/f.ts"]);
     });
+
+    it("lists a code file over the size cap for its imports only, up to the hard bound; past the bound it is skipped (ADR-053, amended)", () => {
+        const dir = makeTempDir("neb-discover-importsonly-");
+        fs.writeFileSync(path.join(dir, "small.ts"), "export {};\n");                                     // 11 bytes
+        fs.writeFileSync(path.join(dir, "mid.ts"), `import "./small";\n// ${"x".repeat(30)}\n`);        // 18 + 34 = 52 bytes
+        fs.writeFileSync(path.join(dir, "huge.ts"), `// ${"x".repeat(120)}\n`);                         // 124 bytes
+        fs.writeFileSync(path.join(dir, "mid.md"), `# ${"x".repeat(50)}\n`);                            // 53 bytes: a doc keeps the cap
+
+        const result = discoverFiles(dir, { extensions: TS_EXTENSIONS, maxBytes: 40, hardMaxBytes: 100 });
+
+        expect(result.files).toEqual([
+            { path: "mid.ts", sizeBytes: 52, importsOnly: true },
+            { path: "small.ts", sizeBytes: 11 },
+        ]);
+        expect(result.files[1].importsOnly).toBeUndefined();
+        expect([...result.skipped].sort((a, b) => (a.path < b.path ? -1 : 1))).toEqual([   // walk order is the OS's
+            { path: "huge.ts", reason: "too large (124 bytes)" },
+            { path: "mid.md", reason: "too large (53 bytes)" },
+        ]);
+    });
 });
 
 describe("discoverFiles — git repositories", () => {
-    it("respects .gitignore, keeps spaces and non-ASCII names intact, skips oversized files and .env files", () => {
+    it("respects .gitignore, keeps spaces and non-ASCII names intact, skips files over the hard bound and .env files", () => {
         const dir = makeTempDir("neb-discover-git-");
         execFileSync("git", ["init", "-q", dir]);
         fs.writeFileSync(path.join(dir, ".gitignore"), "ignored/\n");
@@ -54,7 +74,8 @@ describe("discoverFiles — git repositories", () => {
         fs.writeFileSync(path.join(dir, ".env.ts"), "export const secret = 1;\n");
         fs.writeFileSync(path.join(dir, "big.ts"), `export const big = '${"x".repeat(60)}';\n`);
 
-        const result = discoverFiles(dir, { extensions: TS_EXTENSIONS, maxBytes: 40 });
+        // the hard bound at the cap: past it a file is skipped, not read for its imports (ADR-053, amended)
+        const result = discoverFiles(dir, { extensions: TS_EXTENSIONS, maxBytes: 40, hardMaxBytes: 40 });
 
         expect(result.usedGit).toBe(true);
         expect(result.files.map((f) => f.path)).toEqual(["a.ts", "with space.ts", "ünïcode.ts"]);

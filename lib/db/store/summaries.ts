@@ -26,7 +26,8 @@ export type StoredSummary = {
 };
 
 /** A file as the summary planner sees it. */
-export type FileFacts = { path: string; contentHash: string; lineCount: number; isTest: boolean; importedBy: number };
+/** sizeBytes tells the planner which files are over the size cap, indexed for their imports only (ADR-053). */
+export type FileFacts = { path: string; contentHash: string; lineCount: number; isTest: boolean; importedBy: number; sizeBytes: number };
 
 /** A file that imports another, as that file's prompt needs it: where it is, and whether the indexer calls it a test file. */
 export type Importer = { path: string; isTest: boolean };
@@ -68,6 +69,7 @@ export function loadFileFacts(db: Db, repoId: number): FileFacts[] {
         lineCount: files.lineCount,
         isTest: files.isTest,
         importedBy: sql<number>`count(${imports.id})`,
+        sizeBytes: files.sizeBytes,
     })
         .from(files)
         .leftJoin(imports, eq(imports.targetFileId, files.id))

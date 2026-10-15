@@ -10,8 +10,9 @@ export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", 
  * What this adapter reads from a file, versioned. Bump it whenever a change gives an unchanged file different imports,
  * symbols or chunks: a full run then parses every file again once, where it would otherwise keep what the older
  * adapter stored for every file whose bytes haven't changed (ADR-053). 1: V1.1–V1.5. 2: computed import() (ADR-053).
+ * 3: import type expressions, `typeof import("x")` (ADR-053, amended).
  */
-export const ADAPTER_VERSION = 2;
+export const ADAPTER_VERSION = 3;
 
 /** files.language for a path this adapter claims. TypeScript's parser reads both languages. */
 export function languageOf(filePath: string): "typescript" | "javascript" {
@@ -38,6 +39,25 @@ export function parseTypeScriptFile(filePath: string, text: string): ParsedFile 
     };
 }
 
+/** What comes just before a module augmentation's name: `declare module "x"`. No import statement ends this way. */
+const AUGMENTATION = /\bmodule\s*$/;
+
+/**
+ * A file over the size cap (ADR-053, amended): only its imports, read by TypeScript's preProcessFile, a scanner pass
+ * with no syntax tree. On VS Code's 1–1.6 MB test files it takes 15–30 ms where a full parse takes 90–170 ms and 30–60 MB
+ * of heap, and on a 3.8 MB minified bundle 65 ms against 830 ms and 180 MB. It reads the same statements as
+ * collectImports, with three differences: a module augmentation (`declare module "x"`), which it reports, is dropped
+ * here; it misses `export * as ns from "x"` and a computed import(); and it reads an AMD `define([...])` list.
+ */
+export function parseTypeScriptImportsOnly(filePath: string, text: string): ParsedFile {
+    const preProcessed = ts.preProcessFile(text, true, true);   // readImportFiles, detectJavaScriptImports (require)
+    const imports = preProcessed.importedFiles
+        .filter((ref) => !AUGMENTATION.test(text.slice(Math.max(0, ref.pos - 32), ref.pos)))
+        .map((ref) => ref.fileName);
+
+    return { chunks: [], symbols: [], imports: [...new Set(imports)], lineCount: countLines(text) };
+}
+
 /** Lines as an editor numbers them: a trailing newline does not start an extra line. */
 export function countLines(text: string): number {
     if (text === "") return 0;
@@ -60,6 +80,10 @@ function collectImports(sourceFile: ts.SourceFile): string[] {
             && ts.isExternalModuleReference(node.moduleReference)
             && ts.isStringLiteral(node.moduleReference.expression)){
             found.push(node.moduleReference.expression.text);           // import x = require("x")
+        } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)){
+            // typeof import("x") · import("x").T: a type-only reference, which the import rule counts (ADR-053, amended).
+            // forEachChild never enters JSDoc, so a `{import("x").T}` in a comment stays a comment.
+            found.push(node.argument.literal.text);
         } else if (ts.isCallExpression(node) && node.arguments.length === 1){
             // bind first: TypeScript does not reliably narrow a re-read of node.arguments[0]
             const arg = node.arguments[0];
