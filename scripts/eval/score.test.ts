@@ -5,7 +5,7 @@ import zlib from "zlib";
 import { describe, expect, it } from "vitest";
 import { runName } from "./run-config";
 import {
-    cleanliness, cleanlinessLine, familyArmRows, kindArmRows, kindOf, lastPerName, loadRuns, makeImports, median, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
+    cleanliness, cleanlinessLine, familyArmRows, kindArmRows, kindOf, lastPerName, loadRuns, makeImports, median, missingForGate, repoScoreContext, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
     renderQuestionTable, renderTable, repoIdFor, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, scoreSession, sumTokens, toGateRun, toGateSession, type Adjudicated, type FamilyArmRow, type SessionResult, type QuestionArmRow, type QuestionData,
     type RunResult, type ScoreContext,
 } from "./score";
@@ -584,9 +584,10 @@ describe("repoReadouts: each repo's own graph", () => {
 
 describe("the gate's inputs", () => {
     it("turns a scored run of the eval into a gate run, and leaves out what the gate doesn't take", () => {
-        const base = { score: 0.5, kind: "list-direct" as const, repo: "vscode", costUsd: 0.1, wallMs: 2000, nebulosityCalls: 2, firstCallContext: 21000 };
+        // wallMs is the clock between start and end; the gate takes the result's duration_ms (D1), 1500 here
+        const base = { score: 0.5, kind: "list-direct" as const, repo: "vscode", costUsd: 0.1, wallMs: 2000, nebulosityCalls: 2, firstCallContext: 21000, summary: { durationMs: 1500 } as RunResult["summary"] };
         expect(toGateRun(result("cl1-nebulosity-2", base))).toEqual({
-            question: "cl1", repo: "vscode", kind: "list-direct", arm: "nebulosity", repeat: 2, score: 0.5, costUsd: 0.1, wallMs: 2000, nebulosityCalls: 2, firstCallContext: 21000,
+            question: "cl1", repo: "vscode", kind: "list-direct", arm: "nebulosity", repeat: 2, score: 0.5, costUsd: 0.1, wallMs: 1500, nebulosityCalls: 2, firstCallContext: 21000,
         });
         expect(toGateRun(result("cl1-nebulosity-2", { ...base, score: null }))).toBeNull();
         expect(toGateRun(result("cl1-nebulosity-2", { ...base, kind: undefined }))).toBeNull();
@@ -656,5 +657,95 @@ describe("the Eval #2 tables", () => {
         });
         const text = renderSessionTable([s(0.5, 0.4, 10000), s(1, 0.6, 20000)]);
         expect(text.split("\n")[2]).toBe("| r | baseline | 2 / 2 | 0.75 | $0.50 | 15 s | 0.00 |");
+    });
+});
+
+describe("fix round 1", () => {
+    // d → a closes the cycle; everything else is ctx's, an unknown step (anything to or from e.ts) staying unknown
+    const cyc: ScoreContext = { ...ctx, imports: (a, b) => (a === D && b === A ? true : ctx.imports(a, b)) };
+    const cycleQ = (shortest: number | null): QuestionData => ({
+        id: "gc1", family: "grepHard", kind: "cycle", truth: { id: "gc1", kind: "cycle", file: A, shortest, example: null, verified: true, notes: [] },
+    });
+
+    it("sends an unknown cycle step for reading, and a session and the pending list pick it up (I1)", () => {
+        // a → b is real, b → e is unknown (nobody has read e.ts)
+        const s = scoreAnswer(answer(A, B, E, A), cycleQ(4), cyc);
+        expect(s).toMatchObject({ score: null, pending: "chain step to adjudicate", unknown: [B, E] });
+        const questions = new Map([["gc1", cycleQ(4)]]);
+        const turn = { finalText: answer(A, B, E, A), subtype: "success", costUsd: 0, durationMs: 1, toolCalls: {}, nebulosityCalls: 0 };
+        const session = scoreSession("s1-baseline-1", { question: "s1", arm: "baseline", repeat: 1, toolSearch: true }, ["gc1"], { turns: [turn], costUsd: 0, durationMs: 1, firstCallContext: null }, questions, cyc);
+        expect(session).toMatchObject({ score: null, pending: "chain step to adjudicate", unknown: [[B, E]] });
+    });
+
+    it("reads a cycle after a lead-in line that repeats its first file as the same cycle (M3)", () => {
+        expect(scoreAnswer(answer(`The cycle through ${A}:`, A, B, C, D, A), cycleQ(4), cyc).score).toBe(1);
+    });
+
+    it("flags a valid cycle where the truth says none, for a recheck (M4)", () => {
+        const s = scoreAnswer(answer(A, B, C, D, A), cycleQ(null), cyc);
+        expect(s.score).toBe(0);
+        expect(s.flags).toContain("a valid cycle, though the truth says none: recheck the truth");
+    });
+
+    it("counts a listed path that isn't a file of the repo as a false positive, and flags it (M2)", () => {
+        const q: QuestionData = { id: "gu1", family: "grepHard", kind: "unused", truth: { id: "gu1", kind: "unused", folder: "src/vs", files: [A, B], verified: true, notes: [] } };
+        const s = scoreAnswer(answer(A, "src/vs/nothere.ts"), q, cyc);
+        // listed a and nothere against a and b: 1 hit, precision 1/2, recall 1/2
+        expect(s.score).toBeCloseTo(0.5, 10);
+        expect(s.precision).toBe(0.5);
+        expect(s.extra).toEqual(["src/vs/nothere.ts"]);
+        expect(s.flags).toContain("names non-files");
+    });
+
+    it("parses run names from the right, so ids may hold hyphens and digits (I3)", () => {
+        expect(parseRunName("affine-cn1-nebulosity-2")).toEqual({ question: "affine-cn1", arm: "nebulosity", repeat: 2, toolSearch: true });
+        expect(parseRunName("vs-s1-baseline-3")).toEqual({ question: "vs-s1", arm: "baseline", repeat: 3, toolSearch: true });
+        expect(parseRunName("affine-cn1-nebulosity-upfront-1")).toEqual({ question: "affine-cn1", arm: "nebulosity", repeat: 1, toolSearch: false });
+    });
+
+    it("finds what stops the gate: a repo with no runs, and a question or session short of its scheduled repeats in an arm (I3)", () => {
+        const expected = {
+            repoIds: ["vscode", "affine"], arms: ["baseline", "nebulosity"], repeats: 2,
+            questions: [{ id: "q1", repo: "vscode" }], sessions: [{ id: "s1", repo: "vscode" }],
+        };
+        const run = (name: string): RunResult => ({ ...result(name, { score: 1 }), repo: "vscode" });
+        const have = [run("q1-baseline-1"), run("q1-baseline-2"), run("q1-nebulosity-1")];
+        const sess = (arm: string, repeat: number): SessionResult => ({
+            name: "x", session: "s1", repo: "vscode", arm, repeat, score: 1, pending: null, turns: [], costUsd: 0, wallMs: 0, firstCallContext: null, unknown: [], flags: [],
+        });
+        expect(missingForGate(expected, have, [sess("baseline", 1), sess("baseline", 2), sess("nebulosity", 1), sess("nebulosity", 2)])).toEqual([
+            "no runs for the repo affine",
+            "q1 (nebulosity): 1 of 2 runs",
+        ]);
+        // a repeat counted twice isn't two runs, and one past the schedule isn't one
+        expect(missingForGate({ ...expected, repoIds: ["vscode"] }, [run("q1-baseline-1"), run("q1-baseline-1"), run("q1-nebulosity-1"), run("q1-nebulosity-3")], []))
+            .toEqual(["q1 (baseline): 1 of 2 runs", "q1 (nebulosity): 1 of 2 runs", "session s1 (baseline): 0 of 2 runs", "session s1 (nebulosity): 0 of 2 runs"]);
+        expect(missingForGate({ ...expected, repoIds: ["vscode"], sessions: [] }, [run("q1-baseline-1"), run("q1-baseline-2"), run("q1-nebulosity-1"), run("q1-nebulosity-2")], [])).toEqual([]);
+    });
+
+    it("scores Eval #2 on the truth's own graph: a workspace import resolves, and Task 10's 'out' verdict removes a scanner edge (C1)", () => {
+        const root = path.resolve("test/fixtures/arch-repo");
+        const main = "src/app/main.ts", view = "src/editor/browser/editorView.ts", ui = "packages/ui/src/index.ts", button = "packages/ui/src/button.ts", log = "packages/core/src/log.ts";
+        // main.ts imports "../editor/browser/editorView" and the workspace package "@arch/ui" (packages/ui/src/index.ts);
+        // button.ts imports "@arch/core/lib/log" (packages/core/src/log.ts, through the lib → src mapping)
+        const eval2 = repoScoreContext(root, "fx", false, [], []).ctx;
+        expect(eval2.imports(main, view)).toBe(true);
+        expect(eval2.imports(main, ui)).toBe(true);
+        expect(eval2.imports(button, log)).toBe(true);
+        expect(eval2.imports(view, main)).toBeNull();
+        // Eval #1's scanner has no resolver: the workspace imports are unknown there
+        const eval1 = repoScoreContext(root, "fx", true, [], []).ctx;
+        expect(eval1.imports(main, view)).toBe(true);
+        expect(eval1.imports(main, ui)).toBeNull();
+        // Task 10's verdict format: "out" says main.ts does not import editorView.ts, "in" says view imports main
+        const verdicts = [
+            { repo: "fx", from: main, to: view, decision: "out" as const, why: "inside a string" },
+            { repo: "fx", from: view, to: main, decision: "in" as const, why: "a computed import" },
+            { repo: "other", from: main, to: ui, decision: "out" as const, why: "another repo's verdict" },
+        ];
+        const judged = repoScoreContext(root, "fx", false, [], verdicts).ctx;
+        expect(judged.imports(main, view)).toBe(false);
+        expect(judged.imports(view, main)).toBe(true);
+        expect(judged.imports(main, ui)).toBe(true);
     });
 });

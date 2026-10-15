@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerSection, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreCycle, scoreList, scorePairs } from "./answer";
+import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreCycle, scoreList, scorePairs } from "./answer";
 
 describe("answerSection", () => {
     it("takes the text after the last ANSWER: line, in any case, with markdown around it", () => {
@@ -137,5 +137,31 @@ describe("the new kinds' scores", () => {
         const known = new Set(["m.ts", "t.ts"]);
         expect(extractPaths("m.ts\nt.ts\nm.ts", "/r", known).files).toEqual(["m.ts", "t.ts"]);
         expect(extractPaths("m.ts\nt.ts\nm.ts", "/r", known, { repeats: true }).files).toEqual(["m.ts", "t.ts", "m.ts"]);
+    });
+});
+
+describe("fix round 1: the readers and the cycle", () => {
+    it("reads counts with a unit after the number, or an approximately sign (M6)", () => {
+        const truth = { counts: [["src/app", 1200]] as [string, number][], elsewhere: 0, total: 1200 };
+        expect(scoreCounts("src/app: 1,200 files\nelsewhere: 0 files.\ntotal: ~1,200", truth)).toBe(1);
+    });
+
+    it("normalizes both sides of a pair the same way (M5)", () => {
+        expect(scorePairs(["browser -> common"], [["Browser/", "COMMON"]])).toBe(1);
+        expect(scorePairs(["`Browser/` → *common*"], [["browser", "common"]])).toBe(1);
+    });
+
+    it("leaves a cycle's score open while a step is unknown, but a false step is 0 even after an unknown one (I1)", () => {
+        const imports = (x: string, y: string): boolean | null => (x === "m" && y === "t" ? true : x === "t" && y === "x" ? null : x === "x" && y === "m" ? false : false);
+        expect(scoreCycle(["m", "t", "x", "m"], { file: "m", shortest: 3 }, imports)).toBe(0);   // x → m is known false
+        const open = (x: string, y: string): boolean | null => (x === "t" && y === "x" ? null : true);
+        expect(scoreCycle(["m", "t", "x", "m"], { file: "m", shortest: 3 }, open)).toBeNull();
+        expect(checkCycle(["m", "t", "x", "m"], { file: "m", shortest: 3 }, open).unknown).toEqual(["t", "x"]);
+    });
+
+    it("scores 0 but flags for a recheck a valid cycle where the truth says none (M4)", () => {
+        const c = checkCycle(["m", "t", "x", "m"], { file: "m", shortest: null }, () => true);
+        expect(c).toMatchObject({ score: 0, valid: true, steps: 3 });
+        expect(c.problem).toContain("recheck the truth");
     });
 });

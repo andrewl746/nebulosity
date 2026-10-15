@@ -14,8 +14,8 @@
  * Means and medians run over every matching run (a median of an even count is the mean of the two middle values). A condition
  * that is per repo fails when any repo fails, and reports the numbers of the worst repo. A family with no runs for both arms
  * on a repo is not compared there; a condition with nothing to compare fails (the gate never passes on no data).
- * For sessions "cost" and "time" are the mean over a repo's session runs of each arm (the totals of D1 when the arms ran the
- * same number of sessions, which the schedule makes so). Values are rounded to 4 decimal places.
+ * For sessions "cost" and "time" are the totals over a repo's session runs of each arm, as D1 says; score.ts computes the gate only
+ * on complete data, so both arms have the same number of sessions. Values are rounded to 4 decimal places.
  */
 
 export type QuestionKind = "bigPicture" | "list-direct" | "list-transitive" | "chain" | "impact" | "cycle" | "unused" | "violations" | "entries" | "pairs";
@@ -52,9 +52,10 @@ const kinds = (set: readonly QuestionKind[]) => (r: GateRun): boolean => set.inc
 const arm = (a: GateArm) => <T extends { arm: GateArm }>(xs: readonly T[]): T[] => xs.filter((x) => x.arm === a);
 const A = arm("baseline");
 const N = arm("nebulosity");
-const usd = (x: number): string => `$${x.toFixed(2)}`;
+const usd = (x: number): string => `$${x.toFixed(4)}`;
 const secs = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
-const n2 = (x: number): string => (Number.isFinite(x) ? x.toFixed(2) : "infinite");
+/** The numbers in the sentences print 4 decimal places, as the values are rounded to. */
+const n2 = (x: number): string => (Number.isFinite(x) ? x.toFixed(4) : "infinite");
 
 /** One thing compared on one repo: how far it is from its limit (negative: over it), and the numbers. */
 type Unit = { scope: string; slack: number; values: Record<string, number>; text: string };
@@ -83,7 +84,7 @@ function condition1(runs: readonly GateRun[]): Condition {
     const values = roundAll({ a: aMean, n: nMean, margin, worstQuestion: worst?.margin ?? NaN });
     return {
         id: "1", scope: "grep-hard runs, all repos pooled", values, pass,
-        text: `${rule}: A ${n2(aMean)}, N ${n2(nMean)}, margin ${n2(margin)} (needs 0.15); the worst question is ${n2(worst?.margin ?? NaN)} from A${worst ? ` (${worst.key.replace("\u0000", " ")})` : ""} (needs at least -0.05).`,
+        text: `${rule}: A ${n2(aMean)}, N ${n2(nMean)}, margin ${n2(margin)} (needs 0.1500); the worst question is ${n2(worst?.margin ?? NaN)} from A${worst ? ` (${worst.key.replace("\u0000", " ")})` : ""} (needs at least -0.05).`,
     };
 }
 
@@ -136,14 +137,16 @@ function condition4(sessions: readonly GateSession[]): Condition {
     for (const repo of repos(sessions)){
         const own = sessions.filter((s) => s.repo === repo);
         if (A(own).length === 0 || N(own).length === 0) continue;
-        const [costA, costN] = [mean(A(own).map((s) => s.costUsd)), mean(N(own).map((s) => s.costUsd))];
-        const [wallA, wallN] = [mean(A(own).map((s) => s.wallMs)), mean(N(own).map((s) => s.wallMs))];
+        // D1: the totals over the repo's session runs of each arm (the data is complete when the gate runs: equal counts)
+        const total = (xs: readonly number[]): number => xs.reduce((s, x) => s + x, 0);
+        const [costA, costN] = [total(A(own).map((s) => s.costUsd)), total(N(own).map((s) => s.costUsd))];
+        const [wallA, wallN] = [total(A(own).map((s) => s.wallMs)), total(N(own).map((s) => s.wallMs))];
         const [scoreA, scoreN] = [mean(A(own).map((s) => s.score)), mean(N(own).map((s) => s.score))];
         const [costRatio, wallRatio] = [ratio(costN, costA), ratio(wallN, wallA)];
         units.push({
             scope: repo, slack: Math.min(0.6 - costRatio, 0.6 - wallRatio, scoreN - scoreA + 0.03),
             values: { costA, costN, costRatio, wallA, wallN, wallRatio, scoreA, scoreN, scoreDifference: scoreN - scoreA },
-            text: `cost A ${usd(costA)}, N ${usd(costN)} (${n2(costRatio)} of A's), time A ${secs(wallA)}, N ${secs(wallN)} (${n2(wallRatio)} of A's), score A ${n2(scoreA)}, N ${n2(scoreN)} on ${repo} (cost and time need at most 0.60; score at least -0.03)`,
+            text: `total cost A ${usd(costA)}, N ${usd(costN)} (${n2(costRatio)} of A's), total time A ${secs(wallA)}, N ${secs(wallN)} (${n2(wallRatio)} of A's), score A ${n2(scoreA)}, N ${n2(scoreN)} on ${repo} (cost and time need at most 0.60; score at least -0.03)`,
         });
     }
     return perUnit("4", units, rule, "no sessions of both arms");

@@ -28,7 +28,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import zlib from "zlib";
-import type { ChainTruthFile, CycleTruthFile, ImpactTruthFile, ListTruthFile, PairsTruthFile, TruthFile } from "./build-truth";
+import { buildRepoGraphs, EVAL1, parseAdjudications, type Adjudication, type ChainTruthFile, type CycleTruthFile, type ImpactTruthFile, type ListTruthFile, type PairsTruthFile, type TruthFile } from "./build-truth";
 import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreList, scorePairs } from "./answer";
 import { loadDefinition } from "./definition";
 import { gateVerdict, type GateRun, type GateSession, type QuestionKind, type Verdict } from "./gate";
@@ -85,7 +85,8 @@ export function overrides(edges: readonly (readonly [string, string])[], adjudic
 
 /** The inverse of run-config's runName, or null for a name that isn't a run's. */
 export function parseRunName(name: string): RunId | null {
-    const m = /^([a-z]+\d+)-(baseline|nebulosity)(-upfront)?-(\d+)$/.exec(name);
+    // read from the right (the repeat, an optional "upfront", the arm), so an id may hold hyphens and digits: affine-cn1, vs-s1
+    const m = /^([a-z0-9][a-z0-9-]*)-(baseline|nebulosity)(-upfront)?-(\d+)$/.exec(name);
     return m === null ? null : { question: m[1], arm: m[2] as Arm, repeat: Number(m[4]), toolSearch: m[3] === undefined };
 }
 
@@ -155,18 +156,28 @@ function scoreNewKind(out: AnswerScore, section: string, truth: TruthFile, ctx: 
     if (truth.kind === "pairs") return { ...out, score: scorePairs(section.split(/\r?\n/), (truth as PairsTruthFile).pairs) };
     if (truth.kind === "cycle"){
         const cycle = truth as CycleTruthFile;
-        // a cycle names its first file twice, so the repeats stay
-        const files = extractPaths(section, ctx.repoRoot, ctx.known, { repeats: true }).files;
+        // a cycle names its first file twice, so the repeats stay; but a file named twice in a row (a lead-in line that
+        // repeats the first file) is one step's worth of nothing, so consecutive duplicates collapse
+        const named = extractPaths(section, ctx.repoRoot, ctx.known, { repeats: true }).files;
+        const files = named.filter((file, i) => i === 0 || file !== named[i - 1]);
         const c = checkCycle(out.none ? "none" : files, cycle, ctx.imports);
         const flags = [...out.flags];
         if (out.none && files.length > 0) flags.push("none, but names files");
-        if (c.problem?.startsWith("shorter than")) flags.push(c.problem);
-        return { ...out, files, score: c.score, steps: c.steps, valid: c.valid, problem: c.problem ?? null, flags };
+        if (c.problem?.startsWith("shorter than") || c.problem?.startsWith("a valid cycle")) flags.push(c.problem);
+        return {
+            ...out, files, score: c.score, pending: c.score === null ? "chain step to adjudicate" : null,
+            steps: c.steps, valid: c.valid, problem: c.problem ?? null, unknown: c.unknown ?? null, flags,
+        };
     }
     // unused, violations and entries: a set of files, scored by F1 (recall and precision beside it)
+    // a listed path that isn't a file of the repo is a false positive, and is flagged
     const wanted = (truth as { files: string[] }).files;
-    const s = scoreList(out.files, wanted);
-    return { ...out, score: f1(out.files, wanted), recall: s.recall, precision: s.precision, hits: s.hits, missed: s.missed, extra: s.extra };
+    const listed = [...out.files, ...out.notFiles];
+    const s = scoreList(listed, wanted);
+    return {
+        ...out, score: f1(listed, wanted), recall: s.recall, precision: s.precision, hits: s.hits, missed: s.missed, extra: s.extra,
+        flags: out.notFiles.length > 0 ? [...out.flags, "names non-files"] : out.flags,
+    };
 }
 
 /** Scores one answer's final text against its question's truth or rubric. `grade` is the run's rubric grade, for big-picture questions. */
@@ -262,8 +273,9 @@ export function withGateFields(r: RunResult, q: QuestionData, repo: string): Run
 export function toGateRun(r: RunResult): GateRun | null {
     if (r.score === null || r.kind === undefined || r.repo === undefined || (r.arm !== "baseline" && r.arm !== "nebulosity")) return null;
     return {
-        question: r.question, repo: r.repo, kind: r.kind, arm: r.arm, repeat: r.repeat, score: r.score, costUsd: r.costUsd, wallMs: r.wallMs,
-        nebulosityCalls: r.nebulosityCalls, firstCallContext: r.firstCallContext ?? null,
+        question: r.question, repo: r.repo, kind: r.kind, arm: r.arm, repeat: r.repeat, score: r.score, costUsd: r.costUsd,
+        // D1: wall time is the result's duration_ms, as for a session (summed over its messages), not the clock between start and end
+        wallMs: r.summary.durationMs ?? r.wallMs, nebulosityCalls: r.nebulosityCalls, firstCallContext: r.firstCallContext ?? null,
     };
 }
 
@@ -315,6 +327,51 @@ export function toGateSession(s: SessionResult): GateSession | null {
 }
 
 // ---- per repo
+
+/** Task 10's verdicts ({ decision: "in" | "out" }) as the scorer reads them: "in" is an import, "out" is not. A site that loads nothing (`to: null`) says nothing about a step. */
+export function fromTruthVerdicts(verdicts: readonly Adjudication[]): Adjudicated[] {
+    return verdicts.filter((v) => v.to !== null).map((v) => ({ repo: v.repo, from: v.from, to: v.to as string, imports: v.decision === "in", note: v.why }));
+}
+
+/**
+ * One repo's score context. Eval #1 is scored on the regex scanner's graph and its own verdict format, as it always was. Any
+ * other eval is scored on the graph the truth builder builds (buildRepoGraphs with the truth's resolver, so workspace
+ * packages and module ids resolve) and on Task 10's verdicts: the same graph and judgments its truths were made from.
+ */
+export function repoScoreContext(
+    root: string, repoId: string, firstEval: boolean, adjudicated: readonly Adjudicated[], verdicts: readonly Adjudication[],
+): { ctx: ScoreContext; edges: [string, string][] } {
+    if (firstEval){
+        const g = scanRepo(root);
+        return { edges: g.edges, ctx: { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicatedFor(adjudicated, repoId)) } };
+    }
+    const built = buildRepoGraphs(root, repoId, verdicts, { resolveBare: true });
+    return {
+        edges: built.scanner.edges.map(([a, b]): [string, string] => [a, b]),
+        ctx: { repoRoot: `<${repoId}>`, known: built.known, imports: makeImports(built.scanner.edges, adjudicatedFor(fromTruthVerdicts(verdicts), repoId)) },
+    };
+}
+
+/**
+ * What stops the gate being computed (D1): a repo with no runs, and any question or session without every scheduled repeat
+ * of every arm among the scored runs. The sentences name what is missing; none means the data is complete.
+ */
+export function missingForGate(
+    expected: { repoIds: readonly string[]; arms: readonly string[]; repeats: number; questions: readonly { id: string; repo: string }[]; sessions: readonly { id: string; repo: string }[] },
+    results: readonly RunResult[], sessions: readonly SessionResult[],
+): string[] {
+    const missing: string[] = [];
+    for (const repo of expected.repoIds){
+        if (!results.some((r) => r.repo === repo) && !sessions.some((s) => s.repo === repo)) missing.push(`no runs for the repo ${repo}`);
+    }
+    const check = (id: string, arm: string, repeats: Iterable<number>): void => {
+        const have = new Set([...repeats].filter((n) => n >= 1 && n <= expected.repeats));
+        if (have.size < expected.repeats) missing.push(`${id} (${arm}): ${have.size} of ${expected.repeats} runs`);
+    };
+    for (const q of expected.questions) for (const arm of expected.arms) check(q.id, arm, results.filter((r) => r.question === q.id && r.arm === arm).map((r) => r.repeat));
+    for (const s of expected.sessions) for (const arm of expected.arms) check(`session ${s.id}`, arm, sessions.filter((x) => x.session === s.id && x.arm === arm).map((x) => x.repeat));
+    return missing;
+}
 
 /**
  * The scorer's readings that depend on a repo's graph, each repo against its own: the adjudicated verdicts that overturn a
@@ -506,7 +563,7 @@ export function kindArmRows(results: readonly RunResult[]): KindArmRow[] {
     const own = results.filter((r) => r.kind !== undefined && r.repo !== undefined);
     const rows = [...groups(own, (r) => `${r.repo}${SEP}${r.kind}${SEP}${r.arm}`).values()].map((runs): KindArmRow => ({
         repo: runs[0].repo as string, kind: runs[0].kind as QuestionKind, arm: runs[0].arm, runs: runs.length, scored: runs.filter((r) => r.score !== null).length,
-        mean: mean(runs.map((r) => r.score)), medianCostUsd: median(runs.map((r) => r.costUsd)), medianWallMs: median(runs.map((r) => r.wallMs)),
+        mean: mean(runs.map((r) => r.score)), medianCostUsd: median(runs.map((r) => r.costUsd)), medianWallMs: median(runs.map((r) => r.summary.durationMs ?? r.wallMs)),
         medianFirstCall: median(runs.flatMap((r) => (r.firstCallContext == null ? [] : [r.firstCallContext]))),
     }));
     return rows.sort((a, b) => (a.repo < b.repo ? -1 : a.repo > b.repo ? 1 : 0) || rank(KIND_ORDER, a.kind) - rank(KIND_ORDER, b.kind) || rank(ARM_ORDER, a.arm) - rank(ARM_ORDER, b.arm));
@@ -632,7 +689,18 @@ function main(): void {
     });
     const questions: QuestionData[] = file.questions.filter((q) => only === null || only.includes(q.id)).map(toData);
     const order = questions.map((q) => q.id);
-    const adjudicated = fs.existsSync(`${dir}/truth/adjudicated.json`) ? readJson<Adjudicated[]>(`${dir}/truth/adjudicated.json`) : [];
+    // Eval #1's verdicts are { from, to, imports, note }; every other eval's are Task 10's { repo, from, to, decision, why }
+    const firstEval = definition.name === EVAL1;
+    const rawVerdicts = fs.existsSync(`${dir}/truth/adjudicated.json`) ? readJson<unknown>(`${dir}/truth/adjudicated.json`) : [];
+    let truthVerdicts: Adjudication[] = [];
+    if (!firstEval){
+        try{
+            truthVerdicts = parseAdjudications(rawVerdicts);
+        } catch(e){
+            throw new Stop((e as Error).message);
+        }
+    }
+    const adjudicated: Adjudicated[] = firstEval ? (rawVerdicts as Adjudicated[]) : fromTruthVerdicts(truthVerdicts);
     const grades = fs.existsSync(`${dir}/grading/grades.json`) ? readJson<Record<string, RunGrade>>(`${dir}/grading/grades.json`) : {};
     const sessionDefs = fs.existsSync(`${dir}/sessions.json`) ? readJson<SessionFile>(`${dir}/sessions.json`).sessions : [];
 
@@ -671,9 +739,9 @@ function main(): void {
             const pinned = definition.repos[repoId].commit;
             const head = execFileSync("git", ["-C", repoPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
             if (head !== pinned) throw new Stop(`${repoPath} is at ${head}, not ${pinned}: the truth is for that commit.`);
-            const g = scanRepo(repoPath);
-            edgesByRepo.set(repoId, g.edges);
-            contexts.set(repoId, { repoRoot: `<${repoId}>`, known: new Set(g.files), imports: makeImports(g.edges, adjudicatedFor(adjudicated, repoId)) });
+            const built = repoScoreContext(repoPath, repoId, firstEval, adjudicated, truthVerdicts);
+            edgesByRepo.set(repoId, built.edges);
+            contexts.set(repoId, built.ctx);
         }
         results = wanted.map((r) => {
             const id = parseRunName(r.name)!;
@@ -726,13 +794,19 @@ function main(): void {
     for (const s of sessionResults) for (const u of s.unknown) open.set(u.join(SEP), u);
     const steps = [...open.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, step]) => step);
     if (steps.length > 0){
-        console.log(`\n## Chain steps to adjudicate\n\nRead the source for each step and add {"from", "to", "imports", "note"} (and "repo" when the step is one repo's alone) to ${name}/truth/adjudicated.json:\n\n${steps.map(([a, b]) => `- ${a} → ${b}`).join("\n")}`);
+        console.log(`\n## Chain steps to adjudicate\n\nRead the source for each step and add ${firstEval ? '{"from", "to", "imports", "note"} (and "repo" when the step is one repo\'s alone)' : '{"repo", "from", "to", "decision": "in" or "out", "why"}'} to ${name}/truth/adjudicated.json:\n\n${steps.map(([a, b]) => `- ${a} → ${b}`).join("\n")}`);
         process.exitCode = 1;
     }
 
     if (gated){
+        const missing = missingForGate({
+            repoIds, arms: definition.arms, repeats: definition.repeats,
+            questions: file.questions.map((q) => ({ id: q.id, repo: repoOfQuestion.get(q.id)! })),
+            sessions: sessionDefs.map((s) => ({ id: s.id, repo: s.repo })),
+        }, results, sessionResults);
         const waiting = results.filter((r) => r.score === null).length + sessionResults.filter((s) => s.score === null).length;
         if (only !== null) console.log("\n## Ship gate (D1)\n\n--only: the gate is computed over every question, so it was not computed.");
+        else if (missing.length > 0) console.log(`\n## Ship gate (D1)\n\nNot computed: the data is incomplete.\n\n${missing.slice(0, 20).map((m) => `- ${m}`).join("\n")}${missing.length > 20 ? `\n- ... and ${missing.length - 20} more` : ""}`);
         else if (waiting > 0) console.log(`\n## Ship gate (D1)\n\nNot computed: ${waiting} runs or sessions still wait for a grade or an adjudicated chain step.`);
         else console.log(`\n## Ship gate (D1)\n\n${renderGate(gateVerdict(results.flatMap((r) => toGateRun(r) ?? []), sessionResults.flatMap((s) => toGateSession(s) ?? [])))}`);
     }

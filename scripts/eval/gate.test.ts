@@ -38,7 +38,9 @@ describe("gateVerdict", () => {
 
     it("fails 5b when N's first call is more than 2,500 tokens above A's", () => {
         const heavy = passing.map((r) => (r.arm === "nebulosity" ? { ...r, firstCallContext: 22_600 } : r));
-        expect(gateVerdict(heavy, sessions).conditions.find((c) => c.id === "5b")!.values).toEqual({ a: 20_000, n: 22_600, difference: 2_600 });
+        const c = gateVerdict(heavy, sessions).conditions.find((x) => x.id === "5b")!;
+        expect(c.values).toEqual({ a: 20_000, n: 22_600, difference: 2_600 });
+        expect(c.pass).toBe(false);
     });
 
     it("pools direct and transitive lists in condition 2 (F11): +0.05 and -0.05 with equal run counts is a difference of 0", () => {
@@ -91,6 +93,17 @@ describe("gateVerdict", () => {
         expect(find(passing, "4", [session("baseline", 0.8, 1.0, 300_000), session("nebulosity", 0.85, 0.4, 200_000)]).pass).toBe(false);
         expect(find(passing, "4", [session("baseline", 0.8, 1.0, 300_000), session("nebulosity", 0.76, 0.4, 100_000)]).pass).toBe(false);
         expect(find(passing, "4", [session("baseline", 0.8, 1.0, 300_000), session("nebulosity", 0.78, 0.6, 180_000)]).pass).toBe(true);
+    });
+
+    it("takes condition 4's cost and time as totals over the arm's sessions, and says four decimals (M1, M7)", () => {
+        // A one session costing 1.0; N two sessions costing 0.4 + 0.3 = 0.7: the totals' ratio is 0.7 (the means' would be 0.35)
+        const two = [session("baseline", 0.8, 1.0, 300_000), session("nebulosity", 0.85, 0.4, 50_000), { ...session("nebulosity", 0.85, 0.3, 50_000), repeat: 2 }];
+        const c = find(passing, "4", two);
+        expect(c.values.costRatio).toBeCloseTo(0.7, 10);
+        expect(c.values.wallRatio).toBeCloseTo(100_000 / 300_000, 4);
+        expect(c.pass).toBe(false);
+        expect(c.text).toContain("total cost");
+        expect(c.text).toContain("0.7000");
     });
 
     it("checks each repo apart: one repo's loss fails the condition and names it", () => {
