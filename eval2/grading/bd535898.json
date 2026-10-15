@@ -1,0 +1,13 @@
+{
+  "id": "bd535898",
+  "points": [
+    {"id": "AFFINE-BP2.1", "score": 1, "quote": "`affine/` builds the actual Affine editor on the framework. ... it depends only on `framework/`."},
+    {"id": "AFFINE-BP2.2", "score": 0.5, "quote": "`store/` is the Yjs-backed document model, covering blocks, schemas and transactions."},
+    {"id": "AFFINE-BP2.3", "score": 0.5, "quote": "`std/` is the runtime that sits on top of the others. It handles block views, selection, input, commands and canvas rendering."},
+    {"id": "AFFINE-BP2.4", "score": 0, "quote": "none"},
+    {"id": "AFFINE-BP2.5", "score": 0.5, "quote": "`widgets/` has the UI around the editor, for both page and edgeless modes. ... `fragments/` has the sidebar and title pieces."},
+    {"id": "AFFINE-BP2.6", "score": 1, "quote": "`block-suite-editor/` and `editors/` are React wrappers around the Lit editor elements."},
+    {"id": "AFFINE-BP2.7", "score": 0, "quote": "none"},
+    {"id": "AFFINE-BP2.8", "score": 1, "quote": "It has about 2,700 files and imports nothing from outside itself. ... `packages/` imports BlockSuite in about 1,100 places"}
+  ]
+}

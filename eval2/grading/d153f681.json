@@ -1,0 +1,7 @@
+{ "id": "d153f681", "points": [
+{ "id": "BP3.2", "score": 1, "quote": "A service identifier is created with `createDecorator<T>('name')` (`instantiation.ts:109`). Convention: the const and the interface share one name" },
+{ "id": "BP3.3", "score": 1, "quote": "the service is declared as a constructor parameter with the decorator, e.g. `constructor(arg: string, @IFooService private readonly fooService: IFooService)`" },
+{ "id": "BP3.4", "score": 1, "quote": "`instantiationService.createInstance(MyClass, ...staticArgs)` resolves the dependencies and builds the object." },
+{ "id": "BP3.5", "score": 1, "quote": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)" },
+{ "id": "BP3.6", "score": 1, "quote": "It is typically called at module top level in a workbench contribution or service file." }
+] }

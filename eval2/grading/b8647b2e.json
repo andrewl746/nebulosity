@@ -1,0 +1,13 @@
+{
+  "id": "b8647b2e",
+  "points": [
+    { "id": "BP1.1", "score": 1, "quote": "`base/` holds foundation utilities that work on any platform. ... basic DOM and widget helpers." },
+    { "id": "BP1.2", "score": 1, "quote": "`platform/` holds platform services and the dependency-injection infrastructure. ... It is independent of any particular editor or workbench UI." },
+    { "id": "BP1.3", "score": 1, "quote": "`editor/` is the Monaco text editor: model, view, language features, syntax highlighting and editing behavior." },
+    { "id": "BP1.4", "score": 0.5, "quote": "`workbench/` is the main application shell for desktop and web. ... `browser/` has the core UI: parts, layout and actions." },
+    { "id": "BP1.5", "score": 1, "quote": "`code/` is the Electron main-process entry and implementation." },
+    { "id": "BP1.6", "score": 1, "quote": "`server/` is the server-side entry, used for remote and web hosting." },
+    { "id": "BP1.7", "score": 1, "quote": "`base` depends on nothing above it. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform` and `editor`." },
+    { "id": "BP1.8", "score": 0.5, "quote": "`api/` has the extension host and the implementation of the VS Code extension API." }
+  ]
+}

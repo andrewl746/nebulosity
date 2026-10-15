@@ -1,0 +1,13 @@
+{
+  "id": "5bca435e",
+  "points": [
+    {"id": "AFFINE-BP1.1", "score": 0.5, "quote": "`packages/common/` holds code shared by frontend and backend:"},
+    {"id": "AFFINE-BP1.2", "score": 1, "quote": "`tests/` holds end-to-end and other tests. `tools/` holds the `affine` CLI and CI helpers."},
+    {"id": "AFFINE-BP1.3", "score": 0.5, "quote": "**`blocksuite/`** holds the editor, built on Yjs (a collaborative-editing library)."},
+    {"id": "AFFINE-BP1.4", "score": 1, "quote": "**web**: the browser app. **mobile**: the mobile web shell. **electron** with **electron-renderer**: the desktop app. **ios** and **android**: Capacitor apps ... The admin console (`packages/frontend/admin`) is a separate frontend."},
+    {"id": "AFFINE-BP1.5", "score": 1, "quote": "`native` is a Rust addon (NAPI-RS) that the server relies on heavily. ... Build the Rust native binding with `yarn affine @affine/server-native build`."},
+    {"id": "AFFINE-BP1.6", "score": 0.5, "quote": "It is the cloud and self-host backend: accounts and auth; workspaces and sync of documents between clients"},
+    {"id": "AFFINE-BP1.7", "score": 1, "quote": "exposes a GraphQL endpoint at `http://localhost:3000/graphql` in dev ... A PostgreSQL database, set through `DATABASE_URL` ... A Redis instance, set through `REDIS_SERVER_HOST`."},
+    {"id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared React UI library."}
+  ]
+}

@@ -1,0 +1,10 @@
+{ "id": "b5ccf721", "points": [
+  { "id": "AFFINE-BP2.1", "score": 1, "quote": "BlockSuite lives in `blocksuite/` and splits into two layers: a generic `framework/` and an AFFiNE-specific `affine/`. ... **`blocksuite/affine/`: the AFFiNE implementation, built on the framework**" },
+  { "id": "AFFINE-BP2.2", "score": 1, "quote": "`store`: the document and block data model. Docs are collaborative and CRDT-backed, and the store handles schema, transactions and extensions." },
+  { "id": "AFFINE-BP2.3", "score": 1, "quote": "`std`: the standard editor runtime. It holds the dependency-injection container, extension system, commands, selection, clipboard, the block and widget view base classes" },
+  { "id": "AFFINE-BP2.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.5", "score": 1, "quote": "`widgets/*`: UI overlays such as the slash menu, toolbar, drag handle ... `fragments/*`: side panels such as outline, frame-panel, doc-title ... `editors/page-editor.ts` and `editors/edgeless-editor.ts` define the two editor modes, document and canvas." },
+  { "id": "AFFINE-BP2.6", "score": 1, "quote": "`block-suite-editor/` wraps the editor for React, with `lit-adaper.tsx` bridging React and Lit." },
+  { "id": "AFFINE-BP2.7", "score": 0.5, "quote": "Each package is a self-contained extension, which is the unit the framework's extension system registers. That lets an app compose only the pieces it wants." },
+  { "id": "AFFINE-BP2.8", "score": 0.5, "quote": "The app, mainly `packages/frontend/core`, imports `@blocksuite/affine/*`, `@blocksuite/std` and `@blocksuite/store`." }
+] }

@@ -1,0 +1,13 @@
+{
+  "id": "92fd3801",
+  "points": [
+    { "id": "AFFINE-BP1.1", "score": 0.5, "quote": "**`packages/frontend/`** has the client code. ... **`packages/common/`** is shared by the frontend and the backend. ... **`packages/backend/`** has two packages." },
+    { "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tests/`** holds end-to-end and other tests. - **`tools/`** has the `affine` CLI and CI helpers." },
+    { "id": "AFFINE-BP1.3", "score": 0.5, "quote": "**`blocksuite/`** is the editor, a Yjs (CRDT) based framework." },
+    { "id": "AFFINE-BP1.4", "score": 1, "quote": "**Web** (`web`) - **Mobile web** (`mobile`, with `mobile-shared`) - **Desktop** (`electron` plus `electron-renderer`) - **iOS** (`ios`) - **Android** (`android`) There is also the **admin console** (`packages/frontend/admin`)" },
+    { "id": "AFFINE-BP1.5", "score": 0.5, "quote": "`native` is the Rust addon the server uses. Its build is `yarn affine @affine/server-native build`." },
+    { "id": "AFFINE-BP1.6", "score": 1, "quote": "The server is the optional cloud and self-host backend. The clients work offline, and the server adds: account login and authentication - workspace sync and realtime collaboration" },
+    { "id": "AFFINE-BP1.7", "score": 0.5, "quote": "a GraphQL API at `/graphql` ... **PostgreSQL.** `render.yaml` provisions Postgres 16. ... **Redis.**" },
+    { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared React UI library." }
+  ]
+}

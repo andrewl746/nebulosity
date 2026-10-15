@@ -1,0 +1,27 @@
+{
+  "id": "d153f681",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code does this with its own dependency-injection system in `src/vs/platform/instantiation/common/`. I confirmed `createDecorator`, `refineServiceDecorator`, `InstantiationType` and `registerSingleton` in the source. The rest below is from memory of the codebase.\n\n**1. Defining a service**\n- An interface is declared with a branded marker: `declare readonly _serviceBrand: undefined;`.\n- A service identifier is created with `createDecorator<T>('name')` (`instantiation.ts:109`). Convention: the const and the interface share one name, e.g. `export const IFooService = createDecorator<IFooService>('fooService');` and `export interface IFooService {...}`. Interfaces are prefixed with `I`.\n- The returned `ServiceIdentifier<T>` is both a runtime key and a parameter decorator.\n- `refineServiceDecorator` (`instantiation.ts:128`) creates a narrower identifier for a subtype of an existing service. It reuses the same id.\n\n**2. Making an implementation available**\n- **Global singleton registry:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`). It is typically called at module top level in a workbench contribution or service file.\n  - `InstantiationType.Eager` creates the service at startup.\n  - `InstantiationType.Delayed` returns a lazy proxy that only builds the real service on first use.\n  - You can also pass a `SyncDescriptor` (`new SyncDescriptor(FooService, [staticArgs], supportsDelayed)`) instead.\n- **Explicit `ServiceCollection`:** entry points (workbench, `main.ts`, the shared process, the extension host) build one with `services.set(IFooService, instanceOrSyncDescriptor)`.\n- `InstantiationService` (`instantiationService.ts`) is created with that collection. Any service registered via `registerSingleton` is merged in through `getSingletonServiceDescriptors()`.\n\n**3. Injecting into consumers**\n- **Constructor injection:** the service is declared as a constructor parameter with the decorator, e.g. `constructor(arg: string, @IFooService private readonly fooService: IFooService)`.\n  - Non-service arguments come first, and service parameters come last.\n  - The decorator records the dependency in the class's static metadata through `_util.DI_TARGET` and `DI_DEPENDENCIES`, with `storeServiceDependency`.\n- **Creating instances:** `instantiationService.createInstance(MyClass, ...staticArgs)` resolves the dependencies and builds the object.\n  - `new SyncDescriptor(MyClass)` is used for deferred creation.\n  - `invokeFunction(accessor => accessor.get(IFooService))` is the way to pull a service from a plain function. `ServicesAccessor` is only valid synchronously.\n  - `createChild(serviceCollection)` makes a scoped child container. The child can override services, and lookups fall back to the parent.\n- **Dependency graph:** `InstantiationService._createAndCacheServiceInstance` walks the graph, topologically sorts it, and throws on cycles. Instances are cached per container.\n\n**Related conventions**\n- Workbench contributions are registered with `registerWorkbenchContribution2`, and actions with `registerAction2`. Both get services through the same injection.\n- Services are layered by folder (`common`, `browser`, `electron-sandbox`, `node`), and each layer registers its own implementation."
+}

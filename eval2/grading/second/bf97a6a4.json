@@ -1,0 +1,8 @@
+{ "id": "bf97a6a4", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports `workbench.common.main.js` and then adds the desktop-only pieces" },
+  { "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` (with `workbench.web.main.internal.ts`) imports the same common entry, then the web-specific services" },
+  { "id": "BP5.3", "score": 1, "quote": "`workbench.common.main.ts` imports everything that is common to both builds ... `workbench.desktop.main.ts` imports `workbench.common.main.js` ... `workbench.web.main.ts` ... imports the same common entry" },
+  { "id": "BP5.4", "score": 0.5, "quote": "Each platform provides its own implementation of a service interface. For example, the desktop build registers the native text file service. Callers depend only on the interface." },
+  { "id": "BP5.5", "score": 1, "quote": "If a contribution isn't imported by `common`, `desktop` or `web`, it never ships." },
+  { "id": "BP5.6", "score": 1, "quote": "A feature is only loaded if some entry file imports it, usually through a `*.contribution.ts` file." }
+] }

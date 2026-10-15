@@ -1,0 +1,39 @@
+{
+  "id": "49a72ce6",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "## `src/vs/workbench` organization\n\nIt's the full workbench: about 4,600 files. The folders are layered, lowest first:\n\n1. **`common/`** holds UI-independent contracts and models.\n2. **`services/`** holds the injected core service implementations. These are not specific to any one feature.\n3. **`browser/`** holds the shell and layout.\n4. **`contrib/`** holds the features. **`electron-browser/`** sits at the same level and handles desktop startup.\n5. **`test/`** holds tests.\n6. **`api/`** is the extension-host bridge that implements `vscode.d.ts`.\n7. The entry files **`workbench.common.main.ts`**, **`workbench.desktop.main.ts`** and **`workbench.web.main.ts`** wire everything together through side-effect imports and singleton registrations. `workbench.web.main.internal.ts` exposes the public embedder API.\n\nSubfolders follow the target-environment convention: `common`, `browser`, `node`, `electron-browser` and `test`. The workbench imports from `base`, `platform`, `editor` and `nls`. Nebulosity's import graph shows 461 imports that go against the layer order, 55 import cycles (the largest spans 230 files) and 25 files that nothing imports (not counting tests). So the layering is a convention that isn't strictly enforced.\n\n## `contrib/` rules\n\n`contrib/` has about 3,270 files in about 100 feature folders. The largest are `chat` (1,347 files), `notebook`, `terminalContrib`, `terminal`, `debug`, `mcp`, `testing`, `search` and `extensions`. It has no code of its own at the top level.\n\nThe rules come from `.github/instructions/source-code-organization.instructions.md`, which applies to `src/vs/**`:\n\n- **No imports from outside `contrib/` into `contrib/`.** The graph shows the following importers, so this has exceptions:\n  - The entry files (`workbench.*.main.ts`) import contrib, which is expected.\n  - `api/` imports contrib 356 times.\n  - `services/` imports contrib 8 times.\n  - `sessions/` imports contrib 1,442 times.\n  - `test/` imports contrib 442 times.\n- **Each feature has a single `.contribution.ts` entry point.** The entry files import it to register the feature.\n- **A feature exposes its internal API from a single `common` file.**\n- **Cross-feature dependencies go through that common API.** Features must never reach into another feature's internals.\n\nWithin a feature, the usual split is `common/` for environment-independent code, `browser/` for UI and services, `electron-browser/` or `node/` for desktop-specific code, and `test/`.\n\nFeatures may import `base`, `platform`, `editor`, `workbench/services`, `workbench/common` and `workbench/browser`. The general coding rules in `best-practices`, `coding-guidelines` and `design-philosophy` (the `.github/instructions/` files) also apply."
+}

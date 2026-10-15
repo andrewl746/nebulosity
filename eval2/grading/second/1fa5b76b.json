@@ -1,0 +1,10 @@
+{ "id": "1fa5b76b", "points": [
+  { "id": "BP1.1", "score": 1, "quote": "**`base`**: Generic utilities and UI building blocks with no VS Code concepts." },
+  { "id": "BP1.2", "score": 1, "quote": "**`platform`**: Services and dependency-injection infrastructure shared across layers." },
+  { "id": "BP1.3", "score": 1, "quote": "**`editor`**: The Monaco text editor, covering the model, view, languages and editor contributions (`contrib`)." },
+  { "id": "BP1.4", "score": 1, "quote": "**`workbench`**: The full IDE shell and features: layout, parts, services, extension host and API, and feature contributions (`contrib`) such as search, debug, SCM, terminal and chat." },
+  { "id": "BP1.5", "score": 1, "quote": "**`code`**: The Electron-specific app, including the main process, utility process and renderer bootstrap." },
+  { "id": "BP1.6", "score": 1, "quote": "**`server`**: The remote and web server implementation." },
+  { "id": "BP1.7", "score": 1, "quote": "A layer may import only from layers below it. So `base` imports nothing above itself. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform` and `editor`." },
+  { "id": "BP1.8", "score": 0.5, "quote": "**`workbench`**: The full IDE shell and features: layout, parts, services, extension host and API" }
+] }

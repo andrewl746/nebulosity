@@ -1,0 +1,10 @@
+{ "id": "3e81e27c", "points": [
+  { "id": "BP4.1", "score": 0.5, "quote": "`common/` | Shared contracts and models with no UI ... `browser/` | The workbench shell and layout" },
+  { "id": "BP4.2", "score": 0.5, "quote": "`api/` | Bridges extensions across the process boundary" },
+  { "id": "BP4.3", "score": 1, "quote": "`services/` | Injected service implementations, not tied to one feature" },
+  { "id": "BP4.4", "score": 1, "quote": "`src/vs/workbench` is about 4,600 files. ... `contrib/` has 3,269 files and no code of its own at the top level." },
+  { "id": "BP4.5", "score": 1, "quote": "**No imports into `contrib/` from outside it.**" },
+  { "id": "BP4.6", "score": 1, "quote": "**One `.contribution.ts` entry point per feature.**" },
+  { "id": "BP4.7", "score": 1, "quote": "**One common file exposes each feature's internal API.** A feature publishes its API from a single `common` file." },
+  { "id": "BP4.8", "score": 1, "quote": "**Other features depend only on that API.** They must not reach into another feature's internals." }
+] }

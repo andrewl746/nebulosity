@@ -1,0 +1,10 @@
+{ "id": "49a72ce6", "points": [
+{ "id": "BP4.1", "score": 0.5, "quote": "Subfolders follow the target-environment convention: `common`, `browser`, `node`, `electron-browser` and `test`." },
+{ "id": "BP4.2", "score": 1, "quote": "**`api/`** is the extension-host bridge that implements `vscode.d.ts`." },
+{ "id": "BP4.3", "score": 1, "quote": "**`services/`** holds the injected core service implementations. These are not specific to any one feature." },
+{ "id": "BP4.4", "score": 1, "quote": "`contrib/` has about 3,270 files in about 100 feature folders." },
+{ "id": "BP4.5", "score": 1, "quote": "**No imports from outside `contrib/` into `contrib/`.**" },
+{ "id": "BP4.6", "score": 1, "quote": "**Each feature has a single `.contribution.ts` entry point.**" },
+{ "id": "BP4.7", "score": 1, "quote": "**A feature exposes its internal API from a single `common` file.**" },
+{ "id": "BP4.8", "score": 1, "quote": "**Cross-feature dependencies go through that common API.** Features must never reach into another feature's internals." }
+] }

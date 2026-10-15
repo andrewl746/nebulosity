@@ -1,0 +1,31 @@
+{
+  "id": "535b9a19",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Desktop and web share code through a common core. Which features get loaded is decided by the import graph of each build's entry file, which comes down to two things: the folder a file sits in, and whether an entry file imports it.\n\n**Sharing**\n- `src/vs/workbench/workbench.common.main.ts` is the shared entry point. It pulls in the core workbench plus the contributions that work on every platform.\n- `workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`. They then add platform-specific imports. `workbench.web.main.internal.ts` is a thin wrapper that imports the web entry.\n- Folder names set the layering rules. The conventions report for `src/vs/workbench` shows the import counts:\n  - `common` imports only `common` (3,295 imports).\n  - `browser` imports `browser` and `common`.\n  - `electron-browser` imports `electron-browser`, `browser` and `common`.\n  - `node` imports `node` and `common`.\n- Desktop-only code can build on the shared `browser` code. Shared code never depends on `electron-browser` or `node`, so web can leave those out.\n\n**What decides whether a feature loads**\n- Most workbench features are \"contributions\". A file such as `contrib/<feature>/browser/<feature>.contribution.ts` registers its views, actions, services and settings as a side effect of being imported. Nothing runs unless some entry file imports it.\n- A contribution is therefore loaded if and only if it is reachable from the entry file of that build:\n  - Reachable from `workbench.common.main.ts`: loads on both desktop and web.\n  - Imported only in `workbench.desktop.main.ts`: desktop only. Examples are `contrib/files/electron-browser/fileActions.contribution.js` and `contrib/extensions/electron-browser/extensions.contribution.js`.\n  - Imported only in `workbench.web.main.ts`: web only. Examples are `extensions.web.contribution.js`, `terminal.web.contribution.js` and `performance.web.contribution.js`.\n- Some features have a variant on each side, with the same feature name under different folders and entry files. Examples are `logs`, `localization` and `issue`, which exist under both `browser/` and `electron-browser/`. Each entry file imports its own variant.\n- Services follow the same pattern. Desktop and web each have their own service registrations (`workbench.desktop.main.ts` and `workbench.web.main.ts`, plus the `electron-browser` and `browser` service folders), which supply the platform implementations behind shared interfaces.\n\n**Not checked:** I did not trace the bundler config (the esbuild/gulp entry points) that points each product at these files. I also did not check any runtime gating, such as context keys or `when` clauses, that hides a feature after it has been loaded."
+}

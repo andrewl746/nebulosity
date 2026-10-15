@@ -1,0 +1,13 @@
+{
+  "id": "13abcbf7",
+  "points": [
+    { "id": "AFFINE-BP1.1", "score": 0.5, "quote": "**`packages/backend/`** holds the `server` (NestJS) and `native` (Rust, via napi). **`packages/common/`** holds code shared by client and server" },
+    { "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tests/`** holds the end-to-end and other test suites. **`tools/`** holds the `affine` CLI plus CI and release helpers" },
+    { "id": "AFFINE-BP1.3", "score": 1, "quote": "**`blocksuite/`** is the editor framework the app is built on." },
+    { "id": "AFFINE-BP1.4", "score": 1, "quote": "Web app; Mobile web app; Electron desktop app (macOS, Windows and Linux); Android and iOS apps (native shells around the mobile build); Admin dashboard" },
+    { "id": "AFFINE-BP1.5", "score": 1, "quote": "`native` and `mobile-native` hold Rust bindings. ... `native` (Rust, via napi)." },
+    { "id": "AFFINE-BP1.6", "score": 0.5, "quote": "It's the backend for self-hosted and cloud AFFiNE. It handles: accounts, auth and OAuth ... real-time document sync over socket.io ... optional plugins: copilot (AI)" },
+    { "id": "AFFINE-BP1.7", "score": 0.5, "quote": "PostgreSQL, accessed through Prisma. ... Redis, used for caching, the socket.io adapter and queues. ... a GraphQL API (`schema.gql`)" },
+    { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared UI library" }
+  ]
+}

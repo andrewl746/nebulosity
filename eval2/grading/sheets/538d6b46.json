@@ -1,0 +1,31 @@
+{
+  "id": "538d6b46",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Inside each layer of `src/vs` (`base`, `platform`, `editor`, `workbench`, `code`, `server`, `sessions`), the folders are named for the runtime environment the code runs in. These rules come from `.github/instructions/source-code-organization.instructions.md`. The `code-layering` lint rule in `eslint.config.js:117-141` enforces the same import lists, though only as a warning.\n\n| Folder | Runs in / APIs available | May import from (same layer) |\n|---|---|---|\n| `common` | Plain JavaScript only, with no DOM or Node | nothing else (only other `common` code) |\n| `browser` | Web and DOM APIs | `common` |\n| `node` | Node.js APIs | `common` |\n| `electron-browser` | The renderer, with DOM plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | The Electron utility process | `common`, `node` |\n| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |\n\nEach folder can also import its own code, since the table lists only other folders.\n\n- **Isolation:** `browser` and `node` can't import each other, because one assumes a DOM and the other assumes Node. `electron-browser` is the only environment that sees the DOM, and it does not get `node`. `electron-main` can use `node` but not `browser` or `electron-browser`.\n- **Layer order:** these rules apply inside a layer. Layers have their own ordering: `base`, then `platform`, then `editor`, then `workbench`, then `code`, `server` and `sessions`. Each layer may import only from the layers below it. For example, `editor` must not depend on `node` or `electron-*`, and `workbench` must never import from `sessions`."
+}

@@ -1,0 +1,31 @@
+{
+  "id": "2d678785",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Folder names under `src/vs` recur in a consistent pattern. The import counts below come from the import graph. The \"may import\" rules are my reading of that data plus VS Code's usual layering convention, which I didn't check against the repo's docs.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any JavaScript environment. It can't touch DOM or Node APIs. | Only `common`. The graph shows 17,809 `common`→`common` imports and nothing else. |\n| `browser` | The renderer or web, with DOM access. | `browser` and `common` (21,748 and 53,178 imports). It never imports `node` or `electron-*`. |\n| `node` | Node.js, with no DOM and no Electron. | `node` and `common` (5,324 and 8,220 imports). It never imports `browser`. |\n| `electron-browser` | The Electron renderer, with DOM plus a preload/Node bridge. | `electron-browser`, `browser` and `common` (489, 611 and 4,673 imports). |\n| `electron-main` | The Electron main process. | `electron-main`, `node` and `common` (377, 102 and 1,008 imports). It never imports `browser`. |\n\nThe graph also shows a `test` folder (263 of them). Tests may import from several environments, but only a few do: 52 `common`, 6 `browser`, 4 `node` and 4 `test` imports.\n\n**Rules of thumb**\n- Dependencies point only toward more general environments.\n  - `common` is the base.\n  - `browser` and `node` each sit on top of `common`.\n  - The Electron variants sit on top of those.\n- The two sides never mix. `browser` can't reach `node`, and `node` can't reach `browser`.\n- `electron-browser` is the only folder that combines `browser` with Electron. `electron-main` is the only one that combines `node` with Electron.\n- Anything that has to run everywhere must live in `common`.\n- Platform-specific implementations register against interfaces defined in `common`, so higher layers depend on interfaces rather than concrete environments.\n\nNot covered here: the layers themselves (`base`, `platform`, `editor`, `workbench`, and so on), and some other environment folders (for example `electron-utility`). They fall under the threshold of the 26-folder filter I used, so they're absent from the data."
+}

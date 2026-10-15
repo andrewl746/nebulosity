@@ -1,0 +1,10 @@
+{ "id": "79c8fee0", "points": [
+  { "id": "AFFINE-BP2.1", "score": 1, "quote": "It's split into a framework layer, a set of AFFiNE-specific packages ... **Framework (`blocksuite/framework/`)** This layer doesn't depend on AFFiNE's block types." },
+  { "id": "AFFINE-BP2.2", "score": 1, "quote": "`store` is the Yjs-backed data layer." },
+  { "id": "AFFINE-BP2.3", "score": 1, "quote": "`std` is the standard editor runtime. It provides the view layer, the dependency-injection container, the extension mechanism, selection, commands and the gfx (canvas) base." },
+  { "id": "AFFINE-BP2.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.5", "score": 1, "quote": "**`blocks/*`**: one package per block type ... **`widgets/*`**: UI overlays such as the toolbar, slash-menu, drag-handle ... **`fragments/*`**: side panels such as outline, frame-panel, doc-title ... The mode switch toggles page and edgeless modes." },
+  { "id": "AFFINE-BP2.6", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.7", "score": 0.5, "quote": "The AFFiNE frontend picks which block, widget and fragment extensions to register, and it connects the editor to workspace storage and sync." },
+  { "id": "AFFINE-BP2.8", "score": 0.5, "quote": "The app is wired in as workspace dependencies. `packages/frontend/core/package.json` depends on `@blocksuite/affine`, ..." }
+] }

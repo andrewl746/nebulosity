@@ -1,0 +1,7 @@
+{ "id": "fe9a753a", "points": [
+{ "id": "BP3.2", "score": 1, "quote": "Create the identifier with `createDecorator<IFooService>('fooService')`... It is normally exported under the same name as the interface" },
+{ "id": "BP3.3", "score": 1, "quote": "`constructor(@ILogService private readonly logService: ILogService)`" },
+{ "id": "BP3.4", "score": 1, "quote": "You use `instantiationService.createInstance(MyClass, ...staticArgs)`... Contributions: workbench contributions, editors and similar are created through `createInstance`, so they get injection automatically." },
+{ "id": "BP3.5", "score": 1, "quote": "call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (in `extensions.ts`)" },
+{ "id": "BP3.6", "score": 0.5, "quote": "These calls are usually made at module level in `*.contribution.ts` files or in the service's own file." }
+] }

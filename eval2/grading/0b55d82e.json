@@ -1,0 +1,8 @@
+{ "id": "0b55d82e", "points": [
+{ "id": "BP5.1", "score": 1, "quote": "**Desktop:** `electron-browser/desktop.main.js` and `desktop.contribution`, plus `services/*/electron-browser/*`" },
+{ "id": "BP5.2", "score": 1, "quote": "**Web:** `browser/web.main.js`, `services/*/browser/*` implementations (for example `browserHostService`, `webExtensionsScannerService`), and `dialog.web.contribution`." },
+{ "id": "BP5.3", "score": 1, "quote": "`workbench.web.main.ts` and `workbench.desktop.main.ts` each start with `import './workbench.common.main.js'`." },
+{ "id": "BP5.4", "score": 0.5, "quote": "The same service interface therefore gets a different implementation on each platform." },
+{ "id": "BP5.5", "score": 1, "quote": "Code gets loaded only if some entry file imports it, directly or transitively." },
+{ "id": "BP5.6", "score": 0.5, "quote": "It is a long list of side-effect imports (`import './contrib/notebook/browser/notebook.contribution.js'` and so on)." }
+] }

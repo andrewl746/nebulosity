@@ -1,0 +1,27 @@
+{
+  "id": "529c046a",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code's dependency injection lives in `src/vs/platform/instantiation/common/`. It has three steps.\n\n**1. Define the service**\n- In `instantiation.ts`, `createDecorator<IFoo>('fooService')` returns a `ServiceIdentifier<IFoo>`. By convention the const and the interface share one name, `IFoo`, and the string id is camelCase.\n- The interface carries `readonly _serviceBrand: undefined;`. This brand makes the interface nominally distinct for TypeScript.\n- The same `IFoo` works as a type and as a parameter decorator.\n\n```ts\nexport const IFooService = createDecorator<IFooService>('fooService');\nexport interface IFooService { readonly _serviceBrand: undefined; ... }\n```\n\n**2. Make an implementation available**\n- **Eager registration:** the app builds a `ServiceCollection` (`serviceCollection.ts`) with `.set(IFooService, instance)`. Examples are `workbench.ts` / `main.ts`, and `InstantiationService` is itself registered there.\n- **Lazy registration:** call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` from `extensions.ts`. It is usually placed in a `*.contribution.ts` or the `workbench.*.main.ts` entry points.\n  - `InstantiationType.Eager` creates the service at startup.\n  - `InstantiationType.Delayed` wraps it in a `SyncDescriptor` and a proxy, and the real object is built on first use.\n  - Lazy services are stored as `SyncDescriptor`s (`descriptors.ts`).\n  - `getSingletonServiceDescriptors()` then feeds them into the `ServiceCollection`.\n\n**3. Get it into consumers**\n- **Constructor injection:** declare the service as a constructor parameter with the decorator. By convention these parameters come after any non-service (static) arguments:\n  ```ts\n  constructor(arg: string, @IFooService private readonly fooService: IFooService) {}\n  ```\n  The decorator records the dependency in the class's metadata through `_util.DI_DEPENDENCIES` and `storeServiceDependency`.\n- **Creation:** `IInstantiationService.createInstance(Ctor, ...staticArgs)` resolves the dependencies and passes the services in. Passing a `SyncDescriptor0`/`new SyncDescriptor(Ctor, args)` also works.\n  - `InstantiationService` (`instantiationService.ts`) does this in `_createInstance`.\n  - It sorts the dependencies by decorator and detects cycles with a `Graph`.\n  - Missing services throw.\n  - `_getOrCreateServiceInstance` builds the instances lazily.\n- **Function-style access:** `instantiationService.invokeFunction(accessor => accessor.get(IFooService))` uses a `ServicesAccessor`. Actions and commands use this.\n- **Child scopes:** `instantiationService.createChild(new ServiceCollection(...))` makes a child container with overrides. Editors and the like use it.\n- **Optional dependency:** `@optional(IFoo)` marks a service as optional.\n\n**Extension host and renderer**\nServices in other processes are reached through IPC channels. `ProxyChannel` and `registerMainProcessRemoteService` / `registerSharedProcessRemoteService` register the proxies."
+}

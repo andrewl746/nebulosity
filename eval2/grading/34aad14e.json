@@ -1,0 +1,10 @@
+{"id":"34aad14e","points":[
+{"id":"AFFINE-BP3.1","score":1,"quote":"`metadata` holds `version`, `role` (e.g. `'hub'`) and the `parent` and `children` flavour constraints. `flavour` is a namespaced string such as `'affine:note'`."},
+{"id":"AFFINE-BP3.2","score":0,"quote":"none"},
+{"id":"AFFINE-BP3.3","score":0.5,"quote":"the `parent` and `children` flavour constraints. These can use group aliases like `'@root'` and `'@content'`."},
+{"id":"AFFINE-BP3.4","score":1,"quote":"`toModel: () => new NoteBlockModel()` creates the model instance. The model class extends `BlockModel`"},
+{"id":"AFFINE-BP3.5","score":1,"quote":"The component is a Lit element extending `BlockComponent<Model>` ... `this.renderChildren(this.model)` renders child blocks. ... `BlockViewExtension(flavour, literal`affine-note`)` maps a flavour to a static Lit tag."},
+{"id":"AFFINE-BP3.6","score":0.5,"quote":"`setup(context)` calls `context.register([...])` with: ... widgets"},
+{"id":"AFFINE-BP3.7","score":0.5,"quote":"A `ViewExtensionProvider` subclass bundles these registrations ... A `ViewExtensionManager` ... takes the list of providers."},
+{"id":"AFFINE-BP3.8","score":1,"quote":"`effect()` runs the element registrations ... `this.isEdgeless(context.scope)` lets it register a different view for page mode and edgeless mode."}
+]}

@@ -1,0 +1,7 @@
+{ "id": "5b61c8d6", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create the identifier with `createDecorator<IFooService>('fooService')` from `instantiation.ts`. It is usually exported under the same name as the interface" },
+  { "id": "BP3.3", "score": 1, "quote": "Add the service as a constructor parameter decorated with its identifier: ... `@IFooService private readonly fooService: IFooService,`" },
+  { "id": "BP3.4", "score": 1, "quote": "When someone calls `instantiationService.createInstance(Class, ...staticArgs)`, `InstantiationService` ... Contribution types are also created through `createInstance`. ... Services therefore arrive automatically." },
+  { "id": "BP3.5", "score": 1, "quote": "**Lazy, the usual way:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` from `extensions.ts`." },
+  { "id": "BP3.6", "score": 0, "quote": "none" }
+] }

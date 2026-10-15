@@ -1,0 +1,10 @@
+{ "id": "8b237f37", "points": [
+  { "id": "AFFINE-BP1.1", "score": 1, "quote": "**`packages/frontend/`** is the client side. ... **`packages/backend/`** `server` is the NestJS backend. ... **`packages/common/`** holds code shared by client and server" },
+  { "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tools/`** holds the CLI (`affine`), the build/bundle scripts, and changelog and commit tooling. ... `tests/` (end-to-end)" },
+  { "id": "AFFINE-BP1.3", "score": 1, "quote": "**`blocksuite/`** is the editor framework." },
+  { "id": "AFFINE-BP1.4", "score": 1, "quote": "**Web:** `apps/web`, plus `apps/mobile`, which is the mobile-web build. **Desktop:** `apps/electron` ... **Mobile:** `apps/ios` and `apps/android` ... `admin` is the server admin panel." },
+  { "id": "AFFINE-BP1.5", "score": 1, "quote": "`native` and `mobile-native` are Rust bindings for the desktop and mobile clients. ... `native` (`@affine/server-native`) is its Rust module." },
+  { "id": "AFFINE-BP1.6", "score": 1, "quote": "It is the backend for cloud and self-hosted use. AFFiNE is local-first, so clients keep working offline and the server syncs and stores the data." },
+  { "id": "AFFINE-BP1.7", "score": 1, "quote": "**PostgreSQL**, via Prisma. The schema uses the pgvector extension ... **Redis**. ... GraphQL and REST APIs." },
+  { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared UI library." }
+] }

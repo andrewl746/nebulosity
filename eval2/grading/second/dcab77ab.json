@@ -1,0 +1,10 @@
+{ "id": "dcab77ab", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "Each document is a Yjs CRDT (`Y.Doc`). A workspace has a root doc, whose `meta` map lists the pages, plus one Y.Doc per page." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "`DocFrontend.applyUpdate` then runs Yjs `applyUpdate` on the live doc, and the editor reacts to that change." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "Storage holds Yjs binary updates and snapshots, not JSON." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 1, "quote": "Awareness (cursors and presence) uses its own channel and isn't persisted." },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "**Browser:** IndexedDB (`impls/idb`), one database per workspace named `workspace:<id>`. ... **Desktop and mobile:** a per-workspace SQLite file written by native Rust code (`impls/sqlite` ...)" },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "`DocSyncPeer` runs `push`, `pull` and `pullAndPush` jobs between the local and remote storage. ... Offline edits stay in local storage and are pushed on reconnect." },
+  { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+] }

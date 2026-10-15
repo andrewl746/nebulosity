@@ -1,0 +1,1670 @@
+{
+  "affine-bp1-baseline-1": {
+    "AFFINE-BP1.1": {
+      "score": 1,
+      "sentence": "**`packages/frontend/`** is the client side. ... **`packages/common/`** holds shared libraries ... **`packages/backend/`** has two parts. `server` is the NestJS server, and `native` is its Rust bindings."
+    },
+    "AFFINE-BP1.2": {
+      "score": 1,
+      "sentence": "`tools/` holds the CLI behind `yarn affine`, plus commitlint, changelog and utility scripts. ... `tests/` holds the end-to-end tests."
+    },
+    "AFFINE-BP1.3": {
+      "score": 0.5,
+      "sentence": "`blocksuite/` is the editor engine."
+    },
+    "AFFINE-BP1.4": {
+      "score": 1,
+      "sentence": "web: the browser app; mobile: the mobile web build; electron and electron-renderer: the desktop app; ios and android ... The `admin` dashboard"
+    },
+    "AFFINE-BP1.5": {
+      "score": 1,
+      "sentence": "`native` and `mobile-native` are Rust bindings for the clients. ... `server` is the NestJS server, and `native` is its Rust bindings."
+    },
+    "AFFINE-BP1.6": {
+      "score": 1,
+      "sentence": "It serves the clients, which otherwise work local-first, and it is what you self-host."
+    },
+    "AFFINE-BP1.7": {
+      "score": 1,
+      "sentence": "PostgreSQL ... pgvector/pgvector:pg16 image ... Redis, for caching, queues and real-time coordination. ... It uses GraphQL, REST and socket.io."
+    },
+    "AFFINE-BP1.8": {
+      "score": 1,
+      "sentence": "`component` is the shared UI library."
+    }
+  },
+  "affine-bp1-baseline-2": {
+    "AFFINE-BP1.1": {
+      "score": 1,
+      "sentence": "**`packages/frontend/`** is the client side. ... **`packages/backend/`** `server` is the NestJS backend. ... **`packages/common/`** holds code shared by client and server"
+    },
+    "AFFINE-BP1.2": {
+      "score": 1,
+      "sentence": "**`tools/`** holds the CLI (`affine`), the build/bundle scripts, and changelog and commit tooling. ... `tests/` (end-to-end)"
+    },
+    "AFFINE-BP1.3": {
+      "score": 0.5,
+      "sentence": "**`blocksuite/`** is the editor framework."
+    },
+    "AFFINE-BP1.4": {
+      "score": 1,
+      "sentence": "Web: `apps/web`, plus `apps/mobile`, which is the mobile-web build. Desktop: `apps/electron` ... Mobile: `apps/ios` and `apps/android` ... `admin` is the server admin panel."
+    },
+    "AFFINE-BP1.5": {
+      "score": 1,
+      "sentence": "`native` and `mobile-native` are Rust bindings for the desktop and mobile clients. ... `native` (`@affine/server-native`) is its Rust module."
+    },
+    "AFFINE-BP1.6": {
+      "score": 1,
+      "sentence": "It is the backend for cloud and self-hosted use. AFFiNE is local-first, so clients keep working offline and the server syncs and stores the data."
+    },
+    "AFFINE-BP1.7": {
+      "score": 1,
+      "sentence": "**PostgreSQL**, via Prisma. The schema uses the pgvector extension ... **Redis**. ... GraphQL and REST APIs."
+    },
+    "AFFINE-BP1.8": {
+      "score": 1,
+      "sentence": "`component` is the shared UI library."
+    }
+  },
+  "affine-bp1-baseline-3": {
+    "AFFINE-BP1.1": {
+      "score": 1,
+      "sentence": "**`packages/backend/`** has `server`, a NestJS server, and `native`... **`packages/common/`** holds code shared across clients and the server"
+    },
+    "AFFINE-BP1.2": {
+      "score": 1,
+      "sentence": "**`tools/`** has developer tooling: the `cli` build tool, commitlint, the changelog generator and others. ... `tests/` (end-to-end tests)"
+    },
+    "AFFINE-BP1.3": {
+      "score": 1,
+      "sentence": "**`blocksuite/`** is the editor framework behind AFFiNE. It holds the block-based editor and whiteboard (`framework`)"
+    },
+    "AFFINE-BP1.4": {
+      "score": 1,
+      "sentence": "**web** is the browser app. **electron** and **electron-renderer** are the desktop app. **mobile** is the mobile web UI... **ios** and **android** are the native mobile shells. The admin panel (`packages/frontend/admin`) ships with the server."
+    },
+    "AFFINE-BP1.5": {
+      "score": 1,
+      "sentence": "`native` and `mobile-native` are native bindings for desktop and mobile. ... `native`, a Rust addon for it (`@affine/server-native`)."
+    },
+    "AFFINE-BP1.6": {
+      "score": 1,
+      "sentence": "AFFiNE is local-first, so clients keep their data locally and the server handles sync, sharing and cloud features."
+    },
+    "AFFINE-BP1.7": {
+      "score": 0.5,
+      "sentence": "**PostgreSQL** (Prisma)... **Redis** (CI sets `REDIS_SERVER_HOST`). ... a GraphQL API"
+    },
+    "AFFINE-BP1.8": {
+      "score": 1,
+      "sentence": "`component` is the shared UI component library."
+    }
+  },
+  "affine-bp1-nebulosity-1": {
+    "AFFINE-BP1.1": {
+      "score": 1,
+      "sentence": "**`packages/frontend/`** `core` is the main application logic ... **`packages/backend/`** `server` is the NestJS backend. ... **`packages/common/`** holds code shared by frontend and backend"
+    },
+    "AFFINE-BP1.2": {
+      "score": 1,
+      "sentence": "`tests/` holds end-to-end and other tests. `tools/` holds the `affine` CLI and CI helpers."
+    },
+    "AFFINE-BP1.3": {
+      "score": 0.5,
+      "sentence": "**`blocksuite/`** holds the editor, built on Yjs (a collaborative-editing library)."
+    },
+    "AFFINE-BP1.4": {
+      "score": 1,
+      "sentence": "**web**: the browser app. **mobile**: the mobile web shell. **electron** with **electron-renderer**: the desktop app. **ios** and **android**: Capacitor apps ... The admin console (`packages/frontend/admin`) is a separate frontend."
+    },
+    "AFFINE-BP1.5": {
+      "score": 1,
+      "sentence": "`native` is a Rust addon (NAPI-RS) that the server relies on heavily. ... Build the Rust native binding with `yarn affine @affine/server-native build`."
+    },
+    "AFFINE-BP1.6": {
+      "score": 0.5,
+      "sentence": "It is the cloud and self-host backend: accounts and auth; workspaces and sync of documents between clients"
+    },
+    "AFFINE-BP1.7": {
+      "score": 1,
+      "sentence": "exposes a GraphQL endpoint at `http://localhost:3000/graphql` in dev ... A PostgreSQL database, set through `DATABASE_URL` ... A Redis instance, set through `REDIS_SERVER_HOST`."
+    },
+    "AFFINE-BP1.8": {
+      "score": 1,
+      "sentence": "`component` is the shared React UI library."
+    }
+  },
+  "affine-bp1-nebulosity-2": {
+    "AFFINE-BP1.1": {
+      "score": 1,
+      "sentence": "**`packages/frontend/`** has the client code. ... **`packages/common/`** is shared by the frontend and the backend. ... **`packages/backend/`** has two packages. `server` is the NestJS server."
+    },
+    "AFFINE-BP1.2": {
+      "score": 1,
+      "sentence": "**`tests/`** holds end-to-end and other tests. - **`tools/`** has the `affine` CLI and CI helpers."
+    },
+    "AFFINE-BP1.3": {
+      "score": 0.5,
+      "sentence": "**`blocksuite/`** is the editor, a Yjs (CRDT) based framework."
+    },
+    "AFFINE-BP1.4": {
+      "score": 1,
+      "sentence": "**Web** (`web`) - **Mobile web** (`mobile`, with `mobile-shared`) - **Desktop** (`electron` plus `electron-renderer`) - **iOS** (`ios`) - **Android** (`android`) There is also the **admin console** (`packages/frontend/admin`)"
+    },
+    "AFFINE-BP1.5": {
+      "score": 1,
+      "sentence": "the Rust addon loader (`native`) ... `native` is the Rust addon the server uses. Its build is `yarn affine @affine/server-native build`."
+    },
+    "AFFINE-BP1.6": {
+      "score": 1,
+      "sentence": "The server is the optional cloud and self-host backend. The clients work offline, and the server adds: account login and authentication - workspace sync and realtime collaboration"
+    },
+    "AFFINE-BP1.7": {
+      "score": 0.5,
+      "sentence": "a GraphQL API at `/graphql` ... **PostgreSQL.** `render.yaml` provisions Postgres 16. ... **Redis.**"
+    },
+    "AFFINE-BP1.8": {
+      "score": 1,
+      "sentence": "`component` is the shared React UI library."
+    }
+  },
+  "affine-bp1-nebulosity-3": {
+    "AFFINE-BP1.1": {
+      "score": 1,
+      "sentence": "**`packages/frontend/`** holds the client code. ... **`packages/backend/`** holds the `server` (NestJS) and `native` ... **`packages/common/`** holds code shared by client and server"
+    },
+    "AFFINE-BP1.2": {
+      "score": 1,
+      "sentence": "**`tests/`** holds the end-to-end and other test suites. **`tools/`** holds the `affine` CLI plus CI and release helpers"
+    },
+    "AFFINE-BP1.3": {
+      "score": 1,
+      "sentence": "**`blocksuite/`** is the editor framework the app is built on."
+    },
+    "AFFINE-BP1.4": {
+      "score": 1,
+      "sentence": "Web app; Mobile web app; Electron desktop app (macOS, Windows and Linux); Android and iOS apps (native shells around the mobile build); Admin dashboard"
+    },
+    "AFFINE-BP1.5": {
+      "score": 1,
+      "sentence": "`native` and `mobile-native` hold Rust bindings. ... `native` (Rust, via napi)."
+    },
+    "AFFINE-BP1.6": {
+      "score": 0.5,
+      "sentence": "It's the backend for self-hosted and cloud AFFiNE. It handles: accounts, auth and OAuth ... real-time document sync over socket.io ... optional plugins: copilot (AI)"
+    },
+    "AFFINE-BP1.7": {
+      "score": 0.5,
+      "sentence": "PostgreSQL, accessed through Prisma. ... Redis, used for caching, the socket.io adapter and queues. ... a GraphQL API (`schema.gql`)"
+    },
+    "AFFINE-BP1.8": {
+      "score": 1,
+      "sentence": "`component` is the shared UI library"
+    }
+  },
+  "affine-bp2-baseline-1": {
+    "AFFINE-BP2.1": {
+      "score": 1,
+      "sentence": "This layer doesn't depend on AFFiNE's block types."
+    },
+    "AFFINE-BP2.2": {
+      "score": 0.5,
+      "sentence": "`store` is the Yjs-backed data layer."
+    },
+    "AFFINE-BP2.3": {
+      "score": 0.5,
+      "sentence": "`std` is the standard editor runtime. It provides the view layer, the dependency-injection container, the extension mechanism, selection, commands and the gfx (canvas) base."
+    },
+    "AFFINE-BP2.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.5": {
+      "score": 1,
+      "sentence": "**`blocks/*`**: one package per block type ... **`widgets/*`**: UI overlays such as the toolbar, slash-menu, drag-handle ... **`fragments/*`**: side panels such as outline, frame-panel, doc-title ... The mode switch toggles page and edgeless modes."
+    },
+    "AFFINE-BP2.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.7": {
+      "score": 0.5,
+      "sentence": "The AFFiNE frontend picks which block, widget and fragment extensions to register, and it connects the editor to workspace storage and sync."
+    },
+    "AFFINE-BP2.8": {
+      "score": 0.5,
+      "sentence": "The app is wired in as workspace dependencies. `packages/frontend/core/package.json` depends on `@blocksuite/affine`..."
+    }
+  },
+  "affine-bp2-baseline-2": {
+    "AFFINE-BP2.1": {
+      "score": 1,
+      "sentence": "It splits into a generic framework and the AFFiNE-specific editor built on it."
+    },
+    "AFFINE-BP2.2": {
+      "score": 0.5,
+      "sentence": "`store`: the document data layer. It holds the block models, doc collection and schema, and is presumably CRDT-backed."
+    },
+    "AFFINE-BP2.3": {
+      "score": 0.5,
+      "sentence": "`std`: the standard runtime. It covers the block service and view layer, the extension system, commands, selection and the gfx (edgeless canvas) core."
+    },
+    "AFFINE-BP2.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.5": {
+      "score": 0.5,
+      "sentence": "`widgets/*`: UI overlays and tools, such as slash-menu, toolbar, drag-handle... `fragments/*`: side panels, such as outline, frame-panel, doc-title and adapter-panel."
+    },
+    "AFFINE-BP2.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.7": {
+      "score": 0.5,
+      "sentence": "The editor is therefore assembled from BlockSuite's extension packages, with AFFiNE-specific services layered on top."
+    },
+    "AFFINE-BP2.8": {
+      "score": 0.5,
+      "sentence": "The app code is in `packages/frontend/core/src/blocksuite/`. It imports `@blocksuite/affine/*`, `@blocksuite/std` and `@blocksuite/store` in about 246 files."
+    }
+  },
+  "affine-bp2-baseline-3": {
+    "AFFINE-BP2.1": {
+      "score": 1,
+      "sentence": "splits into two layers: a generic `framework/` and an AFFiNE-specific `affine/`"
+    },
+    "AFFINE-BP2.2": {
+      "score": 0.5,
+      "sentence": "Docs are collaborative and CRDT-backed, and the store handles schema, transactions and extensions."
+    },
+    "AFFINE-BP2.3": {
+      "score": 0.5,
+      "sentence": "It holds the dependency-injection container, extension system, commands, selection, clipboard, the block and widget view base classes"
+    },
+    "AFFINE-BP2.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.5": {
+      "score": 1,
+      "sentence": "`widgets/*`: UI overlays such as the slash menu, toolbar, drag handle... `fragments/*`: side panels such as outline, frame-panel, doc-title"
+    },
+    "AFFINE-BP2.6": {
+      "score": 1,
+      "sentence": "`block-suite-editor/` wraps the editor for React, with `lit-adaper.tsx` bridging React and Lit."
+    },
+    "AFFINE-BP2.7": {
+      "score": 0.5,
+      "sentence": "Each package is a self-contained extension, which is the unit the framework's extension system registers. That lets an app compose only the pieces it wants."
+    },
+    "AFFINE-BP2.8": {
+      "score": 0.5,
+      "sentence": "The app, mainly `packages/frontend/core`, imports `@blocksuite/affine/*`, `@blocksuite/std` and `@blocksuite/store`."
+    }
+  },
+  "affine-bp2-nebulosity-1": {
+    "AFFINE-BP2.1": {
+      "score": 0.5,
+      "sentence": "`affine/` is the Affine editor built on that framework."
+    },
+    "AFFINE-BP2.2": {
+      "score": 0.5,
+      "sentence": "`store`: the Yjs-backed document model (docs, blocks, schemas, transactions)."
+    },
+    "AFFINE-BP2.3": {
+      "score": 0.5,
+      "sentence": "`std`: the runtime that renders and drives the editor. It covers block views, selection, commands, services and the canvas/gfx runtime."
+    },
+    "AFFINE-BP2.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.5": {
+      "score": 0.5,
+      "sentence": "`widgets`: floating UI such as toolbar, slash-menu, drag-handle... `fragments`: side panels such as outline, frame-panel, doc-title and adapter-panel."
+    },
+    "AFFINE-BP2.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.7": {
+      "score": 0.5,
+      "sentence": "Each feature package typically provides a model, a view and store extensions. Behaviour is composed through an extension system rather than hard-coded."
+    },
+    "AFFINE-BP2.8": {
+      "score": 1,
+      "sentence": "Nothing inside `blocksuite/` imports from the rest of the repo, but the rest of the repo imports it about 1,170 times."
+    }
+  },
+  "affine-bp2-nebulosity-2": {
+    "AFFINE-BP2.1": {
+      "score": 1,
+      "sentence": "`affine/` builds the actual Affine editor on the framework. ... it depends only on `framework/`."
+    },
+    "AFFINE-BP2.2": {
+      "score": 0.5,
+      "sentence": "`store/` is the Yjs-backed document model, covering blocks, schemas and transactions."
+    },
+    "AFFINE-BP2.3": {
+      "score": 0.5,
+      "sentence": "`std/` is the runtime that sits on top of the others. It handles block views, selection, input, commands and canvas rendering."
+    },
+    "AFFINE-BP2.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.5": {
+      "score": 1,
+      "sentence": "`blocks/` has the block types ... `widgets/` has the UI around the editor, for both page and edgeless modes. ... `fragments/` has the sidebar and title pieces. ... `block-suite-editor/` and `editors/` are React wrappers around the Lit editor elements."
+    },
+    "AFFINE-BP2.6": {
+      "score": 1,
+      "sentence": "`block-suite-editor/` and `editors/` are React wrappers around the Lit editor elements."
+    },
+    "AFFINE-BP2.7": {
+      "score": 0.5,
+      "sentence": "The view and store extensions are separate so the document model can be used without the UI."
+    },
+    "AFFINE-BP2.8": {
+      "score": 1,
+      "sentence": "It has about 2,700 files and imports nothing from outside itself. ... `packages/` imports BlockSuite in about 1,100 places"
+    }
+  },
+  "affine-bp2-nebulosity-3": {
+    "AFFINE-BP2.1": {
+      "score": 1,
+      "sentence": "`blocksuite/affine/` is the Affine editor built on that framework."
+    },
+    "AFFINE-BP2.2": {
+      "score": 0.5,
+      "sentence": "`store`: the document model, backed by Yjs (a CRDT library). Docs are trees of blocks."
+    },
+    "AFFINE-BP2.3": {
+      "score": 0.5,
+      "sentence": "`std`: the standard runtime. It covers block views, selection, commands, the extension system and the canvas/gfx runtime."
+    },
+    "AFFINE-BP2.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.5": {
+      "score": 0.5,
+      "sentence": "**`widgets/`**: floating UI such as the drag handle... **`fragments/`**: side panels such as outline, frame-panel, doc-title and adapter-panel."
+    },
+    "AFFINE-BP2.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP2.7": {
+      "score": 0.5,
+      "sentence": "The app configures the editor through BlockSuite's extension system. It registers store extensions and view extensions"
+    },
+    "AFFINE-BP2.8": {
+      "score": 1,
+      "sentence": "BlockSuite imports nothing from outside itself. ... 442 files outside `blocksuite/` import it directly."
+    }
+  },
+  "affine-bp3-baseline-1": {
+    "AFFINE-BP3.1": {
+      "score": 1,
+      "sentence": "`defineBlockSchema({flavour, props, metadata, toModel})` ... `flavour` is the namespaced id, such as `'affine:paragraph'`. ... `metadata` holds `version`, `role` (such as `'content'`)"
+    },
+    "AFFINE-BP3.2": {
+      "score": 1,
+      "sentence": "`internal.Text()` creates a collaborative text prop."
+    },
+    "AFFINE-BP3.3": {
+      "score": 0.5,
+      "sentence": "`metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours."
+    },
+    "AFFINE-BP3.4": {
+      "score": 1,
+      "sentence": "The model is a class extending `BlockModel<Props>`, for example `ParagraphBlockModel`. ... `toModel: () => new ParagraphBlockModel()` creates the model."
+    },
+    "AFFINE-BP3.5": {
+      "score": 1,
+      "sentence": "The component extends `BlockComponent<Model>` ... Children go through `this.std.host.renderChildren(model)` ... `BlockViewExtension('affine:paragraph', literal`affine-paragraph`)`, which maps the flavour to the tag name"
+    },
+    "AFFINE-BP3.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP3.7": {
+      "score": 1,
+      "sentence": "Each block package exports two extension providers ... `StoreExtensionProvider` ... `ViewExtensionProvider` ... `StoreExtensionManager` and `ViewExtensionManager` ... collect the providers."
+    },
+    "AFFINE-BP3.8": {
+      "score": 0.5,
+      "sentence": "Its `effect()` calls `effects()` to define the custom elements."
+    }
+  },
+  "affine-bp3-baseline-2": {
+    "AFFINE-BP3.1": {
+      "score": 1,
+      "sentence": "`defineBlockSchema({ flavour, props, metadata, toModel })` declares the block. `flavour` is a namespaced string such as `'affine:callout'`... `metadata` holds `version`, `role`"
+    },
+    "AFFINE-BP3.2": {
+      "score": 1,
+      "sentence": "`internal.Text()` creates a Y.Text-backed rich-text prop."
+    },
+    "AFFINE-BP3.3": {
+      "score": 0.5,
+      "sentence": "`metadata` holds ... the `parent` and `children` flavour whitelists, which constrain where the block can sit in the tree."
+    },
+    "AFFINE-BP3.4": {
+      "score": 1,
+      "sentence": "`class CalloutBlockModel extends BlockModel<CalloutProps>` is the model class. ... `toModel: () => new CalloutBlockModel()` builds the model."
+    },
+    "AFFINE-BP3.5": {
+      "score": 1,
+      "sentence": "`CalloutBlockComponent extends CaptionedBlockComponent<CalloutBlockModel>`. This is a Lit element... `BlockViewExtension('affine:callout', literal`affine-callout`)` maps the flavour to a static Lit tag."
+    },
+    "AFFINE-BP3.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP3.7": {
+      "score": 1,
+      "sentence": "`CalloutStoreExtension extends StoreExtensionProvider` ... calls `context.register(...)` with the schema extension and the adapter extensions ... `CalloutViewExtension extends ViewExtensionProvider` ... Both providers are listed in the aggregate lists in `blocksuite/affine/all/src/extensions/store.ts` and `view.ts`. Editor presets pick them up from there."
+    },
+    "AFFINE-BP3.8": {
+      "score": 0.5,
+      "sentence": "`effect()` calls `effects()` to define the custom elements."
+    }
+  },
+  "affine-bp3-baseline-3": {
+    "AFFINE-BP3.1": {
+      "score": 1,
+      "sentence": "`defineBlockSchema({ flavour, props, metadata, toModel })` ... The flavour is a namespaced string such as `'affine:note'`. ... `metadata` holds `version`, `role`"
+    },
+    "AFFINE-BP3.2": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP3.3": {
+      "score": 0.5,
+      "sentence": "`metadata` holds `version`, `role` (for example `'hub'` or `'content'`), and `parent` and `children` whitelists. The whitelists can use role tags like `'@root'` and `'@content'`."
+    },
+    "AFFINE-BP3.4": {
+      "score": 1,
+      "sentence": "The model is a class extending `BlockModel<Props>`, for example `NoteBlockModel`."
+    },
+    "AFFINE-BP3.5": {
+      "score": 1,
+      "sentence": "The view is a Lit element extending `BlockComponent<Model>` ... Children are rendered with `this.renderChildren(this.model)` ... `BlockViewExtension(flavour, literal`affine-note`)`"
+    },
+    "AFFINE-BP3.6": {
+      "score": 0.5,
+      "sentence": "Widgets use the analogous `WidgetViewExtension` (`widget-view-map.ts`)."
+    },
+    "AFFINE-BP3.7": {
+      "score": 0.5,
+      "sentence": "The store provider extends `StoreExtensionProvider` ... The view provider extends `ViewExtensionProvider`"
+    },
+    "AFFINE-BP3.8": {
+      "score": 0.5,
+      "sentence": "`effect()` calls `effects()`, which defines the custom elements. ... The edgeless branch registers `affine-edgeless-note` instead."
+    }
+  },
+  "affine-bp3-nebulosity-1": {
+    "AFFINE-BP3.1": {
+      "score": 1,
+      "sentence": "`metadata` holds `version`, `role` (e.g. `'hub'`) and the `parent` and `children` flavour constraints. `flavour` is a namespaced string such as `'affine:note'`."
+    },
+    "AFFINE-BP3.2": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP3.3": {
+      "score": 0.5,
+      "sentence": "the `parent` and `children` flavour constraints. These can use group aliases like `'@root'` and `'@content'`."
+    },
+    "AFFINE-BP3.4": {
+      "score": 1,
+      "sentence": "`toModel: () => new NoteBlockModel()` creates the model instance. The model class extends `BlockModel`"
+    },
+    "AFFINE-BP3.5": {
+      "score": 1,
+      "sentence": "The component is a Lit element extending `BlockComponent<Model>` ... `this.renderChildren(this.model)` renders child blocks. ... `BlockViewExtension(flavour, literal`affine-note`)` maps a flavour to a static Lit tag."
+    },
+    "AFFINE-BP3.6": {
+      "score": 0.5,
+      "sentence": "`setup(context)` calls `context.register([...])` with: ... widgets"
+    },
+    "AFFINE-BP3.7": {
+      "score": 1,
+      "sentence": "The schema extension is registered on the store side. The usual vehicle is a `StoreExtensionProvider` ... A `ViewExtensionProvider` subclass bundles these registrations ... A `ViewExtensionManager` ... takes the list of providers."
+    },
+    "AFFINE-BP3.8": {
+      "score": 1,
+      "sentence": "`effect()` runs the element registrations ... `this.isEdgeless(context.scope)` lets it register a different view for page mode and edgeless mode."
+    }
+  },
+  "affine-bp3-nebulosity-2": {
+    "AFFINE-BP3.1": {
+      "score": 1,
+      "sentence": "`defineBlockSchema({ flavour, props, metadata, toModel })` declares the block. The flavour is a string such as `'affine:paragraph'`. ... `metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours."
+    },
+    "AFFINE-BP3.2": {
+      "score": 0.5,
+      "sentence": "`props(internal)` returns the default props, for example `internal.Text()` for rich text."
+    },
+    "AFFINE-BP3.3": {
+      "score": 0.5,
+      "sentence": "`metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours."
+    },
+    "AFFINE-BP3.4": {
+      "score": 1,
+      "sentence": "The model is a class that extends `BlockModel<Props>`, here `ParagraphBlockModel`, with props accessed as `model.props.*`."
+    },
+    "AFFINE-BP3.5": {
+      "score": 1,
+      "sentence": "`BlockViewExtension('affine:paragraph', literal\\`affine-paragraph\\`)`, which maps the flavour to the component's tag."
+    },
+    "AFFINE-BP3.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP3.7": {
+      "score": 1,
+      "sentence": "A package's `store.ts` has a class that extends `StoreExtensionProvider` ... A package's `view.ts` has a class that extends `ViewExtensionProvider<Options>`. ... These lists are the defaults that an editor or store is built from. ... That wiring is presumably in the `store.ts` and `view.ts` extension managers."
+    },
+    "AFFINE-BP3.8": {
+      "score": 0.5,
+      "sentence": "`effect()` calls `effects()`, which defines the custom elements."
+    }
+  },
+  "affine-bp3-nebulosity-3": {
+    "AFFINE-BP3.1": {
+      "score": 1,
+      "sentence": "`defineBlockSchema({ flavour, metadata, props?, toModel })` declares the block. `flavour` is the type id, written `affine:<name>`... `metadata` holds `version`, `role`"
+    },
+    "AFFINE-BP3.2": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP3.3": {
+      "score": 0.5,
+      "sentence": "`metadata` holds `version`, `role` (`'content'`, `'hub'` or `'root'`) and the allowed `children` and `parent` flavours."
+    },
+    "AFFINE-BP3.4": {
+      "score": 1,
+      "sentence": "`class XBlockModel extends BlockModel<Props>` is the data class... `toModel` returns `new DividerBlockModel()`."
+    },
+    "AFFINE-BP3.5": {
+      "score": 1,
+      "sentence": "It is a Lit element... builds on `BlockComponent`... It calls `this.renderChildren(this.model)`... registers `BlockViewExtension('affine:divider', literal`affine-divider`)`."
+    },
+    "AFFINE-BP3.6": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP3.7": {
+      "score": 1,
+      "sentence": "**`store.ts`** has `XStoreExtension extends StoreExtensionProvider`. ... **`view.ts`** has `XViewExtension extends ViewExtensionProvider`. ... The editor or app (for example the `affine-shared`/`ext-loader` extension manager) then registers the Store and View providers."
+    },
+    "AFFINE-BP3.8": {
+      "score": 0.5,
+      "sentence": "`effect()` calls `effects()` to define the custom element."
+    }
+  },
+  "affine-bp4-baseline-1": {
+    "AFFINE-BP4.1": {
+      "score": 0.5,
+      "sentence": "Each document is a Yjs CRDT (`Y.Doc`). A workspace has a root doc, whose `meta` map lists the pages, plus one Y.Doc per page."
+    },
+    "AFFINE-BP4.2": {
+      "score": 0.5,
+      "sentence": "`DocFrontend.applyUpdate` then runs Yjs `applyUpdate` on the live doc, and the editor reacts to that change."
+    },
+    "AFFINE-BP4.3": {
+      "score": 1,
+      "sentence": "Storage holds Yjs binary updates and snapshots, not JSON."
+    },
+    "AFFINE-BP4.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP4.5": {
+      "score": 1,
+      "sentence": "Awareness (cursors and presence) uses its own channel and isn't persisted."
+    },
+    "AFFINE-BP4.6": {
+      "score": 1,
+      "sentence": "Browser: IndexedDB (`impls/idb`), one database per workspace named `workspace:<id>`. ... Desktop and mobile: a per-workspace SQLite file written by native Rust code (`impls/sqlite`"
+    },
+    "AFFINE-BP4.7": {
+      "score": 1,
+      "sentence": "Offline edits stay in local storage and are pushed on reconnect. ... Cloud workspaces sync with the AFFiNE server through socket.io"
+    },
+    "AFFINE-BP4.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "affine-bp4-baseline-2": {
+    "AFFINE-BP4.1": {
+      "score": 1,
+      "sentence": "A document is a Yjs CRDT (`Y.Doc`). The block tree is stored in Yjs maps and arrays, and the editor (BlockSuite) reads and writes it directly."
+    },
+    "AFFINE-BP4.2": {
+      "score": 0.5,
+      "sentence": "The editor re-renders from the Yjs change events."
+    },
+    "AFFINE-BP4.3": {
+      "score": 1,
+      "sentence": "Persisted and transmitted data is binary Yjs data."
+    },
+    "AFFINE-BP4.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP4.5": {
+      "score": 1,
+      "sentence": "Presence (cursors and similar) goes through a separate awareness channel (`frontend/awareness.ts`, `impls/cloud/awareness.ts`)."
+    },
+    "AFFINE-BP4.6": {
+      "score": 1,
+      "sentence": "Web: IndexedDB, in a database named `workspace:${id}` ... Desktop and mobile: SQLite, through the native Rust module"
+    },
+    "AFFINE-BP4.7": {
+      "score": 1,
+      "sentence": "`sync/doc/peer.ts` syncs the local storage with each remote peer. ... Local-only workspaces never connect to the server, so they stay on the device."
+    },
+    "AFFINE-BP4.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "affine-bp4-baseline-3": {
+    "AFFINE-BP4.1": {
+      "score": 1,
+      "sentence": "Each document is a `Y.Doc`, and the block tree lives inside it as Yjs types."
+    },
+    "AFFINE-BP4.2": {
+      "score": 0.5,
+      "sentence": "Incoming change: it applies the update to the `Y.Doc` as a remote-origin change. The editor then renders it."
+    },
+    "AFFINE-BP4.3": {
+      "score": 1,
+      "sentence": "the stored form is binary Yjs update/snapshot blobs, not JSON."
+    },
+    "AFFINE-BP4.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP4.5": {
+      "score": 0.5,
+      "sentence": "Awareness (cursors and presence) has its own cloud channel."
+    },
+    "AFFINE-BP4.6": {
+      "score": 1,
+      "sentence": "Web (IndexedDB): one database per workspace, named `workspace:${id}`... Desktop and mobile: `impls/sqlite` stores the same kind of data in SQLite"
+    },
+    "AFFINE-BP4.7": {
+      "score": 0.5,
+      "sentence": "Local edit: it saves the edit's update to local storage and hands it to the sync layer."
+    },
+    "AFFINE-BP4.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "affine-bp4-nebulosity-1": {
+    "AFFINE-BP4.1": {
+      "score": 1,
+      "sentence": "Each doc is a Yjs `Doc` holding the BlockSuite block tree as Y.Maps and Y.Arrays."
+    },
+    "AFFINE-BP4.2": {
+      "score": 0.5,
+      "sentence": "The same path handles incoming updates from storage. Other users' changes are applied as `apply` jobs."
+    },
+    "AFFINE-BP4.3": {
+      "score": 1,
+      "sentence": "It is persisted as binary Yjs updates (`Uint8Array`) plus merged snapshots."
+    },
+    "AFFINE-BP4.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP4.5": {
+      "score": 1,
+      "sentence": "awareness (cursors and presence) uses a separate channel and is not persisted."
+    },
+    "AFFINE-BP4.6": {
+      "score": 1,
+      "sentence": "Browser: IndexedDB, in `impls/idb/schema.ts`. ... Desktop and mobile: per-workspace SQLite through a Rust native module"
+    },
+    "AFFINE-BP4.7": {
+      "score": 0.5,
+      "sentence": "`sync/doc/peer.ts` syncs a local storage with a remote one using per-doc timestamp clocks."
+    },
+    "AFFINE-BP4.8": {
+      "score": 0.5,
+      "sentence": "per-workspace SQLite through a Rust native module (`packages/frontend/native/nbstore`, using sqlx and y_octo)"
+    }
+  },
+  "affine-bp4-nebulosity-2": {
+    "AFFINE-BP4.1": {
+      "score": 1,
+      "sentence": "A document is a Yjs CRDT (`Y.Doc`). BlockSuite blocks live inside it as nested `Y.Map`/`Y.Array`/`Y.Text` structures."
+    },
+    "AFFINE-BP4.2": {
+      "score": 0.5,
+      "sentence": "Any update whose origin isn't its own is applied with `Y.applyUpdate(doc, update, NBSTORE_ORIGIN)`. The editor renders from the `Y.Doc`, so it updates automatically."
+    },
+    "AFFINE-BP4.3": {
+      "score": 1,
+      "sentence": "Storage and the network only handle binary Yjs updates (`Uint8Array`)."
+    },
+    "AFFINE-BP4.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP4.5": {
+      "score": 0.5,
+      "sentence": "Blobs (images and attachments) and awareness (presence) are stored and synced separately from doc content."
+    },
+    "AFFINE-BP4.6": {
+      "score": 1,
+      "sentence": "Browser: `impls/idb`, an IndexedDB store. Desktop and mobile: `impls/sqlite`, a native SQLite file per workspace"
+    },
+    "AFFINE-BP4.7": {
+      "score": 1,
+      "sentence": "A sync peer connects the local storage to each remote storage. ... Remote updates are written into local storage, which makes the frontend apply them. ... Local-only workspaces have no remote peer."
+    },
+    "AFFINE-BP4.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "affine-bp4-nebulosity-3": {
+    "AFFINE-BP4.1": {
+      "score": 1,
+      "sentence": "Each document is a Yjs `Y.Doc` that holds the BlockSuite block tree."
+    },
+    "AFFINE-BP4.2": {
+      "score": 0.5,
+      "sentence": "The editor re-renders from the Yjs doc, and the origin tag stops those applies being pushed back out."
+    },
+    "AFFINE-BP4.3": {
+      "score": 1,
+      "sentence": "It is persisted as binary Yjs data in two forms: a merged snapshot and incremental updates."
+    },
+    "AFFINE-BP4.4": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP4.5": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "AFFINE-BP4.6": {
+      "score": 1,
+      "sentence": "Desktop (Electron) uses `SqliteDocStorage`, backed by a native SQLite module. Web and mobile use `IndexedDBDocStorage`."
+    },
+    "AFFINE-BP4.7": {
+      "score": 1,
+      "sentence": "`sync/doc/` creates one `DocSyncPeer` per remote. Each peer compares clocks and pushes or pulls updates between the local storage and the remote storage. ... Local-only workspaces have no remote, so they never sync."
+    },
+    "AFFINE-BP4.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "vscode-bp1-baseline-1": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "`base/` holds foundation utilities that work on any platform. ... basic DOM and widget helpers."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "`platform/` holds platform services and the dependency-injection infrastructure. ... It is independent of any particular editor or workbench UI."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "`editor/` is the Monaco text editor: model, view, language features, syntax highlighting and editing behavior."
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "`workbench/` is the main application shell for desktop and web. ... `browser/` has the core UI: parts, layout and actions."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "`code/` is the Electron main-process entry and implementation."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "`server/` is the server-side entry, used for remote and web hosting."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "`base` depends on nothing above it. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform` and `editor`."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "`api/` has the extension host and the implementation of the VS Code extension API."
+    }
+  },
+  "vscode-bp1-baseline-2": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "**`base`** is the foundation: cross-platform utilities such as strings, arrays, events, lifecycle/disposables, async helpers, URI, and basic DOM and UI widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "**`platform`** holds the services and the dependency-injection infrastructure: instantiation, service decorators, configuration, files, storage, log, and similar."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "**`editor`** is the Monaco text editor: the model, the view, language services, syntax highlighting, and editing features."
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "**`workbench`** is the application shell for web and desktop. Its subfolders are: `browser`: parts, layout, and actions."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "**`code`** is the Electron main process implementation, which includes the desktop app startup."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "**`server`** is the server implementation for remote and web hosting."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Dependencies point downward only. A layer may import from the layers below it and never from the layers above it: `base` imports only from `base`. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform`, and `editor`."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "`api`: the extension host and the VS Code API implementation."
+    }
+  },
+  "vscode-bp1-baseline-3": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "Generic utilities and UI building blocks with no VS Code concepts."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "Services and dependency-injection infrastructure shared across layers."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "The Monaco text editor, covering the model, view, languages and editor contributions (`contrib`)."
+    },
+    "BP1.4": {
+      "score": 1,
+      "sentence": "The full IDE shell and features: layout, parts, services, extension host and API, and feature contributions (`contrib`) such as search, debug, SCM, terminal and chat."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "The Electron-specific app, including the main process, utility process and renderer bootstrap."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "The remote and web server implementation."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "A layer may import only from layers below it. So `base` imports nothing above itself. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform` and `editor`."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "extension host and API"
+    }
+  },
+  "vscode-bp1-nebulosity-1": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "**`base/`** (498 files) holds foundational, dependency-free primitives. These are utilities, data structures, events and lifecycle, async helpers, and generic UI widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "**`platform/`** (about 3,100 files) holds the core services and their contracts. These include instantiation and dependency injection, configuration, files, storage"
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "**`editor/`** (about 880 files) is the Monaco code editor core."
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "**`workbench/`** (about 4,630 files) is the VS Code application: parts, services and `contrib/` features such as chat, debug, SCM and search."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "**`code/`** is startup code for desktop, CLI and web."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "**`server/`** is the remote server runtime."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Each layer may import only from the layers below it. For example, `base/` must not import `platform/`, `editor/` or `workbench/`, and `platform/` must not import `editor/` or `workbench/`."
+    },
+    "BP1.8": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "vscode-bp1-nebulosity-2": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "foundational utilities and UI primitives. It covers collections, events, lifecycle, strings, paths, async helpers, and basic DOM widgets."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "core services and their contracts. It covers dependency-injection infrastructure, configuration, files, storage, telemetry"
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "the Monaco code editor core. It covers the text model, view, languages, and standalone editor."
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "the VS Code application itself. It holds the workbench parts, services, and `contrib/` features such as chat, debug, and SCM."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "`code/` holds startup code for desktop, CLI, and web."
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "`server/` is the remote server runtime."
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Each layer may import only from layers below it. So `base` imports nothing above it, and `platform` imports `base`."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "Extension-host support is also here."
+    }
+  },
+  "vscode-bp1-nebulosity-3": {
+    "BP1.1": {
+      "score": 1,
+      "sentence": "Foundation utilities with no knowledge of VS Code as a product: collections, strings, events, lifecycle, async helpers, DOM and generic UI widgets, and JSON."
+    },
+    "BP1.2": {
+      "score": 1,
+      "sentence": "Services and dependency-injection infrastructure: the `IInstantiationService` container, files, configuration, storage, logging, quick input, and the agent host."
+    },
+    "BP1.3": {
+      "score": 1,
+      "sentence": "The Monaco text editor. It covers the text model, languages, the diff computer, and the editor widget"
+    },
+    "BP1.4": {
+      "score": 0.5,
+      "sentence": "The VS Code application shell and features: parts such as the sidebar and panels, `contrib/` features (chat, search, SCM, debug and others), `services/`, and the extension host and API."
+    },
+    "BP1.5": {
+      "score": 1,
+      "sentence": "Top-level entry points: Electron main and desktop startup (`code/`)"
+    },
+    "BP1.6": {
+      "score": 1,
+      "sentence": "the remote or web server (`server/`)"
+    },
+    "BP1.7": {
+      "score": 1,
+      "sentence": "Dependencies point downward only: `base` → `platform` → `editor` → `workbench` → entry points."
+    },
+    "BP1.8": {
+      "score": 0.5,
+      "sentence": "`workbench/` ... the extension host and API."
+    }
+  },
+  "vscode-bp2-baseline-1": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "| `common` | Basic JavaScript only, with no DOM and no Node | nothing else (only other `common` code) |"
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "| `browser` | Web and DOM APIs | `common` |"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "| `node` | Node.js APIs | `common` |"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "| `electron-browser` | The renderer: browser APIs plus limited Electron IPC | `common`, `browser` |"
+    },
+    "BP2.5": {
+      "score": 1,
+      "sentence": "| `electron-utility` | The Electron utility process | `common`, `node` |"
+    },
+    "BP2.6": {
+      "score": 1,
+      "sentence": "| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |"
+    }
+  },
+  "vscode-bp2-baseline-2": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "| `common` | Plain JavaScript only, with no DOM or Node | nothing else (only other `common` code) |"
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "| `browser` | Web and DOM APIs | `common` |"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "| `node` | Node.js APIs | `common` |"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "| `electron-browser` | The renderer, with DOM plus limited Electron IPC | `common`, `browser` |"
+    },
+    "BP2.5": {
+      "score": 1,
+      "sentence": "| `electron-utility` | The Electron utility process | `common`, `node` |"
+    },
+    "BP2.6": {
+      "score": 1,
+      "sentence": "| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |"
+    }
+  },
+  "vscode-bp2-baseline-3": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "| `common` | Any environment, so only basic JavaScript | Only `common` |"
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "| `browser` | Web or DOM environments | `common` |"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "| `node` | Node.js | `common` |"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "| `electron-browser` | The Electron renderer: browser APIs plus limited Electron IPC | `common`, `browser` |"
+    },
+    "BP2.5": {
+      "score": 1,
+      "sentence": "| `electron-utility` | The Electron utility process | `common`, `node` |"
+    },
+    "BP2.6": {
+      "score": 1,
+      "sentence": "| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |"
+    }
+  },
+  "vscode-bp2-nebulosity-1": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "Any JavaScript environment. It can't touch DOM or Node APIs."
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "The renderer or web, with DOM access. | `browser` and `common`"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "Node.js, with no DOM and no Electron. | `node` and `common`"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "The Electron renderer, with DOM plus a preload/Node bridge. | `electron-browser`, `browser` and `common`"
+    },
+    "BP2.5": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP2.6": {
+      "score": 0.5,
+      "sentence": "The Electron main process. | `electron-main`, `node` and `common`"
+    }
+  },
+  "vscode-bp2-nebulosity-2": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "| `common` | Any environment (pure JS/TS, no DOM or Node APIs) | `common` only |"
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "| `browser` | The renderer or web, with DOM APIs | `common` and `browser` |"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "| `node` | Node.js, with no DOM | `common` and `node` |"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "| `electron-browser` | The Electron renderer, with DOM and Electron or Node access | `common`, `browser` and `electron-browser` |"
+    },
+    "BP2.5": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP2.6": {
+      "score": 0.5,
+      "sentence": "| `electron-main` | Electron's main process | `common`, `node` and `electron-main` |"
+    }
+  },
+  "vscode-bp2-nebulosity-3": {
+    "BP2.1": {
+      "score": 1,
+      "sentence": "| `common` | Any environment | Only `common`."
+    },
+    "BP2.2": {
+      "score": 1,
+      "sentence": "| `browser` | The renderer or web, with DOM access | `common` and `browser`. |"
+    },
+    "BP2.3": {
+      "score": 1,
+      "sentence": "| `node` | A Node.js process, with no DOM | `common` and `node`. |"
+    },
+    "BP2.4": {
+      "score": 1,
+      "sentence": "| `electron-browser` | The Electron renderer, where both DOM and the Electron renderer APIs are available | `common`, `browser` and `electron-browser`."
+    },
+    "BP2.5": {
+      "score": 0,
+      "sentence": "none"
+    },
+    "BP2.6": {
+      "score": 0.5,
+      "sentence": "| `electron-main` | The Electron main process | `common`, `node` and `electron-main`. It can't import `browser`."
+    }
+  },
+  "vscode-bp3-baseline-1": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "`createDecorator<IFoo>('fooService')` returns a `ServiceIdentifier<IFoo>`. By convention the const and the interface share one name, `IFoo`"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "declare the service as a constructor parameter with the decorator: constructor(arg: string, @IFooService private readonly fooService: IFooService) {}"
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "`IInstantiationService.createInstance(Ctor, ...staticArgs)` resolves the dependencies and passes the services in."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` from `extensions.ts`."
+    },
+    "BP3.6": {
+      "score": 0.5,
+      "sentence": "It is usually placed in a `*.contribution.ts` or the `workbench.*.main.ts` entry points."
+    }
+  },
+  "vscode-bp3-baseline-2": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "A service identifier is created with `createDecorator<T>('name')` (`instantiation.ts:109`). Convention: the const and the interface share one name"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "the service is declared as a constructor parameter with the decorator, e.g. `constructor(arg: string, @IFooService private readonly fooService: IFooService)`"
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "`instantiationService.createInstance(MyClass, ...staticArgs)` resolves the dependencies and builds the object."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)"
+    },
+    "BP3.6": {
+      "score": 1,
+      "sentence": "It is typically called at module top level in a workbench contribution or service file."
+    }
+  },
+  "vscode-bp3-baseline-3": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Create an identifier with the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "Constructor injection: `constructor(arg1: string, @IFooService private readonly fooService: IFooService)`."
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "Create a class through DI with `instantiationService.createInstance(Ctor, ...staticArgs)`."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "call `registerSingleton(IFooService, FooService, InstantiationType.Delayed | Eager)` (`extensions.ts`)."
+    },
+    "BP3.6": {
+      "score": 0.5,
+      "sentence": "registration happens in `*.contribution.ts` or `*.main.ts` files."
+    }
+  },
+  "vscode-bp3-nebulosity-1": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Create the identifier with `createDecorator<IFooService>('fooService')`... It is normally exported under the same name as the interface"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "`constructor(@ILogService private readonly logService: ILogService)`"
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "You use `instantiationService.createInstance(MyClass, ...staticArgs)`... Contributions: workbench contributions, editors and similar are created through `createInstance`, so they get injection automatically."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (in `extensions.ts`)"
+    },
+    "BP3.6": {
+      "score": 0.5,
+      "sentence": "These calls are usually made at module level in `*.contribution.ts` files or in the service's own file."
+    }
+  },
+  "vscode-bp3-nebulosity-2": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Declare an interface and a matching identifier with `createDecorator<IFoo>('fooService')`. By convention both are named `IFoo`, with the identifier as a `const` of the same name."
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "Services are injected as trailing constructor parameters, each annotated with its identifier: ... @IFooService private readonly fooService: IFooService"
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "`instantiationService.createInstance(MyClass, 'static-arg')` supplies the static arguments and resolves the rest from the container."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "Call `registerSingleton(IFoo, FooService, InstantiationType.Delayed)` (`extensions.ts`)."
+    },
+    "BP3.6": {
+      "score": 0.5,
+      "sentence": "Singletons registered in `*.contribution.ts` files or in `workbench.common.main.ts`, `workbench.desktop.main.ts` and similar entry points."
+    }
+  },
+  "vscode-bp3-nebulosity-3": {
+    "BP3.2": {
+      "score": 1,
+      "sentence": "Create the identifier with `createDecorator<IFooService>('fooService')` from `instantiation.ts`. It is usually exported under the same name as the interface"
+    },
+    "BP3.3": {
+      "score": 1,
+      "sentence": "Add the service as a constructor parameter decorated with its identifier: @IFooService private readonly fooService: IFooService"
+    },
+    "BP3.4": {
+      "score": 1,
+      "sentence": "Contribution types are also created through `createInstance`. These include workbench contributions (`registerWorkbenchContribution2`), editor panes, and views. Services therefore arrive automatically."
+    },
+    "BP3.5": {
+      "score": 1,
+      "sentence": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed)` from `extensions.ts`"
+    },
+    "BP3.6": {
+      "score": 0,
+      "sentence": "none"
+    }
+  },
+  "vscode-bp4-baseline-1": {
+    "BP4.1": {
+      "score": 1,
+      "sentence": "`common/`, `browser/`, `electron-browser/` hold the minimal workbench core."
+    },
+    "BP4.2": {
+      "score": 0.5,
+      "sentence": "`api/` provides the `vscode.d.ts` extension API."
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/` holds core services that aren't specific to one feature."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "`contrib/` holds the feature contributions. It has about 100 folders"
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "nothing outside `contrib/` may depend on code inside `contrib/`."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "each contribution has one `.contribution.ts` file"
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "a contribution exposes whatever other code may use from a single `common` file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "one contribution that needs another must go through that public API. It must not import the other's internal files."
+    }
+  },
+  "vscode-bp4-baseline-2": {
+    "BP4.1": {
+      "score": 1,
+      "sentence": "`common/`, `browser/`, `electron-browser/` hold the minimal workbench core: layout, parts, actions and shared contexts."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "`api/` implements the `vscode.d.ts` extension API. It covers the extension host and the main-thread/ext-host split."
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/` holds core service implementations that aren't tied to one feature."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "`contrib/` holds the feature contributions: git, debug, search, terminal, chat, notebook, scm, extensions, and about 100 others."
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "No inbound dependencies. Nothing outside `contrib/` may depend on `contrib/`."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "Each contribution has a single `*.contribution.ts` file."
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "A contribution exposes its internal API from a single `common` file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "Other contributions depend only on that common API. They never import its internal files."
+    }
+  },
+  "vscode-bp4-baseline-3": {
+    "BP4.1": {
+      "score": 1,
+      "sentence": "`common/`, `browser/` and `electron-browser/` hold the minimal workbench core."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "`api/` holds the extension host and the implementation behind `vscode.d.ts`."
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/` holds core service implementations that aren't specific to one feature."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "`contrib/` holds the feature contributions. There are more than 100 of them"
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "Nothing outside `contrib/` may depend on anything inside `contrib/`."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "Each contribution has a single `.contribution.ts` entry point."
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "A contribution exposes its internal API from a single `common` file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "Other contributions that depend on it must use that common API and never reach into its internals."
+    }
+  },
+  "vscode-bp4-nebulosity-1": {
+    "BP4.1": {
+      "score": 1,
+      "sentence": "`common/`, `browser/`, `electron-browser/`**: the minimal workbench core."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "**`api/`**: the `vscode.d.ts` provider, which bridges extensions across the process boundary."
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/`**: about 660 files of core services that aren't tied to one feature."
+    },
+    "BP4.4": {
+      "score": 0.5,
+      "sentence": "**`contrib/`**: about 3,270 files of features such as chat, notebook, terminal, debug, mcp and testing."
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "Nothing outside `contrib/` may depend on `contrib/`."
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "Each contribution has a single `*.contribution.ts` entry point."
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "Each contribution exposes its internal API from a single `common` file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "Other contributions must depend on that common API and never reach into a feature's internals."
+    }
+  },
+  "vscode-bp4-nebulosity-2": {
+    "BP4.1": {
+      "score": 0.5,
+      "sentence": "Subfolders follow the target-environment convention: `common`, `browser`, `node`, `electron-browser` and `test`."
+    },
+    "BP4.2": {
+      "score": 1,
+      "sentence": "**`api/`** is the extension-host bridge that implements `vscode.d.ts`."
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "**`services/`** holds the injected core service implementations. These are not specific to any one feature."
+    },
+    "BP4.4": {
+      "score": 1,
+      "sentence": "`contrib/` has about 3,270 files in about 100 feature folders."
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "**No imports from outside `contrib/` into `contrib/`.**"
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "**Each feature has a single `.contribution.ts` entry point.**"
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "**A feature exposes its internal API from a single `common` file.**"
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "**Cross-feature dependencies go through that common API.** Features must never reach into another feature's internals."
+    }
+  },
+  "vscode-bp4-nebulosity-3": {
+    "BP4.1": {
+      "score": 0.5,
+      "sentence": "`common/` | Shared contracts and models with no UI ... `browser/` | The workbench shell and layout ... (alongside `electron-browser/`)"
+    },
+    "BP4.2": {
+      "score": 0.5,
+      "sentence": "`api/` | Bridges extensions across the process boundary"
+    },
+    "BP4.3": {
+      "score": 1,
+      "sentence": "`services/` | Injected service implementations, not tied to one feature"
+    },
+    "BP4.4": {
+      "score": 1,
+      "sentence": "`src/vs/workbench` is about 4,600 files. ... `contrib/` has 3,269 files and no code of its own at the top level."
+    },
+    "BP4.5": {
+      "score": 1,
+      "sentence": "**No imports into `contrib/` from outside it.**"
+    },
+    "BP4.6": {
+      "score": 1,
+      "sentence": "**One `.contribution.ts` entry point per feature.**"
+    },
+    "BP4.7": {
+      "score": 1,
+      "sentence": "**One common file exposes each feature's internal API.** A feature publishes its API from a single `common` file."
+    },
+    "BP4.8": {
+      "score": 1,
+      "sentence": "**Other features depend only on that API.** They must not reach into another feature's internals."
+    }
+  },
+  "vscode-bp5-baseline-1": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` imports `workbench.common.main.js` and then adds the desktop-only pieces: `electron-browser/desktop.main` and `desktop.contribution`, the native text file service..."
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "`workbench.web.main.ts` (with `workbench.web.main.internal.ts`) imports the same common entry, then the web-specific services (`browser/web.main.ts`, `web.factory.ts`, `web.api.ts`)."
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "`workbench.common.main.ts` imports everything that is common to both builds"
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "Each platform provides its own implementation of a service interface. For example, the desktop build registers the native text file service. Callers depend only on the interface."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "A feature is only loaded if some entry file imports it, usually through a `*.contribution.ts` file."
+    },
+    "BP5.6": {
+      "score": 1,
+      "sentence": "If a contribution isn't imported by `common`, `desktop` or `web`, it never ships."
+    }
+  },
+  "vscode-bp5-baseline-2": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "The desktop file adds `electron-browser/desktop.main.js` and `desktop.contribution.js`. It also adds native services such as `nativeTextFileService`"
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "The web file adds `browser/web.main.js`. It also adds browser services such as `browserTextFileService`"
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "Both builds register the same service interfaces, such as text files and extensions. Each one registers a different implementation."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "A module only loads if a reachable entry file imports it, directly or through a barrel."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "Each contribution registers itself on import through side effects such as `registerSingleton`, `registerWorkbenchContribution2` and action registration."
+    }
+  },
+  "vscode-bp5-baseline-3": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "The desktop entry adds `electron-browser/desktop.main.js` and `desktop.contribution.js`. It also adds native service implementations"
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "The web entry adds `browser/web.main.ts`, which comes with `web.factory.ts` and `web.api.ts`. It also adds web variants"
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "Both `workbench.desktop.main.ts` and `workbench.web.main.ts` start with `import './workbench.common.main.js'`."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "Platform-specific implementations register against the same service interfaces, so the shared code never needs to know which one it got."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "a feature is loaded only if one of those entry points imports it."
+    },
+    "BP5.6": {
+      "score": 1,
+      "sentence": "A feature's code is loaded only if some entry file imports its `*.contribution.ts` file, directly or transitively."
+    }
+  },
+  "vscode-bp5-nebulosity-1": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "**Desktop:** `electron-browser/desktop.main.js` and `desktop.contribution`, plus `services/*/electron-browser/*`"
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "**Web:** `browser/web.main.js`, `services/*/browser/*` implementations (for example `browserHostService`, `webExtensionsScannerService`), and `dialog.web.contribution`."
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "`workbench.web.main.ts` and `workbench.desktop.main.ts` each start with `import './workbench.common.main.js'`."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "The same service interface therefore gets a different implementation on each platform."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "Code gets loaded only if some entry file imports it, directly or transitively."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "It is a long list of side-effect imports (`import './contrib/notebook/browser/notebook.contribution.js'` and so on)."
+    }
+  },
+  "vscode-bp5-nebulosity-2": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "Imported only in `workbench.desktop.main.ts`: desktop only. Examples are `contrib/files/electron-browser/fileActions.contribution.js`"
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "Imported only in `workbench.web.main.ts`: web only. Examples are `extensions.web.contribution.js`, `terminal.web.contribution.js`"
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "Desktop and web each have their own service registrations ... which supply the platform implementations behind shared interfaces."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "A contribution is therefore loaded if and only if it is reachable from the entry file of that build"
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "A file such as `contrib/<feature>/browser/<feature>.contribution.ts` registers its views, actions, services and settings as a side effect of being imported. Nothing runs unless some entry file imports it."
+    }
+  },
+  "vscode-bp5-nebulosity-3": {
+    "BP5.1": {
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` imports `./workbench.common.main.js` and then adds the Electron-specific parts"
+    },
+    "BP5.2": {
+      "score": 1,
+      "sentence": "`workbench.web.main.ts` also imports `./workbench.common.main.js`. It then adds the browser implementations"
+    },
+    "BP5.3": {
+      "score": 1,
+      "sentence": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point."
+    },
+    "BP5.4": {
+      "score": 0.5,
+      "sentence": "A feature with a platform-specific implementation puts it in `browser/` or `electron-browser/`. Each entry file imports only its own."
+    },
+    "BP5.5": {
+      "score": 1,
+      "sentence": "A feature is in the bundle only if some entry file imports it, directly or through another import."
+    },
+    "BP5.6": {
+      "score": 0.5,
+      "sentence": "Importing a file runs its `registerSingleton(...)` and registry calls, and that registers the service or feature."
+    }
+  }
+}

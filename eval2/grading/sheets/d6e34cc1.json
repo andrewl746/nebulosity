@@ -1,0 +1,39 @@
+{
+  "id": "d6e34cc1",
+  "question": "In BlockSuite, how is a block type defined, rendered and plugged into an editor? Name the functions, classes and conventions involved.",
+  "points": [
+    {
+      "id": "AFFINE-BP3.1",
+      "text": "every block type has a schema made with `defineBlockSchema`: a `flavour` string that names it uniquely (`namespace:name`, such as `affine:paragraph`), its `props`, and `metadata` with a `version` and a `role`"
+    },
+    {
+      "id": "AFFINE-BP3.2",
+      "text": "props can hold Yjs-backed values made with the `internal` helpers, such as `internal.Text()` for the block's rich text (a Y.Text)"
+    },
+    {
+      "id": "AFFINE-BP3.3",
+      "text": "the schema also says where a block may sit, with `parent` and `children` lists of flavours that accept `*` and glob patterns (minimatch); the `root` role marks the document's root block, which can't have a parent"
+    },
+    {
+      "id": "AFFINE-BP3.4",
+      "text": "a block's model is a class extending `BlockModel`, created from the schema, which can add its own methods"
+    },
+    {
+      "id": "AFFINE-BP3.5",
+      "text": "the block's view is a lit web component extending `BlockComponent`, which renders its children through the host, and it is registered for the flavour with `BlockViewExtension(flavour, literal`tag`)`"
+    },
+    {
+      "id": "AFFINE-BP3.6",
+      "text": "widgets are extra UI tied to a host block (toolbars, menus, the drag handle, the slash menu), written as `WidgetComponent`s and registered for a block flavour"
+    },
+    {
+      "id": "AFFINE-BP3.7",
+      "text": "blocks are packaged as extension providers: a `StoreExtensionProvider` registers the data side (the schema, adapters) and a `ViewExtensionProvider` the UI side (the view, widgets, keymaps, config), and an editor gets its extensions from a `StoreExtensionManager` and a `ViewExtensionManager` that collect the providers"
+    },
+    {
+      "id": "AFFINE-BP3.8",
+      "text": "view providers register per scope (`page`, `edgeless`, their preview and mobile variants), so a block can give each kind of editor a different view; one-time setup such as defining the lit elements goes in `effect()`, which runs once per provider class"
+    }
+  ],
+  "answer": "A BlockSuite block type has three parts: a schema and model, a Lit component, and extension registration. I read the `affine:callout` block in this repo and describe it below. I didn't open the `@blocksuite/std` or `@blocksuite/store` sources, so what I say about `BlockComponent`, `BlockViewExtension` and the extension loader comes from how callout uses them.\n\n**1. Model (data)**\n- File: `blocksuite/affine/model/src/blocks/callout/callout-model.ts`.\n- `defineBlockSchema({ flavour, props, metadata, toModel })` declares the block.\n  - `flavour` is a namespaced string such as `'affine:callout'`. It is the block's identity everywhere else.\n  - `props: (internal) => ({...})` gives the default props. `internal.Text()` creates a Y.Text-backed rich-text prop. `meta:createdAt` and similar props are conventional metadata fields.\n  - `metadata` holds `version`, `role` (`'hub'` here) and the `parent` and `children` flavour whitelists, which constrain where the block can sit in the tree.\n  - `toModel: () => new CalloutBlockModel()` builds the model.\n- `class CalloutBlockModel extends BlockModel<CalloutProps>` is the model class.\n- `BlockSchemaExtension(CalloutBlockSchema)` wraps the schema as a store extension, exported as `CalloutBlockSchemaExtension`.\n\n**2. View (rendering)**\n- File: `blocksuite/affine/blocks/callout/src/callout-block.ts`.\n- `CalloutBlockComponent extends CaptionedBlockComponent<CalloutBlockModel>`. This is a Lit element. Its base class comes from the `BlockComponent` family in `@blocksuite/std`, and `CaptionedBlockComponent` adds caption support.\n- `effects.ts` defines the custom element with `customElements.define('affine-callout', CalloutBlockComponent)`. It also augments `HTMLElementTagNameMap` for typing.\n- `BlockViewExtension('affine:callout', literal\\`affine-callout\\`)` maps the flavour to a static Lit tag.\n  - The editor's block renderer uses this mapping to create the right element for each model.\n\n**3. Plugging into an editor (extensions)**\n- Each block package exposes two providers from `@blocksuite/affine-ext-loader`.\n- `CalloutStoreExtension extends StoreExtensionProvider` is in `store.ts`.\n  - Its `setup(context)` calls `context.register(...)` with the schema extension and the adapter extensions, for example `CalloutBlockMarkdownAdapterExtension`.\n  - It is used where the document store is created.\n- `CalloutViewExtension extends ViewExtensionProvider` is in `view.ts`.\n  - `effect()` calls `effects()` to define the custom elements.\n  - `setup(context)` registers `FlavourExtension('affine:callout')` and the `BlockViewExtension`. It also registers the keymap, `SlashMenuConfigExtension` and the toolbar config.\n- Both providers are listed in the aggregate lists in `blocksuite/affine/all/src/extensions/store.ts` and `view.ts`. Editor presets pick them up from there.\n\n**Conventions**\n- The flavour string is prefixed `affine:`.\n- Each block package has the same files: `store.ts`, `view.ts`, `effects.ts`, `adapters/`, `commands/` and `configs/`.\n- The model lives in the separate `affine-model` package, so the data layer doesn't depend on the UI.\n- Behaviour is added as registered extensions, not hard-wired into the editor."
+}

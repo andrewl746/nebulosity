@@ -1,0 +1,10 @@
+{ "id": "4120cd16", "points": [
+  { "id": "BP1.1", "score": 1, "quote": "`base/` | Foundation utilities with no knowledge of VS Code as a product: collections, strings, events, lifecycle, async helpers, DOM and generic UI widgets, and JSON." },
+  { "id": "BP1.2", "score": 1, "quote": "`platform/` | Services and dependency-injection infrastructure: the `IInstantiationService` container, files, configuration, storage, logging" },
+  { "id": "BP1.3", "score": 1, "quote": "`editor/` | The Monaco text editor." },
+  { "id": "BP1.4", "score": 1, "quote": "`workbench/` | The VS Code application shell and features: parts such as the sidebar and panels, `contrib/` features (chat, search, SCM, debug and others), `services/`, and the extension host and API." },
+  { "id": "BP1.5", "score": 1, "quote": "Electron main and desktop startup (`code/`)" },
+  { "id": "BP1.6", "score": 1, "quote": "the remote or web server (`server/`)" },
+  { "id": "BP1.7", "score": 1, "quote": "Dependencies point downward only: `base` → `platform` → `editor` → `workbench` → entry points." },
+  { "id": "BP1.8", "score": 0.5, "quote": "`services/`, and the extension host and API." }
+] }

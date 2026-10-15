@@ -1,0 +1,39 @@
+{
+  "id": "514dbdc3",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "The layers of `src/vs`, from the bottom up, are below. They come from the import graph that the Nebulosity code-index tool built for this repo. I didn't read the repo's own organization docs.\n\n**Layers (bottom to top)**\n1. **`base/`** (498 files) holds foundational, dependency-free primitives. These are utilities, data structures, events and lifecycle, async helpers, and generic UI widgets. It has no VS Code-specific services.\n2. **`platform/`** (about 3,100 files) holds the core services and their contracts. These include instantiation and dependency injection, configuration, files, storage, the keybinding, quick-input and extension-host plumbing, and agent-host services. It is built on `base/`.\n3. **`editor/`** (about 880 files) is the Monaco code editor core. It covers the text model, the view, language features and diffing. It is built on `base/` and `platform/`.\n4. **`workbench/`** (about 4,630 files) is the VS Code application: parts, services and `contrib/` features such as chat, debug, SCM and search. It is built on all three layers below it.\n5. **Entry and host layer.** This top tier has three siblings:\n   - **`code/`** is startup code for desktop, CLI and web.\n   - **`server/`** is the remote server runtime.\n   - **`sessions/`** (about 910 files) is the separate Agents window application, built on the workbench.\n\nTwo top-level files sit outside this stack:\n- `nls.ts` handles localization and is at the very bottom.\n- `amdX.ts` is a module loader that sits between `base/` and `platform/`.\n- `monaco.d.ts` is the public Monaco typings, and nothing links to it.\n\n**Dependency rule**\n\nEach layer may import only from the layers below it. For example, `base/` must not import `platform/`, `editor/` or `workbench/`, and `platform/` must not import `editor/` or `workbench/`. Within a layer, the repo also separates code by environment (`common`, `browser`, `node` and similar), and each environment folder may import only the folders it is allowed to.\n\n**Known exceptions to the rule** (94 imports go against the order):\n- `workbench/` imports `sessions/` in 89 places, mostly in tests and fixtures. This is the main inversion of the order.\n- `platform/agentHost/node/diffWorkerMain.ts` imports three diff files from `editor/common` (3 imports).\n- `base/` has two upward imports, both in tests: one to `platform/` and one to `amdX.ts`.\n\nNothing in `src/vs` imports from outside it. It is used by `extensions/` (665 imports), `build/` and the `src/` bootstrap files."
+}

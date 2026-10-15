@@ -1,0 +1,10 @@
+{ "id": "bdd110ee", "points": [
+  { "id": "AFFINE-BP1.1", "score": 1, "quote": "**`packages/frontend/`** is the client side. ... **`packages/common/`** holds shared libraries ... **`packages/backend/`** has two parts. `server` is the NestJS server, and `native` is its Rust bindings." },
+  { "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tools/`** holds the CLI behind `yarn affine`, plus commitlint, changelog and utility scripts. ... `tests/` holds the end-to-end tests." },
+  { "id": "AFFINE-BP1.3", "score": 1, "quote": "**`blocksuite/`** is the editor engine." },
+  { "id": "AFFINE-BP1.4", "score": 1, "quote": "**web**: the browser app; **mobile**: the mobile web build; **electron** and **electron-renderer**: the desktop app; **ios** and **android**: Capacitor wrappers around the mobile app. The `admin` dashboard and the `@affine/server` backend are also built from this repo." },
+  { "id": "AFFINE-BP1.5", "score": 1, "quote": "`native` and `mobile-native` are Rust bindings for the clients. ... `server` is the NestJS server, and `native` is its Rust bindings." },
+  { "id": "AFFINE-BP1.6", "score": 1, "quote": "It serves the clients, which otherwise work local-first, and it is what you self-host." },
+  { "id": "AFFINE-BP1.7", "score": 1, "quote": "**PostgreSQL**, via Prisma and `DATABASE_URL`. The compose file uses the `pgvector/pgvector:pg16` image, because embeddings need pgvector. **Redis**, for caching, queues and real-time coordination. ... It uses GraphQL, REST and socket.io." },
+  { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared UI library." }
+] }

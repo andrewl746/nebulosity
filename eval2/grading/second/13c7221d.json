@@ -1,0 +1,8 @@
+{ "id": "13c7221d", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports `./workbench.common.main.js` and then adds the Electron-specific parts: `electron-browser/` services and contributions" },
+  { "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` also imports `./workbench.common.main.js`. It then adds the browser implementations" },
+  { "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point. ... `workbench.desktop.main.ts` imports `./workbench.common.main.js` ... `workbench.web.main.ts` also imports `./workbench.common.main.js`." },
+  { "id": "BP5.4", "score": 0.5, "quote": "A feature with a platform-specific implementation puts it in `browser/` or `electron-browser/`. Each entry file imports only its own." },
+  { "id": "BP5.5", "score": 1, "quote": "A feature is in the bundle only if some entry file imports it, directly or through another import. ... The bundler starts from those entry points, so unreferenced files are left out." },
+  { "id": "BP5.6", "score": 0.5, "quote": "It pulls in the platform-neutral services and the `contrib/` features through side-effect imports, for example `contrib/chat/browser/chat.contribution.js` ... Importing a file runs its `registerSingleton(...)` and registry calls" }
+] }

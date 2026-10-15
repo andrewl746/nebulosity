@@ -1,0 +1,39 @@
+{
+  "id": "9a2975dd",
+  "question": "In BlockSuite, how is a block type defined, rendered and plugged into an editor? Name the functions, classes and conventions involved.",
+  "points": [
+    {
+      "id": "AFFINE-BP3.1",
+      "text": "every block type has a schema made with `defineBlockSchema`: a `flavour` string that names it uniquely (`namespace:name`, such as `affine:paragraph`), its `props`, and `metadata` with a `version` and a `role`"
+    },
+    {
+      "id": "AFFINE-BP3.2",
+      "text": "props can hold Yjs-backed values made with the `internal` helpers, such as `internal.Text()` for the block's rich text (a Y.Text)"
+    },
+    {
+      "id": "AFFINE-BP3.3",
+      "text": "the schema also says where a block may sit, with `parent` and `children` lists of flavours that accept `*` and glob patterns (minimatch); the `root` role marks the document's root block, which can't have a parent"
+    },
+    {
+      "id": "AFFINE-BP3.4",
+      "text": "a block's model is a class extending `BlockModel`, created from the schema, which can add its own methods"
+    },
+    {
+      "id": "AFFINE-BP3.5",
+      "text": "the block's view is a lit web component extending `BlockComponent`, which renders its children through the host, and it is registered for the flavour with `BlockViewExtension(flavour, literal`tag`)`"
+    },
+    {
+      "id": "AFFINE-BP3.6",
+      "text": "widgets are extra UI tied to a host block (toolbars, menus, the drag handle, the slash menu), written as `WidgetComponent`s and registered for a block flavour"
+    },
+    {
+      "id": "AFFINE-BP3.7",
+      "text": "blocks are packaged as extension providers: a `StoreExtensionProvider` registers the data side (the schema, adapters) and a `ViewExtensionProvider` the UI side (the view, widgets, keymaps, config), and an editor gets its extensions from a `StoreExtensionManager` and a `ViewExtensionManager` that collect the providers"
+    },
+    {
+      "id": "AFFINE-BP3.8",
+      "text": "view providers register per scope (`page`, `edgeless`, their preview and mobile variants), so a block can give each kind of editor a different view; one-time setup such as defining the lit elements goes in `effect()`, which runs once per provider class"
+    }
+  ],
+  "answer": "A block type in BlockSuite has three parts: a model and schema in the store, a view component, and registration through extensions. I used `affine:note` as the example. I read the note block's files but didn't trace how the editor consumes the extensions.\n\n**1. Model and schema (data layer, `@blocksuite/store`)**\n- `defineBlockSchema({ flavour, props, metadata, toModel })` is in `framework/store/src/model/block/zod.ts`.\n  - The flavour is a namespaced string such as `'affine:note'`.\n  - `props: () => ({...})` supplies the default props.\n  - `metadata` holds `version`, `role` (for example `'hub'` or `'content'`), and `parent` and `children` whitelists. The whitelists can use role tags like `'@root'` and `'@content'`.\n  - `toModel` returns the model class.\n- The model is a class extending `BlockModel<Props>`, for example `NoteBlockModel`. Its file is `affine/model/src/blocks/note/note-model.ts`, and zod is used there for prop validation.\n- `BlockSchemaExtension(schema)` wraps the schema as a store extension. The note's version is exported as `NoteBlockSchemaExtension`.\n- Convention: the schema constant is named `XxxBlockSchema` and the model `XxxBlockModel`. Both live in `@blocksuite/affine-model`.\n\n**2. View (render layer, `@blocksuite/std`)**\n- The view is a Lit element extending `BlockComponent<Model>`, for example `NoteBlockComponent` in `affine/blocks/note/src/note-block.ts`.\n- You implement `renderBlock()` and return `html`...``. Children are rendered with `this.renderChildren(this.model)`.\n- The custom element is declared in `HTMLElementTagNameMap`, for example `'affine-note'`. It is defined with `customElements.define` inside an `effects()` function (`effects.ts`), not at import time.\n- Edgeless mode usually has a separate component, such as `affine-edgeless-note`.\n\n**3. Plugging into an editor (extensions)**\n- Each block package exposes two providers, one for the store and one for the view.\n  - The store provider extends `StoreExtensionProvider`, for example `NoteStoreExtension` in `store.ts`. Its `setup(context)` calls `context.register(NoteBlockSchemaExtension)` plus the adapter extensions.\n  - The view provider extends `ViewExtensionProvider`, for example `NoteViewExtension` in `view.ts`.\n    - `effect()` calls `effects()`, which defines the custom elements.\n    - `setup(context)` calls `context.register([...])` with:\n      - `FlavourExtension(flavour)`\n      - `BlockViewExtension(flavour, literal\\`affine-note\\`)`, which maps the flavour to a static-html tag literal. The edgeless branch registers `affine-edgeless-note` instead.\n      - optional extras: slash-menu config, toolbar config, keymap, clipboard config and edgeless interaction.\n- `BlockViewExtension` is in `framework/std/src/extension/block-view.ts`. The editor's block renderer looks up the tag by flavour, and `BlockComponent` instances get their `model` and `std` from the host.\n- These providers come from `@blocksuite/affine-ext-loader`. The app lists them when it builds the editor's store and view extension sets. I didn't check that code.\n- Widgets use the analogous `WidgetViewExtension` (`widget-view-map.ts`).\n\n**Summary flow:** `defineBlockSchema` → `BlockSchemaExtension` → registered by a `StoreExtensionProvider`. Then a `BlockComponent` with `renderBlock` → `BlockViewExtension(flavour, tag)` → registered by a `ViewExtensionProvider`, with `effects()` defining the elements."
+}

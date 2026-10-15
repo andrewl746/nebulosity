@@ -1,0 +1,13 @@
+{
+  "id": "bd895a57",
+  "points": [
+    { "id": "AFFINE-BP3.1", "score": 1, "quote": "`defineBlockSchema({ flavour, metadata, props?, toModel })` declares the block. `flavour` is the type id, written `affine:<name>`... `metadata` holds `version`, `role`" },
+    { "id": "AFFINE-BP3.2", "score": 0, "quote": "none" },
+    { "id": "AFFINE-BP3.3", "score": 0.5, "quote": "`metadata` holds `version`, `role` (`'content'`, `'hub'` or `'root'`) and the allowed `children` and `parent` flavours." },
+    { "id": "AFFINE-BP3.4", "score": 1, "quote": "`class XBlockModel extends BlockModel<Props>` is the data class... `toModel` returns `new DividerBlockModel()`." },
+    { "id": "AFFINE-BP3.5", "score": 1, "quote": "It is a Lit element... builds on `BlockComponent`... It calls `this.renderChildren(this.model)`... registers `BlockViewExtension('affine:divider', literal`affine-divider`)`." },
+    { "id": "AFFINE-BP3.6", "score": 0, "quote": "none" },
+    { "id": "AFFINE-BP3.7", "score": 0.5, "quote": "`XStoreExtension extends StoreExtensionProvider`... `XViewExtension extends ViewExtensionProvider`... The editor or app (for example the `affine-shared`/`ext-loader` extension manager) then registers the Store and View providers." },
+    { "id": "AFFINE-BP3.8", "score": 0.5, "quote": "`effect()` calls `effects()` to define the custom element." }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "fe9a753a",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses its own dependency-injection system, in `src/vs/platform/instantiation/common/`. This is from memory of that code. I didn't open the files in this session.\n\n**1. Define the service**\n- Declare an interface, conventionally `IFooService`, with a `readonly _serviceBrand: undefined;` field. The brand makes the interface nominally distinct.\n- Create the identifier with `createDecorator<IFooService>('fooService')`, from `instantiation.ts`.\n- The identifier is a decorator function. It is normally exported under the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService');`. That is why a single name works as both a type and a value.\n\n**2. Implement it**\n- Write `class FooService implements IFooService`, with `declare readonly _serviceBrand: undefined;`.\n- Its own dependencies are constructor parameters, each marked with the decorator, for example `constructor(@ILogService private readonly logService: ILogService)`.\n- Parameters decorated with services must come after any non-service (static) arguments.\n\n**3. Make it available (register it)**\n- **Lazy registration:** call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (in `extensions.ts`).\n  - `Delayed` returns an idle-time proxy, and the real instance is created on first use.\n  - `Eager` creates it at startup.\n  - These calls are usually made at module level in `*.contribution.ts` files or in the service's own file.\n- **Manual registration:** create a `ServiceCollection` (`serviceCollection.ts`) and call `set(IFooService, instanceOrSyncDescriptor)`.\n  - Entry points do this when they bootstrap, for example `main.ts`, `workbench.ts` and `services.ts`.\n  - Use `new SyncDescriptor(FooService, [staticArgs], supportsDelayedInstantiation)` for lazily built entries.\n- **Container:** `new InstantiationService(serviceCollection, strict?)` builds the container.\n  - It resolves dependencies and detects cycles.\n  - It uses a dependency graph to create services in the right order.\n  - `createChild()` makes scoped child containers.\n\n**4. Get it into consuming classes**\n- **Constructor injection:** a parameter decorator such as `@IFooService` records the dependency. It does this through `_util.ts` (`storeServiceDependency`, `getServiceDependencies`), which stores the data on the class under `$di$dependencies`.\n- **Creating injected classes:** you don't use `new` for these classes. You use `instantiationService.createInstance(MyClass, ...staticArgs)`.\n  - The container looks up the recorded dependencies and fetches or creates each service.\n  - It then calls the constructor with the static args followed by the services.\n- **Inline access:** `instantiationService.invokeFunction(accessor => accessor.get(IFooService))` gives a `ServicesAccessor`. The accessor is valid only during the synchronous call.\n  - Commands and actions use this pattern (`run(accessor: ServicesAccessor)`).\n- `IInstantiationService` is itself a service, so classes can inject it to create further injectable objects.\n- **Contributions:** workbench contributions, editors and similar are created through `createInstance`, so they get injection automatically.\n\n**Conventions**\n- Interface names start with `I`.\n- The `_serviceBrand` field is always present.\n- Services go in `common/` for the interface and `browser/`, `node/` or `electron-*` for the implementations.\n- Constructor parameters are named `private readonly xService`.\n- Service ids are camelCase strings."
+}

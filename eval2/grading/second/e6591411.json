@@ -1,0 +1,10 @@
+{ "id": "e6591411", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "Each doc is a Yjs `Doc` holding the BlockSuite block tree as Y.Maps and Y.Arrays." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "On `load`, it reads the stored doc and calls `applyUpdate` on the Yjs doc, which the editor observes. The same path handles incoming updates from storage. Other users' changes are applied as `apply` jobs." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "It is persisted as binary Yjs updates (`Uint8Array`) plus merged snapshots." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 1, "quote": "**Presence:** awareness (cursors and presence) uses a separate channel and is not persisted." },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "**Browser:** IndexedDB, in `impls/idb/schema.ts`. ... **Desktop and mobile:** per-workspace SQLite through a Rust native module" },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "`sync/doc/peer.ts` syncs a local storage with a remote one using per-doc timestamp clocks." },
+  { "id": "AFFINE-BP4.8", "score": 0.5, "quote": "per-workspace SQLite through a Rust native module (`packages/frontend/native/nbstore`, using sqlx and y_octo)" }
+] }

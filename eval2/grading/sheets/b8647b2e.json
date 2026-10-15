@@ -1,0 +1,39 @@
+{
+  "id": "b8647b2e",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "`src/vs` has these layers, listed from lowest to highest. This comes from the repo's `.github/copilot-instructions.md` and the directory listing. I didn't open `valid-layers-check` or the `sessions/LAYERS.md` doc, so the exact rules are unchecked.\n\n**Layers**\n\n- **`base/`** holds foundation utilities that work on any platform. It has no knowledge of VS Code as a product. Examples are events, lifecycle and disposables, strings, arrays, URIs, async helpers, and basic DOM and widget helpers.\n- **`platform/`** holds platform services and the dependency-injection infrastructure. It defines service interfaces such as files, configuration, storage, instantiation, and the command, keybinding and context-key services, and it contains their implementations. It is independent of any particular editor or workbench UI.\n- **`editor/`** is the Monaco text editor: model, view, language features, syntax highlighting and editing behavior. It is meant to be usable on its own, apart from the workbench.\n- **`workbench/`** is the main application shell for desktop and web.\n  - `browser/` has the core UI: parts, layout and actions.\n  - `services/` has the workbench service implementations.\n  - `contrib/` has the features, such as git, debug, search and terminal.\n  - `api/` has the extension host and the implementation of the VS Code extension API.\n- **`sessions/`** is the agent sessions window, a dedicated workbench layer for agentic workflows. It sits alongside `workbench`.\n- **`code/`** is the Electron main-process entry and implementation.\n- **`server/`** is the server-side entry, used for remote and web hosting.\n\n**Dependency rules**\n\n- Dependencies point downward only. `base` depends on nothing above it. `platform` may use `base`. `editor` may use `base` and `platform`. `workbench` may use `base`, `platform` and `editor`.\n- `sessions` may import from `workbench`, but `workbench` may not import from `sessions`.\n- `code` and `server` are top-level hosts. They may use the layers below them, but nothing below them imports from them.\n- Each layer is also split by target environment into folders such as `common`, `browser`, `node`, `electron-browser` and `electron-main`. Code in `common` can't import from `browser` or `node`. Code in `browser` can't import from `node` or `electron-*`. The `node`, `electron-*` and `worker` folders have their own import restrictions. This keeps code portable across web, desktop and server.\n- Inside `workbench`, `contrib` modules shouldn't depend on each other directly. They should go through `services` or a small, explicit API surface.\n- To check layering, run `npm run valid-layers-check`. ESLint import-pattern rules also enforce the folder restrictions."
+}

@@ -1,0 +1,31 @@
+{
+  "id": "2fc8fe30",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Desktop and web share almost everything through one common entry point. Which code gets loaded is decided by which entry file imports it.\n\n**Shared code**\n- `src/vs/workbench/workbench.common.main.ts` imports the platform-neutral workbench. That covers the parts (editor, statusbar, banner, titlebar), the API extension points, the common services and most of `contrib/`.\n- `workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`. Each then adds its own environment-specific code.\n- The desktop file adds `electron-browser/desktop.main.js` and `desktop.contribution.js`. It also adds native services such as `nativeTextFileService`, `nativeHostService`, `lifecycleService` and the native `fileDialogService`.\n- The web file adds `browser/web.main.js`. It also adds browser services such as `browserTextFileService`, the browser `extensionService` and `webExtensionsScannerService`.\n- Both builds register the same service interfaces, such as text files and extensions. Each one registers a different implementation.\n\n**Folder layering**\n- Folders under `src/vs` are named by the environment they can run in: `common`, `browser`, `electron-browser` (plus `node` and `electron-main` elsewhere).\n- `common` can't use DOM or Node APIs. `browser` can use the DOM and can't use Node. `electron-browser` can use the DOM and Electron renderer APIs.\n- `npm run valid-layers-check` enforces this. Web-compatible code therefore can't import `electron-browser` code.\n\n**What decides whether a feature loads**\n1. **Imports.** A module only loads if a reachable entry file imports it, directly or through a barrel. Each contribution registers itself on import through side effects such as `registerSingleton`, `registerWorkbenchContribution2` and action registration. Code that no entry imports is never bundled or run.\n2. **Feature barrels.** `contrib/<feature>/` often has per-environment folders (the terminal has `browser`, `common` and `electron-browser`). The `workbench.*.main` files, or an aggregator like `terminal.all.ts`, pull in the right set.\n3. **Runtime gating.** Code that is loaded can still stay inactive. Registration can check `isWeb` or `isNative`. Context keys and `when` clauses can hide commands and views. Configuration and lifecycle phases can delay or skip contributions. Some services are registered with a delayed instantiation option, so they aren't created until first used.\n\nI only read the top of the entry files and the folder listings. I didn't trace the bundling or the gating checks beyond that."
+}

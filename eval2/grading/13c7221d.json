@@ -1,0 +1,8 @@
+{ "id": "13c7221d", "points": [
+{ "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports `./workbench.common.main.js` and then adds the Electron-specific parts" },
+{ "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` also imports `./workbench.common.main.js`. It then adds the browser implementations" },
+{ "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point." },
+{ "id": "BP5.4", "score": 0, "quote": "none" },
+{ "id": "BP5.5", "score": 1, "quote": "A feature is in the bundle only if some entry file imports it, directly or through another import." },
+{ "id": "BP5.6", "score": 0.5, "quote": "Importing a file runs its `registerSingleton(...)` and registry calls, and that registers the service or feature." }
+] }

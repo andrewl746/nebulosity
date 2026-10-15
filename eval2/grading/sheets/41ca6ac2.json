@@ -1,0 +1,39 @@
+{
+  "id": "41ca6ac2",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "**Organization of `src/vs/workbench`**\n\nThis is based on `.github/instructions/source-code-organization.instructions.md` and a directory listing. I didn't open the ESLint layering rules, so I haven't checked how they enforce this.\n\nThe workbench is the fourth layer, above `base`, `platform` and `editor`. `code`, `server` and `sessions` sit above it. `sessions` may import from the workbench, but the workbench must never import from `sessions`.\n\nThe top-level folders are:\n- **`common/`, `browser/`, `electron-browser/`** hold the minimal workbench core. Code is split by runtime environment: `common` is environment-neutral, `browser` needs the DOM, and `electron-browser` is desktop-only.\n- **`api/`** provides the `vscode.d.ts` extension API.\n- **`services/`** holds core services that aren't specific to one feature.\n- **`contrib/`** holds the feature contributions. It has about 100 folders, including `chat`, `debug`, `git`, `scm`, `search`, `terminal`, `notebook`, `extensions`, `testing`, `mcp`, `files` and `preferences`.\n- **`test/`** holds tests for the core.\n- **Entry-point files:** `workbench.common.main.ts` holds the shared imports, `workbench.desktop.main.ts` the desktop-only ones, and `workbench.web.main.ts` (with `workbench.web.main.internal.ts`) the web-only ones. Only code reachable from these files is loaded.\n\nFeatures register themselves through registries and extension points (the contribution model). Services are consumed through constructor injection with decorator identifiers.\n\n**Rules for `contrib/`**\n\n1. **One-way dependency:** nothing outside `contrib/` may depend on code inside `contrib/`. This keeps the core and `services` free of feature code.\n2. **Single entry point:** each contribution has one `.contribution.ts` file, which the main entry files import to load the feature.\n3. **Single public API:** a contribution exposes whatever other code may use from a single `common` file.\n4. **Cross-contribution access:** one contribution that needs another must go through that public API. It must not import the other's internal files.\n5. **Layering inside a contribution:** each contribution is split by environment (`common`, `browser`, `electron-browser`, `test`), and the same environment restrictions apply as elsewhere.\n\nI only saw `eslint.config.js` entries for individual `contrib` files, not the rules themselves. So I can't tell you how the one-way dependency and API rules are enforced."
+}
