@@ -74,3 +74,19 @@ export function summarizeRun(jsonl: string): RunSummary {
         utilization: { fiveHour: limits.five_hour?.utilization ?? null, sevenDay: limits.seven_day?.utilization ?? null },
     };
 }
+
+const DENIED = /Permission to use [\w ]+ has been denied/i;
+
+/** The tool calls Claude Code refused (ADR-060's V): every denied tool result, in the main conversation or a subagent's, in every message of a session. */
+export function refusedCalls(jsonl: string): number {
+    let refused = 0;
+    for (const e of streamEvents(jsonl)){
+        if (e.type !== "user" || !Array.isArray(e.message?.content)) continue;
+        for (const c of e.message.content as Json[]){
+            if (c.type !== "tool_result" || c.is_error !== true) continue;
+            const text = typeof c.content === "string" ? c.content : Array.isArray(c.content) ? c.content.map((x: Json | string) => (typeof x === "string" ? x : x.text ?? "")).join("\n") : "";
+            if (DENIED.test(text)) refused++;
+        }
+    }
+    return refused;
+}

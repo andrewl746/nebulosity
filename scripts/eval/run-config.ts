@@ -90,11 +90,18 @@ export function formatLine(question: { family: string; file?: string }, formats:
  * works under the permission rules, Write into the scratch folder then node, or node -e, because in the dev set (Task 13)
  * every script tried as a Bash heredoc was refused and no run wrote one with Write.
  */
-export function promptFor(question: { prompt: string; family: string; file?: string }, formats: Record<string, string>, scratch?: string): string {
+export function promptFor(question: { prompt: string; family: string; file?: string }, formats: Record<string, string>, scratch?: string, rules?: { repoRoot: string }): string {
     const base = `${question.prompt}\n\n${formatLine(question, formats)}`;
-    return scratch === undefined
-        ? base
-        : `${base}\n\nYou may write Node.js scripts in ${scratch} with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`;
+    if (scratch === undefined) return base;
+    const sentence = rules === undefined
+        ? `You may write Node.js scripts in ${scratch} with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`
+        : rulesSentence(rules.repoRoot, scratch);
+    return `${base}\n\n${sentence}`;
+}
+
+/** Eval #3's rules sentence (D2 of V1.7's plan, R-L), the same in both arms: the repo root and the scratch folder, forward-slashed. */
+export function rulesSentence(repoRoot: string, scratch: string): string {
+    return `You're at the repository root, ${repoRoot}: run grep, git grep, git ls-files, ls, cat, head and the like from here, without cd. To compute anything, write a Node.js script into ${scratch} with the Write tool (the folder exists) and run it with node, or use node -e. Shell writes (redirects, heredocs, tee, sed -i, mkdir), loops, sed, awk, xargs and paths through .. are refused here. Don't change any file in the repository.`;
 }
 
 /** Names that would bill an API key instead of the subscription, or override a pin. Windows ignores their case. */

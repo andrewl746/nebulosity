@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { streamEvents, summarizeRun } from "./transcript";
+import { refusedCalls, streamEvents, summarizeRun } from "./transcript";
 
 const LINES: unknown[] = [
     { type: "system", subtype: "init", model: "claude-sonnet-5-5", claude_code_version: "2.1.296", apiKeySource: "none", permissionMode: "dontAsk",
@@ -61,5 +61,22 @@ describe("firstCallContext", () => {
 describe("streamEvents", () => {
     it("returns the JSON objects in order and skips partial, non-JSON and non-object lines", () => {
         expect(streamEvents('{"type":"a"}\r\nnot json\n42\nnull\n{"type":"b"}\n{"type":"c"')).toEqual([{ type: "a" }, { type: "b" }]);
+    });
+});
+
+describe("refusedCalls", () => {
+    it("counts refused tool calls wherever they fall: a session's two messages, a Bash and a Write", () => {
+        const denied = (id: string, tool: string) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: true, content: `Permission to use ${tool} has been denied.` }] } });
+        const session = [
+            { type: "assistant", message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "cd x && ls" } }] } },
+            denied("b1", "Bash"),
+            { type: "result", subtype: "success", permission_denials: [{ tool_name: "Bash" }] },
+            { type: "assistant", message: { content: [{ type: "tool_use", id: "w1", name: "Write", input: {} }] } },
+            denied("w1", "Write"),
+            { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "z", is_error: true, content: "No such file" }] } },
+            { type: "result", subtype: "success", permission_denials: [{ tool_name: "Write" }] },
+        ].map((e) => JSON.stringify(e)).join("\n");
+        expect(refusedCalls(session)).toBe(2);
+        expect(refusedCalls(JSONL)).toBe(0);
     });
 });
