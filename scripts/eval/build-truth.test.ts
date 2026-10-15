@@ -181,7 +181,7 @@ describe("buildRepoGraphs on the arch-repo fixture", () => {
 
     it("checks the verdicts against the graphs: the loader's verdict decides its site and adds one edge", () => {
         // built.verdicts holds only this repo's (the "other" repo's verdict is left out), and LOADER names loader.ts's site at L5
-        expect(checkVerdicts(built)).toEqual({ in: 1, out: 0, edgesAdded: 1, edgesRemoved: 0, leftOut: 0, sitesDecided: 1 });
+        expect(checkVerdicts(built)).toEqual({ in: 1, out: 0, edgesAdded: 1, edgesRemoved: 0, confirmed: 0, leftOut: 0, sitesDecided: 1 });
     });
 
     it("leaves an undecided site out of the truths: without #5, main.ts is imported by nothing and loader.ts loads nothing", () => {
@@ -272,12 +272,14 @@ describe("checkVerdicts: every verdict must take effect, or the build stops with
             v({ from: "s.ts", to: "a.ts", line: 5, decision: "in" }),
             v({ from: "s.ts", to: "b.ts", line: 5, decision: "in" }),
             v({ from: "s.ts", to: null, line: 9, decision: "out" }),
-        )).toEqual({ in: 3, out: 2, edgesAdded: 3, edgesRemoved: 1, leftOut: 0, sitesDecided: 2 });
+        )).toEqual({ in: 3, out: 2, edgesAdded: 3, edgesRemoved: 1, confirmed: 0, leftOut: 0, sitesDecided: 2 });
         // a → e out: preProcessFile's edge decided out, so the truth's graph (the scanner's) is unchanged
-        expect(check(v({ from: "a.ts", to: "e.ts", decision: "out" }))).toEqual({ in: 0, out: 1, edgesAdded: 0, edgesRemoved: 0, leftOut: 1, sitesDecided: 0 });
+        expect(check(v({ from: "a.ts", to: "e.ts", decision: "out" }))).toEqual({ in: 0, out: 1, edgesAdded: 0, edgesRemoved: 0, confirmed: 0, leftOut: 1, sitesDecided: 0 });
+        // c → d in: the scanner's edge that preProcessFile lacks, confirmed by reading (the truth's graph unchanged)
+        expect(check(v({ from: "c.ts", to: "d.ts", decision: "in" }))).toEqual({ in: 1, out: 0, edgesAdded: 0, edgesRemoved: 0, confirmed: 1, leftOut: 0, sitesDecided: 0 });
         // b → a in, from a file with no computed site: an import read by hand that neither extractor finds
-        expect(check(v({ from: "b.ts", to: "a.ts", decision: "in" }))).toEqual({ in: 1, out: 0, edgesAdded: 1, edgesRemoved: 0, leftOut: 0, sitesDecided: 0 });
-        expect(check()).toEqual({ in: 0, out: 0, edgesAdded: 0, edgesRemoved: 0, leftOut: 0, sitesDecided: 0 });
+        expect(check(v({ from: "b.ts", to: "a.ts", decision: "in" }))).toEqual({ in: 1, out: 0, edgesAdded: 1, edgesRemoved: 0, confirmed: 0, leftOut: 0, sitesDecided: 0 });
+        expect(check()).toEqual({ in: 0, out: 0, edgesAdded: 0, edgesRemoved: 0, confirmed: 0, leftOut: 0, sitesDecided: 0 });
     });
 
     it("stops on an out that matches no edge of either extractor", () => {
@@ -301,8 +303,8 @@ describe("checkVerdicts: every verdict must take effect, or the build stops with
         expect(() => check(v({ from: "s.ts", to: "a.ts", line: 5, decision: "out" }))).toThrow(/s\.ts → a\.ts \(L5\).*to: null/);
     });
 
-    it("stops on a verdict that changes nothing: an in on an edge the scanner already has, without a site's line", () => {
-        expect(() => check(v({ from: "a.ts", to: "b.ts", decision: "in" }))).toThrow(/a\.ts → b\.ts.*already/);
+    it("stops on a verdict that changes nothing: an in on an edge both extractors already have, without a site's line", () => {
+        expect(() => check(v({ from: "a.ts", to: "b.ts", decision: "in" }))).toThrow(/a\.ts → b\.ts.*both extractors already/);
     });
 
     it("stops on a verdict given twice, and on an edge or a site decided both ways", () => {

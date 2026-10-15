@@ -285,16 +285,20 @@ export function parseAdjudications(raw: unknown, repoIds?: readonly string[]): A
 
 /**
  * What one repo's verdicts did, every one of them having taken effect (checkVerdicts): how many said in and out, the edges
- * added to and taken out of the scanner's graph, preProcessFile's edges decided out (the truth's graph unchanged), and the
+ * added to and taken out of the scanner's graph, the scanner's edges preProcessFile lacks that reading confirmed and the
+ * edges only preProcessFile has that reading left out (both disagreements decided, the truth's graph unchanged), and the
  * computed import() sites decided.
  */
-export type VerdictEffects = { in: number; out: number; edgesAdded: number; edgesRemoved: number; leftOut: number; sitesDecided: number };
+export type VerdictEffects = {
+    in: number; out: number; edgesAdded: number; edgesRemoved: number; confirmed: number; leftOut: number; sitesDecided: number;
+};
 
 /**
  * Checks one repo's verdicts against its two graphs before any truth is built from them (R2: a verdict that silently does
  * nothing, or adds an edge to a file that isn't there, would hide a mistake in the truths). Each verdict must take effect:
  *   - an "out" with a `to` takes out an edge one of the extractors found (the scanner's, or one only preProcessFile has);
- *   - an "in" names two files the repo has, and adds an edge the scanner lacks or decides a computed site;
+ *   - an "in" names two files the repo has, and adds an edge the scanner lacks, confirms one only the scanner has, or
+ *     decides a computed site (an in on an edge both extractors have, naming no site, changes nothing);
  *   - a `line` is a computed import() site's in `from`: "in" with the file it loads, or "out" with `to: null` (loads nothing
  *     here); a `to: null` always needs its site's line, and an "in" on an edge neither extractor finds, from a file that
  *     holds computed sites, must name the site it decides;
@@ -308,7 +312,7 @@ export function checkVerdicts(built: {
     const siteLines = new Map<string, number[]>();
     for (const s of built.sites) siteLines.set(s.file, [...(siteLines.get(s.file) ?? []), s.line]);
     const linesOf = (file: string): string => (siteLines.get(file) ?? []).map((l) => `L${l}`).join(", ");
-    const effects: VerdictEffects = { in: 0, out: 0, edgesAdded: 0, edgesRemoved: 0, leftOut: 0, sitesDecided: 0 };
+    const effects: VerdictEffects = { in: 0, out: 0, edgesAdded: 0, edgesRemoved: 0, confirmed: 0, leftOut: 0, sitesDecided: 0 };
     const added = new Set<string>();
     const decidedSites = new Set<string>();
     const edgeDecisions = new Map<string, Adjudication["decision"]>();
@@ -347,7 +351,8 @@ export function checkVerdicts(built: {
                     stop(`names no line, and ${v.from} holds computed import() sites (${linesOf(v.from)}): give the line of the site that loads it.`);
                 }
                 if (!added.has(key)){ added.add(key); effects.edgesAdded++; }
-            } else if (v.line === undefined) stop("changes nothing: the scanner already has this edge, and the verdict names no computed site.");
+            } else if (!preProcessed.has(key)) effects.confirmed++;
+            else if (v.line === undefined) stop("changes nothing: both extractors already have this edge, and the verdict names no computed site.");
         }
         effects[v.decision]++;
     }
@@ -825,7 +830,7 @@ function main(): void {
         const { built, effects: fx, seconds } = builds.get(repo)!;
         const { scannerOnly, preProcessOnly } = built.differences;
         const applied = fx.in + fx.out === 0 ? "no verdicts"
-            : `${plural(fx.in + fx.out, "verdict")} (${fx.in} in, ${fx.out} out: ${plural(fx.edgesAdded, "edge")} added, ${fx.edgesRemoved} taken out, ${fx.leftOut} of preProcessFile's left out, ${plural(fx.sitesDecided, "site")} decided)`;
+            : `${plural(fx.in + fx.out, "verdict")} (${fx.in} in, ${fx.out} out: ${plural(fx.edgesAdded, "edge")} added, ${fx.edgesRemoved} taken out, ${fx.confirmed} of the scanner's alone confirmed, ${fx.leftOut} of preProcessFile's alone left out, ${plural(fx.sitesDecided, "site")} decided)`;
         console.log(`scanned ${root} at ${heads.get(repo)!.slice(0, 8)}: ${built.scanner.files.length} code files, ${built.scanner.edges.length} edges (preProcessFile ${built.preProcess.edges.length}; ${scannerOnly.length} only the scanner's, ${preProcessOnly.length} only preProcessFile's), ${plural(built.sites.length, "computed import() site")} (${built.sites.filter((s) => s.verdicts.length === 0).length} undecided), ${applied}, ${seconds} s`);
         const e: Evidence = { root, known: built.known, g: built.graph, resolve: built.resolve, verdicts: built.verdicts };
         const preImporters = adjacency(built.preProcess, true);
