@@ -1151,6 +1151,8 @@ They need the whole graph, and the index already holds it.
 - How far a value is followed goes from 4 steps to 6.
 - A value whose type is only inferred stays unseen, as the Consequences say. The largest class left is a test helper's undeclared return (15 of the 24 files still missed), and `inferred.ts` in the fixture pins it. The others are `instantiationService.createInstance(C)` (4) and five one-offs.
 
+**Amended (2026-10-15, V1.7 Task 6): speed measured, the fallback not taken.** The first `calls` answer in a fresh MCP process took 869–902 ms over five servers (worst 902 ms against 1.5 s), so resolution stays at query time and no migration 0010 is written. Warm `calls` peak at 99 ms (S5 worst 177 ms). S1 with the call facts is 56.7 s worst of three, median 50.2 s (Index Benchmark #7): about 6 s more parse and 9 s more write than Index Benchmark #6's median, 3.3 s inside the bar. MCP Benchmark #5.
+
 ## ADR-060 — Eval #3's method: the rules sentence, time to relevant context, the call kinds, and the gate (proposed, V1.7 plan, 2026-10-15; the gate approved by the owner 2026-10-15) — amends ADR-057
 
 **Context:** Eval #2 failed its gate on conditions 1, 2, 3a and 5a (ADR-057). V1.7's design found two things that blurred it:

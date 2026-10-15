@@ -986,3 +986,45 @@ Version 7 keeps more bindings because a member fact names the type it goes throu
 | AFFiNE | 7 | 0.5 s | 5.9 s | 10.4 s | 1.1 s | 0.3 s | 18.2 s |
 
 VS Code's version 6 run printed the same files and edges, but its stage times weren't kept. The benchmark run took 1.2 s on VS Code (the tsconfig read and five answers, the first of them building the call index) and 0.2 s on AFFiNE. S14's speed half, the first answer in a fresh MCP process, is MCP Benchmark #5's.
+
+## 2026 10 15 Index Benchmark #7 — S1 with the call facts
+
+- **Target and machine:** VS Code @ `cc3fec88`, the owner's laptop, Node 24.14.0, `ADAPTER_VERSION` 7 (the call facts of ADR-059, after Calls Benchmark #1's two rounds). Before the runs: port 3000 free, no `python.exe`, no `node.exe` busy (the five running had 0.4–2.9 s of CPU in total); the owner's Map and index untouched.
+- **Command:** `NEBULOSITY_DATA=<a fresh scratch folder per run> npx tsx scripts/index.ts ../vscode`, three runs back to back (a cold database each run; the folders were deleted afterwards).
+
+| Run | Files | Edges | discover | parse | write | resolve | aggregate | **structure (S1)** | code search fill |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 14849 | 140583 | 0.8 s | 25.0 s | 21.4 s | 1.7 s | 0.6 s | **49.7 s** | 3.7 s |
+| 2 | 14849 | 140583 | 0.7 s | 25.5 s | 21.5 s | 1.8 s | 0.6 s | **50.2 s** | 3.7 s |
+| 3 | 14849 | 140583 | 0.7 s | 28.9 s | 23.9 s | 2.2 s | 1.0 s | **56.7 s** | 4.8 s |
+
+**S1 (≤ 60 s): PASS at 56.7 s worst of three** (median 50.2 s). Files and edges match Index Benchmark #6 exactly (14,849 and 140,583).
+
+- **Against #6** (31.3–50.7 s, median 35.9 s): the median is 14.3 s higher. Parse is 25.0–28.9 s against 16.9–28.6 s (median 19.1 s) and write is 21.4–23.9 s against 11.2–18.3 s (median 12.7 s). Parse carries the call facts' extraction; write carries three more tables' rows per file. #6's own spread (31 to 51 s for the same code) is wider than the gap between runs here, so part of the difference is the machine, but all three runs here are above #6's median, so the call facts cost something real: about 6 s of parse and 9 s of write at the medians. The margin to the 60 s bar is 3.3 s at the worst run.
+- **Not recorded:** the script prints no count of call rows, and the scratch databases were deleted before they could be counted. Calls Benchmark #1's index-side counts are the only row counts this task holds.
+
+## 2026 10 15 MCP Benchmark #5 — S5 with seven tools, and the first calls answer in a fresh process (S14)
+
+- **Target and machine:** VS Code @ `cc3fec88`, the owner's laptop, Node 24.14.0. The owner's index as it stood after Calls Benchmark #1's re-index (adapter version 7), read-only through the server. `NEBULOSITY_LIVE=off`: nothing was sent to any port.
+- **Command:** `npm run bench-mcp -- ../vscode` for the table (once) and `npm run bench-mcp -- ../vscode --fresh-calls` for S14's speed half. The `calls` row's inputs are five methods and five types, each with its declaring file as `path`, so every timed answer is the full one; the fresh-process check refuses an answer whose first line is the list of candidates, and stopped for none of its five.
+- **Server start** (spawn → initialized): 776 ms.
+
+| Row | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |
+|---|---|---|---|---|---|---|
+| `overview` | 228 ms | 20 | 61 ms | 74 ms | 78 ms | 2,632 |
+| `describe` | 75 ms | 20 | 54 ms | 64 ms | 66 ms | 4,036 |
+| `search` | 1646 ms | 20 | 138 ms | 169 ms | 177 ms | 2,440 |
+| `imports (dependents)` | 59 ms | 20 | 60 ms | 76 ms | 80 ms | 5,944 |
+| `imports (dependencies)` | 51 ms | 20 | 46 ms | 48 ms | 50 ms | 2,491 |
+| `imports (to)` | 50 ms | 20 | 47 ms | 58 ms | 58 ms | 323 |
+| `imports (group_by)` | 66 ms | 20 | 56 ms | 71 ms | 72 ms | 2,035 |
+| `architecture (summary)` | 142 ms | 20 | 136 ms | 147 ms | 148 ms | 1,065 |
+| `architecture (cycles)` | 54 ms | 20 | 47 ms | 53 ms | 55 ms | 8,404 |
+| `calls` | 804 ms | 20 | 73 ms | 96 ms | 99 ms | 15,951 |
+| `show_on_map` | 47 ms | 20 | 47 ms | 52 ms | 62 ms | 167 |
+
+**S5 (every warm call ≤ 500 ms): PASS (worst 177 ms, a `search`).** The `calls` row's warm calls peak at 99 ms; its first call, 804 ms, builds the call index (it is the first `calls` call in the process).
+
+**S14's speed half (the first `calls` call on a fresh server ≤ 1.5 s): PASS, worst 902 ms.** The five fresh servers, each asked `IConfigurationService.getValue` with its declaring file as `path` (a 15,951-character answer): 902, 888, 899, 869 and 875 ms. No fallback (R-B's index-time resolution) is needed, so migration 0010 and the owner's re-index stay unwritten.
+
+- **Against #4:** the rows are the same inputs; the warm worst is 177 ms against #4's 388 ms (#4 ran beside the build session's runaway process), `architecture (summary)` 136 ms p50 against 204 ms. `imports` and `show_on_map` are as fast or faster than #4's.
