@@ -809,3 +809,31 @@ With it, Task 20 spent about $6.03 of the owner's $12.
     - 9 name scripts or other endings (`.ps1`, a diff fixture's `./gulpfile.compile`).
   - AFFiNE's 2: a declaration file that imports its own name (`packages/backend/native/index.d.ts`), and `affine.wasi.cjs`, which isn't in the repo.
 - **Against Index Benchmark #4:** VS Code's relative share read 98.9% there, and AFFiNE's 95.8%. The difference is the counting (822 and 636 specifiers now counted apart), plus the import types and over-cap files ADR-053's earlier amendment added.
+
+## 2026 10 15 Eval #2 — Claude Code with and without Nebulosity's MCP server on VS Code and AFFiNE (S12)
+
+This is the re-measured eval that ADR-051 waits for (ADR-057). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
+- **Targets and machine:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6da`, with Nebulosity's engine frozen at `EVAL2_ENGINE` (`90f9f63`) and index versions 152 and 131. It ran on the owner's laptop on 2026-10-15, 08:36–10:57 UTC, with the machine kept quiet.
+- **How:**
+  - `npm run eval:run -- --eval eval2 --pilot` and `-- --eval eval2 --sessions --pilot`, then the full schedules (`--eval eval2` and `--eval eval2 --sessions`).
+  - 39 single questions and 6 four-question task sessions, three repeats, in two arms: A, Claude Code alone, and N, with Nebulosity. 270 runs in all.
+  - Every run used Claude Code 2.1.300 headless and `claude-sonnet-5-5` at medium effort, with Node.js scripts allowed in both arms.
+  - `npm run eval:score -- --eval eval2` scored them and computed the gate. The big-picture answers were graded blind (`eval2/grading/`).
+- **Result: the ship gate failed** on conditions 1, 2, 3a and 5a; 3b, 4 and 5b passed. **S12: not met.**
+
+How fast Claude Code got the context a question needs (medians, A / N; the score is the mean):
+
+| Questions | Repo | Runs per arm | Score | Time | Cost est. | Context read | Turns |
+|---|---|---|---|---|---|---|---|
+| Big-picture | VS Code | 15 | 0.93 / 0.84 | 13.9 / 11.5 s | $0.033 / $0.031 | 44,618 / 48,652 | 3 / 3 |
+| Big-picture | AFFiNE | 12 | 0.70 / 0.68 | 20.5 / 20.9 s | $0.054 / $0.065 | 93,811 / 116,017 | 6 / 8 |
+| Direct lists | VS Code | 12 | 0.96 / 0.98 | 28.0 / 22.7 s | $0.073 / $0.073 | 96,943 / 101,801 | 4 / 4 |
+| Direct lists | AFFiNE | 9 | 1.00 / 1.00 | 22.4 / 12.0 s | $0.059 / $0.043 | 97,078 / 53,686 | 6 / 3 |
+| Graph questions (chains, transitive lists, grep-hard) | VS Code | 36 | 0.94 / 1.00 | 20.9 / 8.7 s | $0.048 / $0.027 | 92,119 / 48,542 | 4.5 / 2 |
+| Graph questions | AFFiNE | 33 | 0.93 / 1.00 | 31.5 / 7.5 s | $0.079 / $0.034 | 147,245 / 50,318 | 8 / 2 |
+| Task sessions (4 questions) | VS Code | 9 | 0.98 / 1.00 | 76.7 / 26.1 s | $0.168 / $0.079 | 376,843 / 240,347 | 16 / 10 |
+| Task sessions (4 questions) | AFFiNE | 9 | 0.91 / 1.00 | 106.3 / 25.1 s | $0.319 / $0.156 | 782,464 / 374,599 | 26 / 11 |
+
+- **The measures:** time is `duration_ms` and the cost is Claude Code's own list-price estimate. "Context read" is input + cache writes + cache reads over every model call of the run. A session's row is the whole session.
+- **The totals:** the 270 runs came to $22.26 by that estimate. The 5-hour window went from 0.18 to 0.71 and the 7-day from 0.31 to 0.37 (upper bounds).
+- **The losses**, named in the results: VS Code's big-picture questions (−0.083), the grep-hard margin (+0.088 against +0.15), VS Code's graph-question cost (0.57 of A's against 0.5), and tool use (80 of 90 against 0.90). It was also slower and costlier on VSCODE-PAIRS (1.73 times the time, 1.92 times the cost).

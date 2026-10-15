@@ -1,6 +1,14 @@
 # 2026 10 14 Eval #2 — Claude Code with and without Nebulosity, on VS Code and AFFiNE
 
-**Status: the method is fixed (2026-10-14). Claude Code 2.1.300; the engine frozen at `90f9f63` (2026-10-15, before the pilot).** Everything in this section down to "Results" was written before the first run: the arms, the setup, the questions and their truths, the scoring and the ship gate. The gate does not change after the first run.
+**Status: run, scored and published (2026-10-15): 270 runs (234 single, 36 task sessions) on Claude Code 2.1.300, with the engine frozen at `90f9f63` (2026-10-15, before the pilot). The ship gate failed: conditions 1, 2, 3a and 5a. The results, losses included, are under "Results" at the end of this section.** Everything in this section down to "Results" was written before the first run: the arms, the setup, the questions and their truths, the scoring and the ship gate. The gate does not change after the first run.
+
+**In short:** the ship gate failed. Conditions 1, 2, 3a and 5a failed; 3b, 4 and 5b passed.
+- *What Nebulosity measurably did:* on the questions that walk the import graph, Claude Code with it got its context in a median 2 turns and one Nebulosity call, against 6 turns alone. It answered in 0.30 of the time and 0.47 of the cost estimate of Claude Code alone (both repos pooled, medians), scoring 1.00 against 0.94. In four-question task sessions it took 0.29 of the time and 0.39 of the cost, scoring 1.00 against 0.94.
+- *What it didn't do:*
+  - The grep-hard gain was +0.088, where the gate asked for +0.15. Claude Code alone wrote its own import walkers and scored 0.91.
+  - VS Code's big-picture answers were worse again, 0.84 against 0.93: the tools' answers took the place of the repo's own docs.
+  - On VS Code, its median cost on graph questions was 0.57 of Claude Code alone's, where the gate asked for 0.5.
+  - 10 of the 90 runs that should have called a tool wrote a script instead.
 
 This is the re-measured eval that ADR-051's amendment waits for. Nothing ships (the demo deploy, the public repo, the video) until Eval #2 shows clearly better results and efficiency than Eval #1 did. It asks whether Claude Code answers questions about two big repos better and more cheaply with Nebulosity's MCP server than without it. It asks Eval #1's questions again, plus questions grep can't answer cheaply. Losses will be reported beside wins. The decisions are ADR-057, which amends ADR-050 and ADR-051. The plan is `docs/plans/2026-10-14-v1-6-works-on-your-repo.md` (D1, D2, R1–R6 and Task 14).
 
@@ -416,7 +424,439 @@ How `scripts/eval/gate.ts` computes it:
 
 ## Results
 
-Results: to come after the runs.
+**The runs.** All 270 ran on 2026-10-15 between 08:36 and 10:57 UTC: the pilot's 20 (16 single runs and 4 task sessions), then the other 218 single runs, then the other 32 sessions, one batch at a time with the machine kept quiet. 270 runs were kept: 234 single runs and 36 task sessions. No run was an outage and none was refused by the checks. One session was run twice, for the controller's own mistake (see "What the runs showed about the method"). Every init message showed Claude Code 2.1.300, `claude-sonnet-5-5`, permission mode `dontAsk` and no API key, and every N run had `nebulosity` connected. Sonnet 5.5 was the only model that answered: no run used a subagent. Every run ended in `success`, so none hit its turn or budget limit. Both repos were at their commits with a clean `git status` after every run. Nebulosity's index was at version 152 (VS Code) and 131 (AFFiNE) in every run. The lists, chains and grep-hard answers were scored by `npm run eval:score -- --eval eval2`. Two chain steps the scorer asked about were read in the source and decided in `eval2/truth/steps.json`. The big-picture answers were graded as "Scoring" says. Every number below is recomputed from `eval2/results.json`, `eval2/runs/index.jsonl` and the kept transcripts. "A" is Claude Code alone and "N" is Claude Code with Nebulosity. Time is `duration_ms` throughout, as D1 defines it. Cost is Claude Code's own list-price estimate (`total_cost_usd`), not a bill: the runs used the owner's subscription.
+
+### The gate (D1): FAIL
+
+| # | Condition | VS Code | AFFiNE | Result |
+|---|---|---|---|---|
+| 1 | Grep-hard, both repos pooled: N's mean ≥ A's + 0.15, and no grep-hard question more than 0.05 below A | Pooled: A 0.912, N 0.999, a margin of **+0.088** (needs +0.150). Worst question: VSCODE-PAIRS, −0.008 (the floor is −0.05). | (pooled) | **FAIL** |
+| 2 | Each repo × big-picture, lists (direct and transitive) and chains: N's mean ≥ A's − 0.03 | Big-picture 0.927 → 0.844, **−0.083**. Lists 0.953 → 0.988 (+0.035). Chains 1.000 → 1.000. | Big-picture 0.698 → 0.682 (−0.016). Lists 1.000 → 1.000. Chains 0.917 → 1.000 (+0.083). | **FAIL** (VS Code, big-picture) |
+| 3a | Each repo's chains, transitive list and grep-hard runs: N's median cost ≤ 0.5 × A's, and median time ≤ 0.5 × A's | Cost $0.048 → $0.027, **0.568**. Time 20.9 s → 8.7 s, 0.417. | Cost $0.079 → $0.034, 0.434. Time 31.5 s → 7.5 s, 0.238. | **FAIL** (VS Code, cost) |
+| 3b | Each repo's big-picture and direct-list runs: N's median cost ≤ 1.15 × A's | $0.0468 → $0.0457, 0.976 | $0.0541 → $0.0533, 0.985 | PASS |
+| 4 | Each repo's task sessions: N's total cost and total time ≤ 0.6 × A's, and N's mean score ≥ A's − 0.03 | Cost $1.678 → $0.779, 0.464. Time 692.5 s → 240.6 s, 0.347. Score 0.977 → 1.000. | Cost $3.116 → $1.212, 0.389. Time 1,041.1 s → 234.6 s, 0.225. Score 0.907 → 1.000. | PASS |
+| 5a | N's list, chain and grep-hard runs, both repos: the share that calls a Nebulosity tool ≥ 0.90 | 38 of 48 | 42 of 42 | **FAIL**: 80 of 90, **0.889** |
+| 5b | Each repo's single runs: N's median first-call context − A's ≤ 2,500 tokens | 21,433 → 23,527, +2,094 | 21,209 → 23,301, +2,092 | PASS |
+
+`gateVerdict` reports only the worst repo of each condition. The other repo's numbers in this table were recomputed from `eval2/results.json` the same way. They match the scorer's printout wherever it prints them.
+
+**The verdict: the gate failed on conditions 1, 2, 3a and 5a.** Nebulosity made Claude Code faster and cheaper on the questions that walk the import graph and in the task sessions, at an equal or higher score. But its grep-hard gain was +0.088, not +0.15. It lowered VS Code's big-picture score again. Its median cost on VS Code's graph questions was 0.57 of Claude Code alone's, not 0.5. And on VS Code, Claude Code wrote its own script instead of calling a tool in 10 of the runs that should have used one.
+
+### How fast Claude gets the relevant context
+
+This is what the owner asked to see first: how much faster Nebulosity gets Claude Code the context a question needs, and at what accuracy. Each row puts A and N side by side with the ratio N ÷ A. A ratio below 1 means N used less. The mean score sits beside every speed number. The medians are over the row's runs: three a question, so a grep-hard kind's row is three runs an arm.
+- **Time:** the run's `duration_ms`. **Cost:** Claude Code's estimate.
+- **Context read:** input + cache writes + cache reads, summed over every model call of the run. It is everything Claude read, so it grows with turns × the size of each turn's prompt.
+- **Turns:** the run's `num_turns`.
+- **Nebulosity calls:** N's calls to its tools.
+- **File reads and searches:** Read, Grep, Glob, and Bash commands other than scripts.
+- **Script steps:** writing or editing a script (Write and Edit under the scratch folder, or a Bash heredoc), and each `node` run.
+
+Refused calls count where they were made. For a session, the row is the whole session (four messages), and its time is the sum of the messages'.
+
+**VS Code**
+
+| Questions | Runs per arm | Score A / N | Time A / N | N ÷ A | Cost A / N | N ÷ A | Context read A / N | N ÷ A | Turns A / N | Nebulosity calls (N) | File reads and searches A / N | Script steps A / N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Big-picture | 15 | 0.93 / 0.84 | 13.9 / 11.5 s | 0.83 | $0.033 / $0.031 | 0.96 | 44,618 / 48,652 | 1.09 | 3 / 3 | 1 | 2 / 1 | 0 / 0 |
+| Direct lists | 12 | 0.96 / 0.98 | 28.0 / 22.7 s | 0.81 | $0.073 / $0.073 | 1.00 | 96,943 / 101,801 | 1.05 | 4 / 4 | 0.5 | 1.5 / 2 | 2 / 1.5 |
+| Transitive list | 3 | 0.92 / 1.00 | 81.6 / 13.8 s | **0.17** | $0.261 / $0.049 | **0.19** | 380,477 / 49,727 | **0.13** | 16 / 2 | 1 | 13 / 0 | 2 / 0 |
+| Chains | 15 | 1.00 / 1.00 | 19.4 / 5.3 s | **0.28** | $0.033 / $0.020 | 0.59 | 66,809 / 47,529 | 0.71 | 3 / 2 | 1 | 0 / 0 | 2 / 0 |
+| Impact | 3 | 0.91 / 1.00 | 51.4 / 9.6 s | **0.19** | $0.105 / $0.028 | **0.27** | 156,206 / 48,545 | 0.31 | 8 / 2 | 1 | 1 / 0 | 6 / 0 |
+| Cycle | 3 | 1.00 / 1.00 | 13.1 / 6.2 s | 0.48 | $0.035 / $0.022 | 0.63 | 67,067 / 47,648 | 0.71 | 3 / 2 | 1 | 0 / 0 | 2 / 0 |
+| Files nothing imports | 3 | 0.87 / 1.00 | 32.5 / 33.3 s | 1.02 | $0.073 / $0.100 | 1.36 | 119,936 / 165,683 | 1.38 | 6 / 7 | 1 | 3 / 5 | 2 / 0 |
+| Violations | 3 | 1.00 / 1.00 | 18.1 / 19.3 s | 1.07 | $0.047 / $0.052 | 1.11 | 91,486 / 124,774 | 1.36 | 4 / 5 | 0 | 1 / 2 | 2 / 2 |
+| Entries | 3 | 0.63 / 1.00 | 56.7 / 17.5 s | **0.31** | $0.189 / $0.108 | 0.57 | 208,744 / 144,127 | 0.69 | 9 / 5 | 2 | 7 / 2 | 2 / 0 |
+| Pairs | 3 | 1.00 / 0.99 | 44.8 / 77.3 s | **1.73** | $0.100 / $0.192 | **1.92** | 150,113 / 336,703 | 2.24 | 8 / 16 | 1 | 1 / 13 | 6 / 1 |
+| Grep-hard, pooled | 18 | 0.90 / 1.00 | 29.8 / 18.1 s | 0.61 | $0.067 / $0.053 | 0.79 | 117,128 / 111,658 | 0.95 | 5.5 / 4.5 | 1 | 1 / 1.5 | 2 / 0 |
+| **Graph questions** (chains, transitive list, grep-hard: gate 3a's set) | 36 | 0.94 / 1.00 | 20.9 / 8.7 s | **0.42** | $0.048 / $0.027 | **0.57** | 92,119 / 48,542 | **0.53** | 4.5 / 2 | 1 | 1 / 0 | 2 / 0 |
+| Every single question | 63 | 0.94 / 0.96 | 20.1 / 12.9 s | 0.64 | $0.047 / $0.040 | 0.85 | 91,486 / 62,890 | 0.69 | 4 / 3 | 1 | 1 / 0 | 2 / 0 |
+| **Task sessions** (4 messages each) | 9 | 0.98 / 1.00 | 76.7 / 26.1 s | **0.34** | $0.168 / $0.079 | **0.47** | 376,843 / 240,347 | 0.64 | 16 / 10 | 6 | 3 / 0 | 11 / 0 |
+
+**AFFiNE**
+
+| Questions | Runs per arm | Score A / N | Time A / N | N ÷ A | Cost A / N | N ÷ A | Context read A / N | N ÷ A | Turns A / N | Nebulosity calls (N) | File reads and searches A / N | Script steps A / N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Big-picture | 12 | 0.70 / 0.68 | 20.5 / 20.9 s | 1.02 | $0.054 / $0.065 | **1.20** | 93,811 / 116,017 | 1.24 | 6 / 8 | 1 | 5 / 6 | 0 / 0 |
+| Direct lists | 9 | 1.00 / 1.00 | 22.4 / 12.0 s | 0.54 | $0.059 / $0.043 | 0.73 | 97,078 / 53,686 | 0.55 | 6 / 3 | 1 | 5 / 1 | 0 / 0 |
+| Transitive list | 3 | 1.00 / 1.00 | 99.9 / 11.5 s | **0.12** | $0.353 / $0.041 | **0.12** | 550,836 / 48,728 | **0.09** | 19 / 2 | 1 | 16 / 0 | 2 / 0 |
+| Chains | 12 | 0.92 / 1.00 | 25.8 / 5.0 s | **0.19** | $0.065 / $0.019 | **0.30** | 125,981 / 47,048 | 0.37 | 6 / 2 | 1 | 4.5 / 0 | 1 / 0 |
+| Impact | 3 | 0.66 / 1.00 | 44.4 / 9.9 s | **0.22** | $0.124 / $0.044 | 0.36 | 185,663 / 76,365 | 0.41 | 8 / 4 | 3 | 4 / 0 | 2 / 0 |
+| Cycle | 3 | 1.00 / 1.00 | 15.9 / 4.8 s | **0.30** | $0.054 / $0.019 | 0.36 | 114,035 / 47,123 | 0.41 | 5 / 2 | 1 | 3 / 0 | 0 / 0 |
+| Files nothing imports | 3 | 0.94 / 1.00 | 40.2 / 17.6 s | 0.44 | $0.147 / $0.049 | 0.33 | 180,384 / 98,897 | 0.55 | 8 / 5 | 1 | 7 / 3 | 0 / 0 |
+| Violations | 3 | 1.00 / 1.00 | 22.4 / 13.7 s | 0.61 | $0.057 / $0.039 | 0.68 | 114,960 / 74,610 | 0.65 | 6 / 5 | 1 | 5 / 3 | 0 / 0 |
+| Entries | 3 | 0.92 / 1.00 | 56.9 / 7.0 s | **0.12** | $0.158 / $0.034 | **0.22** | 263,191 / 50,320 | **0.19** | 11 / 2 | 1 | 6 / 0 | 3 / 0 |
+| Pairs | 3 | 1.00 / 1.00 | 32.1 / 21.3 s | 0.66 | $0.079 / $0.094 | **1.19** | 167,413 / 121,573 | 0.73 | 8 / 22 | 20 | 5 / 2 | 2 / 0 |
+| Grep-hard, pooled | 18 | 0.92 / 1.00 | 33.9 / 10.2 s | **0.30** | $0.101 / $0.044 | 0.43 | 177,694 / 75,450 | 0.42 | 8 / 4 | 1 | 5 / 0.5 | 0 / 0 |
+| **Graph questions** (gate 3a's set) | 33 | 0.93 / 1.00 | 31.5 / 7.5 s | **0.24** | $0.079 / $0.034 | **0.43** | 147,245 / 50,318 | **0.34** | 8 / 2 | 1 | 5 / 0 | 1 / 0 |
+| Every single question | 54 | 0.89 / 0.93 | 23.5 / 11.2 s | 0.48 | $0.065 / $0.041 | 0.63 | 118,519 / 72,962 | 0.62 | 6 / 4 | 1 | 5 / 1 | 0 / 0 |
+| **Task sessions** (4 messages each) | 9 | 0.91 / 1.00 | 106.3 / 25.1 s | **0.24** | $0.319 / $0.156 | **0.49** | 782,464 / 374,599 | 0.48 | 26 / 11 | 6 | 9 / 0 | 12 / 0 |
+
+**Both repos pooled**
+
+| Questions | Runs per arm | Score A / N | Time A / N | N ÷ A | Cost A / N | N ÷ A | Context read A / N | N ÷ A | Turns A / N |
+|---|---|---|---|---|---|---|---|---|---|
+| Big-picture | 27 | 0.83 / 0.77 | 15.0 / 14.8 s | 0.98 | $0.048 / $0.043 | 0.90 | 92,055 / 74,377 | 0.81 | 5 / 5 |
+| Direct lists | 21 | 0.98 / 0.99 | 26.2 / 19.7 s | 0.75 | $0.064 / $0.061 | 0.96 | 97,078 / 92,455 | 0.95 | 4 / 4 |
+| Graph questions | 69 | 0.94 / 1.00 | 28.1 / 8.4 s | **0.30** | $0.066 / $0.031 | **0.47** | 120,424 / 48,728 | **0.40** | 6 / 2 |
+| Every single question | 117 | 0.92 / 0.95 | 22.3 / 12.0 s | 0.54 | $0.057 / $0.041 | 0.73 | 112,640 / 72,472 | 0.64 | 6 / 3 |
+| Task sessions | 18 | 0.94 / 1.00 | 90.6 / 25.9 s | **0.29** | $0.224 / $0.088 | **0.39** | 528,266 / 256,068 | 0.48 | 19.5 / 10.5 |
+
+**What this shows.** On the questions that need a walk over the import graph (chains, the transitive lists and the six grep-hard kinds), Claude Code with Nebulosity got its context in a median of 2 turns and one Nebulosity call. Claude Code alone took 4.5 turns on VS Code and 8 on AFFiNE, of grep, file reads and scripts of its own. With Nebulosity it answered:
+- **VS Code:** 2.4 times as fast (8.7 s against 20.9 s), at 0.57 of the cost estimate and reading 0.53 of the tokens.
+- **AFFiNE:** 4.2 times as fast (7.5 s against 31.5 s), at 0.43 of the cost and 0.34 of the tokens.
+- **Accuracy:** a mean score of 1.00 against 0.94 (VS Code) and 0.93 (AFFiNE).
+- **Task sessions** (four related questions in one conversation): 2.9 and 4.2 times as fast (median 26 s against 77 s, and 25 s against 106 s), at 0.47 and 0.49 of the median cost, scoring 1.00 against 0.98 and 0.91.
+- **The biggest gains:** the transitive lists (6–8 times as fast, a fifth of the cost or less) and the entries questions (3–8 times as fast).
+
+**It was not faster everywhere.**
+- *VSCODE-PAIRS:* N was slower and costlier, at 1.73 times the time and 1.92 times the cost. The `architecture` conventions report covers only folder names that recur in 26 or more folders, so two runs grepped for the rest by hand.
+- *VS Code's files-nothing-imports and violations questions:* N took about as long as A and cost 1.1–1.4 times as much. On violations no N run called a tool at all.
+- *Direct lists on VS Code:* the cost was the same (1.00) and N's time was 0.81 of A's.
+- *Big-picture:* N was about as fast, and no better: lower on VS Code (0.84 against 0.93) and level on AFFiNE (0.68 against 0.70), where it cost 1.20 times as much.
+
+So the speed and cost gains are real where the question is a walk over the import graph. They are not a general speed-up, and they came with no gain on the questions about how a repo is organized.
+
+### The headline
+
+The score is the mean over the family's runs: the share of rubric points for big-picture, recall for lists, the chain score for chains, and each grep-hard kind's own score (impact by relative error, cycles by validity and length, F1 for files nothing imports, violations, entries and pairs). Recall and precision are shown where the score has them. The medians are over the same runs. "Tokens, all" counts every token of every model, output included.
+
+| Repo | Family | Arm | Runs | Mean score | Recall | Precision | Median tokens, all | Median first call | Median cost | Median time | Median tool calls |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| VS Code | Big-picture | A | 15 | 0.927 | – | – | 45,888 | 21,367 | $0.033 | 13.9 s | 2 |
+| VS Code | Big-picture | N | 15 | 0.844 | – | – | 49,738 | 23,462 | $0.031 | 11.5 s | 2 |
+| VS Code | Lists (direct and transitive) | A | 15 | 0.953 | 0.95 | 1.00 | 101,073 | 21,432 | $0.078 | 28.2 s | 3 |
+| VS Code | Lists (direct and transitive) | N | 15 | 0.988 | 0.99 | 1.00 | 104,175 | 23,523 | $0.067 | 21.6 s | 3 |
+| VS Code | Chains | A | 15 | 1.000 | – | – | 68,169 | 21,442 | $0.033 | 19.4 s | 2 |
+| VS Code | Chains | N | 15 | 1.000 | – | – | 47,847 | 23,532 | $0.020 | 5.3 s | 1 |
+| VS Code | Grep-hard | A | 18 | 0.902 | 1.00 | 0.91 | 119,590 | 21,486 | $0.067 | 29.8 s | 4.5 |
+| VS Code | Grep-hard | N | 18 | 0.999 | 1.00 | 1.00 | 113,305 | 23,577 | $0.053 | 18.1 s | 3.5 |
+| AFFiNE | Big-picture | A | 12 | 0.698 | – | – | 95,731 | 21,150 | $0.054 | 20.5 s | 5 |
+| AFFiNE | Big-picture | N | 12 | 0.682 | – | – | 118,153 | 23,244 | $0.065 | 20.9 s | 7 |
+| AFFiNE | Lists (direct and transitive) | A | 12 | 1.000 | 1.00 | 1.00 | 116,999 | 21,205 | $0.071 | 23.3 s | 5 |
+| AFFiNE | Lists (direct and transitive) | N | 12 | 1.000 | 1.00 | 1.00 | 53,454 | 23,298 | $0.041 | 11.8 s | 2 |
+| AFFiNE | Chains | A | 12 | 0.917 | – | – | 128,614 | 21,212 | $0.065 | 25.8 s | 5 |
+| AFFiNE | Chains | N | 12 | 1.000 | – | – | 47,434 | 23,303 | $0.019 | 5.0 s | 1 |
+| AFFiNE | Grep-hard | A | 18 | 0.921 | 0.97 | 0.95 | 182,147 | 21,221 | $0.101 | 33.9 s | 7 |
+| AFFiNE | Grep-hard | N | 18 | 1.000 | 1.00 | 1.00 | 76,498 | 23,313 | $0.044 | 10.2 s | 3 |
+
+The grep-hard kinds one by one. Recall and precision belong to the F1 kinds:
+
+| Repo | Kind | A: scores | A: mean | N: scores | N: mean | Recall A / N | Precision A / N | Median cost A / N | Median time A / N |
+|---|---|---|---|---|---|---|---|---|---|
+| VS Code | Impact | 0.91, 0.91, 0.91 | 0.909 | 1.00, 1.00, 1.00 | 1.000 | – | – | $0.105 / $0.028 | 51.4 / 9.6 s |
+| VS Code | Cycle | 1.00, 1.00, 1.00 | 1.000 | 1.00, 1.00, 1.00 | 1.000 | – | – | $0.035 / $0.022 | 13.1 / 6.2 s |
+| VS Code | Files nothing imports | 1.00, 1.00, 0.62 | 0.872 | 1.00, 1.00, 1.00 | 1.000 | 1.00 / 1.00 | 0.81 / 1.00 | $0.073 / $0.100 | 32.5 / 33.3 s |
+| VS Code | Violations | 1.00, 1.00, 1.00 | 1.000 | 1.00, 1.00, 1.00 | 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | $0.047 / $0.052 | 18.1 / 19.3 s |
+| VS Code | Entries | 0.00, 0.95, 0.95 | 0.632 | 1.00, 1.00, 1.00 | 1.000 | 1.00 / 1.00 | 0.90 / 1.00 | $0.189 / $0.108 | 56.7 / 17.5 s |
+| VS Code | Pairs | 1.00, 1.00, 1.00 | 1.000 | 1.00, 1.00, 0.98 | 0.992 | – | – | $0.100 / $0.192 | 44.8 / 77.3 s |
+| AFFiNE | Impact | 0.99, 0.00, 0.99 | 0.663 | 1.00, 1.00, 1.00 | 1.000 | – | – | $0.124 / $0.044 | 44.4 / 9.9 s |
+| AFFiNE | Cycle | 1.00, 1.00, 1.00 | 1.000 | 1.00, 1.00, 1.00 | 1.000 | – | – | $0.054 / $0.019 | 15.9 / 4.8 s |
+| AFFiNE | Files nothing imports | 0.91, 1.00, 0.91 | 0.939 | 1.00, 1.00, 1.00 | 1.000 | 1.00 / 1.00 | 0.89 / 1.00 | $0.147 / $0.049 | 40.2 / 17.6 s |
+| AFFiNE | Violations | 1.00, 1.00, 1.00 | 1.000 | 1.00, 1.00, 1.00 | 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | $0.057 / $0.039 | 22.4 / 13.7 s |
+| AFFiNE | Entries | 0.93, 0.83, 1.00 | 0.922 | 1.00, 1.00, 1.00 | 1.000 | 0.90 / 1.00 | 0.96 / 1.00 | $0.158 / $0.034 | 56.9 / 7.0 s |
+| AFFiNE | Pairs | 1.00, 1.00, 1.00 | 1.000 | 1.00, 1.00, 1.00 | 1.000 | – | – | $0.079 / $0.094 | 32.1 / 21.3 s |
+
+A run with no `ANSWER:` line has no recall or precision, so VSCODE-ENTRIES' A recall and precision are over its two answered runs.
+
+### The losses
+
+- **VS Code's big-picture questions: 0.844 against 0.927 (−0.083), where the gate allows −0.03.** Eval #1 lost here too (−0.090).
+  - *Per question:* BP2 −0.25 (0.75 in every N run against 1.00 in every A run), BP3 −0.07, BP5 −0.06, BP1 −0.04, BP4 0.00.
+  - *What the transcripts show:* on BP1 and BP2, N answered from Nebulosity's tool answers instead of the repo's own written rules.
+    - On BP2, every N run's first call was `architecture` with the conventions report. Its answer gives measured import counts for the folder names that recur in 26 or more folders. It has no "Docs about it" line, and it leaves out `electron-utility`, which recurs in fewer folders. No N run opened `.github/instructions/source-code-organization.instructions.md`, which every A run read after grepping `.github`. All three N runs missed BP2.5 (`electron-utility`) and half of BP2.6 (what `electron-main` may use). They said where their rules came from: "The "may import" rules are my reading of that data plus VS Code's usual layering convention, which I didn't check against the repo's docs" (r1), and "I didn't read the repo's written layering rules, so the allowed-import rules are inferred from those counts" (r3).
+    - On BP1, two N runs called `describe` on `src/vs`. Its answer lists that same file first under "Docs about it", and the server's instructions say to read the docs the tools point to. Neither run opened it: "I didn't open the repo's `source-code-organization` doc, which is the authoritative rulebook" (r2).
+    - So N did not miss the docs for lack of a pointer. On BP1 it saw the pointer and kept the tool's answer. On BP2 the tool it chose carries no pointer.
+  - *Where the pointer was followed, N was level.* On BP4 every N run called `describe` on `src/vs/workbench`, then opened or grepped the instructions file, and scored 0.92 like A. Eval #1's BP4 loss (−0.28) is gone.
+  - *BP3 and BP5:* no N run called a tool on BP3; all six runs answered mostly from memory. On BP5, N called `describe` or `architecture`, then grepped the entry files. The gaps are half-points on BP3.6 (the registration runs at module scope) and BP5.6 (a new file is loaded by importing it from a `.contribution.ts`), which A earned in some runs and missed in others.
+  - *AFFiNE's big-picture questions:* −0.016, within the gate. That is the repo without a repo-level agent guide, and Nebulosity's summaries, `overview` and `describe` didn't raise it either.
+- **Condition 1: +0.088 on the grep-hard questions, against the +0.15 asked.** N scored 1.00 on 35 of its 36 grep-hard runs (VSCODE-PAIRS r3: 0.98), a mean of 0.999. A scored 0.912.
+  - *A wrote its own import walkers.* It ran a Node script in 16 of its 18 VS Code grep-hard runs and 6 of its 18 AFFiNE ones, and scored 1.00 in every run of 6 of the 12 grep-hard questions (both cycles, both violations, both pairs).
+  - *Even a perfect N could not have passed.* With A at 0.912, the most N could gain was +0.088. To pass, A would have had to score 0.85 or less.
+  - *Where A lost points:*
+    - two answers that gave up after a refused command (VSCODE-ENTRIES r1 and AFFINE-IMPACT r2, 0 each: see "What the runs showed about the method"). They are 0.054 of A's gap. Had each scored its question's other runs' mean, A's mean would be 0.965 and the margin +0.034;
+    - VSCODE-IMPACT, 0.91 in every run: three scripts that agreed with each other, at 4,484–4,485 against 4,503;
+    - files that aren't code listed beside the right ones: VSCODE-UNUSED r3 (0.62) and AFFINE-UNUSED r1 and r3 (0.91);
+    - an extra or missing entry point in four ENTRIES runs.
+- **Condition 3a on VS Code: a cost ratio of 0.568, against 0.5.** The time ratio, 0.417, passed. AFFiNE passed both (0.434 and 0.238).
+  - *Chains are 15 of VS Code's 36 graph runs.* There, A ran a breadth-first search script in two calls (Write, then `node`) in 13 of 15 runs, at a median $0.033 and 19.4 s. N answered with one `imports` call in two turns (one run made two calls), at $0.020 and 5.3 s.
+  - *N has a cost floor.* Two turns over a prompt of about 23,500 tokens cost $0.018–0.020: N's cheapest run of the 117 was $0.018. Against a script that costs $0.03, N can't reach half. VSCODE-PAIRS (1.92 times A's cost) and VSCODE-UNUSED (1.36 times) pushed the median the other way.
+  - *On AFFiNE, A scripted less:* it ran a script in 12 of its 42 list, chain and grep-hard runs, against 37 of 48 on VS Code. It walked the imports with grep, which made its runs longer and costlier.
+- **Condition 5a: 80 of 90 (0.889), against 0.90.**
+  - *The ten N runs without a tool call are all VS Code:* CL2 r2 and r3, CL3 r1–r3, CL5 r3, VIOLATIONS r1–r3 and UNUSED r3.
+  - *Each began by writing its own Node scanner* (Write, then `node`; UNUSED r3 through a `cat` heredoc) and never called a tool. Their transcripts don't say why: the model's thinking isn't kept.
+  - *They scored as A's scripts did:* 1.00 on CL3, VIOLATIONS and UNUSED. On CL2 (0.93) and CL5 (0.96) they missed the same Copilot fixtures A missed. `imports` returns those fixtures, and N's runs that called it on CL2 and CL5 scored 1.00.
+  - *The prompt offers that route:* its scripts sentence is the same in both arms.
+  - *On AFFiNE,* 42 of 42 N runs in the set called a tool.
+- **Where N was slower or costlier than Claude Code alone**, by the medians above:
+  - VSCODE-PAIRS: 1.73 times the time and 1.92 times the cost, at 0.99 against 1.00;
+  - VSCODE-UNUSED: 1.02 times the time and 1.36 times the cost;
+  - VSCODE-VIOLATIONS: 1.07 and 1.11, with no tool call;
+  - AFFiNE's big-picture questions: 1.20 times the cost;
+  - AFFINE-PAIRS: 1.19 times the cost, though 0.66 times the time. Two N runs made one `imports` call per folder, 20 calls each;
+  - VS Code's direct lists: no saving in cost (1.00).
+  - On CL1, N's mean cost was $0.101 against A's $0.067: N called `imports` and then checked its answer with 2–10 greps.
+
+### Per question
+
+Every run's score, and what the transcripts show. A question's six runs differ only in arm and repeat. The cost and time columns are the means of the three runs.
+
+**VS Code**
+
+| Question | A: r1, r2, r3 | N: r1, r2, r3 | Mean cost A / N | Mean time A / N | What happened |
+|---|---|---|---|---|---|
+| BP1 layers | 0.88, 0.88, 0.94 | 0.81, 0.88, 0.88 | $0.033 / $0.031 | 14.3 / 11.2 s | A grepped `.github/copilot-instructions.md` and listed `src/vs`. N called `architecture` (layers), then `describe` on `src/vs` (r1, r2) or the conventions report (r3). Two N runs saw the instructions file named by `describe` and didn't open it. N r1 missed BP1.8 (the extension host). |
+| BP2 environments | 1.00, 1.00, 1.00 | 0.75, 0.75, 0.75 | $0.047 / $0.027 | 13.5 / 10.4 s | Every A run grepped `.github` and read the environments table in `source-code-organization.instructions.md`. Every N run took `architecture`'s conventions report (names in 26 or more folders, no docs pointer, no `electron-utility`) and missed BP2.5 and half of BP2.6. |
+| BP3 services | 0.90, 1.00, 0.90 | 0.90, 0.90, 0.80 | $0.027 / $0.024 | 13.0 / 10.7 s | No N run called a tool. A r2 and r3 grepped `platform/instantiation` once. The spread is BP3.6, in both arms. |
+| BP4 workbench | 0.88, 0.94, 0.94 | 0.94, 0.94, 0.88 | $0.078 / $0.074 | 17.9 / 13.3 s | Level. Every run read the instructions file's contribution rules. N got there through `describe`'s docs pointer, after `describe` on `workbench` and `contrib` and `architecture`. |
+| BP5 builds | 0.92, 0.83, 0.92 | 0.83, 0.83, 0.83 | $0.030 / $0.045 | 13.3 / 15.7 s | A listed `src/vs/workbench` and read the main entry files. N called `describe` or `architecture`, then grepped the entry files. Every N run half-earned BP5.6, which two A runs earned in full. |
+| CL1 (22) | 1.00, 0.95, 0.95 | 1.00, 1.00, 1.00 | $0.067 / $0.101 | 20.4 / 23.1 s | A wrote a scanner. In r2 and r3 the scanner missed `mainThreadNotebook.ts`. Every N run called `imports` (all 22), then checked with 2–10 greps. |
+| CL2 (41) | 0.93, 0.83, 0.93 | 1.00, 0.93, 0.93 | $0.069 / $0.079 | 30.1 / 27.9 s | A's scanners missed the three Copilot fixtures whose `vs/…` ids name debug files (r2 missed four more). N r1 called `imports`, which gave all 41 (V1.6's module ids). N r2 and r3 wrote scanners instead and missed the same three. |
+| CL3 (3) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.064 / $0.045 | 27.6 / 19.8 s | Every run found all three. No N run called a tool: each wrote a scanner, as A r3 did. A r1 and r2 had their scripts refused and grepped instead. |
+| CL4 (66, transitive) | 0.95, 0.86, 0.95 | 1.00, 1.00, 1.00 | $0.202 / $0.049 | 64.6 / 14.3 s | N: one `imports` call (transitive) each, all 66, the computed loaders included (V1.6's resolution; Eval #1's tool runs got 63). A r1's script left out the three loader files. A r2 and r3 had their script runs refused (a compound command) and walked with grep, 15 calls in 82–84 s. |
+| CL5 (57) | 1.00, 0.96, 0.96 | 1.00, 1.00, 0.96 | $0.088 / $0.083 | 31.9 / 29.0 s | N r1 and r2 called `imports` and got all 57. N r3, A r2 and A r3 used scripts and missed the two Copilot fixtures. A r1's script run was refused; it grepped and counted them. |
+| CN1 (4 steps) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.038 / $0.022 | 21.0 / 5.8 s | N: one `imports` call with `to`. A: a breadth-first search script, then a grep check, in 2–4 calls. |
+| CN2 (5) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.030 / $0.020 | 17.0 / 5.3 s | N: one `imports` call. A: a search script in 2 calls. |
+| CN3 (4) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.086 / $0.020 | 32.5 / 6.1 s | N: one `imports` call. A r1 and r3 used a script (2 calls). A r2's heredoc was refused, and it traced by hand in 10 calls ($0.19, 63 s). |
+| CN4 (none) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.059 / $0.019 | 22.8 / 4.7 s | N: `imports` to the folder `src/vs/workbench`, "doesn't reach" (r3 made a second call). A r1 and r3 used a script. A r2's was refused, and it grepped `strings.ts`'s closure in 10 calls. |
+| CN5 (3) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.042 / $0.019 | 18.8 / 4.7 s | N: one `imports` call. A: a search script (r2 fixed it after two refusals, in 9 calls). |
+| IMPACT | 0.91, 0.91, 0.91 | 1.00, 1.00, 1.00 | $0.099 / $0.028 | 51.8 / 10.6 s | N: one `imports` call (transitive, `group_by`) gave every line exactly (4,503). A's three scripts agreed with each other: 4,484–4,485 in all, 10 against 11 in `src/vs/code`, and 7 against 25 elsewhere. |
+| CYCLE | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.033 / $0.023 | 13.8 / 6.9 s | N: `architecture` cycles through the file (r1 checked the steps with grep). A: a script in 2 calls. |
+| UNUSED | 1.00, 1.00, 0.62 | 1.00, 1.00, 1.00 | $0.160 / $0.105 | 47.8 / 31.3 s | N r1 and r2 called `architecture` (unused), then checked with Glob and Grep (r2 in 14 calls). N r3 wrote a script. A r3 listed four images and a `.md` beside the four files (precision 0.44). A r2 grepped by hand, 17 calls and $0.36. |
+| VIOLATIONS | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.047 / $0.050 | 18.2 / 18.4 s | Every run of both arms wrote a scanner and found the five test files. No N run called a tool. |
+| ENTRIES | 0.00, 0.95, 0.95 | 1.00, 1.00, 1.00 | $0.175 / $0.102 | 53.8 / 15.5 s | N: `imports` (transitive) plus `architecture` (unused), all nine roots. A r1's heredoc was refused. It grepped, then asked whether it might run node instead of answering (no `ANSWER:` line). A r2 and r3 listed `cliProcessMain.ts` as a tenth root, which the truth's `cli.ts` loader verdict leaves out. |
+| PAIRS (21) | 1.00, 1.00, 1.00 | 1.00, 1.00, 0.98 | $0.096 / $0.167 | 42.2 / 58.6 s | A: a script in every run. N called `architecture` conventions, which leaves out `electron-utility` and `worker`. N r1 then wrote a script. N r2 and r3 had a heredoc refused and grepped by hand (20 and 15 calls, $0.27 and $0.19, about 80 s), and r3 missed one pair. |
+
+**AFFiNE**
+
+| Question | A: r1, r2, r3 | N: r1, r2, r3 | Mean cost A / N | Mean time A / N | What happened |
+|---|---|---|---|---|---|
+| BP1 parts | 0.94, 0.94, 0.94 | 0.88, 0.88, 0.88 | $0.051 / $0.063 | 20.3 / 20.6 s | A listed folders and read package files, the README, `docs/developing-server.md` and the self-host compose file. N called `overview`, then `describe` on the packages (1–6 calls; r1 made 13 tool calls). Each N run lost two half-points among BP1.3 (BlockSuite used as workspace packages), BP1.6 (the server is needed only for cloud features) and BP1.7 (what it runs on). Each A run lost one. |
+| BP2 BlockSuite | 0.50, 0.44, 0.63 | 0.44, 0.69, 0.50 | $0.049 / $0.045 | 17.5 / 16.1 s | Low in both arms. No run said each block's text has its own inline editor (BP2.4), and four of six missed that the app wraps lit components in React (BP2.6). N called `describe` on `blocksuite` (r2 made four more Nebulosity calls). A listed folders. |
+| BP3 blocks | 0.75, 0.75, 0.63 | 0.75, 0.69, 0.63 | $0.053 / $0.057 | 19.3 / 19.3 s | No N run called a tool. Both arms read one block's `store.ts`, `view.ts` and model. |
+| BP4 docs and sync | 0.63, 0.69, 0.56 | 0.69, 0.63, 0.56 | $0.075 / $0.074 | 25.5 / 22.2 s | N started with `search` (r2 then called `describe` on nbstore and read its README). Both arms read nbstore's storage, sync and IndexedDB schema. No run mentioned the JSON snapshots (BP4.4), and only N r1 half-earned y-octo (BP4.8). |
+| CL1 (26) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.054 / $0.043 | 21.7 / 11.5 s | N: `imports`, then grep checks. A: grep, after its `git grep` pipeline was refused. |
+| CL2 (24) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.056 / $0.035 | 21.0 / 8.9 s | N: `imports` and one grep. A: grep, or a short script (r1), in 3–7 calls. |
+| CL3 (34) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.084 / $0.060 | 23.7 / 16.7 s | N: `imports` on the folder and a grep check. A: grep, after a refused first command. |
+| CL4 (56, transitive) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.279 / $0.041 | 82.6 / 13.7 s | N: one `imports` call (transitive). A walked the closure with grep: r1 for 16 calls before writing a 107-line script (18 calls in all, $0.39, 109 s), r2 in 23 calls ($0.35, 100 s). A r3 wrote a script ($0.09, 39 s). |
+| CN1 (4 steps) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.074 / $0.020 | 28.0 / 5.3 s | N: one `imports` call with `to`. A traced it by hand, in 5–9 calls. |
+| CN2 (5) | 0.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.117 / $0.019 | 42.9 / 4.7 s | A r1 claimed `affine/all/src/std/index.ts` imports `framework/std/src/gfx/index.ts`. That file is `export * from '@blocksuite/std'`, whose "." export is `src/index.ts`, so the chain is invalid (the verdict is in `steps.json`). A r3 took 28 calls ($0.24, 92 s). N: one call. |
+| CN3 (4) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.080 / $0.019 | 24.7 / 4.4 s | N: one call. A: grep and reads in 3–6 calls (r2's and r3's scripts were refused). |
+| CN4 (none) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.053 / $0.033 | 22.2 / 7.8 s | N: `imports` to the helper folder, then a grep check. A: grep, or a script. |
+| IMPACT | 0.99, 0.00, 0.99 | 1.00, 1.00, 1.00 | $0.099 / $0.044 | 34.9 / 9.9 s | N: three `imports` calls with `group_by`, exact (1,620). A r1 and r3 wrote resolvers of 148–161 lines and got 101 against 104 in `packages/frontend/apps`. A r2's first command was refused. It then asked to be allowed to run node instead of answering (no `ANSWER:` line). |
+| CYCLE | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.046 / $0.019 | 16.5 / 4.5 s | N: one `architecture` cycles call, about 5 s. A read through the dependency-injection framework's files with grep (r1's script was refused). |
+| UNUSED | 0.91, 1.00, 0.91 | 1.00, 1.00, 1.00 | $0.148 / $0.051 | 38.7 / 17.5 s | N: `architecture` (unused), then checks (r3 wrote a script). A r1 and r3 listed the folder's `readme.md` beside the five files. |
+| VIOLATIONS | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.059 / $0.039 | 22.5 / 12.8 s | N: one `imports` call with `within`. A: grep, in 5–10 calls. All four files are `import type`. |
+| ENTRIES | 0.93, 0.83, 1.00 | 1.00, 1.00, 1.00 | $0.174 / $0.034 | 61.3 / 7.2 s | N: one `imports` call (transitive), 7 s. A r1 and r3 wrote resolvers of 64–115 lines (r1 listed one extra page). A r2 walked by hand in 15 calls and missed two roots. |
+| PAIRS (17) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.129 / $0.081 | 47.3 / 23.2 s | N r1: one `imports` call with `group_by`, then a script. N r2 and r3: one `imports` call per folder, 20 each. A: scripts (r2 grepped instead, 36 calls and $0.26). |
+
+### The sessions
+
+Each session is four questions in one conversation: the impact of a change to X, a chain from an entry point to X, a cycle through X, and the files nothing imports in X's folder. The score is the mean of the four messages' scores. The cost and time are the session's totals, and the "3 runs" columns add up the three repeats.
+
+| Session | A: scores | N: scores | Mean score A / N | Cost, 3 runs, A / N | Time, 3 runs, A / N |
+|---|---|---|---|---|---|
+| vscode-s1 (notebook cell model) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | 0.999 / 1.000 | $0.617 / $0.350 | 249.7 / 85.7 s |
+| vscode-s2 (inline completions model) | 0.96, 0.96, 0.96 | 1.00, 1.00, 1.00 | 0.962 / 1.000 | $0.577 / $0.227 | 265.6 / 83.9 s |
+| vscode-s3 (terminal environment) | 0.95, 0.95, 1.00 | 1.00, 1.00, 1.00 | 0.969 / 1.000 | $0.484 / $0.201 | 177.3 / 71.0 s |
+| affine-s1 (database block) | 0.75, 0.75, 1.00 | 1.00, 1.00, 1.00 | 0.833 / 1.000 | $1.382 / $0.270 | 447.0 / 71.4 s |
+| affine-s2 (AI onboarding) | 1.00, 0.67, 1.00 | 1.00, 1.00, 1.00 | 0.889 / 1.000 | $0.898 / $0.470 | 288.6 / 71.5 s |
+| affine-s3 (surface block) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | 1.000 / 1.000 | $0.836 / $0.471 | 305.5 / 91.7 s |
+| **VS Code, all 9** | | | 0.977 / 1.000 | $1.678 / $0.779 | 692.5 / 240.6 s |
+| **AFFiNE, all 9** | | | 0.907 / 1.000 | $3.116 / $1.212 | 1,041.1 / 234.6 s |
+
+Message by message (medians over the 9 sessions of each repo and arm):
+
+| Repo | Message | Score A / N | Cost A / N | Time A / N | Nebulosity calls (N) | Script steps A / N |
+|---|---|---|---|---|---|---|
+| VS Code | 1. impact | 0.91 / 1.00 | $0.070 / $0.034 | 35.8 / 10.2 s | 3 | 4 / 0 |
+| VS Code | 2. chain | 1.00 / 1.00 | $0.040 / $0.014 | 14.9 / 5.2 s | 1 | 2 / 0 |
+| VS Code | 3. cycle | 1.00 / 1.00 | $0.022 / $0.014 | 12.9 / 4.9 s | 1 | 2 / 0 |
+| VS Code | 4. files nothing imports | 1.00 / 1.00 | $0.029 / $0.013 | 14.0 / 5.5 s | 1 | 2 / 0 |
+| AFFiNE | 1. impact | 0.78 / 1.00 | $0.149 / $0.102 | 53.2 / 10.4 s | 3 | 4 / 0 |
+| AFFiNE | 2. chain | 0.89 / 1.00 | $0.045 / $0.019 | 17.1 / 5.0 s | 1 | 2 / 0 |
+| AFFiNE | 3. cycle | 1.00 / 1.00 | $0.040 / $0.015 | 15.8 / 3.6 s | 1 | 2 / 0 |
+| AFFiNE | 4. files nothing imports | 0.96 / 1.00 | $0.037 / $0.017 | 12.8 / 5.0 s | 1 | 2 / 0 |
+
+(The score column is the mean, not the median.)
+
+**What happened in them.**
+- *A* wrote an import-graph script in 17 of its 18 sessions (8 of them after a refused first command) and reused it for the later messages. In affine-s1 r1, it made 44 calls in 163 s on the first message before giving up on it.
+- *N* never wrote a script. It called a tool in 71 of its 72 messages, 1–10 calls each. The exception, affine-s3 r1's cycle message, was answered from the earlier calls.
+- *A's lost points:*
+  - affine-s1 r1 and r2, message 1: it gave up after a refused command and asked to be allowed to run node (0 each);
+  - affine-s2 r2, message 2: a chain through `detail-page.tsx` line 7, a commented-out import (0; the verdict is in `steps.json`); message 4: one of the two files (0.67);
+  - vscode-s2, message 1 in every run: 3 files elsewhere against 12 (0.85);
+  - vscode-s3 r1 and r2, message 1: 75 files in `platform/agentHost` against 54 (0.81).
+
+### Tool use
+
+How often N called Nebulosity's tools, by kind:
+
+| Kind | VS Code: N runs with a call | VS Code: calls | AFFiNE: N runs with a call | AFFiNE: calls |
+|---|---|---|---|---|
+| Big-picture | 12 of 15 | 23 | 9 of 12 | 23 |
+| Direct lists | 6 of 12 | 6 | 9 of 9 | 9 |
+| Transitive list | 3 of 3 | 3 | 3 of 3 | 3 |
+| Chains | 15 of 15 | 16 | 12 of 12 | 13 |
+| Impact | 3 of 3 | 3 | 3 of 3 | 9 |
+| Cycle | 3 of 3 | 3 | 3 of 3 | 3 |
+| Files nothing imports | 2 of 3 | 2 | 3 of 3 | 3 |
+| Violations | 0 of 3 | 0 | 3 of 3 | 3 |
+| Entries | 3 of 3 | 6 | 3 of 3 | 3 |
+| Pairs | 3 of 3 | 3 | 3 of 3 | 41 |
+| Gate 5a's set (all but big-picture) | 38 of 48 | | 42 of 42 | |
+| Task sessions (messages with a call) | 36 of 36 | 48 | 35 of 36 | 65 |
+
+- **Which tools.**
+  - Over all 135 N runs, sessions included: `imports`, 191 calls in 86 runs; `architecture`, 66 in 46; `describe`, 25 in 13; `overview`, 3; `search`, 3.
+  - `show_on_map` was never called, which is right with no Map open.
+  - Nebulosity was called in 21 of the 27 big-picture runs. In Eval #1, the arm at the default tool search called it in none.
+- **ToolSearch: 0 calls in all 270 runs.** The five question tools load through their own `_meta` (ADR-056), as on the dev set.
+- **Scripts in N.** N ran a Node script in 12 of its 90 list, chain and grep-hard runs (10 VS Code, 2 AFFiNE), and in none of its sessions. A ran one in 49 of its 90 (37 VS Code, 12 AFFiNE) and in 17 of its 18 sessions.
+- **The per-turn cost.**
+  - N's median first-call context was 2,094 tokens above A's on VS Code (23,527 against 21,433) and 2,092 above on AFFiNE (23,301 against 21,209).
+  - Task 13's one-turn probes measured +2,091 on both repos (MCP Dev Set #1, BENCHMARKS.md), and Task 3 measured Nebulosity's definitions and instructions at about 2,000 tokens. The eval's first calls agree with both to within 3 tokens.
+  - Loading every deferred tool instead costs +10,955 (Task 3's probe), which V1.6 avoids by loading only Nebulosity's five.
+  - Over a whole run, N read fewer tokens than A on every row of "How fast Claude gets the relevant context" except VS Code's big-picture questions, direct lists, files nothing imports, violations and pairs, and AFFiNE's big-picture questions.
+
+### Against Eval #1
+
+The same 15 VS Code questions, with the same prompts, truths and rubrics. Eval #1 ran them twice per arm and Eval #2 three times. "B" is Eval #1's Nebulosity arm at Claude Code's default tool search, which is what its README reported. U, with every tool loaded up front, is in Eval #1's own tables. Eval #1's time is recomputed here as `duration_ms`, so it differs slightly from its own tables, which used the process clock.
+
+| Question | Eval #1: A | Eval #1: B | Eval #2: A | Eval #2: N | Eval #1: B's runs with a call | Eval #2: N's runs with a call |
+|---|---|---|---|---|---|---|
+| BP1 | 0.91 | 0.91 | 0.90 | 0.85 | 0 of 2 | 3 of 3 |
+| BP2 | 1.00 | 0.79 | 1.00 | 0.75 | 0 of 2 | 3 of 3 |
+| BP3 | 0.95 | 0.95 | 0.93 | 0.87 | 0 of 2 | 0 of 3 |
+| BP4 | 0.94 | 0.66 | 0.92 | 0.92 | 0 of 2 | 3 of 3 |
+| BP5 | 0.75 | 0.79 | 0.89 | 0.83 | 0 of 2 | 3 of 3 |
+| CL1 | 1.00 | 0.80 | 0.97 | 1.00 | 0 of 2 | 3 of 3 |
+| CL2 | 0.93 | 0.93 | 0.89 | 0.95 | 0 of 2 | 1 of 3 |
+| CL3 | 1.00 | 1.00 | 1.00 | 1.00 | 0 of 2 | 0 of 3 |
+| CL4 | 0.93 | 0.95 | 0.92 | 1.00 | 2 of 2 | 3 of 3 |
+| CL5 | 1.00 | 1.00 | 0.98 | 0.99 | 0 of 2 | 2 of 3 |
+| CN1–CN5 | 1.00 each | 1.00 each | 1.00 each | 1.00 each | 10 of 10 | 15 of 15 |
+
+| Family | Eval #1: score A / B | Eval #2: score A / N | Eval #1: median cost A / B | Eval #2: median cost A / N | Eval #1: median time A / B | Eval #2: median time A / N |
+|---|---|---|---|---|---|---|
+| Big-picture | 0.909 / 0.819 (−0.090) | 0.927 / 0.844 (−0.083) | $0.021 / $0.022 | $0.033 / $0.031 | 12.0 / 11.1 s | 13.9 / 11.5 s |
+| Lists | 0.972 / 0.935 (−0.037) | 0.953 / 0.988 (+0.035) | $0.082 / $0.067 | $0.078 / $0.067 | 23.5 / 22.7 s | 28.2 / 21.6 s |
+| Chains | 1.000 / 1.000 | 1.000 / 1.000 | $0.065 / $0.020 (0.31) | $0.033 / $0.020 (0.61) | 22.0 / 6.5 s (0.30) | 19.4 / 5.3 s (0.27) |
+
+**What changed between them:**
+- *Nebulosity (V1.6).* Imports resolve through module ids, workspace packages and computed `import()` sites (ADR-053, with the two gaps fixed before the freeze). `describe` and `overview` name the docs about a place (ADR-054). There are six tools, five of them always loaded, with `imports` and `architecture` in place of `dependents`, `dependencies` and `path` (ADR-055, ADR-056).
+- *The eval.* Scripts are allowed in both arms, there are three repeats, and Claude Code moved from 2.1.299 to 2.1.300.
+
+**What that did:**
+- *Lists turned from a loss into a small gain* (−0.04 to +0.04). With the tool, CL1 and CL4 came out complete: CL4's computed loaders and CL2's and CL5's module-id fixtures are now in the index.
+- *Big-picture stayed a loss* (−0.09 to −0.08), with its cause moved:
+  - BP4's gap closed, because `describe` now names the instructions file and N opened it.
+  - BP2's gap stayed (−0.21 to −0.25). In Eval #1, B answered BP2 from memory without a tool. In Eval #2, N answered from `architecture`'s counts. Neither read the instructions file.
+- *Chains stayed at 1.00 in both arms.* N's time stayed about 0.3 of A's. Its cost ratio rose from 0.31 to 0.61, because Claude Code alone now scripts its search: A's median cost fell from $0.065 to $0.033, while N's stayed at $0.020.
+
+Eval #1 named this caveat ("A user who lets Claude Code run scripts may see A answer these more cheaply"). Eval #2 measured it.
+
+### Usage
+
+- **The windows.** The 5-hour window went from 0.18 at the first run to 0.71 at the last. The 7-day window went from 0.31 to 0.37. Both are two-decimal readings from the runs' `rate_limit_event`s, all within one 5-hour window (no reading fell between runs). The session that ran the eval, and its graders, used the same windows meanwhile. So the eval's share is at most 0.53 of a 5-hour window and 0.06 of a week. Neither stop (0.9 and 0.85) came close.
+- **The cost estimate.** Claude Code's list-price estimate for the 270 runs is $22.26:
+  - single runs: A $9.74, N $5.73;
+  - sessions: A $4.79, N $1.99.
+
+  The pilot's 20 runs were $2.45 of it. The plan expected $20–40. The median single run was $0.049. The costliest single run was AFFINE-CL4's first A run, at $0.389, and the costliest session was affine-s1's first A run, at $0.760.
+- **Time and tokens.**
+  - The single runs' `duration_ms` add up to 57.8 minutes for A and 28.5 for N; the sessions' to 28.9 and 7.9.
+  - The single runs' tokens add up to 16.71 million for A and 10.06 million for N, nearly all cache reads.
+
+### What the runs showed about the method
+
+- **One session was run twice, for the controller's own mistake.**
+  - While the session batch ran, the controller wrote the 54 blind grading sheets into the checkout (`eval2/grading/sheets/`). The runner's checkout check then stopped the batch after its first run, `vscode-s2-nebulosity-1`.
+  - That attempt was complete and valid: four messages, each ending in `success`. It was refused only because the checkout had changed. Its raw transcript is kept at `.nebulosity/eval2/raw/vscode-s2-nebulosity-1.20261015T102335.jsonl`.
+  - The runner re-ran the session as attempt 2, its rule for a run not kept, and the gate uses that run, as it does every kept run.
+  - Attempt 1, scored the same way from its raw transcript (`npm run eval:score -- --eval eval2 --runs <a folder holding only it> --out <a scratch file>`): **1.00** (1.00 on each message), $0.153, 23.4 s, 5 Nebulosity calls. Attempt 2, kept: **1.00** (1.00 on each message), $0.070, 26.1 s, 5 Nebulosity calls.
+  - With attempt 1 in its place, condition 4 on VS Code would read cost 0.514 and time 0.344, and pass either way.
+- **Grading.**
+  - 390 big-picture points were graded twice, blind. The graders agreed exactly on 326 (84%; Eval #1: 174 of 198, 88%).
+  - Of the 64 disagreements, 51 were on AFFiNE (BP1 15, BP2 20, BP3 6, BP4 10) and 13 on VS Code (BP1 6, BP3 1, BP4 4, BP5 2).
+  - The owner was away and had delegated the stops ("just do everything … if u MUST decide, jot it down"). For each disagreement, a third, arms-hidden adjudicator (an Opus model) read the full answer and suggested a score with a reason. The controller adopted every suggestion: 32 kept grader 1's score and 32 changed it (14 changes on A's answers, 18 on N's).
+  - The rulings and their reasons are in `eval2/grading/review.json`, marked as the controller's. The owner can overturn any of them and re-run `npm run eval:grading -- --eval eval2 merge` and the scorer.
+- **The graders could tell many N answers apart.**
+  - 3 of the 54 big-picture answers name Nebulosity: VSCODE-BP1 N r1 and r2, and VSCODE-BP4 N r2. They were not redacted. Eval #1 had none.
+  - Beyond those, 13 of the 27 N answers say their facts came from "the import graph" or "the index", against 2 of the 27 A answers (VSCODE-BP5 r1 and r3, which use "import graph" as a concept).
+  - So the grading was blind to the run, but not always to the arm.
+- **Refused shell commands.** Under `dontAsk`, Claude Code refuses a Bash command it can't match to the allowlist: one that starts with `cd` or `mkdir` (`cd <repo> && …`, `mkdir -p … && cat > s.js <<EOF`), or that chains or pipes into a command outside the list.
+  - *How many:* 131 calls were refused in all. A had 72 in 63 of its 117 single runs and 40 in its sessions. N had 19 in 18 single runs and none in its sessions. 98 of the 131 began with `cd`, and 18 with `mkdir`.
+  - *Most runs recovered:* they used Grep or Glob instead, or wrote the script with Write and ran it with `node`, which the rules allow.
+  - *What they cost in time:* turns that ended in a refused call took about 5% of A's single-run time and 2% of N's (from the previous event's timestamp to the refused call's). Without them, VS Code's condition 3a time ratio stays 0.42, AFFiNE's moves from 0.24 to 0.29, and the sessions' time ratios from 0.35 to 0.36 (VS Code) and stay 0.23 (AFFiNE). The speed results don't rest on the refusals.
+- **Four A answers gave up after a refusal.** VSCODE-ENTRIES r1, AFFINE-IMPACT r2, and the first message of affine-s1 r1 and r2 all failed the same way. The first was seen in the pilot.
+  - *What happened:* the first compound command was refused, and the model concluded that Bash or node was blocked. It asked the user to allow it ("To finish, I need one of these: 1. Allow Bash for `node` runs in the scratch directory") instead of answering. Writing a script with Write and running `node <file>` was allowed, and the same sessions used it for their later messages.
+  - *Their scores:* each scored 0. They are A's only zero scores on grep-hard questions and in sessions.
+  - *What they change:* with each replaced by its question's other runs' mean, condition 1's margin would be +0.034 (still a fail), and A's session means would rise. No N answer gave up.
+- **`architecture`'s conventions report lists only folder names found in 26 or more folders** (Task 7's ruling).
+  - On VSCODE-PAIRS it left out `electron-utility` and `worker`, so N scripted (r1) or grepped (r2, r3) for the rest, at 1.73 times A's time and 1.92 times its cost.
+  - On VSCODE-BP2 it cost the `electron-utility` point.
+  - This was known from the pilot and recorded under R1. Nothing changed after the freeze.
+- **The two index gaps fixed before the freeze, at the owner's call** (2026-10-14, "Fix before the freeze"), were found through this eval's answer key.
+  - *Which questions they touch:* VSCODE-IMPACT and the impact messages of vscode-s3 and affine-s1. N scored 1.00 on each.
+  - *Before the fix*, the index's counts were 4,501 against 4,503; 56 against 59 (`agentHost` 51 against 54); and 1,446 against 1,546 (`tests` 12 against 112).
+  - *What an answer with those counts would have scored:* about 1.00, 0.97 and 0.86 on those three. The two sessions would have scored about 0.99 and 0.97 instead of 1.00. Condition 4 would still pass, and no other condition uses those runs.
+- **A partial machine path reached one committed transcript.** In `vscode-pairs-baseline-3`, a model's own script printed paths cut short at the front, which the runner's full-path scrubber and leak check missed. It was scrubbed in `2bb5dc1` after the data commit, and the scores are unchanged. The cut-off path stays in `4538032`'s history while the repo is private. That is for the owner to settle before any public switch.
+- **Wall time is `duration_ms`.** It leaves out start-up, N's MCP server included (about 0.7 s), which leans slightly toward N on conditions 3a and 4.
+
+### What this says about the claim
+
+The claim Eval #2 tests is ADR-051's: Nebulosity shows clearly better results and efficiency than in Eval #1, as D1 defines them. **It doesn't.** The gate failed on four of its seven conditions.
+
+What it does show, in plain sentences:
+- **Nebulosity makes Claude Code faster and cheaper at getting the context a dependency question needs, without losing accuracy.**
+  - On the 69 graph runs of both repos, with Nebulosity Claude Code answered in a median 8.4 s against 28.1 s (0.30), at $0.031 against $0.066 (0.47), reading 0.40 of the tokens, in 2 turns against 6. It scored 1.00 against 0.94.
+  - In the task sessions it answered in 0.29 of the time and 0.39 of the cost, scoring 1.00 against 0.94.
+  - That held on both repos, the one the model knows well (VS Code) and the one it knows less (AFFiNE).
+- **The accuracy gain is small where it was supposed to be large.**
+  - Claude Code alone, allowed to write Node.js scripts, built its own import walkers and scored 0.91 on the grep-hard questions. Nebulosity's 0.999 is +0.088, under the +0.15 the gate asked.
+  - Part of that gap comes from four answers that gave up after a refused command, an artifact of this eval's permission rules, not of Claude Code alone.
+- **Nebulosity didn't help on big-picture questions, on either repo.**
+  - VS Code: 0.84 against 0.93, the same loss as in Eval #1. AFFiNE: 0.68 against 0.70.
+  - On VS Code, the transcripts show the tools' answers taking the place of the repo's own written rules. Two runs saw the docs pointer and didn't follow it.
+  - Its summaries, `overview` and `describe` raised no big-picture score.
+- **On VS Code's direct lists, the tools added little:** +0.025 in score (0.985 against 0.960), the same cost and 0.81 of the time. In 6 of those 12 runs, Claude Code with Nebulosity wrote its own scanner instead.
+- **It was slower or costlier on VSCODE-PAIRS, VSCODE-UNUSED and VSCODE-VIOLATIONS, and costlier on AFFiNE's big-picture questions and AFFINE-PAIRS** (see "The losses").
+- **ADR-024's test, a second time.** ADR-024 says the value proposition needs rethinking if the tools don't improve Claude Code's answers on VS Code. On VS Code, in this eval:
+  - big-picture answers were worse (−0.08);
+  - lists were better by +0.035 and grep-hard answers by +0.097;
+  - chains were level.
+
+  The improvement is real on the graph questions but smaller than the gate asked, and the big-picture answers got worse. So ADR-024's revisit condition holds a second time.
+- **What this eval doesn't show.**
+  - It covers two repos, one model at one effort, and three runs per question.
+  - The alone arm's scripts and the refused-command artifact both move its scores, in opposite directions.
+  - It measured the MCP tools, not the Map, which is for people and has no Claude Code equivalent.
+
+### After a FAIL: the options
+
+ADR-051's hold stays until the owner decides. Nothing is deployed, published or made public. These are the options the plan names. They are laid out here, not chosen.
+
+1. **A V1.7 aimed at the failed conditions**, then a new eval with its gate fixed before its first run.
+   - *Condition 2 (VS Code big-picture).* Make `architecture` carry the "Docs about it" line that `describe` carries. Have the server's instructions say to read those docs before answering a question about how code is organized. Lower or drop the conventions threshold, which hid `electron-utility`. These came out of Eval #2's own questions, so the next eval needs questions they weren't tuned on.
+   - *Condition 1 (+0.15 on grep-hard).* Against an alone arm that scripts to 0.91, no tool can reach +0.15 on these questions: the most possible was +0.088. Meeting it would take harder questions or a different bar. Either one is a new gate, set before the next run, not a change to this one.
+   - *Condition 3a (VS Code cost 0.57).* N's cost floor is about $0.02 a run: two turns over a prompt of about 23,500 tokens. A's scripted search costs about $0.03, so N can get under half only with fewer turns or a smaller prompt.
+   - *Condition 5a (80 of 90).* The ten runs wrote their own scanners. The tools' descriptions could say to prefer `imports` to a script. Whether the eval's scripts sentence should stay is a method question for the next gate.
+   - *E2 (the call graph through injected services)* is the plan's V1.7 candidate "if calls through injected services were the gap". They weren't. No question asked about calls, and none of the four failed conditions came from a missing call edge. Typecheck Benchmark #1 adds its own cost: 5.1 GB of memory, and a unique implementer settles only about 6% of sampled calls.
+2. **Repositioning: ADR-024's question.** What two evals measured is a speed and cost layer for dependency questions, not better answers in general. The pitch could be exactly that ("the import walk in one call"). It could also lean on the Map, which is for people and which no eval measured.
+3. **Ship as a measured tool, with the losses stated.** The README already states what Eval #2 measured, wins and losses in one paragraph. Going public on those numbers means the owner amends ADR-051's bar ("clearly better results and efficiency"), which Eval #2 did not meet.
+
+### Raw data
+
+- `eval2/runs/`: the 270 scrubbed transcripts (`<question or session>-<arm>-<repeat>.jsonl.gz`) and `index.jsonl`, one summary line per run. A session's line holds each message's cost, time, turns and tool calls.
+- `eval2/results.json`: every run's and session's score, the files its answer named, its misses and extras, tokens, cost estimate, time and tool calls. `npm run eval:score -- --eval eval2` writes it and prints the per-run, per-question, per-family, per-repo and kind, session and gate tables.
+- `eval2/grading/`:
+  - grader 1's replies, and the second grader's in `second/`;
+  - the 64 rulings in `review.json`, and the merged grades in `grades.json`;
+  - the blind sheets in `sheets/`, and the key from sheet to run in `key.json`.
+- `eval2/questions.json`, `eval2/sessions.json`, `eval2/truth/` (with `adjudicated.json` and `steps.json`) and `eval2/rubric/`: the questions, truths and rubrics the scores rest on.
+- **What isn't in `results.json`.** "How fast Claude gets the relevant context" splits tool calls into Nebulosity calls, file reads and searches, and script steps, and "What the runs showed about the method" counts refusals and the time of the turns they ended. Both were counted from the kept transcripts by read-only scripts in the working notes, by the rules stated there, so anyone can count them again from `eval2/runs/`.
 
 # 2026 10 14 Eval #1 — Claude Code with and without Nebulosity on VS Code
 

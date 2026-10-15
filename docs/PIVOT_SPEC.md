@@ -43,7 +43,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 
 **Non-goals.** Editing code. Replacing Claude Code. Multi-user, SaaS or paid tiers (CLAUDE.md's non-goals stand). Non-TS/JS languages before E4. The native C++ scanner (dropped, ADR-025).
 
-**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names:
+**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names, S12 on VS Code and AFFiNE:
 
 | # | Criterion | Threshold |
 |---|---|---|
@@ -58,6 +58,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux *(V1.6: CI on Windows, macOS and Linux installs the package, indexes two fixtures, answers through MCP and serves the Map: run 38701608458)* |
 | S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo *(V1.6: met on express, vite, excalidraw, AFFiNE and VS Code; each indexes without a crash and resolves 99% or more of its relative imports of code, with imports of style sheets, images and other files the index doesn't read counted apart: Variety Benchmark #1)* |
 | S11 | Free mode (V1.6): no API key | the Map, structure and stats, `imports`/`architecture`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed *(V1.6: met; the estimate and the yes, ADR-035 and ADR-038 amended, the Map's on-open summary included since the pre-freeze sweep; the Map checked with no key)* |
+| S12 | Eval #2 passes the ship gate (ADR-057) | all seven of D1's conditions hold *(V1.6: **failed**, 2026-10-15: conditions 1, 2, 3a and 5a failed; 3b, 4 and 5b passed. docs/EVAL_RESULTS.md, Eval #2)* |
 
 ---
 
@@ -328,6 +329,8 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - **Output:** `docs/EVAL_RESULTS.md` plus a README table; raw transcripts in `eval/runs/`. **Losses are reported, not hidden.**
 
 *(Run as ADR-050 says: 90 runs in three arms, Sonnet 5.5 at medium effort, Claude Code 2.1.299.)*
+
+*(Eval #2, V1.6, ADR-057: 270 runs on VS Code and AFFiNE in two arms, three repeats each, Claude Code 2.1.300, scripts allowed in both arms. With Nebulosity, Claude Code was faster and cheaper on the questions that walk the import graph and in task sessions, at an equal or higher score. It was lower on VS Code's big-picture questions. The ship gate failed on conditions 1, 2, 3a and 5a (S12). docs/EVAL_RESULTS.md.)*
 
 ---
 

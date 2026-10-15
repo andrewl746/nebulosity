@@ -201,6 +201,8 @@
 **Consequences:** Phases 6 and S are superseded. Phase 5's orchestration design survives as extra E1 (the Guide). Most `lib/` implementation files are rewritten (`PIVOT_SPEC.md` §3), while the layering, the contracts discipline, the SQLite store, the incremental-indexing pattern and UI-actions-as-tools carry over. An evaluation against Claude Code alone is part of v1's definition of done.
 **Revisit when:** the eval shows Nebulosity's tools don't improve Claude Code's answers on VS Code. At that point the value proposition itself, not just the tuning, needs rethinking.
 
+**Amended (2026-10-15, Eval #2):** two evals now say the same thing about the value proposition: Nebulosity's tools make Claude Code faster and cheaper on the questions that walk the import graph, at the same or a higher score, but they don't make its answers clearly better, and on VS Code's big-picture questions they made them worse both times (−0.09 in Eval #1, −0.08 in Eval #2), so this ADR's revisit condition holds a second time (docs/EVAL_RESULTS.md).
+
 ## ADR-025 — Drop the native C++ scanner (2026-10-11) — supersedes ADR-014 and ADR-015
 
 **Context:** ADR-014 justified the C++ scanner only as a benchmarked accelerator, and ADR-015 deferred it to last. v1 parses with the TypeScript Compiler API (all of VS Code in 22.3 s, single-threaded), so there's no measured bottleneck for a native scanner to remove. The regex extractor it was meant to port is being retired anyway (ADR-026).
@@ -634,6 +636,20 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
 **Amended (2026-10-14, V1.6): E2's measurement.** Type-checking VS Code's `src/tsconfig.json` project took 18.2 s and 5,067 MB at peak, and resolving a call took 4.74 ms (BENCHMARKS.md, Typecheck Benchmark #1). 38% of the sampled method calls resolved to an interface method, the injected-service case, and 15% of those have exactly one implementing class. The decision to build E2 waits for Eval #2's results (V1.6's plan, Task 24).
 
+**Amended (2026-10-15, Eval #2): E2's case, and the order after V1.6, for the owner to decide.**
+- **E2's case.** Typecheck Benchmark #1 measured what it would cost: 18.2 s and 5.1 GB of memory to type-check VS Code's main project, and up to about 62 minutes to resolve every method call. A unique implementer settles only about 6% of the sampled calls; the rest of the injected-service calls need the type checker's own answer or stay unresolved. Eval #2 adds no case for E2. No question asked about calls, and none of its four failed conditions came from a missing call edge:
+  - condition 1: Claude Code alone, writing its own import walkers, scored 0.91 on the grep-hard questions, which left at most +0.088 to gain;
+  - condition 2: VS Code's big-picture answers took the tools' answers over the repo's own docs;
+  - condition 3a: N's cost floor is about $0.02 a run (two turns over a prompt of about 23,500 tokens), against Claude Code alone's scripts at about $0.03;
+  - condition 5a: ten VS Code runs wrote a script instead of calling a tool.
+- **This ADR's own revisit condition** ("the eval shows Nebulosity doesn't help Claude Code on big repos") is met in part. It helps in speed and cost on the questions that walk the import graph and in task sessions, on both repos. It doesn't help the answers to big-picture questions.
+- **The order after V1.6 waits on the owner's call on Eval #2** (docs/EVAL_RESULTS.md, "After a FAIL: the options"):
+  - (a) a V1.7 aimed at the failed conditions, with a new eval and gate, then E4 → E5 → E1;
+  - (b) repositioning first, ADR-024's question;
+  - (c) shipping as a measured tool with the losses stated, which amends ADR-051's bar, then E4 → E5 → E1.
+
+  E2 stays parked in each, unless the owner wants it for its own sake.
+
 ## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
 
 **Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
@@ -793,6 +809,8 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 **Amended (2026-10-14, after Eval #1):** going public waits. The owner's decision: the repo stays private and the demo undeployed until Nebulosity shows better measured results and efficiency than Eval #1 did (its tools didn't raise accuracy, and at Claude Code's default tool search they were loaded in 12 of 30 runs). V1.5 merges to `main` as usual; the deploy, the public switch and the video follow a re-measured eval in V1.6. Everything this ADR prepared (the license, the leak scanner, the reviewed docs) stays in place for then.
 
 **Amended (2026-10-14, V1.6):** the re-measured eval this waits for is Eval #2 (ADR-057). Its ship gate, fixed before the first run, decides whether going public (S8) starts.
+
+**Amended (2026-10-15, Eval #2): the hold stays.** Eval #2 failed conditions 1, 2, 3a and 5a of the gate (ADR-057).
 
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
@@ -1008,6 +1026,8 @@ They need the whole graph, and the index already holds it.
 - **A grading-time "out" on an edge an approved truth rests on** (by `restingEdges`) is printed under "Truths to recheck" with the truths' ids; the truth stays as approved until the owner rules.
 - **A byte-order mark** is dropped from `pnpm-workspace.yaml` as it was from `package.json`, and the source writes it as an escape. Neither repo's workspace files has one, so no truth moves.
 - `npm run eval:grading` with `--eval` and no value stops with its usage line.
+
+**Amended (2026-10-15, the runs):** 270 runs kept, 234 single and 36 task sessions, on Claude Code 2.1.300 and `claude-sonnet-5-5`, with no outage and no run refused by the checks. One session (`vscode-s2-nebulosity-1`) was run twice, after the controller's own change to the checkout stopped its batch; both attempts scored 1.00, and the results report both. The 5-hour window went from 0.18 to 0.71 and the 7-day window from 0.31 to 0.37 (upper bounds: the controller's session shared them). Claude Code's cost estimate for the 270 was $22.26. The two graders disagreed on 64 of 390 points; an arms-hidden adjudicator ruled on each under the owner's overnight delegation (`eval2/grading/review.json`). The gate failed: conditions 1, 2, 3a and 5a. Conditions 3b, 4 and 5b passed (docs/EVAL_RESULTS.md, Eval #2).
 
 ## ADR-058 — Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (2026-10-15) — implements ADR-043's V1.6; amends ADR-048
 
