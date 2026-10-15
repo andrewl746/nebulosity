@@ -293,3 +293,40 @@ describe("what re-resolves every file, and the workspace on every update (ADR-05
         expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
     });
 });
+
+describe("the workspace kept between updates (ADR-053, amended)", () => {
+    const FILE = "src/platform/node/storageFile.ts";
+
+    it("reuses the workspace it is given when nothing re-resolves", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        fs.appendFileSync(path.join(root, FILE), "// one\n");
+        const first = applyFileChanges(root, [FILE]);
+        fs.appendFileSync(path.join(root, FILE), "// two\n");
+        const second = applyFileChanges(root, [FILE], { workspace: first.workspace });
+
+        expect(second.changed).toEqual([FILE]);
+        expect(second.workspace).toBe(first.workspace);
+        expect(tables(repoId).imports).toContain(`${FILE} -> packages/core/src/index.ts (@arch/core)`);
+    });
+
+    it("reads the workspace again when a package.json changes", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        indexRepository(root);
+        fs.appendFileSync(path.join(root, FILE), "// one\n");
+        const first = applyFileChanges(root, [FILE]);
+        const second = applyFileChanges(root, ["packages/core/package.json"], { workspace: first.workspace });
+        expect(second.resolvedAll).toBe(true);
+        expect(second.workspace).not.toBe(first.workspace);
+    });
+
+    it("reads it again when the file set changes", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        indexRepository(root);
+        fs.appendFileSync(path.join(root, FILE), "// one\n");
+        const first = applyFileChanges(root, [FILE]);
+        write(root, "src/base/common/extra.ts", "export const extra = 1;\n");
+        const second = applyFileChanges(root, ["src/base/common/extra.ts"], { workspace: first.workspace });
+        expect(second.workspace).not.toBe(first.workspace);
+    });
+});

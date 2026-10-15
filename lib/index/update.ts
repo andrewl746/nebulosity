@@ -19,7 +19,7 @@ import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript";
 import { normalizeSlashes, repoKey } from "./paths";
 import { toFileRecord } from "./pipeline";
 import { createResolver, createSourceFinder, edgesFrom } from "./resolve";
-import { declaredEntries, readWorkspace } from "./workspace";
+import { declaredEntries, readWorkspace, type Workspace } from "./workspace";
 
 export type FileChangeResult = {
     repoId: number;
@@ -37,6 +37,8 @@ export type FileChangeResult = {
     totalMs: number;
     /** The repo's index version afterwards: it moves only when something changed. */
     indexVersion: number;
+    /** The workspace the imports were resolved with: pass it back next time and it is reused unless a resolution input or the file set changed (ADR-053, amended). */
+    workspace: Workspace;
 };
 
 /**
@@ -62,7 +64,7 @@ export function resolvesEverything(changedPath: string): boolean {
  */
 export function applyFileChanges(
     repoRoot: string, changedPaths: readonly string[],
-    options: { maxFileBytes?: number; parseMaxFileBytes?: number; hardMaxFileBytes?: number } = {}
+    options: { maxFileBytes?: number; parseMaxFileBytes?: number; hardMaxFileBytes?: number; workspace?: Workspace } = {}
 ): FileChangeResult {
     const started = performance.now();
     const root = path.resolve(repoRoot);
@@ -132,10 +134,10 @@ export function applyFileChanges(
         const resolvedAll = fileSetChanged || paths.some(resolvesEverything);
         const current = loadStoredFiles(db, repoId);
         const fileSet = new Set(current.keys());
-        // read on every update, not only when everything re-resolves: an edited file's workspace, module-id and
-        // computed edges need it as much as a full run's do. It costs about 0.28 s an update on VS Code, most of it one
-        // git ls-files (ADR-053); a repo without git is walked whole instead, every update.
-        const workspace = readWorkspace(root, listManifests(root));
+        // ADR-053, amended (V1.7): the worker keeps the workspace it read and passes it back. It is read again only when
+        // what it is made of can have changed: a resolution input, or the file set (a folder with a package.json deleted).
+        // Read afresh it costs about 0.28 s on VS Code, most of it one git ls-files; a repo without git is walked whole.
+        const workspace = options.workspace !== undefined && !resolvedAll ? options.workspace : readWorkspace(root, listManifests(root));
         const resolve = createResolver(root, fileSet, { workspace });
 
         // the imports as they are now against as they were: every file's when the file set or a resolution input changed,
@@ -175,6 +177,7 @@ export function applyFileChanges(
             edgesRemoved: removed.length + cascaded.length,
             totalMs: performance.now() - started,
             indexVersion: anything ? bumpIndexVersion(db, repoId) : readIndexVersion(db, repoId),
+            workspace,
         };
     } finally{
         releaseIndexLock(db);
