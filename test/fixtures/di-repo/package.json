@@ -1,0 +1,5 @@
+{
+  "name": "di-repo",
+  "private": true,
+  "workspaces": ["packages/*"]
+}
