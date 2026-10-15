@@ -37,6 +37,8 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
     "build": "next build",
+    "build:package": "next build && node scripts/prepare-package.mjs",
+    "prepack": "node scripts/prepare-package.mjs --check",
     "start": "next start -H 127.0.0.1",
     "lint": "eslint",
     "test": "vitest run",

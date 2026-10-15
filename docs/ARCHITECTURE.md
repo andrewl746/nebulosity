@@ -119,7 +119,7 @@ nebulosity/
 ├── bin/                     # nebulosity.mjs, the one command (ADR-058); boot.mjs, what both launchers do first
 ├── mcp/                     # launch.mjs and server.ts: the MCP server over stdio (ADR-048)
 ├── scripts/                 # cli.ts and commands/ (the nebulosity command), index, summarize, search, live,
-│                            #   background (the worker), mcp-smoke, bench-map, bench-update,
+│                            #   background (the worker), mcp-smoke and prepare-package (the package), bench-map, bench-update,
 │                            #   export-demo, build-demo, serve-demo (the static demo), …
 ├── test/                    # fixtures/mini-repo, helpers
 └── docs/
