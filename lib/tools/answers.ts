@@ -139,6 +139,11 @@ export function reachAnswer(a: ReachAnswer, page: ReachPage, after: readonly str
 
     // reached is nearest first, so the direct files lead it
     const listed = page.transitive ? a.reached : a.reached.slice(0, a.direct);
+    if (!page.transitive && a.direct === 0){
+        // a within list can hold no direct file (the rest reach it through others): the offset message would call it empty
+        body.push(a.direction === "dependents" ? "None of them imports it directly; list them with transitive." : "It imports none of them directly; list them with transitive.");
+        return { body };
+    }
     if (page.offset >= listed.length){
         body.push(`Nothing at offset ${page.offset}: the list has ${formatCount(listed.length)}.`);
         return { body };

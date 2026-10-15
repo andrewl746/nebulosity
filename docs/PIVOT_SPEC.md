@@ -57,7 +57,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S8 | Public repo, README, video, live demo link | done |
 | S9 | Install (V1.6): from a machine with only Node, one command indexes a repo, one opens the Map, one connects Claude Code | works on Windows, macOS and Linux |
 | S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo |
-| S11 | Free mode (V1.6): no API key | the Map, structure and stats, `dependents`/`dependencies`/`path`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed |
+| S11 | Free mode (V1.6): no API key | the Map, structure and stats, `imports`/`architecture`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed |
 
 ---
 
@@ -232,17 +232,16 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 ### 6.2 Registry
 Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zod input schema, handler }`. Descriptions are written for an LLM: when to use the tool and what it returns. Adapters wrap the entries: MCP registers them in v1, and LangGraph wraps the same entries in E1. Output is compact plain text with repo-relative paths, exact totals, truncation markers ("… 4,231 more") and a freshness note last. *(V1.4, ADR-047: a handler returns `{ text, paths, action? }`; the format's rules are API_CONTRACTS.md §17.)*
 
-| v1 tool | Purpose |
+| tool | Purpose |
 |---|---|
 | `overview` | Repo summary plus top areas with tagline and size. The first call on any unfamiliar repo |
 | `describe` | What a folder or file is, what's inside it, what it uses, what uses it |
 | `search` | Find code or concepts by keyword or meaning |
-| `dependents` | Everything that imports X, directly or transitively, with complete counts |
-| `dependencies` | Everything X imports, directly or transitively |
-| `path` | How A reaches B through imports |
+| `imports` | What imports X, or what X imports, directly or transitively, with complete counts; `group_by` counts what a change reaches by area; `within` keeps one folder; `to` gives the shortest chain from X to Y *(V1.6, ADR-056: replaces `dependents`, `dependencies` and `path`)* |
+| `architecture` | A folder's layers, folder conventions, import cycles and files nothing imports, from its imports *(V1.6, ADR-055, ADR-056)* |
 | `show_on_map` | Highlight paths on the open Map. Does nothing if the Map isn't open |
 
-Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
+*(V1.6, ADR-056: six tools. The five that answer questions are always loaded into Claude Code's prompt through `_meta["anthropic/alwaysLoad"]`; `show_on_map` is deferred with a search hint.)* Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
 
 **Safety.** Every tool is read-only. Paths are validated against the repo root (today's `safePath`, generalized). The MCP server listens on nothing (stdio), and the live endpoint accepts only localhost.
 

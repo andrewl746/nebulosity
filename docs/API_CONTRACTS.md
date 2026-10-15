@@ -289,7 +289,7 @@ type SourceResponse = { repo: string; path: string; content: string; lineCount: 
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo, or an empty one; `404 NOT_FOUND` for a folder, a file the index doesn't know, or a file deleted since; `404 INDEX_EMPTY`.
 
-## 17. The MCP tools (slice V1.4)
+## 17. The MCP tools (slice V1.4; six tools since V1.6, ADR-056)
 
 Claude Code and any MCP client reach the engine through `mcp/server.ts` over stdio (PIVOT_SPEC.md §6.2, ADR-030). Each tool is defined once in `lib/tools/registry.ts` (ADR-047). Claude Code shows them as `mcp__nebulosity__<name>`.
 
@@ -302,12 +302,21 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 | `overview` | none | the repo's size and summary, the docs to read first (up to 5), its top-level areas largest first (size and tagline; 30 at most), and the 10 most-imported files |
 | `describe` | `path` | kind, files and lines; the summary; the docs about it (up to 5); what's inside (20 children) or the declarations (30, with lines); uses and used by (10 areas each, with import counts) |
 | `search` | `query` (1–200 characters), `limit` 1–30 (10) | the best files and folders, each with its tagline and best-matching code (cut to 160 characters) |
-| `dependents` | `path`, `transitive` (false), `limit` 1–500 (50), `offset` (0) | the direct and total counts, then the files: nearest first, most imported next, by path last; grouped by distance when transitive |
-| `dependencies` | the same | the same, following what the target imports |
-| `path` | `from`, `to` | the shortest chain of imports with each step's specifier, the other direction when needed, or "no chain" |
+| `imports` | `path`, `direction` (`dependents`: the files that import it; `dependencies`: the files it imports), `transitive` (false), `to`, `group_by`, `within`, `limit` 1–500 (50), `offset` (0) | see the modes below |
+| `architecture` | `path` (""), `report`: summary, layers, conventions, cycles or unused (summary), `through`, `limit` 1–500 (20), `offset` (0) | a folder's organization computed from its imports (ADR-055); see below |
 | `show_on_map` | `action`: highlight, focus or clear (highlight); `paths` (0–50) | what was sent, what was left out, and whether the Map took it |
 
-**Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `dependents`, `dependencies` and `path` refuse it, since the whole repo has no outside.
+**`imports`, by mode.** `to` wins over `group_by`, which wins over the plain list.
+- *The list* (neither `to` nor `group_by`): the direct and total counts, then the files: nearest first, most imported next, by path last; grouped by distance when `transitive`. A transitive list of dependents ends its first page (offset 0) with the tests among them and the files nothing imports that load the target (a package.json's entry points first); later pages are the list's continuation. Pages: a cut list ends `… N more (next page: offset K)`, and a page past the end says how long the list is. `within` keeps only files inside a folder (the first line says which); both directions take it. A `within` that is a file, isn't indexed, or equals or sits inside a folder target is refused with a sentence naming `within`. When `within` leaves no direct file, the direct-only page reads "None of them imports it directly; list them with transitive."
+- *`group_by`* (a folder whose children are the areas, "" the top level, or "auto" for describe's used-by rule): counts everything reached, so always transitive, by area, then the tests and entry points as above. No file list.
+- *`to`* (a file or folder): the shortest chain of imports from `path` to `to`, each step with the import as written, the other direction when needed, or "no chain". Places that overlap, and the whole repo, are refused.
+- The whole repo ("") is refused as `path`: it has no outside.
+
+**`architecture`, by report.** `summary` is the four reports in brief (layers bottom first and the imports against that order; the recurring folder names; the cycle count and the largest; the files nothing imports). `layers`, `conventions`, `cycles` and `unused` give one in full; `cycles` with `through` (or with a file as `path`) gives the shortest import cycle through that file, or says it is in none. Every report fits the 40,000-character limit. Any other report on a file is refused.
+
+**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports` and `architecture` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The five definitions and the instructions together stay under 7,000 characters (a test).
+
+**Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `imports` refuses it, since the whole repo has no outside.
 
 **Answers.**
 - Plain text with no Markdown. Repo-relative paths, folders ending in `/`.
@@ -322,13 +331,13 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 - an index older than the checkout;
 - nothing indexed at a path;
 - a path outside the repo;
-- overlapping places for `path`;
+- overlapping places for `imports` with `to`, and a `within` that cannot match;
 - bad `show_on_map` input;
 - the MCP SDK's "Input validation error" for input outside a schema.
 
-**Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; dependents and dependencies the target; path `from`, `to`, then the chain between; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
+**Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; imports its target, or with `to` the target, `to`, then the chain between; architecture its path; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
 
-**Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 2,048 characters), are `SERVER_INSTRUCTIONS` in the registry.
+**Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 4,096 characters since 2.1.296, 2,048 before), are `SERVER_INSTRUCTIONS` in the registry: when to reach for each tool, under 2,048 characters so older clients keep all of it.
 
 ## 18. The static demo's files (slice V1.5)
 

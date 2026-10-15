@@ -15,7 +15,7 @@ Some questions about a big repo are walks over its import graph. What depends on
 ## What it does
 
 - **The Map**: one folder at a time, at most 50 boxes, lines for imports between them; big folders split into pages of related boxes; a panel with each box's summary, contents, what it uses and what uses it; a read-only source viewer; search with Ctrl K.
-- **Seven MCP tools for Claude Code**: `overview`, `describe`, `search`, `dependents`, `dependencies` (exact over the indexed import graph), `path` (the shortest import chain from one file to another) and `show_on_map` (Claude Code points at things on your Map while it explains).
+- **Six MCP tools for Claude Code**: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports) and `show_on_map`.
 - **Fresh**: while the Map runs, a background worker reflects a saved file in about 1.2 seconds and, with a key, refreshes its summary after a quiet minute.
 
 ## How it compares with Claude Code alone
@@ -52,7 +52,7 @@ You need Node 24 and git. Nebulosity runs locally, and has been tested on Window
 
 1. `git clone https://github.com/andrewl746/Nebulosity && cd Nebulosity && npm install`
 2. Index a repo: `npm run index -- /path/to/your/repo` (VS Code's 14,844 TypeScript and JavaScript files take about a minute).
-3. Optional, summaries: put `ANTHROPIC_API_KEY=…` in `.env.local` in the Nebulosity folder, then `npm run summarize -- /path/to/your/repo`. They cost about $1 per 1,000 files ($10.30 for VS Code), and your code is sent to Anthropic to write them. Spending on a repo's summaries is capped at $15 unless you raise it with `--budget`. Without a key, the structure index needs no API, and the seven MCP tools answer in free mode: where a summary would go they say summaries are off and what a key adds, and search uses code, file and folder names ([ADR-047](docs/ENGINEERING_DECISIONS.md); the tools' tests run on a repo indexed with no key).
+3. Optional, summaries: put `ANTHROPIC_API_KEY=…` in `.env.local` in the Nebulosity folder, then `npm run summarize -- /path/to/your/repo`. They cost about $1 per 1,000 files ($10.30 for VS Code), and your code is sent to Anthropic to write them. Spending on a repo's summaries is capped at $15 unless you raise it with `--budget`. Without a key, the structure index needs no API, and the six MCP tools answer in free mode: where a summary would go they say summaries are off and what a key adds, and search uses code, file and folder names ([ADR-047](docs/ENGINEERING_DECISIONS.md); the tools' tests run on a repo indexed with no key).
 4. Open the Map: `npm run dev`, then http://localhost:3000. (`npm run build`, then `npm start`, is the production build the Map's speeds below were measured on.)
 5. Connect Claude Code. Nebulosity's MCP server gives Claude Code the index: an overview of the repo, what any folder or file is, search, dependency lists that are exact and complete over the repo's indexed import graph, import chains, and pointing at things on the Map. Register the server for that repo: run this in the repo's folder (the one you indexed). Use forward slashes in the path, also on Windows, and quotes if it has spaces:
 
@@ -78,7 +78,7 @@ your repo
 SQLite in WAL mode: files, imports, folders, summaries, full-text search, vectors
    │
    ▼
-engine (lib/): level · describe · search · dependents · dependencies · path
+engine (lib/): level · describe · search · imports · architecture
    │
    ├── stdio ───────► MCP server, read-only on the database ──► Claude Code, any MCP client
    ├── HTTP + SSE ──► the Map (Next.js), whose background worker owns every write
@@ -96,7 +96,7 @@ Measured on VS Code (20,342 files, 14,844 of them indexed): the structure index 
 - [ADR-035](docs/ENGINEERING_DECISIONS.md): a spend cap on summary runs.
 - [ADR-038](docs/ENGINEERING_DECISIONS.md): a background worker that owns every write while the Map is open.
 - [ADR-044](docs/ENGINEERING_DECISIONS.md): an MCP server that reads the database read-only beside a writer.
-- [ADR-045](docs/ENGINEERING_DECISIONS.md): the compressed import index behind `dependents`, `dependencies` and `path`.
+- [ADR-045](docs/ENGINEERING_DECISIONS.md): the compressed import index behind `imports`.
 - [ADR-049](docs/ENGINEERING_DECISIONS.md) and [ADR-050](docs/ENGINEERING_DECISIONS.md): the static demo, and how the eval was kept honest.
 
 ## Status

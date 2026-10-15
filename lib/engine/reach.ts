@@ -171,7 +171,16 @@ export function reach(repoRoot: string, targetPath: string, direction: Direction
         const kind = requireKind(db, repoId, targetPath);
         if (kind === "repo") throw new BadInputError("Pass a folder or a file: the whole repo has nothing outside it.");
         const within = options.within === undefined || options.within === "" ? undefined : options.within;
-        if (within !== undefined && requireKind(db, repoId, within) === "file") throw new BadInputError("within takes a folder.");
+        if (within !== undefined){
+            // the bare PathNotFoundError would read as if the target were missing, so within gets an error of its own
+            const withinKind = kindAt(db, repoId, within);
+            if (withinKind === null) throw new BadInputError(`within "${within}" isn't a folder in the index.`);
+            if (withinKind === "file") throw new BadInputError("within takes a folder.");
+            // a folder's dependents and dependencies lie outside it, so nothing inside it can ever match
+            if (kind === "folder" && (within === targetPath || within.startsWith(`${targetPath}/`))){
+                throw new BadInputError(`within "${within}" is inside ${targetPath}/, and a folder's importers and imports lie outside it: pick a folder elsewhere.`);
+            }
+        }
         const version = readIndexVersion(db, repoId);
         const all = reachFrom(importIndexFor(db, repoId, version), targetPath, kind, direction);
         const reached = within === undefined ? all : all.filter((r) => r.path.startsWith(`${within}/`));

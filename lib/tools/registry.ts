@@ -4,10 +4,12 @@ import type { UIAction } from "../contracts";
 import { describe } from "../engine/describe";
 import { BadInputError } from "../engine/errors";
 import { overview } from "../engine/overview";
-import { importChain, reach, targetKinds, type Direction } from "../engine/reach";
+import { architecture } from "../engine/architecture";
+import { impact } from "../engine/impact";
+import { importChain, reach, targetKinds } from "../engine/reach";
 import { search } from "../engine/search";
 import { plural } from "../index/summarize/prompts";
-import { chainAnswer, describeAnswer, overviewAnswer, reachAnswer, searchAnswer } from "./answers";
+import { architectureAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import type { ToolContext } from "./context";
 import { repoPathFrom } from "./repo";
 import { answerText, shownPath, type AnswerParts } from "./text";
@@ -26,20 +28,23 @@ export type ToolEntry<S extends z.ZodObject = z.ZodObject> = {
     name: string;
     description: string;
     inputSchema: S;
+    /** Loaded into every session's prompt (ADR-056): mcp/server.ts marks it `_meta["anthropic/alwaysLoad"]`. */
+    alwaysLoad: boolean;
+    /** A deferred tool's words for Claude Code's ToolSearch (`_meta["anthropic/searchHint"]`). */
+    searchHint?: string;
     handler(input: z.infer<S>, context: ToolContext): Promise<ToolOutput>;
 };
 
-/** Sent once per session (MCP's `instructions`; Claude Code keeps up to 2,048 characters): when to reach for these tools. */
+/** Sent once per session (MCP's `instructions`; Claude Code keeps 4,096 characters since 2.1.296, 2,048 before). */
 export const SERVER_INSTRUCTIONS = [
-    "Nebulosity has already indexed this repository: its folder tree, the imports between its files (the import graph) and, when summaries are on, a short summary of every file and folder.",
-    "Use these tools before broad Grep/Glob/Read exploration when a question is about structure or connections:",
-    "- overview: first, on an unfamiliar repo (its areas, sizes and most-imported files);",
-    "- describe: what a folder or file is, what's inside, what it uses and what uses it;",
-    "- search: where a feature or concept lives (code, summaries, folder and file names, exported declarations);",
-    "- dependents / dependencies: what imports X or what X imports, directly or through other files; exact and complete over the indexed import graph (imports that resolve to files in the repo), so better than grep for impact questions;",
-    "- path: how one file or folder reaches another through imports;",
-    "- show_on_map: point the user at files or folders on Nebulosity's Map.",
-    'Paths are relative to the repo root ("" is the root), or absolute paths inside it; answers write them from the root. Read source text with your own Read tool.',
+    "Nebulosity has indexed this repository: its folder tree, every import between its files, its docs and which folders they describe, and, when summaries are on, a short summary of every file and folder.",
+    "Call these tools before grep or reading many files when a question is about how the code is organized or connected. They answer from the whole repo, exactly, in one call:",
+    "- imports: what imports a file or folder, or what it imports, directly or through other files; group_by counts what a change would affect, by area; to gives the import chain between two places;",
+    "- architecture: a folder's layers and the imports against them, its folder conventions, import cycles, and files nothing imports;",
+    "- describe: what a folder or file is, what it uses and what uses it, and the docs that describe it;",
+    "- overview: an unfamiliar repo's areas and the docs to read first;",
+    "- search: where a feature or concept lives.",
+    'Read the docs they point to for the repo\'s own rules. Paths are relative to the repo root ("" is the root) or absolute inside it.',
 ].join("\n");
 
 const repoPath = z.string().max(1024)
@@ -58,7 +63,8 @@ const finish = (parts: AnswerParts, context: ToolContext): string =>
 const overviewInput = z.object({});
 const overviewTool: ToolEntry<typeof overviewInput> = {
     name: "overview",
-    description: "Start here on an unfamiliar repository. Returns the repo's size and summary, its top-level areas (largest first) with their sizes and one-line summaries, and the files most other files import, which are good places to start reading. One call per session is usually enough.",
+    alwaysLoad: true,
+    description: "Start here on an unfamiliar repository: its size and summary, its top-level areas, the docs to read first (its own guides and rules), and the files most others import.",
     inputSchema: overviewInput,
     async handler(_input, context){
         return { text: finish(overviewAnswer(overview(context.repoRoot, { summariesOff: context.summariesOff })), context), paths: [] };
@@ -68,7 +74,8 @@ const overviewTool: ToolEntry<typeof overviewInput> = {
 const describeInput = z.object({ path: repoPath });
 const describeTool: ToolEntry<typeof describeInput> = {
     name: "describe",
-    description: "What a folder or file is: its summary, size, what's inside (subfolders and files, or a file's declarations with their line numbers), and which areas it imports from and is imported by, with exact counts. Use it to get oriented in an area before reading its files.",
+    alwaysLoad: true,
+    description: "What a folder or file is: its summary, size, what's inside (or a file's declarations), the areas it imports from and is imported by with exact counts, and the docs that describe it. Read those docs for the area's rules.",
     inputSchema: describeInput,
     async handler({ path: raw }, context){
         const target = repoPathOf(raw, context);
@@ -83,7 +90,8 @@ const searchInput = z.object({
 });
 const searchTool: ToolEntry<typeof searchInput> = {
     name: "search",
-    description: "Find where a feature or concept lives, by keywords or meaning. Searches code (identifiers and text), the summaries of every file and folder, folder and file names, and exported declaration names, and returns the best-matching files and folders, each with its one-line summary and its best-matching code. Use it for \"where is X handled?\"; use Grep for an exact string.",
+    alwaysLoad: true,
+    description: "Find where a feature or concept lives, by keywords or meaning, across code, summaries, file and folder names, and declarations: the best files and folders with their best-matching code. Use Grep for an exact string.",
     inputSchema: searchInput,
     async handler({ query, limit }, context){
         const result = await search(context.repoRoot, query, { limit, summariesOff: context.summariesOff });
@@ -91,33 +99,61 @@ const searchTool: ToolEntry<typeof searchInput> = {
     },
 };
 
-const reachInput = z.object({
+const importsInput = z.object({
     path: repoPath,
-    transitive: z.boolean().default(false).describe("Also list files reached through other files, not only direct imports."),
-    limit: z.number().int().min(1).max(500).default(50).describe("How many files to list, 1 to 500. The totals always count everything."),
-    offset: z.number().int().min(0).default(0).describe("Where to start listing: the next page of a long answer."),
+    direction: z.enum(["dependents", "dependencies"]).default("dependents").describe("dependents: the files that import it; dependencies: the files it imports."),
+    transitive: z.boolean().default(false).describe("Also count files reached through other files."),
+    to: repoPath.optional().describe("Instead: the shortest chain of imports between path and this file or folder, either way."),
+    group_by: z.string().max(1024).optional().describe('Count everything reached by area instead of listing it: a folder whose children are the areas ("" the top level), or "auto".'),
+    within: z.string().max(1024).optional().describe("Only files inside this folder."),
+    limit: z.number().int().min(1).max(500).default(50).describe("How many files to list, 1 to 500."),
+    offset: z.number().int().min(0).default(0).describe("Where the next page starts."),
 });
-function reachTool(direction: Direction, description: string): ToolEntry<typeof reachInput> {
-    return {
-        name: direction,
-        description,
-        inputSchema: reachInput,
-        async handler({ path: raw, transitive, limit, offset }, context){
-            const target = repoPathOf(raw, context);
-            return { text: finish(reachAnswer(reach(context.repoRoot, target, direction), { transitive, limit, offset }), context), paths: [target] };
-        },
-    };
-}
+const importsTool: ToolEntry<typeof importsInput> = {
+    name: "imports",
+    alwaysLoad: true,
+    description: "Exact answers from the repo's whole import graph, in one call. What imports a file or folder (dependents) or what it imports (dependencies); transitive: true adds files reached through others. group_by counts them by area: what a change would affect, with the tests and the entry points that load it. within keeps only files inside a folder. to gives the shortest import chain between two places. Prefer it to grep for all of these.",
+    inputSchema: importsInput,
+    async handler(input, context){
+        const target = repoPathOf(input.path, context);
+        if (input.to !== undefined){
+            const answer = importChain(context.repoRoot, target, repoPathOf(input.to, context));
+            const middle = answer.files.filter((file) => file !== answer.from && file !== answer.to);
+            return { text: finish(chainAnswer(answer), context), paths: [answer.from, answer.to, ...middle] };
+        }
+        const within = input.within === undefined ? undefined : repoPathOf(input.within, context);
+        const page = { transitive: input.transitive, limit: input.limit, offset: input.offset };
+        if (input.group_by !== undefined){
+            const groupBy = input.group_by === "auto" ? null : repoPathOf(input.group_by, context);
+            // grouping counts everything a change reaches, so it's always transitive
+            return { text: finish(impactAnswer(impact(context.repoRoot, target, input.direction, { groupBy, within })), context), paths: [target] };
+        }
+        if (input.direction === "dependents" && input.transitive){
+            // the tests and the files nothing imports close the first page; later pages are the list's continuation
+            const i = impact(context.repoRoot, target, "dependents", { groupBy: null, within });
+            return { text: finish(reachAnswer(i.reach, page, page.offset === 0 ? rootLines(i.tests, i.roots) : []), context), paths: [target] };
+        }
+        return { text: finish(reachAnswer(reach(context.repoRoot, target, input.direction, { within }), page), context), paths: [target] };
+    },
+};
 
-const pathInput = z.object({ from: repoPath, to: repoPath });
-const pathTool: ToolEntry<typeof pathInput> = {
-    name: "path",
-    description: "How one file or folder reaches another through imports: the shortest chain of files, each step with the import that makes it. Checks both directions and says which way the chain runs, or that none exists. Use it for \"how does A end up depending on B?\".",
-    inputSchema: pathInput,
-    async handler({ from, to }, context){
-        const answer = importChain(context.repoRoot, repoPathOf(from, context), repoPathOf(to, context));
-        const middle = answer.files.filter((file) => file !== answer.from && file !== answer.to);
-        return { text: finish(chainAnswer(answer), context), paths: [answer.from, answer.to, ...middle] };
+const architectureInput = z.object({
+    path: repoPath.default(""),
+    report: z.enum(["summary", "layers", "conventions", "cycles", "unused"]).default("summary")
+        .describe("summary: all four in brief; layers, conventions, cycles or unused: one in full."),
+    through: z.string().max(1024).optional().describe("With cycles: the shortest import cycle through this file."),
+    limit: z.number().int().min(1).max(500).default(20).describe("How many cycles or files to list."),
+    offset: z.number().int().min(0).default(0).describe("Where the next page starts."),
+});
+const architectureTool: ToolEntry<typeof architectureInput> = {
+    name: "architecture",
+    alwaysLoad: true,
+    description: "How code under a folder is organized, computed from its imports: its parts in layers and the imports that go against them (layers); which recurring folder names, like common/browser/node, import which (conventions); import cycles (cycles; through: one file's shortest cycle); files nothing imports (unused). summary gives all four in brief.",
+    inputSchema: architectureInput,
+    async handler({ path: raw, report, through, limit, offset }, context){
+        const target = repoPathOf(raw, context);
+        const answer = architecture(context.repoRoot, target, report, through === undefined ? {} : { through: repoPathOf(through, context) });
+        return { text: finish(architectureAnswer(answer, { limit, offset }), context), paths: [target] };
     },
 };
 
@@ -129,6 +165,8 @@ const showInput = z.object({
 });
 const showOnMapTool: ToolEntry<typeof showInput> = {
     name: "show_on_map",
+    alwaysLoad: false,
+    searchHint: "map highlight focus show point visualize",
     description: "Point the user at files or folders on Nebulosity's Map, the zoomable picture of this repo they may have open in a browser: highlight up to 50 paths, focus one (the Map moves to it and selects it), or clear the highlights. Use it while explaining, so the user sees what you mean. If no Map is open, nothing shows, and the answer says so.",
     inputSchema: showInput,
     async handler({ action, paths: raw }, context){
@@ -157,13 +195,5 @@ const showOnMapTool: ToolEntry<typeof showInput> = {
     },
 };
 
-/** Every v1 tool (PIVOT_SPEC.md §6.2), in the order clients list them. */
-export const TOOLS: readonly ToolEntry[] = [
-    overviewTool,
-    describeTool,
-    searchTool,
-    reachTool("dependents", "The files that import a file or folder: the direct importers, or with transitive: true also every file that reaches it through others. Totals are exact and complete over the indexed import graph (imports that resolve to files in the repo), so prefer it to grep for \"what uses X?\" and \"what breaks if X changes?\". Lists are nearest first, then the most imported; page long ones with offset."),
-    reachTool("dependencies", "The files a file or folder imports: directly, or with transitive: true also what those import in turn. Totals are exact and complete over the indexed import graph (imports that resolve to files in the repo). Packages outside the repo (like react) aren't indexed, so they never appear."),
-    pathTool,
-    showOnMapTool,
-];
+/** Every tool (PIVOT_SPEC.md §6.2, ADR-056), in the order clients list them. */
+export const TOOLS: readonly ToolEntry[] = [overviewTool, describeTool, searchTool, importsTool, architectureTool, showOnMapTool];

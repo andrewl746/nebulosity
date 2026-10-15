@@ -203,6 +203,19 @@ describe("reachAnswer", () => {
         expect(reachAnswer(LOG_DEPENDENTS, { transitive: true, limit: 4, offset: 10 }).body).toEqual([LOG_HEADER, "Nothing at offset 10: the list has 7."]);
     });
 
+    it("a within list with no direct files says so, in place of an offset message (Task 6's review)", () => {
+        const a = {
+            path: "src/base/common/strings.ts", kind: "file" as const, direction: "dependents" as const, direct: 0, indexVersion: 1, within: "src/platform",
+            reached: [{ path: "src/platform/common/storage.ts", distance: 2 }, { path: "src/platform/node/storageFile.ts", distance: 3 }],
+        };
+        expect(reachAnswer(a, { transitive: false, limit: 50, offset: 0 }).body).toEqual([
+            "src/base/common/strings.ts is imported by 0 files directly and 2 files in all, counting files that reach it through others. Only files inside src/platform/ are counted.",
+            "None of them imports it directly; list them with transitive.",
+        ]);
+        // transitive lists them as usual
+        expect(reachAnswer(a, { transitive: true, limit: 50, offset: 0 }).body.slice(1, 3)).toEqual(["Distance 2 (1):", "  src/platform/common/storage.ts"]);
+    });
+
     it("words an empty answer for each direction and kind", () => {
         const none = (direction: "dependents" | "dependencies", kind: "file" | "folder", p: string) =>
             reachAnswer({ path: p, kind, direction, reached: [], direct: 0, indexVersion: 1 }, { transitive: false, limit: 50, offset: 0 }).body;

@@ -517,3 +517,26 @@ Each row covers 10 runs. The score is the mean share of rubric points for big-pi
 **The owner's index.** The first `npm run index -- ../vscode` ran warm (6.0 s) and kept 140,245 edges. Its files were unchanged, so their stored specifiers were kept and the three loaders' computed literals were never read; CL4 found 63 of 66. ADR-053's adapter version fixes that. The next run parsed every file once (70.9 s: discover 1.0, parse 20.0, write 46.9, resolve 2.3, aggregate 0.7; it writes over every existing row) and stored 140,248 edges, as the cold runs did. Summaries stayed ready (18,637/18,637). AFFiNE indexed in 9.8 s (6,986 files, 26,254 edges, 1,982 folders), and the active repo stayed VS Code.
 
 **The incremental update's fixed cost** (`applyFileChanges` on an unchanged VS Code file, six runs in scratch homes): 66–104 ms before, 346–401 ms after. Each update now lists the manifests (`git ls-files`, about 0.26 s on VS Code) and reads the workspace (about 30 ms). ADR-053 discusses what that means for S6.
+
+## 2026 10 14 MCP Benchmark #3 — S5 with the six tools (imports, architecture)
+
+- **Target and machine:** VS Code @ `cc3fec88`, on the owner's laptop, the owner's index as it stood (read-only through the server), the engine as of V1.6 Task 12. `NEBULOSITY_LIVE=off`: nothing was sent to any port.
+- **Command:** `npm run bench-mcp -- ../vscode`, one run: the SDK's stdio client starts `node mcp/launch.mjs` in VS Code's folder, times each call from request to answer, reports each row's first call apart and then 20 warm calls. `imports` now has four rows, one per mode, and `architecture` two:
+  - `imports (group_by)` is `src/vs/platform/storage/common/storage.ts` by area under `src/vs` (one input, repeated);
+  - `architecture (summary)` is `src/vs`, and `architecture (cycles)` is `src/vs/workbench/contrib` (one input each).
+- **Server start** (spawn → initialized): 778 ms.
+
+| Row | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |
+|---|---|---|---|---|---|---|
+| `overview` | 248 ms | 20 | 63 ms | 72 ms | 72 ms | 2,611 |
+| `describe` | 60 ms | 20 | 59 ms | 85 ms | 87 ms | 3,991 |
+| `search` | 2701 ms | 20 | 173 ms | 245 ms | 256 ms | 2,440 |
+| `imports (dependents)` | 84 ms | 20 | 69 ms | 87 ms | 87 ms | 5,944 |
+| `imports (dependencies)` | 67 ms | 20 | 62 ms | 69 ms | 69 ms | 2,491 |
+| `imports (to)` | 65 ms | 20 | 68 ms | 73 ms | 73 ms | 323 |
+| `imports (group_by)` | 81 ms | 20 | 76 ms | 82 ms | 83 ms | 2,035 |
+| `architecture (summary)` | 176 ms | 20 | 198 ms | 228 ms | 229 ms | 449 |
+| `architecture (cycles)` | 74 ms | 20 | 64 ms | 73 ms | 76 ms | 7,788 |
+| `show_on_map` | 65 ms | 20 | 65 ms | 75 ms | 78 ms | 167 |
+
+**S5 (every warm call ≤ 500 ms): PASS (worst 256 ms, a `search`).** Every row's worst warm call is under 500 ms; the slowest new row is `architecture (summary)` (p50 198 ms, max 229 ms), which does four reports in one call. The first `search` (2,701 ms against #2's 1,011 ms) loads the MiniLM model inside the server; it was a single run on a laptop, and I did not look for the cause of the slower load. The `search` rows' warm times (p50 173 ms) are also above #2's (132 ms), with everything else near #2. This run had no after-a-write table.

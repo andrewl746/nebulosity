@@ -28,13 +28,13 @@ About 2 minutes, at most 2:30. It is for someone who has never heard of Nebulosi
 
 ### Prompts (type these verbatim)
 
-Prompt 1 (0:45–1:10), expect `dependents` with exact totals; boxes pulse; `show_on_map` highlights:
+Prompt 1 (0:45–1:10), expect `imports` (with `transitive`) with exact totals; boxes pulse; `show_on_map` highlights:
 
 ```
 What depends on src/vs/base/common/lifecycle.ts, and how many files is that? Show me the biggest areas on the map.
 ```
 
-Prompt 2 (1:10–1:35), expect `path`; the Map moves to it:
+Prompt 2 (1:10–1:35), expect `imports` with `to`; the Map moves to it:
 
 ```
 How does src/vs/workbench/workbench.desktop.main.ts end up loading the terminal's terminalInstance.ts?

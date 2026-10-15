@@ -22,9 +22,10 @@ describe("activityLabel", () => {
         expect(activityLabel(event("overview", []))).toBe("Reading the repo overview");
         expect(activityLabel(event("search", ["a.ts", "b.ts", "c.ts"]))).toBe("Searching · a.ts +2");
         expect(activityLabel(event("search", []))).toBe("Searching");
-        expect(activityLabel(event("dependents", ["x.ts"]))).toBe("Finding what uses x.ts");
-        expect(activityLabel(event("dependencies", ["src/vs/editor"]))).toBe("Finding what src/vs/editor uses");
-        expect(activityLabel(event("path", ["a.ts", "b.ts"]))).toBe("Tracing a.ts → b.ts");
+        expect(activityLabel(event("imports", ["x.ts"]))).toBe("Following the imports of x.ts");
+        expect(activityLabel(event("imports", ["a.ts", "b.ts"]))).toBe("Tracing a.ts → b.ts");
+        expect(activityLabel(event("architecture", ["src"]))).toBe("Reading how src is organized");
+        expect(activityLabel(event("architecture", [""]))).toBe("Reading how the repo is organized");
         expect(activityLabel(event("show_on_map", ["src/vs", "src/main.ts"]))).toBe("Showing src/vs +1 on the map");
     });
 
