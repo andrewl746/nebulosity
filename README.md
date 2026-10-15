@@ -185,7 +185,7 @@ engine (lib/): level · describe · search · imports · architecture
 
 Core logic in `lib/` never imports the UI framework. The MCP server, the Map's API routes and the static exporter are thin adapters over the same engine.
 
-Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index in under a minute (S1: 55.7 s at worst of three, Index Benchmark #5, on a loaded machine), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 388 ms at worst, MCP Benchmark #4), and a saved file reflected in 1,975 ms at worst once warm, Update Benchmark #2, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index in about a minute (S1 asks for 60 s: 55.7 s at worst of three in Index Benchmark #5, but 66.9 s in Update Benchmark #2's cold index, both on a machine with one of its 16 processors busy; a quiet-machine re-measure is owed), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 388 ms at worst, MCP Benchmark #4), and a saved file reflected in 1,975 ms at worst once warm, Update Benchmark #2, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Decisions worth reading
 
