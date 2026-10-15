@@ -45,7 +45,7 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
   and the CLI                                        and the CLI)
 ```
 
-The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout>/mcp/launch.mjs` (ADR-048) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
+The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout or package>/mcp/launch.mjs` (ADR-048; `nebulosity setup` registers it, ADR-058) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
 
 The static demo (ADR-049) is two more adapters, and runs no server. `scripts/export-demo.ts` reads the database without writing and writes the Map's answers for every folder to files, with the repo named instead of rooted, then scans them for any path of this machine. `app/map/staticApi.ts` is the Map's transport in the demo build: it answers the same calls from those files (refusing the ones that need a server), searches in the browser with `lib/engine/staticSearch.ts`, and is chosen in place of `app/map/api.ts`'s HTTP calls when `npm run build-demo` builds the site.
 
@@ -116,7 +116,10 @@ nebulosity/
 │   ├── background/          # service, supervisor, protocol, child, start
 │   ├── live/                # hub, event, sse, local, client
 │   └── agent/               # E1: tools.ts (ported in V1.3), state.ts
-├── scripts/                 # index, summarize, search, live, background (the worker), bench-map, bench-update,
+├── bin/                     # nebulosity.mjs, the one command (ADR-058); boot.mjs, what both launchers do first
+├── mcp/                     # launch.mjs and server.ts: the MCP server over stdio (ADR-048)
+├── scripts/                 # cli.ts and commands/ (the nebulosity command), index, summarize, search, live,
+│                            #   background (the worker), mcp-smoke, bench-map, bench-update,
 │                            #   export-demo, build-demo, serve-demo (the static demo), …
 ├── test/                    # fixtures/mini-repo, helpers
 └── docs/

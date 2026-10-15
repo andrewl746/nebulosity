@@ -16,7 +16,7 @@ import { setupCall } from "../lib/tools/repo";
 import { deliveryNote, type MapDelivery } from "../lib/tools/text";
 
 /** package.json's version (a test keeps them equal). */
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = "0.2.0";
 
 /** Sends one live event to the Map's server on `port`; true when it took it (lib/live/client.ts). */
 export type LivePoster = (event: LiveEvent, port: number) => Promise<boolean>;

@@ -1,0 +1,196 @@
+/**
+ * nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>]
+ *                      [--release-batch <batch id>]...
+ * (in a checkout: npm run summarize -- <path-to-repo> …)
+ *
+ * Writes summaries for an indexed repository (PIVOT_SPEC.md §5.3), then embeds them for search (§5.4).
+ * - A big first pass goes through the Message Batches API at half price and can take hours.
+ *   --no-wait never sleeps: it collects the batches that have already ended, submits what
+ *   that makes ready, and exits. Running the command again (by hand, or from cron) carries
+ *   on from there.
+ * - --budget caps this repo's recorded summary spend (summary_usage, across runs), in US
+ *   dollars (default 15, S2's ceiling); ADR-035 lists the spend it can't see, such as the
+ *   checkpoint reviews. Before each batch or regular-API wave the run projects spent + at
+ *   Anthropic + this submission + the rest. If that would pass the budget, the run stops
+ *   sending but keeps collecting what's already at Anthropic, which is paid for (ADR-035).
+ *   Running again with a bigger --budget goes on from there.
+ * - --path summarizes one file or folder right now through the regular API (an empty path
+ *   means the repo itself). It's one request, so no budget applies.
+ * - --release-batch <batch id> (repeatable) gives up on a batch whose results keep failing to download: its
+ *   requests are sent again in this run, and paid for again. The summaries stage's note names such a batch.
+ */
+import path from "path";
+import { getDb } from "../../lib/db/client";
+import { IndexLockedError } from "../../lib/db/store/lock";
+import { readStages } from "../../lib/db/store/stages";
+import { RepoNotIndexedError, requireRepository } from "../../lib/db/store/structure";
+import { loadUsage } from "../../lib/db/store/summaries";
+import { embedSummaries } from "../../lib/index/embed";
+import { repoKey } from "../../lib/index/paths";
+import { summarizerFromEnv } from "../../lib/index/summarize/claude";
+import { costUsd } from "../../lib/index/summarize/pricing";
+import {
+    BatchesUnreachableError, DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError,
+    TargetNotReadyError, UnknownBatchError, type Transport,
+} from "../../lib/index/summarize/run";
+import { loadLocalEnv } from "../env";
+
+const USAGE = "usage: nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>] [--release-batch <batch id>]..."
+    + "   (in a checkout: npm run summarize -- <path-to-repo> …)";
+
+/** The arguments as a run uses them, or null when they can't be run as given. */
+type SummarizeOptions = {
+    root: string;
+    onePath: string | null;
+    transport: Transport;
+    wait: boolean;
+    budgetUsd: number;
+    releaseBatches: string[];
+};
+
+/**
+ * Every argument after the repo path must be one this command knows, or it stops here. An argument it ignored would
+ * leave the defaults in charge: "--path=src/x.ts" used to start a full summary pass (up to the $15 budget) instead of
+ * the one request --path asks for. So, each at most once: the three switches, and the two options whose value is the
+ * next argument, whatever it is ("--path ''" is the repo itself). Anything else, a "--flag=value" spelling or a second
+ * repo path included, gets the usage line.
+ */
+function parseSummarizeArgs(args: readonly string[]): SummarizeOptions | null {
+    const target = args[0];
+    if (!target || target.startsWith("--")) return null;
+
+    const SWITCHES = ["--direct", "--batch", "--no-wait"];
+    const OPTIONS = ["--budget", "--path"];
+    const REPEATABLE = ["--release-batch"];
+    const repeated = new Map<string, string[]>();
+    const switches = new Set<string>();
+    const values = new Map<string, string>();
+    for (let i = 1; i < args.length; i++){
+        const arg = args[i];
+        if (SWITCHES.includes(arg) && !switches.has(arg)){
+            switches.add(arg);
+        } else if (OPTIONS.includes(arg) && !values.has(arg) && i + 1 < args.length){
+            values.set(arg, args[i + 1]);
+            i++;   // its value is used up
+        } else if (REPEATABLE.includes(arg) && i + 1 < args.length){
+            repeated.set(arg, [...(repeated.get(arg) ?? []), args[i + 1]]);
+            i++;   // its value is used up
+        } else{
+            return null;
+        }
+    }
+    if (switches.has("--direct") && switches.has("--batch")) return null;   // one or the other
+    const releaseBatches = repeated.get("--release-batch") ?? [];
+    if (releaseBatches.length > 0 && values.has("--path")) return null;   // --path sends no batch, so there's nothing to release
+
+    // --budget is a positive number of dollars: Number() reads an empty value as 0 and a word as NaN, and both are refused,
+    // as are negatives and Infinity.
+    const budgetText = values.get("--budget");
+    const budgetUsd = budgetText === undefined ? DEFAULT_BUDGET_USD : Number(budgetText);
+    if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) return null;
+
+    return {
+        root: path.resolve(target),
+        onePath: values.get("--path") ?? null,
+        transport: switches.has("--direct") ? "direct" : switches.has("--batch") ? "batch" : "auto",
+        wait: !switches.has("--no-wait"),
+        budgetUsd,
+        releaseBatches,
+    };
+}
+
+const say = (message: string): void => console.log(`[summarize] ${message}`);
+
+/** Writes and embeds the summaries the arguments ask for. Returns the exit code: 0 done, 1 refused or failed, 2 the index is locked. */
+export async function runSummarize(args: readonly string[]): Promise<number> {
+    loadLocalEnv();
+
+    const options = parseSummarizeArgs(args);
+    if (options === null){
+        console.error(USAGE);
+        return 1;
+    }
+
+    try{
+        return await summarize(options);
+    } catch (err){
+        if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError || err instanceof TargetNotReadyError
+            || err instanceof StructureNotReadyError || err instanceof UnknownBatchError){
+            console.error(`[summarize] ${err.message}`);
+            return 1;
+        }
+        if (err instanceof IndexLockedError){
+            console.error(`[summarize] ${err.message} If no other run is going, the lock clears itself after 30 minutes.`);
+            return 2;
+        }
+        if (err instanceof BatchesUnreachableError){
+            console.error(`[summarize] ${summariesNote(options.root)}`);
+            return 1;
+        }
+        console.error(err);
+        return 1;
+    }
+}
+
+async function summarize(options: SummarizeOptions): Promise<number> {
+    const { root, onePath } = options;
+    const summarizer = summarizerFromEnv();
+
+    if (onePath !== null){
+        if (!summarizer){
+            console.error("[summarize] ANTHROPIC_API_KEY is not set (put it in .env.local).");
+            return 1;
+        }
+        const row = await summarizeNow(root, onePath, summarizer);
+        say(`${row.kind} ${row.path || "(repo)"}: ${row.status}${row.error ? ` (${row.error})` : ""}`);
+        if (row.tagline) say(`${row.tagline} — ${row.summary}`);
+    } else{
+        if (!summarizer) say("ANTHROPIC_API_KEY is not set: writing test-file templates only (put the key in .env.local).");
+        const result = await runSummaries(root, {
+            summarizer, transport: options.transport, wait: options.wait, budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,
+        });
+        say(`up to date ${result.upToDate}/${result.total} · summarized ${result.summarized} · templated ${result.templated}`
+            + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
+            + ` · waves ${result.waves} · batches ${result.batches}`);
+        // the circuit breaker or the spend cap: the stage's note says which, what to do, and what's still at Anthropic
+        if (result.stopped) say(summariesNote(root));
+    }
+
+    const embedded = await embedSummaries(root, {
+        onProgress: (done, total) => process.stdout.write(`\r[summarize] embedding ${done}/${total}   `),
+    });
+    if (embedded.embedded > 0) process.stdout.write("\n");
+    say(`embedded ${embedded.embedded} summaries; ${embedded.total} now have vectors`);
+
+    printSpend(root);
+    return 0;
+}
+
+/** The summaries stage's note, which a stopped run fills in with why it stopped. */
+function summariesNote(root: string): string {
+    const db = getDb();
+    return readStages(db, requireRepository(db, repoKey(root))).summaries?.note ?? "stopped early";
+}
+
+/**
+ * What this repo's summaries have cost so far, per model and transport (success criterion S2).
+ * A model with no price on file (a server-side fallback model, say) isn't counted as $0:
+ * the total then reads "at least" and names the models it couldn't price.
+ */
+function printSpend(root: string): void {
+    const db = getDb();
+    let total = 0;
+    const unpriced = new Set<string>();
+
+    for (const row of loadUsage(db, requireRepository(db, repoKey(root)))){
+        const cost = costUsd(row.model, row, row.transport);
+        if (cost === null) unpriced.add(row.model);
+        else total += cost;
+        say(`spend: ${row.model} ${row.transport} · ${row.requests} requests · ${row.inputTokens.toLocaleString("en-US")} in`
+            + ` · ${row.outputTokens.toLocaleString("en-US")} out · ${cost === null ? "no price on file" : `$${cost.toFixed(4)}`}`);
+    }
+
+    say(unpriced.size === 0
+        ? `spend so far on this repo: $${total.toFixed(2)}`
+        : `spend so far on this repo: at least $${total.toFixed(2)} (no price on file for: ${[...unpriced].join(", ")})`);
+}

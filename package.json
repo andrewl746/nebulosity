@@ -1,8 +1,39 @@
 {
   "name": "nebulosity",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "private": true,
+  "bin": {
+    "nebulosity": "bin/nebulosity.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "mcp/",
+    "scripts/cli.ts",
+    "scripts/commands/",
+    "scripts/index.ts",
+    "scripts/summarize.ts",
+    "scripts/background.ts",
+    "scripts/env.ts",
+    "scripts/mcp-smoke.mjs",
+    "app/",
+    "public/",
+    "next.config.ts",
+    "proxy.ts",
+    "instrumentation.ts",
+    "postcss.config.mjs",
+    "tsconfig.json",
+    ".next/",
+    "!.next/cache/",
+    "!.next/dev/",
+    "!**/*.test.ts",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
     "build": "next build",
@@ -50,6 +81,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
+    "tsx": "^4.23.0",
+    "typescript": "^5",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -62,8 +95,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
-    "tsx": "^4.23.0",
-    "typescript": "^5",
     "vitest": "^4.1.10"
   }
 }

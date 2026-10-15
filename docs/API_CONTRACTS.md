@@ -294,7 +294,7 @@ type SourceResponse = { repo: string; path: string; content: string; lineCount: 
 
 Claude Code and any MCP client reach the engine through `mcp/server.ts` over stdio (PIVOT_SPEC.md §6.2, ADR-030). Each tool is defined once in `lib/tools/registry.ts` (ADR-047). Claude Code shows them as `mcp__nebulosity__<name>`.
 
-**Launch.** `node <checkout>/mcp/launch.mjs` (ADR-048). It sets `NEBULOSITY_HOME` to the checkout unless it's set. `NEBULOSITY_LIVE=off` stops every live event.
+**Launch.** `node <checkout>/mcp/launch.mjs` (ADR-048), or `node <package>/mcp/launch.mjs` for an installed copy, as `nebulosity setup` registers it (ADR-058). It sets `NEBULOSITY_HOME` to the checkout or package unless it's set, and an installed copy's `NEBULOSITY_DATA` to the user's data folder unless it's set (ADR-044, amended). `NEBULOSITY_LIVE=off` stops every live event.
 
 **Which repo.** The indexed repo holding the project folder (`CLAUDE_PROJECT_DIR`, else the server's working folder), the deepest when repos nest. Else the repo the Map shows, with a note first. Else an error (ADR-046).
 
