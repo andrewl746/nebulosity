@@ -1,6 +1,7 @@
 /** An eval's fixed setup (V1.6's plan, D2): what every script of scripts/eval reads from <dir>/eval.json. */
 import fs from "fs";
 import path from "path";
+import { SHELL_PRESETS, type ShellPreset } from "./run-config";
 
 export type ArmName = "baseline" | "nebulosity" | "nebulosity-upfront";
 export type EvalDefinition = {
@@ -15,6 +16,8 @@ export type EvalDefinition = {
     repeats: number;
     /** Node scripts and edits allowed under a fresh scratch folder per run (R6). */
     scripts: boolean;
+    /** More Bash commands allowed in both arms, by preset (run-config's SHELL_PRESETS; ADR-057, amended 2026-10-15). Absent in Eval #1 and Eval #2. */
+    shell?: ShellPreset;
     pilot: string[];
     /** The task sessions the pilot asks (`--sessions --pilot`, one repeat in each arm); absent in an eval with no sessions. */
     pilotSessions?: string[];
@@ -39,5 +42,6 @@ export function loadDefinition(dir: string): EvalDefinition {
     }
     if (typeof raw.scripts !== "boolean" || !Array.isArray(raw.pilot)) fail("scripts is true or false, and pilot lists question ids.");
     if (raw.pilotSessions !== undefined && (!Array.isArray(raw.pilotSessions) || raw.pilotSessions.some((id) => typeof id !== "string"))) fail("pilotSessions, when given, lists session ids.");
+    if (raw.shell !== undefined && !Object.hasOwn(SHELL_PRESETS, raw.shell)) fail(`shell, when given, is one of ${Object.keys(SHELL_PRESETS).map((name) => `"${name}"`).join(", ")}.`);
     return { ...(raw as EvalDefinition), dir: path.resolve(dir) };
 }

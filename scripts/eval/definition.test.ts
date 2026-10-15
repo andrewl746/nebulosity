@@ -28,6 +28,19 @@ describe("loadDefinition", () => {
         expect(() => loadDefinition(write({ ...good, pilotSessions: [1] }))).toThrow("eval.json: pilotSessions, when given, lists session ids.");
     });
 
+    it("reads a shell preset when it names one, and refuses any other value (ADR-057, amended 2026-10-15)", () => {
+        expect(loadDefinition(write({ ...good, shell: "compound" })).shell).toBe("compound");
+        expect(loadDefinition(write(good)).shell).toBeUndefined();
+        expect(() => loadDefinition(write({ ...good, shell: "everything" }))).toThrow('eval.json: shell, when given, is one of "compound".');
+        expect(() => loadDefinition(write({ ...good, shell: ["Bash(cd:*)"] }))).toThrow('eval.json: shell, when given, is one of "compound".');
+    });
+
+    it("leaves the shell preset unset in Eval #1's and Eval #2's own definitions", () => {
+        const checkout = path.join(__dirname, "..", "..");
+        expect(loadDefinition(path.join(checkout, "eval")).shell).toBeUndefined();
+        expect(loadDefinition(path.join(checkout, "eval2")).shell).toBeUndefined();
+    });
+
     it("refuses an unknown arm, a repeat count outside 1–3, and a commit that isn't a full sha, each in a sentence", () => {
         expect(() => loadDefinition(write({ ...good, arms: ["baseline", "other"] }))).toThrow('eval.json: arms may be "baseline", "nebulosity" and "nebulosity-upfront", not "other".');
         expect(() => loadDefinition(write({ ...good, repeats: 4 }))).toThrow("eval.json: repeats is 1, 2 or 3.");

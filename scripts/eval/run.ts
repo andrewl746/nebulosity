@@ -497,7 +497,7 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
 
     const env = childEnv(process.env, { gitBash: ctx.gitBash, toolSearch: run.toolSearch, configDir: ctx.options.configDir ?? undefined });
     const expected = { arm: run.arm, model: DEF.pins.model, claudeVersion: DEF.claudeVersion, forbiddenPlugins: ctx.forbiddenPlugins, scripts: DEF.scripts };
-    const args = session === undefined ? claudeArgs(run.arm, ctx.mcp, DEF.pins, { scratch }) : sessionArgs(run.arm, ctx.mcp, DEF.pins, { scratch });
+    const args = session === undefined ? claudeArgs(run.arm, ctx.mcp, DEF.pins, { scratch, shell: DEF.shell }) : sessionArgs(run.arm, ctx.mcp, DEF.pins, { scratch, shell: DEF.shell });
     const { timedOut, initProblems } = await runClaude(
         ctx.claude, args, env, session === undefined ? prompts[0] : prompts, repo.root, rawFile, errFile,
         (init) => validateInit(init, expected), session === undefined ? TIMEOUT_MS : SESSION_TIMEOUT_MS,
@@ -682,7 +682,7 @@ async function main(): Promise<void> {
             const attempt = attemptsSoFar(runName(run), rawFiles()) + 1;
             console.log(`\n${runName(run)} (attempt ${attempt})`);
             if (session !== undefined){
-                console.log(`  command: ${quote(claude)} ${sessionArgs(run.arm, mcp, DEF.pins, { scratch }).map(quote).join(" ")}`);
+                console.log(`  command: ${quote(claude)} ${sessionArgs(run.arm, mcp, DEF.pins, { scratch, shell: DEF.shell }).map(quote).join(" ")}`);
                 console.log(`  cwd: ${repoRoot(session.repo)}`);
                 session.questions.forEach((id, i) => {
                     const message = userMessage(promptFor(questions.questions.find((x) => x.id === id)!, questions.formats, scratch));
@@ -692,7 +692,7 @@ async function main(): Promise<void> {
             } else {
                 const q = questions.questions.find((x) => x.id === run.question)!;
                 const stdin = promptFor(q, questions.formats, scratch);
-                console.log(`  command: ${quote(claude)} ${claudeArgs(run.arm, mcp, DEF.pins, { scratch }).map(quote).join(" ")}`);
+                console.log(`  command: ${quote(claude)} ${claudeArgs(run.arm, mcp, DEF.pins, { scratch, shell: DEF.shell }).map(quote).join(" ")}`);
                 console.log(`  cwd: ${questionRepo(q).root}`);
                 console.log(`  stdin (${stdin.length} characters): ${JSON.stringify(stdin)}`);
             }

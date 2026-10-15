@@ -75,6 +75,8 @@ claude -p --output-format stream-json --verbose
 
 `eval2/mcp/empty.json` is `{ "mcpServers": {} }`.
 
+*Added after the eval (2026-10-15), for the next eval's method:* `eval.json` may carry `"shell": "compound"`, which appends `Bash(cd:*),Bash(echo:*)` to `--allowedTools` in both arms. Eval #2 ran without it (`eval2/eval.json` leaves it unset). What it covers, and why it covers few of the refusals below, is in ADR-057's amendment of that date.
+
 ### Scripts, and the scratch folder
 
 Both arms may run Node.js scripts (the owner's pick on the options memo, 2026-10-14). Eval #1's baseline could only read, so its savings came with that caveat.
@@ -826,6 +828,7 @@ Eval #1 named this caveat ("A user who lets Claude Code run scripts may see A an
   - So the grading was blind to the run, but not always to the arm.
 - **Refused shell commands.** Under `dontAsk`, Claude Code refuses a Bash command it can't match to the allowlist: one that starts with `cd` or `mkdir` (`cd <repo> && …`, `mkdir -p … && cat > s.js <<EOF`), or that chains or pipes into a command outside the list.
   - *How many:* 131 calls were refused in all. A had 72 in 63 of its 117 single runs and 40 in its sessions. N had 19 in 18 single runs and none in its sessions. 98 of the 131 began with `cd`, and 18 with `mkdir`.
+  - *Why, read again after the eval (2026-10-15; ADR-057, amended):* the leading `cd` was rarely the cause, since 161 kept commands with a cd ran. 59 refused commands wrote a file (sed -i, a redirect or heredoc, mkdir, tee), and 33 ran git after a cd to a `/c/…` path, which Claude Code's guard against a planted repository refuses under dontAsk whatever the allow rules say. The rest had a sed filter (11), a loop (10), a read through `..` (9), two cds (3), awk, xargs or python3 (4), a cd outside the working folders (1), or no cause found (1).
   - *Which runs:* refusals touched 16 of A's 36 VS Code graph runs, 26 of its 33 AFFiNE graph runs and all 18 of its sessions. For N, the counts were 6, 4 and 0.
   - *Most runs recovered:* they used Grep or Glob instead, or wrote the script with Write and ran it with `node`, which the rules allow.
   - *Not every command outside the list was refused:* Claude Code's matcher is looser than the method's "any other Bash command is refused". Three kept N runs ran commands outside it without a refusal: vscode-unused-nebulosity-3 (`cat > <scratch>/s.js <<'EOF' … node …`), and vscode-cl2-nebulosity-2 and -3 (`node <scratch>/scan.js || cd <vscode>/…; grep …`). The rules were the same in both arms, and the checks after every run guard the outcome (no repo or checkout changed).

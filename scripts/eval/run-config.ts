@@ -15,11 +15,25 @@ export const ALLOWED_TOOLS = [
 /** Nothing may change the repo, read the web (the rubric's source is a web page), load a skill, or use another shell. */
 export const DENIED_TOOLS = ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "PowerShell", "Monitor"];
 
+/**
+ * An eval's optional `shell` preset (eval.json; ADR-057, amended 2026-10-15): more Bash commands allowed, the same in
+ * both arms. "compound" adds the read-only commands of Eval #2's refused compound commands that the list above lacks:
+ * cd and echo. Left out: sed (-i and its w command write files), awk (writes files, runs commands), xargs (runs any
+ * command), tee (writes), python3 (runs any code), and mkdir (it writes, and the after-run check can't see an empty
+ * folder). Loops (for, while) are shell syntax, which no rule names. Unset, the arguments are Eval #2's.
+ */
+export const SHELL_PRESETS = { compound: ["Bash(cd:*)", "Bash(echo:*)"] } as const;
+export type ShellPreset = keyof typeof SHELL_PRESETS;
+
+/** What an eval turns on beyond the read-only list: scripts in a scratch folder (R6), and a shell preset. */
+export type RunOptions = { scratch?: string; shell?: ShellPreset };
+
 /** The claude -p arguments; the prompt goes on stdin. The two arms differ only in the MCP config file. */
-export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: { scratch?: string } = {}): string[] {
+export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: RunOptions = {}): string[] {
     const scratch = options.scratch;
     // with scripts on, node and edits under the run's scratch folder are allowed, and Edit and Write leave the deny list (a deny would beat the path rule)
-    const allowed = scratch === undefined ? ALLOWED_TOOLS : [...ALLOWED_TOOLS, "Bash(node:*)", `Edit(${scratchRule(scratch)})`];
+    const scripts = scratch === undefined ? ALLOWED_TOOLS : [...ALLOWED_TOOLS, "Bash(node:*)", `Edit(${scratchRule(scratch)})`];
+    const allowed = options.shell === undefined ? scripts : [...scripts, ...SHELL_PRESETS[options.shell]];
     const denied = scratch === undefined ? DENIED_TOOLS : DENIED_TOOLS.filter((tool) => tool !== "Edit" && tool !== "Write");
     return [
         "-p", "--output-format", "stream-json", "--verbose",
@@ -40,7 +54,7 @@ export function claudeArgs(arm: Arm, mcp: { empty: string; nebulosity: string },
  * pins.sessionMaxBudgetUsd replaces the single run's), and stream-json input so each question is a message written to
  * stdin after the last answer. --replay-user-messages echoes each message into the transcript (the probe run used it).
  */
-export function sessionArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: { scratch?: string } = {}): string[] {
+export function sessionArgs(arm: Arm, mcp: { empty: string; nebulosity: string }, pins: Pins = PINS, options: RunOptions = {}): string[] {
     const budget = pins.sessionMaxBudgetUsd ?? pins.maxBudgetUsd;
     return [...claudeArgs(arm, mcp, { ...pins, maxBudgetUsd: budget }, options), "--input-format", "stream-json", "--replay-user-messages"];
 }

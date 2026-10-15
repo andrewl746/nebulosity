@@ -258,6 +258,61 @@ describe("an opaque scratch folder (R6 as fixed)", () => {
     });
 });
 
+describe("the shell preset (ADR-057, amended 2026-10-15)", () => {
+    const mcp = { empty: "E.json", nebulosity: "N.json" };
+    const pins = { model: "claude-sonnet-5-5", effort: "medium", maxTurns: 80, maxBudgetUsd: 4, sessionMaxBudgetUsd: 10 };
+    const scratch = "C:/Temp/eval-scratch/ab";
+    const READ_ONLY = "Read,Grep,Glob,Agent,Bash(git grep:*),Bash(git ls-files:*),Bash(git log:*),Bash(git show:*),"
+        + "Bash(rg:*),Bash(grep:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(uniq:*),Bash(find:*),mcp__nebulosity";
+    // Eval #2's A command, as its method in docs/EVAL_RESULTS.md prints it ("The command"), with this scratch folder
+    const EVAL2_A = [
+        "-p", "--output-format", "stream-json", "--verbose",
+        "--model", "claude-sonnet-5-5", "--effort", "medium",
+        "--max-turns", "80", "--max-budget-usd", "4",
+        "--setting-sources", "project,local",
+        "--strict-mcp-config", "--mcp-config", "E.json",
+        "--permission-mode", "dontAsk", "--permission-prompts", "none",
+        "--allowedTools", `${READ_ONLY},Bash(node:*),Edit(//c/Temp/eval-scratch/ab/**)`,
+        "--disallowedTools", "NotebookEdit,WebFetch,WebSearch,Skill,PowerShell,Monitor",
+        "--add-dir", "C:/Temp/eval-scratch/ab",
+        "--no-session-persistence",
+    ];
+
+    it("unset, Eval #2's arguments are as they were, byte for byte, and Eval #1's too", () => {
+        expect(claudeArgs("baseline", mcp, pins, { scratch })).toEqual(EVAL2_A);
+        expect(claudeArgs("baseline", mcp, pins, { scratch, shell: undefined })).toEqual(EVAL2_A);
+        // Eval #1: no scripts, so no node, no Edit rule, no --add-dir, and Edit and Write stay denied
+        expect(claudeArgs("baseline", mcp, pins)).toEqual([
+            "-p", "--output-format", "stream-json", "--verbose",
+            "--model", "claude-sonnet-5-5", "--effort", "medium",
+            "--max-turns", "80", "--max-budget-usd", "4",
+            "--setting-sources", "project,local",
+            "--strict-mcp-config", "--mcp-config", "E.json",
+            "--permission-mode", "dontAsk", "--permission-prompts", "none",
+            "--allowedTools", READ_ONLY,
+            "--disallowedTools", "Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,PowerShell,Monitor",
+            "--no-session-persistence",
+        ]);
+    });
+
+    it("on, both arms allow cd and echo after the scripts rules, and still differ only in the MCP config", () => {
+        const a = claudeArgs("baseline", mcp, pins, { scratch, shell: "compound" });
+        const n = claudeArgs("nebulosity", mcp, pins, { scratch, shell: "compound" });
+        const at = EVAL2_A.indexOf("--allowedTools") + 1;
+        expect(a).toEqual(EVAL2_A.map((x, i) => (i === at ? `${READ_ONLY},Bash(node:*),Edit(//c/Temp/eval-scratch/ab/**),Bash(cd:*),Bash(echo:*)` : x)));
+        expect(a.filter((x, i) => x !== n[i])).toEqual(["E.json"]);
+        expect(n.filter((x, i) => x !== a[i])).toEqual(["N.json"]);
+        // without scripts, the preset follows the read-only list
+        const noScripts = claudeArgs("baseline", mcp, pins, { shell: "compound" });
+        expect(noScripts[noScripts.indexOf("--allowedTools") + 1]).toBe(`${READ_ONLY},Bash(cd:*),Bash(echo:*)`);
+    });
+
+    it("a session gets the same rules", () => {
+        const session = sessionArgs("baseline", mcp, pins, { scratch, shell: "compound" });
+        expect(session[session.indexOf("--allowedTools") + 1]).toBe(`${READ_ONLY},Bash(node:*),Edit(//c/Temp/eval-scratch/ab/**),Bash(cd:*),Bash(echo:*)`);
+    });
+});
+
 describe("sessionArgs", () => {
     const mcp = { empty: "E.json", nebulosity: "N.json" };
     const pins = { model: "claude-sonnet-5-5", effort: "medium", maxTurns: 80, maxBudgetUsd: 4, sessionMaxBudgetUsd: 10 };
