@@ -53,7 +53,7 @@ async function connect(options: Omit<ServerOptions, "now"> & { mapAnswers?: bool
 }
 
 describe("the MCP server", () => {
-    it("serves the registry's six tools, read-only, the five that answer questions marked always loaded, with its instructions and version", async () => {
+    it("serves the registry's seven tools, read-only, the six that answer questions marked always loaded, with its instructions and version", async () => {
         const { client } = await connect({ projectDir: mapShowing(), live: true });
         const { tools } = await client.listTools();
         expect(tools.map((t) => t.name)).toEqual(TOOLS.map((t) => t.name));

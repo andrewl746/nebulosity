@@ -6,7 +6,8 @@ import { layersOf } from "../engine/architecture";
 import { indexRepository } from "../index/pipeline";
 import type { Overview } from "../engine/overview";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
-import { architectureAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
+import type { MemberAnswer } from "../engine/calls";
+import { architectureAnswer, callsAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import { answerText, MAX_ANSWER_CHARS, SUMMARIES_OFF_LINE as S } from "./text";
 
 const off = { summaryStatus: "off" as const };
@@ -632,5 +633,35 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         expect(through).toContain("  … 1,960 more steps");
         expect(through).toHaveLength(1 + 1 + 20 + 1 + 20);
         expect(through[through.length - 1]).toBe(`  → ${cycle[2_000]}  (import "./s1999")`);
+    });
+});
+
+describe("callsAnswer on a huge answer (Review Focus 3)", () => {
+    const deep = "deep/".repeat(15);
+    const a: MemberAnswer = {
+        kind: "member", groupBy: null, areas: [], elsewhere: 0,
+        type: { name: "IThing", kind: "interface", path: "src/thing.ts", line: 1 }, member: "run",
+        files: Array.from({ length: 2_000 }, (_, i) => ({ path: `src/${deep}f${i}.ts`, lines: [1], receivers: [], isTest: false, sites: [] })),
+        calls: 2_000, tests: 0, categories: { type: 2_000, subtype: 0, implementation: 0 }, subtypeWord: "sub-interface",
+        declaring: Array.from({ length: 500 }, (_, i) => `src/${deep}d${i}.ts`), implementations: [],
+    };
+
+    it("stays under the cap, lists fewer files than the limit, and says where the next page starts", () => {
+        const text = answerText(callsAnswer(a, { limit: 500, offset: 0 }));
+        expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        const lines = text.split("\n");
+        const k = lines.filter((l) => /^ {2}src\/(deep\/)+f\d+\.ts {2}1$/.test(l)).length;
+        expect(k).toBeGreaterThan(0);
+        expect(k).toBeLessThan(500);
+        expect(lines).toContain(`… ${(2_000 - k).toLocaleString("en-US")} more (next page: offset ${k})`);
+        const at = lines.findIndex((l) => l.startsWith("If run's signature changes"));
+        expect(lines.slice(at + 1, at + 31).every((l) => /^ {2}src\/(deep\/)+d\d+\.ts$/.test(l))).toBe(true);
+        expect(lines[at + 31]).toBe("  … 470 more");
+    });
+
+    it("stays under the cap on a later page, which starts with its Showing line", () => {
+        const text = answerText(callsAnswer(a, { limit: 500, offset: 1_500 }));
+        expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        expect(text.split("\n").some((l) => l.startsWith("Showing 1,501–"))).toBe(true);
     });
 });

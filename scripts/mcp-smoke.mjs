@@ -2,17 +2,17 @@
 // A smoke test of the MCP server as Claude Code starts it (ADR-048, ADR-058): `node <launcher>` in the repo's folder.
 // CI runs it on all three systems, and it's run by hand after packing:
 //   node scripts/mcp-smoke.mjs --launcher <package>/mcp/launch.mjs --repo <an indexed repo> [--files <n>]
-// It lists the tools (the six names, the five that answer questions marked always loaded through _meta, show_on_map
+// It lists the tools (the seven names, the six that answer questions marked always loaded through _meta, show_on_map
 // deferred with a search hint), calls overview, and checks the answer names the repo and its file count (exactly <n>
-// with --files). It prints "mcp-smoke: ok (6 tools, overview answered)" and exits 0, or prints what differed and exits 1.
+// with --files). It prints "mcp-smoke: ok (7 tools, overview answered)" and exits 0, or prints what differed and exits 1.
 // Plain JavaScript, so it needs nothing but node and the MCP SDK.
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const TOOLS = ["overview", "describe", "search", "imports", "architecture", "show_on_map"];
-const ALWAYS_LOADED = ["overview", "describe", "search", "imports", "architecture"];
+const TOOLS = ["overview", "describe", "search", "imports", "architecture", "calls", "show_on_map"];
+const ALWAYS_LOADED = ["overview", "describe", "search", "imports", "architecture", "calls"];
 const TIMEOUT_MS = 120_000;   // a first start compiles the engine through tsx with a cold cache
 
 const { values } = parseArgs({ options: { launcher: { type: "string" }, repo: { type: "string" }, files: { type: "string" } } });

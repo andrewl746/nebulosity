@@ -1007,11 +1007,11 @@ They need the whole graph, and the index already holds it.
 
 **Amended (2026-10-15, V1.6, the pre-freeze sweep): two answers corrected.** With the summary (the default report), `through` took the place of the cycle groups, so a folder with cycles read "Import cycles: none". Now `through`, or a file as `path`, on the summary is answered as `cycles`: the shortest cycle through that file, and the answer's report says `cycles`. With `layers`, `conventions` or `unused`, `through` is refused in one sentence that says to ask with `cycles`, and so is a file. *(The sweep's first version refused `through` on the summary too, which cost a model that left the report at its default one more call; the controller ruled for reading it as the question.)* And a page of the files nothing imports that starts past the end of the list now says "Nothing at offset N: the list has M.", as the cycles report does, instead of an empty heading.
 
-**Amended (proposed, V1.7 plan, 2026-10-15): seven tools, six always loaded, and a tighter budget.** `calls` (ADR-059) is the seventh tool and the sixth always loaded; `show_on_map` stays deferred, and the instructions gain one bullet.
+**Amended (2026-10-15, V1.7 Task 4): seven tools, six always loaded, and a tighter budget.** `calls` (ADR-059) is the seventh tool and the sixth always loaded; `show_on_map` stays deferred, and the instructions gain one bullet.
 - In Eval #2 a definition or an instruction cost about 2.75 characters a token, so the old 7,000-character budget is about 2,545 tokens, over gate condition 6's 2,500.
 - The six definitions and the instructions now stay under 6,650 characters (a test).
 - To fit `calls`, the shared path description, `imports`' `to` and `group_by`, and `describe`'s and `search`'s descriptions get shorter, and `architecture`'s `report` and `through` lose their own descriptions (its description says both).
-- The planning draft measured 6,614 characters, about 2,400 tokens. The dev set measures the real difference (MCP Dev Set #2).
+- Measured as the test measures it (each always-loaded tool's name as Claude Code prefixes it, description and JSON schema, then the instructions): overview 355, describe 518, search 588, imports 1,687, architecture 1,108 and calls 1,098 characters, 5,354 for the definitions, plus 1,260 for the instructions: 6,614 in all, about 2,400 tokens. The dev set measures the real difference (MCP Dev Set #2).
 
 ## ADR-057 — Eval #2's method and the ship gate (2026-10-14) — amends ADR-050 and ADR-051
 

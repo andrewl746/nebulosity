@@ -1,5 +1,5 @@
 /**
- * npm run bench-mcp -- [path-to-repo] [--after-write]   (default ../vscode)
+ * npm run bench-mcp -- [path-to-repo] [--after-write | --fresh-calls]   (default ../vscode)
  *
  * S5 (PIVOT_SPEC.md §2): every tool's latency through the real MCP server, as a client sees it. The SDK's stdio client
  * starts `node mcp/launch.mjs` in the repo's folder with live events off, and times each call from request to answer.
@@ -9,6 +9,9 @@
  * --after-write then runs a warm `npm run index` (no file edited, no API called) and measures the whole table again, first
  * calls included: the caches keyed by the index version rebuild on each tool's first call after the write (V1.5, ADR-052).
  * It's informative; the exit code stays S5's, which judges the warm calls of the first table.
+ *
+ * --fresh-calls (S14, V1.7) instead starts a fresh server five times and times the first `calls` call of each, the
+ * largest answer, which builds the call index; the worst must be ≤ 1.5 s. It runs no other table.
  */
 import { spawnSync } from "child_process";
 import path from "path";
@@ -18,6 +21,7 @@ import { nebulosityPath } from "../lib/home";
 
 const WARM_CALLS = 20;
 const S5_MS = 500;
+const S14_MS = 1_500;
 
 const FILES = [
     "src/vs/base/common/lifecycle.ts", "src/vs/base/common/event.ts", "src/vs/base/common/uri.ts",
@@ -46,6 +50,19 @@ const PAIRS: [string, string][] = [
     ["src/vs/workbench/contrib/notebook/common/notebookCommon.ts", "src/vs/base/browser/dom.ts"],
 ];
 
+/**
+ * The five planning methods and their types (V1.7), each with its declaring file: in ../vscode IConfigurationService and
+ * ICommandService are also declared under extensions/copilot/, and without `path` the answer is the short list of candidates.
+ */
+const CALL_TARGETS: { type: string; member: string; path: string }[] = [
+    { type: "IConfigurationService", member: "getValue", path: "src/vs/platform/configuration/common/configuration.ts" },
+    { type: "IFileService", member: "readFile", path: "src/vs/platform/files/common/files.ts" },
+    { type: "IStorageService", member: "store", path: "src/vs/platform/storage/common/storage.ts" },
+    { type: "ICommandService", member: "executeCommand", path: "src/vs/platform/commands/common/commands.ts" },
+    { type: "IEditorService", member: "openEditor", path: "src/vs/workbench/services/editor/common/editorService.ts" },
+];
+const FRESH_CALLS_INPUT = { symbol: "IConfigurationService.getValue", path: "src/vs/platform/configuration/common/configuration.ts" };
+
 /** A row of the table: its label, the tool it calls, and its inputs in the order calls cycle through them (the first is the cold call). */
 type Row = { label: string; tool: string; inputs: Record<string, unknown>[] };
 const CALLS: Row[] = [
@@ -59,6 +76,10 @@ const CALLS: Row[] = [
     { label: "imports (group_by)", tool: "imports", inputs: [{ path: "src/vs/platform/storage/common/storage.ts", group_by: "src/vs" }] },
     { label: "architecture (summary)", tool: "architecture", inputs: [{ path: "src/vs" }] },
     { label: "architecture (cycles)", tool: "architecture", inputs: [{ path: "src/vs/workbench/contrib", report: "cycles" }] },
+    { label: "calls", tool: "calls", inputs: [
+        ...CALL_TARGETS.map((t) => ({ symbol: `${t.type}.${t.member}`, path: t.path })),
+        ...CALL_TARGETS.map((t) => ({ symbol: t.type, path: t.path })),
+    ] },
     { label: "show_on_map", tool: "show_on_map", inputs: [...FILES, ...FOLDERS].map((p) => ({ paths: [p] })) },
 ];
 
@@ -119,12 +140,10 @@ function warmIndex(repo: string): string[] {
     return indexed.stdout.split(/[\r\n]+/).filter((line) => line.startsWith("[index]") && !/^\[index\] \w+ \d+\/\d+\s*$/.test(line));
 }
 
-async function main(): Promise<void> {
-    const repo = path.resolve(process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join("..", "vscode"));
-    const afterWrite = process.argv.includes("--after-write");
+/** Starts the real server in the repo's folder, as Claude Code does, with live events off; returns the connected client and the start-up time. */
+async function startServer(repo: string): Promise<{ client: Client; startupMs: number }> {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
-
     const client = new Client({ name: "bench-mcp", version: "1" });
     const started = performance.now();
     await client.connect(new StdioClientTransport({
@@ -134,7 +153,34 @@ async function main(): Promise<void> {
         env: { ...env, NEBULOSITY_LIVE: "off", CLAUDE_PROJECT_DIR: repo },
         stderr: "inherit",
     }));
-    const startupMs = performance.now() - started;
+    return { client, startupMs: performance.now() - started };
+}
+
+/** S14: the first `calls` call of a fresh server, five times; each answer must be a real answer, not the list of candidates. */
+async function freshCalls(repo: string): Promise<boolean> {
+    const times: number[] = [];
+    for (let run = 1; run <= 5; run++){
+        const { client } = await startServer(repo);
+        const started = performance.now();
+        const result = await client.callTool({ name: "calls", arguments: FRESH_CALLS_INPUT });
+        const took = performance.now() - started;
+        const text = (result.content as { type: string; text: string }[])[0]?.text ?? "";
+        await client.close();
+        if (result.isError || / types are named /.test(text.split("\n")[0])) throw new Error(`fresh calls run ${run} didn't give an answer: ${text.split("\n")[0]}`);
+        times.push(took);
+        console.log(`fresh server ${run}: first calls call ${ms(took)} (${text.length.toLocaleString("en-US")} characters)`);
+    }
+    const worst = Math.max(...times);
+    console.log(`\nS14 (first calls call on a fresh server ≤ ${S14_MS} ms): ${worst <= S14_MS ? "PASS" : "FAIL"} (worst ${ms(worst)})`);
+    return worst <= S14_MS;
+}
+
+async function main(): Promise<void> {
+    const repo = path.resolve(process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join("..", "vscode"));
+    const afterWrite = process.argv.includes("--after-write");
+    if (process.argv.includes("--fresh-calls")) process.exit((await freshCalls(repo)) ? 0 : 1);
+
+    const { client, startupMs } = await startServer(repo);
 
     const warm = await table(client);
     console.log(`Server start (spawn → initialized): ${ms(startupMs)}\n`);

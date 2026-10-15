@@ -244,10 +244,10 @@ Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zo
 | `search` | Find code or concepts by keyword or meaning |
 | `imports` | What imports X, or what X imports, directly or transitively, with complete counts; `group_by` counts what a change reaches by area; `within` keeps one folder; `to` gives the shortest chain from X to Y *(V1.6, ADR-056: replaces `dependents`, `dependencies` and `path`)* |
 | `architecture` | A folder's layers, folder conventions, import cycles and files nothing imports, from its imports *(V1.6, ADR-055, ADR-056)* |
-| `calls` | Who calls a method through declared types (injected services, fields, parameters, base classes), its implementations, and what a change to its signature touches; or where a type is injected *(proposed, V1.7 plan, 2026-10-15, ADR-059)* |
+| `calls` | Who calls a method through declared types (injected services, fields, parameters, base classes), its implementations, and what a change to its signature touches; or where a type is injected *(V1.7, ADR-059)* |
 | `show_on_map` | Highlight paths on the open Map. Does nothing if the Map isn't open |
 
-*(V1.6, ADR-056: six tools. The five that answer questions are always loaded into Claude Code's prompt through `_meta["anthropic/alwaysLoad"]`; `show_on_map` is deferred with a search hint.)* *(proposed, V1.7 plan, 2026-10-15, ADR-056 amended: seven tools, the six that answer questions always loaded, their definitions and the instructions under 6,650 characters.)* Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
+*(V1.6, ADR-056: six tools. The five that answer questions are always loaded into Claude Code's prompt through `_meta["anthropic/alwaysLoad"]`; `show_on_map` is deferred with a search hint.)* *(V1.7, ADR-056 amended: seven tools, the six that answer questions always loaded, their definitions and the instructions under 6,650 characters.)* Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
 
 **Safety.** Every tool is read-only. Paths are validated against the repo root (today's `safePath`, generalized). The MCP server listens on nothing (stdio), and the live endpoint accepts only localhost.
 

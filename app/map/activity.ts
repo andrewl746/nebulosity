@@ -35,6 +35,7 @@ export function activityLabel(event: LiveEvent): string {
         // a live event carries only the tool and its paths, so a chain is told by having two or more
         case "imports": return paths.length >= 2 ? `Tracing ${paths[0]} → ${paths[1]}` : any ? `Following the imports of ${list(paths)}` : "Following imports";
         case "architecture": return any ? `Reading how ${list(paths)} is organized` : "Reading how the code is organized";
+        case "calls": return any ? `Following the calls into ${list(paths)}` : "Following calls";
         case "show_on_map": return any ? `Showing ${list(paths)} on the map` : "Showing on the map";
         default: return any ? `${tool} · ${list(paths)}` : tool;
     }

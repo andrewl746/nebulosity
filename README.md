@@ -15,7 +15,7 @@ Some questions about a big repo are walks over its import graph. What depends on
 ## What it does
 
 - **The Map**: one folder at a time, at most 50 boxes, lines for imports between them; big folders split into pages of related boxes; a panel with each box's summary, contents, what it uses and what uses it; a read-only source viewer; search with Ctrl K.
-- **Six MCP tools for Claude Code**: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports) and `show_on_map`.
+- **Seven MCP tools for Claude Code**: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports), `calls` (who calls a method, even through injected services, and what changing it touches) and `show_on_map`.
 - **Fresh**: while the Map runs, a background worker reflects a saved file in 1.975 s at worst once warm (Update Benchmark #2) and, with a key, refreshes its summary after a quiet minute.
 
 ## How it compares with Claude Code alone
@@ -120,7 +120,7 @@ nebulosity setup      # connect Claude Code to this repo
 Everything except summaries works without a key, and without one nothing is sent to Anthropic:
 - the index, and the Map with its folders, files, import lines, panels and source viewer;
 - search over code, declarations, file names and folder names;
-- all six tools in Claude Code.
+- all seven tools in Claude Code.
 
 Where a summary would go, Nebulosity says summaries are off and what a key would add.
 
@@ -134,18 +134,19 @@ With an Anthropic API key, `nebulosity summarize .` writes a short summary of ev
 
 A big first run goes through Anthropic's Batch API at half price, so it can take a while; `--no-wait` returns at once, and running the command again picks up where it left off.
 
-### The six tools Claude Code gets
+### The seven tools Claude Code gets
 
 - **`overview`**: start here. The repo's size and summary, its top-level areas, the docs to read first, and the files most others import.
 - **`describe`**: what a folder or file is: its summary, what's inside, what it imports from and what imports it, with exact counts, and the docs that describe it.
 - **`search`**: where a feature or concept lives, across code, summaries, file and folder names, and declarations.
 - **`imports`**: exact answers from the whole import graph in one call: what imports a file or folder, what it imports, what a change would affect, and the shortest import chain between two places.
 - **`architecture`**: how a folder's code is organized, computed from its imports: its layers and the imports that go against them, recurring folder conventions, import cycles, and files nothing imports.
+- **`calls`**: who calls a method of a class or interface through declared types (injected services, fields, parameters, base classes): its callers, its implementations, what a change to its signature touches, and where a type is injected.
 - **`show_on_map`**: points at files or folders on the Map while Claude Code explains them.
 
 Good to know:
 - The server answers about the indexed repo that holds the folder Claude Code runs in. It only reads the index, so keep `nebulosity map` running to have changes picked up as you edit.
-- The five tools that answer questions load at the start of every session, with no setting to change; their definitions and instructions take about 2,000 tokens. `show_on_map` loads when Claude Code needs it.
+- The six tools that answer questions load at the start of every session, with no setting to change; their definitions and instructions take about 2,400 tokens. `show_on_map` loads when Claude Code needs it.
 - To keep tool calls off the Map, run `nebulosity setup --print`, add `-e NEBULOSITY_LIVE=off` right after the name `nebulosity` in the add line it prints, and run what it prints. A later plain `nebulosity setup` drops that setting again.
 
 ### Windows, macOS and Linux

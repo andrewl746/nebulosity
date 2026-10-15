@@ -1,7 +1,7 @@
 import path from "path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture, DI_FIXTURE } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../db/client";
 import { requireRepository } from "../db/store/structure";
@@ -39,21 +39,57 @@ function archFixture(): ToolContext {
     return { repoRoot: repoKey(root), summariesOff: true };
 }
 
+/** The di-repo fixture (ground truth: the V1.7 plan) indexed with no key. */
+function diFixture(): ToolContext {
+    const root = copyFixture(DI_FIXTURE);
+    indexRepository(root);
+    refreshSummaryStatus(root, { summarizerAvailable: false });
+    return { repoRoot: repoKey(root), summariesOff: true };
+}
+
+const NOTE = "Note: found through declared types: fields, constructor parameters, parameters, locals, X.get(T), useService(T), new C(), base classes and aliases. A call on a value whose type is only inferred isn't seen.";
+const READ_FILE_HEAD = [
+    "IFileService.readFile (interface IFileService, src/platform/files/common/files.ts:5): called in 8 files, 13 calls in all.",
+    "On IFileService itself in 4 files, on a sub-interface in 1, on an implementation in 4. Tests among the files: 1.",
+    "By area:", "  src/workbench/  6", "  src/platform/files/common/fileService.ts  1", "  src/platform/files/node/  1",
+    "Files, most calls first (lines):",
+];
+const READ_FILE_ROWS = [
+    "  src/workbench/commands/openCommand.ts  8, 8, 12",
+    "  src/workbench/editor/editorPane.ts  15, 15  (on IFileService, IWatchingFileService)",
+    "  src/workbench/history/history.ts  4, 8",
+    "  src/workbench/test/fileService.test.ts  14, 14  (on FileService, TestFileService)",
+    "  src/platform/files/common/fileService.ts  10  (on FileService)",
+    "  src/platform/files/node/watchingFileService.ts  6  (on WatchingFileService)",
+    "  src/workbench/editor/textEditor.ts  5",
+    "  src/workbench/search/searchModel.ts  8  (on FileService)",
+];
+const READ_FILE_TAIL = [
+    "If readFile's signature changes, 10 files change: these 8, and 2 that declare it:",
+    "  src/platform/files/browser/memoryFileService.ts",
+    "  src/platform/files/common/files.ts",
+    "Implementations of IFileService (4; 3 declare readFile):",
+    "  MemoryFileService  src/platform/files/browser/memoryFileService.ts:3  implements IFileService, declares readFile",
+    "  FileService  src/platform/files/common/fileService.ts:4  implements IFileService, declares readFile",
+    "  WatchingFileService  src/platform/files/node/watchingFileService.ts:4  through IWatchingFileService",
+    "  TestFileService  src/workbench/test/fileService.test.ts:6  test double, declares readFile",
+];
+
 describe("the registry", () => {
     it("defines the tools once, in order, with descriptions Claude Code shows whole", () => {
         for (const tool of TOOLS) expect(tool.description.length).toBeLessThanOrEqual(2_048);
     });
 
-    it("serves six tools, the five that answer questions loaded into every prompt (ADR-056)", () => {
-        expect(TOOLS.map((t) => t.name)).toEqual(["overview", "describe", "search", "imports", "architecture", "show_on_map"]);
-        expect(TOOLS.filter((t) => t.alwaysLoad).map((t) => t.name)).toEqual(["overview", "describe", "search", "imports", "architecture"]);
+    it("serves seven tools, the six that answer questions loaded into every prompt (ADR-056)", () => {
+        expect(TOOLS.map((t) => t.name)).toEqual(["overview", "describe", "search", "imports", "architecture", "calls", "show_on_map"]);
+        expect(TOOLS.filter((t) => t.alwaysLoad).map((t) => t.name)).toEqual(["overview", "describe", "search", "imports", "architecture", "calls"]);
         expect(TOOLS.find((t) => t.name === "show_on_map")!.searchHint).toBe("map highlight focus show point visualize");
     });
 
-    it("keeps what every session loads under 7,000 characters: the five definitions and the instructions", () => {
+    it("keeps what every session loads under 6,650 characters: the six definitions and the instructions", () => {
         const chars = TOOLS.filter((t) => t.alwaysLoad)
             .reduce((sum, t) => sum + JSON.stringify({ name: `mcp__nebulosity__${t.name}`, description: t.description, input_schema: z.toJSONSchema(t.inputSchema) }).length, 0);
-        expect(chars + SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(7_000);
+        expect(chars + SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(6_650);   // 2.75 characters a token in Eval #2: 6,650 is about 2,420 tokens, under gate condition 6's 2,500 (ADR-056, amended)
         expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(2_048);   // within the old cap too, for older Claude Code
     });
 
@@ -63,6 +99,56 @@ describe("the registry", () => {
             'Paths are relative to the repo root ("" is the root) or absolute inside it.',
         ]);
         expect(SERVER_INSTRUCTIONS).not.toContain("Read the docs they point to");
+    });
+});
+
+describe("calls", () => {
+    it("gives the ground truth's text for a member, a type and an ambiguous name, and the paths the Map pulses", async () => {
+        const context = diFixture();
+        const member = await call("calls", { symbol: "IFileService.readFile" }, context);
+        expect(member.text).toBe([...READ_FILE_HEAD, ...READ_FILE_ROWS, ...READ_FILE_TAIL, NOTE].join("\n"));
+        expect(member.paths).toEqual([
+            "src/platform/files/common/files.ts", "src/workbench/commands/openCommand.ts", "src/workbench/editor/editorPane.ts",
+            "src/workbench/history/history.ts", "src/workbench/test/fileService.test.ts", "src/platform/files/common/fileService.ts",
+            "src/platform/files/node/watchingFileService.ts", "src/workbench/editor/textEditor.ts", "src/workbench/search/searchModel.ts",
+        ]);
+        const type = await call("calls", { symbol: "IFileService" }, context);
+        expect(type.text).toBe([
+            "IFileService (interface, src/platform/files/common/files.ts:5): injected in 3 files, 5 places in all.",
+            "By area:", "  src/workbench/  3",
+            "Files, most places first (lines):",
+            "  src/workbench/commands/openCommand.ts  5, 6, 7  (accessor or hook)",
+            "  src/workbench/editor/baseEditor.ts  4  (constructor)",
+            "  src/workbench/editor/editorPane.ts  6  (constructor)",
+            "Implementations of IFileService (4):",
+            "  MemoryFileService  src/platform/files/browser/memoryFileService.ts:3  implements IFileService",
+            "  FileService  src/platform/files/common/fileService.ts:4  implements IFileService",
+            "  WatchingFileService  src/platform/files/node/watchingFileService.ts:4  through IWatchingFileService",
+            "  TestFileService  src/workbench/test/fileService.test.ts:6  test double",
+            NOTE,
+        ].join("\n"));
+        expect(type.paths).toEqual(["src/platform/files/common/files.ts", "src/workbench/commands/openCommand.ts", "src/workbench/editor/baseEditor.ts", "src/workbench/editor/editorPane.ts"]);
+        const ambiguous = await call("calls", { symbol: "Logger.log" }, context);
+        expect(ambiguous.text).toBe([
+            "2 types are named Logger; pass path, the file that declares the one you mean:",
+            "  class Logger  src/platform/log/logger.ts:1",
+            "  class Logger  src/workbench/log/logger.ts:1",
+        ].join("\n"));
+        expect(ambiguous.paths).toEqual([]);
+    });
+
+    it("pages the files, and keeps the signature block and the implementations for the first page", async () => {
+        const context = diFixture();
+        const first = await call("calls", { symbol: "IFileService.readFile", limit: 3 }, context);
+        expect(first.text).toBe([...READ_FILE_HEAD, ...READ_FILE_ROWS.slice(0, 3), "… 5 more (next page: offset 3)", ...READ_FILE_TAIL, NOTE].join("\n"));
+        const second = await call("calls", { symbol: "IFileService.readFile", limit: 3, offset: 3 }, context);
+        expect(second.text).toBe([...READ_FILE_HEAD, "Showing 4–6 of 8.", ...READ_FILE_ROWS.slice(3, 6), "… 2 more (next page: offset 6)", NOTE].join("\n"));
+    });
+
+    it("refuses a member the type doesn't have, listing the ones it has", async () => {
+        const failure = call("calls", { symbol: "IFileService.save" }, diFixture());
+        await expect(failure).rejects.toThrow(BadInputError);
+        await expect(failure).rejects.toThrow("IFileService has no member save. Its members: readFile, writeFile.");
     });
 });
 

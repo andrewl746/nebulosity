@@ -290,7 +290,7 @@ type SourceResponse = { repo: string; path: string; content: string; lineCount: 
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo, or an empty one; `404 NOT_FOUND` for a folder, a file the index doesn't know, or a file deleted since; `404 INDEX_EMPTY`.
 
-## 17. The MCP tools (slice V1.4; six tools since V1.6, ADR-056)
+## 17. The MCP tools (slice V1.4; six tools since V1.6, ADR-056; seven since V1.7, ADR-059)
 
 Claude Code and any MCP client reach the engine through `mcp/server.ts` over stdio (PIVOT_SPEC.md §6.2, ADR-030). Each tool is defined once in `lib/tools/registry.ts` (ADR-047). Claude Code shows them as `mcp__nebulosity__<name>`.
 
@@ -305,7 +305,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 | `search` | `query` (1–200 characters), `limit` 1–30 (10) | the best files and folders, each with its tagline and best-matching code (cut to 160 characters) |
 | `imports` | `path`, `direction` (`dependents`: the files that import it; `dependencies`: the files it imports), `transitive` (false), `to`, `group_by`, `within`, `limit` 1–500 (50), `offset` (0) | see the modes below |
 | `architecture` | `path` (""), `report`: summary, layers, conventions, cycles or unused (summary), `through`, `limit` 1–500 (20), `offset` (0) | a folder's organization computed from its imports (ADR-055), then the docs about the place (up to 5); with `through` or a file as `path`, the default report answers as `cycles`; see below |
-| `calls` *(proposed, V1.7 plan, 2026-10-15)* | `symbol`, `path`, `group_by`, `within`, `limit` 1–500 (50), `offset` (0) | see `calls` below |
+| `calls` | `symbol`, `path`, `group_by`, `within`, `limit` 1–500 (50), `offset` (0) | see `calls` below |
 | `show_on_map` | `action`: highlight, focus or clear (highlight); `paths` (0–50) | what was sent, what was left out, and whether the Map took it |
 
 `imports` replaces V1.4's `dependents`, `dependencies` and `path` (ADR-056): `dependents` is `imports` with `direction: "dependents"` (the default), `dependencies` is `direction: "dependencies"`, and the `path` tool's `from` and `to` are `imports`' `path` and `to`.
@@ -318,7 +318,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
 
 **`architecture`, by report.** `summary` is the four reports in brief (layers bottom first and the imports against that order; the recurring folder names; the cycle count and the largest; the files nothing imports). `layers`, `conventions`, `cycles` and `unused` give one in full; `cycles` with `through` (or with a file as `path`) gives the shortest import cycle through that file, or says it is in none. `summary` with `through`, or on a file, is read as that question and answered as `cycles` (since 2026-10-15). `through`, or a file as `path`, with `layers`, `conventions` or `unused` is refused. A page of `unused` past the end of its list says how long the list is. Every report, and a file's cycle, ends with the docs about the place, the ones `describe` names for it (the repo's: the docs to read first), since 2026-10-15 (ADR-054, amended). Every report fits the 40,000-character limit: a page of cycles or of files nothing imports takes the docs lines out of its list's budget.
 
-**`calls`** *(proposed, V1.7 plan, 2026-10-15, ADR-059)*.
+**`calls`** *(V1.7, ADR-059)*.
 - **Description:** `Who calls a method of a class or interface, through declared types: injected services, fields, parameters, locals and base classes. With a method: its callers, its implementations and what changing it touches; with a type: where it is injected. Prefer it to grep.`
 - **Input:**
   - `symbol` (required, at most 200 characters): `"IFooService", or a method: "IFooService.save".`;
@@ -352,7 +352,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - **Ambiguous names** list the candidates, one per line with the kind, path and line, and ask for `path`.
 - **Live event:** the declaring file, then up to 49 of the page's files (the Map takes 50 paths at most).
 
-**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports` and `architecture` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The five definitions and the instructions together stay under 7,000 characters (a test). *(proposed, V1.7 plan, 2026-10-15, ADR-056 amended: `calls` is always loaded too, and the six definitions and the instructions stay under 6,650 characters.)*
+**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports`, `architecture` and `calls` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The six definitions and the instructions together stay under 6,650 characters (a test; they measure 6,614, ADR-056 amended).
 
 **Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `imports` refuses it, since the whole repo has no outside.
 
@@ -375,7 +375,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - bad `show_on_map` input;
 - the MCP SDK's "Input validation error" for input outside a schema.
 
-**Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; imports its target, or with `to` the target, `to`, then the chain between; architecture its path; show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
+**Live events** (§14). One per successful call: `tool` is the bare name and `paths` what the call touched. describe sends its path; search its hits; imports its target, or with `to` the target, `to`, then the chain between; architecture its path; calls the declaring file, then up to 49 of the page's files (the Map takes 50 paths at most); show_on_map its paths and its `action`; overview none. None go out when the answer's repo isn't the one the Map shows, or with `NEBULOSITY_LIVE=off`. Pulses are fire-and-forget; show_on_map waits (at most 200 ms) to say whether the Map took it.
 
 **Instructions.** The server's `instructions`, sent once per session (Claude Code keeps 4,096 characters since 2.1.296, 2,048 before), are `SERVER_INSTRUCTIONS` in the registry: when to reach for each tool, under 2,048 characters so older clients keep all of it. Since 2026-10-15 their next-to-last sentence says the docs the answers name are the maintainers' own account, to open before answering how the code is organized or why (ADR-054, amended).
 
