@@ -47,7 +47,7 @@ import {
     QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub, sessionArgs, utilizationCheck,
     type RunId,
 } from "./run-config";
-import { resultCount, scheduleSessions, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef, type SessionFile } from "./session";
+import { resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef, type SessionFile } from "./session";
 import { summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
@@ -447,7 +447,8 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
 
     // 1. the init message again, from the finished transcript. A run that never started has no init to check: it is the outage below.
     const neverStarted = outage !== null && summary.model === null;
-    const problems = neverStarted ? [] : validateInit(summary, expected);
+    // a session has one init per message: every one is judged, so a server that dropped between messages is caught
+    const problems = neverStarted ? [] : session === undefined ? validateInit(summary, expected) : sessionInitProblems(raw, (init) => validateInit(init, expected));
     if (problems.length > 0) throw new Stop(2, `${name}: the run differs from the agreed setup:\n  - ${problems.join("\n  - ")}\nThe raw transcript is ${rawFile}. Nothing was kept.`);
 
     // 2. what no run may change: any repo of the definition, or the checkout. Never restored automatically.

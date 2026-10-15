@@ -9,7 +9,7 @@
  * So a message's cost is the difference of two totals, and a session's time is the sum of its messages' duration_ms.
  */
 import { schedule, type RunId } from "./run-config";
-import { streamEvents, type Json } from "./transcript";
+import { streamEvents, summarizeRun, type Json, type RunSummary } from "./transcript";
 import { infrastructureFailure } from "./validate";
 
 export type SessionTurn = { finalText: string | null; costUsd: number; durationMs: number; toolCalls: Record<string, number>; nebulosityCalls: number };
@@ -22,14 +22,39 @@ export const userMessage = (text: string): string => JSON.stringify({ type: "use
 export const resultCount = (jsonl: string): number => streamEvents(jsonl).filter((e) => e.type === "result").length;
 
 /**
- * Why a session's transcript is an outage, or null. A session with fewer results than messages sent stopped early; that
- * comes first, because infrastructureFailure reads only the last result, and a first message that succeeded would hide a
- * second that never came. Otherwise infrastructureFailure's answer.
+ * Why a session's transcript is an outage, or null. Fewer results than messages sent means it stopped early; more
+ * is refused (turnQuestions would no longer line up with the results). Then every message's own stretch of the
+ * transcript (it has its own init and result) gets infrastructureFailure's tests, because that reads only the last result
+ * and an error in the middle would be kept as an answer. A message that ran into its turn or budget limit is an answer
+ * that scores 0, not an outage (infrastructureFailure already says so).
  */
 export function sessionOutage(jsonl: string, messagesSent: number): string | null {
     const answered = resultCount(jsonl);
     if (answered < messagesSent) return `the session ended after ${answered} of ${messagesSent} results (killed, crashed or timed out before the last answer)`;
-    return infrastructureFailure(jsonl);
+    if (answered > messagesSent) return `the session has ${answered} results for ${messagesSent} messages sent, so the questions can't be matched to the answers`;
+    let message = 0;
+    let segment: Json[] = [];
+    for (const e of streamEvents(jsonl)){
+        segment.push(e);
+        if (e.type !== "result") continue;
+        message++;
+        const why = infrastructureFailure(segment.map((x) => JSON.stringify(x)).join("\n"));
+        if (why !== null) return `message ${message} of ${messagesSent}: ${why}`;
+        segment = [];
+    }
+    return null;
+}
+
+/** Every init message of a session checked as a single run's is; the problems name the message whose init differs. */
+export function sessionInitProblems(jsonl: string, check: (init: RunSummary) => string[]): string[] {
+    const problems: string[] = [];
+    let message = 0;
+    for (const e of streamEvents(jsonl)){
+        if (e.type !== "system" || e.subtype !== "init") continue;
+        message++;
+        for (const p of check(summarizeRun(JSON.stringify(e)))) problems.push(`message ${message}: ${p}`);
+    }
+    return problems;
 }
 
 const count = (into: Record<string, number>, name: string): void => { into[name] = (into[name] ?? 0) + 1; };

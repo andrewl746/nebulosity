@@ -1,5 +1,6 @@
+import { validateInit } from "./validate";
 import { describe, expect, it } from "vitest";
-import { resultCount, scheduleSessions, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
+import { resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage } from "./session";
 
 /**
  * A hand-made two-message session in the shape the probe run of Task 9 showed (docs: task-9-report.md), with round numbers:
@@ -124,5 +125,46 @@ describe("sessionProblems", () => {
         expect(problems[3]).toMatch(/s3 is over nowhere but asks q1/);
         expect(problems[4]).toMatch(/s1.*twice/);
         expect(problems[5]).toMatch(/s5.*no questions/);
+    });
+});
+
+describe("sessionOutage in the middle of a session", () => {
+    const mid = (first: unknown, second: unknown = turnTwo[turnTwo.length - 1]): string =>
+        [...turnOne.slice(0, -1), first, ...turnTwo.slice(0, -1), second].map(line).join("\n");
+    const ok1 = turnOne[turnOne.length - 1];
+
+    it("names a message whose result is an API error even when the last one succeeded", () => {
+        const text = mid({ type: "result", subtype: "success", is_error: true, api_error_status: 529, result: "overloaded" });
+        expect(sessionOutage(text, 2)).toBe("message 1 of 2: the API returned an error (529)");
+        expect(sessionOutage(mid({ type: "result", subtype: "success", is_error: true, result: "API Error: Connection error." }), 2)).toMatch(/^message 1 of 2: the run ended on an error message/);
+        expect(sessionOutage(mid(ok1), 2)).toBeNull();
+    });
+
+    it("does not call a message that hit its turn or budget limit an outage", () => {
+        const limit = { type: "result", subtype: "error_max_turns", is_error: true, result: "" };
+        expect(sessionOutage(mid(limit), 2)).toBeNull();
+        // the process ended after the limited message and nothing followed: still a missing result, not a limit
+        expect(sessionOutage([...turnOne.slice(0, -1), limit].map(line).join("\n"), 1)).toBeNull();
+    });
+
+    it("refuses more results than messages sent", () => {
+        const three = [...turnOne, ...turnTwo, ...turnOne].map(line).join("\n");
+        expect(sessionOutage(three, 2)).toMatch(/3 results for 2 messages/);
+    });
+});
+
+describe("sessionInitProblems", () => {
+    const expect_ = { arm: "nebulosity" as const, model: "claude-sonnet-5-5", claudeVersion: "2.1.300", forbiddenPlugins: [], scripts: false };
+    const connected = { ...init, tools: ["Bash", "Read", "Grep", "Glob"], mcp_servers: [{ name: "nebulosity", status: "connected" }] };
+    const dropped = { ...connected, mcp_servers: [] };
+    const build = (second: unknown): string => [connected, ...turnOne.slice(1), second, ...turnTwo.slice(1)].map(line).join("\n");
+
+    it("is empty when every message's init matches", () => {
+        expect(sessionInitProblems(build(connected), (i) => validateInit(i, expect_))).toEqual([]);
+    });
+    it("names the message whose init lacks nebulosity: connected", () => {
+        const problems = sessionInitProblems(build(dropped), (i) => validateInit(i, expect_));
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toBe("message 2: MCP servers are [], not [nebulosity:connected]");
     });
 });
