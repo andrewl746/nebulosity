@@ -142,7 +142,7 @@ describe("the MCP server", () => {
         const { client } = await connect({ projectDir: makeTempDir("neb-elsewhere-"), live: true });
         const result = await client.callTool({ name: "overview", arguments: {} });
         expect(result.isError).toBe(true);
-        expect(textOf(result)).toBe(`No repository indexed yet. Run npm run index -- <path-to-repo>. (Nebulosity's folder: ${process.env.NEBULOSITY_HOME}.)`);
+        expect(textOf(result)).toBe(`No repository indexed yet. Run nebulosity index <path-to-repo> (in a checkout: npm run index -- <path-to-repo>). (Nebulosity's folder: ${process.env.NEBULOSITY_HOME}.)`);
     });
 
     it("keeps stdout for the protocol: log, info, debug, dir and dirxml go through console.error", () => {

@@ -4,6 +4,7 @@ import { getDb } from "../db/client";
 import { listStagedRepositories } from "../db/store/stages";
 import { NoActiveRepoError } from "../engine/errors";
 import { readIndexStatus } from "../engine/status";
+import { commandHint } from "../hints";
 import { normalizeSlashes, parseRepoPath } from "../index/paths";
 import type { ToolContext } from "./context";
 
@@ -74,7 +75,7 @@ export function setupCall(projectDir: string): CallSetup {
     const indexNote = structure?.state === "running"
         ? `The index is being updated (${structure.done}/${structure.total} files), so answers may miss the newest changes.`
         : structure?.state === "failed"
-            ? `The last index update failed${structure.note ? ` (${structure.note})` : ""}, so answers may be out of date. Running npm run index in the Nebulosity folder redoes it.`
+            ? `The last index update failed${structure.note ? ` (${structure.note})` : ""}, so answers may be out of date. Running ${commandHint("index", `"${choice.root}"`)} redoes it.`
             : undefined;
     // a session below the repo's root (a package of a monorepo) would otherwise read every path as its own folder's
     const subfolder = choice.how === "project" ? insideRoot(projectDir, choice.root) : null;

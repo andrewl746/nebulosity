@@ -4,6 +4,7 @@ import { IndexLockedError } from "../db/store/lock";
 import { findRepository } from "../db/store/structure";
 import { countStaleFolders, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
 import { NoActiveRepoError, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "../engine/errors";
+import { commandHint } from "../hints";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository, type IndexOptions, type IndexResult } from "../index/pipeline";
@@ -215,7 +216,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         if (repo === null || paths.length === 0 || deps.summarizer === null || !mayRefresh(repo)) return;
         const allowance = MAX_AUTO_REFRESH_FILES - refreshedInWindow;
         if (allowance <= 0){
-            log(`${paths.length} changed files keep their old summaries: ${MAX_AUTO_REFRESH_FILES} were refreshed in the last ${AUTO_REFRESH_WINDOW_MS / 60_000} minutes; they're redone when opened, or by npm run summarize`);
+            log(`${paths.length} changed files keep their old summaries: ${MAX_AUTO_REFRESH_FILES} were refreshed in the last ${AUTO_REFRESH_WINDOW_MS / 60_000} minutes; they're redone when opened, or by ${commandHint("summarize", `"${repo}"`)}`);
             return;
         }
 
@@ -246,7 +247,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             refreshedInWindow += sent;
             later(() => { refreshedInWindow -= sent; }, AUTO_REFRESH_WINDOW_MS);
             if (paths.length > allowance){
-                log(`refreshed at most ${allowance} of ${paths.length} changed files; the rest stay out of date until opened or npm run summarize`);
+                log(`refreshed at most ${allowance} of ${paths.length} changed files; the rest stay out of date until opened or summarized by ${commandHint("summarize", `"${repo}"`)}`);
             }
             if (result.summarized > 0) queueEmbed();
         } catch (err){
@@ -331,7 +332,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
      */
     async function begin(repo: string, firstTry: boolean): Promise<void> {
         if (findRepository(getDb(), repoKey(repo)) === null){
-            if (firstTry) log(`${repo} isn't indexed yet; run npm run index -- "${repo}" (checked again every ${timings.retryLockedMs / 1000} s)`);
+            if (firstTry) log(`${repo} isn't indexed yet; run ${commandHint("index", `"${repo}"`)} (checked again every ${timings.retryLockedMs / 1000} s)`);
             later(() => {
                 if (root !== repo || watcher !== null) return;
                 begin(repo, false).catch((err: unknown) => log(`starting on ${repo} failed: ${err instanceof Error ? err.message : String(err)}`));

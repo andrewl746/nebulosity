@@ -2,7 +2,7 @@ import type { ErrorCode } from "../contracts";
 import { DatabaseMissingError, DatabaseOutdatedError } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { RepoNotIndexedError } from "../db/store/structure";
-import { commandHint } from "../hints";
+import { commandHint, keyHint } from "../hints";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
 import { SummarizerAuthError } from "../index/summarize/types";
 import { NotAFolderError, PathNotFoundError } from "./level";
@@ -11,7 +11,7 @@ import { UnknownRepoError } from "./repos";
 /** Thrown when a summary is asked for and there's no API key to write it with. */
 export class SummariesOffError extends Error {
     constructor(){
-        super("Summaries are off: ANTHROPIC_API_KEY is not set (put it in .env.local and restart the server).");
+        super(`Summaries are off: ANTHROPIC_API_KEY is not set (${keyHint()}, then restart the Map).`);
         this.name = "SummariesOffError";
     }
 }
@@ -30,7 +30,7 @@ export class SummariesNotConfirmedError extends Error {
 /** Thrown when there's no active repo: nothing has been indexed yet. */
 export class NoActiveRepoError extends Error {
     constructor(){
-        super("No repository indexed yet. Run npm run index -- <path-to-repo>.");
+        super(`No repository indexed yet. Run ${commandHint("index", "<path-to-repo>")}.`);
         this.name = "NoActiveRepoError";
     }
 }

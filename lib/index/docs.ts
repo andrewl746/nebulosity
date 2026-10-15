@@ -84,10 +84,10 @@ function plainText(markdown: string): string {
     return pieces.join("").replace(/\s+/g, " ").trim();
 }
 
-/** Text outside code without HTML tags and emphasis marks. */
+/** Text outside code without HTML tags and emphasis marks. A capitalized tag (<PageListTable />) names a component, and stays. */
 function withoutMarks(text: string): string {
     return text
-        .replace(/<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/g, "")   // <img …>, <br/>, <b>
+        .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/g, "")         // <img …>, <br/>, <b>
         .replace(/(\*\*|__|~~)(.+?)\1/g, "$2")                          // **strong**, __strong__, ~~struck~~
         .replace(/(^|[^\w*])\*(?!\s)([^*]+?)\*(?!\w)/g, "$1$2")        // *em*, not 2*3*4
         .replace(/(^|\W)_(?!\s)([^_]+?)_(?!\w)/g, "$1$2");             // _em_, not snake_case

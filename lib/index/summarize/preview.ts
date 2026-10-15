@@ -4,6 +4,7 @@ import {
     loadFileFacts, loadFolderFacts, loadImporters, loadSummaries, targetKey,
     type FileFacts, type FolderFacts, type StoredSummary,
 } from "../../db/store/summaries";
+import { commandHint } from "../../hints";
 import { ASSUMED_TOKENS } from "./budget";
 import { perRequestPrice, pickSample, usageStats, type UsageStats } from "./compare";
 import { mapLimit } from "./concurrency";
@@ -162,7 +163,7 @@ export async function runFolderPreview(input: PreviewInput): Promise<FolderPrevi
         const customId = keyOf(target);
         const prompt = target.kind === "file" ? input.filePrompt(fileByPath.get(target.path)!) : (target.prompt ?? null);
         if (prompt === null){
-            return Promise.resolve({ customId, ok: false, error: `${target.path} changed after it was indexed; run npm run index first`, model: null, usage: null });
+            return Promise.resolve({ customId, ok: false, error: `${target.path} changed after it was indexed; run ${commandHint("index", "<path-to-repo>")} first`, model: null, usage: null });
         }
         return input.summarizer.summarize({ customId, model: target.model, system: SYSTEM_PROMPTS[target.kind], prompt });
     };

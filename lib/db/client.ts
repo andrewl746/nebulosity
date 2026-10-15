@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import * as schema from "./schema";
+import { commandHint } from "../hints";
 import { dataPath, nebulosityPath } from "../home";
 
 /** How a process opens the database. Everything writes except the MCP server, which only reads (ADR-030, ADR-044). */
@@ -13,7 +14,7 @@ export type DbMode = "readwrite" | "readonly";
 /** A read-only open found no database file: nothing has been indexed on this machine yet. */
 export class DatabaseMissingError extends Error {
     constructor(file: string){
-        super(`No repository indexed yet: there's no index at ${file}. In the Nebulosity folder, run npm run index -- <path-to-repo>.`);
+        super(`No repository indexed yet: there's no index at ${file}. Run ${commandHint("index", "<path-to-repo>")}.`);
         this.name = "DatabaseMissingError";
     }
 }
@@ -24,7 +25,7 @@ export class DatabaseMissingError extends Error {
  */
 export class DatabaseOutdatedError extends Error {
     constructor(){
-        super("Nebulosity's index is older than this version of Nebulosity. Start the Map (npm run dev) or run npm run index -- <path-to-repo> once in the Nebulosity folder to update it, then try again.");
+        super(`Nebulosity's index is older than this version of Nebulosity. Run ${commandHint("index", "<path-to-repo>")} once, or start the Map (nebulosity map; in a checkout, npm run dev), to update it, then try again.`);
         this.name = "DatabaseOutdatedError";
     }
 }
@@ -112,9 +113,9 @@ export function useReadOnlyDatabase(): void {
 export function getDb(): Db {
     if (!globalForDb.db){
         // Vitest gets a throwaway in-memory database, whatever the mode: a test never opens a real file through here.
-        // Everything else opens the file under NEBULOSITY_DATA, by default NEBULOSITY_HOME/.nebulosity (lib/home.ts), never relative to cwd, because the MCP server
-        // is launched from inside the user's repository. A failed open isn't kept, so the next call tries again: the MCP
-        // server may start before anything is indexed.
+        // Everything else opens the file under NEBULOSITY_DATA, by default NEBULOSITY_HOME/.nebulosity (lib/home.ts),
+        // never relative to cwd, because the MCP server is launched from inside the user's repository. A failed open
+        // isn't kept, so the next call tries again: the MCP server may start before anything is indexed.
         globalForDb.db = process.env.VITEST
             ? openDb(":memory:")
             : openDb(dataPath("nebulosity.db"), globalForDb.readOnly ? "readonly" : "readwrite");

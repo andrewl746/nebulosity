@@ -1,7 +1,8 @@
 /**
  * npm run export-demo -- <path-to-repo> [--out <folder>] [--name <public name>]
  *
- * Writes the static demo's data (ADR-049, API_CONTRACTS.md §18) to <Nebulosity>/.nebulosity/demo by default. It only
+ * Writes the static demo's data (ADR-049, API_CONTRACTS.md §18) to the data folder's demo folder by default
+ * (dataPath("demo"): <Nebulosity>/.nebulosity/demo in a checkout, unless NEBULOSITY_DATA moves it). It only
  * reads the database, so it runs while the Map is open. Exits 1 when any file holds a path of this machine or the git
  * email; the demo must never publish one (D7).
  */

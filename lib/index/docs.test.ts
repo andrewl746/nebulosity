@@ -33,6 +33,8 @@ describe("docTitle", () => {
         expect(docTitle("README.md", "# __Bold__, *em*, _em_ and ~~old~~ but snake_case_name and 2*3*4\n")).toBe("Bold, em, em and old but snake_case_name and 2*3*4");
         expect(docTitle("README.md", '# <img src="logo.png" alt="logo" width="40"> AFFiNE <br/>\n')).toBe("AFFiNE");
         expect(docTitle("README.md", "# The `__init__` and `<Map>` [`api`][ref] guide ##\n")).toBe("The __init__ and <Map> api guide");
+        // a capitalized tag is a component's name (AFFiNE's page-list readme), not HTML: it stays
+        expect(docTitle("page-list/readme.md", "# <PageListTable />\n")).toBe("<PageListTable />");
     });
 
     it("skips a heading with nothing left in it: a bare # or one holding only a badge", () => {

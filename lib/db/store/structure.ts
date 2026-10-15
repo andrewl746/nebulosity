@@ -7,6 +7,7 @@ import {
 } from "../schema";
 import { chunkRows, columnCount, forEachBatch } from "../batch";
 import type { CodeChunk } from "../../contracts";
+import { commandHint } from "../../hints";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -48,10 +49,10 @@ export function findRepository(db: Db, rootPath: string): number | null {
     return db.select({ id: repositories.id }).from(repositories).where(eq(repositories.rootPath, rootPath)).get()?.id ?? null;
 }
 
-/** Thrown when a command needs a repo that `npm run index` hasn't indexed yet. */
+/** Thrown when a command needs a repo that `nebulosity index` hasn't indexed yet. */
 export class RepoNotIndexedError extends Error {
     constructor(rootPath: string){
-        super(`${rootPath} isn't indexed yet. Run npm run index -- ${rootPath} first.`);
+        super(`${rootPath} isn't indexed yet. Run ${commandHint("index", `"${rootPath}"`)} first.`);
         this.name = "RepoNotIndexedError";
     }
 }

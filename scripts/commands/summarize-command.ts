@@ -39,6 +39,7 @@ import {
     TargetNotReadyError, UnknownBatchError, type Transport,
 } from "../../lib/index/summarize/run";
 import { SUMMARY_MODELS } from "../../lib/index/summarize/prompts";
+import { keyHint } from "../../lib/hints";
 import { loadLocalEnv } from "../env";
 
 const USAGE = "usage: nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>] [--release-batch <batch id>]... [--yes]"
@@ -147,14 +148,14 @@ async function summarize(options: SummarizeOptions): Promise<number> {
 
     if (onePath !== null){
         if (!summarizer){
-            console.error("[summarize] ANTHROPIC_API_KEY is not set (put it in .env.local).");
+            console.error(`[summarize] ANTHROPIC_API_KEY is not set (${keyHint()}).`);
             return 1;
         }
         const row = await summarizeNow(root, onePath, summarizer);
         say(`${row.kind} ${row.path || "(repo)"}: ${row.status}${row.error ? ` (${row.error})` : ""}`);
         if (row.tagline) say(`${row.tagline} — ${row.summary}`);
     } else{
-        if (!summarizer) say("ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key; put it in .env.local).");
+        if (!summarizer) say(`ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key: ${keyHint()}).`);
         else if (!(await confirmSpend(options))) return 1;
         const result = await runSummaries(root, {
             summarizer, transport: options.transport, wait: options.wait, budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,

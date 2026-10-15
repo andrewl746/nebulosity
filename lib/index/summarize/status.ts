@@ -5,6 +5,7 @@ import { isSummaryLockHeld } from "../../db/store/lock";
 import { readStages, writeStage } from "../../db/store/stages";
 import { requireRepository } from "../../db/store/structure";
 import { applyTargetUpdates, countInFlight } from "../../db/store/summaries";
+import { commandHint } from "../../hints";
 import { repoKey } from "../paths";
 import type { PlannedTarget, TargetState } from "./plan";
 import { plural } from "./prompts";
@@ -24,7 +25,7 @@ export type SummaryStageContext = {
 
 /** The note for requests a stopped run leaves at Anthropic: they're paid for, and the next run collects them. */
 export function stillAtAnthropic(inFlight: number): string {
-    return `${plural(inFlight, "request")} still at Anthropic; run npm run summarize to collect them`;
+    return `${plural(inFlight, "request")} still at Anthropic; run ${commandHint("summarize", "<path-to-repo>")} to collect them`;
 }
 
 /**
@@ -52,7 +53,7 @@ export function summaryStageStatus(targets: readonly PlannedTarget[], context: S
         notes.push(`ANTHROPIC_API_KEY is not set, so ${waiting} of ${targets.length} summaries can't be written`);
     } else if (context.inFlight > 0){
         state = "running";
-        notes.push(`${plural(context.inFlight, "request")} at Anthropic in batches; run npm run summarize to collect them`);
+        notes.push(`${plural(context.inFlight, "request")} at Anthropic in batches; run ${commandHint("summarize", "<path-to-repo>")} to collect them`);
     } else if (waiting > 0){
         state = "idle";
         notes.push(`${waiting} waiting to be summarized`);

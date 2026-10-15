@@ -1,9 +1,11 @@
+import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../../lib/db/client";
 import { requireRepository } from "../../lib/db/store/structure";
 import { summariesConfirmed } from "../../lib/db/store/summaries";
+import { dataDir } from "../../lib/home";
 import { repoKey } from "../../lib/index/paths";
 import { indexRepository } from "../../lib/index/pipeline";
 import type { Summarizer } from "../../lib/index/summarize/types";
@@ -70,7 +72,7 @@ describe("nebulosity summarize: an estimate and a yes before any spend (S11)", (
 
         expect(await runSummarize([root])).toBe(0);
 
-        expect(printed(log)).toContain("ANTHROPIC_API_KEY is not set");
+        expect(printed(log)).toContain(`ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key: set it in the environment, or put it in ${path.join(dataDir(), ".env.local")}).`);
         expect(printed(log)).not.toContain("at list prices");
         expect(stub.requests).toHaveLength(0);
     });

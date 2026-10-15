@@ -211,7 +211,8 @@ describe("background service", () => {
         await service.idle();
 
         expect(stub.requests).toHaveLength(MAX_AUTO_REFRESH_FILES);
-        expect(logs).toContain("refreshed at most 50 of 52 changed files; the rest stay out of date until opened or npm run summarize");
+        const repo = path.resolve(root);
+        expect(logs).toContain(`refreshed at most 50 of 52 changed files; the rest stay out of date until opened or summarized by nebulosity summarize "${repo}" (in a checkout: npm run summarize -- "${repo}")`);
         await service.stop();
     });
 
@@ -411,7 +412,7 @@ describe("background service", () => {
 
         await service.setRepo(root);
         expect(watching).toBe(0);
-        expect(logs.some((m) => m.includes("isn't indexed yet"))).toBe(true);
+        expect(logs).toContain(`${path.resolve(root)} isn't indexed yet; run nebulosity index "${path.resolve(root)}" (in a checkout: npm run index -- "${path.resolve(root)}") (checked again every 30 s)`);
 
         indexRepository(root);   // npm run index, from a terminal
         await vi.advanceTimersByTimeAsync(30_000);

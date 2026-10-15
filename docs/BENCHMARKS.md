@@ -522,7 +522,7 @@ Each row covers 10 runs. The score is the mean share of rubric points for big-pi
 
 - **Target and machine:** VS Code @ `cc3fec88`, on the owner's laptop, the owner's index as it stood (read-only through the server), the engine as of V1.6 Task 12. `NEBULOSITY_LIVE=off`: nothing was sent to any port.
 - **Command:** `npm run bench-mcp -- ../vscode`, one run: the SDK's stdio client starts `node mcp/launch.mjs` in VS Code's folder, times each call from request to answer, reports each row's first call apart and then 20 warm calls. `imports` now has four rows, one per mode, and `architecture` two:
-  - `imports (group_by)` is `src/vs/platform/storage/common/storage.ts` by area under `src/vs` (one input, repeated);
+  - `imports (group_by)` is `src/vs/platform/storage/common/storage.ts` by area under `src/vs` (one input, repeated). Each call walks every file that reaches `storage.ts` through imports (thousands on VS Code), counts them by area, and finds the tests among them and the files nothing imports that load it, checked against the entry points the index held (Tasks 4 and 5 had re-indexed it, so they were stored). Only the import index is kept between calls, per index version, so every warm call redoes the walk;
   - `architecture (summary)` is `src/vs`, and `architecture (cycles)` is `src/vs/workbench/contrib` (one input each).
 - **Server start** (spawn → initialized): 778 ms.
 
@@ -606,11 +606,11 @@ N − A is within gate 5b's 2,500 tokens on both repos. The probes cost $0.12, s
 **Wording:** none changed. Both targets were met in round 1, so there was no second round.
 
 **Two observations:**
-- **Scripts were hard to use as configured.** 5 runs tried a script through Bash, as a heredoc (`mkdir -p … && cd … && cat > s.js <<'EOF' … node s.js`):
-  - all 5 were denied under `--permission-mode dontAsk`, because the allowlist holds only `Bash(node:*)` and read-only commands;
+- **Scripts were hard to use as configured.** 6 runs hit a denial. 5 tried a script through Bash, as a heredoc (`mkdir -p … && cd … && cat > s.js <<'EOF' … node s.js`), and affine-dev-unused tried a `for` loop that ran `git grep` once per file:
+  - all 6 were denied under `--permission-mode dontAsk`, because the allowlist holds only `Bash(node:*)` and read-only commands;
   - no run wrote a script with Write and then ran `node`, so every scratch folder was empty.
 
-  Nebulosity's tools answered in those runs. In Eval #2's arm without them, scripting as configured would mostly fail the same way.
+  Nebulosity's tools answered in those runs. In Eval #2's arm without them, scripting as configured would likely fail the same way; the pilot checks it.
 - **The plan's VS Code dev picks share `src/vs/platform` with Eval #2's planned violations question** (`src/vs/platform` → `src/vs/editor`). The dev set uses `src/vs/platform` twice: as the imported folder of its violations question (`src/vs/base` → `src/vs/platform`), and as its pairs folder. Task 14 therefore moves that Eval #2 question.
 
 ## 2026 10 15 Index Benchmark #5 — the structure stage after the two index gaps
