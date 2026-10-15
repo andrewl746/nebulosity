@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { nebulosityPath } from "./home";
+import { dataPath } from "./home";
 
 /** The port the Map's server listens on (npm run dev's default); live events are posted to it (PIVOT_SPEC.md §8). */
 export const DEFAULT_PORT = 3000;
@@ -8,7 +8,7 @@ export const DEFAULT_PORT = 3000;
 /** Small user-level settings that outlive any one run. */
 export type NebulosityConfig = { activeRepo: string | null; port: number };
 
-const configFile = (): string => nebulosityPath(".nebulosity", "config.json");
+const configFile = (): string => dataPath("config.json");
 
 export function readConfig(): NebulosityConfig {
     try{

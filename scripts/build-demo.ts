@@ -14,7 +14,7 @@ import path from "path";
 import { DEMO_FORMAT_VERSION, type DemoManifest } from "../lib/contracts";
 import { readConfig } from "../lib/config";
 import { leakNeedles, scanForLeaks } from "../lib/demo/privacy";
-import { nebulosityHome, nebulosityPath } from "../lib/home";
+import { dataPath, nebulosityHome, nebulosityPath } from "../lib/home";
 import { MAX_BYTES, MAX_FILES, refusals } from "./demo-limits";
 import { gitEmail } from "./git-email";
 
@@ -42,7 +42,7 @@ if (dataFlag !== -1 && (args[dataFlag + 1] === undefined || args[dataFlag + 1].s
     console.error(USAGE);
     process.exit(1);
 }
-const data = path.resolve(dataFlag === -1 ? nebulosityPath(".nebulosity", "demo") : args[dataFlag + 1]);
+const data = path.resolve(dataFlag === -1 ? dataPath("demo") : args[dataFlag + 1]);
 const manifestFile = path.join(data, "manifest.json");
 if (!fs.existsSync(manifestFile)){
     console.error(`[build-demo] no export at ${data}: run npm run export-demo -- <path-to-repo> first.`);

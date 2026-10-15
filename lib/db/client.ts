@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import * as schema from "./schema";
-import { nebulosityPath } from "../home";
+import { dataPath, nebulosityPath } from "../home";
 
 /** How a process opens the database. Everything writes except the MCP server, which only reads (ADR-030, ADR-044). */
 export type DbMode = "readwrite" | "readonly";
@@ -112,12 +112,12 @@ export function useReadOnlyDatabase(): void {
 export function getDb(): Db {
     if (!globalForDb.db){
         // Vitest gets a throwaway in-memory database, whatever the mode: a test never opens a real file through here.
-        // Everything else opens the file under NEBULOSITY_HOME (lib/home.ts), never relative to cwd, because the MCP server
+        // Everything else opens the file under NEBULOSITY_DATA, by default NEBULOSITY_HOME/.nebulosity (lib/home.ts), never relative to cwd, because the MCP server
         // is launched from inside the user's repository. A failed open isn't kept, so the next call tries again: the MCP
         // server may start before anything is indexed.
         globalForDb.db = process.env.VITEST
             ? openDb(":memory:")
-            : openDb(nebulosityPath(".nebulosity", "nebulosity.db"), globalForDb.readOnly ? "readonly" : "readwrite");
+            : openDb(dataPath("nebulosity.db"), globalForDb.readOnly ? "readonly" : "readwrite");
     }
 
     return globalForDb.db;
