@@ -16,7 +16,7 @@ Some questions about a big repo are walks over its import graph. What depends on
 
 - **The Map**: one folder at a time, at most 50 boxes, lines for imports between them; big folders split into pages of related boxes; a panel with each box's summary, contents, what it uses and what uses it; a read-only source viewer; search with Ctrl K.
 - **Six MCP tools for Claude Code**: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports) and `show_on_map`.
-- **Fresh**: while the Map runs, a background worker reflects a saved file in about ‹S6 PLACEHOLDER: Update Benchmark #2's worst, in seconds, measured after V1.6's final fix wave; the controller fills this in› and, with a key, refreshes its summary after a quiet minute.
+- **Fresh**: while the Map runs, a background worker reflects a saved file in 1.975 s at worst once warm (Update Benchmark #2) and, with a key, refreshes its summary after a quiet minute.
 
 ## How it compares with Claude Code alone
 
@@ -185,7 +185,7 @@ engine (lib/): level · describe · search · imports · architecture
 
 Core logic in `lib/` never imports the UI framework. The MCP server, the Map's API routes and the static exporter are thin adapters over the same engine.
 
-Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index in under a minute (S1: 55.7 s at worst of three, Index Benchmark #5, on a loaded machine), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 388 ms at worst, MCP Benchmark #4), and a saved file reflected in ‹S6 PLACEHOLDER: Update Benchmark #2's worst, in ms, 1 s of it the watcher's debounce; the controller fills this in after measuring› (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index in under a minute (S1: 55.7 s at worst of three, Index Benchmark #5, on a loaded machine), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 388 ms at worst, MCP Benchmark #4), and a saved file reflected in 1,975 ms at worst once warm, Update Benchmark #2, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Decisions worth reading
 

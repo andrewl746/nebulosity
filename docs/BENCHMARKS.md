@@ -844,3 +844,19 @@ How fast Claude Code got the context a question needs (medians, A / N; the score
   - tool use (80 of 90 against 0.90).
 
   It was also slower and costlier on VSCODE-PAIRS (1.73 times the time, 1.92 times the cost, at 0.99 against 1.00). The conventions report skips rare folder names, and two of N's three runs then had their scripts refused and grepped by hand. The third was faster and cheaper than every A run.
+
+## 2026 10 15 Update Benchmark #2 — S6 after V1.6's per-update workspace read
+
+- **Command:** `npm run bench-update -- ../vscode <file>` (five runs each) against `npx next dev -p 3130`, as in Update Benchmark #1: the watcher (1 s debounce) → `applyFileChanges` → `GET /api/describe` showing the new export, polled every 25 ms.
+- **Setup:** the sandbox worktree `../Nebulosity-build` at `ddc3975`, port 3130 (port 3000 untouched), a scratch data folder (`NEBULOSITY_DATA`) holding a fresh cold index of VS Code @ `cc3fec88` and a `config.json` with `port: 3130`; no API key, so summaries off. VS Code was clean afterwards.
+- **Machine:** One of 16 logical processors was fully used throughout by a runaway `python -` process left by this build session's own shell (PID 39512); see Index Benchmark #5. The cold index for this run took structure 66.9 s on that loaded machine (discover 1.0 s, parse 36.5 s, write 24.0 s, resolve 3.7 s, aggregate 1.5 s; code search filled 6.8 s later): an extra S1 data point, not an S1 verdict.
+
+| Batch | File | Each run | Median | Worst |
+|---|---|---|---|---|
+| 1, first after server start | `src/vs/base/common/strings.ts` | 4,189, 3,597, 11,029, 1,975, 1,900 ms | 3,597 ms | 11,029 ms |
+| 2 | `src/vs/editor/common/model/textModel.ts` | 1,904, 1,951, 1,847, 1,953, 1,844 ms | 1,904 ms | 1,953 ms |
+| 3, repeat of batch 1's file | `src/vs/base/common/strings.ts` | 1,964, 1,975, 1,906, 1,842, 1,918 ms | 1,918 ms | 1,975 ms |
+
+- `applyFileChanges` alone took 0.55–0.72 s per update (the worker's log; 115–224 ms in Update Benchmark #1), so the V1.6 workspace read roughly added 0.4–0.5 s on this loaded machine.
+- **Batch 1's first three runs were the dev server's cold start** (the first requests compile the routes; the log printed "watching" only during that batch), not steady state. Batches 2 and 3 are warm.
+- **S6 (≤ 2 s): FAIL as first run (worst 11,029 ms, the cold start); PASS warm (worst 1,975 ms, median 1,904 ms), with only 25–155 ms of margin.** The README quotes the warm worst.
