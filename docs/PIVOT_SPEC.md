@@ -402,7 +402,7 @@ Each v1 slice ends demoable:
 | V1.3 Map | level/describe/search APIs, new Map UI (levels, panel, ⌘K, status pill), live channel |
 | V1.4 MCP | tool registry, `mcp/server.ts`, `claude mcp add` instructions, smoke test |
 | V1.5 Ship | static export + hosted demo, eval, README, demo-video script |
-| V1.6 Works on your repo (ADR-043) | an installable package (index, Map and Claude Code setup, one command each); a set of real repos of different shapes; Windows, macOS and Linux; free mode with no API key; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic |
+| V1.6 Works on your repo (ADR-043) — DONE 2026-10-15 | an installable package (index, Map and Claude Code setup, one command each); five real repos of different shapes; Windows, macOS and Linux (CI); free mode with no API key; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic. As built, also: more imports resolved (ADR-053), docs pointers (ADR-054), impact and architecture facts (ADR-055), six tools with five always loaded (ADR-056), and Eval #2 against a gate fixed before its first run (ADR-057), which **failed**: the hold of ADR-051 stays |
 
 **Target:** V1.1–V1.5 by **2026-10-18** (end of reading week), with a slip budget of 2–4 days; V1.6 adds about 3–4 days. The extras follow in the order of ADR-043, E4 → E5 → E1 at about 2–4 days each, then E3 (small, optional) and E2 (after its measurement); each one updates the live demo and README. Context: Shopify applications open around late October or early November 2026. *(Until 2026-10-13 the extras ran E1 → E5 in about 1–2 weeks.)*
 
@@ -472,6 +472,12 @@ Each v1 slice ends demoable:
 | ADR-050 | The evaluation's method: 15 questions in three families, hand-checked truths, three arms, blind grading of the big-picture answers |
 | ADR-051 | Going public: MIT, and nothing of the owner's machine in anything published |
 | ADR-052 | Search finds files by their names and declarations, damps tests, and shows declarations before imports (amends ADR-027) |
+| ADR-053 | More imports resolved: workspace packages, module ids, computed `import()`, and the entry points a package.json names (amends ADR-022, ADR-026) |
+| ADR-054 | Docs pointers: which docs talk about which folders, read from the repo's Markdown |
+| ADR-055 | Impact and architecture facts, computed from the import graph (amends §6.1) |
+| ADR-056 | Six tools, five always loaded, instructions as the setup-free guide, a size budget (amends ADR-047, §6.2) |
+| ADR-057 | Eval #2's method and the ship gate (amends ADR-050, ADR-051) |
+| ADR-058 | Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (implements ADR-043's V1.6; amends ADR-048) |
 
 ## 16. Doc migration
 
