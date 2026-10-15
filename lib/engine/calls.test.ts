@@ -64,6 +64,27 @@ describe("calls: who calls a member", () => {
         expect(framework.kind === "member" && framework.files.map((f) => [f.path, f.lines])).toEqual([["src/app/dialogs/index.ts", [6]]]);
     });
 
+    it("follows super, this and new on nested classes, members of declared types and declared returns (TaskRunner.run)", () => {
+        const a = calls(root, { symbol: "TaskRunner.run" });
+        if (a.kind !== "member") throw new Error(a.kind);
+        expect(a.type).toEqual({ name: "TaskRunner", kind: "class", path: "src/workbench/tasks/taskRunner.ts", line: 1 });
+        expect(a.files.map((f) => [f.path, f.lines, f.receivers])).toEqual([
+            ["src/workbench/tasks/taskHost.ts", [18, 18, 18, 18, 27], []],
+            ["src/workbench/tasks/runners.ts", [5, 12, 12, 16], ["(anonymous class)", "TaskRunner", "TwiceRunner"]],
+        ]);
+        expect(a.files[1].sites.map((s) => [s.line, s.category, s.receiver, s.receiverDeclares])).toEqual([
+            [5, "type", "TaskRunner", true], [12, "subtype", "TwiceRunner", false], [12, "subtype", "TwiceRunner", false], [16, "subtype", "(anonymous class)", false],
+        ]);
+        // ITaskHost's runner property, TaskPanel's runner field (through that = this), the declared return and tuple: all TaskRunner
+        expect(a.files[0].sites.every((s) => s.category === "type" && s.receiver === "TaskRunner" && s.receiverDeclares)).toBe(true);
+        expect([a.calls, a.tests, a.categories, a.subtypeWord]).toEqual([9, 0, { type: 2, subtype: 1, implementation: 0 }, "subclass"]);
+        expect([a.declaring, a.implementations]).toEqual([["src/workbench/tasks/taskRunner.ts"], []]);
+        expect(a.areas).toEqual([
+            { path: "src/workbench/tasks/runners.ts", kind: "file", count: 1 },
+            { path: "src/workbench/tasks/taskHost.ts", kind: "file", count: 1 },
+        ]);
+    });
+
     it("keeps only files inside within, and groups by a folder's children", () => {
         const inside = calls(root, { symbol: "IFileService.readFile" }, { groupBy: null, within: "src/workbench" });
         if (inside.kind !== "member") throw new Error(inside.kind);

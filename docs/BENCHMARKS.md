@@ -874,3 +874,115 @@ How fast Claude Code got the context a question needs (medians, A / N; the score
 | 3 | 14849 | 140583 | 0.7 s | 16.9 s | 11.2 s | 1.7 s | 0.6 s | **31.3 s** | 3.4 s |
 
 **S1 (≤ 60 s): PASS at 50.7 s worst of three** (median 35.9 s). Run 2 was slower in parse and write alike, which points to the machine rather than the code: the same work took 31–36 s on either side of it. The loaded-machine figures before it (55.7 s in #5, 66.9 s in Update Benchmark #2's cold index) carried the runaway process. Files and edges match #5's final code exactly.
+
+## 2026 10 15 Calls Benchmark #1 — calls through declared types against TypeScript's checker (S14)
+
+- **Command:** `npm run bench-calls -- --repo ../vscode --checker <checker.json>` and `npm run bench-calls -- --repo ../affine --sites <affine-sites.json> --verdicts <verdicts.json>` (`scripts/bench-calls.ts`), read-only on the owner's index. It writes `.nebulosity/measure/calls-<repo>.json`.
+- **The index:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6d`, re-indexed in the owner's database three times (R-AC, each announced): adapter version 5, then 6 and 7 after the two rounds below. Files and edges were the same every time: VS Code 14,849 and 140,583 (Index Benchmark #6), AFFiNE 6,987 and 26,261 (Eval #2). The `calls` answer for each method is asked as `calls { symbol: "<Type>.<member>", path: <declaring file> }`, VS Code's `within: "src"`.
+- **The reference on VS Code:** the type checker's run from V1.7's design check, kept in the V1.7 ledger as `evidence/e2/out/checker.json`. It built `src/tsconfig.json`'s program (10,237 roots, 21.5 s, 4,998 MB, 0 errors) and asked the checker which declaration each of the 7,347 calls named `readFile`, `store`, `getValue`, `executeCommand` or `openEditor` resolves to. Both sides are kept to the program's own files: the tsconfig's `fileNames` without `.d.ts`, 10,037 files, read without building a program.
+- **The sets (R-AB):**
+  - "Interface calls": the files with a call the checker resolves to the interface's member. On the index's side, the files with a call on the interface, or on a sub-interface that doesn't declare the member.
+  - "Interface + implementation": those files, plus calls on a class that implements the interface. The checker side counts a class whose heritage reaches the interface; the index side counts its implementations, test doubles included.
+  - A call on a sub-interface that redeclares the member is counted apart.
+- **The bar (S14, R-AL):** recall ≥ 0.98 and precision ≥ 0.99, file level, pooled over the five methods, on both sets.
+
+**Result (adapter version 7): PASS.** Interface calls 0.999 / 1.000; interface + implementation 0.987 / 0.999, pooled.
+
+Interface calls:
+
+| Method | Checker files | Index files | Both | Recall | Precision |
+|---|---|---|---|---|---|
+| IFileService.readFile | 180 | 180 | 180 | 1.000 | 1.000 |
+| IStorageService.store | 326 | 325 | 325 | 0.997 | 1.000 |
+| IConfigurationService.getValue | 726 | 725 | 725 | 0.999 | 1.000 |
+| ICommandService.executeCommand | 327 | 327 | 327 | 1.000 | 1.000 |
+| IEditorService.openEditor | 194 | 194 | 194 | 1.000 | 1.000 |
+| **Pooled** | **1,753** | **1,751** | **1,751** | **0.999** | **1.000** |
+
+Interface + implementation calls:
+
+| Method | Checker files | Index files | Both | Recall | Precision |
+|---|---|---|---|---|---|
+| IFileService.readFile | 214 | 213 | 213 | 0.995 | 1.000 |
+| IStorageService.store | 397 | 388 | 388 | **0.977** | 1.000 |
+| IConfigurationService.getValue | 768 | 758 | 758 | 0.987 | 1.000 |
+| ICommandService.executeCommand | 330 | 330 | 329 | 0.997 | 0.997 |
+| IEditorService.openEditor | 205 | 202 | 202 | 0.985 | 1.000 |
+| **Pooled** | **1,914** | **1,891** | **1,890** | **0.987** | **0.999** |
+
+`IStorageService.store` is under 0.98 on its own. Its 9 missed files are all tests: 8 take the storage from a test helper's undeclared return, and 1 from a conditional (class 1 and the conditional of class 3 below).
+
+**Rounds** (pooled; the bar first failed on interface + implementation recall):
+
+| Adapter | Change | Interface R / P | Interface + implementation R / P |
+|---|---|---|---|
+| 5 | none (Tasks 1–4) | 0.995 / 1.000 | 0.969 / 1.000 |
+| 6 | Round 1: `super.m()`, and `this` or `new` on a nested or nameless class | 0.996 / 1.000 | 0.978 / 0.999 |
+| 7 | Round 2: a member of a declared type, and a same-file function's declared return type | 0.999 / 1.000 | 0.987 / 0.999 |
+
+- **Round 1** fixed the most common miss class: 16 of the 59 files missed at version 5.
+  - `super.m()` is typed by its class's extends clause; `extends mock<I>()` gives `I`.
+  - `this` in a nested or nameless class, and `new class … {}`, name the class as `@<line>`, the key R-O gives it. The engine reads that as the file's own type at that line.
+  - It recovered 16 files, plus 1 that had been missed only as an interface call. It added the one extra below.
+  - The fixture case is `src/workbench/tasks/taskRunner.ts` and `runners.ts`.
+- **Round 2** fixed the most common class left inside ADR-059's rules: a same-file function's declared return type, 12 files. Half of those also reach a member of a declared type (`accessor.editorService.openEditor(…)`), and the same rule covered the 6 files of that class.
+  - The member rules: `x.f.m()`, `const { f } = x`, `({ f }: IServices)` and `const that = this`. The engine reads the field through the type's declaration and its bases. An interface's property types are now recorded as fields, the way a class's are.
+  - The return rules: a function declared in the same file, `await` taking `Promise<T>` to `T`, and a declared tuple or type literal destructured.
+  - It recovered 19 files, 5 of them interface misses too, and added no extra.
+  - The fixture case is `src/workbench/tasks/taskHost.ts`.
+- **Round 3 wasn't run:** the bar passed.
+- **Not done:** following a helper's undeclared return was left out, although it is the largest class left (15 files). ADR-059 keeps inferred types unseen, and the fixture's `inferred.ts` pins that.
+
+**What the index still misses** (interface + implementation, 24 files; the 2 interface misses are among them):
+
+1. **A test helper's undeclared return** (15 files, all tests). Example: `src/vs/platform/chat/test/common/agentsWindowInvitation.test.ts:252`, `h.storage.store(…)`, where `const h = createHarness()` and `createHarness` returns an object literal with no annotation. It is one of the 2 interface misses: `agentHostRemoteByokNotification.test.ts:436`.
+2. **`instantiationService.createInstance(C, …)`** (4 files, all tests). Example: `src/vs/workbench/test/browser/quickAccess.test.ts:438`, after `editorService = disposables.add(instantiationService.createInstance(EditorService, undefined))`.
+3. **One file each** (5):
+   - a conditional, `options.showDetails ? disposableStore.add(new InMemoryStorageService()) : undefined` (`suggestWidget.fixture.ts:46`);
+   - a parameter property typed only by its default, `private configurationService = new TestConfigurationService()` (`workbenchTestServices.ts:1262`);
+   - a chained assignment, `a = b = new TestConfigurationService(…)` (`aiCustomizationManagementEditor.fixture.ts:1209`);
+   - `services?.configurationService ?? testConfigurationService` (`chatInputModeValidation.test.ts:125`);
+   - the contextually typed parameter of an object literal's method, `bindTo(service)` (`src/vs/workbench/browser/parts/editor/breadcrumbs.ts:98`). This is the one production file, and the other interface miss.
+
+- **The one extra:** `src/vs/workbench/contrib/chat/test/browser/voiceClient/voiceSessionController.test.ts:766`, `super.executeCommand(…)` in `AdoptingCommandService extends TestCommandService`, where `TestCommandService extends mock<ICommandService>()`. The index counts a test double as an implementation (ADR-059). The checker run's "implements" check follows only heritage clauses that name a symbol, so it doesn't count `mock<I>()`.
+- **Counted apart:** 6 files call `store` on `IApplicationStorageMainService`, which redeclares it. Example: `src/vs/platform/native/electron-main/auth.ts:279`. The checker files these under that interface too.
+
+**AFFiNE** (reported, not judged), against the design check's syntactic L3 sets for its three planning methods:
+
+| Method | L3 files | Verdicts | Reference | Index files | Both | Recall | Precision |
+|---|---|---|---|---|---|---|---|
+| WorkspaceDialogService.open | 45 | 2 in | 47 | 47 | 47 | 1.000 | 1.000 |
+| GlobalDialogService.open | 25 | 1 in | 26 | 26 | 26 | 1.000 | 1.000 |
+| GraphQLService.gql | 18 | 1 in | 19 | 19 | 19 | 1.000 | 1.000 |
+| **Pooled** | **88** | **4** | **92** | **92** | **92** | **1.000** | **1.000** |
+
+- **Before the verdicts:** recall 1.000 and precision 0.957 (88 of 92). The index had 4 files the L3 sets lack, and all 4 are real calls, each read in the source:
+  - three are calls on a destructured parameter whose type literal names the service: `commands/affine-help.tsx:39`, `affine-navigation.tsx:98` and `affine-creation.tsx:66`. The design check's report names all three as calls its pass missed;
+  - one is `this.gql(…)` inside `GraphQLService` (`modules/cloud/services/graphql.ts:25`), since the L3 sets leave `this.m()` calls out.
+- The verdicts, each with its deciding line, are `calls-benchmark-affine-verdicts.json` in the V1.7 ledger.
+- **Neither side has two more real calls** the design check found by grep: `audio-transcription-job-store.ts:49` and `:103`. Each calls through a getter with no annotation (class 1's kind), so the reference holds only the calls that one side found.
+
+**Rows stored** (the three call tables; the counts are read-only, after each re-index):
+
+| Repo | Adapter | `type_decls` | `call_bindings` | `typed_calls` (calls + injection sites) |
+|---|---|---|---|---|
+| VS Code | 5 | 37,072 | 68,362 | 395,763 (353,014 + 42,749) |
+| VS Code | 6 | 37,072 | 68,362 | 399,811 (357,062 + 42,749) |
+| VS Code | 7 | 37,072 | 75,690 | 452,239 (409,490 + 42,749) |
+| AFFiNE | 5 | 4,839 | 11,939 | 32,789 (28,406 + 4,383) |
+| AFFiNE | 6 | 4,839 | 11,939 | 35,717 (31,334 + 4,383) |
+| AFFiNE | 7 | 4,839 | 12,787 | 39,829 (35,446 + 4,383) |
+
+Version 7 keeps more bindings because a member fact names the type it goes through, and that type's import is kept.
+
+**The re-index runs** (the owner's database, so warm and with summaries kept: these aren't S1 figures; Index Benchmark #7 measures S1):
+
+| Repo | Adapter | discover | parse | write | resolve | aggregate | structure |
+|---|---|---|---|---|---|---|---|
+| VS Code | 5 | 1.3 s | 27.0 s | 55.5 s | 2.6 s | 1.0 s | 87.4 s |
+| VS Code | 7 | 0.9 s | 26.8 s | 33.2 s | 2.0 s | 0.7 s | 63.7 s |
+| AFFiNE | 5 | 0.5 s | 5.6 s | 9.7 s | 1.2 s | 0.4 s | 17.5 s |
+| AFFiNE | 6 | 0.5 s | 5.7 s | 10.3 s | 1.0 s | 0.3 s | 17.8 s |
+| AFFiNE | 7 | 0.5 s | 5.9 s | 10.4 s | 1.1 s | 0.3 s | 18.2 s |
+
+VS Code's version 6 run printed the same files and edges, but its stage times weren't kept. The benchmark run took 1.2 s on VS Code (the tsconfig read and five answers, the first of them building the call index) and 0.2 s on AFFiNE. S14's speed half, the first answer in a fresh MCP process, is MCP Benchmark #5's.

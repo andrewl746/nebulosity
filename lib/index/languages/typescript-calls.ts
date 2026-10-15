@@ -19,8 +19,11 @@ const PROVIDER_METHODS = new Set(["get", "getOptional"]);
 const HOOKS = new Set(["useService", "useServiceOptional"]);
 /** store.add(new C()), this._register(new C()), disposables.add(new C()): the value is the new C. */
 const PASS_THROUGH = new Set(["add", "_register"]);
-/** How far a local's initializer is followed (const a = b; const b = this.f), and a type parameter's constraint. */
-const MAX_DEPTH = 4;
+/**
+ * How far a value is followed (const a = b; const b = this.f; const { x } = await make(); x.f), and a type parameter's
+ * constraint. 6, not 4, since Calls Benchmark #1's second round: a member of a destructured, awaited return takes five steps.
+ */
+const MAX_DEPTH = 6;
 
 type Receiver = { receiver: TypedCallFact["receiver"]; ref: string | null; inClass: string | null; how: CallRule };
 type Anchored = { pos: number; fact: TypedCallFact };
@@ -90,6 +93,10 @@ function collectTypes(sourceFile: ts.SourceFile, lineOf: (node: ts.Node) => numb
             for (const m of node.members){
                 const name = memberName(m.name);
                 if (name !== null) fact.members.push(name);
+                // a property's declared type, as a class field's: x.files.m() and const { files } = x read it; the first declaration wins
+                const type = ts.isPropertySignature(m) || ts.isGetAccessorDeclaration(m) ? m.type : undefined;
+                const ref = name !== null && type !== undefined ? typeRefOf(type, m) : null;
+                if (ref !== null && !Object.prototype.hasOwnProperty.call(fact.fields, name!)) fact.fields[name!] = ref;
             }
         } else if (ts.isClassLike(node) && (topLevel ? ts.isClassDeclaration(node) : node.heritageClauses !== undefined)){
             out.push(classFact(node, topLevel, lineOf));
@@ -155,6 +162,11 @@ function receiverOf(expression: ts.Expression, depth: number): Receiver | null {
         const inClass = thisClass(e);
         return inClass === null ? null : { receiver: "this", ref: null, inClass, how: "this" };
     }
+    if (e.kind === ts.SyntaxKind.SuperKeyword){
+        // super.m(): the class it sits in names its base in its extends clause
+        const base = superRef(e);
+        return base === null ? null : { receiver: "type", ref: base, inClass: null, how: "super" };
+    }
     if (ts.isPropertyAccessExpression(e) && e.expression.kind === ts.SyntaxKind.ThisKeyword){
         const inClass = thisClass(e);
         const name = memberName(e.name);
@@ -163,7 +175,145 @@ function receiverOf(expression: ts.Expression, depth: number): Receiver | null {
     const value = valueTypeRef(e);
     if (value !== null) return { receiver: "type", ref: value, inClass: null, how: ts.isCallExpression(e) && providedRef(e) !== null ? "provider" : "new" };
     if (ts.isIdentifier(e)) return identifierReceiver(e, depth);
+    if (depth >= MAX_DEPTH) return null;
+    // x.files.m(): a member of a value whose type the code declares (Calls Benchmark #1's second round)
+    if (ts.isPropertyAccessExpression(e)) return memberOf(e.expression, memberName(e.name), "member", depth + 1);
+    // make().m(), (await make()).m(): a same-file function's declared return type
+    if (ts.isCallExpression(e) || ts.isAwaitExpression(e)){
+        const declared = declaredTypeOf(e, depth + 1);
+        const ref = declared === null ? null : typeRefOf(declared, declared);
+        return ref === null ? null : { receiver: "type", ref, inClass: null, how: "return" };
+    }
     return null;
+}
+
+/**
+ * A member of a value: through a type literal or a tuple the code declares for it, the member's own type; through a
+ * named type (a class or an interface), a "field" fact the engine resolves through that type's declaration and its
+ * bases; through `this` (const that = this), the class's field. A member of a named type's member gives nothing: one
+ * "field" fact names one step.
+ */
+function memberOf(holder: ts.Expression, key: string | null, how: CallRule, depth: number): Receiver | null {
+    if (key === null || depth > MAX_DEPTH) return null;
+    const declared = declaredTypeOf(holder, depth);
+    if (declared !== null) return memberOfDeclared(declared, key, how);
+    const r = receiverOf(holder, depth + 1);
+    if (r !== null && r.receiver === "type" && r.ref !== null) return { receiver: "field", ref: key, inClass: r.ref, how };
+    if (r !== null && r.receiver === "this") return { receiver: "field", ref: key, inClass: r.inClass, how: "alias" };
+    return null;
+}
+
+function memberOfDeclared(declared: ts.TypeNode, key: string, how: CallRule): Receiver | null {
+    const member = memberTypeNode(declared, key, 0);
+    if (member !== null){
+        const ref = typeRefOf(member, member);
+        return ref === null ? null : { receiver: "type", ref, inClass: null, how };
+    }
+    const named = typeRefOf(declared, declared);
+    return named === null ? null : { receiver: "field", ref: key, inClass: named, how };
+}
+
+/**
+ * The type the code declares for a value, as written: an annotated parameter or local (through an untyped local's
+ * initializer), a member of a declared type literal or tuple, or the return annotation of a function declared in this
+ * file (`await` takes Promise<T> to T). A value whose type is only inferred gives null, as ADR-059 says.
+ */
+function declaredTypeOf(expression: ts.Expression, depth: number): ts.TypeNode | null {
+    if (depth > MAX_DEPTH) return null;
+    const e = unwrap(expression);
+    if (ts.isAwaitExpression(e)){
+        const inner = declaredTypeOf(e.expression, depth + 1);
+        return inner === null ? null : awaitedType(inner);
+    }
+    if (ts.isIdentifier(e)){
+        const d = findDeclaration(e);
+        if (d === null) return null;
+        if (!ts.isBindingElement(d) && d.type) return d.type;
+        if (ts.isVariableDeclaration(d)) return d.initializer ? declaredTypeOf(d.initializer, depth + 1) : null;
+        if (ts.isBindingElement(d)){
+            const key = bindingKey(d);
+            const holder = d.parent.parent;
+            if (key === null || !(ts.isParameter(holder) || ts.isVariableDeclaration(holder))) return null;
+            const holderType = holder.type ?? (ts.isVariableDeclaration(holder) && holder.initializer ? declaredTypeOf(holder.initializer, depth + 1) : null);
+            return holderType === null ? null : memberTypeNode(holderType, key, 0);
+        }
+        return null;
+    }
+    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression)) return calledFunction(e.expression)?.type ?? null;
+    if (ts.isPropertyAccessExpression(e) && e.expression.kind !== ts.SyntaxKind.ThisKeyword){
+        const holder = declaredTypeOf(e.expression, depth + 1);
+        const key = memberName(e.name);
+        return holder === null || key === null ? null : memberTypeNode(holder, key, 0);
+    }
+    return null;
+}
+
+/** A property of a type literal, or an element of a tuple ("0", "1", …), through parentheses, unions and intersections. */
+function memberTypeNode(type: ts.TypeNode, key: string, depth: number): ts.TypeNode | null {
+    if (depth > MAX_DEPTH) return null;
+    if (ts.isParenthesizedTypeNode(type)) return memberTypeNode(type.type, key, depth + 1);
+    if (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type)){
+        for (const part of type.types){
+            const found = memberTypeNode(part, key, depth + 1);
+            if (found !== null) return found;
+        }
+        return null;
+    }
+    if (ts.isTypeLiteralNode(type)){
+        for (const m of type.members) if (ts.isPropertySignature(m) && memberName(m.name) === key && m.type) return m.type;
+        return null;
+    }
+    if (ts.isTupleTypeNode(type) && /^\d+$/.test(key)){
+        const element = type.elements[Number(key)];
+        if (element === undefined || ts.isRestTypeNode(element) || ts.isOptionalTypeNode(element)) return null;
+        return ts.isNamedTupleMember(element) ? element.type : element;
+    }
+    return null;
+}
+
+/** What `await` gives for a declared type: Promise<T> and PromiseLike<T> give T; anything else is itself. */
+function awaitedType(type: ts.TypeNode): ts.TypeNode {
+    const promise = ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && (type.typeName.text === "Promise" || type.typeName.text === "PromiseLike");
+    return promise && type.typeArguments?.length === 1 ? type.typeArguments[0] : type;
+}
+
+/** The name a destructured binding takes from its holder: its property's name, or its index in an array pattern. */
+function bindingKey(element: ts.BindingElement): string | null {
+    const pattern = element.parent;
+    if (ts.isArrayBindingPattern(pattern)) return String(pattern.elements.indexOf(element));
+    return element.propertyName ? memberName(element.propertyName) : ts.isIdentifier(element.name) ? element.name.text : null;
+}
+
+/** The function a called name means where it is called: a function declared in an enclosing scope, or a local holding an arrow or function expression. */
+function calledFunction(id: ts.Identifier): ts.SignatureDeclaration | null {
+    const name = id.text;
+    for (let node: ts.Node | undefined = id.parent; node !== undefined; node = node.parent){
+        if (ts.isFunctionLike(node) && node.parameters.some((p) => ts.isIdentifier(p.name) && p.name.text === name)) return null;
+        if (ts.isBlock(node) || ts.isSourceFile(node) || ts.isModuleBlock(node)){
+            const declared = functionsIn(node).get(name);
+            if (declared) return declared;
+            const local = declaredIn(node).get(name);
+            if (local){
+                const init = ts.isVariableDeclaration(local) && local.initializer ? unwrap(local.initializer) : null;
+                return init !== null && (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) ? init : null;
+            }
+        }
+    }
+    return null;
+}
+
+/** Each scope's function declarations by name, built once per scope node; the first declaration (an overload's) wins. */
+const declaredFunctions = new WeakMap<ts.Node, Map<string, ts.FunctionDeclaration>>();
+
+function functionsIn(scope: ts.Block | ts.SourceFile | ts.ModuleBlock): Map<string, ts.FunctionDeclaration> {
+    let names = declaredFunctions.get(scope);
+    if (names) return names;
+    names = new Map();
+    for (const statement of scope.statements){
+        if (ts.isFunctionDeclaration(statement) && statement.name !== undefined && !names.has(statement.name.text)) names.set(statement.name.text, statement);
+    }
+    declaredFunctions.set(scope, names);
+    return names;
 }
 
 function identifierReceiver(id: ts.Identifier, depth: number): Receiver | null {
@@ -182,40 +332,34 @@ function identifierReceiver(id: ts.Identifier, depth: number): Receiver | null {
         // const files = this.fileService: an alias of a field
         return inner !== null && inner.receiver === "field" ? { ...inner, how: "alias" } : inner;
     }
-    if (ts.isBindingElement(declaration)) return bindingReceiver(declaration);
+    if (ts.isBindingElement(declaration)) return bindingReceiver(declaration, depth);
     return null;
 }
 
-/** ({ files }: { files: IFoo }) => …, or const { fooService } = useServices({ FooService }): a destructured name a rule can type. */
-function bindingReceiver(element: ts.BindingElement): Receiver | null {
-    const key = element.propertyName ? memberName(element.propertyName) : ts.isIdentifier(element.name) ? element.name.text : null;
-    if (key === null || !ts.isObjectBindingPattern(element.parent)) return null;
+/**
+ * A destructured name a rule can type: ({ files }: { files: IFoo }), ({ files }: IServices), const { fooService } =
+ * useServices({ FooService }), const { files } = services, const [, b] = await make() (a declared tuple).
+ */
+function bindingReceiver(element: ts.BindingElement, depth: number): Receiver | null {
+    const key = bindingKey(element);
     const holder = element.parent.parent;
-    if ((ts.isParameter(holder) || ts.isVariableDeclaration(holder)) && holder.type && ts.isTypeLiteralNode(holder.type)){
-        for (const m of holder.type.members){
-            if (ts.isPropertySignature(m) && memberName(m.name) === key && m.type){
-                const ref = typeRefOf(m.type, m);
-                return ref === null ? null : { receiver: "type", ref, inClass: null, how: "destructure" };
-            }
-        }
-        return null;
-    }
-    if (ts.isVariableDeclaration(holder) && holder.initializer){
-        const init = unwrap(holder.initializer);
-        if (ts.isCallExpression(init)){
-            for (const [value, ref] of servicesKeysOf(init)){
-                const name = ts.isShorthandPropertyAssignment(value.parent) || ts.isPropertyAssignment(value.parent) ? memberName(value.parent.name) : null;
-                if (name !== null && uncapitalize(name) === key) return { receiver: "type", ref, inClass: null, how: "provider" };
-            }
+    if (key === null || !(ts.isParameter(holder) || ts.isVariableDeclaration(holder))) return null;
+    if (holder.type) return memberOfDeclared(holder.type, key, "destructure");
+    if (!ts.isVariableDeclaration(holder) || !holder.initializer) return null;
+    const init = unwrap(holder.initializer);
+    if (ts.isObjectBindingPattern(element.parent) && ts.isCallExpression(init)){
+        for (const [value, ref] of servicesKeysOf(init)){
+            const name = ts.isShorthandPropertyAssignment(value.parent) || ts.isPropertyAssignment(value.parent) ? memberName(value.parent.name) : null;
+            if (name !== null && uncapitalize(name) === key) return { receiver: "type", ref, inClass: null, how: "provider" };
         }
     }
-    return null;
+    return depth >= MAX_DEPTH ? null : memberOf(holder.initializer, key, "destructure", depth + 1);
 }
 
 /** The type a value is sure to have, read from its syntax: new C(), x.add(new C()), this._register(new C()), a provider's id. */
 function valueTypeRef(expression: ts.Expression): string | null {
     const e = unwrap(expression);
-    if (ts.isNewExpression(e)) return refOfExpression(e.expression);
+    if (ts.isNewExpression(e)) return ts.isClassExpression(e.expression) ? classRef(e.expression) : refOfExpression(e.expression);
     if (!ts.isCallExpression(e)) return null;
     const provided = providedRef(e);
     if (provided !== null) return provided;
@@ -398,14 +542,45 @@ function declaredIn(scope: ts.Block | ts.SourceFile | ts.ModuleBlock | ts.CaseCl
     return names;
 }
 
-/** The top-level class a `this` belongs to: not past a function (it has its own this), nor an object literal's method. */
-function thisClass(node: ts.Node): string | null {
+/** The class a `this` or a `super` belongs to: not past a function (it has its own this), nor an object literal's method. */
+function ownClass(node: ts.Node): ts.ClassLikeDeclaration | null {
     for (let n = node.parent; n !== undefined; n = n.parent){
-        if (ts.isClassLike(n)) return ts.isClassDeclaration(n) && n.name !== undefined && ts.isSourceFile(n.parent) ? n.name.text : null;
+        if (ts.isClassLike(n)) return n;
         if (ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n)) return null;
         if ((ts.isMethodDeclaration(n) || ts.isGetAccessorDeclaration(n) || ts.isSetAccessorDeclaration(n)) && ts.isObjectLiteralExpression(n.parent)) return null;
     }
     return null;
+}
+
+/** The class a `this` belongs to, as classRef names it. */
+function thisClass(node: ts.Node): string | null {
+    const cls = ownClass(node);
+    return cls === null ? null : classRef(cls);
+}
+
+/**
+ * How a fact names a class it sits in or makes: a top-level class by its name; a nested or nameless one that collectTypes
+ * records (R-O) as "@<line>", its declaration's line, which the engine reads as that file's type at that line (no import
+ * can name it). A nested class with no heritage clause isn't recorded, so it gives null.
+ */
+function classRef(cls: ts.ClassLikeDeclaration): string | null {
+    const topLevel = ts.isClassDeclaration(cls) && ts.isSourceFile(cls.parent);
+    if (topLevel && cls.name !== undefined) return cls.name.text;
+    if (!topLevel && cls.heritageClauses === undefined) return null;
+    const sourceFile = cls.getSourceFile();
+    return `@${sourceFile.getLineAndCharacterOfPosition((cls.name ?? cls).getStart(sourceFile)).line + 1}`;
+}
+
+/** super's type: the base its class extends (`extends mock<IFoo>()` gives IFoo, as the test double's declaration reads it). */
+function superRef(node: ts.Node): string | null {
+    const cls = ownClass(node);
+    const base = cls?.heritageClauses?.find((c) => c.token === ts.SyntaxKind.ExtendsKeyword)?.types[0]?.expression;
+    if (cls === null || base === undefined) return null;
+    if (ts.isCallExpression(base)){
+        const double = ts.isIdentifier(base.expression) && base.expression.text === "mock" && base.typeArguments?.length === 1;
+        return double ? typeRefOf(base.typeArguments![0], cls) : null;
+    }
+    return refOfExpression(base);
 }
 
 /** The top-level class a node sits in, whatever functions lie between, or null. */
@@ -457,7 +632,7 @@ function collectBindings(sourceFile: ts.SourceFile, types: readonly TypeDeclFact
         note(t.testDoubleOf);
         Object.values(t.fields).forEach(note);
     }
-    for (const c of calls) if (c.receiver === "type") note(c.ref);
+    for (const c of calls) note(c.receiver === "type" ? c.ref : c.receiver === "field" ? c.inClass : null);
     for (const b of all) if (b.kind === "export") named.add(b.imported);
     return all.filter((b) => b.kind !== "import" || named.has(b.local));
 }

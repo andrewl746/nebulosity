@@ -51,6 +51,7 @@
     "bench-map": "tsx scripts/bench-map.ts",
     "bench-update": "tsx scripts/bench-update.ts",
     "bench-search": "tsx scripts/bench-search.ts",
+    "bench-calls": "tsx scripts/bench-calls.ts",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
     "eval:run": "tsx scripts/eval/run.ts",
     "eval:probe": "tsx scripts/eval/probe.ts",

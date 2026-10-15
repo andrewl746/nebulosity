@@ -287,10 +287,10 @@ describe("scanTypeScriptImports — the token scan, for a file over 5 MB (ADR-05
 });
 
 describe("parseTypeScriptFile: call facts (ADR-059)", () => {
-    it("is the adapter's fourth product, and the adapter is at version 5", () => {
+    it("is the adapter's fourth product, and the adapter is at version 7", () => {
         const { types } = parseTypeScriptFile("src/a.ts", "export class A {}\n").calls;
         expect(types).toHaveLength(1);
         expect(types[0].name).toBe("A");
-        expect(ADAPTER_VERSION).toBe(5);
+        expect(ADAPTER_VERSION).toBe(7);
     });
 });

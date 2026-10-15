@@ -123,6 +123,8 @@ export function buildCallIndex(decls: readonly StoredTypeDecl[], bindings: reado
     };
     const memo = new Map<string, TypeKey | null>();
     const resolve = (file: string, ref: string): TypeKey | null => {
+        // "@12": a nested or nameless class of this very file (R-O's key), which no import can name
+        if (ref.startsWith("@")) return types.has(`${file}${ref}`) ? `${file}${ref}` : null;
         const k = `${file}\0${ref}`;
         if (memo.has(k)) return memo.get(k)!;
         const dot = ref.indexOf(".");
@@ -229,8 +231,9 @@ function fieldType(index: CallIndex, classKey: TypeKey, field: string, depth: nu
 
 function receiverType(index: CallIndex, c: StoredCall): TypeKey | null {
     if (c.receiver === "type") return c.ref === null ? null : index.resolve(c.path, c.ref);
-    const own = c.inClass === null ? null : `${c.path}#${c.inClass}`;
-    if (own === null || !index.types.has(own)) return null;
+    // the class a this or a field goes through: a top-level class of the file by name (a local declaration wins), or "@<line>"
+    const own = c.inClass === null ? null : index.resolve(c.path, c.inClass);
+    if (own === null) return null;
     return c.receiver === "this" ? own : c.ref === null ? null : fieldType(index, own, c.ref, 0);
 }
 

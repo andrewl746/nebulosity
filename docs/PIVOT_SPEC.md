@@ -60,7 +60,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S11 | Free mode (V1.6): no API key | the Map, structure and stats, `imports`/`architecture`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed *(V1.6: met; the estimate and the yes, ADR-035 and ADR-038 amended, the Map's on-open summary included since the pre-freeze sweep; the Map checked with no key)* |
 | S12 | Eval #2 passes the ship gate (ADR-057) | all seven of D1's conditions hold *(V1.6: **failed**, 2026-10-15: conditions 1, 2, 3a and 5a failed; 3b, 4 and 5b passed. docs/EVAL_RESULTS.md, Eval #2)* |
 | S13 | Eval #3 passes its gate (ADR-060) *(proposed, V1.7 plan, 2026-10-15)* | V and conditions 1–6 hold (the gate approved by the owner 2026-10-15, fixed before the first run) |
-| S14 | Calls index (ADR-059) *(proposed, V1.7 plan, 2026-10-15)* | file-level recall ≥ 0.98 and precision ≥ 0.99 against the type checker, pooled over its benchmark methods, each reported; first `calls` answer ≤ 1.5 s |
+| S14 | Calls index (ADR-059) *(proposed, V1.7 plan, 2026-10-15)* | file-level recall ≥ 0.98 and precision ≥ 0.99 against the type checker, pooled over its benchmark methods, each reported; first `calls` answer ≤ 1.5 s *(V1.7 Task 5, 2026-10-15: recall and precision **met** on VS Code's five methods pooled, after two rounds of rules (adapter version 7): interface calls 0.999 / 1.000, interface + implementation 0.987 / 0.999. `IStorageService.store` alone is at 0.977 recall on the second set. AFFiNE scores 1.000 / 1.000 against its adjudicated L3 sets. docs/BENCHMARKS.md, Calls Benchmark #1. The first-answer half is Task 6's.)* |
 
 ---
 

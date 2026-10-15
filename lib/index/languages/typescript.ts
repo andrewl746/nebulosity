@@ -14,8 +14,11 @@ export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", 
  * 3: import type expressions, `typeof import("x")` (ADR-053, amended). 4: files of 1–5 MB parsed in full for their
  * imports, not token-scanned (ADR-053, amended).
  * 5: call facts, a fourth product of the parse (ADR-059).
+ * 6: super.m(), and this or new on a nested or nameless class (Calls Benchmark #1's first round, ADR-059 amended).
+ * 7: a member of a declared type (x.files.m(), const { files } = x, an interface's property types) and a same-file
+ * function's declared return type (Calls Benchmark #1's second round, ADR-059 amended).
  */
-export const ADAPTER_VERSION = 5;
+export const ADAPTER_VERSION = 7;
 
 /** files.language for a path this adapter claims. TypeScript's parser reads both languages. */
 export function languageOf(filePath: string): "typescript" | "javascript" {

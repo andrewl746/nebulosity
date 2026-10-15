@@ -237,6 +237,7 @@ export type LevelEdgeRow = Omit<typeof levelEdges.$inferSelect, "id" | "repoId">
 /** How a call's receiver got its type, or (member null) what kind of injection site a fact is (ADR-059). */
 export const CALL_RULES = [
     "param", "local", "destructure", "constraint", "cast", "provider", "new", "alias", "field", "this", "ctor-param", "inject-field",
+    "super", "return", "member",
 ] as const;
 export type CallRule = (typeof CALL_RULES)[number];
 
@@ -259,7 +260,7 @@ export type TypeDeclFact = {
     testDoubleOf: string | null;
     /** Its methods, accessors and properties (a class's constructor parameter properties too), sorted, each once. */
     members: string[];
-    /** A class's field → the type it is declared with, or sure to hold (`= new C()`, `= this._register(new C())`). */
+    /** A class's field, or an interface's property → the type it is declared with, or sure to hold (`= new C()`, `= this._register(new C())`). */
     fields: Record<string, string>;
 };
 
@@ -280,9 +281,9 @@ export type TypedCallFact = {
     line: number;
     member: string | null;
     receiver: "type" | "field" | "this";
-    /** "type": the TypeRef; "field": the field's name; "this": null. */
+    /** "type": the TypeRef ("@<line>" for a nested or nameless class of this file, R-O); "field": the field's name; "this": null. */
     ref: string | null;
-    /** The top-level class the call sits in ("field" and "this" resolve through it), or null. */
+    /** "field" and "this": the type they resolve through, a TypeRef ("@<line>" for a nested or nameless class); otherwise the top-level class the call sits in, or null. */
     inClass: string | null;
     how: CallRule;
 };

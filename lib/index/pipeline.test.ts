@@ -421,10 +421,10 @@ describe("indexRepository on the architecture fixture", () => {
 describe("indexRepository on the calls fixture (ADR-059)", () => {
     const root = path.join(__dirname, "..", "..", "test", "fixtures", "di-repo");
 
-    it("indexes 28 files, two of them tests, with 36 edges, and stores editorPane.ts's call facts", () => {
+    it("indexes 31 files, two of them tests, with 38 edges, and stores editorPane.ts's call facts", () => {
         const result = indexRepository(root);
-        expect(result.files).toBe(28);
-        expect(result.edges).toBe(36);
+        expect(result.files).toBe(31);
+        expect(result.edges).toBe(38);
         const db = getDb();
         const ofFile = <T extends { path: string }>(rows: T[]): T[] => rows.filter((r) => r.path === "src/workbench/editor/editorPane.ts");
         expect(ofFile(loadTypeDecls(db, result.repoId)).map((t) => t.name)).toEqual(["EditorPane"]);

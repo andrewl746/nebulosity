@@ -129,6 +129,80 @@ describe("collectCallFacts: calls and injection sites", () => {
         ]);
     });
 
+    it("reads super.m(), this in a nested class and a call on new class … {} (runners.ts, Calls Benchmark #1's first round)", () => {
+        const runners = fixture("src/workbench/tasks/runners.ts");
+        expect(runners.types.map((t) => [t.name, t.line, t.nested, t.extendsRefs, t.members])).toEqual([
+            ["LoggingRunner", 3, false, ["TaskRunner"], ["run"]],
+            ["TwiceRunner", 10, true, ["TaskRunner"], ["twice"]],
+            [null, 15, true, ["TaskRunner"], []],
+        ]);
+        expect(runners.bindings).toEqual([{ kind: "import", local: "TaskRunner", imported: "TaskRunner", specifier: "./taskRunner" }]);
+        expect(runners.calls).toEqual([
+            { line: 5, member: "run", receiver: "type", ref: "TaskRunner", inClass: "LoggingRunner", how: "super" },
+            { line: 12, member: "run", receiver: "this", ref: null, inClass: "@10", how: "this" },
+            { line: 12, member: "run", receiver: "this", ref: null, inClass: "@10", how: "this" },
+            { line: 16, member: "run", receiver: "type", ref: "@15", inClass: null, how: "new" },
+        ]);
+    });
+
+    it("reads a member of a declared type, a declared return, a declared tuple and that = this (taskHost.ts, Calls Benchmark #1's second round)", () => {
+        const host = fixture("src/workbench/tasks/taskHost.ts");
+        expect(host.types).toEqual([
+            { name: "ITaskHost", kind: "interface", line: 3, exported: true, nested: false, extendsRefs: [], implementsRefs: [], testDoubleOf: null, members: ["runner"], fields: { runner: "TaskRunner" } },
+            { name: "TaskPanel", kind: "class", line: 21, exported: true, nested: false, extendsRefs: [], implementsRefs: [], testDoubleOf: null, members: ["refresh", "runner"], fields: { runner: "TaskRunner" } },
+        ]);
+        expect(host.bindings).toEqual([{ kind: "import", local: "TaskRunner", imported: "TaskRunner", specifier: "./taskRunner" }]);
+        // line 18: host.runner, runner from const { runner } = host, makeRunner(), paired from const [, paired] = await makePair();
+        // line 27: that.runner, where const that = this
+        expect(host.calls).toEqual([
+            { line: 18, member: "run", receiver: "field", ref: "runner", inClass: "ITaskHost", how: "member" },
+            { line: 18, member: "run", receiver: "field", ref: "runner", inClass: "ITaskHost", how: "destructure" },
+            { line: 18, member: "run", receiver: "type", ref: "TaskRunner", inClass: null, how: "return" },
+            { line: 18, member: "run", receiver: "type", ref: "TaskRunner", inClass: null, how: "destructure" },
+            { line: 27, member: "run", receiver: "field", ref: "runner", inClass: "TaskPanel", how: "alias" },
+        ]);
+    });
+
+    it("reads a member through a declared type literal and a named parameter type; an undeclared return or a member of a member gives nothing", () => {
+        const source = lines(
+            "function make(): Promise<{ files: IFiles; bag: IBag }> { return load(); }",
+            "function guess() { return new Files(); }",
+            "export async function f(bag: IBag, { files }: IBag): Promise<void> {",
+            "    const got = await make();",
+            "    got.files.read();",
+            "    files.read();",
+            "    guess().read();",
+            "    bag.inner.files.read();",
+            "}",
+        );
+        // line 5: got's declared literal member; line 6: a destructured parameter typed by a name, resolved by the engine;
+        // line 7: guess() has no return annotation (inferred, ADR-059); line 8: a member (inner) of a member of a named type
+        expect(facts(source).calls).toEqual([
+            { line: 5, member: "read", receiver: "type", ref: "IFiles", inClass: null, how: "member" },
+            { line: 6, member: "read", receiver: "field", ref: "files", inClass: "IBag", how: "destructure" },
+        ]);
+    });
+
+    it("reads super on a test double's base and a field of a class expression; a nested class with no heritage gives nothing", () => {
+        const source = lines(
+            "export function make(): void {",
+            "    const double = new class extends mock<IFoo>() {",
+            "        private readonly bar: IBar = make();",
+            "        run(): void { super.run(); this.bar.go(); }",
+            "    }();",
+            "    class Plain { x(): void { this.x(); } }",
+            "    double.run();",
+            "}",
+        );
+        // line 4: super is the mock's IFoo, this.bar the class expression's (recorded at its `class` keyword, line 2) field;
+        // line 6: Plain has no heritage clause, so it isn't recorded and its this names nothing
+        expect(facts(source).calls).toEqual([
+            { line: 4, member: "run", receiver: "type", ref: "IFoo", inClass: null, how: "super" },
+            { line: 4, member: "go", receiver: "field", ref: "bar", inClass: "@2", how: "field" },
+            { line: 7, member: "run", receiver: "type", ref: "@2", inClass: null, how: "new" },
+        ]);
+    });
+
     it("leaves out a provider asked for a local value (map.get(key)) and a this-call inside a plain function, and keeps a cast", () => {
         const source = lines(
             "export class A {",

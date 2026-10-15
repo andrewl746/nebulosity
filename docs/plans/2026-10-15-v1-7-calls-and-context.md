@@ -346,7 +346,7 @@ Non-source files:
 }
 ```
 
-**28 source files**, sorted, with their full text. Line numbers matter: the answers cite them.
+**31 source files**, sorted, with their full text. Line numbers matter: the answers cite them. The three in `src/workbench/tasks/` were added by Calls Benchmark #1's two rounds (Task 5), each with its ground truth below.
 
 `packages/infra/src/framework.ts`
 ```ts
@@ -712,6 +712,71 @@ export class SearchModel extends Disposable {
 }
 ```
 
+`src/workbench/tasks/runners.ts` (Calls Benchmark #1's first round, Task 5: `super`, and `this` or `new` on a nested or nameless class)
+```ts
+import { TaskRunner } from "./taskRunner";
+
+export class LoggingRunner extends TaskRunner {
+    override run(name: string): string {
+        return super.run(`log:${name}`);
+    }
+}
+
+export function makeRunners(): TaskRunner[] {
+    class TwiceRunner extends TaskRunner {
+        twice(name: string): string {
+            return this.run(name) + this.run(name);
+        }
+    }
+    const quiet = new class extends TaskRunner {}();
+    quiet.run("quiet");
+    return [new TwiceRunner(), quiet];
+}
+```
+
+`src/workbench/tasks/taskHost.ts` (its second round: a member of a declared type, a same-file function's declared return type and tuple, and `const that = this`)
+```ts
+import { TaskRunner } from "./taskRunner";
+
+export interface ITaskHost {
+    runner: TaskRunner;
+}
+
+function makeRunner(): TaskRunner {
+    return new TaskRunner();
+}
+
+async function makePair(): Promise<[string, TaskRunner]> {
+    return ["pair", makeRunner()];
+}
+
+export async function runAll(host: ITaskHost): Promise<string> {
+    const { runner } = host;
+    const [, paired] = await makePair();
+    return host.runner.run("a") + runner.run("b") + makeRunner().run("c") + paired.run("d");
+}
+
+export class TaskPanel {
+    private readonly runner = new TaskRunner();
+
+    refresh(): () => string {
+        const that = this;
+        return function () {
+            return that.runner.run("e");
+        };
+    }
+}
+```
+
+`src/workbench/tasks/taskRunner.ts`
+```ts
+export class TaskRunner {
+    run(name: string): string {
+        return name;
+    }
+}
+```
+
 `src/workbench/test/fileService.test.ts` (a test file)
 ```ts
 import { IFileService } from "../../platform/files/common/files";
@@ -733,9 +798,9 @@ export function check(store: DisposableStore): string {
 
 ### The index's view of it
 
-- **Files:** 28, two of them tests (`src/base/test/mock.ts`, `src/workbench/test/fileService.test.ts`).
+- **Files:** 31, two of them tests (`src/base/test/mock.ts`, `src/workbench/test/fileService.test.ts`).
 - **Workspace:** the root declares `packages/*`, so `@di/infra` is a workspace package whose `main` is `packages/infra/src/index.ts` (also its one entry point). The root `tsconfig.json` makes `""` an id root; nothing imports by module id.
-- **36 resolved edges.** By source: `packages/infra/src/index.ts` 2 (`./framework`, `./hooks`); `src/app/commands/commandContribution.ts` 2; `src/app/components/settingsButton.tsx` 2 (`@di/infra` → `packages/infra/src/index.ts`, `../dialogs` → `src/app/dialogs/index.ts`); `src/app/dialogs/dialogService.ts` 1 (`@di/infra`); `src/app/dialogs/index.ts` 3; `src/platform/files/browser/memoryFileService.ts` 1; `src/platform/files/common/fileService.ts` 2; `src/platform/files/common/files.ts` 1; `src/platform/files/index.ts` 3; `src/platform/files/node/watchingFileService.ts` 2; `src/workbench/commands/openCommand.ts` 2; `src/workbench/editor/baseEditor.ts` 1 (`../../platform/files` → `src/platform/files/index.ts`); `src/workbench/editor/editorPane.ts` 2; `src/workbench/editor/textEditor.ts` 1; `src/workbench/files/watchView.ts` 1; `src/workbench/history/history.ts` 1; `src/workbench/history/inferred.ts` 1; `src/workbench/log/logView.ts` 2; `src/workbench/search/searchModel.ts` 2; `src/workbench/test/fileService.test.ts` 4. The other eight files import nothing.
+- **38 resolved edges.** By source: `packages/infra/src/index.ts` 2 (`./framework`, `./hooks`); `src/app/commands/commandContribution.ts` 2; `src/app/components/settingsButton.tsx` 2 (`@di/infra` → `packages/infra/src/index.ts`, `../dialogs` → `src/app/dialogs/index.ts`); `src/app/dialogs/dialogService.ts` 1 (`@di/infra`); `src/app/dialogs/index.ts` 3; `src/platform/files/browser/memoryFileService.ts` 1; `src/platform/files/common/fileService.ts` 2; `src/platform/files/common/files.ts` 1; `src/platform/files/index.ts` 3; `src/platform/files/node/watchingFileService.ts` 2; `src/workbench/commands/openCommand.ts` 2; `src/workbench/editor/baseEditor.ts` 1 (`../../platform/files` → `src/platform/files/index.ts`); `src/workbench/editor/editorPane.ts` 2; `src/workbench/editor/textEditor.ts` 1; `src/workbench/files/watchView.ts` 1; `src/workbench/history/history.ts` 1; `src/workbench/history/inferred.ts` 1; `src/workbench/log/logView.ts` 2; `src/workbench/search/searchModel.ts` 2; `src/workbench/tasks/runners.ts` 1 (`./taskRunner`); `src/workbench/tasks/taskHost.ts` 1 (`./taskRunner`); `src/workbench/test/fileService.test.ts` 4. The other nine files import nothing.
 
 ### Call facts of three files (the adapter's output; ADR-059's rules)
 
@@ -763,6 +828,28 @@ A TypeRef is a type as written: `IFoo`, or `ns.IFoo` through a namespace. Lines 
 - line 12: `{ member: "readFile", receiver: "type", ref: "files.IFileService", inClass: null, how: "cast" }`.
 
 `src/workbench/test/fileService.test.ts`: **types** `{ name: "TestFileService", kind: "class", line: 6, exported: false, nested: false, extendsRefs: [], implementsRefs: [], testDoubleOf: "IFileService", members: ["readFile"], fields: {} }`; **bindings** `IFileService` (from `../../platform/files/common/files`), `FileService` (`../../platform/files/common/fileService`), `DisposableStore` (`../../base/lifecycle`); `mock` isn't named by a fact, so it isn't stored; **calls:** line 13 `{ member: "add", receiver: "type", ref: "DisposableStore", inClass: null, how: "param" }`; line 14 `{ member: "readFile", receiver: "type", ref: "FileService", inClass: null, how: "new" }` and `{ member: "readFile", receiver: "type", ref: "TestFileService", inClass: null, how: "new" }`.
+
+### Call facts of Calls Benchmark #1's cases (Task 5; ADR-059 amended, `ADAPTER_VERSION` 7)
+
+`src/workbench/tasks/runners.ts`:
+- **types:** `{ name: "LoggingRunner", kind: "class", line: 3, exported: true, nested: false, extendsRefs: ["TaskRunner"], implementsRefs: [], testDoubleOf: null, members: ["run"], fields: {} }`; `{ name: "TwiceRunner", kind: "class", line: 10, exported: false, nested: true, extendsRefs: ["TaskRunner"], implementsRefs: [], testDoubleOf: null, members: ["twice"], fields: {} }`; `{ name: null, kind: "class", line: 15, exported: false, nested: true, extendsRefs: ["TaskRunner"], implementsRefs: [], testDoubleOf: null, members: [], fields: {} }`.
+- **bindings:** `{ kind: "import", local: "TaskRunner", imported: "TaskRunner", specifier: "./taskRunner" }`.
+- **calls,** in source order:
+  - line 5: `{ member: "run", receiver: "type", ref: "TaskRunner", inClass: "LoggingRunner", how: "super" }` (`super` is the extends clause's class);
+  - line 12: `{ member: "run", receiver: "this", ref: null, inClass: "@10", how: "this" }` twice (`TwiceRunner` is nested, so a fact names it by its line, R-O's key);
+  - line 16: `{ member: "run", receiver: "type", ref: "@15", inClass: null, how: "new" }` (`quiet` holds `new class extends TaskRunner {}()`, the nameless class at line 15).
+
+`src/workbench/tasks/taskHost.ts`:
+- **types:** `{ name: "ITaskHost", kind: "interface", line: 3, exported: true, nested: false, extendsRefs: [], implementsRefs: [], testDoubleOf: null, members: ["runner"], fields: { runner: "TaskRunner" } }` (an interface's property types are fields, as a class's are); `{ name: "TaskPanel", kind: "class", line: 21, exported: true, nested: false, extendsRefs: [], implementsRefs: [], testDoubleOf: null, members: ["refresh", "runner"], fields: { runner: "TaskRunner" } }`.
+- **bindings:** `{ kind: "import", local: "TaskRunner", imported: "TaskRunner", specifier: "./taskRunner" }`.
+- **calls,** in source order:
+  - line 18: `{ member: "run", receiver: "field", ref: "runner", inClass: "ITaskHost", how: "member" }` (`host.runner`);
+  - line 18: `{ member: "run", receiver: "field", ref: "runner", inClass: "ITaskHost", how: "destructure" }` (`runner`, from `const { runner } = host`);
+  - line 18: `{ member: "run", receiver: "type", ref: "TaskRunner", inClass: null, how: "return" }` (`makeRunner()`, declared `: TaskRunner`);
+  - line 18: `{ member: "run", receiver: "type", ref: "TaskRunner", inClass: null, how: "destructure" }` (`paired`, from `const [, paired] = await makePair()`, declared `Promise<[string, TaskRunner]>`);
+  - line 27: `{ member: "run", receiver: "field", ref: "runner", inClass: "TaskPanel", how: "alias" }` (`that.runner`, where `const that = this`).
+
+`src/workbench/tasks/taskRunner.ts`: **types** `{ name: "TaskRunner", kind: "class", line: 1, exported: true, nested: false, extendsRefs: [], implementsRefs: [], testDoubleOf: null, members: ["run"], fields: {} }`; no bindings, no calls.
 
 ### The engine's answers
 
@@ -805,6 +892,16 @@ The receivers resolve this way (Task 3 checks each):
 **`Framework.service`:** 1 file: `src/app/dialogs/index.ts` 6.
 
 **`Logger.log`:** two classes are named `Logger` (`src/platform/log/logger.ts:1`, `src/workbench/log/logger.ts:1`), so the answer lists both and asks for `path`. With `path: "src/platform/log/logger.ts"`: `src/workbench/log/logView.ts` 6 (through the renamed import `PlatformLogger`). With `path: "src/workbench/log/logger.ts"`: `src/workbench/log/logView.ts` 5.
+
+**`TaskRunner.run`** (class `TaskRunner`, `src/workbench/tasks/taskRunner.ts` line 1; Task 5's cases):
+- *Subclasses:* `LoggingRunner` (`src/workbench/tasks/runners.ts:3`, declares run), `TwiceRunner` (nested, `runners.ts` line 10) and the nameless class at `runners.ts` line 15. No implementations.
+- *Callers:* **2 files, 9 calls,** no tests:
+  - `src/workbench/tasks/taskHost.ts` 18, 18, 18, 18, 27, all on TaskRunner (ITaskHost's `runner` property, read directly and destructured; the declared return; the declared tuple; TaskPanel's `runner` field through `that`);
+  - `src/workbench/tasks/runners.ts` 5, 12, 12, 16: on TaskRunner through `super`, on the subclass TwiceRunner twice, on the nameless subclass; receivers `(anonymous class)`, `TaskRunner`, `TwiceRunner`.
+
+  By category: on TaskRunner itself 2 files, on a subclass 1, on an implementation 0.
+- *What a change to run's signature touches:* the 2, plus `src/workbench/tasks/taskRunner.ts` (it declares run and isn't a caller): **3 files.** LoggingRunner declares run too, but its file is among the callers.
+- *By area* (no `group_by`, from `src/workbench/tasks`): `src/workbench/tasks/runners.ts` 1, `src/workbench/tasks/taskHost.ts` 1.
 
 ### The `calls` answers on the fixture (exact text; Task 4 transcribes)
 
@@ -862,7 +959,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 
 ### The checker's truth on the same fixture (Task 10; R2)
 
-`scripts/eval/ts-calls.ts`, building a program over the 28 files with `@di/infra` resolved by `resolve-truth.ts`, gives:
+`scripts/eval/ts-calls.ts`, building a program over the 31 files with `@di/infra` resolved by `resolve-truth.ts`, gives:
 - **callers of `IFileService.readFile`:** the index's 8 files **plus `src/workbench/history/inferred.ts`** (line 9): 9 files.
 - **breaks of `IFileService.readFile`:** those 9 plus `src/platform/files/browser/memoryFileService.ts` and `src/platform/files/common/files.ts`: 11 files.
 - **injects of `IFileService`:** `src/workbench/commands/openCommand.ts`, `src/workbench/editor/baseEditor.ts`, `src/workbench/editor/editorPane.ts`.
@@ -870,6 +967,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - **callers of `DialogService.open`:** `src/app/components/settingsButton.tsx`. **Injects of `DialogService`:** the same file.
 - **callers of `CommandRegistry.register`** and **injects of `CommandRegistry`:** `src/app/commands/commandContribution.ts`.
 - **callers of `Framework.service`:** `src/app/dialogs/index.ts`.
+- **callers of `TaskRunner.run`** (Task 5's cases): `src/workbench/tasks/runners.ts`, `src/workbench/tasks/taskHost.ts`. The checker resolves all nine calls to `TaskRunner.run` (checked on a scratch program over the three `tasks/` files: 0 errors).
 - **A task on `IFileService.readFile`:** CHANGE = the 11 breaks files; TESTS = the test files among them or directly importing one of them = `src/workbench/test/fileService.test.ts` (it is in CHANGE, and it imports `files.ts` and `fileService.ts`). `src/base/test/mock.ts` imports nothing, so it isn't one.
 
 ---

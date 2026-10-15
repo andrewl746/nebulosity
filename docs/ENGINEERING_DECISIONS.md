@@ -1141,6 +1141,16 @@ They need the whole graph, and the index already holds it.
 **Consequences:** Each repo is re-parsed once (adapter version 5). Calls on a value whose type is only inferred (a function's return, say) stay unseen, and every answer says so. JavaScript without declared types gets little from it. The V1.7 plan pins the facts and the answers on `test/fixtures/di-repo`.
 **Revisit when:** Calls Benchmark #1 misses its bar after three rounds (the plan stops for the owner); the first answer takes over 1.5 s (the fallback); or Eval #3 shows `calls` unused or wrong.
 
+**Amended (2026-10-15, V1.7 Task 5): measured, after two rounds of rules (`ADAPTER_VERSION` 7).** Calls Benchmark #1 passes S14's accuracy bar on VS Code's five methods, pooled, against the checker. Interface calls: recall 0.999 and precision 1.000 (1,751 of 1,753 files). Interface + implementation calls: recall 0.987 and precision 0.999 (1,890 of 1,914, one extra). `IStorageService.store` is under 0.98 on its own (0.977): its 9 misses are test helpers' undeclared returns and a conditional. AFFiNE scores 1.000 / 1.000 against its L3 sets after 4 verdicts, all "in". At version 5 the pool stood at 0.969 for interface + implementation recall, so two rounds added these rules:
+- **Round 1 (version 6):**
+  - `super.m()` is typed by its class's extends clause (`extends mock<I>()` gives `I`).
+  - `this` in a nested or nameless class, and `new class … {}`, name the class as `@<line>`, its R-O key, which the engine reads as that file's own type.
+- **Round 2 (version 7):**
+  - a member of a declared type: `x.f.m()`, `const { f } = x`, `({ f }: IServices)` and `const that = this`. The fact names the holder's type, and the engine reads the field through that type's declaration and its bases. An interface's property types are recorded as fields, as a class's are.
+  - a function declared in the same file is typed by its declared return type; `await` takes `Promise<T>` to `T`, and a declared tuple or type literal can be destructured.
+- How far a value is followed goes from 4 steps to 6.
+- A value whose type is only inferred stays unseen, as the Consequences say. The largest class left is a test helper's undeclared return (15 of the 24 files still missed), and `inferred.ts` in the fixture pins it. The others are `instantiationService.createInstance(C)` (4) and five one-offs.
+
 ## ADR-060 — Eval #3's method: the rules sentence, time to relevant context, the call kinds, and the gate (proposed, V1.7 plan, 2026-10-15; the gate approved by the owner 2026-10-15) — amends ADR-057
 
 **Context:** Eval #2 failed its gate on conditions 1, 2, 3a and 5a (ADR-057). V1.7's design found two things that blurred it:
