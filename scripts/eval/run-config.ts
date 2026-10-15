@@ -57,9 +57,22 @@ export function scratchFolder(tmp: string, hex: string): string {
     return `${tmp.replace(/\\/g, "/").replace(/\/+$/, "")}/eval-scratch/${hex}`;
 }
 
+/**
+ * A question's format line: its family's, with `<file>` replaced by the question's file in backticks (Eval #2's cycle
+ * line names the file the cycle starts and ends with). Throws a sentence when the family has no line, or the line names
+ * `<file>` and the question names none.
+ */
+export function formatLine(question: { family: string; file?: string }, formats: Record<string, string>): string {
+    const line = formats[question.family];
+    if (typeof line !== "string") throw new Error(`"formats" has no line for its family ${question.family}`);
+    if (!line.includes("<file>")) return line;
+    if (question.file === undefined) throw new Error(`its format line (${question.family}) names <file>, and the question names no file`);
+    return line.split("<file>").join(`\`${question.file}\``);
+}
+
 /** The text a run sends: the question, its family's format line, and with scripts on the scratch sentence (R6). */
-export function promptFor(question: { prompt: string; family: string }, formats: Record<string, string>, scratch?: string): string {
-    const base = `${question.prompt}\n\n${formats[question.family]}`;
+export function promptFor(question: { prompt: string; family: string; file?: string }, formats: Record<string, string>, scratch?: string): string {
+    const base = `${question.prompt}\n\n${formatLine(question, formats)}`;
     return scratch === undefined ? base : `${base}\n\nYou may write and run Node.js scripts in ${scratch} (and nowhere else); don't change any file in the repository.`;
 }
 
@@ -126,6 +139,33 @@ export function schedule(questions: readonly string[], repeats: number, order: r
         }
     }
     return runs;
+}
+
+/**
+ * The dev set's runs (Task 13, R1): each question once (repeat 1, Claude Code's default tool search), in the arms asked.
+ * With both arms, which goes first is schedule's, from the question's place in `order`.
+ */
+export function devSchedule(questions: readonly string[], order: readonly string[], arms: readonly Arm[]): RunId[] {
+    return schedule(questions, 1, order, { upfront: false }).filter((run) => arms.includes(run.arm));
+}
+
+const ARMS: readonly Arm[] = ["baseline", "nebulosity"];
+
+/** --arms: a comma list of the eval's arm names, each kept once in the order given. Throws a sentence otherwise. */
+export function parseArms(value: string): Arm[] {
+    const names = value.split(",").map((name) => name.trim()).filter(Boolean);
+    if (names.length === 0) throw new Error("--arms needs at least one arm (baseline, nebulosity)");
+    const unknown = names.filter((name) => !(ARMS as readonly string[]).includes(name));
+    if (unknown.length > 0) throw new Error(`--arms takes baseline and nebulosity, not ${unknown.join(", ")}`);
+    return [...new Set(names)] as Arm[];
+}
+
+/**
+ * The questions on the wrong side of R1: in a dev run, the ones not marked `"dev": true` (a real question would be tuned
+ * on); in a real run, the ones marked (a dev question would be scored). Their ids, in the file's order.
+ */
+export function devMismatch(questions: readonly { id: string; dev?: boolean }[], dev: boolean): string[] {
+    return questions.filter((q) => (q.dev === true) !== dev).map((q) => q.id);
 }
 
 export type UtilizationCheck = { unwatched: number; warning: string | null; stop: string | null; giveUp: string | null };

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
-import { QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scratchRule, scrub, sessionArgs, utilizationCheck } from "./run-config";
+import {
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder,
+    scratchRule, scrub, sessionArgs, utilizationCheck,
+} from "./run-config";
 
 describe("claudeArgs", () => {
     it("pins the model and effort, drops user settings, allows read-only tools, and differs between arms only in the MCP config", () => {
@@ -274,5 +277,48 @@ describe("sessionArgs", () => {
     it("uses the single-run budget when the pins name no session budget", () => {
         const session = sessionArgs("baseline", mcp, { ...pins, sessionMaxBudgetUsd: undefined });
         expect(session[session.indexOf("--max-budget-usd") + 1]).toBe("4");
+    });
+});
+
+describe("the dev set (Task 13, R1)", () => {
+    it("names a cycle question's file in its format line, in backticks, and leaves a line without <file> as it is", () => {
+        const formats = { cycle: "End with ANSWER: none, or the cycle starting and ending with <file>, where each file imports the next.", list: "End with ANSWER: and the files." };
+        expect(formatLine({ family: "cycle", file: "src/a.ts" }, formats)).toBe("End with ANSWER: none, or the cycle starting and ending with `src/a.ts`, where each file imports the next.");
+        expect(formatLine({ family: "list" }, formats)).toBe("End with ANSWER: and the files.");
+        // a file given to a line that doesn't name one changes nothing
+        expect(formatLine({ family: "list", file: "src/a.ts" }, formats)).toBe("End with ANSWER: and the files.");
+        expect(promptFor({ prompt: "Q?", family: "cycle", file: "src/a.ts" }, formats, "C:/s")).toBe(
+            "Q?\n\nEnd with ANSWER: none, or the cycle starting and ending with `src/a.ts`, where each file imports the next.\n\nYou may write and run Node.js scripts in C:/s (and nowhere else); don't change any file in the repository.");
+    });
+
+    it("refuses a format line that names <file> for a question that names none, and a family with no line", () => {
+        const formats = { cycle: "starting and ending with <file>." };
+        expect(() => formatLine({ family: "cycle" }, formats)).toThrow("its format line (cycle) names <file>, and the question names no file");
+        expect(() => formatLine({ family: "chain" }, formats)).toThrow('"formats" has no line for its family chain');
+    });
+
+    it("runs each dev question once, in the arms asked: N alone by default, A and N alternating as schedule orders them", () => {
+        const order = ["d1", "d2", "d3"];
+        expect(devSchedule(["d1", "d2", "d3"], order, ["nebulosity"]).map(runName)).toEqual(["d1-nebulosity-1", "d2-nebulosity-1", "d3-nebulosity-1"]);
+        // d1 at index 0 (A first), d2 at index 1 (N first), d3 at index 2 (A first), repeat 1
+        expect(devSchedule(["d1", "d2", "d3"], order, ["baseline", "nebulosity"]).map(runName)).toEqual([
+            "d1-baseline-1", "d1-nebulosity-1", "d2-nebulosity-1", "d2-baseline-1", "d3-baseline-1", "d3-nebulosity-1",
+        ]);
+        expect(devSchedule(["d2"], order, ["baseline"]).map(runName)).toEqual(["d2-baseline-1"]);
+        expect(devSchedule(["d2"], order, ["nebulosity"]).every((r) => r.toolSearch && r.repeat === 1)).toBe(true);
+    });
+
+    it("reads --arms as the eval's arm names, each once", () => {
+        expect(parseArms("nebulosity")).toEqual(["nebulosity"]);
+        expect(parseArms(" baseline , nebulosity,baseline")).toEqual(["baseline", "nebulosity"]);
+        expect(() => parseArms("upfront")).toThrow("--arms takes baseline and nebulosity, not upfront");
+        expect(() => parseArms(" , ")).toThrow("--arms needs at least one arm");
+    });
+
+    it("names the questions on the wrong side of R1: unmarked ones in a dev run, dev ones in a real run", () => {
+        const questions = [{ id: "d1", dev: true }, { id: "q1" }, { id: "q2", dev: false }, { id: "d2", dev: true }];
+        expect(devMismatch(questions, true)).toEqual(["q1", "q2"]);
+        expect(devMismatch(questions, false)).toEqual(["d1", "d2"]);
+        expect(devMismatch([{ id: "d1", dev: true }], true)).toEqual([]);
     });
 });

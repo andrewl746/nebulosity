@@ -1,0 +1,150 @@
+{
+  "name": "Eval #2's dev set (R1): tool use and per-turn cost, never scored; no target here may appear in Eval #2",
+  "formats": {
+    "list": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "chain": "End with a line that says ANSWER: and then either the word none, or the chain as file paths relative to the repository root, one per line, from the first file to the last, where each file imports the next.",
+    "impact": "End with a line that says ANSWER: and then one line for each folder named above, in the same order, as the folder, a colon and the number of files, then a line elsewhere: and the number of files outside them, then a line total: and the number of files in all.",
+    "cycle": "End with a line that says ANSWER: and then either the word none, or the cycle as file paths relative to the repository root, one per line, starting and ending with <file>, where each file imports the next.",
+    "pairs": "End with a line that says ANSWER: and then one line for each pair, as the importing folder's name, then ->, then the imported folder's name."
+  },
+  "questions": [
+    {
+      "id": "vscode-dev-impact",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "impact",
+      "family": "impact",
+      "prompt": "If I change `src/vs/platform/clipboard/common/clipboardService.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/base`, `src/vs/platform`, `src/vs/editor`, `src/vs/workbench`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "vscode-dev-transitive",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "list-transitive",
+      "family": "list",
+      "prompt": "List every file that depends on `src/vs/editor/contrib/folding/browser/folding.ts`, directly or through other files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "vscode-dev-cycle",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "cycle",
+      "family": "cycle",
+      "file": "src/vs/base/common/observableInternal/map.ts",
+      "prompt": "Is `src/vs/base/common/observableInternal/map.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle."
+    },
+    {
+      "id": "vscode-dev-unused",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "unused",
+      "family": "list",
+      "prompt": "List every file in `src/vs/platform/files` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "vscode-dev-violations",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "violations",
+      "family": "list",
+      "prompt": "List every file in `src/vs/base` that directly imports a file in `src/vs/platform`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "vscode-dev-entries",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "entries",
+      "family": "list",
+      "prompt": "Which files that no other file imports end up loading `src/vs/workbench/contrib/markers/browser/markersView.ts`, directly or through other files? Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "vscode-dev-pairs",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "pairs",
+      "family": "pairs",
+      "prompt": "Code under `src/vs/platform` sits in folders named `common`, `browser`, `node`, `electron-browser`, `electron-utility`, `electron-main`. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path."
+    },
+    {
+      "id": "vscode-dev-chain",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Give the shortest chain of imports from `src/vs/code/electron-main/main.ts` to `src/vs/platform/log/common/log.ts`."
+    },
+    {
+      "id": "affine-dev-impact",
+      "dev": true,
+      "repo": "affine",
+      "kind": "impact",
+      "family": "impact",
+      "why": "The eval's scanner with the truth resolver finds no AFFiNE file with 200-700 dependents spread over three or more top folders (a 405-file import cycle in packages/frontend/core/src puts anything it imports at 680 or more), so this is the smallest spread-out kind: 947 dependents (6 direct), 37 in blocksuite/affine, 21 in blocksuite/integration-test, 681 in packages/frontend, 199 in tests, 9 elsewhere.",
+      "prompt": "If I change `blocksuite/affine/blocks/bookmark/src/bookmark-block.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `blocksuite/affine`, `blocksuite/integration-test`, `packages/frontend`, `tests`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-transitive",
+      "dev": true,
+      "repo": "affine",
+      "kind": "list-transitive",
+      "family": "list",
+      "why": "40 dependents, only 9 of them direct, all in the admin app (packages/frontend/admin), 4 of them spec files: a list grep can't finish in one search.",
+      "prompt": "List every file that depends on `packages/frontend/admin/src/use-query.ts`, directly or through other files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-cycle",
+      "dev": true,
+      "repo": "affine",
+      "kind": "cycle",
+      "family": "cycle",
+      "file": "packages/frontend/apps/electron/src/main/events.ts",
+      "why": "A real cycle in the Electron main process (a 20-file group), shortest 3 steps: events.ts -> windows-manager/popup.ts -> exposed.ts -> events.ts; app code, not a barrel file.",
+      "prompt": "Is `packages/frontend/apps/electron/src/main/events.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle."
+    },
+    {
+      "id": "affine-dev-unused",
+      "dev": true,
+      "repo": "affine",
+      "kind": "unused",
+      "family": "list",
+      "why": "41 non-test files of which 3 are imported by nothing (affine/use-reference-link-helper.ts, affine/use-toggle-cloud-public.ts, use-block-suite-workspace-helper.ts).",
+      "prompt": "List every file in `packages/frontend/core/src/components/hooks` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-violations",
+      "dev": true,
+      "repo": "affine",
+      "kind": "violations",
+      "family": "list",
+      "why": "Shared modules reaching into the desktop UI: 4 files in packages/frontend/core/src/modules import a file in packages/frontend/core/src/desktop (import/services/service.ts, peek-view/view/doc-preview/doc-peek-view.tsx, workbench/view/workbench-root.tsx, workspace-indexer-embedding/view/embedding-settings.tsx). The package-level pair (packages/frontend/core into packages/frontend/apps, also 4 files) is left for Eval #2.",
+      "prompt": "List every file in `packages/frontend/core/src/modules` that directly imports a file in `packages/frontend/core/src/desktop`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-entries",
+      "dev": true,
+      "repo": "affine",
+      "kind": "entries",
+      "family": "list",
+      "why": "Loaded by 5 non-test files nothing imports (the Android and iOS entries and their nbstore workers, and mobile-shared's own index.ts), 14 dependents in all.",
+      "prompt": "Which files that no other file imports end up loading `packages/frontend/apps/mobile-shared/src/auth/endpoint.ts`, directly or through other files? Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-pairs",
+      "dev": true,
+      "repo": "affine",
+      "kind": "pairs",
+      "family": "pairs",
+      "why": "A folder's children: 11 pairs among packages/common's packages (error, graphql, debug, infra, env, nbstore, reader, realtime). The richer packages/frontend children and the core modules' recurring names (entities, services, stores, ...) are left for Eval #2.",
+      "prompt": "Which of the folders directly inside `packages/common` import from which others?"
+    },
+    {
+      "id": "affine-dev-chain",
+      "dev": true,
+      "repo": "affine",
+      "kind": "chain",
+      "family": "chain",
+      "why": "5 steps from the server's entry to a common package, through app.module.ts (which imports dozens of modules): index.ts -> server.ts -> app.module.ts -> core/realtime/index.ts -> core/realtime/gateway.ts -> packages/common/realtime/src/index.ts.",
+      "prompt": "Give the shortest chain of imports from `packages/backend/server/src/index.ts` to `packages/common/realtime/src/index.ts`."
+    }
+  ]
+}

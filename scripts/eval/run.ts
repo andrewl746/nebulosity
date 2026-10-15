@@ -2,6 +2,12 @@
  * npm run eval:run -- [--pilot | --only bp1,cl2,...] [--repeat 1|2 (default 2)] [--limit n]
  *                     [--stop-at-seven-day 0.85] [--stop-at-five-hour 0.9] [--config-dir dir] [--dry-run]
  * npm run eval:run -- --eval eval2 --sessions [--only <session ids>] [--repeat 1|2|3] [--limit n] [--dry-run]
+ * npm run eval:run -- --eval eval2 --dev [--arms nebulosity|baseline,nebulosity] [--only <ids>] [--limit n] [--dry-run]
+ *
+ * With --dev the questions are the dev set's (<dir>/dev/questions.json, every one marked "dev": true; V1.6's Task 13, R1):
+ * one run of each in the arms asked (Nebulosity's alone by default), with every check a real run gets, kept in
+ * <dir>/dev/runs (raw transcripts in .nebulosity/<dir>/dev/raw). A real run refuses a question marked "dev", and --dev
+ * refuses one that isn't, so tuning never sees the eval's questions.
  *
  * With --sessions the runs are task sessions (<dir>/sessions.json): several questions asked in one Claude Code process
  * over --input-format stream-json, the next written to stdin when the last one's `result` event appears. Every check a
@@ -44,8 +50,9 @@ import { requireRepository } from "../../lib/db/store/structure";
 import { repoKey } from "../../lib/index/paths";
 import { loadDefinition, type EvalDefinition } from "./definition";
 import {
-    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, isStripped, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub, sessionArgs, utilizationCheck,
-    type RunId,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, runName, schedule, scratchFolder, scrub,
+    sessionArgs, utilizationCheck,
+    type Arm, type RunId,
 } from "./run-config";
 import { resultCount, scheduleSessions, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef, type SessionFile } from "./session";
 import { summarizeRun, type RunSummary } from "./transcript";
@@ -66,13 +73,20 @@ const PLACEHOLDER_PROMPT = "<placeholder: the questions file doesn't exist yet>"
 const forward = (p: string): string => p.replace(/\\/g, "/");
 const CHECKOUT = forward(path.resolve(__dirname, "..", ".."));
 
-/** Where one eval keeps its files (`--eval <dir>`, default eval): the tracked folder, and the untracked work folder under .nebulosity. */
-type Paths = { dir: string; name: string; questions: string; emptyMcp: string; runs: string; work: string; raw: string; nebulosityMcp: string };
-function pathsFor(definition: EvalDefinition): Paths {
+/**
+ * Where one eval keeps its files (`--eval <dir>`, default eval): the tracked folder, and the untracked work folder under
+ * .nebulosity. The dev set (--dev) has its own questions, runs and work folder under dev/; `label` names its folder in messages.
+ */
+type Paths = { dir: string; name: string; label: string; questions: string; emptyMcp: string; runs: string; work: string; raw: string; nebulosityMcp: string };
+function pathsFor(definition: EvalDefinition, dev: boolean): Paths {
     const dir = forward(definition.dir);
     const name = path.basename(dir);
-    const work = `${CHECKOUT}/.nebulosity/${name}`;
-    return { dir, name, questions: `${dir}/questions.json`, emptyMcp: `${dir}/mcp/empty.json`, runs: `${dir}/runs`, work, raw: `${work}/raw`, nebulosityMcp: `${work}/mcp-nebulosity.json` };
+    const own = dev ? `${dir}/dev` : dir;
+    const work = dev ? `${CHECKOUT}/.nebulosity/${name}/dev` : `${CHECKOUT}/.nebulosity/${name}`;
+    return {
+        dir, name, label: dev ? `${name}/dev` : name, questions: `${own}/questions.json`, emptyMcp: `${dir}/mcp/empty.json`, runs: `${own}/runs`,
+        work, raw: `${work}/raw`, nebulosityMcp: `${work}/mcp-nebulosity.json`,
+    };
 }
 // set once by main(), before anything reads them
 let P!: Paths;
@@ -92,12 +106,14 @@ class Stop extends Error {
 type Options = {
     pilot: boolean; only: string[] | null; repeat: number | null; limit: number;
     sevenDay: number; fiveHour: number; configDir: string | null; dryRun: boolean; evalDir: string; sessions: boolean;
+    /** The dev set (Task 13): its own questions and runs, one run each, in `arms` (Nebulosity's alone when null). */
+    dev: boolean; arms: Arm[] | null;
 };
 
-const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--sessions (with --only <session ids>)] [--dry-run]";
+const USAGE = "usage: npm run eval:run -- [--pilot | --only <ids>] [--repeat 1|2|3 (default: the definition's)] [--limit <n>] [--stop-at-seven-day <0-1>] [--stop-at-five-hour <0-1>] [--config-dir <dir>] [--eval <dir> (default eval)] [--sessions (with --only <session ids>)] [--dev [--arms baseline,nebulosity (default nebulosity)]] [--dry-run]";
 
 function parseArgs(argv: string[]): Options {
-    const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false, evalDir: "eval", sessions: false };
+    const options: Options = { pilot: false, only: null, repeat: null, limit: Infinity, sevenDay: 0.85, fiveHour: 0.9, configDir: null, dryRun: false, evalDir: "eval", sessions: false, dev: false, arms: null };
     for (let i = 0; i < argv.length; i++){
         const arg = argv[i];
         const value = (): string => {
@@ -129,16 +145,31 @@ function parseArgs(argv: string[]): Options {
         else if (arg === "--config-dir") options.configDir = forward(path.resolve(value()));
         else if (arg === "--eval") options.evalDir = value();
         else if (arg === "--sessions") options.sessions = true;
+        else if (arg === "--dev") options.dev = true;
+        else if (arg === "--arms"){
+            try{
+                options.arms = parseArms(value());
+            } catch(e){
+                if (e instanceof Stop) throw e;
+                throw new Stop(1, `${(e as Error).message}. ${USAGE}`);
+            }
+        }
         else throw new Stop(1, `unknown argument ${arg}. ${USAGE}`);
     }
+    if (options.dev && (options.pilot || options.sessions)) throw new Stop(1, "--dev runs the dev set's single questions, so it can't be combined with --pilot or --sessions.");
+    if (options.dev && options.repeat !== null) throw new Stop(1, "--dev is one run of each dev question, so it can't be combined with --repeat.");
+    if (options.arms !== null && !options.dev) throw new Stop(1, "--arms is for the dev set: use it with --dev.");
     if (options.sessions && options.pilot) throw new Stop(1, "--pilot is for single questions, so it can't be combined with --sessions.");
     if (options.pilot && options.only) throw new Stop(1, "--pilot already names its questions (the definition's), so it can't be combined with --only.");
     if (options.pilot && options.repeat !== null) throw new Stop(1, "--pilot is one run of each pilot question, so it can't be combined with --repeat.");
     return options;
 }
 
-/** A question may name the repo it asks about; Eval #1's don't, and get the definition's only repo. */
-type Question = { id: string; family: string; prompt: string; repo?: string };
+/**
+ * A question may name the repo it asks about; Eval #1's don't, and get the definition's only repo. A cycle question names
+ * its `file` for its format line; a dev-set question is marked `dev`.
+ */
+type Question = { id: string; family: string; prompt: string; repo?: string; file?: string; dev?: boolean };
 type QuestionFile = { formats: Record<string, string>; questions: Question[] };
 
 /** What a dry run asks until the questions file exists: the definition's pilot ids (else bp4, cl2, cn3), with no real prompt. */
@@ -155,29 +186,42 @@ function placeholderFile(): QuestionFile {
 function questionRepo(question: Question): Repo {
     const ids = Object.keys(DEF.repos);
     const id = question.repo ?? (ids.length === 1 ? ids[0] : undefined);
-    if (id === undefined) throw new Stop(1, `${P.name}/questions.json: question ${question.id} names no repo, and ${P.name}/eval.json has several (${ids.join(", ")}).`);
-    if (!(id in DEF.repos)) throw new Stop(1, `${P.name}/questions.json: question ${question.id} names the repo ${id}, which ${P.name}/eval.json doesn't list.`);
+    if (id === undefined) throw new Stop(1, `${P.label}/questions.json: question ${question.id} names no repo, and ${P.name}/eval.json has several (${ids.join(", ")}).`);
+    if (!(id in DEF.repos)) throw new Stop(1, `${P.label}/questions.json: question ${question.id} names the repo ${id}, which ${P.name}/eval.json doesn't list.`);
     return repoOf(id);
 }
 
-function loadQuestions(dryRun: boolean): { file: QuestionFile; placeholder: boolean } {
+function loadQuestions(dryRun: boolean, dev: boolean): { file: QuestionFile; placeholder: boolean } {
     if (!fs.existsSync(P.questions)){
-        if (dryRun) return { file: placeholderFile(), placeholder: true };
-        throw new Stop(1, `${P.name}/questions.json doesn't exist yet, so there is nothing to ask. Nothing was run.`);
+        // the dev set has no placeholders: a dry run of it shows the real prompts or nothing
+        if (dryRun && !dev) return { file: placeholderFile(), placeholder: true };
+        throw new Stop(1, `${P.label}/questions.json doesn't exist yet, so there is nothing to ask. Nothing was run.`);
     }
     let parsed: Partial<QuestionFile> | null;
     try{
         parsed = JSON.parse(fs.readFileSync(P.questions, "utf8")) as Partial<QuestionFile> | null;
     } catch(e){
-        throw new Stop(1, `${P.name}/questions.json isn't valid JSON: ${(e as Error).message}`);
+        throw new Stop(1, `${P.label}/questions.json isn't valid JSON: ${(e as Error).message}`);
     }
     if (!parsed || typeof parsed.formats !== "object" || parsed.formats === null || !Array.isArray(parsed.questions)){
-        throw new Stop(1, `${P.name}/questions.json needs a "formats" object and a "questions" list.`);
+        throw new Stop(1, `${P.label}/questions.json needs a "formats" object and a "questions" list.`);
     }
     for (const q of parsed.questions){
         if (typeof q?.id !== "string" || typeof q.prompt !== "string" || typeof q.family !== "string" || typeof parsed.formats[q.family] !== "string"){
-            throw new Stop(1, `${P.name}/questions.json: question ${JSON.stringify(q?.id)} needs an id, a prompt, and a family that has a line in "formats".`);
+            throw new Stop(1, `${P.label}/questions.json: question ${JSON.stringify(q?.id)} needs an id, a prompt, and a family that has a line in "formats".`);
         }
+        try{
+            formatLine(q, parsed.formats);
+        } catch(e){
+            throw new Stop(1, `${P.label}/questions.json: question ${q.id}: ${(e as Error).message}.`);
+        }
+    }
+    // R1: tuning never sees the eval's questions, and the eval never scores a dev question
+    const wrongSide = devMismatch(parsed.questions, dev);
+    if (wrongSide.length > 0){
+        throw new Stop(1, dev
+            ? `${P.label}/questions.json: ${wrongSide.join(", ")} ${wrongSide.length === 1 ? "isn't" : "aren't"} marked "dev": true, and --dev runs only the dev set (R1). Nothing was run.`
+            : `${P.label}/questions.json: ${wrongSide.join(", ")} ${wrongSide.length === 1 ? "is" : "are"} marked "dev": true; the dev set lives in ${P.name}/dev/questions.json and runs with --dev (R1). Nothing was run.`);
     }
     return { file: parsed as QuestionFile, placeholder: false };
 }
@@ -505,7 +549,7 @@ async function main(): Promise<void> {
     } catch(e){
         throw new Stop(1, `${options.evalDir}: ${(e as Error).message}`);
     }
-    P = pathsFor(DEF);
+    P = pathsFor(DEF, options.dev);
     const dry = options.dryRun;
     console.log(`${dry ? "Dry run: nothing is started, written or changed. " : ""}${DEF.name} (${P.name}).`);
 
@@ -521,8 +565,8 @@ async function main(): Promise<void> {
 
     if (options.configDir && !fs.existsSync(options.configDir)) throw new Stop(1, `--config-dir ${options.configDir} doesn't exist.`);
 
-    const { file: questions, placeholder } = loadQuestions(dry);
-    console.log(placeholder ? `${P.name}/questions.json: missing; the dry run uses placeholder prompts for ${questions.questions.map((q) => q.id).join(", ")}` : `${P.name}/questions.json: ${questions.questions.length} questions`);
+    const { file: questions, placeholder } = loadQuestions(dry, options.dev);
+    console.log(placeholder ? `${P.label}/questions.json: missing; the dry run uses placeholder prompts for ${questions.questions.map((q) => q.id).join(", ")}` : `${P.label}/questions.json: ${questions.questions.length} questions`);
 
     const keys = ownerPluginKeys();
     const plugins = [...new Set(keys.map((key) => key.split("@")[0]))];
@@ -558,7 +602,12 @@ async function main(): Promise<void> {
         const chosen = questions.questions.filter((q) => ids === null || ids.includes(q.id)).map((q) => q.id);
         // which arm goes first comes from a question's place in the whole list (D2's order for the placeholders), however few are asked
         const order = placeholder && chosen.every((id) => QUESTION_ORDER.includes(id)) ? QUESTION_ORDER : questions.questions.map((q) => q.id);
-        planned = schedule(chosen, options.pilot ? 1 : options.repeat ?? DEF.repeats, order, { upfront: DEF.arms.includes("nebulosity-upfront") });
+        if (options.dev){
+            const arms = options.arms ?? ["nebulosity"];
+            const missing = arms.filter((arm) => !DEF.arms.includes(arm));
+            if (missing.length > 0) throw new Stop(1, `${P.name}/eval.json has no arm ${missing.join(" or ")} (its arms are ${DEF.arms.join(", ")}).`);
+            planned = devSchedule(chosen, order, arms);
+        } else planned = schedule(chosen, options.pilot ? 1 : options.repeat ?? DEF.repeats, order, { upfront: DEF.arms.includes("nebulosity-upfront") });
     }
     const sessionOf = (run: RunId): SessionDef | undefined => (options.sessions ? sessionDefs.find((x) => x.id === run.question) : undefined);
     const repoIdOf = (run: RunId): string => sessionOf(run)?.repo ?? questionRepo(questions.questions.find((q) => q.id === run.question)!).id;
@@ -587,7 +636,7 @@ async function main(): Promise<void> {
     const mcpNebulosity = { mcpServers: { nebulosity: { command: "node", args: [`${CHECKOUT}/mcp/launch.mjs`], env: { NEBULOSITY_LIVE: "off" } } } };
     const text = `${JSON.stringify(mcpNebulosity, null, 2)}\n`;
     console.log(`MCP config for A: ${P.emptyMcp}`);
-    console.log(`schedule: ${planned.length} runs, ${planned.length - todo.length} already in ${P.name}/runs, ${batch.length} to start${todo.length > batch.length ? ` (--limit ${options.limit}; ${todo.length - batch.length} more after)` : ""}`);
+    console.log(`schedule: ${planned.length} runs, ${planned.length - todo.length} already in ${P.label}/runs, ${batch.length} to start${todo.length > batch.length ? ` (--limit ${options.limit}; ${todo.length - batch.length} more after)` : ""}`);
 
     if (dry){
         console.log(`MCP config for B, which a real run writes to ${P.nebulosityMcp}:\n${text.trimEnd()}`);
@@ -620,7 +669,7 @@ async function main(): Promise<void> {
     }
 
     if (batch.length === 0){
-        console.log("Nothing to run: every run in this schedule is already in ${P.name}/runs.");
+        console.log(`Nothing to run: every run in this schedule is already in ${P.label}/runs.`);
         return;
     }
     if (!fs.existsSync(P.emptyMcp)) throw new Stop(1, `${P.emptyMcp} is missing (it is committed).`);
@@ -665,7 +714,7 @@ async function main(): Promise<void> {
         }
         if (check.stop !== null) console.log(`Note: ${check.stop}. Wait before starting more runs.`);
     }
-    console.log(`Done: ${started} runs kept in ${P.name}/runs. ${todo.length - started} runs are left in this schedule.`);
+    console.log(`Done: ${started} runs kept in ${P.label}/runs. ${todo.length - started} runs are left in this schedule.`);
 }
 
 main().catch((e: unknown) => {
