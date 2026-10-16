@@ -25,9 +25,11 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import type ts from "typescript";
 import { loadDefinition, type EvalDefinition } from "./definition";
 import { createTruthResolver } from "./resolve-truth";
 import { CODE_FILE, computedSites, importSpecifiers, listFiles, resolveSpecifier, scanRepo, type ComputedSite, type ResolveBare } from "./scan";
+import { callTruth, programFor, type CallTruth } from "./ts-calls";
 import { preProcessGraph, preProcessImports } from "./ts-graph";
 import {
     adjacency, childOf, childPairs, directImporters, filesNothingImports, impactByFolders, importersWithin, isTestFile, nameOf, namePairs,
@@ -51,7 +53,15 @@ export type ViolationsSpec = SpecBase & { kind: "violations"; from: string; to: 
 export type EntriesSpec = SpecBase & { kind: "entries"; target: string };
 /** Without `names`, which of the folder's children import which; with them, which of those folder names below it do. */
 export type PairsSpec = SpecBase & { kind: "pairs"; folder: string; names?: string[] };
-export type TruthSpec = ListSpec | ChainSpec | ImpactSpec | CycleSpec | UnusedSpec | ViolationsSpec | EntriesSpec | PairsSpec;
+/**
+ * The calls TypeScript's checker resolves (ts-calls.ts): callers of type.member; breaks (those, and the files that declare the
+ * member on the type or a class or interface reaching it); adopt (callers, asked as a migration); injects (the files that ask
+ * for the type through a constructor parameter, an @inject field or a provider). `within` keeps the files under a folder.
+ */
+export type CallSpec = SpecBase & { kind: "callers" | "breaks" | "adopt" | "injects"; type: string; file: string; member?: string; within?: string };
+/** The change a signature change forces: the files to change (breaks), and the tests to run among them or directly importing one. */
+export type TaskSpec = SpecBase & { kind: "task"; type: string; file: string; member: string; within?: string };
+export type TruthSpec = ListSpec | ChainSpec | ImpactSpec | CycleSpec | UnusedSpec | ViolationsSpec | EntriesSpec | PairsSpec | CallSpec | TaskSpec;
 
 /** Eval #1's definition, whose ten truths are TRUTH_TABLE rather than a truth-specs.json. */
 export const EVAL1 = "Eval #1";
@@ -73,6 +83,7 @@ export const TRUTH_TABLE: TruthSpec[] = [
 const KIND_FIELDS: Record<TruthSpec["kind"], string[]> = {
     list: ["target", "scope"], chain: ["from", "to"], impact: ["target", "folders"], cycle: ["file"],
     unused: ["folder"], violations: ["from", "to"], entries: ["target"], pairs: ["folder"],
+    callers: ["type", "file", "member"], breaks: ["type", "file", "member"], adopt: ["type", "file", "member"], injects: ["type", "file"], task: ["type", "file", "member"],
 };
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string");
 
@@ -94,9 +105,12 @@ export function parseTruthSpecs(raw: unknown, repoIds: readonly string[]): Truth
                 if (!isStringList(s.folders)) fail(`${id} (${s.kind}) needs folders, a list of folder paths.`);
             } else if (field === "scope"){
                 if (s.scope !== "direct" && s.scope !== "outside" && s.scope !== "transitive") fail(`${id} (list) needs scope "direct", "outside" or "transitive".`);
+            } else if (field === "type" || field === "member"){
+                if (typeof s[field] !== "string" || s[field] === "") fail(`${id} (${s.kind}) needs ${field}, ${field === "type" ? "the name of a class or interface" : "the name of a member of it"}.`);
             } else if (typeof s[field] !== "string") fail(`${id} (${s.kind}) needs ${field}, a repo path.`);
         }
         if (s.names !== undefined && !isStringList(s.names)) fail(`${id}'s names, when given, must be a list of folder names.`);
+        if (s.within !== undefined && typeof s.within !== "string") fail(`${id}'s within, when given, is a folder path.`);
     }
     return raw as TruthSpec[];
 }
@@ -131,18 +145,46 @@ export type UnusedTruthFile = { id: string; kind: "unused"; folder: string; file
 export type ViolationsTruthFile = { id: string; kind: "violations"; from: string; to: string; files: string[] } & Checked;
 export type EntriesTruthFile = { id: string; kind: "entries"; target: string; files: string[] } & Checked;
 export type PairsTruthFile = { id: string; kind: "pairs"; folder: string; names: string[] | null; pairs: [string, string][] } & Checked;
+/** The files the checker finds for a call question; `member` is null for injects. */
+export type CallTruthFile = {
+    id: string; kind: "callers" | "breaks" | "adopt" | "injects"; type: string; file: string; member: string | null; within: string | null; files: string[];
+} & Checked;
+/** A task: CHANGE (the breaks truth) and TESTS (taskTests). */
+export type TaskTruthFile = { id: string; kind: "task"; type: string; file: string; member: string; within: string | null; change: string[]; tests: string[] } & Checked;
 type TruthOf = {
     list: ListTruthFile; chain: ChainTruthFile; impact: ImpactTruthFile; cycle: CycleTruthFile;
     unused: UnusedTruthFile; violations: ViolationsTruthFile; entries: EntriesTruthFile; pairs: PairsTruthFile;
+    callers: CallTruthFile; breaks: CallTruthFile; adopt: CallTruthFile; injects: CallTruthFile; task: TaskTruthFile;
 };
 export type TruthFile = TruthOf[keyof TruthOf];
 
-/** A spec's truth over a graph, unverified and without notes (the hand check adds both). */
-export function buildTruth<S extends TruthSpec>(g: Graph, spec: S): TruthOf[S["kind"]] {
-    return truthFor(g, spec) as TruthOf[S["kind"]];
+/**
+ * A spec's truth over a graph, unverified and without notes (the hand check adds both). A call or task spec also needs the
+ * repo's checker program (the eight import kinds ignore it); a task's TESTS read the graph.
+ */
+export function buildTruth<S extends TruthSpec>(g: Graph, spec: S, calls?: { program: ts.Program; root: string }): TruthOf[S["kind"]] {
+    return truthFor(g, spec, calls) as TruthOf[S["kind"]];
 }
 
-function truthFor(g: Graph, spec: TruthSpec): TruthFile {
+/**
+ * A task's TESTS: the test files (isTestFile) among the files to change, and those with an edge of the graph into one of
+ * them, inside `within` when given, sorted.
+ */
+export function taskTests(change: readonly string[], g: Graph, within?: string): string[] {
+    const changing = new Set(change);
+    const found = new Set<string>();
+    for (const file of change) if (isTestFile(file)) found.add(file);
+    for (const [from, to] of g.edges) if (changing.has(to) && isTestFile(from)) found.add(from);
+    return [...found].filter((f) => within === undefined || within === "" || f.startsWith(`${within}/`)).sort(byPath);
+}
+
+/** The checker's answer for a call or task spec: adopt asks callers, a task asks breaks. */
+export function callSitesFor(spec: CallSpec | TaskSpec, calls: { program: ts.Program; root: string }): CallTruth {
+    const kind = spec.kind === "adopt" ? "callers" : spec.kind === "task" ? "breaks" : spec.kind;
+    return callTruth(calls.program, calls.root, kind, spec);
+}
+
+function truthFor(g: Graph, spec: TruthSpec, calls?: { program: ts.Program; root: string }): TruthFile {
     const unchecked = (): Checked => ({ verified: false, notes: [] });
     switch (spec.kind){
         case "list": {
@@ -177,6 +219,16 @@ function truthFor(g: Graph, spec: TruthSpec): TruthFile {
                 id: spec.id, kind: "pairs", folder: spec.folder, names: spec.names ?? null,
                 pairs: spec.names ? namePairs(g, spec.folder, spec.names) : childPairs(g, spec.folder), ...unchecked(),
             };
+        case "callers": case "breaks": case "adopt": case "injects": {
+            if (!calls) throw new Error(`${spec.id}: a ${spec.kind} truth needs the repo's checker program`);
+            const found = callSitesFor(spec, calls);
+            return { id: spec.id, kind: spec.kind, type: spec.type, file: spec.file, member: spec.member ?? null, within: spec.within ?? null, files: found.files, ...unchecked() };
+        }
+        case "task": {
+            if (!calls) throw new Error(`${spec.id}: a task truth needs the repo's checker program`);
+            const change = callSitesFor(spec, calls).files;
+            return { id: spec.id, kind: "task", type: spec.type, file: spec.file, member: spec.member, within: spec.within ?? null, change, tests: taskTests(change, g, spec.within), ...unchecked() };
+        }
     }
 }
 
@@ -243,7 +295,12 @@ export function restingEdges(g: Graph, truth: TruthFile): [string, string][] {
         case "impact": ways(truth.target, transitiveDependents(g, truth.target)); break;
         case "entries": ways(truth.target, truth.files); break;
         case "violations": into(truth.files, truth.to); break;
-        case "unused": break;
+        case "unused": case "callers": case "breaks": case "adopt": case "injects": break;
+        case "task": {
+            const changing = new Set(truth.change);
+            edges.push(...g.edges.filter(([a, b]) => changing.has(b) && truth.tests.includes(a)).map(([a, b]): [string, string] => [a, b]));
+            break;
+        }
         case "pairs": {
             const group = truth.names ? nameOf(truth.folder, truth.names) : childOf(truth.folder);
             const firsts = new Map<string, [string, string]>();
@@ -372,6 +429,57 @@ export function checkVerdicts(built: {
         effects[v.decision]++;
     }
     return effects;
+}
+
+/**
+ * A reader's verdict on one file of a call truth (R2), in <dir>/truth/calls-adjudicated.json: "in" adds a file the checker
+ * missed, "out" takes one out that it counted (a task's verdict is on its CHANGE; its TESTS are recomputed). `line` is the
+ * line of the source that decides it.
+ */
+export type CallAdjudication = { id: string; file: string; decision: "in" | "out"; line: number; why: string };
+
+export function parseCallAdjudications(raw: unknown, ids?: readonly string[]): CallAdjudication[] {
+    const file = "calls-adjudicated.json";
+    if (!Array.isArray(raw)) throw new Error(`${file}: it must be a list of verdicts, each { id, file, decision, line, why }.`);
+    const given = new Set<string>();
+    for (const item of raw as unknown[]){
+        const v = (item ?? {}) as Record<string, unknown>;
+        const ok = typeof v.id === "string" && typeof v.file === "string" && (v.decision === "in" || v.decision === "out") && Number.isInteger(v.line) && typeof v.why === "string";
+        if (!ok) throw new Error(`${file}: ${JSON.stringify(item)} needs id, file (a repo path), decision "in" or "out", line (a whole number) and why.`);
+        if (ids !== undefined && !ids.includes(v.id as string)) throw new Error(`${file}: the verdict on ${v.file as string} is for ${JSON.stringify(v.id)}, which is none of the call truths (${ids.join(", ")}).`);
+        const key = `${v.id as string}\0${v.file as string}`;
+        if (given.has(key)) throw new Error(`${file}: ${v.id as string} has two verdicts on ${v.file as string}.`);
+        given.add(key);
+    }
+    return raw as CallAdjudication[];
+}
+
+/** <dir>/truth/calls-adjudicated.json, [] when it's missing. */
+export function loadCallAdjudications(dir: string): CallAdjudication[] {
+    const file = path.join(dir, "truth", "calls-adjudicated.json");
+    return fs.existsSync(file) ? parseCallAdjudications(JSON.parse(fs.readFileSync(file, "utf8"))) : [];
+}
+
+/**
+ * A call or task truth with its verdicts applied. Each must take effect, or the build stops naming it: an "in" for a file
+ * the checker already has, or an "out" for one it lacks, means the verdict agrees with the checker and has nothing to decide.
+ * A task's CHANGE takes the verdicts, then its TESTS are recomputed from the graph.
+ */
+export function applyCallVerdicts<T extends CallTruthFile | TaskTruthFile>(truth: T, verdicts: readonly CallAdjudication[], g: Graph, known?: ReadonlySet<string>): T {
+    const mine = verdicts.filter((v) => v.id === truth.id);
+    if (mine.length === 0) return truth;
+    const list = new Set(truth.kind === "task" ? truth.change : truth.files);
+    for (const v of mine){
+        const named = `calls-adjudicated.json: ${truth.id}'s verdict "${v.decision}" on ${v.file}`;
+        if (known !== undefined && !known.has(v.file)) throw new Error(`${named} can't take effect: ${v.file} isn't a code file of the repo.`);
+        if (v.decision === "in" && list.has(v.file)) throw new Error(`${named} changes nothing: the checker already has this file.`);
+        if (v.decision === "out" && !list.has(v.file)) throw new Error(`${named} changes nothing: the checker doesn't have this file.`);
+        if (v.decision === "in") list.add(v.file);
+        else list.delete(v.file);
+    }
+    const files = [...list].sort(byPath);
+    if (truth.kind === "task") return { ...truth, change: files, tests: taskTests(files, g, truth.within ?? undefined) };
+    return { ...truth, files };
 }
 
 /** A graph with the verdicts applied: "out" edges taken away, then "in" edges added (each once). */
@@ -649,6 +757,7 @@ function evidenceFor(e: Evidence, truth: TruthFile, preImporters: ReadonlyMap<st
         case "violations": return violationsEvidence(e, truth);
         case "entries": return entriesEvidence(e, truth);
         case "pairs": return pairsEvidence(e, truth);
+        case "callers": case "breaks": case "adopt": case "injects": case "task": return [];
     }
 }
 
@@ -702,6 +811,31 @@ function sampleSection(repo: string, e: Evidence, resting: readonly [string, str
     return out;
 }
 
+/** Each call or task truth's files with the line(s) that decide them and why, for the hand check. */
+export function callsEvidence(intro: string[], truths: readonly { truth: CallTruthFile | TaskTruthFile; sites: CallTruth["sites"] }[], verdicts: readonly CallAdjudication[]): string[] {
+    const out = [...intro, "For each file the checker counts: the line(s) of the source that decide it, and why (call, declares, constructor, @inject field, provider). A file added or taken out by reading is marked with its verdict. The hand check reads this sheet.", ""];
+    for (const { truth, sites } of truths){
+        const what = truth.kind === "task" ? "task on" : truth.kind;
+        const target = `${truth.type}${truth.member !== null ? `.${truth.member}` : ""} (${truth.file})`;
+        const files = truth.kind === "task" ? truth.change : truth.files;
+        out.push(`### ${truth.id.toUpperCase()}: ${what} ${code(target)}${truth.within !== null ? ` within ${code(truth.within)}` : ""} (${plural(files.length, "file")}${truth.kind === "task" ? ` to change, ${plural(truth.tests.length, "test")}` : ""})`, "");
+        files.forEach((file, i) => {
+            const mine = sites.filter((x) => x.file === file);
+            const verdict = verdicts.find((v) => v.id === truth.id && v.file === file && v.decision === "in");
+            out.push(`${i + 1}. ${code(file)}`);
+            for (const site of mine) out.push(`   - L${site.line}: ${site.why}`);
+            if (verdict) out.push(`   - decided by reading (calls-adjudicated.json, L${verdict.line}): ${verdict.why}`);
+            if (mine.length === 0 && !verdict) out.push("   - NO SITE FOUND: the truth has this file but the checker reports no site. Investigate.");
+        });
+        for (const v of verdicts.filter((x) => x.id === truth.id && x.decision === "out")) out.push(`- taken out by reading: ${code(v.file)} (L${v.line}): ${v.why}`);
+        if (truth.kind === "task") out.push("", "Tests to run:", ...truth.tests.map((t, i) => `${i + 1}. ${code(t)}`));
+        out.push("");
+    }
+    return out;
+}
+
+const isCallSpec = (s: TruthSpec): s is CallSpec | TaskSpec => s.kind === "callers" || s.kind === "breaks" || s.kind === "adopt" || s.kind === "injects" || s.kind === "task";
+
 // ---- the command
 
 function sizeOf(t: TruthFile): string {
@@ -711,6 +845,8 @@ function sizeOf(t: TruthFile): string {
         case "cycle": return t.shortest === null ? "none" : `${t.shortest} steps`;
         case "impact": return `${t.total} files (${t.counts.map(([f, n]) => `${f} ${n}`).join(", ")}, elsewhere ${t.elsewhere})`;
         case "pairs": return plural(t.pairs.length, "pair");
+        case "callers": case "breaks": case "adopt": case "injects": return plural(t.files.length, "file");
+        case "task": return `${plural(t.change.length, "file")} to change, ${plural(t.tests.length, "test")}`;
     }
 }
 
@@ -769,6 +905,7 @@ function main(): void {
     let definition: EvalDefinition;
     let specs: TruthSpec[];
     let adjudications: Adjudication[];
+    let callVerdicts: CallAdjudication[];
     const adjudicatedFile = (d: EvalDefinition): string => `${forward(d.dir)}/truth/adjudicated.json`;
     try {
         args = parseArgs(process.argv.slice(2));
@@ -776,6 +913,8 @@ function main(): void {
         specs = specsFor(definition);
         // adjudicated.json alone: steps.json (grading-time verdicts) is the scorer's, never the truths'
         adjudications = loadTruthAdjudications(definition.dir, Object.keys(definition.repos));
+        callVerdicts = loadCallAdjudications(definition.dir);
+        parseCallAdjudications(callVerdicts, specs.filter(isCallSpec).map((s) => s.id));
     } catch (error){
         console.error((error as Error).message);
         process.exitCode = 1;
@@ -811,11 +950,23 @@ function main(): void {
     // every repo's graphs first, and every verdict checked against them, so a verdict that can't take effect stops the build
     // before any truth or sheet is written
     const builds = new Map<string, { built: RepoGraphs; effects: VerdictEffects; seconds: string }>();
+    // the call and task truths, from the checker (one program per repo, built only when the repo has such a spec), with their verdicts applied
+    const callTruths = new Map<string, { truth: CallTruthFile | TaskTruthFile; sites: CallTruth["sites"] }>();
     for (const repo of repos){
         const started = Date.now();
         const built = buildRepoGraphs(rootOf(repo), repo, adjudications, { resolveBare });
         try {
             builds.set(repo, { built, effects: checkVerdicts(built), seconds: ((Date.now() - started) / 1000).toFixed(1) });
+            const callSpecs = specs.filter((s): s is CallSpec | TaskSpec => s.repo === repo && isCallSpec(s));
+            if (callSpecs.length > 0){
+                const made = programFor(rootOf(repo), { project: definition.repos[repo].project });
+                console.log(`checker program for ${repo}: ${made.files.length} files, ${(made.ms / 1000).toFixed(1)} s, peak ${made.peakMb} MB`);
+                for (const spec of callSpecs){
+                    const sites = callSitesFor(spec, { program: made.program, root: rootOf(repo) }).sites;
+                    const truth = applyCallVerdicts(buildTruth(built.graph, spec, { program: made.program, root: rootOf(repo) }) as CallTruthFile | TaskTruthFile, callVerdicts, built.graph, built.known);
+                    callTruths.set(spec.id, { truth, sites });
+                }
+            }
         } catch (error){
             console.error((error as Error).message);
             process.exitCode = 1;
@@ -854,7 +1005,7 @@ function main(): void {
         const resting: [string, string][] = [];
         const table: string[] = ["| Truth | Size | Planning scan |", "| --- | --- | --- |"];
         for (const spec of specs.filter((s) => s.repo === repo)){
-            const truth = buildTruth(built.graph, spec);
+            const truth = callTruths.get(spec.id)?.truth ?? buildTruth(built.graph, spec);
             const file = `${truthDir}/${truth.id}.json`;
             const kept = !args.force && isHandChecked(file);
             if (!kept) fs.writeFileSync(file, `${JSON.stringify(truth, null, 2)}\n`);
@@ -883,6 +1034,11 @@ function main(): void {
     const sheets: [string, string[]][] = [
         ["truth-evidence.md", evidence], ["truth-disagreements.md", disagreements], ["computed-sites.md", sites], ["truth-sample.md", sample],
     ];
+    if (callTruths.size > 0){
+        const callsFile = `${forward(definition.dir)}/truth/calls-adjudicated.json`;
+        if (args.out === null && !fs.existsSync(callsFile)) fs.writeFileSync(callsFile, "[]\n");
+        sheets.push(["calls-evidence.md", callsEvidence(intro("Call truth evidence"), [...callTruths.values()], callVerdicts)]);
+    }
     for (const [name, lines] of sheets) fs.writeFileSync(`${sheetDir}/${name}`, `${lines.join("\n")}\n`);
     for (const r of rows) console.log(`${r.id}: ${r.size}${r.planning ? ` (planning scan: ${r.planning})` : ""}${r.example.length ? `\n    ${r.example.join("\n    ")}` : ""}`);
     if (args.out !== null) console.log(`\nAgainst ${evalName}/truth:\n${comparisons.join("\n")}`);

@@ -2,10 +2,10 @@
  * npm run eval:needed -- --eval <dir> [--out <file>]
  *
  * The files a question's answer needs, fixed from its truth before the first run (ADR-060, D2 of V1.7's plan): a list
- * truth's files, and for a chain or cycle the shortest-path DAG of the truth's graph (every shortest path, not one example).
+ * truth's files, a call truth's files, a task's CHANGE and TESTS together, and for a chain or cycle the shortest-path DAG of the truth's graph (every shortest path, not one example).
  * Time to relevant context (context.ts) is measured against them. Written to <dir>/truth/needed.json as
  * { [question id]: Needed }, for the single questions that have a needed set. It reads the truth's graph through build-truth.ts and
- * scan.ts only, never score.ts, so (with definition.ts's route through run-config, Task 10's to cut) nothing here reaches lib/.
+ * scan.ts only, never score.ts, and definition.ts no longer imports run-config.ts, so nothing here reaches lib/ (scan.test.ts follows the imports).
  */
 import fs from "fs";
 import path from "path";
@@ -82,8 +82,10 @@ const filesOnly = (files: string[]): Needed | null => (files.length === 0 ? null
 /** A question's needed set from its truth, or null for the kinds and answers that have none (big picture, impact, pairs, "none"). */
 export function neededFor(truth: TruthFile, g: Graph): Needed | null {
     switch (truth.kind){
-        case "list": case "unused": case "violations": case "entries":
+        case "list": case "unused": case "violations": case "entries": case "callers": case "breaks": case "adopt": case "injects":
             return filesOnly(truth.files);
+        case "task":
+            return filesOnly([...new Set([...truth.change, ...truth.tests])].sort());
         case "chain": {
             const t = truth as ChainTruthFile;
             if (!t.connected || t.shortest === null) return null;

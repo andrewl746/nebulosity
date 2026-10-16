@@ -1,7 +1,16 @@
 /** An eval's fixed setup (V1.6's plan, D2): what every script of scripts/eval reads from <dir>/eval.json. */
 import fs from "fs";
 import path from "path";
-import { SHELL_PRESETS, type ShellPreset } from "./run-config";
+
+/**
+ * An eval's optional `shell` preset (eval.json; ADR-057, amended 2026-10-15): more Bash commands allowed, the same in
+ * both arms. "compound" adds the read-only commands of Eval #2's refused compound commands that run-config.ts's read-only list lacks:
+ * cd and echo. Left out: sed (-i and its w command write files), awk (writes files, runs commands), xargs (runs any
+ * command), tee (writes), python3 (runs any code), and mkdir (it writes, and the after-run check can't see an empty
+ * folder). Loops (for, while) are shell syntax, which no rule names. Unset, the arguments are Eval #2's.
+ */
+export const SHELL_PRESETS = { compound: ["Bash(cd:*)", "Bash(echo:*)"] } as const;
+export type ShellPreset = keyof typeof SHELL_PRESETS;
 
 export type ArmName = "baseline" | "nebulosity" | "nebulosity-upfront";
 export type EvalDefinition = {

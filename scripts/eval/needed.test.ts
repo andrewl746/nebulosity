@@ -60,3 +60,20 @@ describe("neededFor", () => {
         expect(neededFor({ id: "q", kind: "cycle", file: "x", shortest: null, example: null, ...checked } as never, cyc)).toBeNull();
     });
 });
+
+describe("neededFor, the call kinds and tasks", () => {
+    const g = { files: ["a", "b"], edges: [] as [string, string][] };
+    const checked = { verified: true, notes: [] };
+    const call = { type: "IFoo", file: "foo.ts", member: "save", within: null };
+
+    it("gives a call truth's files, and null for none", () => {
+        expect(neededFor({ id: "q", kind: "callers", ...call, files: ["x.ts", "y.ts"], ...checked } as never, g)).toEqual({ kind: "files", files: ["x.ts", "y.ts"] });
+        expect(neededFor({ id: "q", kind: "injects", ...call, member: null, files: ["x.ts"], ...checked } as never, g)).toEqual({ kind: "files", files: ["x.ts"] });
+        expect(neededFor({ id: "q", kind: "breaks", ...call, files: [], ...checked } as never, g)).toBeNull();
+    });
+
+    it("gives a task's files to change and its tests together, each once, sorted", () => {
+        const task = { id: "t", kind: "task", ...call, change: ["src/b.ts", "src/test/b.test.ts"], tests: ["src/test/a.test.ts", "src/test/b.test.ts"], ...checked };
+        expect(neededFor(task as never, g)).toEqual({ kind: "files", files: ["src/b.ts", "src/test/a.test.ts", "src/test/b.test.ts"] });
+    });
+});

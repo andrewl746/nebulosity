@@ -1,4 +1,5 @@
 /** How each eval run is started (D3 in docs/plans/2026-10-13-v1-5-ship.md), as pure functions so they're tested. */
+import { SHELL_PRESETS, type ShellPreset } from "./definition";
 import { slug, spellings } from "../../lib/demo/privacy";
 
 export type Arm = "baseline" | "nebulosity";
@@ -15,15 +16,7 @@ export const ALLOWED_TOOLS = [
 /** Nothing may change the repo, read the web (the rubric's source is a web page), load a skill, or use another shell. */
 export const DENIED_TOOLS = ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "PowerShell", "Monitor"];
 
-/**
- * An eval's optional `shell` preset (eval.json; ADR-057, amended 2026-10-15): more Bash commands allowed, the same in
- * both arms. "compound" adds the read-only commands of Eval #2's refused compound commands that the list above lacks:
- * cd and echo. Left out: sed (-i and its w command write files), awk (writes files, runs commands), xargs (runs any
- * command), tee (writes), python3 (runs any code), and mkdir (it writes, and the after-run check can't see an empty
- * folder). Loops (for, while) are shell syntax, which no rule names. Unset, the arguments are Eval #2's.
- */
-export const SHELL_PRESETS = { compound: ["Bash(cd:*)", "Bash(echo:*)"] } as const;
-export type ShellPreset = keyof typeof SHELL_PRESETS;
+export { SHELL_PRESETS, type ShellPreset };
 
 /** What an eval turns on beyond the read-only list: scripts in a scratch folder (R6), and a shell preset. */
 export type RunOptions = { scratch?: string; shell?: ShellPreset };
