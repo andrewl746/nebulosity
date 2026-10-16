@@ -39,9 +39,9 @@ export type ToolEntry<S extends z.ZodObject = z.ZodObject> = {
 /** Sent once per session (MCP's `instructions`; Claude Code keeps 4,096 characters since 2.1.296, 2,048 before). */
 export const SERVER_INSTRUCTIONS = [
     "Nebulosity has indexed this repository: its folder tree, every import between its files, its docs and which folders they describe, and, when summaries are on, a short summary of every file and folder.",
-    "Call these tools before grep or reading many files when a question is about how the code is organized or connected. They answer from the whole repo, exactly, in one call:",
+    "Call these tools before grep, a script of your own or reading many files when a question is about how the code is organized or connected. They answer from the whole repo, exactly, in one call:",
     "- imports: what imports a file or folder, or what it imports, directly or through other files; group_by counts what a change would affect, by area; to gives the import chain between two places;",
-    "- calls: who calls a method, even through injected services, and what changing it touches;",
+    "- calls: who calls a method, even through injected services, where a type is injected, and what changing it touches (give the type's file as path);",
     "- architecture: a folder's layers and the imports against them, its folder conventions, import cycles, and files nothing imports;",
     "- describe: what a folder or file is, what it uses and what uses it, and the docs that describe it;",
     "- overview: an unfamiliar repo's areas and the docs to read first;",
@@ -168,9 +168,9 @@ const callsInput = z.object({
     symbol: z.string().trim().min(1).max(200).describe('"IFooService", or a method: "IFooService.save".'),
     path: z.string().optional().describe("Its file, if two types share the name."),
     group_by: z.string().optional().describe('Count by area: a folder ("" the top level) or "auto".'),
-    within: z.string().optional().describe("Only files inside this folder."),
+    within: z.string().optional(),
     limit: z.number().int().min(1).max(500).default(50).describe("Files to list, 1 to 500."),
-    offset: z.number().int().min(0).default(0).describe("Where the next page starts."),
+    offset: z.number().int().min(0).default(0),
 });
 const callsTool: ToolEntry<typeof callsInput> = {
     name: "calls",

@@ -92,9 +92,9 @@ export function promptFor(question: { prompt: string; family: string; file?: str
     return `${base}\n\n${sentence}`;
 }
 
-/** Eval #3's rules sentence (D2 of V1.7's plan, R-L), the same in both arms: the repo root and the scratch folder, forward-slashed. */
+/** Eval #3's rules sentence (D2 of V1.7's plan, R-L), the same in both arms: the repo root and the scratch folder, forward-slashed. Reworded once after the shell check (R-L): round 1 refused loops, cd into a subfolder, a pipe into sed and a redirect. */
 export function rulesSentence(repoRoot: string, scratch: string): string {
-    return `You're at the repository root, ${repoRoot}: run grep, git grep, git ls-files, ls, cat, head and the like from here, without cd. To compute anything, write a Node.js script into ${scratch} with the Write tool (the folder exists) and run it with node, or use node -e. Shell writes (redirects, heredocs, tee, sed -i, mkdir), loops, sed, awk, xargs and paths through .. are refused here. Don't change any file in the repository.`;
+    return `You're at the repository root, ${repoRoot}, and every command runs from there: never use cd, not even into a subfolder or the scratch folder, and name paths from the root instead (git grep -n foo -- src/a src/b). Allowed: grep, rg, git grep, git ls-files, git log, git show, ls, cat, head, tail, wc, sort, uniq, find and node, alone or piped into one another. Refused: cd, shell loops (for, while), echo, sed, awk, cut, xargs, redirects, heredocs, tee, mkdir and any path with .. in it. To check many files or compute anything, write a Node.js script into ${scratch} with the Write tool (the folder exists) and run it with node and its full path, or use node -e. Don't change any file in the repository.`;
 }
 
 /** Names that would bill an API key instead of the subscription, or override a pin. Windows ignores their case. */

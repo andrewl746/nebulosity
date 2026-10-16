@@ -460,7 +460,7 @@ describe("the checkout's status snapshot (sweep B, item 4)", () => {
 });
 
 describe("Eval #3's rules sentence", () => {
-    const RULES = "You're at the repository root, C:/Users/Ann/vscode: run grep, git grep, git ls-files, ls, cat, head and the like from here, without cd. To compute anything, write a Node.js script into C:/Users/Ann/AppData/Local/Temp/eval-scratch/0123456789abcdef with the Write tool (the folder exists) and run it with node, or use node -e. Shell writes (redirects, heredocs, tee, sed -i, mkdir), loops, sed, awk, xargs and paths through .. are refused here. Don't change any file in the repository.";
+    const RULES = "You're at the repository root, C:/Users/Ann/vscode, and every command runs from there: never use cd, not even into a subfolder or the scratch folder, and name paths from the root instead (git grep -n foo -- src/a src/b). Allowed: grep, rg, git grep, git ls-files, git log, git show, ls, cat, head, tail, wc, sort, uniq, find and node, alone or piped into one another. Refused: cd, shell loops (for, while), echo, sed, awk, cut, xargs, redirects, heredocs, tee, mkdir and any path with .. in it. To check many files or compute anything, write a Node.js script into C:/Users/Ann/AppData/Local/Temp/eval-scratch/0123456789abcdef with the Write tool (the folder exists) and run it with node and its full path, or use node -e. Don't change any file in the repository.";
 
     it("writes Eval #3's rules sentence, D2's, with both paths in drive-letter form", () => {
         expect(rulesSentence("C:/Users/Ann/vscode", "C:/Users/Ann/AppData/Local/Temp/eval-scratch/0123456789abcdef")).toBe(RULES);
