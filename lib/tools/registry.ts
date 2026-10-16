@@ -39,15 +39,15 @@ export type ToolEntry<S extends z.ZodObject = z.ZodObject> = {
 /** Sent once per session (MCP's `instructions`; Claude Code keeps 4,096 characters since 2.1.296, 2,048 before). */
 export const SERVER_INSTRUCTIONS = [
     "Nebulosity has indexed this repository: its folder tree, every import between its files, its docs and which folders they describe, and, when summaries are on, a short summary of every file and folder.",
-    "Call these tools before grep, a script of your own or reading many files when a question is about how the code is organized or connected. They answer from the whole repo, exactly, in one call:",
+    "Call these tools first, before grep, a script of your own or reading many files, for any question about how the code is organized or connected: who calls or injects something, what a change touches and which tests to run, imports against the layers, cycles, files nothing imports. They answer from the whole repo, exactly, in one call:",
     "- imports: what imports a file or folder, or what it imports, directly or through other files; group_by counts what a change would affect, by area; to gives the import chain between two places;",
     "- calls: who calls a method, even through injected services, where a type is injected, and what changing it touches (give the type's file as path);",
     "- architecture: a folder's layers and the imports against them, its folder conventions, import cycles, and files nothing imports;",
     "- describe: what a folder or file is, what it uses and what uses it, and the docs that describe it;",
     "- overview: an unfamiliar repo's areas and the docs to read first;",
     "- search: where a feature or concept lives.",
-    // ADR-054, amended 2026-10-15: in Eval #2 the docs line alone didn't get the repo's own rules opened
-    "The docs these answers name are the maintainers' own account of the code: open them before answering how it is organized or why, since the tools' counts and summaries don't replace them.",
+    // ADR-054, amended 2026-10-15: in Eval #2 the docs line alone didn't get the repo's own rules opened; shortened the same day in V1.7's tool-use round 3 (R-AA) to hold the first-call budget
+    "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account.",
     'Paths are relative to the repo root ("" is the root) or absolute inside it.',
 ].join("\n");
 
@@ -95,7 +95,7 @@ const searchInput = z.object({
 const searchTool: ToolEntry<typeof searchInput> = {
     name: "search",
     alwaysLoad: true,
-    description: "Find where a feature or concept lives, by keywords or meaning: the best files and folders, with their best-matching code. Use Grep for an exact string.",
+    description: "Find where a feature or concept lives: the best files and folders, with their best-matching code.",
     inputSchema: searchInput,
     async handler({ query, limit }, context){
         const result = await search(context.repoRoot, query, { limit, summariesOff: context.summariesOff });

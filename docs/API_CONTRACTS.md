@@ -327,7 +327,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
   - `within`: no description (trimmed in V1.7 to hold the first-call budget, R-AA);
   - `limit` 1–500 (50): `Files to list, 1 to 500.`;
   - `offset` ≥ 0 (0): no description (trimmed likewise).
-- **The instructions' bullet,** after `imports`': `- calls: who calls a method, even through injected services, where a type is injected, and what changing it touches (give the type's file as path);` The instructions' opening line reads "Call these tools before grep, a script of your own or reading many files when …".
+- **The instructions' bullet,** after `imports`': `- calls: who calls a method, even through injected services, where a type is injected, and what changing it touches (give the type's file as path);` The instructions' opening line reads "Call these tools first, before grep, a script of your own or reading many files, for any question about how the code is organized or connected: …" and names the questions (who calls or injects something, what a change touches and which tests to run, imports against the layers, cycles, files nothing imports); `search`'s description is "Find where a feature or concept lives: the best files and folders, with their best-matching code." (V1.7 tool-use round 3, R-AA).
 - **The answer, for a method** (a fictional example):
 ```
 IFooService.save (interface IFooService, src/platform/foo/common/foo.ts:12): called in 3 files, 4 calls in all.
@@ -352,7 +352,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - **Ambiguous names** list the candidates, one per line with the kind, path and line, and ask for `path`.
 - **Live event:** the declaring file, then up to 49 of the page's files (the Map takes 50 paths at most).
 
-**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports`, `architecture` and `calls` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The six definitions and the instructions together stay under 6,650 characters (a test; they measure 6,602, ADR-056 amended).
+**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports`, `architecture` and `calls` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The six definitions and the instructions together stay under 6,650 characters (a test; they measure 6,624, ADR-056 amended).
 
 **Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `imports` refuses it, since the whole repo has no outside.
 

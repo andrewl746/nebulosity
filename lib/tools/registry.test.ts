@@ -95,7 +95,7 @@ describe("the registry", () => {
 
     it("tells Claude to open the docs the answers name before answering how code is organized (ADR-054, amended 2026-10-15)", () => {
         expect(SERVER_INSTRUCTIONS.split("\n").slice(-2)).toEqual([
-            "The docs these answers name are the maintainers' own account of the code: open them before answering how it is organized or why, since the tools' counts and summaries don't replace them.",
+            "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account.",
             'Paths are relative to the repo root ("" is the root) or absolute inside it.',
         ]);
         expect(SERVER_INSTRUCTIONS).not.toContain("Read the docs they point to");
