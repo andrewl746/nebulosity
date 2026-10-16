@@ -80,6 +80,11 @@ export function graphDrawOf(rows: readonly DrawRow[], drawn: readonly Candidate[
     return out;
 }
 
+/** A warning for each repo the mix asks questions of that has no candidate at all. */
+export function reposWithoutCandidates(mixRepos: readonly string[], candidateRepos: readonly string[]): string[] {
+    return mixRepos.filter((repo) => !candidateRepos.includes(repo)).map((repo) => `${repo}: no call or task candidates`);
+}
+
 export type DrawRow = { kind: string; candidates: number; passing: number; drawn: number };
 
 /**
@@ -94,8 +99,16 @@ export function drawRepo(candidates: readonly Candidate[], mix: Record<string, n
     const take = (kind: string, n: number): number => {
         const all = candidates.filter((c) => c.kind === kind);
         const pool = all.filter((c) => c.passes === true && (typeOf(c) === null || !used.has(typeOf(c)!)));
-        const picked = draw(pool, n, seed);
-        for (const c of picked){ drawn.push(c); const t = typeOf(c); if (t !== null) used.add(t); }
+        // R-AF within a kind too: walk the seeded shuffle, and each pick closes its type to the next
+        const picked: Candidate[] = [];
+        for (const c of draw(pool, pool.length, seed)){
+            if (picked.length === n) break;
+            const t = typeOf(c);
+            if (t !== null && used.has(t)) continue;
+            picked.push(c);
+            drawn.push(c);
+            if (t !== null) used.add(t);
+        }
         rows.push({ kind, candidates: all.length, passing: pool.length, drawn: picked.length });
         return picked.length;
     };
@@ -193,7 +206,8 @@ function main(): void {
         }
     }
 
-    const repos = [...new Set(candidates.map((c) => c.repo))];
+    const repos = [...new Set([...Object.keys(MIX), ...candidates.map((c) => c.repo)])];
+    for (const warning of reposWithoutCandidates(Object.keys(MIX), candidates.map((c) => c.repo))) console.log(`WARNING ${warning}`);
     const graphDraw: Record<string, Record<string, GraphDraw>> = {};
     console.log("repo     kind             candidates  passing  drawn");
     for (const c of candidates) c.drawn = false;

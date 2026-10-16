@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draw, drawRepo, graphDrawOf, parseJsonLines, isPlanning, PLANNING, sizeInRange, type Candidate } from "./draw";
+import { draw, drawRepo, graphDrawOf, parseJsonLines, reposWithoutCandidates, isPlanning, PLANNING, sizeInRange, type Candidate } from "./draw";
 
 const pool = ["c", "a", "e", "b", "d"].map((id) => ({ id }));
 
@@ -69,5 +69,27 @@ describe("the graph candidates' input and their record in candidates.json", () =
             cycle: { pool: 3, passing: 2, drawn: ["g1", "g3"] },
             entries: { pool: 1, passing: 1, drawn: ["e1"] },
         });
+    });
+});
+
+describe("one type per repo within a kind, and a repo with no candidates", () => {
+    it("never draws two candidates of one type in a kind: of a pair sharing a type and a third, n=2 gives one of the pair and the third", () => {
+        const all = [cand("a1", "breaks", "T1", true), cand("a2", "breaks", "T1", true), cand("z", "breaks", "T2", true)];
+        const ids = drawRepo(all, { breaks: 2 }, 1).drawn.map((c) => c.id).sort();
+        expect(ids).toHaveLength(2);
+        expect(ids).toContain("z");
+        expect(ids.filter((id) => id.startsWith("a"))).toHaveLength(1);
+    });
+
+    it("draws fewer than n, and says so, when the types run out", () => {
+        const all = [cand("a1", "breaks", "T1", true), cand("a2", "breaks", "T1", true)];
+        const { drawn, notes } = drawRepo(all, { breaks: 2 }, 1);
+        expect(drawn).toHaveLength(1);
+        expect(notes).toEqual(["breaks: 1 of 2 drawn."]);
+    });
+
+    it("names a mix repo that has no candidates", () => {
+        expect(reposWithoutCandidates(["vscode", "theia"], ["vscode"])).toEqual(["theia: no call or task candidates"]);
+        expect(reposWithoutCandidates(["vscode"], ["vscode"])).toEqual([]);
     });
 });
