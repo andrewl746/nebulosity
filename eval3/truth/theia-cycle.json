@@ -1,0 +1,14 @@
+{
+  "id": "theia-cycle",
+  "kind": "cycle",
+  "file": "packages/core/src/common/index.ts",
+  "shortest": 3,
+  "example": [
+    "packages/core/src/common/index.ts",
+    "packages/core/src/common/menu/index.ts",
+    "packages/core/src/browser/menu/action-menu-node.ts",
+    "packages/core/src/common/index.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

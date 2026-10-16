@@ -1,0 +1,26 @@
+{
+  "id": "theia-callers1",
+  "kind": "callers",
+  "type": "MenuModelRegistry",
+  "file": "packages/core/src/common/menu/menu-model-registry.ts",
+  "member": "registerSubmenu",
+  "within": null,
+  "files": [
+    "examples/api-samples/src/browser/menu/sample-menu-contribution.ts",
+    "packages/ai-registry/src/browser/ai-registry-menu-contribution.ts",
+    "packages/core/src/browser/authentication-service.ts",
+    "packages/core/src/browser/common-frontend-contribution.ts",
+    "packages/core/src/browser/menu/menu.spec.ts",
+    "packages/core/src/browser/shell/tab-bar-toolbar/tab-bar-toolbar.spec.ts",
+    "packages/debug/src/browser/debug-frontend-application-contribution.ts",
+    "packages/editor/src/browser/editor-menu.ts",
+    "packages/monaco/src/browser/monaco-menu.ts",
+    "packages/notebook/src/browser/contributions/notebook-actions-contribution.ts",
+    "packages/notebook/src/browser/contributions/notebook-cell-actions-contribution.ts",
+    "packages/plugin-ext/src/main/browser/menus/menus-contribution-handler.ts",
+    "packages/terminal/src/browser/terminal-frontend-contribution.ts",
+    "packages/test/src/browser/view/test-view-contribution.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

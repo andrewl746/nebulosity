@@ -12,6 +12,6 @@
   "scripts": true,
   "sentence": "rules",
   "gate": "eval3",
-  "pilot": [],
-  "pilotSessions": []
+  "pilot": ["vscode-breaks1", "vscode-task1", "vscode-bp6", "vscode-cn1", "affine-breaks1", "affine-task1", "affine-bp5", "affine-cn1", "theia-breaks1", "theia-task1", "theia-bp1", "theia-cn1"],
+  "pilotSessions": ["vscode-s1", "affine-s1"]
 }

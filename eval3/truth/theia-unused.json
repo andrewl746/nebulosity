@@ -1,0 +1,11 @@
+{
+  "id": "theia-unused",
+  "kind": "unused",
+  "folder": "packages/ai-chat/src",
+  "files": [
+    "packages/ai-chat/src/browser/ai-chat-frontend-module.ts",
+    "packages/ai-chat/src/node/ai-chat-backend-module.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

@@ -1,0 +1,29 @@
+{
+  "id": "theia-task1",
+  "kind": "task",
+  "type": "BackendApplicationContribution",
+  "file": "packages/core/src/node/backend-application.ts",
+  "member": "onStop",
+  "within": null,
+  "change": [
+    "packages/ai-mcp-server/src/node/mcp-theia-server-impl.ts",
+    "packages/ai-mcp/src/electron-node/mcp-oauth-loopback-callback-server.spec.ts",
+    "packages/ai-mcp/src/electron-node/mcp-oauth-loopback-callback-server.ts",
+    "packages/core/src/node/backend-application.ts",
+    "packages/external-api/src/node/external-api-server.ts",
+    "packages/plugin-ext-headless/src/hosted/node/plugin-ext-headless-hosted-module.ts",
+    "packages/process/src/node/process-manager.ts",
+    "packages/remote/src/electron-node/remote-connection-service.ts",
+    "packages/task/src/node/task-manager.ts",
+    "packages/telemetry/src/node/telemetry-service-impl.spec.ts",
+    "packages/telemetry/src/node/telemetry-service-impl.ts"
+  ],
+  "tests": [
+    "packages/ai-mcp/src/electron-node/mcp-oauth-loopback-callback-server.spec.ts",
+    "packages/core/src/node/backend-application.spec.ts",
+    "packages/external-api/src/node/external-api-server.spec.ts",
+    "packages/telemetry/src/node/telemetry-service-impl.spec.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

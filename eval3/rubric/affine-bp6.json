@@ -1,0 +1,62 @@
+{
+  "id": "affine-bp6",
+  "source": "AFFiNE's own docs at 0b69a6da: packages/frontend/core/src/modules/workbench/README.md",
+  "points": [
+    {
+      "id": "AFFINE-BP6.1",
+      "text": "the workbench (`Workbench`, in `packages/frontend/core/src/modules/workbench`) is the app's window manager, covering the main area and the right sidebar",
+      "check": "Doc: packages/frontend/core/src/modules/workbench/README.md L18 ('`Workbench` is the window manager in affine, including the main area and the right sidebar area') and the diagram at L3-16. Code (author's pointers, for the re-checker): modules/workbench/entities/workbench.ts L26 (class Workbench extends Entity), sidebarOpen$ and sidebarWidth$ (L59-73); view/workbench-root.tsx.",
+      "holds": true,
+      "note": "Doc: packages/frontend/core/src/modules/workbench/README.md L18 ('`Workbench` is the window manager in affine, including the main area and the right sidebar area'), diagram L3-16. Code: modules/workbench/entities/workbench.ts L26 (class Workbench extends Entity), L59-72 (sidebarOpen$, sidebarWidth$); view/workbench-root.tsx L65-74 (SplitView of views plus WorkbenchSidebar). In scope."
+    },
+    {
+      "id": "AFFINE-BP6.2",
+      "text": "a view (`View`) is a managed window under the workbench; the workbench holds all the views, which can be open side by side, and decides when to show and close them",
+      "check": "Doc: README.md L20 ('`View` is a managed window under the workbench'), L24 ('The `Workbench` manages all Views and decides when to display and close them') and the diagram at L3-16 (several views side by side). Code (author's pointers, for the re-checker): workbench.ts L38-46 (views$), L95-111 (createView), open() from L138; entities/view.ts L13 (class View extends Entity); view/workbench-root.tsx L20 and L67 (SplitView).",
+      "holds": true,
+      "note": "Doc: README.md L20 ('`View` is a managed window under the workbench') and L24 ('The `Workbench` manages all Views and decides when to display and close them'); diagram L3-16. Code: workbench.ts L38-47 (views$), L95-112 (createView), L138-160 (open), close()/closeOthers() later in the file (close refuses to close the last view); entities/view.ts L13 (class View extends Entity); view/workbench-root.tsx L67-72 (SplitView renders all views side by side). In scope."
+    },
+    {
+      "id": "AFFINE-BP6.3",
+      "text": "each view has its own navigation history, with back and forward, and its own current URL",
+      "check": "Doc: README.md L20 ('Each view has its own history(Support go back and forward) and currently URL'). Code (author's pointers, for the re-checker): entities/view.ts L54-60 (each View creates its own history with createNavigableHistory, starting at its defaultLocation or /all); workbench.ts L154-156 (open() pushes or replaces on the view's history).",
+      "holds": true,
+      "note": "Doc: README.md L20 ('Each view has its own history(Support go back and forward) and currently URL'). Code: entities/view.ts L54-60 (each View builds its own createNavigableHistory starting at defaultLocation or /all), L67-75 (location$ follows that history); workbench.ts L153-157 (open() pushes or replaces on the view's history). In scope."
+    },
+    {
+      "id": "AFFINE-BP6.4",
+      "text": "a view renders the content that the app's router defines for its URL",
+      "check": "Doc: README.md L21 ('The view renders the content as defined by the router'). Code (author's pointers, for the re-checker): view/view-root.tsx L20-39 (each view gets its own createMemoryRouter(routes), navigated to the view's location); packages/frontend/core/src/desktop/workbench-router.ts (workbenchRoutes, lazy route pages such as /all, /collection, /tag, /trash) and mobile/workbench-router.ts. The README's link (../../router.tsx, i.e. packages/frontend/core/src/router.tsx) points at a file that doesn't exist at this commit; desktop/router.tsx and mobile/router.tsx do.",
+      "holds": true,
+      "note": "Doc: README.md L21 ('The view renders the content as defined by the router'). Code: view/view-root.tsx L20-32 (each view gets its own createMemoryRouter(routes) and navigates it to the view's location); view/workbench-root.tsx L29-35 passes workbenchRoutes from packages/frontend/core/src/desktop/workbench-router.ts (/chat, /all, /collection, /tag, /trash, /:pageId, ...). The README's link (../../router.tsx, i.e. packages/frontend/core/src/router.tsx) is stale: that file doesn't exist; desktop/router.tsx and mobile/router.tsx do. In scope."
+    },
+    {
+      "id": "AFFINE-BP6.5",
+      "text": "each route renders its own header, body and sidebars through view islands (`ViewHeader`, `ViewBody` and `ViewSidebarTab` in `view-islands.tsx`), which the view's frame shows in their places",
+      "check": "Doc: README.md L22 ('Each route can render its own `Header`, `Body`, and several `Sidebar`s by ViewIsland (./view/view-islands.tsx)'). Code (author's pointers, for the re-checker): view/view-islands.tsx L114 (ViewIslandRegistryProvider), L128 (ViewBody), L144 (ViewHeader), L160 (ViewSidebarTab) and their *Target counterparts; view/route-container.tsx L70 and L88 (ViewHeaderTarget, ViewBodyTarget).",
+      "holds": true,
+      "note": "Doc: README.md L22 ('Each route can render its own `Header`, `Body`, and several `Sidebar`s by ViewIsland (./view/view-islands.tsx)'). Code: view/view-islands.tsx L30-31 (Provider renders content, Target is placed where it shows), L128 ViewBody, L144 ViewHeader, L160-191 ViewSidebarTab; view/route-container.tsx L70-73 and L88 (ViewHeaderTarget, ViewBodyTarget in each view's frame). Imprecision, immaterial: the sidebar tabs' targets are not in the view's frame but in the workbench's right sidebar (view/sidebar/sidebar-container.tsx L34, sidebar-header-switcher.tsx L19, mounted by WorkbenchSidebar in workbench-root.tsx L179-185). In scope."
+    },
+    {
+      "id": "AFFINE-BP6.6",
+      "text": "there is always one active view, and its URL counts as the URL of the whole application",
+      "check": "Doc: README.md L25 ('There is always one **active View**, and the URL of the active View is considered the URL of the entire application'). Code (author's pointers, for the re-checker): workbench.ts L35 (activeViewIndex$), L49-54 (activeView$, falling back to the first view), L56-58 (location$ is the active view's location); view/browser-adapter.ts (the browser location follows the active view).",
+      "holds": true,
+      "note": "Doc: README.md L25 ('There is always one **active View**, and the URL of the active View is considered the URL of the entire application'). Code: workbench.ts L35 (activeViewIndex$), L49-54 (activeView$ falls back to views[0]), L56-58 (location$ is the active view's location); view/browser-adapter.ts L32-57 (the browser URL follows the active view's history). In scope."
+    },
+    {
+      "id": "AFFINE-BP6.7",
+      "text": "each view can define sidebars for the right-hand area; only the active view's sidebars are shown, with a switcher when a view has more than one",
+      "check": "Doc: README.md L27-32 ('Each `View` can define its `Sidebar`, which will be displayed in the right area of the screen. If the same view has multiple sidebars, a switcher will be displayed'; 'only the sidebar of the currently active view will be displayed'). Code (author's pointers, for the re-checker): entities/view.ts L31 (sidebarTabs$), L46-53 (activeSidebarTab$); entities/sidebar-tab.ts; view/sidebar/sidebar-container.tsx and sidebar-header-switcher.tsx.",
+      "holds": true,
+      "note": "Doc: README.md L27-32 (each View can define its Sidebar in the right area; a switcher with multiple sidebars; only the active view's sidebar is displayed). Code: entities/view.ts L31 (sidebarTabs$), L45-52 (activeSidebarTab$); view/workbench-root.tsx L179-185 (one SidebarContainer per view, hidden with display:none unless it is the active view); view/sidebar/sidebar-header-switcher.tsx L36-47 (a RadioGroup switcher; it renders whenever there is at least one tab, so also with one; immaterial). In scope."
+    },
+    {
+      "id": "AFFINE-BP6.8",
+      "text": "in a browser, the workbench passes the browser's back and forward navigation to the active view, keeping the active view's history and the browser's in step",
+      "check": "Doc: README.md L43 ('If running in a browser, the workbench will passing the browser's back and forward navigation to the active view'). Code (author's pointers, for the re-checker): view/browser-adapter.ts L9-25 (useBindWorkbenchToBrowserRouter: view history PUSH/REPLACE update the browser; browser location changes update the active view; the two are different stacks, and a view's POP isn't synchronized); view/desktop-adapter.ts (the Electron counterpart); view/workbench-root.tsx L16-27 picks one (BUILD_CONFIG.isElectron).",
+      "holds": true,
+      "note": "Doc: README.md L43 ('If running in a browser, the workbench will passing the browser's back and forward navigation to the active view'). Code: view/workbench-root.tsx L25-27 (browser adapter unless BUILD_CONFIG.isElectron); view/browser-adapter.ts L59-87 (a browser location change moves the active view's history with history.go(delta) when the entry came from the view, else pushes it) and L34-57 (the view's PUSH/REPLACE update the browser). Overstatement, immaterial: the adapter keeps the current locations in step, but the code says the two are 'two different stacks' (L14-16) and a view's own POP is not mirrored to the browser (L36-40). In scope."
+    }
+  ]
+}

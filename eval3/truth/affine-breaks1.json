@@ -1,0 +1,22 @@
+{
+  "id": "affine-breaks1",
+  "kind": "breaks",
+  "type": "Editor",
+  "file": "packages/frontend/core/src/modules/editor/entities/editor.ts",
+  "member": "setMode",
+  "within": null,
+  "files": [
+    "packages/frontend/core/src/blocksuite/block-suite-editor/starter-bar.tsx",
+    "packages/frontend/core/src/blocksuite/block-suite-header/menu/index.tsx",
+    "packages/frontend/core/src/blocksuite/block-suite-mode-switch/index.tsx",
+    "packages/frontend/core/src/blocksuite/view-extensions/edgeless-block-header/edgeless-note-header.tsx",
+    "packages/frontend/core/src/blocksuite/view-extensions/editor-view/doc-mode-service.ts",
+    "packages/frontend/core/src/desktop/pages/workspace/share/share-page.tsx",
+    "packages/frontend/core/src/desktop/pages/workspace/share/use-shared-mode-query-sync.ts",
+    "packages/frontend/core/src/mobile/pages/workspace/detail/menu/mode-switch.tsx",
+    "packages/frontend/core/src/mobile/pages/workspace/detail/page-header-more-button.tsx",
+    "packages/frontend/core/src/modules/editor/entities/editor.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

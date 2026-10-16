@@ -1,0 +1,426 @@
+[
+  {
+    "id": "vscode-adopt1", "file": "src/vs/workbench/services/dialogs/test/electron-browser/fileDialogService.test.ts", "decision": "in", "line": 243,
+    "why": "dialogService = createInstance(TestFileDialogService, ...); TestFileDialogService extends FileDialogService extends AbstractFileDialogService implements IFileDialogService; dialogService.showOpenDialog(...)."
+  },
+  {
+    "id": "vscode-breaks1", "file": "src/vs/editor/browser/widget/diffEditor/diffEditorWidget.ts", "decision": "in", "line": 551,
+    "why": "this._editors.original.restoreViewState(...); DiffEditorEditors.original is assigned from _createLeftHandSideEditor(): CodeEditorWidget, which implements ICodeEditor."
+  },
+  {
+    "id": "vscode-breaks1", "file": "src/vs/workbench/browser/parts/editor/textResourceEditor.ts", "decision": "in", "line": 82,
+    "why": "control = assertReturnsDefined(this.editorControl); editorControl: ICodeEditor | undefined (AbstractTextCodeEditor), then control.restoreViewState."
+  },
+  {
+    "id": "vscode-breaks1", "file": "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/chatToolInputOutputContentPart.ts", "decision": "in", "line": 251,
+    "why": "codeBlock = this._editorReferences[0]?.object (CodeBlockPart); codeBlock.editor: CodeEditorWidget implements ICodeEditor."
+  },
+  {
+    "id": "vscode-breaks1", "file": "src/vs/workbench/contrib/files/browser/editors/textFileEditor.ts", "decision": "in", "line": 139,
+    "why": "control = assertReturnsDefined(this.editorControl): ICodeEditor from AbstractTextCodeEditor; control.restoreViewState(...)."
+  },
+  {
+    "id": "vscode-breaks1", "file": "src/vs/workbench/contrib/mergeEditor/browser/view/mergeEditor.ts", "decision": "in", "line": 676,
+    "why": "this.inputResultView.editor.restoreViewState; inputResultView is createInstance(ResultCodeEditorView) and CodeEditorView.editor is createInstance(CodeEditorWidget), implements ICodeEditor."
+  },
+  {
+    "id": "vscode-breaks1", "file": "src/vs/workbench/contrib/searchEditor/browser/searchEditor.ts", "decision": "in", "line": 798,
+    "why": "this.searchResultEditor.restoreViewState; getter searchResultEditor returns this.editorControl! (ICodeEditor)."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/chatChangesSummaryPart.ts", "decision": "in", "line": 131,
+    "why": "list = pool.get() returns WorkbenchList<...> which extends List implements ISpliceable; list.splice(...)."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/chatReferencesContentPart.ts", "decision": "in", "line": 149,
+    "why": "list = ref.object, ref from pool.get(); wrapper.list: WorkbenchList<...> -> List implements ISpliceable."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/toolInvocationParts/chatModifiedFilesConfirmationSubPart.ts", "decision": "in", "line": 284,
+    "why": "list = listReference.object (pool.get()), WorkbenchList<IChatCollapsibleListItem>; list.splice."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/contrib/chat/browser/widget/input/chatInputPart.ts", "decision": "in", "line": 5218,
+    "why": "list = this._chatEditList!.object; _chatEditList: IDisposableReference<WorkbenchList<...>>; list.splice."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/contrib/extensions/browser/extensionFeaturesTab.ts", "decision": "in", "line": 369,
+    "why": "list = this._register(this.createFeaturesList(...)) returning the WorkbenchList created by createInstance; list.splice."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/contrib/terminalContrib/suggest/browser/terminalSuggestAddon.ts", "decision": "in", "line": 873,
+    "why": "this._suggestWidget.list.splice; SimpleSuggestWidget.list getter returns List<TItem> which implements ISpliceable."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/test/browser/notificationAccessibleView.test.ts", "decision": "in", "line": 52,
+    "why": "list = store.add(createInstance(WorkbenchList<INotificationViewItem>, ...)); list.splice."
+  },
+  {
+    "id": "vscode-callers1", "file": "src/vs/platform/keybinding/test/common/abstractKeybindingService.test.ts", "decision": "in", "line": 674,
+    "why": "kbService.appendKeybinding(...) where kbService = createTestKeybindingService(...) returns TestKeybindingService extends AbstractKeybindingService implements IKeybindingService."
+  },
+  {
+    "id": "vscode-callers2", "file": "src/vs/sessions/contrib/canvases/test/electron-browser/sessionCanvasWorkingSet.test.ts", "decision": "in", "line": 291,
+    "why": "harness.layoutService.setPartHidden(...); harness (destructured from createHarness) .layoutService: IAgentWorkbenchLayoutService extends IWorkbenchLayoutService."
+  },
+  {
+    "id": "vscode-task2", "file": "src/vs/workbench/api/browser/mainThreadTerminalShellIntegration.ts", "decision": "in", "line": 113,
+    "why": "this._terminalService.getInstanceFromId(id)?.runCommand: returns ITerminalInstance | undefined."
+  },
+  {
+    "id": "vscode-task2", "file": "src/vs/workbench/contrib/chat/browser/actions/chatCodeblockActions.ts", "decision": "in", "line": 525,
+    "why": "terminal = await terminalService.getActiveOrCreateInstance(...): Promise<ITerminalInstance>; terminal.runCommand."
+  },
+  {
+    "id": "vscode-task2", "file": "src/vs/workbench/contrib/terminalContrib/quickFix/browser/terminal.quickFix.contribution.ts", "decision": "in", "line": 56,
+    "why": "this._ctx.instance.runCommand; ITerminalContributionContext.instance: ITerminalInstance."
+  },
+  {
+    "id": "vscode-task3", "file": "src/vs/workbench/contrib/webview/browser/overlayWebview.ts", "decision": "in", "line": 163,
+    "why": "contextKeyService = (scopedContextKeyService || this._baseContextKeyService), both IContextKeyService; contextKeyService.createScoped(...)."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/blocksuite/block-suite-editor/starter-bar.tsx", "decision": "in", "line": 86,
+    "why": "editorService.editor.setMode('edgeless'), where editorService = useService(EditorService) and the field `readonly editor = this.scope.props.editor` is Editor (EditorScope extends Scope<{ editor: Editor }>)."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/blocksuite/block-suite-header/menu/index.tsx", "decision": "in", "line": 227,
+    "why": "editorService.editor.setMode(mode), where editorService = useService(EditorService); EditorService.editor is inferred from this.scope.props.editor, which is Editor."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/blocksuite/block-suite-mode-switch/index.tsx", "decision": "in", "line": 50,
+    "why": "editor.setMode('page') (and L57), where const editor = useService(EditorService).editor is Editor through the inferred field initializer this.scope.props.editor."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/blocksuite/view-extensions/edgeless-block-header/edgeless-note-header.tsx", "decision": "in", "line": 114,
+    "why": "editor.setMode('page'), where const editor = useService(EditorService).editor is Editor (an inferred field)."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/blocksuite/view-extensions/editor-view/doc-mode-service.ts", "decision": "in", "line": 18,
+    "why": "editorService.editor.setMode(mode) on a parameter `editorService: EditorService`; .editor is the inferred field this.scope.props.editor, which is Editor."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/desktop/pages/workspace/share/share-page.tsx", "decision": "in", "line": 279,
+    "why": "editor.setMode(resolvedPublishMode), where const editor = doc.scope.get(EditorsService).createEditor(); createEditor() has no return annotation and returns this.framework.createEntity(Editor), which is Editor."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/mobile/pages/workspace/detail/menu/mode-switch.tsx", "decision": "in", "line": 35,
+    "why": "editor.setMode(mode), where const editor = useService(EditorService).editor is Editor (an inferred field)."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/mobile/pages/workspace/detail/page-header-more-button.tsx", "decision": "in", "line": 63,
+    "why": "editorService.editor.setMode(mode), where editorService = useService(EditorService); .editor is Editor (an inferred field)."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/blocks/data-view/src/data-view-block.ts", "decision": "in", "line": 147,
+    "why": "this.host.event.add(name, handler, …) in DataViewBlockComponent (extends CaptionedBlockComponent, which extends BlockComponent): BlockComponent.host is an unannotated getter returning this.std.host (EditorHost), and EditorHost declares `get event(): UIEventDispatcher`."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/blocks/database/src/database-block.ts", "decision": "in", "line": 434,
+    "why": "this.host.event.add(name, handler, …) in a class-field arrow of DatabaseBlockComponent: the inferred getter host gives EditorHost, and .event is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/blocks/image/src/components/page-image-block.ts", "decision": "in", "line": 296,
+    "why": "this._host.event.add('dragStart', …) (and L309, L320): the unannotated getter _host returns this.block.host, where block is ImageBlockComponent; host is an inferred getter giving EditorHost, and .event is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/blocks/root/src/clipboard/page-clipboard.ts", "decision": "in", "line": 193,
+    "why": "this.std.event.add('copy', …) (and L194, L195) in PageClipboard (extends ReadOnlyClipboard, which extends LifeCycleWatcher, whose std is BlockStdScope); BlockStdScope.event is an unannotated getter returning this.get(UIEventDispatcher), which is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/blocks/root/src/clipboard/readonly-clipboard.ts", "decision": "in", "line": 68,
+    "why": "this.std.event.add('copy', this.onPageCopy): std is BlockStdScope (LifeCycleWatcher's constructor property), and .event is the inferred getter this.get(UIEventDispatcher)."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/blocks/root/src/edgeless/clipboard/clipboard.ts", "decision": "in", "line": 93,
+    "why": "this.std.event.add('copy', …) (and L102, L106) in EdgelessClipboardController (extends PageClipboard): the inferred getter BlockStdScope.event gives UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/blocks/root/src/edgeless/edgeless-root-block.ts", "decision": "in", "line": 166,
+    "why": "this.std.event.add('pan', …) (and L190, L333) in EdgelessRootBlockComponent (extends BlockComponent, whose std accessor is declared BlockStdScope); .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/components/src/drop-indicator/file-drop-manager.ts", "decision": "in", "line": 205,
+    "why": "std.event.add('nativeDragStart', …) (and L210, L226, L239, L244), where const std = this.std in FileDropExtension (extends LifeCycleWatcher, so std is BlockStdScope); .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/gfx/connector/src/text/edgeless-connector-label-editor.ts", "decision": "in", "line": 203,
+    "why": "dispatcher.add('keyDown', …) (and L239, L240), where const dispatcher = std.event and std, destructured from this, is declared `accessor std!: BlockStdScope`; .event is the inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/gfx/group/src/text/edgeless-group-title-editor.ts", "decision": "in", "line": 102,
+    "why": "dispatcher.add('keyDown', …) (and L120, L121), where const dispatcher = this.std.event and std is declared BlockStdScope; .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/gfx/shape/src/text/edgeless-shape-text-editor.ts", "decision": "in", "line": 351,
+    "why": "dispatcher.add('click', …) (and L356), where const dispatcher = this.std.event and std is declared BlockStdScope; .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/gfx/text/src/edgeless-text-editor.ts", "decision": "in", "line": 269,
+    "why": "dispatcher.add('click', () => true) (and L270), where const dispatcher = this.std.event and std is declared BlockStdScope; .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/widgets/edgeless-auto-connect/src/index.ts", "decision": "in", "line": 566,
+    "why": "std.event.add('dragStart', …) (and L571), where const { _disposables, std } = this in a WidgetComponent; WidgetComponent.std is an inferred getter giving BlockStdScope, and .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/widgets/edgeless-selected-rect/src/edgeless-auto-complete.ts", "decision": "in", "line": 703,
+    "why": "edgeless.host.event.add('pointerMove', …), where edgeless is declared `accessor edgeless!: BlockComponent`; BlockComponent.host is an inferred getter giving EditorHost, and EditorHost.event is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/widgets/frame-title/src/edgeless-frame-title-editor.ts", "decision": "in", "line": 84,
+    "why": "dispatcher.add('keyDown', …) (and L102, L103), where const dispatcher = this.edgeless.std.event, edgeless is BlockComponent with std declared BlockStdScope, and .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/affine/widgets/note-slicer/src/note-slicer.ts", "decision": "in", "line": 292,
+    "why": "std.event.add('pointerMove', …) (and L333), with std destructured from this (WidgetComponent's inferred std getter, a BlockStdScope); L358's this.block.service.uiEventDispatcher.add is also UIEventDispatcher (BlockService.uiEventDispatcher returns this.std.event)."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/framework/std/src/extension/service.ts", "decision": "in", "line": 101,
+    "why": "this.uiEventDispatcher.add(name, fn, …) in BlockService.handleEvent: the unannotated getter uiEventDispatcher returns this.std.event (std: BlockStdScope), which is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/framework/std/src/gfx/tool/tool-controller.ts", "decision": "in", "line": 330,
+    "why": "this.std.event.add('dragStart', …) (and L411, L455, L499, L512, L524) in ToolController (extends GfxExtension): GfxExtension.std is an inferred getter returning this.gfx.std (BlockStdScope), and .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/framework/std/src/inline/range/range-binding.ts", "decision": "in", "line": 367,
+    "why": "this.host.event.add('beforeInput', …): the unannotated getter RangeBinding.host returns this.manager.std.host, where manager is RangeManager (a LifeCycleWatcher with std: BlockStdScope) and host gives EditorHost; EditorHost.event is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/framework/std/src/view/element/block-component.ts", "decision": "in", "line": 56,
+    "why": "this.std.event.add(name, handler, …) in BlockComponent.handleEvent: std is declared `accessor std!: BlockStdScope`, and .event is an inferred getter returning this.get(UIEventDispatcher)."
+  },
+  {
+    "id": "affine-breaks2", "file": "blocksuite/framework/std/src/view/element/widget-component.ts", "decision": "in", "line": 24,
+    "why": "this.host.event.add(name, handler, …) in WidgetComponent.handleEvent: the unannotated getter host returns this.std.host (EditorHost), and EditorHost.event is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "packages/frontend/core/src/blocksuite/ai/widgets/ai-panel/ai-panel.ts", "decision": "in", "line": 482,
+    "why": "this.block.host.event.add('pointerDown', …) (and L489) in AffineAIPanelWidget (extends WidgetComponent): block is an inferred getter giving `B | null`, narrowed by if (this.block) to BlockComponent; .host is an inferred getter giving EditorHost, and .event is UIEventDispatcher."
+  },
+  {
+    "id": "affine-breaks2", "file": "packages/frontend/core/src/blocksuite/ai/widgets/edgeless-copilot/index.ts", "decision": "in", "line": 218,
+    "why": "this.std.event.add('pointerDown', …) in EdgelessCopilotWidget (extends WidgetComponent): std is an inferred getter giving BlockStdScope, and .event is an inferred getter giving UIEventDispatcher."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/affine/blocks/embed-doc/src/common/render-linked-doc.ts", "decision": "in", "line": 191,
+    "why": "std.get(ViewExtensionManagerIdentifier).get('preview-page'): BlockStdScope.get is provider.get<T>(identifier: GeneralServiceIdentifier<T>): T, and ViewExtensionManagerIdentifier = createIdentifier<ViewExtensionManager>(...), so the receiver is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/affine/blocks/embed-doc/src/embed-synced-doc-block/embed-synced-doc-block.ts", "decision": "in", "line": 122,
+    "why": "const viewExtensionManager = this.std.get(ViewExtensionManagerIdentifier); viewExtensionManager.get(name): the local is ViewExtensionManager through provider.get<T> and createIdentifier<ViewExtensionManager>."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/affine/blocks/surface-ref/src/portal/note.ts", "decision": "in", "line": 127,
+    "why": "this.host.std.get(ViewExtensionManagerIdentifier).get('preview-page'): the receiver is ViewExtensionManager (provider.get<T> with createIdentifier<ViewExtensionManager>)."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/affine/blocks/surface-ref/src/surface-ref-block.ts", "decision": "in", "line": 123,
+    "why": "this._viewExtensionManager.get('preview-edgeless'), where the unannotated getter _viewExtensionManager returns this.std.get(ViewExtensionManagerIdentifier), so its type is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/affine/fragments/frame-panel/src/card/frame-preview.ts", "decision": "in", "line": 95,
+    "why": "this._viewExtensionManager.get('preview-edgeless'), where the unannotated getter returns this.std.get(ViewExtensionManagerIdentifier), so its type is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/affine/widgets/drag-handle/src/helpers/preview-helper.ts", "decision": "in", "line": 74,
+    "why": "widget.std.get(ViewExtensionManagerIdentifier).get('preview-page'): the receiver is ViewExtensionManager (provider.get<T> with createIdentifier<ViewExtensionManager>)."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/integration-test/src/__tests__/utils/setup.ts", "decision": "in", "line": 82,
+    "why": "viewManager.get('page') (and L87), where const viewManager = getTestViewManager() and view.ts's unannotated getTestViewManager() returns `manager = new ViewExtensionManager(...)`. A test helper, which counts."
+  },
+  {
+    "id": "affine-callers1", "file": "blocksuite/playground/apps/starter/utils/extensions.ts", "decision": "in", "line": 51,
+    "why": "viewManager.get('page') (and L52), where const viewManager = getTestViewManager() (imported from @blocksuite/integration-test/view; it has no return annotation and returns new ViewExtensionManager(...))."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/blocksuite/ai/blocks/ai-chat-block/ai-chat-block.ts", "decision": "in", "line": 66,
+    "why": "this.std.get(ViewExtensionManagerIdentifier).get('preview-page'): the receiver is ViewExtensionManager (provider.get<T> with createIdentifier<ViewExtensionManager>)."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/blocksuite/ai/messages/slides-renderer.ts", "decision": "in", "line": 98,
+    "why": "this.host.std.get(ViewExtensionManagerIdentifier).get('preview-edgeless'): the receiver is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/blocksuite/ai/peek-view/chat-block-peek-view.ts", "decision": "in", "line": 473,
+    "why": "this.host.std.get(ViewExtensionManagerIdentifier).get('preview-page'): the receiver is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/blocksuite/block-suite-editor/bi-directional-link-panel.tsx", "decision": "in", "line": 183,
+    "why": "manager.get('preview-page'), where manager = getViewManager().config.init()….codeBlockPreview(framework).value: getViewManager() (no return annotation) gives ViewProvider, .config is Configure, each step returns Configure, and Configure.value is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/blocksuite/block-suite-editor/lit-adaper.tsx", "decision": "in", "line": 125,
+    "why": "manager.get('mobile-page') (and L127, L130), where manager = getViewManager().config.init()….comment(...).value is ViewExtensionManager (Configure.value)."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/blocksuite/manager/view.ts", "decision": "in", "line": 373,
+    "why": "getViewManager().config.init().value.get('page'): same-file getViewManager() has no return annotation (it returns ViewProvider.getInstance()), and Configure.value is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/components/comment/comment-editor/index.tsx", "decision": "in", "line": 46,
+    "why": "manager.get(readonly ? 'preview-page' : 'page'), where const manager = getCommentEditorViewManager(framework); specs.ts's unannotated function returns the module-level `manager: ViewExtensionManager | null` after assigning new ViewExtensionManager(...), so the return type is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/components/hooks/affine/use-ai-specs.ts", "decision": "in", "line": 50,
+    "why": "manager.get('page'), where manager = getViewManager().config.init()….codeBlockPreview(framework).value is ViewExtensionManager (Configure.value)."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/desktop/dialogs/setting/general-setting/editor/edgeless/snapshot.tsx", "decision": "in", "line": 68,
+    "why": "manager.get('preview-edgeless'), where manager = getViewManager().config.init()….codeBlockPreview(framework).value is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers1", "file": "packages/frontend/core/src/desktop/pages/workspace/chat/index.tsx", "decision": "in", "line": 87,
+    "why": "getViewManager().config.init().value.get('page'): Configure.value is ViewExtensionManager."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/desktop/components/navigation-panel/nodes/doc/index.tsx", "decision": "in", "line": 130,
+    "why": "workspaceService.workspace.engine.doc.addPriority(docId, 10): WorkspaceService.workspace is Workspace (inferred getter), Workspace.engine is WorkspaceEngine (inferred getter through WorkspaceEngineService.engine), and WorkspaceEngine.doc returns this.client.docFrontend, which StoreClient declares as DocFrontend."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/desktop/pages/workspace/detail-page/detail-page-wrapper.tsx", "decision": "in", "line": 44,
+    "why": "currentWorkspace.engine.doc.addPriority(pageId, 10), where currentWorkspace = useService(WorkspaceService).workspace (Workspace); .engine and .doc are inferred getters, and .doc is DocFrontend."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/mobile/modules/navigation-projection/shell-data-projection.ts", "decision": "in", "line": 418,
+    "why": "this.workspace.workspace.engine.doc.addPriority(id, 10), where the field is `private readonly workspace: WorkspaceService`, then Workspace, then WorkspaceEngine, then DocFrontend, all through inferred getters."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/db/services/db.ts", "decision": "in", "line": 53,
+    "why": "this.workspaceService.workspace.engine.doc.addPriority(ydoc.guid, 50) (and L85): the chain workspace, engine and doc goes through inferred getters to DocFrontend."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/doc-summary/stores/doc-summary.ts", "decision": "in", "line": 37,
+    "why": "this.workspaceService.workspace.engine.doc.addPriority(docId, 10): the receiver is DocFrontend through the inferred getters workspace, engine and doc."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/doc/entities/doc.ts", "decision": "in", "line": 39,
+    "why": "this.workspaceService.workspace.engine.doc.addPriority(this.id, 100): DocFrontend through inferred getters."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/doc/stores/docs.ts", "decision": "in", "line": 298,
+    "why": "this.workspaceService.workspace.engine.doc.addPriority(id, priority): DocFrontend through inferred getters."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/import-clipper/services/import.ts", "decision": "in", "line": 127,
+    "why": "workspace.engine.doc.addPriority('db$docProperties', 100) (and L469 on a `workspace: Workspace` parameter, L503 and L504): Workspace.engine and WorkspaceEngine.doc are inferred getters that give DocFrontend."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/peek-view/view/utils.ts", "decision": "in", "line": 81,
+    "why": "currentWorkspace.engine.doc.addPriority(pageId, 10), where currentWorkspace = useService(WorkspaceService).workspace; the inferred getters give DocFrontend."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/userspace/entities/user-db.ts", "decision": "in", "line": 23,
+    "why": "this.engine.client.docFrontend.addPriority(ydoc.guid, 50): the field `readonly engine = this.framework.createEntity(UserDBEngine, …)` is inferred as UserDBEngine (generic createEntity<T>(…): T), UserDBEngine.client is declared StoreClient, and StoreClient.docFrontend is declared DocFrontend."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/frontend/core/src/modules/workspace/entities/engine.ts", "decision": "in", "line": 80,
+    "why": "this.doc.addPriority(rootDoc.guid, 100) inside WorkspaceEngine.start(): the unannotated getter doc returns this.client.docFrontend, which is DocFrontend."
+  },
+  {
+    "id": "affine-injects1", "file": "packages/frontend/core/src/desktop/pages/index/index.tsx", "decision": "in", "line": 54,
+    "why": "const authService = useService(AuthService), with AuthService imported from '../../../modules/cloud', whose index.ts has `export { AuthService } from './services/auth'`: the hook asks for exactly AuthService. The file also imports the same module as '@affine/core/modules/cloud' (L1), and the imports table keeps one row per (source, target), so the relative binding has no edge."
+  },
+  {
+    "id": "affine-task1", "file": "packages/frontend/core/src/modules/workspace/entities/workspace.ts", "decision": "in", "line": 120,
+    "why": "onCreateDoc: docId => this.docs.createDoc({ id: docId, skipInit: true }).id: Workspace's unannotated getter docs returns this.scope.get(DocsService), which is DocsService."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/affine/shared/src/utils/model/doc.ts", "decision": "in", "line": 35,
+    "why": "store.resetHistory(), where const store = doc.getStore(), doc = collection.createDoc(...) on `collection: Workspace`; Workspace.createDoc(): Doc and Doc.getStore(): Store are declared in the store package."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/integration-test/src/__tests__/utils/setup.ts", "decision": "in", "line": 64,
+    "why": "doc.resetHistory(), where const doc = collection.createDoc('doc:home').getStore(); TestWorkspace.createDoc(): Doc and Doc.getStore(): Store. A test helper, which counts."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/_common/components/docs-panel.ts", "decision": "in", "line": 76,
+    "why": "this.editor.doc.resetHistory(), where editor is declared TestAffineEditorContainer, whose unannotated getter doc returns `this._doc.value as Store`."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/database.ts", "decision": "in", "line": 118,
+    "why": "store.resetHistory(), where const store = doc.getStore() and doc = collection.createDoc(id) on `collection: Workspace`, so the receiver is Store."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/embed.ts", "decision": "in", "line": 50,
+    "why": "store.resetHistory(), where const store = doc.getStore() and doc = collection.getDoc(id) ?? collection.createDoc(id), which is Doc, so the receiver is Store."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/empty.ts", "decision": "in", "line": 24,
+    "why": "store.resetHistory(), where const store = doc.getStore() and doc is a Doc, so the receiver is Store."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/linked.ts", "decision": "in", "line": 75,
+    "why": "docA.resetHistory() (and L76, L77 on docB and docC), each a local from collection.createDoc(...).getStore(...), which is Store."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/multiple-editor.ts", "decision": "in", "line": 22,
+    "why": "doc.resetHistory() (and L57), where const doc = collection.createDoc(id).getStore({ id }), which is Store."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/preset.ts", "decision": "in", "line": 43,
+    "why": "store.resetHistory(), where const store = doc.getStore({ id }) and doc is a Doc (getDoc() or createDoc()), so the receiver is Store."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/synced.ts", "decision": "in", "line": 168,
+    "why": "docSyncedEdgeless.resetHistory() (and L169, L170), each a local from collection.createDoc(...).getStore(...), which is Store."
+  },
+  {
+    "id": "affine-task2", "file": "blocksuite/playground/apps/starter/data/version-mismatch.ts", "decision": "in", "line": 31,
+    "why": "doc.resetHistory(), where const doc = collection.createDoc(id).getStore({ id }), which is Store."
+  },
+  {
+    "id": "affine-task2", "file": "packages/frontend/core/src/blocksuite/ai/messages/slides-renderer.ts", "decision": "in", "line": 237,
+    "why": "doc.resetHistory(), where const doc = collection.createDoc().getStore() and collection = new WorkspaceImpl(...); WorkspaceImpl.createDoc(): Doc and Doc.getStore(): Store."
+  },
+  {
+    "id": "affine-task2", "file": "packages/frontend/core/src/blocksuite/ai/mini-mindmap/mindmap-preview.ts", "decision": "in", "line": 113,
+    "why": "doc.resetHistory(), where const doc = collection.createDoc('doc:home').getStore() on new WorkspaceImpl(...), which is Store."
+  },
+  {
+    "id": "affine-task2", "file": "packages/frontend/core/src/components/providers/workspace-side-effects.tsx", "decision": "in", "line": 80,
+    "why": "doc.resetHistory() inside if (doc), where const [doc] = await ZipTransformer.importDocs(...); importDocs has no return annotation and returns Promise.all(... job.snapshotToDoc(snapshot)), which is Promise<Store | undefined>, so doc narrows to Store."
+  },
+  {
+    "id": "affine-task2", "file": "packages/frontend/core/src/modules/comment/services/snapshot-helper.ts", "decision": "in", "line": 145,
+    "why": "store.resetHistory(), where const store = doc.getStore(), doc = collection.createDoc() and collection = this.getTempWorkspace() (a WorkspaceImpl); the receiver is Store."
+  },
+  {
+    "id": "affine-task2", "file": "tests/blocksuite/e2e/drag.spec.ts", "decision": "in", "line": 641,
+    "why": "doc.resetHistory() inside page.evaluate, where const { doc } = window and declare-test-window.ts augments `interface Window { doc: Store }` (Store from @blocksuite/affine/store). A test, which counts."
+  },
+  {
+    "id": "affine-task2", "file": "tests/blocksuite/e2e/edgeless/edgeless-text.spec.ts", "decision": "in", "line": 621,
+    "why": "doc.resetHistory(), where const { doc } = window and the global augmentation types Window.doc as Store."
+  },
+  {
+    "id": "affine-task2", "file": "tests/blocksuite/e2e/paragraph.spec.ts", "decision": "in", "line": 1246,
+    "why": "doc.resetHistory(), where const { doc } = window and the global augmentation types Window.doc as Store."
+  },
+  {
+    "id": "affine-task2", "file": "tests/blocksuite/e2e/utils/actions/misc.ts", "decision": "in", "line": 223,
+    "why": "space.resetHistory(), where const space = window.doc (and L323, L1228 on doc destructured from window); declare-test-window.ts types Window.doc as Store."
+  },
+  {
+    "id": "theia-breaks2", "file": "packages/ai-ide/src/browser/app-tester-chat-agent.ts", "decision": "in", "line": 167,
+    "why": "this.preferenceService.set(...); field @inject(PreferenceService) preferenceService: PreferenceService, imported from @theia/core/lib/common."
+  },
+  {
+    "id": "theia-breaks2", "file": "packages/ai-ide/src/browser/github-chat-agent.ts", "decision": "in", "line": 173,
+    "why": "this.preferenceService.set(...); field @inject(PreferenceService) preferenceService: PreferenceService, imported from @theia/core/lib/common."
+  },
+  {
+    "id": "theia-breaks2", "file": "packages/ai-ide/src/browser/ide-chat-welcome-message-provider.tsx", "decision": "in", "line": 203,
+    "why": "this.preferenceService.set(...); field @inject(PreferenceService) preferenceService: PreferenceService, imported from @theia/core/lib/common."
+  },
+  {
+    "id": "theia-callers1", "file": "packages/plugin-ext/src/main/browser/menus/menus-contribution-handler.ts", "decision": "in", "line": 61,
+    "why": "@inject(MenuModelRegistry) private readonly menuRegistry: MenuModelRegistry (imported from @theia/core/lib/common); this.menuRegistry.registerSubmenu(...)."
+  },
+  {
+    "id": "theia-injects1", "file": "packages/remote/src/electron-browser/remote-user-storage-provider.ts", "decision": "out", "line": 40,
+    "why": "Field is @inject(LocalEnvVariablesServer) (a different symbol) merely typed EnvVariablesServer; rule needs @inject(EnvVariablesServer) / ctor param / get(T) - none present in the file."
+  }
+]

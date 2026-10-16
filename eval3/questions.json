@@ -354,6 +354,425 @@
       "prompt": "List every file in `blocksuite/affine/blocks/database/src` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
       "truth": "eval3/truth/affine-s1-unused.json",
       "origin": "eval2"
+    },
+    {
+      "id": "vscode-callers1",
+      "repo": "vscode",
+      "kind": "callers",
+      "family": "callers",
+      "prompt": "List every file that calls `IKeybindingService.appendKeybinding` (`IKeybindingService` is declared in `src/vs/platform/keybinding/common/keybinding.ts`). Count a file if it calls `appendKeybinding` on a value whose type is `IKeybindingService`, a type that extends `IKeybindingService`, or a class that implements `IKeybindingService` (directly or through a base class); test files count. Count only files under src/.",
+      "target": {
+        "type": "IKeybindingService",
+        "file": "src/vs/platform/keybinding/common/keybinding.ts",
+        "member": "appendKeybinding",
+        "within": "src"
+      },
+      "source": "https://github.com/microsoft/vscode/pull/283994",
+      "truth": "eval3/truth/vscode-callers1.json"
+    },
+    {
+      "id": "vscode-callers2",
+      "repo": "vscode",
+      "kind": "callers",
+      "family": "callers",
+      "prompt": "List every file that calls `IWorkbenchLayoutService.setPartHidden` (`IWorkbenchLayoutService` is declared in `src/vs/workbench/services/layout/browser/layoutService.ts`). Count a file if it calls `setPartHidden` on a value whose type is `IWorkbenchLayoutService`, a type that extends `IWorkbenchLayoutService`, or a class that implements `IWorkbenchLayoutService` (directly or through a base class); test files count. Count only files under src/vs/sessions/.",
+      "target": {
+        "type": "IWorkbenchLayoutService",
+        "file": "src/vs/workbench/services/layout/browser/layoutService.ts",
+        "member": "setPartHidden",
+        "within": "src/vs/sessions"
+      },
+      "source": "https://github.com/microsoft/vscode/pull/314572",
+      "truth": "eval3/truth/vscode-callers2.json"
+    },
+    {
+      "id": "vscode-breaks1",
+      "repo": "vscode",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `ICodeEditor.restoreViewState` changes (`ICodeEditor` is declared in `src/vs/editor/browser/editorBrowser.ts`), which files have to change? List them. Count a file if it calls `restoreViewState` on a value whose type is `ICodeEditor`, a type that extends `ICodeEditor`, or a class that implements `ICodeEditor` (directly or through a base class), or if it declares `ICodeEditor`, a type that extends `ICodeEditor`, a class that implements `ICodeEditor` or a class that extends `mock<ICodeEditor>()`, where that declaration defines `restoreViewState`; test files count. Count only files under src/.",
+      "target": {
+        "type": "ICodeEditor",
+        "file": "src/vs/editor/browser/editorBrowser.ts",
+        "member": "restoreViewState",
+        "within": "src"
+      },
+      "source": "https://github.com/microsoft/vscode/pull/146866",
+      "truth": "eval3/truth/vscode-breaks1.json"
+    },
+    {
+      "id": "vscode-breaks2",
+      "repo": "vscode",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `ISpliceable.splice` changes (`ISpliceable` is declared in `src/vs/base/common/sequence.ts`), which files have to change? List them. Count a file if it calls `splice` on a value whose type is `ISpliceable`, a type that extends `ISpliceable`, or a class that implements `ISpliceable` (directly or through a base class), or if it declares `ISpliceable`, a type that extends `ISpliceable`, a class that implements `ISpliceable` or a class that extends `mock<ISpliceable>()`, where that declaration defines `splice`; test files count. Count only files under src/.",
+      "target": {
+        "type": "ISpliceable",
+        "file": "src/vs/base/common/sequence.ts",
+        "member": "splice",
+        "within": "src"
+      },
+      "source": "https://github.com/microsoft/vscode/pull/166751",
+      "truth": "eval3/truth/vscode-breaks2.json"
+    },
+    {
+      "id": "vscode-adopt1",
+      "repo": "vscode",
+      "kind": "adopt",
+      "family": "adopt",
+      "prompt": "Calls should pass `openLabel` (typed as `{ withMnemonic, withoutMnemonic } | string`) by wrapping the localized string with `mnemonicButtonLabel(...)`, so each platform renders the mnemonic correctly (microsoft/vscode#312751). List every file with a call to `IFileDialogService.showOpenDialog` that would have to adopt it (`IFileDialogService` is declared in `src/vs/platform/dialogs/common/dialogs.ts`). Count a file if it calls `showOpenDialog` on a value whose type is `IFileDialogService`, a type that extends `IFileDialogService`, or a class that implements `IFileDialogService` (directly or through a base class); test files count. Count only files under src/.",
+      "target": {
+        "type": "IFileDialogService",
+        "file": "src/vs/platform/dialogs/common/dialogs.ts",
+        "member": "showOpenDialog",
+        "within": "src"
+      },
+      "change": "Calls should pass `openLabel` (typed as `{ withMnemonic, withoutMnemonic } | string`) by wrapping the localized string with `mnemonicButtonLabel(...)`, so each platform renders the mnemonic correctly (microsoft/vscode#312751).",
+      "source": "https://github.com/microsoft/vscode/pull/312751",
+      "truth": "eval3/truth/vscode-adopt1.json"
+    },
+    {
+      "id": "vscode-injects1",
+      "repo": "vscode",
+      "kind": "injects",
+      "family": "injects",
+      "prompt": "List every file that has `IWorkbenchAssignmentService` injected (`IWorkbenchAssignmentService` is declared in `src/vs/workbench/services/assignment/common/assignmentService.ts`). Count a file if it receives `IWorkbenchAssignmentService` through a constructor parameter typed `IWorkbenchAssignmentService`, a field decorated `@inject(IWorkbenchAssignmentService)`, or a call that asks a service container or hook for it (`get(IWorkbenchAssignmentService)`, `getOptional(IWorkbenchAssignmentService)`, `useService(IWorkbenchAssignmentService)`, `useServiceOptional(IWorkbenchAssignmentService)` or `useServices({ IWorkbenchAssignmentService })`); test files count. Count only files under src/.",
+      "target": {
+        "type": "IWorkbenchAssignmentService",
+        "file": "src/vs/workbench/services/assignment/common/assignmentService.ts",
+        "within": "src"
+      },
+      "source": "https://github.com/microsoft/vscode/blob/cc3fec8846d0e678357e476fa611774da26d7e24/.github/skills/experiments/SKILL.md#L11",
+      "truth": "eval3/truth/vscode-injects1.json"
+    },
+    {
+      "id": "vscode-task1",
+      "repo": "vscode",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `ILanguageModelsService.sendChatRequest` (`ILanguageModelsService` is declared in `src/vs/workbench/contrib/chat/common/languageModels.ts`): the 'from' parameter becomes optional (`ExtensionIdentifier | undefined`), so internal VS Code calls can pass undefined instead of instantiating invalid `ExtensionIdentifier('core')` identifiers (microsoft/vscode#298767). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `sendChatRequest` on a value whose type is `ILanguageModelsService`, a type that extends `ILanguageModelsService`, or a class that implements `ILanguageModelsService` (directly or through a base class), or if it declares `ILanguageModelsService`, a type that extends `ILanguageModelsService`, a class that implements `ILanguageModelsService` or a class that extends `mock<ILanguageModelsService>()`, where that declaration defines `sendChatRequest`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name. Count only files under src/, in both lists.",
+      "target": {
+        "type": "ILanguageModelsService",
+        "file": "src/vs/workbench/contrib/chat/common/languageModels.ts",
+        "member": "sendChatRequest",
+        "within": "src"
+      },
+      "change": "the 'from' parameter becomes optional (`ExtensionIdentifier | undefined`), so internal VS Code calls can pass undefined instead of instantiating invalid `ExtensionIdentifier('core')` identifiers (microsoft/vscode#298767).",
+      "source": "https://github.com/microsoft/vscode/pull/298767",
+      "truth": "eval3/truth/vscode-task1.json"
+    },
+    {
+      "id": "vscode-task2",
+      "repo": "vscode",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `ITerminalInstance.runCommand` (`ITerminalInstance` is declared in `src/vs/workbench/contrib/terminal/browser/terminal.ts`): it gains an optional `commandLineForMetadata`, and terminal command metadata uses `commandLineForMetadata ?? commandLine`, so the terminal still executes the rewritten sandbox command but the metadata records the display/original command (microsoft/vscode#309346). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `runCommand` on a value whose type is `ITerminalInstance`, a type that extends `ITerminalInstance`, or a class that implements `ITerminalInstance` (directly or through a base class), or if it declares `ITerminalInstance`, a type that extends `ITerminalInstance`, a class that implements `ITerminalInstance` or a class that extends `mock<ITerminalInstance>()`, where that declaration defines `runCommand`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name. Count only files under src/, in both lists.",
+      "target": {
+        "type": "ITerminalInstance",
+        "file": "src/vs/workbench/contrib/terminal/browser/terminal.ts",
+        "member": "runCommand",
+        "within": "src"
+      },
+      "change": "it gains an optional `commandLineForMetadata`, and terminal command metadata uses `commandLineForMetadata ?? commandLine`, so the terminal still executes the rewritten sandbox command but the metadata records the display/original command (microsoft/vscode#309346).",
+      "source": "https://github.com/microsoft/vscode/pull/309346",
+      "truth": "eval3/truth/vscode-task2.json"
+    },
+    {
+      "id": "vscode-task3",
+      "repo": "vscode",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `IContextKeyService.createScoped` (`IContextKeyService` is declared in `src/vs/platform/contextkey/common/contextkey.ts`): the optionality is removed from the parameter in `createScoped(target?: IContextKeyServiceTarget)`, so `target` becomes required (microsoft/vscode#115890). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `createScoped` on a value whose type is `IContextKeyService`, a type that extends `IContextKeyService`, or a class that implements `IContextKeyService` (directly or through a base class), or if it declares `IContextKeyService`, a type that extends `IContextKeyService`, a class that implements `IContextKeyService` or a class that extends `mock<IContextKeyService>()`, where that declaration defines `createScoped`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name. Count only files under src/vs/workbench/contrib/, in both lists.",
+      "target": {
+        "type": "IContextKeyService",
+        "file": "src/vs/platform/contextkey/common/contextkey.ts",
+        "member": "createScoped",
+        "within": "src/vs/workbench/contrib"
+      },
+      "change": "the optionality is removed from the parameter in `createScoped(target?: IContextKeyServiceTarget)`, so `target` becomes required (microsoft/vscode#115890).",
+      "source": "https://github.com/microsoft/vscode/pull/115890",
+      "truth": "eval3/truth/vscode-task3.json"
+    },
+    {
+      "id": "vscode-bp6",
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How is VS Code tested: what kinds of tests does the repository have, where does each kind live, and how is each kind run?",
+      "rubric": "eval3/rubric/vscode-bp6.json"
+    },
+    {
+      "id": "vscode-bp7",
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does VS Code keep event listeners and other resources from leaking: which types and patterns does its code use to tie a resource's lifetime to its owner, and how are leaks caught?",
+      "rubric": "eval3/rubric/vscode-bp7.json"
+    },
+    {
+      "id": "affine-callers1",
+      "repo": "affine",
+      "kind": "callers",
+      "family": "callers",
+      "prompt": "List every file that calls `ViewExtensionManager.get` (`ViewExtensionManager` is declared in `blocksuite/affine/ext-loader/src/view-manager.ts`). Count a file if it calls `get` on a value whose type is `ViewExtensionManager`, a type that extends `ViewExtensionManager`, or a class that implements `ViewExtensionManager` (directly or through a base class); test files count.",
+      "target": {
+        "type": "ViewExtensionManager",
+        "file": "blocksuite/affine/ext-loader/src/view-manager.ts",
+        "member": "get"
+      },
+      "source": "https://github.com/toeverything/AFFiNE/blob/0b69a6da21e8fd35beb85667bb8496d9b3852238/blocksuite/affine/ext-loader/README.md",
+      "truth": "eval3/truth/affine-callers1.json"
+    },
+    {
+      "id": "affine-callers2",
+      "repo": "affine",
+      "kind": "callers",
+      "family": "callers",
+      "prompt": "List every file that calls `DocFrontend.addPriority` (`DocFrontend` is declared in `packages/common/nbstore/src/frontend/doc.ts`). Count a file if it calls `addPriority` on a value whose type is `DocFrontend`, a type that extends `DocFrontend`, or a class that implements `DocFrontend` (directly or through a base class); test files count.",
+      "target": {
+        "type": "DocFrontend",
+        "file": "packages/common/nbstore/src/frontend/doc.ts",
+        "member": "addPriority"
+      },
+      "source": "https://github.com/toeverything/AFFiNE/pull/15595",
+      "truth": "eval3/truth/affine-callers2.json"
+    },
+    {
+      "id": "affine-breaks1",
+      "repo": "affine",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `Editor.setMode` changes (`Editor` is declared in `packages/frontend/core/src/modules/editor/entities/editor.ts`), which files have to change? List them. Count a file if it calls `setMode` on a value whose type is `Editor`, a type that extends `Editor`, or a class that implements `Editor` (directly or through a base class), or if it declares `Editor`, a type that extends `Editor`, a class that implements `Editor` or a class that extends `mock<Editor>()`, where that declaration defines `setMode`; test files count.",
+      "target": {
+        "type": "Editor",
+        "file": "packages/frontend/core/src/modules/editor/entities/editor.ts",
+        "member": "setMode"
+      },
+      "source": "https://github.com/toeverything/AFFiNE/pull/7873",
+      "truth": "eval3/truth/affine-breaks1.json"
+    },
+    {
+      "id": "affine-breaks2",
+      "repo": "affine",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `UIEventDispatcher.add` changes (`UIEventDispatcher` is declared in `blocksuite/framework/std/src/event/dispatcher.ts`), which files have to change? List them. Count a file if it calls `add` on a value whose type is `UIEventDispatcher`, a type that extends `UIEventDispatcher`, or a class that implements `UIEventDispatcher` (directly or through a base class), or if it declares `UIEventDispatcher`, a type that extends `UIEventDispatcher`, a class that implements `UIEventDispatcher` or a class that extends `mock<UIEventDispatcher>()`, where that declaration defines `add`; test files count.",
+      "target": {
+        "type": "UIEventDispatcher",
+        "file": "blocksuite/framework/std/src/event/dispatcher.ts",
+        "member": "add"
+      },
+      "source": "https://github.com/toeverything/AFFiNE/pull/14830",
+      "truth": "eval3/truth/affine-breaks2.json"
+    },
+    {
+      "id": "affine-injects1",
+      "repo": "affine",
+      "kind": "injects",
+      "family": "injects",
+      "prompt": "List every file that has `AuthService` injected (`AuthService` is declared in `packages/frontend/core/src/modules/cloud/services/auth.ts`). Count a file if it receives `AuthService` through a constructor parameter typed `AuthService`, a field decorated `@inject(AuthService)`, or a call that asks a service container or hook for it (`get(AuthService)`, `getOptional(AuthService)`, `useService(AuthService)`, `useServiceOptional(AuthService)` or `useServices({ AuthService })`); test files count.",
+      "target": {
+        "type": "AuthService",
+        "file": "packages/frontend/core/src/modules/cloud/services/auth.ts"
+      },
+      "source": "https://github.com/toeverything/AFFiNE/pull/15308",
+      "truth": "eval3/truth/affine-injects1.json"
+    },
+    {
+      "id": "affine-task1",
+      "repo": "affine",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `DocsService.createDoc` (`DocsService` is declared in `packages/frontend/core/src/modules/doc/services/docs.ts`): `docProps` extracted from editor settings is passed to `docsService.createDoc`, and a new `initDocFromProps` function initializes the document with specific props, so a new document's default style follows AFFiNE settings (toeverything/AFFiNE#8291). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `createDoc` on a value whose type is `DocsService`, a type that extends `DocsService`, or a class that implements `DocsService` (directly or through a base class), or if it declares `DocsService`, a type that extends `DocsService`, a class that implements `DocsService` or a class that extends `mock<DocsService>()`, where that declaration defines `createDoc`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name.",
+      "target": {
+        "type": "DocsService",
+        "file": "packages/frontend/core/src/modules/doc/services/docs.ts",
+        "member": "createDoc"
+      },
+      "change": "`docProps` extracted from editor settings is passed to `docsService.createDoc`, and a new `initDocFromProps` function initializes the document with specific props, so a new document's default style follows AFFiNE settings (toeverything/AFFiNE#8291).",
+      "source": "https://github.com/toeverything/AFFiNE/pull/8291",
+      "truth": "eval3/truth/affine-task1.json"
+    },
+    {
+      "id": "affine-task2",
+      "repo": "affine",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `Store.resetHistory` (`Store` is declared in `blocksuite/framework/store/src/model/store/store.ts`): history moves from doc to store, so undo/redo history management is centralized within the store and history reset calls target the store (toeverything/AFFiNE#12131). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `resetHistory` on a value whose type is `Store`, a type that extends `Store`, or a class that implements `Store` (directly or through a base class), or if it declares `Store`, a type that extends `Store`, a class that implements `Store` or a class that extends `mock<Store>()`, where that declaration defines `resetHistory`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name.",
+      "target": {
+        "type": "Store",
+        "file": "blocksuite/framework/store/src/model/store/store.ts",
+        "member": "resetHistory"
+      },
+      "change": "history moves from doc to store, so undo/redo history management is centralized within the store and history reset calls target the store (toeverything/AFFiNE#12131).",
+      "source": "https://github.com/toeverything/AFFiNE/pull/12131",
+      "truth": "eval3/truth/affine-task2.json"
+    },
+    {
+      "id": "affine-bp5",
+      "repo": "affine",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does AFFiNE store a document's content in edgeless (whiteboard) mode: how does it relate to the same document in page mode, where do shapes and drawings live, and how are position, stacking order and grouping represented?",
+      "rubric": "eval3/rubric/affine-bp5.json"
+    },
+    {
+      "id": "affine-bp6",
+      "repo": "affine",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does the AFFiNE app manage what's on screen: what are the workbench and its views, how does a URL become the content a view shows, and how do the header, the right sidebar and back/forward navigation fit in?",
+      "rubric": "eval3/rubric/affine-bp6.json"
+    },
+    {
+      "id": "theia-callers1",
+      "repo": "theia",
+      "kind": "callers",
+      "family": "callers",
+      "prompt": "List every file that calls `MenuModelRegistry.registerSubmenu` (`MenuModelRegistry` is declared in `packages/core/src/common/menu/menu-model-registry.ts`). Count a file if it calls `registerSubmenu` on a value whose type is `MenuModelRegistry`, a type that extends `MenuModelRegistry`, or a class that implements `MenuModelRegistry` (directly or through a base class); test files count.",
+      "target": {
+        "type": "MenuModelRegistry",
+        "file": "packages/core/src/common/menu/menu-model-registry.ts",
+        "member": "registerSubmenu"
+      },
+      "source": "https://github.com/eclipse-theia/theia/issues/7299",
+      "truth": "eval3/truth/theia-callers1.json"
+    },
+    {
+      "id": "theia-breaks1",
+      "repo": "theia",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `ContextMenuRenderer.render` changes (`ContextMenuRenderer` is declared in `packages/core/src/browser/context-menu-renderer.ts`), which files have to change? List them. Count a file if it calls `render` on a value whose type is `ContextMenuRenderer`, a type that extends `ContextMenuRenderer`, or a class that implements `ContextMenuRenderer` (directly or through a base class), or if it declares `ContextMenuRenderer`, a type that extends `ContextMenuRenderer`, a class that implements `ContextMenuRenderer` or a class that extends `mock<ContextMenuRenderer>()`, where that declaration defines `render`; test files count.",
+      "target": {
+        "type": "ContextMenuRenderer",
+        "file": "packages/core/src/browser/context-menu-renderer.ts",
+        "member": "render"
+      },
+      "source": "https://github.com/eclipse-theia/theia/blob/81ea5f939c40c905de91083d07e284bfd7437fac/doc/changelogs/CHANGELOG-2022.md#L349",
+      "truth": "eval3/truth/theia-breaks1.json"
+    },
+    {
+      "id": "theia-breaks2",
+      "repo": "theia",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `PreferenceService.set` changes (`PreferenceService` is declared in `packages/core/src/common/preferences/preference-service.ts`), which files have to change? List them. Count a file if it calls `set` on a value whose type is `PreferenceService`, a type that extends `PreferenceService`, or a class that implements `PreferenceService` (directly or through a base class), or if it declares `PreferenceService`, a type that extends `PreferenceService`, a class that implements `PreferenceService` or a class that extends `mock<PreferenceService>()`, where that declaration defines `set`; test files count.",
+      "target": {
+        "type": "PreferenceService",
+        "file": "packages/core/src/common/preferences/preference-service.ts",
+        "member": "set"
+      },
+      "source": "https://github.com/eclipse-theia/theia/issues/16046",
+      "truth": "eval3/truth/theia-breaks2.json"
+    },
+    {
+      "id": "theia-injects1",
+      "repo": "theia",
+      "kind": "injects",
+      "family": "injects",
+      "prompt": "List every file that has `EnvVariablesServer` injected (`EnvVariablesServer` is declared in `packages/core/src/common/env-variables/env-variables-protocol.ts`). Count a file if it receives `EnvVariablesServer` through a constructor parameter typed `EnvVariablesServer`, a field decorated `@inject(EnvVariablesServer)`, or a call that asks a service container or hook for it (`get(EnvVariablesServer)`, `getOptional(EnvVariablesServer)`, `useService(EnvVariablesServer)`, `useServiceOptional(EnvVariablesServer)` or `useServices({ EnvVariablesServer })`); test files count.",
+      "target": {
+        "type": "EnvVariablesServer",
+        "file": "packages/core/src/common/env-variables/env-variables-protocol.ts"
+      },
+      "source": "https://github.com/eclipse-theia/theia/blob/81ea5f939c40c905de91083d07e284bfd7437fac/CHANGELOG.md#L88",
+      "truth": "eval3/truth/theia-injects1.json"
+    },
+    {
+      "id": "theia-task1",
+      "repo": "theia",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `BackendApplicationContribution.onStop` (`BackendApplicationContribution` is declared in `packages/core/src/node/backend-application.ts`): it is now dispatched from `gracefulShutdown()` instead of from `process.on('exit')`, and hooks are dispatched in parallel and may now return `Promise<void>` to participate in the (timeout-bounded) asynchronous shutdown; existing synchronous implementations remain valid (eclipse-theia/theia#17477). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `onStop` on a value whose type is `BackendApplicationContribution`, a type that extends `BackendApplicationContribution`, or a class that implements `BackendApplicationContribution` (directly or through a base class), or if it declares `BackendApplicationContribution`, a type that extends `BackendApplicationContribution`, a class that implements `BackendApplicationContribution` or a class that extends `mock<BackendApplicationContribution>()`, where that declaration defines `onStop`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name.",
+      "target": {
+        "type": "BackendApplicationContribution",
+        "file": "packages/core/src/node/backend-application.ts",
+        "member": "onStop"
+      },
+      "change": "it is now dispatched from `gracefulShutdown()` instead of from `process.on('exit')`, and hooks are dispatched in parallel and may now return `Promise<void>` to participate in the (timeout-bounded) asynchronous shutdown; existing synchronous implementations remain valid (eclipse-theia/theia#17477).",
+      "source": "https://github.com/eclipse-theia/theia/blob/81ea5f939c40c905de91083d07e284bfd7437fac/CHANGELOG.md#L433",
+      "truth": "eval3/truth/theia-task1.json"
+    },
+    {
+      "id": "theia-task2",
+      "repo": "theia",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `CommandRegistry.isEnabled` (`CommandRegistry` is declared in `packages/core/src/common/command.ts`): today it passes `...args` to the handler and has no place to put a matcher; it gains one, so enablement can be evaluated against a context overlay describing the widget that owns the toolbar rather than the focused widget (eclipse-theia/theia#18030). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `isEnabled` on a value whose type is `CommandRegistry`, a type that extends `CommandRegistry`, or a class that implements `CommandRegistry` (directly or through a base class), or if it declares `CommandRegistry`, a type that extends `CommandRegistry`, a class that implements `CommandRegistry` or a class that extends `mock<CommandRegistry>()`, where that declaration defines `isEnabled`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name.",
+      "target": {
+        "type": "CommandRegistry",
+        "file": "packages/core/src/common/command.ts",
+        "member": "isEnabled"
+      },
+      "change": "today it passes `...args` to the handler and has no place to put a matcher; it gains one, so enablement can be evaluated against a context overlay describing the widget that owns the toolbar rather than the focused widget (eclipse-theia/theia#18030).",
+      "source": "https://github.com/eclipse-theia/theia/issues/18030",
+      "truth": "eval3/truth/theia-task2.json"
+    },
+    {
+      "id": "theia-cl1",
+      "repo": "theia",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file that directly imports `packages/ai-core/src/common/language-model.ts`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval3/truth/theia-cl1.json"
+    },
+    {
+      "id": "theia-cl2",
+      "repo": "theia",
+      "kind": "list-transitive",
+      "family": "list",
+      "prompt": "List every file that depends on `packages/scm/src/browser/scm-avatar-service.ts`, directly or through other files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval3/truth/theia-cl2.json"
+    },
+    {
+      "id": "theia-cn1",
+      "repo": "theia",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "How does `packages/scm/src/browser/decorations/scm-navigator-decorator.ts` end up loading `packages/core/src/browser/shell/current-widget-command-adapter.ts`? Give the shortest chain of imports.",
+      "truth": "eval3/truth/theia-cn1.json"
+    },
+    {
+      "id": "theia-cycle",
+      "repo": "theia",
+      "kind": "cycle",
+      "family": "cycle",
+      "file": "packages/core/src/common/index.ts",
+      "prompt": "Is `packages/core/src/common/index.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle. A file imports another when this rule counts it: Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval3/truth/theia-cycle.json"
+    },
+    {
+      "id": "theia-unused",
+      "repo": "theia",
+      "kind": "unused",
+      "family": "list",
+      "prompt": "List every file in `packages/ai-chat/src` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval3/truth/theia-unused.json"
+    },
+    {
+      "id": "theia-entries",
+      "repo": "theia",
+      "kind": "entries",
+      "family": "list",
+      "prompt": "Which files that no other file imports end up loading `packages/ai-core/src/browser/agents-md-frontend-application-contribution.ts`, directly or through other files? Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval3/truth/theia-entries.json"
+    },
+    {
+      "id": "theia-bp1",
+      "repo": "theia",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does Theia run VS Code extensions and Theia plugins: where does a plugin's code run, how does it get the `vscode` or `theia` API, and how do calls travel between a plugin and the rest of Theia?",
+      "rubric": "eval3/rubric/theia-bp1.json"
+    },
+    {
+      "id": "theia-bp2",
+      "repo": "theia",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How is a Theia application put together from extensions: what is a Theia extension, how does it add code to the frontend and the backend, and how does an application pick its extensions, get built and start?",
+      "rubric": "eval3/rubric/theia-bp2.json"
     }
   ]
 }

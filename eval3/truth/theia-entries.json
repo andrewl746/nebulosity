@@ -1,0 +1,30 @@
+{
+  "id": "theia-entries",
+  "kind": "entries",
+  "target": "packages/ai-core/src/browser/agents-md-frontend-application-contribution.ts",
+  "files": [
+    "examples/api-samples/src/browser/api-samples-frontend-module.ts",
+    "packages/ai-anthropic/src/browser/anthropic-frontend-module.ts",
+    "packages/ai-chat-ui/src/browser/ai-chat-ui-frontend-module.ts",
+    "packages/ai-chat/src/browser/ai-chat-frontend-module.ts",
+    "packages/ai-chatgpt/src/browser/chatgpt-frontend-module.ts",
+    "packages/ai-claude-code/src/browser/claude-code-frontend-module.ts",
+    "packages/ai-code-completion/src/browser/ai-code-completion-frontend-module.ts",
+    "packages/ai-codex/src/browser/codex-frontend-module.ts",
+    "packages/ai-copilot/src/browser/copilot-frontend-module.ts",
+    "packages/ai-copilot/src/browser/index.ts",
+    "packages/ai-editor/src/browser/ai-editor-frontend-module.ts",
+    "packages/ai-editor/src/browser/index.ts",
+    "packages/ai-google/src/browser/google-frontend-module.ts",
+    "packages/ai-history/src/browser/ai-history-frontend-module.ts",
+    "packages/ai-ide/src/browser/frontend-module.ts",
+    "packages/ai-openai/src/browser/openai-frontend-module.ts",
+    "packages/ai-registry/src/browser/ai-registry-frontend-module.ts",
+    "packages/ai-scanoss/src/browser/ai-scanoss-frontend-module.ts",
+    "packages/ai-terminal/src/browser/ai-terminal-frontend-module.ts",
+    "packages/ai-tool-sketchpad/src/browser/frontend-module.ts",
+    "packages/ai-tool-sketchpad/src/browser/index.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

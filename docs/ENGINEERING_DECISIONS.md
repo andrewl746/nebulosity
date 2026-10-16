@@ -1153,7 +1153,7 @@ They need the whole graph, and the index already holds it.
 
 **Amended (2026-10-15, V1.7 Task 6): speed measured, the fallback not taken.** The first `calls` answer in a fresh MCP process took 869–902 ms over five servers (worst 902 ms against 1.5 s), so resolution stays at query time and no migration 0010 is written. Warm `calls` peak at 99 ms (S5 worst 177 ms). S1 with the call facts is 56.7 s worst of three, median 50.2 s (Index Benchmark #7): about 6 s more parse and 9 s more write than Index Benchmark #6's median, 3.3 s inside the bar. MCP Benchmark #5.
 
-## ADR-060 — Eval #3's method: the rules sentence, time to relevant context, the call kinds, and the gate (proposed, V1.7 plan, 2026-10-15; the gate approved by the owner 2026-10-15) — amends ADR-057
+## ADR-060 — Eval #3's method: the rules sentence, time to relevant context, the call kinds, and the gate (accepted 2026-10-16, before the first run) — amends ADR-057
 
 **Context:** Eval #2 failed its gate on conditions 1, 2, 3a and 5a (ADR-057). V1.7's design found two things that blurred it:
 - Claude Code alone had shell commands refused in 42 of its 69 graph runs (131 refusals in all, mostly file writes and cd-then-git on `/c/…` paths);
@@ -1172,6 +1172,16 @@ Speed was measured end to end, while what an agent needs is to reach the right f
   - 24 graph questions: Eval #2's first of each kind per repo, unchanged, and Theia's six new ones;
   - 15 big-picture questions: Eval #2's, plus two new per repo from its docs;
   - Eval #2's first session on each repo.
+- **The questions as drawn (2026-10-16): 61 single questions and 2 sessions, 378 runs** (VS Code 156, AFFiNE 138, Theia 84), not 384. AFFiNE has no adopt question (R-X: none passed, so it asks a second callers question), and 2 tasks, not 3 (R-AF: its only other passing task shared a type with the drawn one).
+  - **22 call and task questions:** VS Code 2 callers, 2 breaks, 1 adopt, 1 injects and 3 tasks; AFFiNE 2 callers, 2 breaks, 1 injects and 2 tasks; Theia 1 callers, 2 breaks, 1 injects and 2 tasks. They were drawn with mulberry32(1) from 225 candidates (VS Code 65, AFFiNE 68, Theia 92), collected from the repos' pull requests (81), issues (47) and docs at the pins (97). Of the 22 drawn, 14 come from pull requests, 5 from docs and 3 from issues.
+  - **Theia's six graph questions,** drawn the same way from every qualifying target in the truth's own graph (46,929 candidates).
+  - **Six new big-picture questions,** two per repo, from each repo's own docs at its pin: 48 rubric points, all holding on an independent re-check.
+  - **Eval #2's 27 single questions and 2 sessions,** copied unchanged with their truths, verdicts and rubrics (R-I).
+  - **The truths:**
+    - the call and task truths come from TypeScript's checker, and all 106 disagreements with the index were read and decided (105 in, 1 out), with no truth changed;
+    - Theia's import truths have 37 verdicts and a 30-edge sample.
+
+    The questions, their sources and how they were checked are in Eval #3's method in docs/EVAL_RESULTS.md.
 - **Sourcing:** the DI and task questions come from real issues, pull requests and docs. They are filtered (a truth of 10–80 files; none of the design's planning methods; no dev-set target) and drawn with a fixed seed, before anyone sees how either arm does on them.
 - **The new kinds' truth** comes from TypeScript's own type checker over each repo's program, independent of the index (R2). Every disagreement with the index is read in the source and decided in `calls-adjudicated.json`.
 - **Scores:** F1 over files for the call kinds. A task has two parts, the files to change and the tests to run, each F1, and the task scores their mean. Eval #2's kinds score as before.

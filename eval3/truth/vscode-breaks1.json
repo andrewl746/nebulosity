@@ -1,0 +1,25 @@
+{
+  "id": "vscode-breaks1",
+  "kind": "breaks",
+  "type": "ICodeEditor",
+  "file": "src/vs/editor/browser/editorBrowser.ts",
+  "member": "restoreViewState",
+  "within": "src",
+  "files": [
+    "src/vs/editor/browser/editorBrowser.ts",
+    "src/vs/editor/browser/widget/codeEditor/codeEditorWidget.ts",
+    "src/vs/editor/browser/widget/diffEditor/diffEditorWidget.ts",
+    "src/vs/workbench/browser/parts/editor/textResourceEditor.ts",
+    "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/chatToolInputOutputContentPart.ts",
+    "src/vs/workbench/contrib/codeEditor/browser/outline/documentSymbolEditor.ts",
+    "src/vs/workbench/contrib/files/browser/editors/textFileEditor.ts",
+    "src/vs/workbench/contrib/interactive/browser/interactiveEditor.ts",
+    "src/vs/workbench/contrib/mergeEditor/browser/view/mergeEditor.ts",
+    "src/vs/workbench/contrib/notebook/browser/diff/diffComponents.ts",
+    "src/vs/workbench/contrib/notebook/browser/viewModel/baseCellViewModel.ts",
+    "src/vs/workbench/contrib/replNotebook/browser/replEditor.ts",
+    "src/vs/workbench/contrib/searchEditor/browser/searchEditor.ts"
+  ],
+  "verified": true,
+  "notes": []
+}
