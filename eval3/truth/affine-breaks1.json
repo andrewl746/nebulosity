@@ -15,7 +15,8 @@
     "packages/frontend/core/src/desktop/pages/workspace/share/use-shared-mode-query-sync.ts",
     "packages/frontend/core/src/mobile/pages/workspace/detail/menu/mode-switch.tsx",
     "packages/frontend/core/src/mobile/pages/workspace/detail/page-header-more-button.tsx",
-    "packages/frontend/core/src/modules/editor/entities/editor.ts"
+    "packages/frontend/core/src/modules/editor/entities/editor.ts",
+    "packages/frontend/core/src/modules/peek-view/view/utils.ts"
   ],
   "verified": true,
   "notes": []

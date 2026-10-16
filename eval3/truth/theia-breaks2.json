@@ -7,6 +7,9 @@
   "within": null,
   "files": [
     "examples/api-samples/src/node/sample-backend-preferences-service.ts",
+    "examples/api-tests/src/preferences.spec.js",
+    "examples/api-tests/src/saveable.spec.js",
+    "examples/api-tests/src/typescript.spec.js",
     "packages/ai-core/src/browser/ai-configuration-service-impl.ts",
     "packages/ai-core/src/browser/discovering-provider-contribution.ts",
     "packages/ai-core/src/browser/favorite-models-service.ts",

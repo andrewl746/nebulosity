@@ -184,7 +184,7 @@ Eleven new questions, then Eval #2's fourteen, unchanged. The truths and rubrics
 |---|---|---|---|---|
 | AFFINE-CALLERS1 | callers | `ViewExtensionManager.get` in `blocksuite/affine/ext-loader/src/view-manager.ts` | `blocksuite/affine/ext-loader/README.md` at the pin | 20 files |
 | AFFINE-CALLERS2 | callers (R-X, for adopt) | `DocFrontend.addPriority` in `packages/common/nbstore/src/frontend/doc.ts` | PR toeverything/AFFiNE#15595 | 12 files |
-| AFFINE-BREAKS1 | what breaks | `Editor.setMode` in `packages/frontend/core/src/modules/editor/entities/editor.ts` | PR toeverything/AFFiNE#7873 | 10 files |
+| AFFINE-BREAKS1 | what breaks | `Editor.setMode` in `packages/frontend/core/src/modules/editor/entities/editor.ts` | PR toeverything/AFFiNE#7873 | 11 files |
 | AFFINE-BREAKS2 | what breaks | `UIEventDispatcher.add` in `blocksuite/framework/std/src/event/dispatcher.ts` | PR toeverything/AFFiNE#14830 | 25 files |
 | AFFINE-INJECTS1 | injects | `AuthService` in `packages/frontend/core/src/modules/cloud/services/auth.ts` | PR toeverything/AFFiNE#15308 | 78 files |
 | AFFINE-TASK1 | task | `DocsService.createDoc` in `packages/frontend/core/src/modules/doc/services/docs.ts` | PR toeverything/AFFiNE#8291 | 11 files to change, 2 tests |
@@ -207,8 +207,8 @@ Eleven new questions, then Eval #2's fourteen, unchanged. The truths and rubrics
 | Id | Kind | Target | Source | Truth |
 |---|---|---|---|---|
 | THEIA-CALLERS1 | callers | `MenuModelRegistry.registerSubmenu` in `packages/core/src/common/menu/menu-model-registry.ts` | issue eclipse-theia/theia#7299 | 14 files |
-| THEIA-BREAKS1 | what breaks | `ContextMenuRenderer.render` in `packages/core/src/browser/context-menu-renderer.ts` | `doc/changelogs/CHANGELOG-2022.md` L349 at the pin | 35 files |
-| THEIA-BREAKS2 | what breaks | `PreferenceService.set` in `packages/core/src/common/preferences/preference-service.ts` | issue eclipse-theia/theia#16046 | 33 files |
+| THEIA-BREAKS1 | what breaks | `ContextMenuRenderer.render` in `packages/core/src/browser/context-menu-renderer.ts` | `doc/changelogs/CHANGELOG-2022.md` L349 at the pin | 42 files |
+| THEIA-BREAKS2 | what breaks | `PreferenceService.set` in `packages/core/src/common/preferences/preference-service.ts` | issue eclipse-theia/theia#16046 | 36 files |
 | THEIA-INJECTS1 | injects | `EnvVariablesServer` in `packages/core/src/common/env-variables/env-variables-protocol.ts` | `CHANGELOG.md` L88 at the pin | 42 files |
 | THEIA-TASK1 | task | `BackendApplicationContribution.onStop` in `packages/core/src/node/backend-application.ts` | `CHANGELOG.md` L433 at the pin | 11 files to change, 4 tests |
 | THEIA-TASK2 | task | `CommandRegistry.isEnabled` in `packages/core/src/common/command.ts` | issue eclipse-theia/theia#18030 | 14 files to change, 22 tests |
@@ -317,7 +317,8 @@ The truth never comes from Nebulosity's index (R2).
 - Each was read at its line, against the question's call rule, and decided in `eval3/truth/calls-adjudicated.json`. The rule counts a value's type as TypeScript sees it, declared or inferred.
   - All 105 checker-only files are "in": the checker was right.
   - The index-only file is "out". It is THEIA-INJECTS1's `remote-user-storage-provider.ts`: L40 is `@inject(LocalEnvVariablesServer)`, a different symbol, only typed `EnvVariablesServer`. That was the index's error.
-- No verdict changed a truth: a rebuild with them gave every truth byte for byte as before. None is left undecided.
+- Those 106 verdicts changed no truth: a rebuild with them gave every truth byte for byte as before. None is left undecided.
+- A sweep for the checker's blind spot then added 34 more verdicts (below), so `calls-adjudicated.json` holds 140: 116 "in" and 24 "out". Eleven of the "in" verdicts add a file the checker missed, and they changed three truths.
 
 | Truth | Index only / checker only | Truth | Index only / checker only | Truth | Index only / checker only |
 |---|---|---|---|---|---|
@@ -349,7 +350,9 @@ The truth never comes from Nebulosity's index (R2).
   - AFFINE-BREAKS2, `page-clipboard.ts` L193: `this.std.event.add`, where the getter `event` returns `this.get(UIEventDispatcher)`;
   - VSCODE-BREAKS1, `diffEditorWidget.ts` L551.
 - **The agreements:** the session that assembled the questions read a seeded sample of 22 files both the checker and the index count, one per call truth (mulberry32(1) over each truth's files that no verdict covers). All 22 hold. It also read Theia's chain and cycle steps (THEIA-CN1's 3 and THEIA-CYCLE's 3) at their lines: all six hold.
-- **What wasn't read one by one:** the other files both the checker and the index count, which rest on two independent methods agreeing; and the entries of Theia's lists and roots, which rest on the two extractors agreeing, the 37 verdicts and the 30-edge sample.
+- **The full reading** (2026-10-16, after an independent review): every entry of the call truths' evidence sheet (`calls-evidence.md`) was read at its line by three Sonnet readers, one per repo, with a script printing every cited line: VS Code's 9 questions, AFFiNE's 7 and Theia's 6, tests included. So were all of Theia's graph evidence (`truth-evidence.md`): its lists, roots, steps and 186 import-edge lines. They found no problems. Four look-alikes in VS Code were checked and hold.
+- **The sweep for the checker's blind spot** (2026-10-16, after the review). The checker types a receiver `any` when its type comes through React props or an npm package (no `node_modules`), and the program leaves out `// @ts-check` JS tests. An Opus reader listed every call to each question's member whose receiver the checker types `any` or `unknown`, every `.js` file with such a call, and the producers of AFFiNE's high-volume members, then read 34 candidates and decided each. Eleven were "in": THEIA-BREAKS1 +7 (six calls through React props, such as `this.props.contextMenuRenderer.render(…)` in a `React.Component<Props>` whose Props declare the type, and one `container.get(ContextMenuRenderer)` in `menus.spec.js`), THEIA-BREAKS2 +3 (three `.spec.js` files typed by a JSDoc import) and AFFINE-BREAKS1 +1 (`peek-view/view/utils.ts`, a `useState<Doc | null>`). Twenty-three were "out" (Node and Electron receivers, sinon stubs, Playwright, an rxjs subject, untyped vendored JS, a JSDoc path that resolves to nothing). The blind-spot labels: react-props-any 7 in and 5 out; ts-check-js 4 in and 4 out. THEIA-BREAKS1 went from 35 to 42, THEIA-BREAKS2 from 33 to 36 and AFFINE-BREAKS1 from 10 to 11, all inside 10–80; every other truth is byte for byte as before, and the needed sets of those three were rebuilt.
+- **What wasn't read one by one:** the graph under Theia's truths (20,008 scanner edges), which rests on the two extractors agreeing, the 37 verdicts and the 30-edge sample; and any file that neither the checker nor the index counts, beyond what the sweep looked for.
 - Each of the 28 new truths carries `verified: true`. Each of the 6 new rubrics has every point's `holds` set.
 
 **The needed files** were fixed from the truths before the first run (`npm run eval:needed -- --eval eval3`, `eval3/truth/needed.json`).
@@ -373,7 +376,7 @@ The 105 checker-only files, read above, show why a declared-type index misses ca
 | Other: a property chain through a context interface, `a \|\| b`, a module imported under two specifiers (one import row per file pair) | 2 | 1 | 0 |
 | **Files the index misses** | **20** | **81** | **4** |
 
-On five of AFFiNE's seven call truths, the index holds 1–2 of the checker's 10–25 files: CALLERS1 2 of 20, CALLERS2 1 of 12, BREAKS1 2 of 10, BREAKS2 2 of 25 and TASK2 2 of 21. On VS Code, BREAKS1 has 7 of 13 and BREAKS2 37 of 44.
+On five of AFFiNE's seven call truths, the index holds 1–2 of the checker's 10–25 files: CALLERS1 2 of 20, CALLERS2 1 of 12, BREAKS1 2 of 11, BREAKS2 2 of 25 and TASK2 2 of 21. On VS Code, BREAKS1 has 7 of 13 and BREAKS2 37 of 44.
 
 **The engine was not tuned on these misses** (the ledger's ruling, 2026-10-16). They were found on Eval #3's own questions after the draw, and tuning the index on them would fit the test set. Eval #3 measures the index as it stands, and the engine freezes at the pilot (R-N). A fix comes after the results, measured on a new set.
 
@@ -465,13 +468,15 @@ Eval #3 has two arms: **A**, Claude Code alone, and **N**, Claude Code with Nebu
 - **The rules sentence is advisory.** It tells both arms what the permission rules refuse, but the rules do the refusing. A model may still try a refused command, and condition V counts every run that does.
 - **Condition 1 rests on the multi-step kinds.** One broad grep can "see" all of a single method's callers. The plain rule counts any result naming a needed file, so a callers or injects question may be reached quickly in both arms. The tasks (whose needed set is CHANGE and TESTS together), Theia's lists, chains and cycles, and the larger breaks sets carry the 4× bar.
 - **The model may know VS Code from training.** VS Code also ships its own guide for agents (`AGENTS.md`). Theia ships a `CLAUDE.md` and an `AGENTS.md` too, which both arms read alike.
-- **Theia is unknown to the tuning**: no dev question touches it, and it runs in free mode. Its truths and AFFiNE's rest on the checker with the truth's own module resolution, since neither checkout has `node_modules`. A call made through an npm package's types is invisible to the truth.
+- **Theia is unknown to the tuning**: no dev question touches it, and it runs in free mode. Its truths and AFFiNE's rest on the checker with the truth's own module resolution, since neither checkout has `node_modules`. A call made through an npm package's types is invisible to the truth. This was not wholly so for the repo's own types passed through React props or hooks, which the checker also lost without `node_modules`; a sweep after the draw found those and added 11 files to three truths (see "Who read what"). A residual risk remains for other paths that go through npm types.
+- **Most of the task changes are already in the code.** At the pinned commits, six of the seven task changes are already made (vscode-task1, vscode-task2 and vscode-task3, affine-task1 and affine-task2, theia-task1); only theia-task2's is proposed. vscode-adopt1 is partly adopted: its PR fixes one site and says others already follow it. The prompts say "I'm changing…", so a run may answer that the change is done. The rule (breaks plus tests) decides the truth either way.
+- **theia-injects1's truth follows the rule's letter.** A field `@inject(LocalEnvVariablesServer)` typed `EnvVariablesServer` is not counted, though its type is the one asked about.
 - **The dev set and the eval share kinds, not targets.** The overlap check refuses any shared target, and the draw refused them too, but the tools' wording may suit these kinds better than a user's own questions.
 - **Three repeats is a small sample.** Each repo has one to three questions per kind, so a per-repo condition can turn on a few runs.
 - **The owner set the bars after Eval #2**, knowing where Eval #2 fell short. They were fixed with the plan on 2026-10-15, before Eval #3's questions existed, and they don't change after the first run.
 - **The dev set's tool use was 13 of 17 (0.76)**, after three rounds of wording, so condition 5 (0.90) is at risk. Four dev questions used no Nebulosity tool in any of their runs (0 of 12, across three wordings): VS Code's task and injects, and AFFiNE's files nothing imports and violations. Each run read its question as a text search.
 - **The calls index misses many of these callers.** On AFFiNE it holds 1–2 of the checker's 10–25 files on five of the seven call truths, and on VS Code 7 of 13 and 37 of 44 on the two breaks questions. An answer built on `calls` alone misses the rest. Conditions 2 and 3 will show that as a loss, and the engine was not tuned on it.
-- **The truths were read by models, and the agreements only by sample.** Every disagreement was read. The files both the checker and the index count were read in a sample of 22 (all hold), and the rest rest on two independent methods agreeing.
+- **The truths were read by models; no person read them all.** Every disagreement with the index was read. Every entry of the call truths was then read at its line, and so were Theia's graph evidence (three Sonnet readers, no problems). Agreement between the checker and the index covers the files they both include. The files both could miss are covered by the sweep for the checker's blind spot only, and a residual risk remains (see the npm types line above).
 
 ## Results
 

@@ -422,5 +422,141 @@
   {
     "id": "theia-injects1", "file": "packages/remote/src/electron-browser/remote-user-storage-provider.ts", "decision": "out", "line": 40,
     "why": "Field is @inject(LocalEnvVariablesServer) (a different symbol) merely typed EnvVariablesServer; rule needs @inject(EnvVariablesServer) / ctor param / get(T) - none present in the file."
+  },
+  {
+    "id": "theia-breaks1", "file": "packages/notebook/src/browser/view/notebook-main-toolbar.tsx", "decision": "in", "line": 137,
+    "why": "`this.props.contextMenuRenderer.render({...})` in `NotebookMainToolbar extends React.Component<NotebookMainToolbarProps, ...>`; NotebookMainToolbarProps (L34) declares `contextMenuRenderer: ContextMenuRenderer`, so with React's types this.props.contextMenuRenderer is ContextMenuRenderer."
+  },
+  {
+    "id": "theia-breaks1", "file": "packages/scm/src/browser/scm-tree-widget.tsx", "decision": "in", "line": 543,
+    "why": "`const { treeNode: node, contextMenuRenderer } = this.props; ... contextMenuRenderer.render({...})` in `ScmElement<P extends ScmElement.Props> extends React.Component<P, ...>`; ScmElement.Props extends ScmTreeWidget.Props, which declares `contextMenuRenderer: ContextMenuRenderer` (L498)."
+  },
+  {
+    "id": "theia-breaks1", "file": "packages/timeline/src/browser/timeline-tree-widget.tsx", "decision": "in", "line": 147,
+    "why": "`const { timelineItem, contextKeys, contextMenuRenderer } = this.props; ... contextMenuRenderer.render({...})` in `TimelineItemNode extends React.Component<TimelineItemNode.Props>`; TimelineItemNode.Props declares `contextMenuRenderer: ContextMenuRenderer` (L82)."
+  },
+  {
+    "id": "theia-breaks1", "file": "packages/messages/src/browser/notification-component.tsx", "decision": "in", "line": 78,
+    "why": "`this.props.contextMenuRenderer.render({...})` (guarded by `if (this.props.contextMenuRenderer)`) in `NotificationComponent extends React.Component<NotificationComponentProps>`; the props declare `readonly contextMenuRenderer?: ContextMenuRenderer` (L27), narrowed to ContextMenuRenderer."
+  },
+  {
+    "id": "theia-breaks1", "file": "packages/ai-terminal/src/browser/shell-execution-tool-renderer.tsx", "decision": "in", "line": 559,
+    "why": "`contextMenuRenderer.render({...})` (also L600) where contextMenuRenderer is destructured from the props of `ShellExecutionConfirmationActions: React.FC<ShellExecutionConfirmationActionsProps>`, whose interface declares `contextMenuRenderer: ContextMenuRenderer` (L481); React.FC unresolved made the parameter any."
+  },
+  {
+    "id": "theia-breaks1", "file": "packages/ai-chat-ui/src/browser/chat-response-renderer/tool-confirmation.tsx", "decision": "in", "line": 342,
+    "why": "`contextMenuRenderer.render({...})` where contextMenuRenderer is destructured from the props of `ToolConfirmationActions: React.FC<ToolConfirmationActionsProps>`, whose interface declares `contextMenuRenderer: ContextMenuRenderer` (L171)."
+  },
+  {
+    "id": "theia-breaks1", "file": "examples/api-tests/src/menus.spec.js", "decision": "in", "line": 127,
+    "why": "`// @ts-check` file: `const contextMenuService = container.get(ContextMenuRenderer)` (L51), container = window.theia.container typed `import('inversify').Container` (api-tests.d.ts); inversify 6's `get<T>(id: ServiceIdentifier<T>): T` infers T = ContextMenuRenderer from the abstract class (Abstract<T> = { prototype: T }), so `contextMenuService.render({...})` (L127, L145) is on a ContextMenuRenderer."
+  },
+  {
+    "id": "theia-breaks1", "file": "packages/notebook/src/browser/view/notebook-cell-list-view.tsx", "decision": "out", "line": 190,
+    "why": "`renderer.render(...)` where `renderer = this.props.renderers.get(cell.cellKind)` and CellListProps declares `renderers: Map<CellKind, CellRenderer>` (L44); CellRenderer (L28) is the notebook's own interface, unrelated to ContextMenuRenderer."
+  },
+  {
+    "id": "theia-breaks2", "file": "examples/api-tests/src/preferences.spec.js", "decision": "in", "line": 67,
+    "why": "`// @ts-check`: L29 `/** @type {import ('@theia/core/lib/common/preferences/preference-service').PreferenceService} */ const preferenceService = container.get(PreferenceService)`; the module is the compiled packages/core/src/common/preferences/preference-service.ts, so `preferenceService.set(key, value, PreferenceScope.Workspace)` (L67, also L195-197) is on PreferenceService."
+  },
+  {
+    "id": "theia-breaks2", "file": "examples/api-tests/src/saveable.spec.js", "decision": "in", "line": 73,
+    "why": "`// @ts-check`: L41 `/** @type {import('@theia/core/lib/common/preferences/preference-service').PreferenceService} */ const preferences = container.get(PreferenceService)` (the only `preferences` binding), so `preferences.set('files.autoSave', 'off', ...)` (L73, also L74/L100/L477/L496) is on PreferenceService."
+  },
+  {
+    "id": "theia-breaks2", "file": "examples/api-tests/src/typescript.spec.js", "decision": "in", "line": 78,
+    "why": "`// @ts-check`: L56 `/** @type {import('@theia/core/lib/common/preferences/preference-service').PreferenceService} */ const preferences = container.get(PreferenceService)`, so `preferences.set('files.autoSave', 'off')` (L78, also L79/L95/L657/L658/L674) is on PreferenceService."
+  },
+  {
+    "id": "theia-breaks2", "file": "examples/api-tests/src/undo-redo-selectAll.spec.js", "decision": "out", "line": 46,
+    "why": "L46 `/** @type {PreferenceService} */` names the binding from L36 `const { PreferenceService, PreferenceScope } = require('@theia/core/lib/browser')`, but at 81ea5f9 core/src/browser/index.ts exports no PreferenceService (browser/preferences/index.ts re-exports only preference-contribution and preference-validation-service; checked with the checker's module exports), so the JSDoc type is unresolved and `preferenceService.set(...)` (L78) is on any."
+  },
+  {
+    "id": "theia-breaks2", "file": "examples/api-tests/src/launch-preferences.spec.js", "decision": "out", "line": 43,
+    "why": "L43 `/** @type {import('@theia/core/lib/browser/preferences/preference-service').PreferenceService} */` points at a module that doesn't exist (packages/core/src/browser/preferences/ has no preference-service.ts), so `preferences` is any and `preferences.set('launch', ...)` (L649 ff.) isn't on a PreferenceService as TypeScript sees it."
+  },
+  {
+    "id": "theia-breaks2", "file": "examples/api-tests/src/scm.spec.js", "decision": "out", "line": 42,
+    "why": "`const preferences = container.get(PreferenceService)` with no JSDoc: PreferenceService comes from `require('@theia/core/lib/browser')` (L31), which doesn't export it, and even as the Symbol('PreferenceService') id inversify's get<T> infers T = unknown; `preferences.set(...)` (L76-77) isn't on a PreferenceService."
+  },
+  {
+    "id": "theia-breaks2", "file": "packages/ai-core-ui/src/browser/ai-configuration/components/ai-settings-row.tsx", "decision": "out", "line": 75,
+    "why": "`service.set(preferenceId, value, scope, resourceUri)` where service is destructured from React.FC<AiSettingsRowProps> props declaring `service: AiSettingsRowService`; AiSettingsRowService (ai-settings-row-service.ts L76) is a plain @injectable class with its own set, not implementing PreferenceService."
+  },
+  {
+    "id": "theia-task2", "file": "packages/ai-ide/src/browser/ai-configuration/categories/agent-detail-view.tsx", "decision": "out", "line": 80,
+    "why": "`agentService.isEnabled(agent.id)`: agentService is destructured from the component's services bag and is the AgentService, not CommandRegistry."
+  },
+  {
+    "id": "theia-task2", "file": "packages/plugin-ext/src/main/browser/comments/comment-thread-widget.tsx", "decision": "out", "line": 774,
+    "why": "`node.isEnabled(nodePath, {...})` with `const { node, ... } = this.props` and CommentAction.Props declaring `node: CommandMenu` (L760); CommandMenu is a menu node, not CommandRegistry."
+  },
+  {
+    "id": "theia-injects1", "file": "examples/api-tests/src/task-configurations.spec.js", "decision": "out", "line": 86,
+    "why": "The only JS mention, `// const envVariables = container.get(EnvVariablesServer);` with its `// /** @type {EnvVariablesServer} */` (L81-86), is commented out."
+  },
+  {
+    "id": "affine-breaks1", "file": "packages/frontend/core/src/modules/peek-view/view/utils.ts", "decision": "in", "line": 70,
+    "why": "`const editor = doc.scope.get(EditorsService).createEditor(); editor.setMode(...)` where `const [doc, setDoc] = useState<Doc | null>(null)` (L27, narrowed by `if (!doc) return`); with React's types doc is Doc, and EditorsService.createEditor() returns `this.framework.createEntity(Editor)`, an Editor."
+  },
+  {
+    "id": "affine-callers2", "file": "packages/common/nbstore/src/sync/doc/index.ts", "decision": "out", "line": 199,
+    "why": "`peers.map(peer => peer.addPriority(id, priority))` inside an rxjs switchMap over `peers$ = new BehaviorSubject<DocSyncPeer[]>([])` (L50); peer is a DocSyncPeer, not DocFrontend."
+  },
+  {
+    "id": "affine-task1", "file": "packages/frontend/core/src/components/affine/page-history-modal/data.ts", "decision": "out", "line": 213,
+    "why": "`historyShellWorkspace.createDoc(pageId)` where historyShellWorkspace = historyShell.docCollection and historyShell = useMemo(() => createShellWorkspace(...)); docCollection is the blocksuite workspace, whose createDoc is not DocsService.createDoc."
+  },
+  {
+    "id": "affine-task1", "file": "tests/affine-cloud-copilot/e2e/basic/chat.spec.ts", "decision": "out", "line": 515,
+    "why": "`utils.editor.createDoc(page, 'Doc 1', 'doc1')`: utils is the Playwright fixture and utils.editor the e2e EditorUtils class (tests/affine-cloud-copilot/e2e/utils/editor-utils.ts L342 `static async createDoc(page, title, docContent)`), not DocsService."
+  },
+  {
+    "id": "affine-task1", "file": "tests/affine-cloud-copilot/e2e/settings/embedding.spec.ts", "decision": "out", "line": 407,
+    "why": "Same as chat.spec.ts: `utils.editor.createDoc(...)` is the e2e EditorUtils static helper, not DocsService."
+  },
+  {
+    "id": "affine-task1", "file": "blocksuite/playground/apps/_common/components/docs-panel.ts", "decision": "out", "line": 64,
+    "why": "`createDoc = () => {...}` is a field of the lit element `DocsPanel extends WithDisposable(ShadowlessElement)` (unresolved mixin heritage), which neither is nor extends DocsService."
+  },
+  {
+    "id": "affine-task2", "file": "packages/backend/server/src/__tests__/e2e/license/resolver.spec.ts", "decision": "out", "line": 80,
+    "why": "`install.resetHistory()` is a sinon stub's resetHistory (followed by `install.resolves(installed)`), not Store.resetHistory."
+  },
+  {
+    "id": "affine-task2", "file": "packages/backend/server/src/base/helpers/__tests__/url.spec.ts", "decision": "out", "line": 150,
+    "why": "`spy.resetHistory()` after `spy.calledOnceWith(...)`: a sinon spy, not Store."
+  },
+  {
+    "id": "affine-task2", "file": "packages/backend/server/src/core/backend-runtime/__tests__/job.spec.ts", "decision": "out", "line": 113,
+    "why": "`t.context.runtime.embeddingHealth.resetHistory()` beside `.reset()` calls on sinon stubs in the ava context, not Store."
+  },
+  {
+    "id": "affine-task2", "file": "packages/backend/server/src/core/mail/__tests__/mailer.spec.ts", "decision": "out", "line": 217,
+    "why": "`t.context.runtime.assertMailDeliveryQuotaV1.resetHistory()` is a sinon stub (cf. `.called` on L216), not Store."
+  },
+  {
+    "id": "vscode-breaks1", "file": "src/vs/monaco.d.ts", "decision": "out", "line": 6202,
+    "why": "`restoreViewState(state: ICodeEditorViewState | null): void` in `export interface ICodeEditor extends IEditor` inside `declare namespace monaco.editor` (L945), the generated public-API mirror: a distinct symbol from editorBrowser.ts's ICodeEditor that doesn't extend it."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/base/common/marked/marked.js", "decision": "out", "line": 117,
+    "why": "`cells.splice(count)`: cells is a plain array in the vendored marked library, not an ISpliceable."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts", "decision": "out", "line": 693,
+    "why": "`args.splice(idx, 1)` on the process argument array (string[]), any only because Node's types aren't installed; not an ISpliceable."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/mainImpl.ts", "decision": "out", "line": 559,
+    "why": "`argv.splice(endOfArgsMarkerIndex, 0, '--crash-reporter-id', crashReporterId)` on the process argv string array, not an ISpliceable."
+  },
+  {
+    "id": "vscode-breaks2", "file": "src/vs/workbench/api/node/extensionHostProcess.ts", "decision": "out", "line": 59,
+    "why": "`process.execArgv.splice(i, 1)`: Node's process.execArgv (string[]), not an ISpliceable."
+  },
+  {
+    "id": "vscode-adopt1", "file": "src/vs/platform/dialogs/electron-main/dialogMainService.ts", "decision": "out", "line": 235,
+    "why": "`electron.dialog.showOpenDialog(window, options)` (also L237) is Electron's dialog API, not IFileDialogService."
   }
 ]

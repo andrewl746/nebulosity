@@ -1178,7 +1178,7 @@ Speed was measured end to end, while what an agent needs is to reach the right f
   - **Six new big-picture questions,** two per repo, from each repo's own docs at its pin: 48 rubric points, all holding on an independent re-check.
   - **Eval #2's 27 single questions and 2 sessions,** copied unchanged with their truths, verdicts and rubrics (R-I).
   - **The truths:**
-    - the call and task truths come from TypeScript's checker, and all 106 disagreements with the index were read and decided (105 in, 1 out), with no truth changed;
+    - the call and task truths come from TypeScript's checker. All 106 disagreements with the index were read and decided (105 in, 1 out), and a sweep for the checker's blind spot (receivers typed through React props, `// @ts-check` tests) added 34 more verdicts (11 in, 23 out), which changed three truths (THEIA-BREAKS1 35 to 42, THEIA-BREAKS2 33 to 36, AFFINE-BREAKS1 10 to 11); every entry was then read in full;
     - Theia's import truths have 37 verdicts and a 30-edge sample.
 
     The questions, their sources and how they were checked are in Eval #3's method in docs/EVAL_RESULTS.md.
