@@ -1,0 +1,222 @@
+{
+  "name": "Eval #3's dev set (V1.7 Task 15): the shell check and tool use, never scored; no target here may appear in Eval #3",
+  "dev": true,
+  "formats": {
+    "list": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "chain": "End with a line that says ANSWER: and then either the word none, or the chain as file paths relative to the repository root, one per line, from the first file to the last, where each file imports the next.",
+    "bigPicture": "Answer in at most 400 words.",
+    "impact": "End with a line that says ANSWER: and then one line for each folder named above, in the same order, as the folder, a colon and the number of files, then a line elsewhere: and the number of files outside them, then a line total: and the number of files in all.",
+    "cycle": "End with a line that says ANSWER: and then either the word none, or the cycle as file paths relative to the repository root, one per line, starting and ending with <file>, where each file imports the next.",
+    "pairs": "End with a line that says ANSWER: and then one line for each pair, as the importing folder's name, then ->, then the imported folder's name.",
+    "callers": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "breaks": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "adopt": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "injects": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "task": "End with a line that says ANSWER CHANGE: and then every file to change, one path per line relative to the repository root; then a line that says ANSWER TESTS: and then every test file to run, one per line, with nothing after the list."
+  },
+  "questions": [
+    {
+      "id": "vscode-dev-callers",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "callers",
+      "family": "callers",
+      "prompt": "List every file that calls `ICommandService.executeCommand` (`ICommandService` is declared in `src/vs/platform/commands/common/commands.ts`). Count a file if it calls `executeCommand` on a value whose type is `ICommandService`, a type that extends `ICommandService`, or a class that implements `ICommandService` (directly or through a base class); test files count. Count only files under src/vs/workbench/browser/.",
+      "target": {
+        "type": "ICommandService",
+        "file": "src/vs/platform/commands/common/commands.ts",
+        "member": "executeCommand",
+        "within": "src/vs/workbench/browser"
+      }
+    },
+    {
+      "id": "vscode-dev-breaks",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `IConfigurationService.getValue` changes (`IConfigurationService` is declared in `src/vs/platform/configuration/common/configuration.ts`), which files have to change? List them. Count a file if it calls `getValue` on a value whose type is `IConfigurationService`, a type that extends `IConfigurationService`, or a class that implements `IConfigurationService` (directly or through a base class), or if it declares `IConfigurationService`, a type that extends `IConfigurationService`, a class that implements `IConfigurationService` or a class that extends `mock<IConfigurationService>()`, where that declaration defines `getValue`; test files count. Count only files under src/vs/workbench/contrib/debug/.",
+      "target": {
+        "type": "IConfigurationService",
+        "file": "src/vs/platform/configuration/common/configuration.ts",
+        "member": "getValue",
+        "within": "src/vs/workbench/contrib/debug"
+      }
+    },
+    {
+      "id": "vscode-dev-adopt",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "adopt",
+      "family": "adopt",
+      "prompt": "microsoft/vscode#117869 asks to adopt IFileService#readFile({ atomic: true }). List every file with a call to `IFileService.readFile` that would have to adopt it (`IFileService` is declared in `src/vs/platform/files/common/files.ts`). Count a file if it calls `readFile` on a value whose type is `IFileService`, a type that extends `IFileService`, or a class that implements `IFileService` (directly or through a base class); test files count. Count only files under src/vs/workbench/services/.",
+      "target": {
+        "type": "IFileService",
+        "file": "src/vs/platform/files/common/files.ts",
+        "member": "readFile",
+        "within": "src/vs/workbench/services"
+      },
+      "change": "microsoft/vscode#117869 asks to adopt IFileService#readFile({ atomic: true }).",
+      "source": "https://github.com/microsoft/vscode/issues/117869"
+    },
+    {
+      "id": "vscode-dev-injects",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "injects",
+      "family": "injects",
+      "prompt": "List every file that has `ICommandService` injected (`ICommandService` is declared in `src/vs/platform/commands/common/commands.ts`). Count a file if it receives `ICommandService` through a constructor parameter typed `ICommandService`, a field decorated `@inject(ICommandService)`, or a call that asks a service container or hook for it (`get(ICommandService)`, `getOptional(ICommandService)`, `useService(ICommandService)`, `useServiceOptional(ICommandService)` or `useServices({ ICommandService })`); test files count. Count only files under src/vs/editor/contrib/.",
+      "target": {
+        "type": "ICommandService",
+        "file": "src/vs/platform/commands/common/commands.ts",
+        "within": "src/vs/editor/contrib"
+      }
+    },
+    {
+      "id": "vscode-dev-task",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `IEditorService.openEditor` (`IEditorService` is declared in `src/vs/workbench/services/editor/common/editorService.ts`). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `openEditor` on a value whose type is `IEditorService`, a type that extends `IEditorService`, or a class that implements `IEditorService` (directly or through a base class), or if it declares `IEditorService`, a type that extends `IEditorService`, a class that implements `IEditorService` or a class that extends `mock<IEditorService>()`, where that declaration defines `openEditor`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name. Count only files under src/vs/sessions/contrib/, in both lists.",
+      "target": {
+        "type": "IEditorService",
+        "file": "src/vs/workbench/services/editor/common/editorService.ts",
+        "member": "openEditor",
+        "within": "src/vs/sessions/contrib"
+      }
+    },
+    {
+      "id": "vscode-dev-chain",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "chain",
+      "family": "chain",
+      "prompt": "Give the shortest chain of imports from `src/vs/code/electron-main/main.ts` to `src/vs/platform/log/common/log.ts`."
+    },
+    {
+      "id": "vscode-dev-transitive",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "list-transitive",
+      "family": "list",
+      "prompt": "List every file that depends on `src/vs/editor/contrib/folding/browser/folding.ts`, directly or through other files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "vscode-dev-impact",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "impact",
+      "family": "impact",
+      "prompt": "If I change `src/vs/platform/clipboard/common/clipboardService.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `src/vs/base`, `src/vs/platform`, `src/vs/editor`, `src/vs/workbench`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "vscode-dev-pairs",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "pairs",
+      "family": "pairs",
+      "prompt": "Code under `src/vs/platform` sits in folders named `common`, `browser`, `node`, `electron-browser`, `electron-utility`, `electron-main`. For each of these names, which of the names do its files import from? Count a pair when at least one import goes that way; a file belongs to the deepest of these names on its path."
+    },
+    {
+      "id": "vscode-dev-bp",
+      "dev": true,
+      "repo": "vscode",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does VS Code start up: which processes does it launch, what does each one do, and how do they talk to each other?"
+    },
+    {
+      "id": "affine-dev-callers",
+      "dev": true,
+      "repo": "affine",
+      "kind": "callers",
+      "family": "callers",
+      "prompt": "List every file that calls `GraphQLService.gql` (`GraphQLService` is declared in `packages/frontend/core/src/modules/cloud/services/graphql.ts`). Count a file if it calls `gql` on a value whose type is `GraphQLService`, a type that extends `GraphQLService`, or a class that implements `GraphQLService` (directly or through a base class); test files count.",
+      "target": {
+        "type": "GraphQLService",
+        "file": "packages/frontend/core/src/modules/cloud/services/graphql.ts",
+        "member": "gql"
+      }
+    },
+    {
+      "id": "affine-dev-breaks",
+      "dev": true,
+      "repo": "affine",
+      "kind": "breaks",
+      "family": "breaks",
+      "prompt": "If the signature of `WorkspaceDialogService.open` changes (`WorkspaceDialogService` is declared in `packages/frontend/core/src/modules/dialogs/services/workspace-dialog.ts`), which files have to change? List them. Count a file if it calls `open` on a value whose type is `WorkspaceDialogService`, a type that extends `WorkspaceDialogService`, or a class that implements `WorkspaceDialogService` (directly or through a base class), or if it declares `WorkspaceDialogService`, a type that extends `WorkspaceDialogService`, a class that implements `WorkspaceDialogService` or a class that extends `mock<WorkspaceDialogService>()`, where that declaration defines `open`; test files count.",
+      "target": {
+        "type": "WorkspaceDialogService",
+        "file": "packages/frontend/core/src/modules/dialogs/services/workspace-dialog.ts",
+        "member": "open"
+      }
+    },
+    {
+      "id": "affine-dev-task",
+      "dev": true,
+      "repo": "affine",
+      "kind": "task",
+      "family": "task",
+      "prompt": "I'm changing the signature of `GlobalDialogService.open` (`GlobalDialogService` is declared in `packages/frontend/core/src/modules/dialogs/services/dialog.ts`). Plan it: which files will I have to change, and which tests should I run? Count a file if it calls `open` on a value whose type is `GlobalDialogService`, a type that extends `GlobalDialogService`, or a class that implements `GlobalDialogService` (directly or through a base class), or if it declares `GlobalDialogService`, a type that extends `GlobalDialogService`, a class that implements `GlobalDialogService` or a class that extends `mock<GlobalDialogService>()`, where that declaration defines `open`; test files count. A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name.",
+      "target": {
+        "type": "GlobalDialogService",
+        "file": "packages/frontend/core/src/modules/dialogs/services/dialog.ts",
+        "member": "open"
+      }
+    },
+    {
+      "id": "affine-dev-entries",
+      "dev": true,
+      "repo": "affine",
+      "kind": "entries",
+      "family": "list",
+      "why": "Loaded by 5 non-test files nothing imports (the Android and iOS entries and their nbstore workers, and mobile-shared's own index.ts), 14 dependents in all.",
+      "prompt": "Which files that no other file imports end up loading `packages/frontend/apps/mobile-shared/src/auth/endpoint.ts`, directly or through other files? Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-cycle",
+      "dev": true,
+      "repo": "affine",
+      "kind": "cycle",
+      "family": "cycle",
+      "file": "packages/frontend/apps/electron/src/main/events.ts",
+      "why": "A real cycle in the Electron main process (a 20-file group), shortest 3 steps: events.ts -> windows-manager/popup.ts -> exposed.ts -> events.ts; app code, not a barrel file.",
+      "prompt": "Is `packages/frontend/apps/electron/src/main/events.ts` part of an import cycle, a chain of imports that leads from it back to itself? If it is, give the shortest such cycle."
+    },
+    {
+      "id": "affine-dev-unused",
+      "dev": true,
+      "repo": "affine",
+      "kind": "unused",
+      "family": "list",
+      "why": "41 non-test files of which 3 are imported by nothing (affine/use-reference-link-helper.ts, affine/use-toggle-cloud-public.ts, use-block-suite-workspace-helper.ts).",
+      "prompt": "List every file in `packages/frontend/core/src/components/hooks` that no other file in the repository imports. Leave out test files. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-violations",
+      "dev": true,
+      "repo": "affine",
+      "kind": "violations",
+      "family": "list",
+      "why": "Shared modules reaching into the desktop UI: 4 files in packages/frontend/core/src/modules import a file in packages/frontend/core/src/desktop (import/services/service.ts, peek-view/view/doc-preview/doc-peek-view.tsx, workbench/view/workbench-root.tsx, workspace-indexer-embedding/view/embedding-settings.tsx). The package-level pair (packages/frontend/core into packages/frontend/apps, also 4 files) is left for Eval #2.",
+      "prompt": "List every file in `packages/frontend/core/src/modules` that directly imports a file in `packages/frontend/core/src/desktop`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-direct",
+      "dev": true,
+      "repo": "affine",
+      "kind": "list-direct",
+      "family": "list",
+      "prompt": "List every file that directly imports `packages/frontend/admin/src/use-query.ts`. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count."
+    },
+    {
+      "id": "affine-dev-bp",
+      "dev": true,
+      "repo": "affine",
+      "kind": "bigPicture",
+      "family": "bigPicture",
+      "prompt": "How does AFFiNE handle signing in and accounts: where do the sign-in flows live, and how does the app know who is signed in?"
+    }
+  ]
+}

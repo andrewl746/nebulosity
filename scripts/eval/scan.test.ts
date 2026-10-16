@@ -242,7 +242,7 @@ describe("the scanner's independence (R3)", () => {
     });
 
     it("imports nothing from lib/: the scanner, the truths, the truth's resolver, both extractors, the truth builder, the definition and the rest (R2, B-8)", () => {
-        const pinned = ["scan", "truth", "resolve-truth", "ts-graph", "ts-calls", "build-truth", "definition", "context", "stats", "needed"].map((name) => `scripts/eval/${name}.ts`);
+        const pinned = ["scan", "truth", "resolve-truth", "ts-graph", "ts-calls", "build-truth", "definition", "context", "stats", "needed", "prompts"].map((name) => `scripts/eval/${name}.ts`);
         for (const file of pinned){
             // every file this one reaches through its relative imports, itself included
             for (const reached of reachableFrom(file)){
@@ -250,9 +250,9 @@ describe("the scanner's independence (R3)", () => {
                 expect({ file, reached, fromLib: specifiers.filter(reachesLib) }).toEqual({ file, reached, fromLib: [] });
             }
             // A reader that stopped matching would pass the check above for any file, so the files that import must be seen
-            // importing (truth.ts and stats.ts import nothing).
+            // importing (truth.ts, stats.ts and prompts.ts import nothing; prompts.ts only names import() in a sentence).
             const own = moduleSpecifiers(fs.readFileSync(file, "utf8"));
-            if ((!file.endsWith("/truth.ts") || file.endsWith("resolve-truth.ts")) && !file.endsWith("stats.ts")) expect({ file, found: own.length > 0 }).toEqual({ file, found: true });
+            if ((!file.endsWith("/truth.ts") || file.endsWith("resolve-truth.ts")) && !file.endsWith("stats.ts") && !file.endsWith("prompts.ts")) expect({ file, found: own.length > 0 }).toEqual({ file, found: true });
         }
     });
 });
