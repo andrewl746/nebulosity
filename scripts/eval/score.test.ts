@@ -964,3 +964,46 @@ describe("a steps.json 'out' on an edge an approved truth rests on (sweep B fix 
         ].join("\n"));
     });
 });
+
+describe("scoreAnswer: Eval #3's call kinds and tasks", () => {
+    const callersQ: QuestionData = {
+        id: "vc1", family: "grepHard", kind: "callers",
+        truth: { id: "vc1", kind: "callers", type: "IFoo", file: X, member: "save", within: null, files: [A, B], verified: true, notes: [] },
+    };
+    const taskQ: QuestionData = {
+        id: "vt1", family: "grepHard", kind: "task",
+        truth: { id: "vt1", kind: "task", type: "IFoo", file: X, member: "save", within: null, change: [A, B, X], tests: [C], verified: true, notes: [] },
+    };
+
+    it("scores a callers answer by F1 over files, with recall and precision beside it; a non-file counts as a wrong file", () => {
+        const s = scoreAnswer(answer(A, C, "src/vs/gone.ts"), callersQ, ctx);
+        // a, c and a non-file (3) against a and b: precision 1/3, recall 1/2, F1 = 2·(1/3)·(1/2) / (1/3 + 1/2) = 0.4
+        expect(s.score).toBeCloseTo(0.4, 10);
+        expect([s.recall, s.precision, s.hits, s.missed, s.flags]).toEqual([0.5, 1 / 3, 1, [B], ["names non-files"]]);
+    });
+
+    it("doesn't mark a callers answer down for naming its type's own file, as an entries answer may name its target", () => {
+        expect(scoreAnswer(answer(`IFoo is declared in ${X}; its callers:`, A, B), callersQ, ctx).score).toBe(1);
+    });
+
+    it("scores a task as the mean of its two blocks' F1, each block reported", () => {
+        const s = scoreAnswer(`Plan.\nANSWER CHANGE:\n${A}\n${B}\n${X}\nANSWER TESTS:\n${C}\n${D}`, taskQ, ctx);
+        // CHANGE 3 of 3: F1 1; TESTS c and d against c: precision 1/2, recall 1, F1 2/3; the task 5/6
+        expect(s.score).toBeCloseTo(5 / 6, 10);
+        expect(s.parts).toEqual({
+            change: { score: 1, recall: 1, precision: 1, missed: [], extra: [] },
+            tests: { score: expect.closeTo(2 / 3, 10), recall: 1, precision: 0.5, missed: [], extra: [D] },
+        });
+        expect(s.flags).toEqual([]);
+    });
+
+    it("scores a missing block 0 and flags it; with neither block the task scores 0", () => {
+        const s = scoreAnswer(`ANSWER CHANGE:\n${A}\n${B}\n${X}`, taskQ, ctx);
+        expect([s.score, s.flags]).toEqual([0.5, ["no ANSWER TESTS: line"]]);
+        expect(scoreAnswer("I'd change a few files.", taskQ, ctx).score).toBe(0);
+    });
+
+    it("puts the new kinds in the grep-hard family, each with its own row label", () => {
+        for (const kind of ["callers", "breaks", "adopt", "injects", "task"] as const) expect(familyOfKind(kind)).toBe("grepHard");
+    });
+});

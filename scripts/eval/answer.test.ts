@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreCycle, scoreList, scorePairs } from "./answer";
+import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreCycle, scoreList, scorePairs, taskSections } from "./answer";
 
 describe("answerSection", () => {
     it("takes the text after the last ANSWER: line, in any case, with markdown around it", () => {
@@ -163,5 +163,17 @@ describe("fix round 1: the readers and the cycle", () => {
         const c = checkCycle(["m", "t", "x", "m"], { file: "m", shortest: null }, () => true);
         expect(c).toMatchObject({ score: 0, valid: true, steps: 3 });
         expect(c.problem).toContain("recheck the truth");
+    });
+});
+
+describe("taskSections", () => {
+    it("splits a task answer at its last ANSWER CHANGE: and ANSWER TESTS: lines, in either order, markdown around the labels ignored", () => {
+        expect(taskSections("The plan.\n**ANSWER CHANGE:**\nsrc/a.ts\nsrc/b.ts\nANSWER TESTS:\nsrc/a.test.ts")).toEqual({ change: "src/a.ts\nsrc/b.ts", tests: "src/a.test.ts" });
+        expect(taskSections("ANSWER TESTS: src/x.test.ts\n## Answer change:\nsrc/c.ts")).toEqual({ change: "src/c.ts", tests: "src/x.test.ts" });
+    });
+
+    it("gives null for a missing block, and an ANSWER: line alone is neither", () => {
+        expect(taskSections("ANSWER CHANGE:\nsrc/a.ts")).toEqual({ change: "src/a.ts", tests: null });
+        expect(taskSections("ANSWER:\nsrc/a.ts")).toEqual({ change: null, tests: null });
     });
 });

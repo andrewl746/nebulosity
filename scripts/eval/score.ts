@@ -11,7 +11,8 @@
  *                 A step is real by eval/truth/adjudicated.json (reading the source beats the scanner, either way), else
  *                 when the scanner has the edge, else unknown
  *   big-picture:  the mean of the grades over the rubric points that hold (not scored until the grades exist)
- * Eval #2's kinds (V1.6, D2) are scored from the question's truth the same way: impact counts (the mean over the lines of
+ * Eval #3's kinds (V1.7) join them: callers, breaks, adopt and injects are lists of files scored by F1 (recall and precision
+ * beside it), and a task is the mean of its two ANSWER blocks' F1 (CHANGE and TESTS), each block reported. Eval #2's kinds (V1.6, D2) are scored from the question's truth the same way: impact counts (the mean over the lines of
  * 1 - the relative error), cycles (1 / 0.5 / 0), unused, violations and entries lists (F1) and pairs (F1). A run or a session
  * message that hit its turn or budget limit scores 0. Task sessions (the runs whose index line has a `session`) are scored
  * message by message against the questions they asked, and a session's score is the mean of its messages'. For an eval
@@ -30,8 +31,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import zlib from "zlib";
-import { buildRepoGraphs, EVAL1, parseAdjudications, restingEdges, type Adjudication, type ChainTruthFile, type CycleTruthFile, type ImpactTruthFile, type ListTruthFile, type PairsTruthFile, type TruthFile } from "./build-truth";
-import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreList, scorePairs } from "./answer";
+import { buildRepoGraphs, EVAL1, parseAdjudications, restingEdges, type Adjudication, type CallTruthFile, type ChainTruthFile, type CycleTruthFile, type ImpactTruthFile, type ListTruthFile, type PairsTruthFile, type TaskTruthFile, type TruthFile } from "./build-truth";
+import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreList, scorePairs, taskSections } from "./answer";
 import { loadDefinition } from "./definition";
 import { gateVerdict, type GateRun, type GateSession, type QuestionKind, type Verdict } from "./gate";
 import type { Arm, RunId } from "./run-config";
@@ -147,11 +148,17 @@ export type AnswerScore = {
     steps: number | null; valid: boolean | null; problem: string | null; unknown: [string, string] | null;
     /** Things the owner should look at: no ANSWER: line, "none" with files named, a chain naming non-files, one shorter than the truth's. */
     flags: string[];
+    /** A task's two blocks (R-U); absent for every other kind. */
+    parts?: { change: PartScore; tests: PartScore };
 };
+
+export type PartScore = { score: number; recall: number; precision: number; missed: string[]; extra: string[] };
 
 const NO_ANSWER_LINE = "no ANSWER: line";
 
 const NEW_KINDS: readonly TruthFile["kind"][] = ["impact", "cycle", "unused", "violations", "entries", "pairs"];
+/** Eval #3's four call kinds: lists of files, scored like Eval #2's sets. */
+export const CALL_KINDS: readonly TruthFile["kind"][] = ["callers", "breaks", "adopt", "injects"];
 
 /** The answer's score for one of Eval #2's kinds (D2); `out` is the answer's parts so far. */
 function scoreNewKind(out: AnswerScore, section: string, truth: TruthFile, ctx: ScoreContext): AnswerScore {
@@ -177,7 +184,8 @@ function scoreNewKind(out: AnswerScore, section: string, truth: TruthFile, ctx: 
     const wanted = (truth as { files: string[] }).files;
     // an entries answer's lead-in may name the file it asks about ("The files that end up loading src/x.ts:"), a real
     // file that isn't an entry: it lists nothing, unless the truth itself holds it
-    const target = truth.kind === "entries" && !wanted.includes(truth.target) ? truth.target : null;
+    const named = truth.kind === "entries" ? truth.target : CALL_KINDS.includes(truth.kind) ? (truth as CallTruthFile).file : null;
+    const target = named !== null && !wanted.includes(named) ? named : null;
     const nonFiles = listedNonFiles(out.notFiles, ownFolders(truth));
     const listed = [...out.files.filter((f) => f !== target), ...nonFiles];
     const s = scoreList(listed, wanted);
@@ -185,6 +193,27 @@ function scoreNewKind(out: AnswerScore, section: string, truth: TruthFile, ctx: 
         ...out, score: f1(listed, wanted), recall: s.recall, precision: s.precision, hits: s.hits, missed: s.missed, extra: s.extra,
         flags: nonFiles.length > 0 ? [...out.flags, "names non-files"] : out.flags,
     };
+}
+
+/** A task's score (R-U): each block is F1 over files, the task's score their mean; a missing block scores 0 and is flagged. */
+function scoreTask(out: AnswerScore, finalText: string | null, truth: TaskTruthFile, ctx: ScoreContext): AnswerScore {
+    const blocks = finalText === null ? { change: null, tests: null } : taskSections(finalText);
+    const flags: string[] = [];
+    const files: string[] = [];
+    const part = (block: string | null, wanted: readonly string[], name: string): PartScore => {
+        if (block === null){
+            flags.push(`no ANSWER ${name}: line`);
+            return { score: 0, recall: 0, precision: 0, missed: [...wanted], extra: [] };
+        }
+        const named = extractPaths(block, ctx.repoRoot, ctx.known);
+        for (const f of named.files) if (!files.includes(f)) files.push(f);
+        const listed = [...named.files, ...listedNonFiles(named.notFiles, [])];
+        const s = scoreList(listed, wanted);
+        return { score: f1(listed, wanted), recall: s.recall, precision: s.precision, missed: s.missed, extra: s.extra };
+    };
+    const change = part(blocks.change, truth.change, "CHANGE");
+    const tests = part(blocks.tests, truth.tests, "TESTS");
+    return { ...out, flags, files, score: (change.score + tests.score) / 2, parts: { change, tests } };
 }
 
 /** The folders a question names itself: an answer's lead-in may repeat them ("Unused files in src/vs/base/common:"). */
@@ -221,9 +250,11 @@ export function scoreAnswer(finalText: string | null, q: QuestionData, ctx: Scor
         return { ...out, score: holding.reduce((s, p) => s + grade[p.id].score, 0) / holding.length };
     }
 
+    if (q.truth?.kind === "task") return scoreTask(out, finalText, q.truth, ctx);
+
     if (section === null) out.flags.push(NO_ANSWER_LINE);
     const truth = q.truth;
-    if (truth !== undefined && NEW_KINDS.includes(truth.kind)){
+    if (truth !== undefined && (NEW_KINDS.includes(truth.kind) || CALL_KINDS.includes(truth.kind))){
         if (section === null) return { ...out, score: 0, valid: false, problem: NO_ANSWER_LINE };
         return scoreNewKind(out, section, truth, ctx);
     }
@@ -455,10 +486,11 @@ export function repoReadouts(
 
 const FAMILY_ORDER: Family[] = ["bigPicture", "list", "chain", "grepHard"];
 const FAMILY_LABEL: Record<Family, string> = { bigPicture: "Big-picture", list: "Complete-list", chain: "Connection", grepHard: "Grep-hard" };
-const KIND_ORDER: QuestionKind[] = ["bigPicture", "list-direct", "list-transitive", "chain", "impact", "cycle", "unused", "violations", "entries", "pairs"];
+const KIND_ORDER: QuestionKind[] = ["bigPicture", "list-direct", "list-transitive", "chain", "impact", "cycle", "unused", "violations", "entries", "pairs", "callers", "breaks", "adopt", "injects", "task"];
 /** The per-family table's label for a grep-hard kind, which gets a row of its own there (Eval #2). */
 const KIND_LABEL: Partial<Record<QuestionKind, string>> = {
     impact: "Impact", cycle: "Cycle", unused: "Files nothing imports", violations: "Violations", entries: "Entries", pairs: "Pairs",
+    callers: "Callers", breaks: "What breaks", adopt: "Adopt", injects: "Injected", task: "Task",
 };
 
 /**
