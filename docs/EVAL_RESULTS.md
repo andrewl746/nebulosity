@@ -38,13 +38,13 @@ A and N differ only in the MCP config file. The prompts, the scratch folder's ru
 
 | What | Value |
 |---|---|
-| Claude Code | 2.1.301 in `eval3/eval.json`'s `claudeVersion`, pinned at the pilot (Task 19). The guard probe and the dev set ran on 2.1.301. The runner refuses to start on any other version, and refuses any run whose init message reports another. |
+| Claude Code | 2.1.301 in `eval3/eval.json`'s `claudeVersion`, pinned at the pilot (Task 19): `claude --version` said 2.1.301, so the pin didn't move since the shell check (Task 15). The guard probe and the dev set ran on 2.1.301. The runner refuses to start on any other version, and refuses any run whose init message reports another. |
 | Model | `claude-sonnet-5-5` (R-E) |
 | Effort | `medium` |
 | Limits | A single run: 80 turns, $4 (Claude Code's estimate) and 30 minutes. A task session: one budget of $10 for its four messages, and 60 minutes. |
 | Repos | VS Code at `cc3fec8846d0e678357e476fa611774da26d7e24` (`../vscode`). AFFiNE at `0b69a6da21e8fd35beb85667bb8496d9b3852238` (`../affine`). Theia at `81ea5f939c40c905de91083d07e284bfd7437fac` (`../theia`): the head of `master` when it was cloned on 2026-10-15, a shallow clone of 4,530 tracked files, held out. The runner stops if any HEAD is anything else. |
-| Nebulosity's engine | Frozen at the commit the pilot starts from (R-N); Task 19 records it here as `EVAL3_ENGINE`. Nothing in `lib/engine`, `lib/tools`, `lib/index`, `lib/db`, `lib/home.ts`, `lib/config.ts` or `mcp/` changes from then until the results are committed. A bug found in that time is recorded, not fixed, and reported with the results. |
-| Nebulosity's index | The owner's database: VS Code and AFFiNE with summaries, Theia in free mode (3,772 files and 19,979 import edges, Variety Benchmark #2). The pilot's dry run (2026-10-16) read the index versions VS Code 155, AFFiNE 134 and Theia 2. Every run records the version it saw, and the server opens the database read-only. |
+| Nebulosity's engine | Frozen at `2f913ad` (`EVAL3_ENGINE`), the commit the pilot starts from (R-N). Nothing in `lib/engine`, `lib/tools`, `lib/index`, `lib/db`, `lib/home.ts`, `lib/config.ts` or `mcp/` changes from then until the results are committed. A bug found in that time is recorded, not fixed, and reported with the results. |
+| Nebulosity's index | The owner's database, current at adapter version 7 for all three repos (VS Code and AFFiNE re-indexed in Task 5, Theia indexed in Task 17; nothing that changes stored facts has changed since, so no re-index): VS Code and AFFiNE with summaries, Theia in free mode (3,772 files and 19,979 import edges, Variety Benchmark #2). The pilot's dry run (2026-10-16) read the index versions VS Code 155, AFFiNE 134 and Theia 2. Every run records the version it saw, and the server opens the database read-only. |
 | Working folder | The repo the question asks about. |
 
 ### The command
