@@ -18,6 +18,11 @@
  * message by message against the questions they asked, and a session's score is the mean of its messages'. For an eval
  * with several repos or kinds the scorer also prints the tables per repo and kind, the sessions, and the ship gate
  * (scripts/eval/gate.ts, D1); each run is scored against its own repo's graph and truth only.
+ * An eval whose definition says "gate": "eval3" (V1.7, ADR-060) is judged by scripts/eval/gate3.ts instead. For it, each run
+ * also carries its question's set ("new", "eval2" or "bigPicture"), its refused calls and, when the question has a needed set
+ * (<dir>/truth/needed.json, from npm run eval:needed), its time to relevant context; each session carries its refused calls.
+ * It prints a "Time to relevant context" table per repo and a "Refusals" table, and its results.json names each repo's pinned
+ * commit and the verdict (an infinite number is written "infinite", a missing one "n/a"). Both gates take repeats 1..repeats only.
  * It prints the Markdown tables Task 20 uses and writes eval/results.json (not under --only, not for zero runs, and with
  * --runs but no --out to a temp file, never over the real one).
  *
@@ -34,11 +39,14 @@ import zlib from "zlib";
 import { buildRepoGraphs, EVAL1, parseAdjudications, restingEdges, type Adjudication, type CallTruthFile, type ChainTruthFile, type CycleTruthFile, type ImpactTruthFile, type ListTruthFile, type PairsTruthFile, type TaskTruthFile, type TruthFile } from "./build-truth";
 import { answerSection, checkCycle, extractPaths, f1, isNone, scoreChain, scoreCounts, scoreList, scorePairs, taskSections } from "./answer";
 import { loadDefinition } from "./definition";
-import { gateVerdict, type GateRun, type GateSession, type QuestionKind, type Verdict } from "./gate";
+import { relevantContext, type ContextResult, type Needed } from "./context";
+import { gateVerdict, type GateRun, type GateSession, type QuestionKind } from "./gate";
+import { gate3Verdict, type Gate3Run, type Gate3Session, type QuestionSet } from "./gate3";
+import { bootstrapMedianInterval, median as medianOfRuns, ratioOfMedians } from "./stats";
 import type { Arm, RunId } from "./run-config";
 import { scanRepo } from "./scan";
 import { summarizeSession, type SessionDef, type SessionFile, type SessionSummary } from "./session";
-import { summarizeRun, type RunSummary } from "./transcript";
+import { refusedCalls, summarizeRun, type RunSummary } from "./transcript";
 import type { Graph } from "./truth";
 
 export type Family = "bigPicture" | "list" | "chain" | "grepHard";
@@ -277,6 +285,8 @@ export function scoreAnswer(finalText: string | null, q: QuestionData, ctx: Scor
 /** A kept run: its transcript's summary and, when the index has a line for it, when it started and ended. */
 export type LoadedRun = {
     name: string; summary: RunSummary; startedAt: string | null; endedAt: string | null; resultNotes: string[];
+    /** The gunzipped transcript, kept only when loadRuns is asked for it (Eval #3 reads refused calls and time to context from it). */
+    raw?: string;
     /** A task session's run: its id, the question each message asked, and the messages' answers and the session's totals. */
     session?: { id: string; turnQuestions: string[]; summary: SessionSummary };
 };
@@ -293,6 +303,8 @@ export type RunResult = AnswerScore & {
     summary: Omit<RunSummary, "finalText">;
     /** For an eval with several repos or kinds, the gate's inputs: the question's kind, its repo, and the first call's context. */
     kind?: QuestionKind; repo?: string; firstCallContext?: number | null;
+    /** Eval #3 only (R-V): the question's set, the run's refused calls, and its time to relevant context (null: the question has no needed set). */
+    set?: QuestionSet; refusals?: number; context?: ContextResult | null;
 };
 
 const limited = (subtype: string | null): boolean => subtype !== null && subtype.startsWith("error_max");
@@ -336,6 +348,23 @@ export function toGateRun(r: RunResult): GateRun | null {
     };
 }
 
+/** The runs the gate takes: repeats 1..`repeats` only (V1.6 final review B-9). */
+export const inRepeats = <T extends { repeat: number }>(xs: readonly T[], repeats: number): T[] => xs.filter((x) => x.repeat >= 1 && x.repeat <= repeats);
+
+/** Eval #3's fields on a scored run (R-V): its question's set, its refused calls, and its time to relevant context when its question has a needed set. */
+export function withEval3Fields(r: RunResult, input: { set: QuestionSet; raw: string; startedAt: string | null; repoId: string; needed: Needed | undefined; tracked: ReadonlySet<string> }): RunResult {
+    if (input.needed !== undefined && input.startedAt === null) throw new Error(`${r.name} has no startedAt in the index, so its time to relevant context can't be measured`);
+    const context = input.needed === undefined ? null
+        : relevantContext({ jsonl: input.raw, startedAt: input.startedAt as string, repoId: input.repoId, needed: input.needed, tracked: input.tracked });
+    return { ...r, set: input.set, refusals: refusedCalls(input.raw), context };
+}
+
+export function toGate3Run(r: RunResult): Gate3Run | null {
+    const g = toGateRun(r);
+    if (g === null || r.set === undefined || r.refusals === undefined) return null;
+    return { ...g, set: r.set, refusals: r.refusals, ...(r.context ? { ttrcMs: r.context.ttrcMs } : {}) };
+}
+
 // ---- task sessions
 
 export type SessionTurnResult = { question: string; score: number | null; pending: AnswerScore["pending"]; flags: string[]; nebulosityCalls: number; costUsd: number };
@@ -346,6 +375,8 @@ export type SessionResult = {
     /** The session's totals: the cost estimate, the sum of the messages' times, and the first call's context. */
     costUsd: number; wallMs: number; firstCallContext: number | null;
     unknown: [string, string][]; flags: string[];
+    /** Eval #3 only: the session's refused calls. */
+    refusals?: number;
 };
 
 /**
@@ -381,6 +412,34 @@ export function scoreSession(
 export function toGateSession(s: SessionResult): GateSession | null {
     if (s.score === null || (s.arm !== "baseline" && s.arm !== "nebulosity")) return null;
     return { session: s.session, repo: s.repo, arm: s.arm, repeat: s.repeat, score: s.score, costUsd: s.costUsd, wallMs: s.wallMs };
+}
+
+export function toGate3Session(s: SessionResult): Gate3Session | null {
+    const g = toGateSession(s);
+    return g === null || s.refusals === undefined ? null : { ...g, refusals: s.refusals };
+}
+
+export type TtrcRow = { repo: string; questions: number; reachedA: number; reachedN: number; medianA: number; medianN: number; ratio: number; low: number; high: number; mostlyRatio: number; tokensA: number | null; tokensN: number | null };
+
+/** Per repo, over the runs with a needed set: each arm's reached share and median TTRC (never = infinite), the matched per-question ratio's median and interval, the mostly-relevant version's median ratio, and the median tokens to context over the reached runs. */
+export function ttrcRows(results: readonly RunResult[]): TtrcRow[] {
+    const own = results.filter((r) => r.context !== undefined && r.context !== null && r.repo !== undefined);
+    return [...new Set(own.map((r) => r.repo as string))].sort().map((repo) => {
+        const mine = own.filter((r) => r.repo === repo);
+        const arm = (a: string) => mine.filter((r) => r.arm === a);
+        const [a, n] = [arm("baseline"), arm("nebulosity")];
+        const questions = [...new Set(mine.map((r) => r.question))].sort().filter((q) => a.some((r) => r.question === q) && n.some((r) => r.question === q));
+        const ratios = (pick: (r: RunResult) => number | null) => questions.map((q) => ratioOfMedians(a.filter((r) => r.question === q).map(pick), n.filter((r) => r.question === q).map(pick)));
+        const plain = ratios((r) => r.context!.ttrcMs);
+        const [low, high] = bootstrapMedianInterval(plain);
+        const tokens = (xs: RunResult[]) => median(xs.flatMap((r) => (r.context!.tokens === null ? [] : [r.context!.tokens])));
+        const share = (xs: RunResult[]) => xs.filter((r) => r.context!.reached).length / xs.length;
+        const ttrc = (xs: RunResult[]) => medianOfRuns(xs.map((r) => r.context!.ttrcMs ?? Infinity));
+        return {
+            repo, questions: questions.length, reachedA: share(a), reachedN: share(n), medianA: ttrc(a), medianN: ttrc(n),
+            ratio: medianOfRuns(plain), low, high, mostlyRatio: medianOfRuns(ratios((r) => r.context!.mostlyRelevant.ttrcMs)), tokensA: tokens(a), tokensN: tokens(n),
+        };
+    });
 }
 
 // ---- per repo
@@ -766,15 +825,43 @@ export function renderSessionTable(sessions: readonly SessionResult[]): string {
     );
 }
 
+const secondsOrNever = (ms: number): string => (Number.isFinite(ms) ? `${(ms / 1000).toFixed(1)} s` : "never");
+const ratio3 = (x: number): string => (Number.isFinite(x) ? x.toFixed(3) : "never");
+
+/** Eval #3's time to relevant context, one row per repo (ttrcRows). */
+export function renderTtrcTable(rows: readonly TtrcRow[]): string {
+    return renderTable(
+        ["Repo", "Questions", "Reached A", "Reached N", "Median TTRC A", "Median TTRC N", "Ratio (median)", "95% interval", "Mostly-relevant ratio", "Tokens to context A", "Tokens to context N"],
+        rows.map((r) => [
+            r.repo, String(r.questions), n2(r.reachedA), n2(r.reachedN), secondsOrNever(r.medianA), secondsOrNever(r.medianN),
+            ratio3(r.ratio), `${ratio3(r.low)} to ${ratio3(r.high)}`, ratio3(r.mostlyRatio), count(r.tokensA), count(r.tokensN),
+        ]),
+    );
+}
+
+/** Eval #3's refusals: per arm and kind (sessions as "session"), the runs, those with a refused call, and the refused calls. */
+export function renderRefusalTable(results: readonly RunResult[], sessions: readonly SessionResult[]): string {
+    const items = [
+        ...results.filter((r) => r.refusals !== undefined).map((r) => ({ arm: r.arm, kind: (r.kind ?? r.family) as string, refusals: r.refusals as number })),
+        ...sessions.filter((s) => s.refusals !== undefined).map((s) => ({ arm: s.arm, kind: "session", refusals: s.refusals as number })),
+    ];
+    const rows = [...groups(items, (i) => `${i.arm}${SEP}${i.kind}`).values()]
+        .sort((a, b) => rank(ARM_ORDER, a[0].arm) - rank(ARM_ORDER, b[0].arm) || rank(KIND_ORDER, a[0].kind) - rank(KIND_ORDER, b[0].kind) || (a[0].kind < b[0].kind ? -1 : a[0].kind > b[0].kind ? 1 : 0));
+    return renderTable(
+        ["Arm", "Kind", "Runs", "Runs with a refused call", "Refused calls"],
+        rows.map((g) => [g[0].arm, g[0].kind, String(g.length), String(g.filter((i) => i.refusals > 0).length), String(g.reduce((s, i) => s + i.refusals, 0))]),
+    );
+}
+
 /** The gate, condition by condition, then the verdict. */
-export function renderGate(v: Verdict): string {
+export function renderGate(v: { pass: boolean; conditions: { id: string; pass: boolean; scope: string; text: string; values?: Record<string, number> }[] }): string {
     return `${v.conditions.map((c) => `- ${c.id} ${c.pass ? "PASS" : "FAIL"} (${c.scope}): ${c.text}`).join("\n")}\n\nGate: ${v.pass ? "PASS" : "FAIL"}`;
 }
 
 // ---- reading the kept runs
 
 /** Every kept transcript in a folder (eval/runs), summarized, with its index line when it has one. A missing folder has no runs. */
-export function loadRuns(dir: string): { runs: LoadedRun[]; warnings: string[] } {
+export function loadRuns(dir: string, options: { raw?: boolean } = {}): { runs: LoadedRun[]; warnings: string[] } {
     if (!fs.existsSync(dir)) return { runs: [], warnings: [] };
     const indexFile = path.join(dir, "index.jsonl");
     const index = fs.existsSync(indexFile) ? lastPerName(fs.readFileSync(indexFile, "utf8")) : new Map<string, IndexEntry>();
@@ -791,6 +878,7 @@ export function loadRuns(dir: string): { runs: LoadedRun[]; warnings: string[] }
         const raw = zlib.gunzipSync(fs.readFileSync(path.join(dir, file))).toString("utf8");
         runs.push({
             name, summary: summarizeRun(raw),
+            ...(options.raw ? { raw } : {}),
             startedAt: typeof meta?.startedAt === "string" ? meta.startedAt : null,
             endedAt: typeof meta?.endedAt === "string" ? meta.endedAt : null,
             resultNotes: Array.isArray(meta?.resultNotes) ? meta.resultNotes.filter((n): n is string => typeof n === "string") : [],
@@ -847,7 +935,14 @@ function main(): void {
 
     const questionsFile = `${dir}/questions.json`;
     if (!fs.existsSync(questionsFile)) throw new Stop(`${name}/questions.json doesn't exist yet, so there is nothing to score. Nothing was scored.`);
-    type FileQuestion = { id: string; family?: Family; kind?: QuestionKind; repo?: string; truth?: string; rubric?: string; session?: string };
+    type FileQuestion = { id: string; family?: Family; kind?: QuestionKind; repo?: string; truth?: string; rubric?: string; session?: string; origin?: string };
+    const eval3 = definition.gate === "eval3";
+    let needed: Record<string, Needed> = {};
+    if (eval3){
+        const neededFile = `${dir}/truth/needed.json`;
+        if (!fs.existsSync(neededFile)) throw new Stop(`${name}/truth/needed.json doesn't exist: run npm run eval:needed -- --eval ${name} first.`);
+        needed = readJson<Record<string, Needed>>(neededFile);
+    }
     const file = readJson<{ commit: string; questions: FileQuestion[] }>(questionsFile);
     // a question that names its kind is scored by it: its `family` is the runner's key to its format line (impact, cycle, pairs, ...)
     const familyOf = (q: FileQuestion): Family => {
@@ -887,7 +982,7 @@ function main(): void {
     const grades = fs.existsSync(`${dir}/grading/grades.json`) ? readJson<Record<string, RunGrade>>(`${dir}/grading/grades.json`) : {};
     const sessionDefs = fs.existsSync(`${dir}/sessions.json`) ? readJson<SessionFile>(`${dir}/sessions.json`).sessions : [];
 
-    const loaded = loadRuns(runsDir);
+    const loaded = loadRuns(runsDir, { raw: eval3 });
     const warnings = [...loaded.warnings];
     const singles = loaded.runs.filter((r) => r.session === undefined);
     const wanted = singles.filter((r) => order.includes(parseRunName(r.name)!.question) && !sessionQuestion.has(parseRunName(r.name)!.question));
@@ -918,6 +1013,8 @@ function main(): void {
     // each repo has its own graph: its scanner's edges, the verdicts that apply to it, and so its own context
     const edgesByRepo = new Map<string, [string, string][]>();
     const rechecks: TruthRecheck[] = [];
+    // Eval #3: each touched repo's tracked files (lower-cased), listed once, for the mostly-relevant version of time to context
+    const trackedByRepo = new Map<string, Set<string>>();
     if (wanted.length > 0 || sessionRuns.length > 0){
         // one score context per repo the runs touch; each repo's HEAD is checked against its pinned commit
         const contexts = new Map<string, ScoreContext>();
@@ -930,6 +1027,10 @@ function main(): void {
             const built = repoScoreContext(repoPath, repoId, firstEval, adjudicated, truthVerdicts, stepVerdicts);
             edgesByRepo.set(repoId, built.edges);
             contexts.set(repoId, built.ctx);
+            if (eval3){
+                const listed = execFileSync("git", ["-C", repoPath, "ls-files"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+                trackedByRepo.set(repoId, new Set(listed.split(/\r?\n/).filter(Boolean).map((p) => p.toLowerCase())));
+            }
             // a grading-time "out" on an edge an approved truth rests on: every truth of the repo, --only or not
             if (stepVerdicts.some((v) => v.repo === repoId && v.decision === "out")){
                 const truths = file.questions.filter((q) => q.truth !== undefined && repoOfQuestion.get(q.id) === repoId).map((q) => readJson<TruthFile>(`${checkout}/${q.truth}`));
@@ -941,13 +1042,19 @@ function main(): void {
             const q = questions.find((x) => x.id === id.question)!;
             const repoId = repoOfQuestion.get(id.question)!;
             const scored = scoreRun(r, id, q, contexts.get(repoId)!, grades[r.name]);
-            return gated ? withGateFields(scored, q, repoId) : scored;
+            const withGate = gated ? withGateFields(scored, q, repoId) : scored;
+            if (!eval3) return withGate;
+            const fileQuestion = file.questions.find((x) => x.id === id.question)!;
+            const set: QuestionSet = familyOf(fileQuestion) === "bigPicture" ? "bigPicture" : fileQuestion.origin === "eval2" ? "eval2" : "new";
+            return withEval3Fields(withGate, { set, raw: r.raw as string, startedAt: r.startedAt, repoId, needed: needed[id.question], tracked: trackedByRepo.get(repoId)! });
         });
         if (JSON.stringify(results.map((r) => r.name)) !== JSON.stringify([...new Set(results.map((r) => r.name))])) warnings.push("two runs share a name");
         const byId = new Map(questions.map((q) => [q.id, q] as const));
         try{
-            sessionResults = sessionRuns.map(({ run, def }) =>
-                scoreSession(run.name, parseRunName(run.name)!, run.session!.turnQuestions, run.session!.summary, byId, contexts.get(def.repo)!, def.repo));
+            sessionResults = sessionRuns.map(({ run, def }) => {
+                const scored = scoreSession(run.name, parseRunName(run.name)!, run.session!.turnQuestions, run.session!.summary, byId, contexts.get(def.repo)!, def.repo);
+                return eval3 ? { ...scored, refusals: refusedCalls(run.raw as string) } : scored;
+            });
         } catch(e){
             throw new Stop(`${name}: ${(e as Error).message}`);
         }
@@ -966,15 +1073,36 @@ function main(): void {
         console.log(`## Per repo and kind\n\n${renderKindTable(kindArmRows(results))}\n`);
         if (sessionResults.length > 0) console.log(`## Task sessions\n\n${renderSessionTable(sessionResults)}\n`);
     }
+    if (eval3){
+        console.log(`## Time to relevant context\n\n${renderTtrcTable(ttrcRows(results))}\n`);
+        console.log(`## Refusals\n\n${renderRefusalTable(results, sessionResults)}\n`);
+    }
     if (warnings.length > 0) console.log(`## Warnings\n\n${warnings.map((w) => `- ${w}`).join("\n")}\n`);
     if (notes.length > 0) console.log(`## Notes\n\n${notes.map((n) => `- ${n}`).join("\n")}\n`);
 
+    // what stops the gate being computed, and Eval #3's verdict when nothing does (it goes in the results file too)
+    const missing = gated ? missingForGate({
+        repoIds, arms: definition.arms, repeats: definition.repeats,
+        questions: file.questions.map((q) => ({ id: q.id, repo: repoOfQuestion.get(q.id)!, ...(q.session !== undefined ? { session: q.session } : {}) })),
+        sessions: sessionDefs.map((s) => ({ id: s.id, repo: s.repo })),
+    }, results, sessionResults) : [];
+    const waiting = results.filter((r) => r.score === null).length + sessionResults.filter((s) => s.score === null).length;
+    // both gates take repeats 1..repeats only (B-9)
+    const gateRuns = inRepeats(results, definition.repeats);
+    const gateSessions = inRepeats(sessionResults, definition.repeats);
+    const verdict3 = eval3 && gated && only === null && missing.length === 0 && waiting === 0
+        ? gate3Verdict(gateRuns.flatMap((r) => toGate3Run(r) ?? []), gateSessions.flatMap((s) => toGate3Session(s) ?? [])) : null;
+
     if ((results.length > 0 || sessionResults.length > 0) && only === null){
         fs.mkdirSync(path.dirname(outFile), { recursive: true });
-        fs.writeFileSync(outFile, `${JSON.stringify({
+        const body = {
             commit: file.commit, truthsVerified: clean.truthsVerified, uncheckedPoints: clean.uncheckedPoints, runs: results,
             ...(sessionResults.length > 0 ? { sessions: sessionResults } : {}),
-        }, null, 2)}\n`);
+            ...(eval3 ? { commits: Object.fromEntries(repoIds.map((id) => [id, definition.repos[id].commit])), ...(verdict3 !== null ? { verdict: verdict3 } : {}) } : {}),
+        };
+        // JSON has no infinity or NaN: Eval #3's file writes them as "infinite" and "n/a" (Eval #2's keeps JSON.stringify's own)
+        const replacer = eval3 ? (_key: string, v: unknown): unknown => (typeof v === "number" && !Number.isFinite(v) ? (Number.isNaN(v) ? "n/a" : "infinite") : v) : undefined;
+        fs.writeFileSync(outFile, `${JSON.stringify(body, replacer, 2)}\n`);
         console.log(`Wrote ${outFile}.`);
     } else if (results.length > 0) console.log("--only: the results file was not written.");
 
@@ -992,16 +1120,12 @@ function main(): void {
     }
 
     if (gated){
-        const missing = missingForGate({
-            repoIds, arms: definition.arms, repeats: definition.repeats,
-            questions: file.questions.map((q) => ({ id: q.id, repo: repoOfQuestion.get(q.id)!, ...(q.session !== undefined ? { session: q.session } : {}) })),
-            sessions: sessionDefs.map((s) => ({ id: s.id, repo: s.repo })),
-        }, results, sessionResults);
-        const waiting = results.filter((r) => r.score === null).length + sessionResults.filter((s) => s.score === null).length;
-        if (only !== null) console.log("\n## Ship gate (D1)\n\n--only: the gate is computed over every question, so it was not computed.");
-        else if (missing.length > 0) console.log(`\n## Ship gate (D1)\n\nNot computed: the data is incomplete.\n\n${missing.slice(0, 20).map((m) => `- ${m}`).join("\n")}${missing.length > 20 ? `\n- ... and ${missing.length - 20} more` : ""}`);
-        else if (waiting > 0) console.log(`\n## Ship gate (D1)\n\nNot computed: ${waiting} runs or sessions still wait for a grade or an adjudicated chain step.`);
-        else console.log(`\n## Ship gate (D1)\n\n${renderGate(gateVerdict(results.flatMap((r) => toGateRun(r) ?? []), sessionResults.flatMap((s) => toGateSession(s) ?? [])))}`);
+        const heading = eval3 ? "## Ship gate (ADR-060)" : "## Ship gate (D1)";
+        if (only !== null) console.log(`\n${heading}\n\n--only: the gate is computed over every question, so it was not computed.`);
+        else if (missing.length > 0) console.log(`\n${heading}\n\nNot computed: the data is incomplete.\n\n${missing.slice(0, 20).map((m) => `- ${m}`).join("\n")}${missing.length > 20 ? `\n- ... and ${missing.length - 20} more` : ""}`);
+        else if (waiting > 0) console.log(`\n${heading}\n\nNot computed: ${waiting} runs or sessions still wait for a grade or an adjudicated chain step.`);
+        else if (verdict3 !== null) console.log(`\n${heading}\n\n${renderGate(verdict3)}`);
+        else console.log(`\n${heading}\n\n${renderGate(gateVerdict(gateRuns.flatMap((r) => toGateRun(r) ?? []), gateSessions.flatMap((s) => toGateSession(s) ?? [])))}`);
     }
 }
 
