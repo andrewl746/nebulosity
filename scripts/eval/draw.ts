@@ -9,9 +9,16 @@
  * the passing candidates are drawn: sorted by id, shuffled with mulberry32(1), the first n. A type drawn once leaves the
  * repo's later pools (R-AF). It writes the sizes, the verdicts and the draw back into candidates.json. Nobody sees how
  * either arm does on a candidate before this runs. Imports nothing from lib/.
+ *
+ * Where the candidates live: <dir>/candidates.json holds the call and task candidates (and any graph candidates small enough
+ * to sit inline). A repo's graph candidates, every qualifying target of Step 3's ranges (Theia's are 46,929), are a read-only
+ * input in <dir>/candidates-<repo>-graph.json.gz, one JSON candidate per line. The draw never writes them back: candidates.json
+ * gains a `graphDraw` object (per repo and graph kind: pool, passing, the drawn ids) and `graphDrawn`, the full record of
+ * each drawn graph candidate, so a question can be built from candidates.json alone.
  */
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import { loadDefinition } from "./definition";
 import { askedOfQuestion, askedOfSpec, overlaps, type Asked } from "./overlap";
 import { mulberry32 } from "./stats";
@@ -59,6 +66,20 @@ export const sizeInRange = (size: number): boolean => size >= MIN_SIZE && size <
 /** The type a candidate names, or null (a graph candidate): R-AF's key. */
 const typeOf = (c: Candidate): string | null => (typeof c.target?.type === "string" ? c.target.type : null);
 
+/** A gzipped (or plain) text of one JSON candidate per line, blank lines ignored. */
+export function parseJsonLines(text: string): Candidate[] {
+    return text.split("\n").filter((line) => line.trim() !== "").map((line) => JSON.parse(line) as Candidate);
+}
+
+export type GraphDraw = { pool: number; passing: number; drawn: string[]; replaced?: string[] };
+
+/** A repo's graph kinds from the draw's rows: the pool, the passing count and the drawn ids of each, the ids sorted. */
+export function graphDrawOf(rows: readonly DrawRow[], drawn: readonly Candidate[]): Record<string, GraphDraw> {
+    const out: Record<string, GraphDraw> = {};
+    for (const r of rows) if (GRAPH_KINDS.includes(r.kind)) out[r.kind] = { pool: r.candidates, passing: r.passing, drawn: drawn.filter((c) => c.kind === r.kind).map((c) => c.id).sort() };
+    return out;
+}
+
 export type DrawRow = { kind: string; candidates: number; passing: number; drawn: number };
 
 /**
@@ -96,7 +117,7 @@ export function drawRepo(candidates: readonly Candidate[], mix: Record<string, n
     return { drawn, rows, notes };
 }
 
-const GRAPH_KINDS = ["list-direct", "list-transitive", "chain", "cycle", "unused", "entries"];
+export const GRAPH_KINDS = ["list-direct", "list-transitive", "chain", "cycle", "unused", "entries"];
 const SIZED_AS: Record<string, CallTruthKind> = { callers: "callers", adopt: "callers", breaks: "breaks", task: "breaks", injects: "injects" };
 
 function main(): void {
@@ -111,8 +132,12 @@ function main(): void {
     const definition = loadDefinition(dir);
     const readJson = (file: string): any => JSON.parse(fs.readFileSync(file, "utf8")); // eslint-disable-line @typescript-eslint/no-explicit-any -- JSON read field by field
     const candidatesFile = path.join(dir, "candidates.json");
-    const file = readJson(candidatesFile) as { candidates: Candidate[] };
-    const candidates = file.candidates;
+    const file = readJson(candidatesFile) as { candidates: Candidate[]; graphDraw?: unknown; graphDrawn?: unknown };
+    const inline = file.candidates;
+    // graph candidates kept out of candidates.json: read-only gzipped inputs, one per repo
+    const graphInputs = fs.readdirSync(dir).filter((name) => /^candidates-.+-graph.json.gz$/.test(name)).sort();
+    const external = graphInputs.flatMap((name) => parseJsonLines(zlib.gunzipSync(fs.readFileSync(path.join(dir, name))).toString("utf8")));
+    const candidates = [...inline, ...external];
 
     // what a candidate may not share a target with: the dev set, and the questions of the two sessions Eval #3 reuses
     const readTruth = (truth: string): Record<string, unknown> | null => {
@@ -169,15 +194,20 @@ function main(): void {
     }
 
     const repos = [...new Set(candidates.map((c) => c.repo))];
+    const graphDraw: Record<string, Record<string, GraphDraw>> = {};
     console.log("repo     kind             candidates  passing  drawn");
     for (const c of candidates) c.drawn = false;
     for (const repo of repos){
         const result = drawRepo(candidates.filter((c) => c.repo === repo), MIX[repo] ?? {}, 1);
         for (const c of result.drawn) c.drawn = true;
+        const graph = graphDrawOf(result.rows, result.drawn);
+        if (Object.keys(graph).length > 0) graphDraw[repo] = graph;
         for (const r of result.rows) console.log(`${repo.padEnd(8)} ${r.kind.padEnd(16)} ${String(r.candidates).padStart(10)}  ${String(r.passing).padStart(7)}  ${String(r.drawn).padStart(5)}`);
         for (const note of result.notes) console.log(`${repo}: ${note}`);
     }
-    fs.writeFileSync(candidatesFile, JSON.stringify({ ...file, candidates }, null, 2) + "\n");
+    const kept = new Set(external);
+    const graphDrawn = candidates.filter((c) => kept.has(c) && c.drawn === true);
+    fs.writeFileSync(candidatesFile, JSON.stringify({ ...file, candidates: inline, graphDraw, graphDrawn }, null, 2) + "\n");
 }
 
 // runs only as a script, so the tests can import the functions above

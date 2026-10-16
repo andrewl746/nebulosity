@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draw, drawRepo, isPlanning, PLANNING, sizeInRange, type Candidate } from "./draw";
+import { draw, drawRepo, graphDrawOf, parseJsonLines, isPlanning, PLANNING, sizeInRange, type Candidate } from "./draw";
 
 const pool = ["c", "a", "e", "b", "d"].map((id) => ({ id }));
 
@@ -52,5 +52,22 @@ describe("the planning methods and the size range", () => {
 
     it("takes 10 to 80 files", () => {
         expect([9, 10, 80, 81].map(sizeInRange)).toEqual([false, true, true, false]);
+    });
+});
+
+describe("the graph candidates' input and their record in candidates.json", () => {
+    it("reads one JSON candidate per line, blank lines ignored", () => {
+        const text = '{"id":"x-1","repo":"r","kind":"cycle"}\n\n{"id":"x-2","repo":"r","kind":"cycle"}\n';
+        expect(parseJsonLines(text).map((c) => c.id)).toEqual(["x-1", "x-2"]);
+        expect(parseJsonLines("")).toEqual([]);
+    });
+
+    it("records each graph kind's pool, passing count and sorted drawn ids, and no call kind", () => {
+        const all = [cand("g3", "cycle", null, true), cand("g1", "cycle", null, true), cand("g2", "cycle", null, false), cand("e1", "entries", null, true), cand("b1", "breaks", "T1", true)];
+        const { drawn, rows } = drawRepo(all, { breaks: 1, cycle: 2, entries: 1 }, 1);
+        expect(graphDrawOf(rows, drawn)).toEqual({
+            cycle: { pool: 3, passing: 2, drawn: ["g1", "g3"] },
+            entries: { pool: 1, passing: 1, drawn: ["e1"] },
+        });
     });
 });
