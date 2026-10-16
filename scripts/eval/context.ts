@@ -64,7 +64,7 @@ export function cdTarget(command: string, cwd: string | null, repoId: string): s
     let at: string | null | undefined;
     let current = cwd;
     for (let m = re.exec(command); m !== null; m = re.exec(command)){
-        const t = m[1].replace(/^["']|["']$/g, "").replace(/\+/g, "/");
+        const t = m[1].replace(/^["']|["']$/g, "").replace(/\\+/g, "/");
         const rooted = rootedRe.exec(t);
         let next: string | null;
         if (rooted) next = join("", t.slice(rooted[0].length));

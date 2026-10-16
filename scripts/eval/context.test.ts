@@ -38,6 +38,12 @@ describe("cds that chain and paths that climb", () => {
         expect(cdTarget("cd /tmp && cd <vscode>/src", "", "vscode")).toBe("src");
     });
 
+    it("reads backslashes in a cd target as slashes, and keeps a plus", () => {
+        expect(cdTarget("cd <vscode>\\src", "", "vscode")).toBe("src");
+        expect(cdTarget("cd C:\\x", "src", "vscode")).toBeNull();
+        expect(cdTarget("cd src/a+b", "", "vscode")).toBe("src/a+b");
+    });
+
     it("resolves .. inside a path token", () => {
         expect(pathTokens("<vscode>/src/vs/x/../a.ts", "vscode")).toEqual(["src/vs/a.ts"]);
     });
