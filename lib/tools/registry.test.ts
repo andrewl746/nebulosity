@@ -94,9 +94,8 @@ describe("the registry", () => {
     });
 
     it("tells Claude to open the docs the answers name before answering how code is organized (ADR-054, amended 2026-10-15)", () => {
-        expect(SERVER_INSTRUCTIONS.split("\n").slice(-2)).toEqual([
+        expect(SERVER_INSTRUCTIONS.split("\n").slice(-1)).toEqual([
             "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account.",
-            'Paths are relative to the repo root ("" is the root) or absolute inside it.',
         ]);
         expect(SERVER_INSTRUCTIONS).not.toContain("Read the docs they point to");
     });

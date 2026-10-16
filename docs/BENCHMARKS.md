@@ -1063,3 +1063,84 @@ VS Code's version 6 run printed the same files and edges, but its stage times we
 **S14's speed half (the first `calls` call on a fresh server ≤ 1.5 s): PASS, worst 902 ms.** The five fresh servers, each asked `IConfigurationService.getValue` with its declaring file as `path` (a 15,951-character answer): 902, 888, 899, 869 and 875 ms. No fallback (R-B's index-time resolution) is needed, so migration 0010 and the owner's re-index stay unwritten.
 
 - **Against #4:** the rows are the same inputs; the warm worst is 177 ms against #4's 388 ms (#4 ran beside the build session's runaway process), `architecture (summary)` 136 ms p50 against 204 ms. `imports` and `show_on_map` are as fast or faster than #4's.
+
+## 2026 10 16 MCP Dev Set #2 — the shell check and tool use before Eval #3
+
+- **Purpose (V1.7 Tasks 14–16):** before Eval #3's questions exist, check three things on 19 dev questions whose targets Eval #3 does not use (`eval3/dev/questions.json`: 10 on VS Code, 9 on AFFiNE):
+  - whether the rules sentence in the prompt stops Claude Code's refused commands (D2's validity condition: at most 1 refused command per arm in 19 runs);
+  - whether Claude Code calls Nebulosity's tools, now that `calls` exists;
+  - how many tokens the server adds to the first call of a session (gate condition 6: at most 2,500).
+
+  Nothing is scored.
+- **Setup:** Claude Code 2.1.301, claude-sonnet-5-5 at medium effort, permission mode `dontAsk`, isolated as Eval #2's runs are, `apiKeySource: "none"`, no owner plugins in any init. Both arms ran each question once (A alone, N with Nebulosity); N's init lists the server connected with seven tools. VS Code at `cc3fec88`, AFFiNE at `0b69a6d`; both repos were clean after every batch. The transcripts are in `eval3/dev/runs/` (round 1 in `round-1/`, round 2 in `round-2/`, round 3 in the folder itself, with `index.jsonl`); each was scrubbed of machine paths by the runner, and `scanForLeaks` over every file found 0 leaks.
+- **The guard probe (Task 14, ADR-060):** one live run of `cd /c/…/vscode; git ls-files | wc -l`. It was refused: "Permission to use Bash has been denied because Claude Code is running in don't ask mode." The model stopped there with no workaround. Cost $0.09; kept apart from the dev runs below.
+
+### The shell check
+
+| | alone (A) | with Nebulosity (N) |
+|---|---|---|
+| Round 1, 19 runs each | 5 refused | 3 refused |
+| Round 2, the 6 questions with refusals re-run (plus 3 extra N runs) | 0 in 6 | 1 in 9 (1 in the 6 re-run) |
+| **Current state, 19 each** (round 2 where re-run, round 1 otherwise) | **0** | **1** |
+
+D2's bar is at most 1 per arm: round 1 FAILED, the current state PASSES. In no run did a refusal end in a give-up: every refusing run finished with its answer line, and none said it could not do what the refused command was for. Four round-1 runs did say they had not checked every file after swapping the refused loop for Grep (a thoroughness cost).
+
+- **Round 1's eight refusals, by cause:** shell loops 4 (A: VS Code callers, VS Code task, AFFiNE task; N: VS Code transitive, after a `cd` to the scratch folder), `cd` then `git` 2 (VS Code adopt, both arms: `cd src/vs/workbench/services; git grep …`), a pipe into `sed` 1 (N, VS Code task), `cd` plus `node -e` plus a redirect 1 (A, VS Code transitive). No file writes and no `..`. Seven of the eight were on VS Code.
+- **Round 2's one refusal:** N, VS Code task, a pipe into `awk` (`… | awk 'NR>0' 2>/dev/null | head -0; git grep …`). The model re-ran the second `git grep` alone and answered. The causes of round 1 did not recur.
+- **Round 3's five runs:** 0 refusals.
+- **The rules sentence** (placeholders `<repo root>` and `<scratch>`; D2's one allowed rewording, R-L, aimed at round 1's causes).
+  - Old: "You're at the repository root, <repo root>: run grep, git grep, git ls-files, ls, cat, head and the like from here, without cd. To compute anything, write a Node.js script into <scratch> with the Write tool (the folder exists) and run it with node, or use node -e. Shell writes (redirects, heredocs, tee, sed -i, mkdir), loops, sed, awk, xargs and paths through .. are refused here. Don't change any file in the repository."
+  - New: "You're at the repository root, <repo root>, and every command runs from there: never use cd, not even into a subfolder or the scratch folder, and name paths from the root instead (git grep -n foo -- src/a src/b). Allowed: grep, rg, git grep, git ls-files, git log, git show, ls, cat, head, tail, wc, sort, uniq, find and node, alone or piped into one another. Refused: cd, shell loops (for, while), echo, sed, awk, cut, xargs, redirects, heredocs, tee, mkdir and any path with .. in it. To check many files or compute anything, write a Node.js script into <scratch> with the Write tool (the folder exists) and run it with node and its full path, or use node -e. Don't change any file in the repository."
+  - It adds about 90 to 103 tokens to the first call in both arms (the alone arm differs from round 1 only by it), so it cancels in a paired difference.
+
+### Tool use
+
+Share of the 17 non-big-picture questions where the N run called at least one Nebulosity tool (target 16 of 17):
+
+| Round | Runs | Share | ToolSearch calls |
+|---|---|---|---|
+| 1 | 38 (19 per arm) | 12 of 17 (big-picture: 1 of 2, AFFiNE `search`) | 0 of 38 runs |
+| 2 | 15 (9 N) | 12 of 17 (current state) | 0 of 15 |
+| 3 | 5 | **13 of 17 (0.76)** | 0 of 5 |
+
+Across all 31 non-big-picture N runs of the three rounds, 17 called a tool (0.55). Claude Code never needed ToolSearch: the six tools are always loaded.
+
+- **The four stable misses** used no Nebulosity tool in any run they had: 0 of 12 across three wordings. Each read the question as "find the lines containing X" and took grep, or its own Node script, as the cheap first move; the transcripts' thinking blocks are empty, and none mentions the tools or the instructions.
+  - VS Code task: grepped `openEditor` and `IEditorService`, then wrote a script for which tests import the files (the question is `calls` and `imports`).
+  - VS Code injects: one `git grep ICommandService` over the folder, then reads; judged grep enough for injection forms.
+  - AFFiNE unused: `git ls-files` plus its own import-resolution script; never considered `architecture` or `imports`.
+  - AFFiNE violations: two `git grep desktop` passes over `modules`; never considered `imports`.
+- **The questions that flip:** VS Code adopt (miss in round 1, `calls` in round 2) and AFFiNE task (`calls`, miss, `calls`): run-to-run variation, not wording. Wording gained adopt and nothing else.
+- **Other notes:** the VS Code breaks run in round 1 got "2 types are named IConfigurationService; pass path …" and never retried with a path (callers did; round 2's callers runs passed `path` first time). Big-picture was not re-run (VS Code bp used no tool).
+- **R-J's outcome: the condition was not met.** No `calls` answer had a later page left unread (they listed every file: 19, 22, 26 and 47 files in round 1); the default `limit` stays 50. (Other tools did truncate: `imports` transitive, `architecture` unused and conventions.)
+- **The owner's choice at the stop, verbatim:** "ill go with b) asw". Option (b): run Eval #3 as it is and report the tool-use share, instead of (a) more wording. The share is therefore a result of Eval #3 to report, not something the tools were tuned to.
+
+### The first-call difference, paired
+
+The difference is N minus A in the first assistant message's input, cache-creation and cache-read tokens (`firstCallContext`, which the scorer also reads). It is taken per question, within one round. Medians of all N runs minus medians of all A runs are misleading after a rewording: after round 2, N's median (9 round-2 runs) was compared with A's (6 round-2 runs, 13 round-1 runs), a longer prompt against a shorter one, and read +2,415.5 on VS Code and +2,468 on AFFiNE. Paired, the same runs gave +2,393.5 and +2,397.5.
+
+| | VS Code | AFFiNE |
+|---|---|---|
+| Round 1 (all questions) | +2,398.5 | +2,401 |
+| Round 2 (the re-run questions) | +2,393.5 | +2,397.5 |
+| Round 3 (the two or five re-run questions) | +2,401 | +2,390 direct; about +2,403 by the round-2 pairing |
+| **After this task's trim (estimate)** | **about +2,373** | **about +2,362 to +2,375** |
+
+Run-to-run noise on one question is about 6 tokens. Round 3's 22 extra characters moved the VS Code difference by about 7 tokens, as 2.75 characters a token predicts. All rows are under gate condition 6's 2,500; the trim brings both repos under R-AA's 2,400.
+
+### Every wording change, with the budget after it
+
+The budget is the six always-loaded definitions plus the instructions, in characters, as `registry.test.ts` measures it (bound 6,650; about 2.75 characters a token).
+
+| Change | Budget |
+|---|---|
+| Task 4 (the planned texts) | 6,614 |
+| Round 2 (5a0ce52): the rules sentence reworded; the instructions' second line "before grep or reading many files" became "before grep, a script of your own or reading many files" (four misses wrote their own scripts), and the `calls` bullet gained "even through injected services, where a type is injected"; `calls`' `within` and `offset` descriptions dropped to pay for it | 6,602 |
+| Round 3 (1259bc7): the instructions' second line names the question kinds (who calls or injects something, what a change touches and which tests to run, imports against the layers, cycles, files nothing imports); the docs sentence shortened to "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account."; `search`'s description cut to "Find where a feature or concept lives: the best files and folders, with their best-matching code." | 6,624 |
+| This task: the instructions' closing sentence "Paths are relative to the repo root ("" is the root) or absolute inside it." dropped, because every path input's description says it | **6,548** (instructions 1,339, was 1,415; the definitions 5,209) |
+
+About 6,548 characters is about 2,380 tokens, so the README's "about 2,400 tokens" stands.
+
+### Runs and cost
+
+58 runs in the three rounds (38, then 15, then 5): $9.29 list price (round 1 $5.04, round 2 $3.65, round 3 $0.60), plus the guard probe's $0.09: 59 runs, about $9.38 in all. The last rate-limit event read 5-hour 0.53, 7-day 0.64.

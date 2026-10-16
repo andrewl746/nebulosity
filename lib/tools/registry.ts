@@ -48,7 +48,6 @@ export const SERVER_INSTRUCTIONS = [
     "- search: where a feature or concept lives.",
     // ADR-054, amended 2026-10-15: in Eval #2 the docs line alone didn't get the repo's own rules opened; shortened the same day in V1.7's tool-use round 3 (R-AA) to hold the first-call budget
     "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account.",
-    'Paths are relative to the repo root ("" is the root) or absolute inside it.',
 ].join("\n");
 
 const repoPath = z.string().max(1024)
