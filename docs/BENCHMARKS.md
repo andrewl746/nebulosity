@@ -810,6 +810,25 @@ With it, Task 20 spent about $6.03 of the owner's $12.
   - AFFiNE's 2: a declaration file that imports its own name (`packages/backend/native/index.d.ts`), and `affine.wasi.cjs`, which isn't in the repo.
 - **Against Index Benchmark #4:** VS Code's relative share read 98.9% there, and AFFiNE's 95.8%. The difference is the counting (822 and 636 specifiers now counted apart), plus the import types and over-cap files ADR-053's earlier amendment added.
 
+## 2026 10 15 Variety Benchmark #2 — Theia, held out
+
+Eval #3's held-out repo, indexed once so its resolution share is known before any question is drawn (V1.7 plan, Task 17). Nothing about how either arm does on it has been seen.
+- **Target and machine:** Eclipse Theia @ `81ea5f93`, a shallow clone at `../theia` (4,530 tracked files, clean tree). The owner's laptop, Node 24, the TypeScript adapter. Indexed into the owner's database with `npx tsx scripts/index.ts ../theia --no-activate` (the Map stays on VS Code), structure only, free mode with no summaries; then `npm run report-resolution -- ../theia`.
+- **Shape:** a Lerna/npm-workspaces monorepo (`packages/*`, `dev-packages/*`, `examples/*`) in TypeScript with Inversify dependency injection. Packages import one another by their compiled paths (`@theia/core/lib/browser/…`), which ADR-053's compiled to source mapping reads as `src/`.
+
+| Repo | Files | Edges | Structure | Relative resolved | Not code | Bare resolved | Top unresolved bare names |
+|---|---|---|---|---|---|---|---|
+| Theia | 3,772 | 19,979 | 12.2 s | 9,642/9,648 (99.9%) | 127 (.css 78, .json 47, .node 2) | 10,431/13,187 (79.1%) | chai 518, @theia/monaco-editor-core 517, inversify 301, path 165, fs 91 |
+
+- **Structure time:** discover 0.2 s, parse 4.4 s, write 6.8 s, resolve 0.5 s, aggregate 0.2 s. The code search filled in a further 12.1 s after the stage. 753 folders, 6,433 folder-level edges.
+- **Theia's own code:** 10,444 bare specifiers name an `@theia/…` package other than `@theia/monaco-editor-core`, and 10,430 of them (99.9%) resolve. The 14 that don't:
+  - 13 import `@theia/core/shared/@theia/application-package/lib/environment` (or `/lib/api`), the re-export shim in `packages/core/shared/`, which points at another package's compiled output;
+  - 1 imports the JSON file `@theia/core/src/common/i18n/nls.metadata.json`, which the index doesn't read.
+  - So the compiled to source mapping covers Theia's package imports; the one pattern it misses is a package reached through core's `shared/` shim.
+- **The other unresolved bare names are outside the repo:** `chai`, `inversify`, `sinon`, Node's built-ins, and `@theia/monaco-editor-core` (517), which is a published fork of Monaco that no package.json in the checkout declares.
+- **The 6 unresolved relative specifiers of code** were not itemised; the misses seen while checking name build-time files the checkout doesn't have (`gen-esbuild.*.mjs`, `ffmpeg.node`).
+- **Call facts** (ADR-059), rows for Theia's repo: 5,812 type_decls, 13,658 call_bindings, 62,937 typed_calls. No `calls` answer was read.
+
 ## 2026 10 15 Eval #2 — Claude Code with and without Nebulosity's MCP server on VS Code and AFFiNE (S12)
 
 This is the re-measured eval that ADR-051 waits for (ADR-057). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
