@@ -1,0 +1,16 @@
+[
+  {
+    "repo": "affine",
+    "from": "blocksuite/affine/all/src/std/index.ts",
+    "to": "blocksuite/framework/std/src/gfx/index.ts",
+    "decision": "out",
+    "why": "The file is one line, `export * from '@blocksuite/std';`, and @blocksuite/std's \".\" export is ./src/index.ts (blocksuite/framework/std/package.json); the gfx entry (\"./gfx\": \"./src/gfx/index.ts\") is imported by the sibling std/gfx.ts, not by std/index.ts."
+  },
+  {
+    "repo": "affine",
+    "from": "packages/frontend/core/src/desktop/pages/workspace/detail-page/detail-page.tsx",
+    "to": "packages/frontend/core/src/components/affine/ai-onboarding/index.tsx",
+    "decision": "out",
+    "why": "Line 7 is a comment: `// import { PageAIOnboarding } from '@affine/core/components/affine/ai-onboarding';`; no live import of the ai-onboarding folder in the file."
+  }
+]

@@ -242,7 +242,7 @@ describe("the scanner's independence (R3)", () => {
     });
 
     it("imports nothing from lib/: the scanner, the truths, the truth's resolver, both extractors, the truth builder, the definition and the rest (R2, B-8)", () => {
-        const pinned = ["scan", "truth", "resolve-truth", "ts-graph", "ts-calls", "build-truth", "definition", "context", "stats", "needed", "prompts"].map((name) => `scripts/eval/${name}.ts`);
+        const pinned = ["scan", "truth", "resolve-truth", "ts-graph", "ts-calls", "build-truth", "definition", "context", "stats", "needed", "prompts", "draw"].map((name) => `scripts/eval/${name}.ts`);
         for (const file of pinned){
             // every file this one reaches through its relative imports, itself included
             for (const reached of reachableFrom(file)){

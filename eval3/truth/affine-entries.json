@@ -1,0 +1,16 @@
+{
+  "id": "affine-entries",
+  "kind": "entries",
+  "target": "packages/frontend/core/src/modules/organize/services/organize.ts",
+  "files": [
+    "packages/frontend/apps/android/src/index.tsx",
+    "packages/frontend/apps/electron-renderer/src/app/index.tsx",
+    "packages/frontend/apps/ios/src/index.tsx",
+    "packages/frontend/apps/mobile/src/index.tsx",
+    "packages/frontend/apps/web/src/index.tsx",
+    "packages/frontend/core/src/mobile/components/navigation/tree/root.tsx",
+    "packages/frontend/core/src/mobile/views/all-docs/tag/empty.tsx"
+  ],
+  "verified": true,
+  "notes": []
+}

@@ -1,0 +1,62 @@
+{
+  "id": "vscode-bp4",
+  "source": "VS Code wiki, Source Code Organization (edited 2025-10-11)",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`",
+      "check": "src/vs/workbench/common (34 files), browser (130) and electron-browser (10) exist, against 3,269 files in contrib.",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench",
+      "check": "src/vs/workbench/api/common/extHost.api.impl.ts L6 import type * as vscode from 'vscode' and L150 createApiFactoryAndRegisterActors, which builds the API of src/vscode-dts/vscode.d.ts. api/common has 115 extHost* files (extension host side), api/browser 98 mainThread* files (workbench side).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses",
+      "check": "src/vs/workbench/services has 95 folders. Over the scanner graph, leaving out tests and the main entry files, 3 are used by a single contribution only: extensionRecommendations (contrib/extensions), suggest (contrib/terminalContrib), userAttention (contrib/editTelemetry).",
+      "holds": true,
+      "note": "States the rule; the code mostly keeps it (3 of 95 service folders serve one contribution)."
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code",
+      "check": "src/vs/workbench/contrib: 3,269 of the workbench's 4,634 files (70.5%) and 1,256,074 of its 1,731,688 lines (72.5%).",
+      "holds": true,
+      "note": ""
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it",
+      "check": "Scanner graph, files outside src/vs/workbench/contrib importing into it: src/vs/sessions 391 (244 non-test), src/vs/workbench/api 113 (81 non-test), src/vs/workbench/test 67, src/vs/workbench/services 5 (all tests), the 3 workbench.*.main.ts entry files, src/vs/server 2 (serverServices.ts, remoteTerminalChannel.ts).",
+      "holds": true,
+      "note": "States the rule; the code breaks it. eslint.config.js itself allows api and server to import contrib, and tests to; src/vs/sessions imports it widely. CL2 shows src/vs/workbench/api/* and src/vs/sessions/* importing contrib/debug."
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file",
+      "check": "Non-test *.contribution.ts files per src/vs/workbench/contrib/<name> (101 folders): exactly one in 63; two in 15; three in 16; more in 5 (extensions 4, remote 4, terminal 5, terminalContrib 25, chat 27); none in 2 (git, whose entry is git.contributions.ts; inlayHints, one file).",
+      "holds": true,
+      "note": "States the convention; 63 of 101 contributions follow it exactly, and 36 have more than one entry file."
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)",
+      "check": "src/vs/workbench/contrib/search/common/search.ts exists and is what other contributions import from search: chat (3 files), notebook, searchEditor (2), plus 6 files in workbench/api and one api test (CL1 list).",
+      "holds": true,
+      "note": "States the convention; many contributions are imported through files outside common instead (see BP4.8)."
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals",
+      "check": "Scanner graph: 1,753 imports from one contribution into another; 879 of them (743 from non-test files) land outside the other contribution's common folders (in browser, node, electron-* or top-level files). CL2's list has clear cases: notebook imports debug/browser/breakpointEditorContribution.ts, callStackEditorContribution.ts, debugEditorContribution.ts, debugExpressionRenderer.ts and debugColors.ts; testing imports debug/browser/callStackWidget.ts.",
+      "holds": true,
+      "note": "States the rule; the code breaks it often."
+    }
+  ]
+}

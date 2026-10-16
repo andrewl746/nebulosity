@@ -1,0 +1,27 @@
+{
+  "id": "vscode-s1-impact",
+  "kind": "impact",
+  "target": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+  "counts": [
+    [
+      "src/vs/workbench/contrib/notebook",
+      225
+    ],
+    [
+      "src/vs/workbench/contrib/chat",
+      1068
+    ],
+    [
+      "src/vs/workbench/api",
+      325
+    ],
+    [
+      "src/vs/sessions",
+      703
+    ]
+  ],
+  "elsewhere": 831,
+  "total": 3152,
+  "verified": true,
+  "notes": []
+}

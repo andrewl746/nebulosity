@@ -1,0 +1,14 @@
+{
+  "id": "affine-violations",
+  "kind": "violations",
+  "from": "packages/frontend/core",
+  "to": "packages/frontend/apps",
+  "files": [
+    "packages/frontend/core/src/desktop/dialogs/setting/general-setting/meetings/index.tsx",
+    "packages/frontend/core/src/modules/editor-setting/services/spell-check-setting.ts",
+    "packages/frontend/core/src/modules/editor-setting/services/tray-settings.ts",
+    "packages/frontend/core/src/modules/media/services/meeting-settings.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

@@ -1,0 +1,78 @@
+{
+  "id": "affine-pairs",
+  "kind": "pairs",
+  "folder": "packages/frontend",
+  "names": null,
+  "pairs": [
+    [
+      "admin",
+      "component"
+    ],
+    [
+      "admin",
+      "core"
+    ],
+    [
+      "admin",
+      "routes"
+    ],
+    [
+      "apps",
+      "component"
+    ],
+    [
+      "apps",
+      "core"
+    ],
+    [
+      "apps",
+      "electron-api"
+    ],
+    [
+      "apps",
+      "i18n"
+    ],
+    [
+      "apps",
+      "native"
+    ],
+    [
+      "apps",
+      "track"
+    ],
+    [
+      "component",
+      "i18n"
+    ],
+    [
+      "core",
+      "apps"
+    ],
+    [
+      "core",
+      "component"
+    ],
+    [
+      "core",
+      "electron-api"
+    ],
+    [
+      "core",
+      "i18n"
+    ],
+    [
+      "core",
+      "templates"
+    ],
+    [
+      "core",
+      "track"
+    ],
+    [
+      "electron-api",
+      "apps"
+    ]
+  ],
+  "verified": true,
+  "notes": []
+}
