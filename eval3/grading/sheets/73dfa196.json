@@ -1,0 +1,31 @@
+{
+  "id": "73dfa196",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "**Shared code.** Both builds sit on one shared core and differ only in a thin entry-point layer.\n\n- `src/vs/workbench/workbench.common.main.ts` is the shared entry point. It is a long list of side-effect imports (`import './contrib/...contribution.js'`). Those imports register the services, contributions, actions and editors that work in any environment. It includes `contrib/terminal/terminal.all.ts` and the chat, notebook and preferences contributions.\n- `workbench.desktop.main.ts` imports `workbench.common.main.js` first. It then adds desktop-only code from `electron-browser/` folders. Examples are `electron-browser/desktop.main.js`, `services/textfile/electron-browser/nativeTextFileService.js`, `services/lifecycle/electron-browser/...` and `contrib/terminal/electron-browser/terminal.contribution.js`.\n- `workbench.web.main.ts` also imports `workbench.common.main.js` first. It then adds `browser/web.main.js` and web-specific implementations such as `webExtensionsScannerService`, `webUserDataSyncEnablementService`, `terminal.web.contribution`, `extensions.web.contribution` and `webview.web.contribution`. `workbench.web.main.internal.ts` and `web.api.ts` / `web.factory.ts` expose the embedder API (`create`, `URI`, `Event` and so on).\n- The same service interface usually gets a different implementation in each build. The web build registers a `*.web` or `browser` one. The desktop build registers a native one from `electron-browser`.\n\n**What decides whether code is loaded.** There is no runtime flag. Loading is decided statically by two things:\n\n1. **Reachability from an entry file.** Each registration is a side-effect import, so a feature's code is only bundled and loaded if one of the entry files imports it, directly or transitively. If you leave the import out of the web or desktop main file, that code never loads in that build. To make a feature appear in both, add it to the common file.\n2. **The folder name, which sets the target environment and the allowed imports.** The layers are `common`, `browser`, `node`, `electron-browser` and `electron-main`. `common` can run anywhere. `browser` needs DOM and Web APIs. `electron-browser` is desktop renderer code. `node` and `electron-main` are not available to web code. The layering rules (documented in `.github/instructions/source-code-organization.instructions.md`) stop web code from importing `electron-browser` or `node`. That is why desktop-only code can only be wired in through the desktop entry point.\n\nOnce a module is loaded, runtime context keys and `when` clauses only decide whether its UI or actions are active. They don't affect whether the code is loaded.\n\nI didn't check the layering rules against the lint config. I only read the entry files and the instruction doc's description."
+}

@@ -1,0 +1,10 @@
+{ "id": "38888020", "points": [
+  { "id": "AFFINE-BP2.1", "score": 1, "quote": "**Framework packages (`blocksuite/framework/`)** These are generic and don't depend on AFFiNE-specific blocks: ... **AFFiNE layer (`blocksuite/affine/`)** Each kind of component is its own package:" },
+  { "id": "AFFINE-BP2.2", "score": 1, "quote": "`store` is the document model. It holds blocks and schemas, and is built on Yjs CRDTs." },
+  { "id": "AFFINE-BP2.3", "score": 1, "quote": "`std` is the standard runtime: the extension system, commands, events, clipboard, the gfx (edgeless canvas) core, and the block-view and widget infrastructure." },
+  { "id": "AFFINE-BP2.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.5", "score": 1, "quote": "**Blocks:** `paragraph`, `list`, ... `root` is the page and edgeless root block. ... **Widgets:** UI overlays such as `toolbar`, `slash-menu`, `drag-handle` ... **Fragments:** side panels, such as `outline`, `frame-panel`, `doc-title` and `adapter-panel`." },
+  { "id": "AFFINE-BP2.6", "score": 0.5, "quote": "It re-exports the other packages, registers schemas, and has an `effects.ts` that registers custom elements." },
+  { "id": "AFFINE-BP2.7", "score": 0.5, "quote": "`root` is the page and edgeless root block." },
+  { "id": "AFFINE-BP2.8", "score": 0.5, "quote": "`packages/frontend/core` depends on `@blocksuite/affine`, `std`, `global`, `data-view` and several `affine-*` packages. ... AFFiNE customizes BlockSuite through extensions rather than by editing it:" }
+] }

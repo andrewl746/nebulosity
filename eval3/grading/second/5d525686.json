@@ -1,0 +1,8 @@
+{ "id": "5d525686", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "Desktop adds `electron-browser` implementations such as `contrib/logs/electron-browser/logs.contribution.js`, ..." },
+  { "id": "BP5.2", "score": 1, "quote": "Web adds the browser or web variants, such as `contrib/logs/browser/logs.contribution.js`, ..." },
+  { "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` holds the shared dependencies. ... `workbench.desktop.main.ts` and `workbench.web.main.ts` each import the common file." },
+  { "id": "BP5.4", "score": 0.5, "quote": "Where both platforms have the same feature, each side has its own implementation. Each one registers its own singleton service." },
+  { "id": "BP5.5", "score": 1, "quote": "The doc says \"Only code referenced from entry point files is loaded.\" ... A feature that no entry file imports, directly or transitively, is never bundled or run." },
+  { "id": "BP5.6", "score": 0.5, "quote": "Features register themselves through side-effect imports of their `.contribution.ts` file. Each contribution has a single `.contribution.ts` entry point" }
+] }

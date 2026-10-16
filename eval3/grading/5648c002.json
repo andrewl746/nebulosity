@@ -1,0 +1,13 @@
+{
+  "id": "5648c002",
+  "points": [
+    {"id": "AFFINE-BP2.1", "score": 1, "quote": "**Framework (`blocksuite/framework/`)** is the generic core: ... **Affine layer (`blocksuite/affine/`)** builds the actual editor on that core"},
+    {"id": "AFFINE-BP2.2", "score": 0.5, "quote": "`store`: the Yjs-backed document and block model."},
+    {"id": "AFFINE-BP2.3", "score": 0.5, "quote": "`std`: the block view layer, selection, services/extensions and the canvas (gfx) runtime."},
+    {"id": "AFFINE-BP2.4", "score": 0, "quote": "none"},
+    {"id": "AFFINE-BP2.5", "score": 1, "quote": "`widgets/`: UI overlays such as the toolbar, slash-menu, drag-handle ... `fragments/`: side panels such as outline, frame-panel, doc-title ... The app's \"page\" and \"edgeless\" modes correspond to the document editor and the surface/gfx canvas."},
+    {"id": "AFFINE-BP2.6", "score": 1, "quote": "The `packages/frontend/component` package wraps the Lit-based editor for React through its `lit-react` folder."},
+    {"id": "AFFINE-BP2.7", "score": 0, "quote": "none"},
+    {"id": "AFFINE-BP2.8", "score": 0.5, "quote": "It is consumed as `@blocksuite/*` packages. About 1,100 imports come from `packages/` and 74 from `tests/`."}
+  ]
+}

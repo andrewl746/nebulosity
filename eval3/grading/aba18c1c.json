@@ -1,0 +1,13 @@
+{
+  "id": "aba18c1c",
+  "points": [
+    { "id": "THEIA-BP1.1", "score": 0.5, "quote": "Headless plugins use a single shared backend host and have no frontend. (VS Code extensions and Theia plugins are named, but nothing on runtime install/removal versus built-in Theia extensions)" },
+    { "id": "THEIA-BP1.2", "score": 1, "quote": "For each connected frontend, the Theia backend forks a Node child process ... Plugins can also run in a browser web worker ... The Ext side runs in the plugin host. It can't use Theia services directly." },
+    { "id": "THEIA-BP1.3", "score": 1, "quote": "The API is declared in `packages/plugin/src/theia.d.ts`. `createAPIFactory` in `packages/plugin-ext/src/plugin/plugin-context.ts` builds one API object per plugin. ... VS Code extensions use `vscode`, handled in `packages/plugin-ext-vscode/src/node/plugin-vscode-init.ts:60`. It starts from the Theia API and overrides a few members." },
+    { "id": "THEIA-BP1.4", "score": 1, "quote": "In Node hosts, module loading is overridden by replacing `module._load`: Theia plugins use `@theia/plugin` ... VS Code extensions use `vscode` ... In web workers, the API is assigned to `window['theia']`." },
+    { "id": "THEIA-BP1.5", "score": 1, "quote": "Each feature has a matching pair of interfaces, such as `LanguagesExt` and `LanguagesMain`, defined in `plugin-ext/src/common/plugin-api-rpc.ts`. Only methods starting with `$` are callable over RPC. ... Each side holds a proxy of the other side's interface." },
+    { "id": "THEIA-BP1.6", "score": 1, "quote": "For each connected frontend, the Theia backend forks a Node child process ... The browser reaches the host through the Theia backend, which only relays messages in both directions." },
+    { "id": "THEIA-BP1.7", "score": 1, "quote": "The transport is an `RpcProtocol` using msgpackr encoding. ... Objects with functions can't be serialised. The creating side caches the object and sends a handle (an id)." },
+    { "id": "THEIA-BP1.8", "score": 0.5, "quote": "Headless plugins use a single shared backend host and have no frontend. ... For headless plugins, Main runs in Node instead. (purpose of application-specific extension points not stated)" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "6c0889a9",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code's dependency injection lives in `src/vs/platform/instantiation/common/`. I confirmed the function names below with a grep of that folder. The description of how they work together comes from my knowledge of the codebase, which I didn't re-read.\n\n**1. Defining a service**\n- Declare an interface, usually named `IFooService`.\n- Create an identifier with the same name: `export const IFooService = createDecorator<IFooService>('fooService');`. `createDecorator` is in `instantiation.ts:109`.\n- The result is a `ServiceIdentifier<T>`, which is also a parameter decorator.\n- Add `readonly _serviceBrand: undefined;` to the interface. This brand stops unrelated types from being treated as services.\n- `refineServiceDecorator` (`instantiation.ts:128`) creates a more specific identifier that extends an existing service.\n\n**2. Making an implementation available**\n- **Global registration:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed | Eager)` (`extensions.ts:25`).\n  - `Delayed` hands out a lazy proxy, and the real object is built on first use.\n  - `Eager` builds it at startup.\n  - You can also pass a `SyncDescriptor` (`descriptors.ts:6`) instead of a class.\n  - Registrations are collected in a registry. They are turned into descriptors when the `InstantiationService` is created. Workbench services are usually registered in `workbench.common.main.ts` and similar entry files.\n- **Manual registration:** the entry points (for example `main.ts`, `workbenchServices`, and the server or extension host setups) build a `ServiceCollection` and call `.set(IFooService, instanceOrSyncDescriptor)`. They then create `new InstantiationService(serviceCollection)`.\n\n**3. Getting it into the classes that use it**\n- **Constructor injection:** use the identifier as a parameter decorator, after any non-service arguments.\n  ```ts\n  constructor(arg: string, @IFooService private readonly fooService: IFooService) {}\n  ```\n- The decorator records the parameter's index and identifier on the class. `_util.getServiceDependencies(ctor)` (`instantiation.ts:19`) reads those records.\n- **Creating objects:** `IInstantiationService.createInstance(Ctor, ...staticArgs)` looks up each dependency and appends it to the arguments. Passing a `SyncDescriptor` also works.\n- **Resolving services:** `instantiationService.invokeFunction(accessor => accessor.get(IFooService))` gives a `ServicesAccessor`. Commands and actions use this form.\n- **Child scopes:** `createChild(collection)` makes a child instantiation service. Lookups fall back to the parent if the child doesn't have the service.\n- **Dependency order:** the `InstantiationService` builds dependencies first, using a dependency graph. It throws on cycles.\n\n**Conventions**\n- The identifier and the interface share one name.\n- Service parameters come last in a constructor.\n- Implementations are named `FooService`.\n- Interfaces go in `common/`, and implementations go in `browser/`, `node/` or `electron-*`, by layer."
+}

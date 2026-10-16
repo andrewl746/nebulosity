@@ -1,0 +1,39 @@
+{
+  "id": "d43a09d8",
+  "question": "What are the main parts of the AFFiNE repository and what is each one for? Say which apps are built from it, what the server is for and what it needs to run.",
+  "points": [
+    {
+      "id": "AFFINE-BP1.1",
+      "text": "`packages/` holds the code that runs in production, split into `backend/` (the server), `frontend/` (the apps and the business libraries they share) and `common/` (isomorphic or basic libraries with no business logic)"
+    },
+    {
+      "id": "AFFINE-BP1.2",
+      "text": "`tools/` holds development and CI tooling that doesn't ship (such as the `yarn affine` CLI), and `tests/` holds the end-to-end and integration tests that span packages"
+    },
+    {
+      "id": "AFFINE-BP1.3",
+      "text": "the editor is BlockSuite, which lives in the same repository under `blocksuite/` and is used by the app as workspace packages (`@blocksuite/*`)"
+    },
+    {
+      "id": "AFFINE-BP1.4",
+      "text": "several apps are built from the shared frontend code under `packages/frontend`: the web app, the Electron desktop app, a mobile web app, iOS and Android apps, and an admin app"
+    },
+    {
+      "id": "AFFINE-BP1.5",
+      "text": "some code is written in Rust and built into Node.js bindings with napi-rs: `@affine/native` (`packages/frontend/native`) for the clients and `@affine/server-native` for the server"
+    },
+    {
+      "id": "AFFINE-BP1.6",
+      "text": "the server (`@affine/server`, in `packages/backend/server`) is only needed for cloud features (accounts, sync and collaboration, AI); without it the web app keeps workspaces locally in the browser"
+    },
+    {
+      "id": "AFFINE-BP1.7",
+      "text": "the server runs on PostgreSQL (with the pgvector extension) and Redis, and serves a GraphQL API at `/graphql`"
+    },
+    {
+      "id": "AFFINE-BP1.8",
+      "text": "`@affine/component` (`packages/frontend/component`) is the shared UI component library"
+    }
+  ],
+  "answer": "AFFiNE is a Yarn monorepo with Rust crates alongside the TypeScript. I read the overview, directory listings and the server's `package.json` and `schema.prisma`. I didn't read the server docs or the Docker/compose files, so the list of what the server needs is inferred from code and may be incomplete.\n\n## Main parts\n\n- **`blocksuite/`** holds the editor AFFiNE is built on.\n  - `framework/` is the core: a Yjs-backed (CRDT) store, plus std/runtime pieces.\n  - `affine/` has the block types, models, widgets and shared services, including the edgeless canvas.\n  - The rest is `playground/`, `docs-site/`, `integration-test/` and `docs/`.\n- **`packages/frontend/`** is the client side.\n  - `core` is the main app logic and UI modules.\n  - `component` is the shared UI library.\n  - `i18n` handles translations.\n  - `admin` is the admin dashboard.\n  - `apps/` holds the buildable shells (listed below).\n  - `electron-api`, `native`, `mobile-native`, `routes`, `templates` and `track` hold smaller supporting code.\n- **`packages/backend/`** has `server` (NestJS) and `native` (Rust, exposed to Node as `@affine/server-native`).\n- **`packages/common/`** has code shared by the client and the server:\n  - `infra`, the most-imported package, provides dependency-injection and framework utilities.\n  - `nbstore` is the storage and sync layer.\n  - `graphql` holds the API schema and client.\n  - `native`, `s3-compat`, `auth`, `env`, `error`, `debug`, `reader`, `realtime` and `theme` cover the rest.\n- **`tools/`** has the `affine` CLI (build, bundle, dev), commit and changelog helpers, and CI utilities.\n- **`scripts/`** has build, release and test scripts.\n- **`tests/`** has the end-to-end and integration tests.\n- **`.github/`** holds the CI and deployment automation.\n- **`docs/`** has the contributing guide and other docs.\n\n## Apps built from it\n\n`packages/frontend/apps` contains:\n\n- **web** (browser app)\n- **mobile** (mobile web, with `mobile-shared`)\n- **electron** and **electron-renderer** (desktop)\n- **ios**\n- **android**\n\nThe `admin` dashboard is a separate frontend build. The server itself is also a deployable build, bundled with `affine bundle -p @affine/server`.\n\n## What the server is for\n\n`@affine/server` is the self-hostable backend. It provides:\n\n- accounts and authentication, including OAuth\n- workspace and document storage and sync (socket.io), with blob storage for attachments\n- a GraphQL API (Apollo) used by the clients\n- mail, with templates in `src/mails`\n- AI/copilot features, which have their own tests\n- admin functions\n\nIt also has CLI and data-migration modes, selected with `SERVER_FLAVOR=script`.\n\n## What it needs to run\n\n- **PostgreSQL**, configured through `DATABASE_URL`. Prisma uses it with Postgres extensions, and `schema.prisma` plus `migrations/` define the schema.\n- **Redis**, which the dependencies suggest is used through `ioredis` and the socket.io Redis adapter for multi-instance setups. I haven't confirmed whether it's required or optional.\n- **Object storage**, S3-compatible or local, for blobs. This is inferred from the `s3-compat` package.\n- **The native Rust module**, `@affine/server-native`, built from `packages/backend/native`.\n- **Configuration**, in `config.example.json`.\n- **A deploy step** that runs Prisma migrations and the CLI (`predeploy`).\n- **Optional services**, such as an SMTP server for mail and AI provider keys for copilot."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "d6feac2b",
+  "points": [
+    {"id": "AFFINE-BP5.1", "score": 1, "quote": "Page mode and edgeless mode are two views of the same Yjs doc, which is one block tree. ... Switching mode only changes how that tree is rendered."},
+    {"id": "AFFINE-BP5.2", "score": 0.5, "quote": "Its children are one `affine:surface` block and the `affine:note` blocks."},
+    {"id": "AFFINE-BP5.3", "score": 1, "quote": "The `affine:surface` block has one prop, `elements`. ... These are \"surface elements\" and are not blocks. They include shape, brush (freehand drawing), connector, text, mindmap and group"},
+    {"id": "AFFINE-BP5.4", "score": 0.5, "quote": "Notes hold the page-mode content (paragraphs, lists and so on). In edgeless mode they appear as movable cards."},
+    {"id": "AFFINE-BP5.5", "score": 0.5, "quote": "Several block types are allowed as children of the surface block (`surface-model.ts`): `affine:frame`, `affine:image`, ... Notes sit beside the surface, not under it."},
+    {"id": "AFFINE-BP5.6", "score": 1, "quote": "the `xywh` prop holds a serialized string like `\"[x,y,w,h]\"`. Block models expose it through `gfx-block-model.ts`, and elements use the same field."},
+    {"id": "AFFINE-BP5.7", "score": 1, "quote": "`index` is a fractional-index string such as `'a0'`. The string's lexical order is the z-order. ... Blocks and elements share one index space, so they can be layered against each other."},
+    {"id": "AFFINE-BP5.8", "score": 0.5, "quote": "A `group` element has a `children` Y.Map of `childId → true` ... A `frame` is a block. It keeps `childElementIds: Record<id, boolean>` and its own `xywh` and `index`"}
+  ]
+}

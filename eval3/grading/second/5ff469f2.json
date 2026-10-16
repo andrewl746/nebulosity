@@ -1,0 +1,10 @@
+{ "id": "5ff469f2", "points": [
+  { "id": "AFFINE-BP1.1", "score": 1, "quote": "`packages/frontend/` is everything the user sees ... `packages/backend/` has two parts: `server` is the NestJS backend. ... `packages/common/` holds shared libraries: `nbstore` (the local-first storage and sync layer), `infra`, `graphql`, ..." },
+  { "id": "AFFINE-BP1.2", "score": 1, "quote": "`tools/` has the CLI (`yarn affine`), the changelog, commitlint and utility scripts. ... `tests/` for end-to-end tests." },
+  { "id": "AFFINE-BP1.3", "score": 1, "quote": "`blocksuite/` is the editor engine, with its own packages:" },
+  { "id": "AFFINE-BP1.4", "score": 1, "quote": "`web` is the browser app. `electron` and `electron-renderer` are the desktop app. `mobile` and `mobile-shared` are the mobile web UI, packaged as native apps by `ios` and `android`. ... `admin` is a separate admin web app." },
+  { "id": "AFFINE-BP1.5", "score": 1, "quote": "It's a Yarn monorepo that mixes TypeScript and Rust. ... `native` and `mobile-native` are the native bindings. ... `native` is the Rust bindings the server uses." },
+  { "id": "AFFINE-BP1.6", "score": 1, "quote": "Local-first clients can work without it. The server is what enables cloud sync, collaboration, AI and self-hosting." },
+  { "id": "AFFINE-BP1.7", "score": 1, "quote": "PostgreSQL, set with `DATABASE_URL`, with Prisma migrations applied. Redis, set with the `REDIS_SERVER_*` variables ... It exposes a GraphQL endpoint (`/graphql`)" },
+  { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared UI library." }
+] }

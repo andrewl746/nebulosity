@@ -1,0 +1,10 @@
+{ "id": "9f112045", "points": [
+  { "id": "AFFINE-BP1.1", "score": 1, "quote": "**`packages/frontend/`** is the client side: ... **`packages/common/`** is shared code: ... **`packages/backend/`** has `server` (NestJS) and `native` (the Rust bindings used by the server)." },
+  { "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tests/`** holds end-to-end tests. **`tools/`** has the CLI and CI helpers." },
+  { "id": "AFFINE-BP1.3", "score": 1, "quote": "**`blocksuite/`** is the editor, a separate sub-monorepo." },
+  { "id": "AFFINE-BP1.4", "score": 1, "quote": "Web app (`apps/web`) Admin panel (`frontend/admin`) Desktop app (Electron: `apps/electron` and `electron-renderer`) Mobile app (`apps/mobile`) iOS (`apps/ios`) and Android (`apps/android`) apps" },
+  { "id": "AFFINE-BP1.5", "score": 1, "quote": "`electron-api`, `native` and `mobile-native` bridge to native code. ... **`packages/backend/`** has `server` (NestJS) and `native` (the Rust bindings used by the server)." },
+  { "id": "AFFINE-BP1.6", "score": 1, "quote": "It is what makes the self-hosted or cloud version work. The local-first clients can work without it." },
+  { "id": "AFFINE-BP1.7", "score": 1, "quote": "**PostgreSQL with the pgvector extension.** ... **Redis.** ... It is a NestJS app that exposes GraphQL (Apollo) and REST, plus Socket.IO for realtime document sync." },
+  { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the UI library, and `i18n` holds translations." }
+] }

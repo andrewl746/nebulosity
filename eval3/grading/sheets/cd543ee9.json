@@ -1,0 +1,39 @@
+{
+  "id": "cd543ee9",
+  "question": "How does AFFiNE represent, store and sync a document's content: what form does the data take, how do local edits and other users' changes reach the editor, and where is the data kept on the device and synced to?",
+  "points": [
+    {
+      "id": "AFFINE-BP4.1",
+      "text": "a document's content is a Yjs CRDT: each doc is its own Yjs document (the docs say a subdocument), its blocks are kept in it, and that CRDT data is the single source of truth for the block tree"
+    },
+    {
+      "id": "AFFINE-BP4.2",
+      "text": "an edit changes the Yjs data first; the store turns the resulting Yjs events into updates of the block models, which then notify the UI; local edits, undo/redo and other users' changes all take that same path, so app code doesn't need to tell them apart"
+    },
+    {
+      "id": "AFFINE-BP4.3",
+      "text": "what is stored and synced is the CRDT's binary update data, not JSON"
+    },
+    {
+      "id": "AFFINE-BP4.4",
+      "text": "JSON snapshots of the block tree exist for import and export: a transformer turns a doc into a snapshot and back, and adapters convert snapshots to and from formats such as Markdown and HTML"
+    },
+    {
+      "id": "AFFINE-BP4.5",
+      "text": "cursors and selections are shared through Yjs awareness, kept beside the document and outside its history"
+    },
+    {
+      "id": "AFFINE-BP4.6",
+      "text": "on the device, documents and files are kept through `@affine/nbstore`'s storages (doc, blob and more, grouped per workspace), which come in IndexedDB and SQLite implementations"
+    },
+    {
+      "id": "AFFINE-BP4.7",
+      "text": "it is local-first: the copy on the device is the primary one, and a cloud workspace syncs it in real time with the server (one more storage it syncs with), which is what makes collaboration work"
+    },
+    {
+      "id": "AFFINE-BP4.8",
+      "text": "y-octo, a native Rust implementation of Yjs, handles the CRDT data in native code on both the client and the server"
+    }
+  ],
+  "answer": "AFFiNE stores each document as a Yjs CRDT, saves it locally as binary updates and snapshots, and syncs those updates with the server over a websocket. This comes from reading the code, and I didn't run anything.\n\n**Form of the data**\n- A document is a Yjs `Doc`. The BlockSuite block tree lives inside it as Y.Maps.\n- On disk and on the wire the data is binary Yjs updates, plus merged snapshots (`packages/common/nbstore/src/storage/doc.ts`).\n- The storage layer is `@affine/nbstore` (`packages/common/nbstore`).\n\n**Local edits to storage**\n- `frontend/doc.ts` listens for `doc.on('update')` on the Yjs doc. It ignores updates tagged with its own origin, `nbstore-frontend`, so it doesn't save what it just applied.\n- Other edits become `save` jobs that call `pushDocUpdate` on local storage.\n- Updates are merged with `mergeUpdates` before they are applied or saved.\n\n**Changes from other users to the editor**\n- The cloud storage (`impls/cloud/doc.ts`) joins the workspace's space with `space:join-batch`.\n- It receives `space:broadcast-doc-updates` and `space:broadcast-doc-invalidation` socket events.\n- Those updates go into local storage, and the frontend runs `applyUpdate(doc, update, NBSTORE_ORIGIN)`, so the editor changes without echoing the update back.\n\n**Sync engine**\n- `sync/doc/peer.ts` runs one queue per remote peer, with `connect`, `push`, `pull`, `pullAndPush` and `save` jobs.\n- It keeps clocks (timestamps) per document, local and remote, and uses `diffUpdate` and state vectors to send only the missing data.\n- Pushing uses `space:push-doc-update`. Pulling uses `space:load-doc` and `space:load-doc-timestamps`.\n- Sync progress is stored per peer: `PeerClocks` in IndexedDB, or the `DocSyncStorage` implementations on SQLite.\n\n**Where data lives on the device**\n- **Web (IndexedDB):** one database per workspace, `workspace:${id}` (`impls/idb/schema.ts`). Its tables are `snapshots`, `updates`, `clocks`, `peerClocks`, `blobs`, `blobData`, `indexerSync` and `blobSync`. The workspace code uses `IndexedDBDocStorage` here.\n- **Desktop (Electron) and mobile:** a SQLite file per workspace, opened through a native Rust module (`packages/frontend/native/nbstore`). The Electron helper resolves the path with `getSpaceDBPath`, and `SqliteDocStorage` uses it. Mobile has its own native storage (`mobile-native/src/storage/docs.rs`).\n- **Search index:** kept per workspace and built from the doc data, in IndexedDB or SQLite.\n- **Blobs:** images and attachments are stored separately from document updates, in the blob tables.\n\n**Server**\n- The NestJS backend (`packages/backend/server/src/core/doc/storage/doc.ts`) validates incoming updates and stores them in Prisma/Postgres `Update` rows.\n- It squashes those rows into `Snapshot` rows and broadcasts updates to the other clients in the workspace.\n\n**Local-only workspaces**\n- These skip the cloud peer and keep everything in the local store."
+}

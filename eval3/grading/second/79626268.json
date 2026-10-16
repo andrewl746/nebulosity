@@ -1,0 +1,7 @@
+{ "id": "79626268", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create the identifier with `createDecorator<IFoo>('fooService')` (`instantiation.ts:109`). By convention the const and the interface share the name, as in `export const IFooService = createDecorator<IFooService>(...)`." },
+  { "id": "BP3.3", "score": 1, "quote": "Use constructor injection. Put the service parameters last, after any non-service arguments, and decorate each one: `constructor(arg: string, @IFooService private readonly fooService: IFooService)`." },
+  { "id": "BP3.4", "score": 1, "quote": "When a class is created with `instantiationService.createInstance(MyClass, 'arg')`, the container reads that metadata and supplies the services, with your static arguments first. ... Editor panes, view containers and contributions are registered this way and instantiated by the framework." },
+  { "id": "BP3.5", "score": 1, "quote": "Call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)." },
+  { "id": "BP3.6", "score": 0, "quote": "none" }
+] }

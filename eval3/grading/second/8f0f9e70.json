@@ -1,0 +1,8 @@
+{ "id": "8f0f9e70", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports `./electron-browser/desktop.main.js` and `desktop.contribution.js`, then Electron-specific services" },
+  { "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` imports `./browser/web.main.js`, then browser-specific services" },
+  { "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point. ... The platform entry points import it first and then add their own files" },
+  { "id": "BP5.4", "score": 0.5, "quote": "Each service has an interface plus per-platform implementations, which the platform entry files choose between." },
+  { "id": "BP5.5", "score": 1, "quote": "If no entry file imports a feature's `*.contribution.ts`, the bundler never includes it." },
+  { "id": "BP5.6", "score": 0.5, "quote": "If no entry file imports a feature's `*.contribution.ts`, the bundler never includes it." }
+] }

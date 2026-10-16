@@ -1,0 +1,10 @@
+{ "id": "7b8813db", "points": [
+  { "id": "THEIA-BP1.1", "score": 0.5, "quote": "VS Code extensions and Theia plugins run in a separate \"plugin host\" process. ... Headless plugins are different." },
+  { "id": "THEIA-BP1.2", "score": 1, "quote": "VS Code extensions and Theia plugins run in a separate \"plugin host\" process. The Theia backend spawns it to isolate plugins from the main process. ... Browser-compatible plugins run in web workers" },
+  { "id": "THEIA-BP1.3", "score": 1, "quote": "The API is declared in `packages/plugin/src/theia.d.ts`. `createAPIFactory` in `plugin-ext/src/plugin/plugin-context.ts` builds the implementation. ... `vscode`, via `plugin-ext-vscode/src/node/plugin-vscode-init.ts`. This starts from the Theia API object and overrides a few members." },
+  { "id": "THEIA-BP1.4", "score": 1, "quote": "The plugin host overrides module loading so that the plugin's `import` or `require` returns that object: ... `@theia/plugin` ... `vscode` ... **Web workers**: the object is assigned to `window['theia']`." },
+  { "id": "THEIA-BP1.5", "score": 1, "quote": "Interfaces come in pairs, such as `LanguagesExt` and `LanguagesMain`, defined in `plugin-ext/src/common/plugin-api-rpc.ts`. Each side holds an RPC proxy of the other side's interface. ... Methods callable over RPC start with `$`" },
+  { "id": "THEIA-BP1.6", "score": 1, "quote": "For these plugins there is one host per connected frontend. ... For VS Code and Theia plugins, the frontend and the plugin host talk through the Theia backend, which only relays messages in both directions." },
+  { "id": "THEIA-BP1.7", "score": 1, "quote": "Messages are encoded by `RpcProtocol` using msgpackr. ... Functions and object references can't be serialized. The creating side caches the object and passes a handle (an id) to the other side." },
+  { "id": "THEIA-BP1.8", "score": 1, "quote": "They share a single backend host process that is started only if there are headless plugins. They get no default `vscode` or `theia` API. ... For headless plugins, Main runs in the node backend instead." }
+] }

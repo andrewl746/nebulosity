@@ -1,0 +1,31 @@
+{
+  "id": "5d525686",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Desktop and web share a large common core, and the entry-point files decide what loads. This comes from the source-code-organization doc and the entry files' imports. I didn't trace the bundler config.\n\n**How code is shared**\n\n- **Environment folders.** Each layer's code is split by runtime. `common` uses only basic JavaScript. `browser` may use DOM APIs plus `common`. `electron-browser` may use `common`, `browser` and limited Electron IPC. `node` and the `electron-*` main and utility folders are desktop or server only. So `common` and `browser` code runs on both desktop and web, while `electron-browser` code runs only on desktop. The web build uses `browser` plus web-specific files, such as `*.web.contribution.ts`.\n- **Shared entry file.** `src/vs/workbench/workbench.common.main.ts` holds the shared dependencies. It imports the shared services and the features that work in both environments.\n- **Per-environment entry files.** `workbench.desktop.main.ts` and `workbench.web.main.ts` each import the common file. They then add their own pieces.\n  - Desktop adds `electron-browser` implementations such as `contrib/logs/electron-browser/logs.contribution.js`, `contrib/extensions/electron-browser/extensions.contribution.js` and `contrib/debug/electron-browser/extensionHostDebugService.js`.\n  - Web adds the browser or web variants, such as `contrib/logs/browser/logs.contribution.js`, `contrib/performance/browser/performance.web.contribution.js` and `contrib/webview/browser/webview.web.contribution.js`.\n  - Where both platforms have the same feature, each side has its own implementation. Each one registers its own singleton service.\n- **Public embedder API.** `workbench.web.main.internal.ts` exposes the public web embedder API.\n\n**What decides whether a feature loads**\n\n- **Reachability from an entry file.** The doc says \"Only code referenced from entry point files is loaded.\" Features register themselves through side-effect imports of their `.contribution.ts` file. Each contribution has a single `.contribution.ts` entry point, which registers its services, actions, views and workbench contributions. A feature that no entry file imports, directly or transitively, is never bundled or run.\n- **Which entry file imports it.** Put the import in `common.main` and the feature is in both builds. Put it in `desktop.main` or `web.main` and it is in only one.\n- **Layering rules.** Nothing outside `contrib/` may depend on `contrib/`. Contributions talk to each other only through a common API file. This keeps features separable, so omitting a contribution's import doesn't break the rest.\n- **Runtime gating.** Once code is loaded, it can still be switched off by context keys, configuration, or extension and product settings. Those only affect what is active, not what is bundled. I haven't checked how that gating works."
+}

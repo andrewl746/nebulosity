@@ -1,0 +1,39 @@
+{
+  "id": "60d085b9",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "`src/vs/workbench` sits above `base`, `platform` and `editor` in VS Code's layered architecture. I read the directory listing, `.github/copilot-instructions.md` and `eslint.config.js`. I didn't open the lint plugin source, so the details of how the rules are enforced come from the config only.\n\n**Organization of `src/vs/workbench`**\n- `browser/`: core workbench UI, including parts, layout and actions.\n- `common/`: shared code with no UI dependencies.\n- `electron-browser/`: desktop-only renderer code.\n- `services/`: service implementations. They are grouped per service and then split by environment layer.\n- `api/`: the extension host and the implementation of the VS Code API.\n- `contrib/`: feature contributions such as git, debug, search, terminal, chat, notebook, scm, testing and extensions. It has about 100 feature folders.\n- `test/`: tests for the workbench.\n- The entry points are `workbench.common.main.ts`, `workbench.desktop.main.ts`, `workbench.web.main.ts` and `workbench.web.main.internal.ts`. These import each feature's `*.contribution.ts` file, so a feature is only active if an entry point pulls it in.\n\n`src/vs/sessions/` is a separate workbench layer for the agent sessions window. It can import from `vs/workbench`, but `vs/workbench` can't import from it.\n\n**Rules for `contrib`**\n- **Contribution model:** features plug in by registering with registries and extension points (commands, views, editors, configuration). Each feature normally has a `*.contribution.ts` that wires this up. The core doesn't call into features directly.\n- **Layered imports:** the `local/code-import-patterns` ESLint rule in `eslint.config.js` governs what `src/vs/workbench/contrib/*/~` may import. The `~` stands for the environment layer, so `browser` code can import `browser` and `common`, but `common` can't import `browser`. Allowed imports are:\n  - `vs/base`\n  - `vs/platform`\n  - `vs/editor`, including `editor/contrib`\n  - `vs/workbench` itself, including `workbench/services`\n  - other `vs/workbench/contrib/*` features\n  - `vs/sessions`, as the config lists it\n  \n  Node and Electron imports are restricted to the matching `node` and `electron-browser` layers.\n- **Cross-feature coupling:** a few terminal exports are whitelisted explicitly (`terminalContribExports*`, `terminalContribChatExports*`). Some imports from `editor` and `workbench` carry `TODO@layers` comments.\n- **Checks:** `npm run valid-layers-check` is for changes that might affect module layering. A few external packages are allowed in browser code, such as `@xterm/xterm`, `@xterm/addon-*` and `vscode-notebook-renderer` (type-only).\n- **Per-area guidance:** `.github/instructions/*.instructions.md` has architecture notes for chat, notebook, interactive, accessibility and others. `best-practices.instructions.md` also says to render actions through `MenuWorkbenchToolBar`, and to read state from its owning service rather than from context keys."
+}

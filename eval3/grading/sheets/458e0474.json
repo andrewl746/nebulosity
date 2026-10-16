@@ -1,0 +1,39 @@
+{
+  "id": "458e0474",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "**How `src/vs/workbench` is organized**\n\nThe workbench is about 4,600 files. It sits in the fourth of seven ordered layers in `src/vs`: `base`, `platform`, `editor`, `workbench`, `code`, `server`, `sessions`. Each layer may only import from the layers below it. The `workbench` layer imports only from `base`, `platform` and `editor`. `sessions` may import from `workbench`, but `workbench` must never import from `sessions`.\n\nInside `workbench`:\n\n- **`common/`, `browser/`, `electron-browser/`:** the minimal core. `common` holds shared, UI-independent contracts. `browser` holds the shell and layout. `electron-browser` holds the desktop startup.\n- **`services/`:** core service implementations that aren't specific to one feature (about 660 files).\n- **`api/`:** the `vscode.d.ts` API provider. It bridges extensions across the process boundary.\n- **`contrib/`:** the individual features (about 3,270 files).\n- **`test/`:** tests for the workbench.\n- **Entry files:** `workbench.common.main.ts`, `workbench.desktop.main.ts` and `workbench.web.main.ts` wire everything together through side-effect imports and singleton registrations. Only code reachable from these files is loaded. `workbench.web.main.internal.ts` exposes the public embedder API.\n\nThe import graph matches this order, bottom to top: `common`, `services`, `browser`, `contrib` and `electron-browser`, `test`, `api`, then the entry files. The graph also has 461 imports that go against that order and 55 import cycles. The largest cycle spans 230 files.\n\nWithin each layer, folder names say which runtime a file targets:\n\n| Folder | Runtime | May use |\n|---|---|---|\n| `common` | basic JavaScript only | — |\n| `browser` | web and DOM APIs | `common` |\n| `node` | Node.js APIs | `common` |\n| `electron-browser` | browser plus limited Electron IPC | `common`, `browser` |\n\n**Rules for `contrib/`**\n\nThese come from `.github/instructions/source-code-organization.instructions.md`:\n\n1. Nothing outside `contrib/` may depend on `contrib/`. In practice, the entry files (`workbench.*.main.ts`), `api/`, `sessions/` and tests do import it.\n2. Each contribution has a single `*.contribution.ts` entry point.\n3. A contribution exposes its internal API from a single `common` file.\n4. Other contributions must depend only on that common API, never on another contribution's internals.\n\nServices are consumed through constructor injection with `@IService` decorators. They are registered with `registerSingleton(...)`. Decorated parameters must use the canonical service interface, not local subset types. Test-only stubs belong in test code.\n\nEach feature is one subfolder of `contrib/` (`chat`, `notebook`, `terminal`, `debug`, `mcp`, `testing`, `search` and about 90 others). A feature usually splits into `common/`, `browser/`, `electron-browser/` or `node/`, and `test/`.\n\nThe same folder also has coding-guideline, best-practice and design-philosophy docs in `.github/instructions/`. I did not read those."
+}

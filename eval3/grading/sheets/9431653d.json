@@ -1,0 +1,39 @@
+{
+  "id": "9431653d",
+  "question": "How does AFFiNE represent, store and sync a document's content: what form does the data take, how do local edits and other users' changes reach the editor, and where is the data kept on the device and synced to?",
+  "points": [
+    {
+      "id": "AFFINE-BP4.1",
+      "text": "a document's content is a Yjs CRDT: each doc is its own Yjs document (the docs say a subdocument), its blocks are kept in it, and that CRDT data is the single source of truth for the block tree"
+    },
+    {
+      "id": "AFFINE-BP4.2",
+      "text": "an edit changes the Yjs data first; the store turns the resulting Yjs events into updates of the block models, which then notify the UI; local edits, undo/redo and other users' changes all take that same path, so app code doesn't need to tell them apart"
+    },
+    {
+      "id": "AFFINE-BP4.3",
+      "text": "what is stored and synced is the CRDT's binary update data, not JSON"
+    },
+    {
+      "id": "AFFINE-BP4.4",
+      "text": "JSON snapshots of the block tree exist for import and export: a transformer turns a doc into a snapshot and back, and adapters convert snapshots to and from formats such as Markdown and HTML"
+    },
+    {
+      "id": "AFFINE-BP4.5",
+      "text": "cursors and selections are shared through Yjs awareness, kept beside the document and outside its history"
+    },
+    {
+      "id": "AFFINE-BP4.6",
+      "text": "on the device, documents and files are kept through `@affine/nbstore`'s storages (doc, blob and more, grouped per workspace), which come in IndexedDB and SQLite implementations"
+    },
+    {
+      "id": "AFFINE-BP4.7",
+      "text": "it is local-first: the copy on the device is the primary one, and a cloud workspace syncs it in real time with the server (one more storage it syncs with), which is what makes collaboration work"
+    },
+    {
+      "id": "AFFINE-BP4.8",
+      "text": "y-octo, a native Rust implementation of Yjs, handles the CRDT data in native code on both the client and the server"
+    }
+  ],
+  "answer": "**Form of the data.** A document is a Yjs CRDT (`Y.Doc`). BlockSuite models blocks as Y.Maps and Y.Arrays inside it (`blocksuite/framework/store`). The workspace has a root doc that holds metadata, and each page is its own sub-doc. Storage and sync treat a doc as binary Yjs update blobs, not as structured rows. A `DocRecord` is a `{docId, bin, timestamp}` entry. Updates are merged (\"squashed\") with `yjsMergeUpdates`, on the server as well.\n\n**Local edit path.** This is based on a skim of the code, not a full trace.\n1. An edit mutates the Y.Doc in the editor.\n2. The nbstore frontend (`packages/common/nbstore/src/frontend/doc.ts`) listens for Yjs updates. It queues them and pushes them to the doc storage. That storage is the local one for the platform and runs inside a worker (`nbstore/src/worker`).\n3. The sync engine (`nbstore/src/sync/doc/index.ts` and `peer.ts`) compares per-doc clocks, which are timestamps kept in `DocSyncStorage`. It runs a peer for each remote, pushing local updates and pulling newer remote ones, and it tracks state such as syncing, retrying and errors.\n\n**Incoming changes.** A remote update goes into local storage first. Storage then emits `subscribeDocUpdate(record, origin)`. The frontend ignores events whose `origin` is its own `uniqueId`. For any other origin it calls `applyUpdate(doc, bin, NBSTORE_ORIGIN)` on the live Y.Doc, and the editor re-renders from that. When the doc observer sees `NBSTORE_ORIGIN`, it skips re-persisting the update, which avoids an echo loop.\n\n**Where it lives on the device** (`nbstore/src/impls`):\n- **Web:** IndexedDB (`impls/idb`). The older BlockSuite-era IndexedDB format is read-only (`idb/v1`).\n- **Desktop and mobile:** a native SQLite database (`impls/sqlite`, `SqliteDocStorage` plus `SqliteDocSyncStorage`). The legacy `sqlite/v1` is read-only.\n- The same folder also has `broadcast-channel` and `disk` implementations. I haven't checked what they do in practice; broadcast-channel probably carries updates between tabs. Blobs and awareness use parallel storages, and blobs also have their own IndexedDB or SQLite stores.\n\n**Remote.** For cloud workspaces, `impls/cloud/doc.ts` talks to the NestJS server over socket.io. It sends events such as `space:join-batch`, `space:load-doc`, `space:load-doc-timestamps` and a push-updates event. The server (`packages/backend/server/src/core/doc/storage`) persists the updates, merges them into snapshots, and broadcasts them to other clients in the space. Local-only workspaces have no remote peer.\n\nThe older BlockSuite sync (`blocksuite/framework/sync/src/doc`, with `impl/indexeddb.ts`) is a separate, earlier layer. It looks superseded by nbstore for the AFFiNE app, but I didn't confirm that."
+}

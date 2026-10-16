@@ -1,0 +1,11 @@
+{
+  "id": "c0c62a84",
+  "points": [
+    { "id": "BP2.1", "score": 1, "quote": "Plain JavaScript and TypeScript that runs anywhere. It can't use DOM APIs or Node APIs." },
+    { "id": "BP2.2", "score": 1, "quote": "`browser` may import `common` and `browser`." },
+    { "id": "BP2.3", "score": 1, "quote": "`node` may import `common` and `node`." },
+    { "id": "BP2.4", "score": 1, "quote": "`electron-browser` may import `common`, `browser` and `electron-browser`. It may use Node only through the sandbox and IPC" },
+    { "id": "BP2.5", "score": 0, "quote": "none" },
+    { "id": "BP2.6", "score": 0.5, "quote": "`electron-main` may import `common`, `node` and `electron-main`. It must not import `browser` or `electron-browser`." }
+  ]
+}

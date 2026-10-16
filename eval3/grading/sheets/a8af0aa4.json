@@ -1,0 +1,39 @@
+{
+  "id": "a8af0aa4",
+  "question": "How does the AFFiNE app manage what's on screen: what are the workbench and its views, how does a URL become the content a view shows, and how do the header, the right sidebar and back/forward navigation fit in?",
+  "points": [
+    {
+      "id": "AFFINE-BP6.1",
+      "text": "the workbench (`Workbench`, in `packages/frontend/core/src/modules/workbench`) is the app's window manager, covering the main area and the right sidebar"
+    },
+    {
+      "id": "AFFINE-BP6.2",
+      "text": "a view (`View`) is a managed window under the workbench; the workbench holds all the views, which can be open side by side, and decides when to show and close them"
+    },
+    {
+      "id": "AFFINE-BP6.3",
+      "text": "each view has its own navigation history, with back and forward, and its own current URL"
+    },
+    {
+      "id": "AFFINE-BP6.4",
+      "text": "a view renders the content that the app's router defines for its URL"
+    },
+    {
+      "id": "AFFINE-BP6.5",
+      "text": "each route renders its own header, body and sidebars through view islands (`ViewHeader`, `ViewBody` and `ViewSidebarTab` in `view-islands.tsx`), which the view's frame shows in their places"
+    },
+    {
+      "id": "AFFINE-BP6.6",
+      "text": "there is always one active view, and its URL counts as the URL of the whole application"
+    },
+    {
+      "id": "AFFINE-BP6.7",
+      "text": "each view can define sidebars for the right-hand area; only the active view's sidebars are shown, with a switcher when a view has more than one"
+    },
+    {
+      "id": "AFFINE-BP6.8",
+      "text": "in a browser, the workbench passes the browser's back and forward navigation to the active view, keeping the active view's history and the browser's in step"
+    }
+  ],
+  "answer": "Workbench and views are the layout; the adapters link them to the browser URL.\n\n**Workbench and views**\n- `Workbench` (`modules/workbench/entities/workbench.ts`) is the window manager. It holds `views$`, `activeViewIndex$`, an `activeView$` and the right-sidebar state. The active view's URL counts as the URL of the whole app.\n- Each `View` (`entities/view.ts`) is one pane in a split-view layout (`view/split-view/`) and is created by the workbench. It has its own `scope`, its own history and a `location$` derived from that history. The history comes from `createNavigableHistory` in `utils/navigable-history.ts`, an in-memory history that exposes `backable` and `forwardable`.\n- `workbench-root.tsx` lays the views out side by side.\n\n**URL to content**\n- The route table is `router.tsx`, one level above the workbench folder.\n- Each view renders through `ViewRoot` (`view/view-root.tsx`). It creates a private `createMemoryRouter(routes)`, subscribes to `view.location$`, and calls `viewRouter.navigate(location)` in a layout effect. It then wraps the result in `FrameworkScope` for the view's scope.\n- The outer location contexts are reset, so each view's router is independent of the others and of the real browser router.\n- Two adapters connect the real URL to the active view:\n  - In a browser, `browser-adapter.ts` (`useBindWorkbenchToBrowserRouter`) pushes the active view's location into the browser URL. It also passes the browser's back and forward navigation to the active view.\n  - On desktop, `desktop-adapter.ts` (`useBindWorkbenchToDesktopRouter`) goes the other way. It takes the router location and updates the active view.\n- `WorkbenchLink` is the link component that navigates inside a view.\n\n**Header, body and sidebar**\n- A route component doesn't draw its own chrome. It renders `ViewHeader`, `ViewBody` and `ViewSidebarTab` (`view/view-islands.tsx`). Each of these registers an \"island\" under an id like `${view.id}:header`, `:body` or `:sidebar:${tabId}:body`. The island code is in `utils/island`.\n- The matching targets (`ViewHeaderTarget`, `ViewBodyTarget`, `ViewSidebarTabBodyTarget`, `ViewSidebarTabIconTarget`) sit in the layout. They look up the island by id and portal the content in. This is how a route's header appears in the pane's header slot.\n- The right sidebar is `view/sidebar/sidebar-container.tsx`. It shows only the active view's sidebar tabs. If a view has several tabs, a header switcher (`sidebar-header-switcher.tsx`) lets the user choose between them.\n- `route-container.tsx` holds the sidebar toggle button.\n- `ViewTitle` and `ViewIcon` in `view-meta.tsx` set a view's title and icon.\n\n**Back and forward**\n- The `Navigator` entity (`modules/navigation/entities/navigator.ts`) maps `workbench.activeView$` to that view's `history`. It exposes the back and forward state and actions. The buttons in `navigation/view/` use it. They always act on the active view's history, not on a global one.\n\n**Mobile**\n- Mobile has a separate `workbench-root.tsx` under `mobile/pages/workspace/`. It reuses the same views and history and adds home-page caching."
+}

@@ -1,0 +1,10 @@
+{ "id": "9431653d", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "A document is a Yjs CRDT (`Y.Doc`). BlockSuite models blocks as Y.Maps and Y.Arrays inside it (`blocksuite/framework/store`). The workspace has a root doc that holds metadata, and each page is its own sub-doc." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "An edit mutates the Y.Doc in the editor. ... For any other origin it calls `applyUpdate(doc, bin, NBSTORE_ORIGIN)` on the live Y.Doc, and the editor re-renders from that." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "Storage and sync treat a doc as binary Yjs update blobs, not as structured rows." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 0.5, "quote": "Blobs and awareness use parallel storages, and blobs also have their own IndexedDB or SQLite stores." },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "**Web:** IndexedDB (`impls/idb`). ... **Desktop and mobile:** a native SQLite database (`impls/sqlite`, `SqliteDocStorage` plus `SqliteDocSyncStorage`)." },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "A remote update goes into local storage first. ... For cloud workspaces, `impls/cloud/doc.ts` talks to the NestJS server over socket.io. ... Local-only workspaces have no remote peer." },
+  { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+] }

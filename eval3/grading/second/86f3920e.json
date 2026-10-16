@@ -1,0 +1,10 @@
+{ "id": "86f3920e", "points": [
+  { "id": "BP4.1", "score": 0.5, "quote": "`browser/`: core workbench UI, meaning the parts, layout and actions. `common/`: code shared across environments. `electron-browser/`: desktop-only renderer code." },
+  { "id": "BP4.2", "score": 1, "quote": "`api/`: the extension host and the implementation of the VS Code API (`vscode`)." },
+  { "id": "BP4.3", "score": 0.5, "quote": "`services/`: service implementations. Each is a folder such as `services/foo/{common,browser,electron-browser}`." },
+  { "id": "BP4.4", "score": 0.5, "quote": "`contrib/`: feature contributions. There are about 100 folders, including `chat`, `debug`, `search`, `terminal`, ..." },
+  { "id": "BP4.5", "score": 0.5, "quote": "**Services can't import contrib.** `workbench/services/*` may not import `contrib/*`, except in tests ... The same restriction covers `workbench/~` itself. `workbench/api` is allowed to import contrib." },
+  { "id": "BP4.6", "score": 1, "quote": "Each contrib has a `*.contribution.ts` file that registers its actions, views, editors, configuration and services." },
+  { "id": "BP4.7", "score": 0, "quote": "none" },
+  { "id": "BP4.8", "score": 0, "quote": "none" }
+] }

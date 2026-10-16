@@ -1,0 +1,10 @@
+{ "id": "85753cd3", "points": [
+  { "id": "BP6.1", "score": 0.5, "quote": "They sit next to the code in `src/vs/**/test/` folders, in `browser/`, `node/` and `common/` subfolders." },
+  { "id": "BP6.2", "score": 0.5, "quote": "Run them with `scripts/test.sh` or `scripts\\test.bat`. Useful options are `--run <file>` and `--grep`." },
+  { "id": "BP6.3", "score": 1, "quote": "`npm run test-browser` runs them in Playwright, and `npm run test-node` runs the node ones with mocha." },
+  { "id": "BP6.4", "score": 1, "quote": "Many of the tests live in `src/**/test/**/*.integrationTest.*` files. Run them with `scripts/test-integration.sh`." },
+  { "id": "BP6.5", "score": 1, "quote": "They live inside `extensions/*`, including `vscode-api-tests`. ... The integration scripts also run them." },
+  { "id": "BP6.6", "score": 1, "quote": "These are UI end-to-end tests in `test/smoke`. They drive the app through the `test/automation` library, which uses Playwright or Electron. Run them with `npm run smoketest`" },
+  { "id": "BP6.7", "score": 1, "quote": "The runner infrastructure is in `test/unit/` ... The runners are in `test/integration/electron` and `test/integration/browser`. ... UI end-to-end tests in `test/smoke` ... They are in `test/sanity`. They check built release artifacts and containers." },
+  { "id": "BP6.8", "score": 0, "quote": "none" }
+] }

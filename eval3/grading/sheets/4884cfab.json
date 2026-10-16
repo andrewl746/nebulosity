@@ -1,0 +1,39 @@
+{
+  "id": "4884cfab",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "`src/vs/workbench` is the fourth layer of `src/vs`. It sits above `base`, `platform` and `editor`, and below `code`, `server` and `sessions`. It must not import from `sessions`. This comes from `.github/instructions/source-code-organization.instructions.md` and `.github/copilot-instructions.md`. I read those two files and listed the directories, but I didn't open any contrib code to check the rules against it.\n\n## Layout of `src/vs/workbench`\n\n- **`common/`, `browser/`, `electron-browser/`** hold the minimal workbench core: parts, layout and actions. `browser/` also covers the web side.\n- **`api/`** provides the `vscode.d.ts` extension API and the extension host.\n- **`services/`** holds core service implementations that aren't specific to one feature.\n- **`contrib/`** holds the feature contributions, such as `debug`, `search`, `terminal`, `scm`, `chat`, `notebook` and `extensions`.\n- **`test/`** holds the tests.\n- **Entry points** are `workbench.common.main.ts` (shared), `workbench.desktop.main.ts` and `workbench.web.main.ts`. Only code reachable from these files gets loaded.\n\nInside each layer, folders are split by runtime environment. Each may use only the environments listed with it:\n\n| Folder | Runs in | May use |\n|---|---|---|\n| `common` | Plain JavaScript only | nothing else |\n| `browser` | Web/DOM | `common` |\n| `node` | Node.js | `common` |\n| `electron-browser` | Browser plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | Electron utility process | `common`, `node` |\n| `electron-main` | Electron main process | `common`, `node`, `electron-utility` |\n\n## Rules for `contrib`\n\n- **No imports into `contrib` from outside it.** Nothing outside `contrib/` may depend on it.\n- **One entry point per contribution.** Each has a single `.contribution.ts` file, which registers it with the workbench's registries and extension points.\n- **One common API file.** A contribution exposes its internal API from a single common file.\n- **No reaching into internals.** Other contributions that depend on it must use that common API, never its internals.\n\n## Related conventions\n\n- Services are consumed through constructor injection with `@IService` decorators. They are registered with `registerSingleton(...)`.\n- Injected parameters must use the canonical service interface. Don't write local subset interfaces or `Pick<>` aliases just to make tests easier.\n- Run `npm run valid-layers-check` when a change might affect module layering."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "864481c8",
+  "points": [
+    {"id": "AFFINE-BP5.1", "score": 1, "quote": "Edgeless mode doesn't store a separate copy of the document. It adds data to the same Yjs doc that page mode uses."},
+    {"id": "AFFINE-BP5.2", "score": 0.5, "quote": "The `affine:surface` block is the page's second child. It is the edgeless layer, and its schema declares `parent: ['@root']`."},
+    {"id": "AFFINE-BP5.3", "score": 1, "quote": "Shapes, brush strokes, highlighter strokes, connectors, groups, mindmaps and canvas text are not blocks. They live inside the surface block's single `elements` prop."},
+    {"id": "AFFINE-BP5.4", "score": 0.5, "quote": "Each `affine:note` block ... also carries edgeless props: `xywh`, `index` ... This is how a note appears as a card on the canvas."},
+    {"id": "AFFINE-BP5.5", "score": 0.5, "quote": "A note's `displayMode` controls where it shows. It can be edgeless-only, or visible in both the doc and edgeless views. / Rich objects are real child blocks of the surface: `affine:frame`, `affine:image`..."},
+    {"id": "AFFINE-BP5.6", "score": 1, "quote": "every element and every edgeless block has `xywh`. It is a serialized string such as \"[x,y,w,h]\"."},
+    {"id": "AFFINE-BP5.7", "score": 1, "quote": "each element and block has a fractional-indexing string in `index`, generated with `generateKeyBetween`... sorts by this string to produce the z-order."},
+    {"id": "AFFINE-BP5.8", "score": 0.5, "quote": "a `group` element ... has a `children` prop that is a `Y.Map<boolean>` of child id -> `true` ... the group's bounds come from them."}
+  ]
+}

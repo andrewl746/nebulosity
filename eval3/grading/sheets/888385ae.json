@@ -1,0 +1,39 @@
+{
+  "id": "888385ae",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "`src/vs/workbench` is the full VS Code workbench layer. It sits above `base`, `platform` and `editor`. Of the 4,634 files in it, 3,269 are under `contrib/`.\n\n**Organization**\n\n| Folder | Role |\n|---|---|\n| `common/`, `browser/`, `electron-browser/` | Minimal workbench core: shared contracts, the layout shell, and desktop startup. |\n| `services/` | Core injected services, not tied to any one feature. |\n| `api/` | The extension API (`vscode.d.ts`) bridge across the process boundary. |\n| `contrib/` | The individual features (see below). |\n| `test/` | Workbench tests. |\n\nThree entry files wire everything together through side-effect imports and singleton registrations:\n- `workbench.common.main.ts` holds the shared dependencies.\n- `workbench.desktop.main.ts` holds the desktop-only ones.\n- `workbench.web.main.ts` holds the web-only ones.\n\n`workbench.web.main.internal.ts` exposes the public embedder API. Only code reachable from these entry files gets loaded.\n\nThe import graph gives this layer order, lowest first: `common` → `services` → `browser` → `contrib` and `electron-browser` → `test` → `api` → the entry files. It has 461 imports that go against that order, and 55 import cycles, the largest spanning 230 files.\n\nWithin each layer, a folder name says which environment the code runs in:\n- `common` is plain JavaScript only.\n- `browser` may use DOM APIs and `common`.\n- `node` may use Node.js APIs and `common`.\n- `electron-browser` may use `common` and `browser`, plus limited Electron IPC.\n\nFurther down the stack, `electron-utility` and `electron-main` follow the same pattern.\n\n**`contrib/` rules**\n\n`contrib/` has 101 feature folders, including `chat`, `notebook`, `terminal`, `terminalContrib`, `debug`, `mcp`, `testing`, `search`, `extensions` and `scm`. The rules come from `.github/instructions/source-code-organization.instructions.md`:\n- No code outside `contrib/` may depend on code inside it.\n- Each contribution has a single `.contribution.ts` entry point that registers it.\n- A contribution exposes its internal API from a single `common` file.\n- Other contributions must use that common API and never reach into its internals.\n\nIn practice a feature splits into `common/`, `browser/`, `electron-browser/` or `node/`, and `test/`. Services are consumed through constructor injection with canonical interfaces. They are provided with `registerSingleton(...)`.\n\n**Where the rules aren't followed**\n\nThe \"nothing outside imports `contrib/`\" rule is not strictly followed. `workbench/api` has 356 imports into `contrib/`. `workbench/test` has 442, and the entry files have about 176. Those are expected wiring.\n\n`workbench/services` has 8 imports into `contrib/`, and `src/vs/sessions` has about 1,442. `contrib/` itself imports `services/` 2,649 times and `common/` 1,034 times, which is the intended direction.\n\nThe layer rule is one-way: `sessions` may import `workbench`, but `workbench` must never import `sessions`. The graph shows 89 workbench imports of `sessions`, with 2 of them from `contrib/`, so that rule isn't fully kept either.\n\nOther docs that apply under `src/vs/**` are `best-practices`, `coding-guidelines` and `design-philosophy`, all in `.github/instructions/`."
+}

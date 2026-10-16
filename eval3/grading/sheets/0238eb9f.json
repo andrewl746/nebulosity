@@ -1,0 +1,39 @@
+{
+  "id": "0238eb9f",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "Under `src/vs`, the layers run from `base` at the bottom to `workbench` and the entry-point layers at the top. This comes from the repo's own docs (`.github/copilot-instructions.md`) and the directory listing. I didn't run `npm run valid-layers-check` or read its rules file, so the exact allowed-import rules are not confirmed.\n\n**Layers, bottom to top**\n\n- **`base`** holds general-purpose utilities and UI primitives: strings, arrays, events, lifecycle, async helpers, URIs, and basic DOM widgets. It has no VS Code-specific knowledge.\n- **`platform`** holds the service infrastructure: dependency injection (`instantiation`), plus services such as files, configuration, storage, telemetry, log, and keybinding. It also holds the registries those services use. Most subfolders are one service each.\n- **`editor`** is the Monaco text editor: model, view, language features, and standalone editor APIs. It is independent of the workbench shell.\n- **`workbench`** is the VS Code application shell. It holds the parts (editor groups, sidebar, panels), services, and `contrib` features such as search, SCM, debug, terminal, and chat. It also holds the extension host and the API that extensions use.\n- **`sessions`** is a dedicated workbench layer for the agent-sessions window and agentic workflows. It sits alongside `workbench`, may import from it, and is not imported by it. Its `LAYERS.md` has more detail.\n- **`code`**, **`server`** are the entry points that boot everything. `code` is the desktop app (Electron main, renderer, utility processes, and a node CLI). `server` is the remote and web server (node).\n\n**Dependency rules**\n\n- Dependencies point downward only: `base` ← `platform` ← `editor` ← `workbench` ← `sessions`.\n  - `base` imports only from itself.\n  - `platform` may use `base`.\n  - `editor` may use `base` and `platform`.\n  - `workbench` may use all three layers below it.\n  - `sessions` may use `workbench` and everything below it.\n- The entry-point layers (`code`, `server`) may use any lower layer. Nothing should import from them.\n- Within each layer, code is also split by target environment, and a folder may only import from environments it is compatible with:\n  - `common`: runs anywhere.\n  - `browser`: needs DOM APIs.\n  - `node`: needs Node.js.\n  - `electron-browser`, `electron-main`, `electron-utility`: the Electron-specific environments. `electron-browser` is the renderer, `electron-main` is the main process, and `electron-utility` is the utility process.\n  - `worker`: web workers.\n- For example, `common` can't import `browser` or `node`, and `browser` can't import `node`.\n- `workbench/contrib` features should depend on each other only through services and registries. They should not import each other's internals directly."
+}

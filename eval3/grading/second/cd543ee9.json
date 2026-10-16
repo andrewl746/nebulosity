@@ -1,0 +1,10 @@
+{ "id": "cd543ee9", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "A document is a Yjs `Doc`. The BlockSuite block tree lives inside it as Y.Maps." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "Those updates go into local storage, and the frontend runs `applyUpdate(doc, update, NBSTORE_ORIGIN)`, so the editor changes without echoing the update back." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "On disk and on the wire the data is binary Yjs updates, plus merged snapshots (`packages/common/nbstore/src/storage/doc.ts`)." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "The storage layer is `@affine/nbstore` (`packages/common/nbstore`). ... **Web (IndexedDB):** one database per workspace ... **Desktop (Electron) and mobile:** a SQLite file per workspace" },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "AFFiNE stores each document as a Yjs CRDT, saves it locally as binary updates and snapshots, and syncs those updates with the server over a websocket. ... `sync/doc/peer.ts` runs one queue per remote peer" },
+  { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+] }

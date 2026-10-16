@@ -1,0 +1,39 @@
+{
+  "id": "3afbd48e",
+  "question": "In BlockSuite, how is a block type defined, rendered and plugged into an editor? Name the functions, classes and conventions involved.",
+  "points": [
+    {
+      "id": "AFFINE-BP3.1",
+      "text": "every block type has a schema made with `defineBlockSchema`: a `flavour` string that names it uniquely (`namespace:name`, such as `affine:paragraph`), its `props`, and `metadata` with a `version` and a `role`"
+    },
+    {
+      "id": "AFFINE-BP3.2",
+      "text": "props can hold Yjs-backed values made with the `internal` helpers, such as `internal.Text()` for the block's rich text (a Y.Text)"
+    },
+    {
+      "id": "AFFINE-BP3.3",
+      "text": "the schema also says where a block may sit, with `parent` and `children` lists of flavours that accept `*` and glob patterns (minimatch); the `root` role marks the document's root block, which can't have a parent"
+    },
+    {
+      "id": "AFFINE-BP3.4",
+      "text": "a block's model is a class extending `BlockModel`, created from the schema, which can add its own methods"
+    },
+    {
+      "id": "AFFINE-BP3.5",
+      "text": "the block's view is a lit web component extending `BlockComponent`, which renders its children through the host, and it is registered for the flavour with `BlockViewExtension(flavour, literal`tag`)`"
+    },
+    {
+      "id": "AFFINE-BP3.6",
+      "text": "widgets are extra UI tied to a host block (toolbars, menus, the drag handle, the slash menu), written as `WidgetComponent`s and registered for a block flavour"
+    },
+    {
+      "id": "AFFINE-BP3.7",
+      "text": "blocks are packaged as extension providers: a `StoreExtensionProvider` registers the data side (the schema, adapters) and a `ViewExtensionProvider` the UI side (the view, widgets, keymaps, config), and an editor gets its extensions from a `StoreExtensionManager` and a `ViewExtensionManager` that collect the providers"
+    },
+    {
+      "id": "AFFINE-BP3.8",
+      "text": "view providers register per scope (`page`, `edgeless`, their preview and mobile variants), so a block can give each kind of editor a different view; one-time setup such as defining the lit elements goes in `effect()`, which runs once per provider class"
+    }
+  ],
+  "answer": "A block type has three parts: a schema in the store, a view in the std layer, and extensions that register both on an editor. I used the paragraph block as the example. I didn't open the file that assembles the editor's extension list, so that step is from memory of how the pieces fit.\n\n**1. Definition (data model, `blocksuite/framework/store`)**\n- `defineBlockSchema({ flavour, props, metadata })` is in `store/src/model/block/zod.ts`.\n  - The flavour is a string with an `affine:` prefix, such as `affine:paragraph`.\n  - `props` gives the default props.\n  - `metadata` holds the `version`, `role` (`content`, `hub` or `root`), and `parent` and `children` constraints.\n- A model class extends `BlockModel`. Paragraph's is `ParagraphBlockModel`.\n- `BlockSchemaExtension(Schema)` in `store/src/extension/schema.ts` wraps the schema as an extension.\n  - Paragraph's schema is `ParagraphBlockSchema` in `blocksuite/affine/model/src/blocks/paragraph/paragraph-model.ts`, and it is wrapped there as `ParagraphBlockSchemaExtension`.\n- The store side registers it in `store.ts`, using `context.register(ParagraphBlockSchemaExtension)`.\n\n**2. Rendering (view, `blocksuite/framework/std`)**\n- The view is a Lit custom element that extends `BlockComponent<Model>`. That class is in `std/src/view/element/block-component.ts`.\n  - Paragraph's is `ParagraphBlockComponent`, which extends `CaptionedBlockComponent`.\n  - Other blocks extend `BlockComponent` more directly.\n  - It renders the model, and `renderChildren` renders child blocks.\n- `effects.ts` registers the element with `customElements.define('affine-paragraph', ParagraphBlockComponent)`. It also augments `HTMLElementTagNameMap`.\n- `BlockViewExtension(flavour, literal\\`affine-paragraph\\`)` is in `std/src/extension/block-view.ts`.\n  - It binds the flavour to its Lit tag through `di.addImpl(BlockViewIdentifier(flavour), …)`.\n  - `literal` comes from Lit's static html.\n- `WidgetViewExtension` (`std/src/extension/widget-view-map.ts`) attaches widgets to a block in the same way.\n\n**3. Plugging into an editor**\n- Everything is an `ExtensionType`, an object with `setup(di)` that registers into a dependency-injection container. This container is how the editor finds a block's view and services.\n- Other behaviour is also added as extensions:\n  - commands, in `commands/`\n  - keymaps, in `paragraph-keymap.ts`\n  - block config, in `paragraph-block-config.ts`\n  - adapters for markdown, HTML and plain text, in `adapters/`\n  - services and slash-menu items\n- Each block package usually has these files:\n  - `store.ts` for the schema extensions\n  - `view.ts` for the view extensions\n  - `effects.ts` for the element registration\n  - `index.ts`\n- The editor takes the combined extension arrays, split into store and view, and the doc store and view manager read them. Apps choose which blocks exist by choosing which extensions to pass.\n\n**Conventions**\n- Flavours are named `affine:<name>`.\n- Element tags are named `affine-<name>`.\n- Model code lives in `affine/model`, and view code lives in `affine/blocks/<name>`.\n- Behaviour is added through extensions, with no central registry to edit."
+}

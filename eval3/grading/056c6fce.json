@@ -1,0 +1,8 @@
+{"id":"056c6fce","points":[
+{"id":"BP2.1","score":1,"quote":"| `common` | Any JS environment, with no DOM or Node APIs | `common` only |"},
+{"id":"BP2.2","score":1,"quote":"| `browser` | The browser or renderer, with DOM APIs | `common`, `browser` |"},
+{"id":"BP2.3","score":1,"quote":"| `node` | Node.js, for example the server or extension host | `common`, `node` |"},
+{"id":"BP2.4","score":1,"quote":"| `electron-browser` | The Electron renderer (the window, with sandboxed access to Electron APIs) | `common`, `browser`, `electron-browser` |"},
+{"id":"BP2.5","score":1,"quote":"| `electron-utility` | Electron utility processes (shared process, pty host and so on) | `common`, `node`, `electron-utility` |"},
+{"id":"BP2.6","score":1,"quote":"| `electron-main` | The Electron main process | `common`, `node`, `electron-utility`, `electron-main` |"}
+]}

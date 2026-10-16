@@ -1,0 +1,10 @@
+{"id":"8c82dbaf","points":[
+{"id":"AFFINE-BP5.1","score":1,"quote":"a document doesn't have a separate edgeless copy. Page mode and edgeless mode are two views of one Yjs block tree."},
+{"id":"AFFINE-BP5.2","score":1,"quote":"The other is `affine:surface`, which holds the whiteboard layer."},
+{"id":"AFFINE-BP5.3","score":1,"quote":"Shapes, brush strokes, connectors, text, mind maps and groups are not blocks. They are \"surface elements\" stored inside the single `affine:surface` block. The surface model defines `elements: Boxed(new Y.Map())`"},
+{"id":"AFFINE-BP5.4","score":1,"quote":"Page mode renders the notes as a linear document. Edgeless mode renders the same note blocks as movable cards on the canvas"},
+{"id":"AFFINE-BP5.5","score":0.5,"quote":"Several block types can sit directly under the surface... These are frames, edgeless text, and in some cases bookmarks and attachments. These blocks are stored as ordinary blocks."},
+{"id":"AFFINE-BP5.6","score":1,"quote":"Surface elements and the block-based edgeless items (notes, frames, edgeless text) use the same field."},
+{"id":"AFFINE-BP5.7","score":1,"quote":"`index` is a fractional-index string... Elements are sorted by it... It applies to blocks and elements alike"},
+{"id":"AFFINE-BP5.8","score":1,"quote":"A group element (`GroupElementModel`) has a `children` Y.Map of `{childId: true}`... A frame block has `childElementIds`... they test containment by bounds."}
+]}

@@ -1,0 +1,39 @@
+{
+  "id": "85753cd3",
+  "question": "How is VS Code tested: what kinds of tests does the repository have, where does each kind live, and how is each kind run?",
+  "points": [
+    {
+      "id": "BP6.1",
+      "text": "unit tests are `*.test.ts` files in `test/` folders beside the code they test (`src/vs/**/test/`), written with Mocha (`suite`/`test`) and `assert`, with `sinon` for mocks"
+    },
+    {
+      "id": "BP6.2",
+      "text": "`scripts/test.sh` (`scripts/test.bat` on Windows) runs the unit tests with Mocha inside an Electron renderer, which has both the DOM and Node.js APIs, the closest to the environment VS Code ships in; options such as `--run`, `--grep` and `--runGlob` pick the tests"
+    },
+    {
+      "id": "BP6.3",
+      "text": "unit tests from the `common` and `browser` layers also run in real browsers (Chromium and WebKit, through Playwright, with `npm run test-browser`), and unit tests can run under plain Node.js too (`npm run test-node`)"
+    },
+    {
+      "id": "BP6.4",
+      "text": "integration tests are `*.integrationTest.ts` files under `src/` that exercise real external APIs; `scripts/test.sh` doesn't run them, `scripts/test-integration.sh` (`.bat` on Windows) does, in Electron with the same Mocha runner"
+    },
+    {
+      "id": "BP6.5",
+      "text": "extension host tests (the extension API tests, and tests of built-in extensions such as Git, TypeScript and Emmet) live with the extensions under `extensions/`; `scripts/test-integration.sh` runs them too, launching a full VS Code with `--extensionDevelopmentPath`, and `--suite` picks which ones"
+    },
+    {
+      "id": "BP6.6",
+      "text": "smoke tests in `test/smoke/` drive a whole VS Code (Electron, web or remote) through end-to-end UI flows with Playwright, through the automation driver in `test/automation`; `npm run smoketest` compiles and runs them"
+    },
+    {
+      "id": "BP6.7",
+      "text": "the top-level `test/` folder holds the test runners and the suites that test the product as a whole: `unit` (the runners for the unit tests in `src/`), `integration` (the API tests), `smoke` and `sanity` (release sanity tests of published builds)"
+    },
+    {
+      "id": "BP6.8",
+      "text": "tests run against the compiled JavaScript output (`out/`), not the TypeScript sources, so the code has to be compiled (or the watch build running) before running them"
+    }
+  ],
+  "answer": "VS Code has several kinds of tests. This comes from a quick scan of the repo's layout, scripts and `package.json`. I didn't run any of them.\n\n**Unit tests**\n- They sit next to the code in `src/vs/**/test/` folders, in `browser/`, `node/` and `common/` subfolders.\n- The runner infrastructure is in `test/unit/` (`electron`, `browser`, `node`).\n- Run them with `scripts/test.sh` or `scripts\\test.bat`. Useful options are `--run <file>` and `--grep`.\n- `npm run test-browser` runs them in Playwright, and `npm run test-node` runs the node ones with mocha.\n\n**Integration tests**\n- The runners are in `test/integration/electron` and `test/integration/browser`. Many of the tests live in `src/**/test/**/*.integrationTest.*` files.\n- Run them with `scripts/test-integration.sh`. Related scripts are `test-remote-integration` and `test-web-integration`.\n- Agent-host end-to-end tests are in `test/integration/agentHost`. Run them with `npm run test-agent-host-e2e`, or the `-coverage` variant.\n\n**Extension tests**\n- They live inside `extensions/*`, including `vscode-api-tests`.\n- They run through `@vscode/test-cli` and `@vscode/test-electron`, using `npm run test-extension`. The integration scripts also run them.\n\n**Smoke tests**\n- These are UI end-to-end tests in `test/smoke`. They drive the app through the `test/automation` library, which uses Playwright or Electron.\n- Run them with `npm run smoketest`, or `smoketest-no-compile` to skip the compile step.\n\n**Sanity tests**\n- They are in `test/sanity`. They check built release artifacts and containers.\n\n**Other suites**\n- `test/monaco` tests the standalone Monaco editor package. It has its own `runner.js` and `package.json`.\n- `test/mcp` has MCP server tests.\n- `test/scenario` holds scenario tests.\n- `test/componentFixtures` has visual component fixtures. They run through component-explorer and Playwright, with screenshot comparison.\n- `build/` has its own tests, run with `npm run test-build-scripts`.\n- `scripts/chat-simulation` holds the chat performance and memory-leak checks. Run them with `npm run perf:chat` and `perf:chat-leak`.\n- `scripts/test-documentation.sh` also exists.\n\n**Project guidance** (`.github/copilot-instructions.md`)\n- Add a targeted selector such as `--grep` whenever possible.\n- Prefer the smallest targeted tests that cover the change.\n- Don't run broad builds or type checks as a completion ritual."
+}

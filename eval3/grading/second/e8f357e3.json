@@ -1,0 +1,10 @@
+{ "id": "e8f357e3", "points": [
+  { "id": "BP6.1", "score": 0.5, "quote": "They sit next to the code in `src/vs/**/test/` folders (`browser/`, `node/`, `common/`, `electron-*`)." },
+  { "id": "BP6.2", "score": 1, "quote": "Run them with `scripts/test.sh` (`scripts\\test.bat` on Windows), which uses Electron. Add `--grep` or `--run <file>` to narrow the run." },
+  { "id": "BP6.3", "score": 1, "quote": "`npm run test-node` runs the Node-only suite with mocha. `npm run test-browser` runs the suite in Playwright browsers." },
+  { "id": "BP6.4", "score": 0.5, "quote": "These live in `test/integration/`, under `electron/` and `browser/`. ... Run them with `scripts/test-integration.sh` (or `.bat`)." },
+  { "id": "BP6.5", "score": 1, "quote": "The `vscode-api-tests` extension and other extension tests also run in this group. Run them with `scripts/test-integration.sh` (or `.bat`)." },
+  { "id": "BP6.6", "score": 1, "quote": "These are automated UI tests in `test/smoke/`, built on the driver in `test/automation/`. Run them with `npm run smoketest`" },
+  { "id": "BP6.7", "score": 1, "quote": "The runners are in `test/unit/`. ... These live in `test/integration/` ... automated UI tests in `test/smoke/` ... `test/sanity/` holds release sanity checks." },
+  { "id": "BP6.8", "score": 0, "quote": "none" }
+] }

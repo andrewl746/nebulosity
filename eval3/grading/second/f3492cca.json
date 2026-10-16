@@ -1,0 +1,8 @@
+{ "id": "f3492cca", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` starts with `import './workbench.common.main.js'`. It then adds desktop-only pieces" },
+  { "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` also starts with `import './workbench.common.main.js'`. It then adds: `browser/web.main.ts` the web service implementations" },
+  { "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point ... `workbench.desktop.main.ts` starts with `import './workbench.common.main.js'` ... `workbench.web.main.ts` also starts with `import './workbench.common.main.js'`." },
+  { "id": "BP5.4", "score": 0.5, "quote": "**Service substitution.** A service interface in `common` is often implemented twice, once in `browser` and once in `electron-browser` or `node`. Each entry file registers its own implementation through `registerSingleton`." },
+  { "id": "BP5.5", "score": 1, "quote": "The organization guide says \"Only code referenced from entry point files is loaded.\"" },
+  { "id": "BP5.6", "score": 0.5, "quote": "Each feature has one `*.contribution.ts` file. That file registers actions, views and services as side effects. If an entry file never imports it, the feature is absent from that build." }
+] }

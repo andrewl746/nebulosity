@@ -1,0 +1,39 @@
+{
+  "id": "04f1fb48",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "The core under `src/vs` is a stack of layers. Each layer may import only from the layers below it. This comes from `.github/instructions/source-code-organization.instructions.md` and the import graph.\n\n**Layers, bottom to top**\n\n1. **`base/`** holds general utilities and UI building blocks, such as events, lifecycle, strings, and DOM widgets. It has no service dependencies.\n2. **`platform/`** provides dependency-injection support and the base services shared across layers, such as files, configuration, storage, and quick input. Services are defined here as contracts plus implementations.\n3. **`editor/`** is the Monaco editor core. It must not use `node` or `electron-*` APIs.\n4. **`workbench/`** is the full VS Code application: the workbench framework, `api/` (the `vscode.d.ts` provider), `services/`, and `contrib/` feature contributions.\n5. **Application and host entry layers**, which sit on top and are siblings of each other:\n   - **`code/`** is the desktop, CLI and web startup code (Electron main, shared process).\n   - **`server/`** is the remote server runtime.\n   - **`sessions/`** is the separate Agents window application, built on the workbench.\n\nThe top-level files `nls.ts` (localization) and `amdX.ts` (AMD loading of node modules) sit at the bottom and low in the stack. `monaco.d.ts` holds the public Monaco typings and is not linked to the other layers.\n\n**Dependency rules**\n\n- Imports go downward only. For example, `workbench` may use `editor`, `platform` and `base`, but `base` must not use `platform`.\n- `workbench` must never import `sessions`.\n- Within a layer, code is split by runtime environment:\n  - `common` has basic JavaScript only.\n  - `browser` may use `common`.\n  - `node` may use `common`.\n  - `electron-browser` may use `common` and `browser`.\n  - `electron-utility` may use `common` and `node`.\n  - `electron-main` may use `common`, `node` and `electron-utility`.\n- Code in `workbench/contrib` may not be imported from outside `contrib/`. Each contribution has one `.contribution.ts` entry point and exposes its API from a single common file. Other contributions use that API and never reach into internals.\n\n**Current violations**\n\nThe import graph shows 94 imports that go against these rules.\n- **`workbench/` → `sessions/` (89 imports):** the biggest group, for example `agentHostCustomizationService.ts` importing `sessions/common/agentHostSessionsProvider.ts`. This is the rule violated most.\n- **`platform/` → `editor/` (3 imports):** `platform/agentHost/node/diffWorkerMain.ts` imports the editor's diff computer.\n- **`base/` → `amdX.ts` and `base/` → `platform/` (1 import each):** both are in test files."
+}

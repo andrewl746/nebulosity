@@ -1,0 +1,39 @@
+{
+  "id": "e8f357e3",
+  "question": "How is VS Code tested: what kinds of tests does the repository have, where does each kind live, and how is each kind run?",
+  "points": [
+    {
+      "id": "BP6.1",
+      "text": "unit tests are `*.test.ts` files in `test/` folders beside the code they test (`src/vs/**/test/`), written with Mocha (`suite`/`test`) and `assert`, with `sinon` for mocks"
+    },
+    {
+      "id": "BP6.2",
+      "text": "`scripts/test.sh` (`scripts/test.bat` on Windows) runs the unit tests with Mocha inside an Electron renderer, which has both the DOM and Node.js APIs, the closest to the environment VS Code ships in; options such as `--run`, `--grep` and `--runGlob` pick the tests"
+    },
+    {
+      "id": "BP6.3",
+      "text": "unit tests from the `common` and `browser` layers also run in real browsers (Chromium and WebKit, through Playwright, with `npm run test-browser`), and unit tests can run under plain Node.js too (`npm run test-node`)"
+    },
+    {
+      "id": "BP6.4",
+      "text": "integration tests are `*.integrationTest.ts` files under `src/` that exercise real external APIs; `scripts/test.sh` doesn't run them, `scripts/test-integration.sh` (`.bat` on Windows) does, in Electron with the same Mocha runner"
+    },
+    {
+      "id": "BP6.5",
+      "text": "extension host tests (the extension API tests, and tests of built-in extensions such as Git, TypeScript and Emmet) live with the extensions under `extensions/`; `scripts/test-integration.sh` runs them too, launching a full VS Code with `--extensionDevelopmentPath`, and `--suite` picks which ones"
+    },
+    {
+      "id": "BP6.6",
+      "text": "smoke tests in `test/smoke/` drive a whole VS Code (Electron, web or remote) through end-to-end UI flows with Playwright, through the automation driver in `test/automation`; `npm run smoketest` compiles and runs them"
+    },
+    {
+      "id": "BP6.7",
+      "text": "the top-level `test/` folder holds the test runners and the suites that test the product as a whole: `unit` (the runners for the unit tests in `src/`), `integration` (the API tests), `smoke` and `sanity` (release sanity tests of published builds)"
+    },
+    {
+      "id": "BP6.8",
+      "text": "tests run against the compiled JavaScript output (`out/`), not the TypeScript sources, so the code has to be compiled (or the watch build running) before running them"
+    }
+  ],
+  "answer": "VS Code has several kinds of tests. Everything below comes from `package.json`, `test/README.md` and the folder layout. I didn't run anything.\n\n**1. Unit tests**\n- They sit next to the code in `src/vs/**/test/` folders (`browser/`, `node/`, `common/`, `electron-*`). Extensions have their own.\n- The runners are in `test/unit/`. There are three: `electron/`, `browser/` and `node/`.\n- Run them with `scripts/test.sh` (`scripts\\test.bat` on Windows), which uses Electron. Add `--grep` or `--run <file>` to narrow the run.\n- `npm run test-node` runs the Node-only suite with mocha.\n- `npm run test-browser` runs the suite in Playwright browsers.\n- `test/unit/coverage.js` handles coverage.\n\n**2. Integration and API tests**\n- These live in `test/integration/`, under `electron/` and `browser/`. `test/integration/agentHost/` covers the agent host.\n- The `vscode-api-tests` extension and other extension tests also run in this group.\n- Run them with `scripts/test-integration.sh` (or `.bat`).\n- Variants:\n  - `scripts/test-web-integration.*` runs them in the web build.\n  - `scripts/test-remote-integration.*` runs them against a remote.\n  - `npm run test-agent-host-e2e` runs the agent-host end-to-end tests.\n  - `npm run test-extension` runs `vscode-test`.\n\n**3. Smoke tests**\n- These are automated UI tests in `test/smoke/`, built on the driver in `test/automation/`.\n- Run them with `npm run smoketest`, or `smoketest-no-compile` if it's already compiled.\n\n**4. Sanity tests**\n- `test/sanity/` holds release sanity checks. It includes `containers/` for running them in containers.\n- Its README describes how to run them.\n\n**5. Monaco editor tests**\n- `test/monaco/` checks the standalone Monaco editor build. It has a webpack config and an ESM check, and `runner.js` runs it.\n\n**6. Other suites**\n- `test/mcp/` holds MCP-related tests.\n- `test/scenario/` holds scenario tests.\n- `test/componentFixtures/` holds component fixtures. They use a component explorer and Playwright screenshots.\n- `build/` has its own tests, run with `npm run test-build-scripts`.\n- `scripts/test-documentation.*` is a further runner, and `scripts/chat-simulation/` also sits under `scripts/`. I didn't check what either one does.\n\n`npm run valid-layers-check` is not a test. It checks module layering."
+}

@@ -1,0 +1,10 @@
+{ "id": "a29aa0fa", "points": [
+  { "id": "AFFINE-BP1.1", "score": 1, "quote": "`packages/frontend/` holds the client code: ... `packages/backend/` holds `server` (`@affine/server`) and `native` ... `packages/common/` holds code shared by client and server" },
+  { "id": "AFFINE-BP1.2", "score": 1, "quote": "`tools/` holds the CLI, changelog, commitlint and utility tooling. ... `tests/` holds the end-to-end suites" },
+  { "id": "AFFINE-BP1.3", "score": 1, "quote": "`blocksuite/` is the editor engine, split into three layers:" },
+  { "id": "AFFINE-BP1.4", "score": 1, "quote": "`web` is the browser app. `electron` and `electron-renderer` are the desktop app. `mobile` and `mobile-shared` are the mobile web UI. `ios` and `android` are the native mobile shells. `admin` is also built as its own app, in `packages/frontend/admin`." },
+  { "id": "AFFINE-BP1.5", "score": 1, "quote": "It's a Yarn monorepo that mixes TypeScript and Rust. ... `native` and `mobile-native` are native bindings. ... `native`, the Rust bindings for the server (`@affine/server-native`)." },
+  { "id": "AFFINE-BP1.6", "score": 1, "quote": "It is what makes cloud sync, collaboration and self-hosting possible. The client works without it." },
+  { "id": "AFFINE-BP1.7", "score": 1, "quote": "It serves a GraphQL API at `/graphql`, plus Socket.IO realtime sync. ... PostgreSQL, accessed through Prisma ... Redis, set through `REDIS_SERVER_HOST`." },
+  { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` holds shared UI components." }
+] }

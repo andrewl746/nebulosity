@@ -1,0 +1,13 @@
+{
+  "id": "a8af0aa4",
+  "points": [
+    {"id": "AFFINE-BP6.1", "score": 1, "quote": "`Workbench` (`modules/workbench/entities/workbench.ts`) is the window manager. It holds `views$`, `activeViewIndex$`, an `activeView$` and the right-sidebar state."},
+    {"id": "AFFINE-BP6.2", "score": 1, "quote": "Each `View` (`entities/view.ts`) is one pane in a split-view layout (`view/split-view/`) and is created by the workbench. ... `workbench-root.tsx` lays the views out side by side."},
+    {"id": "AFFINE-BP6.3", "score": 1, "quote": "It has its own `scope`, its own history and a `location$` derived from that history. ... exposes `backable` and `forwardable`."},
+    {"id": "AFFINE-BP6.4", "score": 1, "quote": "Each view renders through `ViewRoot` ... It creates a private `createMemoryRouter(routes)`, subscribes to `view.location$`, and calls `viewRouter.navigate(location)`"},
+    {"id": "AFFINE-BP6.5", "score": 1, "quote": "A route component doesn't draw its own chrome. It renders `ViewHeader`, `ViewBody` and `ViewSidebarTab` (`view/view-islands.tsx`). ... They look up the island by id and portal the content in."},
+    {"id": "AFFINE-BP6.6", "score": 1, "quote": "The active view's URL counts as the URL of the whole app."},
+    {"id": "AFFINE-BP6.7", "score": 1, "quote": "It shows only the active view's sidebar tabs. If a view has several tabs, a header switcher (`sidebar-header-switcher.tsx`) lets the user choose between them."},
+    {"id": "AFFINE-BP6.8", "score": 1, "quote": "In a browser, `browser-adapter.ts` ... pushes the active view's location into the browser URL. It also passes the browser's back and forward navigation to the active view."}
+  ]
+}

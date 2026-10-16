@@ -1,0 +1,31 @@
+{
+  "id": "23b52c22",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Within each layer of `src/vs`, code is split into folders by runtime environment. This comes from `.github/instructions/source-code-organization.instructions.md`, which I read. I didn't check it against actual imports in the code.\n\n| Folder | Runs in / APIs available | May import from |\n|---|---|---|\n| `common` | Plain JavaScript only, with no DOM and no Node | `common` only |\n| `browser` | Web/DOM APIs | `common` |\n| `node` | Node.js APIs | `common` |\n| `electron-browser` | The renderer: browser APIs plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | The Electron utility process | `common`, `node` |\n| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |\n\nTwo rules apply on top of the environment split:\n\n- **Layers.** Each layer can only import from layers below it. The order from bottom to top is `base`, `platform`, `editor`, `workbench`, then `code` and `server` (the desktop and remote-server entry points). `sessions` (the Agent Sessions window) can import from `workbench` and below, but `workbench` must never import from `sessions`.\n- **Editor layer.** `editor` must not depend on `node` or `electron-*` code.\n\nThe workbench also has a few rules of its own:\n\n- Its minimal core lives in `common`, `browser` and `electron-browser`.\n- Anything outside `contrib/` must not import from inside it.\n- Each contribution has a single `.contribution.ts` entry point."
+}

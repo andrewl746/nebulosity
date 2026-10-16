@@ -1,0 +1,10 @@
+{ "id": "5e85d4f5", "points": [
+  { "id": "AFFINE-BP2.1", "score": 1, "quote": "**1. `blocksuite/framework/`: the generic, editor-agnostic core** ... **2. `blocksuite/affine/`: the AFFiNE-flavoured implementation built on the framework**" },
+  { "id": "AFFINE-BP2.2", "score": 1, "quote": "`store`: the document model. It holds blocks, schemas and the doc and collection layer, and sits on a CRDT." },
+  { "id": "AFFINE-BP2.3", "score": 1, "quote": "`std`: the standard runtime. It covers the dependency-injection and extension system, block components and views, commands, selection, the event/UI layer, and the gfx (canvas) base." },
+  { "id": "AFFINE-BP2.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.5", "score": 1, "quote": "`widgets/*`: UI overlays such as toolbar, slash-menu, drag-handle, ... `fragments/*`: side panels such as outline, frame-panel, doc-title and adapter-panel. ... mounts the resulting editor in page and edgeless modes." },
+  { "id": "AFFINE-BP2.6", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.7", "score": 0.5, "quote": "The extension loader and the `std` DI container compose these into an editor. ... The app selects the extension sets it needs, adds its own (AI, workspace and doc services, custom embeds), and mounts the resulting editor in page and edgeless modes." },
+  { "id": "AFFINE-BP2.8", "score": 0.5, "quote": "Frontend packages import `@blocksuite/affine/...` heavily. About 391 files under `packages/frontend/core/src` do." }
+] }

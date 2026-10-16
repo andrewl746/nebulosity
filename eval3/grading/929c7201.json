@@ -1,0 +1,11 @@
+{
+  "id": "929c7201",
+  "points": [
+    {"id": "BP5.1", "score": 0.5, "quote": "`workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`. They then add their own platform-specific imports and service registrations."},
+    {"id": "BP5.2", "score": 1, "quote": "The web file, for example, adds `contrib/webview/browser/webview.web.contribution.js` and `contrib/extensions/browser/extensions.web.contribution.js`."},
+    {"id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point. ... each start with `import './workbench.common.main.js'`."},
+    {"id": "BP5.4", "score": 0.5, "quote": "a shared feature can only reach platform-specific behaviour through a service interface that each platform implements."},
+    {"id": "BP5.5", "score": 1, "quote": "\"Only code referenced from entry point files is loaded.\" ... If no entry point reaches a file, it is never bundled or loaded."},
+    {"id": "BP5.6", "score": 0.5, "quote": "A feature's `*.contribution.ts` file registers its services, commands, views and so on when it is imported."}
+  ]
+}

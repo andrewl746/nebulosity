@@ -1,0 +1,39 @@
+{
+  "id": "acef88ef",
+  "question": "How is a Theia application put together from extensions: what is a Theia extension, how does it add code to the frontend and the backend, and how does an application pick its extensions, get built and start?",
+  "points": [
+    {
+      "id": "THEIA-BP2.1",
+      "text": "a Theia application is a node package that lists Theia extensions as its dependencies and is managed with the Theia CLI (the `theia` command from `@theia/cli`)"
+    },
+    {
+      "id": "THEIA-BP2.2",
+      "text": "a Theia extension is a node package whose `package.json` declares `theiaExtensions`, a list of entries naming the modules it contributes"
+    },
+    {
+      "id": "THEIA-BP2.3",
+      "text": "an entry's `frontend` module runs in the browser (and in Electron unless a `frontendElectron` module is given), and its `backend` module runs in Node.js (and in Electron unless a `backendElectron` module is given)"
+    },
+    {
+      "id": "THEIA-BP2.4",
+      "text": "each such module default-exports an inversify `ContainerModule`, which binds the extension's services and contributions into the dependency-injection container (inversify is re-exported as `@theia/core/shared/inversify`)"
+    },
+    {
+      "id": "THEIA-BP2.5",
+      "text": "`@theia/core` is the main extension every application builds on, providing the application and shell APIs, base widgets, and contribution points such as commands, menu items and keybindings"
+    },
+    {
+      "id": "THEIA-BP2.6",
+      "text": "inside a package, code is split into platform folders that limit what it may use: `common` (runs everywhere), `browser` and `browser-only` (DOM), `node` (Node.js), and `electron-browser`, `electron-node` and `electron-main` for Electron; `browser` and `node` may use only `common`"
+    },
+    {
+      "id": "THEIA-BP2.7",
+      "text": "an application is configured under `theia` in its `package.json`: its target, `browser` (the default) or `electron`, and frontend and backend settings such as the application name and default preferences"
+    },
+    {
+      "id": "THEIA-BP2.8",
+      "text": "the CLI generates the application's frontend and backend code and its esbuild configuration; `theia build` bundles it and `theia start` runs the backend server (on localhost:3000 for the browser target), and in Electron the generated `electron-main` script forks the backend into a Node.js subprocess"
+    }
+  ],
+  "answer": "A Theia application is a set of Theia extensions, plus a generated bootstrap that loads them. I based this on the repo's `CLAUDE.md`, the `package.json` of `examples/browser`, and the file layout of `dev-packages/application-package` and `dev-packages/application-manager`. I didn't open the generator or collector code, so the build and start steps below are partly from memory of how Theia works.\n\n**What an extension is**\n- A Theia extension is an ordinary npm package that declares a `theiaExtensions` array in its `package.json`. Each entry names a module for each side, for example `\"frontend\": \"lib/browser/editor-frontend-module\"` and `\"backend\": \"lib/node/editor-backend-module\"`.\n- Those modules are InversifyJS `ContainerModule`s. They bind services and contributions such as `CommandContribution`, `MenuContribution` and `FrontendApplicationContribution`. Code that several extensions share is meant to be extended through `ContributionProvider`s.\n- Source folders follow the runtime:\n  - `src/browser` is the frontend.\n  - `src/node` is the backend.\n  - `src/common` is shared code.\n  - `src/electron-browser` and `src/electron-main` are the Electron renderer and main processes.\n- `dev-packages/application-package` models this. Its `extension-package.ts` reads `theiaExtensions` from each package, and `extension-package-collector.ts` walks the dependency tree to find every package that has one.\n\n**How an application picks its extensions**\n- An application such as `examples/browser` lists the extensions it wants as plain npm dependencies. `@theia/core` is one of them, at 1.76.0. It also has a `theia` section in its `package.json` for application properties such as the target (browser or Electron).\n- The extensions in the build are the ones the collector finds in that dependency tree.\n\n**How it is built**\n- `theiaext build` compiles the TypeScript (`tsc --build`).\n- `theia build`, from `@theia/cli` and `dev-packages/application-manager`, then bundles the frontend. Before bundling, the generators in `application-manager/src/generator` write the bootstrap code:\n  - `frontend-generator.ts` writes a frontend entry that loads every extension's frontend module into one Inversify container.\n  - `backend-generator.ts` does the same for the backend modules.\n  - `bundler-generator.ts` writes the esbuild configuration (`esbuild.mjs`).\n- The `bundle` script also runs `npm run rebuild` first, which handles native modules. Bundling always uses esbuild.\n- From the repo root, `npm run build:browser` runs the whole chain.\n\n**How it starts**\n- `theia start` runs the generated backend, which loads the backend modules and serves the bundled frontend. In this repo, `npm run start:browser` does this and serves on localhost:3000.\n- The browser then runs the frontend entry, which loads the frontend modules and starts the `FrontendApplication`, so the contributions from every extension run.\n- The `start` script in `examples/browser` also passes `--plugins=local-dir:../../plugins` to load runtime VS Code extensions and Theia plugins. Those are separate from the build-time extensions above."
+}

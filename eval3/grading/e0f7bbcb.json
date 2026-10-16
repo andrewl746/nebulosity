@@ -1,0 +1,13 @@
+{
+  "id": "e0f7bbcb",
+  "points": [
+    {"id": "BP6.1", "score": 0.5, "quote": "They live next to the code, in `src/vs/*/test/{common,browser,node,electron-main}/*.test.ts`."},
+    {"id": "BP6.2", "score": 1, "quote": "Run them with `scripts/test.sh` or `scripts\\test.bat`, which uses Electron. Add `--run <file>` or `--grep` to narrow the run."},
+    {"id": "BP6.3", "score": 1, "quote": "`npm run test-browser` runs the browser-targeted tests in Playwright. `npm run test-node` runs the node-only tests with mocha."},
+    {"id": "BP6.4", "score": 0.5, "quote": "They live in `test/integration/electron` and `test/integration/browser`. ... Run them with `scripts/test-integration.sh` (or `.bat`)."},
+    {"id": "BP6.5", "score": 1, "quote": "They also include extension-host tests that run inside a real VS Code instance. Examples are the API tests in `extensions/vscode-api-tests` and other tests under `extensions/`."},
+    {"id": "BP6.6", "score": 1, "quote": "They live in `test/smoke`. They drive the built app with UI automation, built on `test/automation`. Run them with `npm run smoketest`, which compiles first."},
+    {"id": "BP6.7", "score": 1, "quote": "The shared harness is in `test/unit/`. ... `test/sanity` holds sanity tests of the built product."},
+    {"id": "BP6.8", "score": 0, "quote": "none"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "0eaa170a",
+  "points": [
+    {"id": "BP4.1", "score": 0.5, "quote": "`common/` holds shared contracts and models that don't depend on the UI. ... `browser/` holds the shell and layout. ... `electron-browser/`, the desktop startup layer."},
+    {"id": "BP4.2", "score": 1, "quote": "`api/`, the bridge to the extension host and the `vscode.d.ts` provider."},
+    {"id": "BP4.3", "score": 0.5, "quote": "`services/` holds the core service implementations (about 660 files)."},
+    {"id": "BP4.4", "score": 1, "quote": "`contrib/` (about 3,270 files)"},
+    {"id": "BP4.5", "score": 1, "quote": "Nothing outside `contrib/` may depend on `contrib/`. The exceptions are the entry-point files, `api/` (356 imports) and tests."},
+    {"id": "BP4.6", "score": 1, "quote": "Each contribution has a single `.contribution.ts` entry point, which registers it."},
+    {"id": "BP4.7", "score": 1, "quote": "A contribution exposes its internal API from a single `common` file."},
+    {"id": "BP4.8", "score": 1, "quote": "Other contributions may depend only on that common API and must not reach into a feature's internals."}
+  ]
+}

@@ -1,0 +1,10 @@
+{ "id": "864481c8", "points": [
+  { "id": "AFFINE-BP5.1", "score": 1, "quote": "Edgeless mode doesn't store a separate copy of the document. It adds data to the same Yjs doc that page mode uses. ... Edgeless mode reuses it." },
+  { "id": "AFFINE-BP5.2", "score": 0.5, "quote": "The `affine:surface` block is the page's second child. It is the edgeless layer, and its schema declares `parent: ['@root']`." },
+  { "id": "AFFINE-BP5.3", "score": 1, "quote": "Shapes, brush strokes, highlighter strokes, connectors, groups, mindmaps and canvas text are not blocks. They live inside the surface block's single `elements` prop." },
+  { "id": "AFFINE-BP5.4", "score": 1, "quote": "The page-mode block tree is `affine:page` → `affine:note` blocks → paragraphs, lists and so on. Edgeless mode reuses it. ... This is how a note appears as a card on the canvas." },
+  { "id": "AFFINE-BP5.5", "score": 0.5, "quote": "Rich objects are real child blocks of the surface: `affine:frame`, `affine:image`, `affine:bookmark`, `affine:attachment`, `affine:embed-*` and `affine:edgeless-text`." },
+  { "id": "AFFINE-BP5.6", "score": 1, "quote": "**Position:** every element and every edgeless block has `xywh`. It is a serialized string such as `\"[x,y,w,h]\"`." },
+  { "id": "AFFINE-BP5.7", "score": 1, "quote": "**Stacking:** each element and block has a fractional-indexing string in `index`, generated with `generateKeyBetween`. ... `blocksuite/framework/std/src/gfx/layer.ts` sorts by this string to produce the z-order." },
+  { "id": "AFFINE-BP5.8", "score": 0.5, "quote": "**Grouping:** a `group` element ... has a `children` prop that is a `Y.Map<boolean>` of child id → `true`, plus a `title` Y.Text. A child can be an element or a block, and the group's bounds come from them." }
+] }

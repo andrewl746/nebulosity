@@ -1,0 +1,13 @@
+{
+  "id": "7b261786",
+  "points": [
+    {"id": "AFFINE-BP3.1", "score": 1, "quote": "`defineBlockSchema({ flavour, props, metadata, toModel })` ... The flavour is a namespaced string, `'affine:paragraph'`. ... `metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours."},
+    {"id": "AFFINE-BP3.2", "score": 1, "quote": "`props(internal)` returns the default props. `internal.Text()` creates a collaborative text field."},
+    {"id": "AFFINE-BP3.3", "score": 0.5, "quote": "`metadata` holds `version`, `role` (such as `'content'`) and the allowed `parent` flavours."},
+    {"id": "AFFINE-BP3.4", "score": 1, "quote": "`toModel` returns an instance of a class that extends `BlockModel<Props>`, here `ParagraphBlockModel`."},
+    {"id": "AFFINE-BP3.5", "score": 1, "quote": "`ParagraphBlockComponent extends CaptionedBlockComponent<ParagraphBlockModel>`. `CaptionedBlockComponent` is built on the std `BlockComponent` base. ... `BlockViewExtension('affine:paragraph', literal`affine-paragraph`)`."},
+    {"id": "AFFINE-BP3.6", "score": 0.5, "quote": "Optional extras are services, widgets and toolbar entries."},
+    {"id": "AFFINE-BP3.7", "score": 1, "quote": "`ParagraphStoreExtension extends StoreExtensionProvider` ... This is the data side. `ParagraphViewExtension extends ViewExtensionProvider` ... It builds the editor's view from the view extensions through `ViewExtensionManager`."},
+    {"id": "AFFINE-BP3.8", "score": 0.5, "quote": "The view's `effect()` runs once so the custom element gets defined."}
+  ]
+}

@@ -1,0 +1,10 @@
+{"id":"3095c2da","points":[
+{"id":"AFFINE-BP4.1","score":0.5,"quote":"AFFiNE stores each document as a Yjs CRDT, a `Y.Doc` whose content is a tree of shared types."},
+{"id":"AFFINE-BP4.2","score":0,"quote":"none"},
+{"id":"AFFINE-BP4.3","score":1,"quote":"Persisted data is binary Yjs updates, not JSON or plain text."},
+{"id":"AFFINE-BP4.4","score":0,"quote":"none"},
+{"id":"AFFINE-BP4.5","score":1,"quote":"Awareness (cursors and presence) uses a separate channel. It is cloud-based, with a BroadcastChannel between local tabs."},
+{"id":"AFFINE-BP4.6","score":1,"quote":"In the browser, IndexedDB holds a database named `workspace:<id>`... In the desktop (Electron) and mobile apps, SQLite is used instead"},
+{"id":"AFFINE-BP4.7","score":0.5,"quote":"`sync/doc/peer.ts` syncs the local storage with each remote peer by running connect, pull, push, pullAndPush and save jobs."},
+{"id":"AFFINE-BP4.8","score":0,"quote":"none"}
+]}

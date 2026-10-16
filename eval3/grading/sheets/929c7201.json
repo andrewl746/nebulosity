@@ -1,0 +1,31 @@
+{
+  "id": "929c7201",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Desktop and web share one workbench. What differs is which entry file pulls in which modules.\n\n**How the code is shared**\n\n- `src/vs/workbench/workbench.common.main.ts` is the shared entry point. It imports the shared core and most feature contributions, and it registers the shared services.\n- `workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`. They then add their own platform-specific imports and service registrations. The web file, for example, adds `contrib/webview/browser/webview.web.contribution.js` and `contrib/extensions/browser/extensions.web.contribution.js`.\n- `workbench.web.main.internal.ts` exposes the public API for people embedding the web workbench.\n- Code is split by target environment into folders. Each folder may only use the ones it builds on:\n  - `common` uses only basic JavaScript.\n  - `browser` can use web and DOM APIs.\n  - `electron-browser` adds Electron IPC on top of `browser`.\n  - `node` and `electron-main` are for the Node and Electron main processes.\n- The desktop and web layers therefore both build on `common` and `browser`. Desktop adds `electron-browser`.\n- A feature can have both versions side by side. `contrib/webview` has `browser/webview.contribution.ts` and `electron-browser/webview.contribution.ts`. It also has `browser/webviewElement.ts` and `electron-browser/webviewElement.ts`.\n- The shared contract sits in `common`, and each platform provides its own implementation.\n- Features register themselves through side effects. A feature's `*.contribution.ts` file registers its services, commands, views and so on when it is imported.\n- Layering rules (`.github/instructions/source-code-organization.instructions.md`) keep this workable:\n  - Each layer may only import from layers below it.\n  - Nothing outside `contrib/` may depend on `contrib/`.\n\n**What decides whether a feature loads**\n\nThe source-organization doc says that \"Only code referenced from entry point files is loaded.\" Loading is decided by the import graph, not by a runtime check:\n\n- If a feature's `.contribution.ts` is imported by `workbench.common.main.ts`, both builds load it.\n- If only the desktop entry or only the web entry imports it, only that build loads it.\n- If no entry point reaches a file, it is never bundled or loaded.\n\nThe environment folder rules also matter. A `browser` module cannot import `node` or `electron-browser` code, so a shared feature can only reach platform-specific behaviour through a service interface that each platform implements.\n\nI read the entry-file imports and the organization doc. I didn't trace the bundler config in `build/`."
+}

@@ -1,0 +1,27 @@
+{
+  "id": "4da53a92",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code does this with its own dependency-injection system in `src/vs/platform/instantiation/common/`. I checked the definitions in `instantiation.ts`, `extensions.ts` and `descriptors.ts`, and the `IContextViewService` example below. I didn't trace how `IInstantiationService` resolves dependencies inside `instantiationService.ts`, so that step relies on how the system is normally described.\n\n**1. Define the service**\n- In a `common/`, `browser/` or similar file, declare an interface such as `IFooService`. It has a `readonly _serviceBrand: undefined;` member.\n- The brand makes the interface structurally unique.\n- Next to it, create the identifier with `createDecorator<IFooService>('fooService')` (`instantiation.ts:109`).\n- The convention is to export a `const` with the same name as the interface: `export const IFooService = createDecorator<IFooService>(...)`. The result is a `ServiceIdentifier<T>`, and it also works as a parameter decorator.\n- Example: `IContextViewService` in `src/vs/platform/contextview/browser/contextView.ts:17`.\n\n**2. Implement it**\n- Write `class FooService implements IFooService`. It repeats `declare readonly _serviceBrand: undefined`.\n- Its own dependencies are constructor parameters, each tagged with a decorator: `constructor(@IBarService private readonly barService: IBarService)`.\n- Non-service arguments, if any, go first and the decorated service parameters go last.\n\n**3. Make it available**\n- **Lazy singleton:** call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`). `InstantiationType.Eager` creates the service at startup instead. `Delayed` returns a proxy and constructs the service on first use.\n- **Descriptor form:** `registerSingleton(id, new SyncDescriptor(FooService, [staticArgs]))` (`descriptors.ts`).\n- These calls usually sit in a `*.main.ts` or `*.contribution.ts` file. For example, `src/vs/workbench/workbench.common.main.ts:181` registers `IContextViewService`.\n- Services that need startup-time objects are instead added directly to a `ServiceCollection` with `.set(id, instanceOrDescriptor)`. Entry points such as the workbench, the server and the extension host do this, and they then create an `InstantiationService` from that collection.\n\n**4. Get it into classes**\n- **Constructor injection:** `@IFooService` parameter decorators record the dependency on the class. The `InstantiationService` reads that metadata and builds the dependencies in order. It resolves each identifier from its `ServiceCollection`, or from its parent's.\n- **Creating instances:** use `instantiationService.createInstance(MyClass, ...nonServiceArgs)`. A class created this way gets its decorated parameters filled in automatically.\n- **Running functions:** `instantiationService.invokeFunction(accessor => accessor.get(IFooService))` runs a function with a `ServicesAccessor`. Commands and actions use this form.\n- **Child scopes:** `instantiationService.createChild(collection)` makes a scoped container that overrides or adds services.\n- **Cross-layer rule:** `IInstantiationService` is itself an injectable service."
+}

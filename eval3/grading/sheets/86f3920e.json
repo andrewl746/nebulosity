@@ -1,0 +1,39 @@
+{
+  "id": "86f3920e",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "`src/vs/workbench` is the main application layer for web and desktop. It sits above `base`, `platform` and `editor` in VS Code's layered architecture. I read the layout from the directory listing and `.github/copilot-instructions.md`. I read the contrib import rules from `eslint.config.js` (around lines 1885–1965). I didn't read the rest of that file, so other contrib-specific rules may exist.\n\n**Layout**\n- `api/`: the extension host and the implementation of the VS Code API (`vscode`).\n- `browser/`: core workbench UI, meaning the parts, layout and actions.\n- `common/`: code shared across environments.\n- `electron-browser/`: desktop-only renderer code.\n- `services/`: service implementations. Each is a folder such as `services/foo/{common,browser,electron-browser}`.\n- `contrib/`: feature contributions. There are about 100 folders, including `chat`, `debug`, `search`, `terminal`, `scm`, `notebook`, `extensions`, `files`, `mcp` and `testing`.\n- `test/`: tests.\n- Entry points: `workbench.common.main.ts`, `workbench.desktop.main.ts`, `workbench.web.main.ts` and `workbench.web.main.internal.ts`. These import the contributions.\n\n**Rules for `contrib/*`**\n\nThe rules are enforced by the import-pattern lint rules in `eslint.config.js`.\n\n- **Allowed imports.** A contrib folder may import from these places:\n  - `vs/base`\n  - `vs/platform`\n  - `vs/editor`, including `editor/contrib/*`\n  - `vs/workbench/{common,browser,…}`\n  - `vs/workbench/services/*`\n  - other `vs/workbench/contrib/*` folders\n  - `vs/sessions`\n  - a few type-only or specific modules (`vscode-notebook-renderer`, `@vscode/tree-sitter-wasm`, the terminal contrib export files)\n  - `@xterm/*`, only in browser code\n- **Layering inside a folder.** The `~` in the patterns means the environment layers are checked as well. Code under `common/` can't import `browser/` or `electron-browser/` code. Browser code can't import Node or Electron code.\n- **Services can't import contrib.** `workbench/services/*` may not import `contrib/*`, except in tests, which carry a `TODO@layers` marker. The same restriction covers `workbench/~` itself. `workbench/api` is allowed to import contrib.\n- **Contribution model.** Features plug in through registries and extension points, not by being hard-wired. Each contrib has a `*.contribution.ts` file that registers its actions, views, editors, configuration and services. The `workbench.*.main.ts` entry points import those files.\n- **Sessions layer.** `src/vs/sessions` sits alongside `vs/workbench`. It may import from the workbench, but the workbench may not import from it. The `contrib/*` rule above does list `vs/sessions/~` as an allowed import, so contrib is the exception to that one-way rule."
+}

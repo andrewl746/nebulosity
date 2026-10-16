@@ -1,0 +1,8 @@
+{ "id": "73dfa196", "points": [
+  { "id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports `workbench.common.main.js` first. It then adds desktop-only code from `electron-browser/` folders." },
+  { "id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` also imports `workbench.common.main.js` first. It then adds `browser/web.main.js` and web-specific implementations" },
+  { "id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` is the shared entry point. ... `workbench.desktop.main.ts` imports `workbench.common.main.js` first. ... `workbench.web.main.ts` also imports `workbench.common.main.js` first." },
+  { "id": "BP5.4", "score": 0.5, "quote": "The same service interface usually gets a different implementation in each build. The web build registers a `*.web` or `browser` one. The desktop build registers a native one from `electron-browser`." },
+  { "id": "BP5.5", "score": 1, "quote": "Each registration is a side-effect import, so a feature's code is only bundled and loaded if one of the entry files imports it, directly or transitively." },
+  { "id": "BP5.6", "score": 0.5, "quote": "It is a long list of side-effect imports (`import './contrib/...contribution.js'`)." }
+] }

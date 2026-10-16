@@ -1,0 +1,31 @@
+{
+  "id": "c0c62a84",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Each layer (`base`, `platform`, `editor`, `workbench`, and so on) splits into folders named for the environment the code runs in. I got this from the folder names under `src/vs` and from my knowledge of VS Code's layering rules. I didn't open the rule file that enforces them (`.eslint-plugin-local/code-layering.ts`, if I remember its name right), so check the exact allowed-import lists there.\n\n**Environments**\n\n- **`common`**: Plain JavaScript and TypeScript that runs anywhere. It can't use DOM APIs or Node APIs.\n- **`browser`**: Code that needs the DOM and browser APIs, such as web workers, the DOM and `window`.\n- **`node`**: Code that needs Node.js APIs, such as `fs`, `child_process` and `net`. It runs in a Node process, such as the extension host, the shared process or a CLI.\n- **`electron-browser`**: The Electron renderer process. It has the DOM plus Electron and Node access through preload and IPC. Some layers call this folder `electron-sandbox` instead.\n- **`electron-main`**: The Electron main process. It has Node plus Electron's main-process APIs, such as `BrowserWindow` and `app`.\n\nSome layers also have `worker` folders for web-worker code.\n\n**What each may import**\n\nThe rule is that code can import only from environments that are available wherever it runs, and always from within the same layer or a lower one.\n\n- **`common`** may import only other `common` code.\n- **`browser`** may import `common` and `browser`.\n- **`node`** may import `common` and `node`.\n- **`electron-browser`** may import `common`, `browser` and `electron-browser`. It may use Node only through the sandbox and IPC, not by importing `node` folders directly. Older code that is not sandboxed may still import `node`.\n- **`electron-main`** may import `common`, `node` and `electron-main`. It must not import `browser` or `electron-browser`.\n\n**Things to avoid**\n\n- **Never cross environments sideways.** `browser` must not import `node` or `electron-main`, `node` must not import `browser`, and `common` must not import anything environment-specific.\n- **Layers only point downward.** `base` is the bottom, then `platform`, then `editor`, then `workbench`. A lower layer must not import from a higher one, and `base` knows nothing about `platform`.\n- **Shared contracts go in `common`.** For example, `platform/files` has `common` (the interfaces), `browser`, `node` and `electron-main`. The service interface lives in `common`, and each environment supplies its own implementation."
+}

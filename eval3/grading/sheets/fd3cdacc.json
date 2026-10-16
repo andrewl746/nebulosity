@@ -1,0 +1,27 @@
+{
+  "id": "fd3cdacc",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code's dependency injection lives in `src/vs/platform/instantiation/common/`. I confirmed the function names below by grep. The other details come from my prior knowledge of the code and I didn't re-check them.\n\n**1. Define the service**\n- Declare an interface, conventionally named `IFooService`.\n- Put `declare readonly _serviceBrand: undefined;` in the interface. This brand makes the type distinct for the type checker.\n- Create the identifier with `createDecorator<IFooService>('fooService')` (`instantiation.ts:109`). The same name is used for the `const` and the type:\n  `export const IFooService = createDecorator<IFooService>('fooService');`\n- The result is a `ServiceIdentifier<T>`. It is also a parameter decorator.\n- `refineServiceDecorator` (`instantiation.ts:128`) makes a more specific identifier that extends an existing one.\n\n**2. Make an implementation available**\n- Write a class `FooService implements IFooService`. Its constructor takes other services as decorated parameters, such as `@IBarService bar: IBarService`. It also carries `declare readonly _serviceBrand: undefined;`.\n- There are two ways to register it:\n  - **Global registration:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`).\n    - `Delayed` makes the service lazy. It returns a proxy and creates the real object on first use.\n    - `Eager` creates it at startup.\n    - The overload that takes a `SyncDescriptor` (`descriptors.ts:6`) lets you pass static arguments.\n  - **Manual registration:** `new ServiceCollection([IFooService, new SyncDescriptor(FooService)])`, or pass an already-built instance. Entry points do this when they bootstrap, for example in the workbench, main process, or extension host. `ServiceCollection` is the registry that holds these entries.\n\n**3. Get it into consumers**\n- A consumer declares the dependency as a constructor parameter decorator:\n  `constructor(@IFooService private readonly fooService: IFooService) {}`\n- The decorator records the dependency on the class. The `createDecorator` identifier stores it under a `$di$dependencies` key.\n- `InstantiationService` (`instantiationService.ts:28`) does the resolving.\n  - `createInstance(Ctor, ...staticArgs)` looks up the class's dependencies and fetches each one with `_getOrCreateServiceInstance`. That method builds the service from its `SyncDescriptor` through `_createServiceInstanceWithOwner` (line 282). It checks for cycles, caches the result, and falls back to the parent instantiation service if the service isn't found.\n  - Static arguments come first in the constructor. The injected services follow.\n- Other entry points are `invokeFunction(accessor => accessor.get(IFooService))` for one-off use, and `createChild(serviceCollection)` for scoped containers.\n- Consumers get an `IInstantiationService` by injecting it. They don't import it directly.\n\n**Conventions**\n- Interface names start with `I`.\n- Services are declared in `common/` or in `browser/` or `node/` platform folders.\n- Registration happens as a side effect of importing the module, for example from `workbench.common.main.ts` and the other `*.main.ts` files.\n- Services use `_serviceBrand`.\n- Dependencies are `private readonly` constructor parameters."
+}

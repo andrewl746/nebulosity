@@ -1,0 +1,7 @@
+{ "id": "dacc279e", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Each service has an interface named `IFooService`. Next to it is a same-named constant: `export const IFooService = createDecorator<IFooService>('fooService')` (`instantiation.ts:109`)." },
+  { "id": "BP3.3", "score": 1, "quote": "A consumer declares the service as a constructor parameter, using the identifier as a decorator: ... `@IFooService private readonly fooService: IFooService`" },
+  { "id": "BP3.4", "score": 1, "quote": "Classes are created with `instantiationService.createInstance(FooClass, ...staticArgs)`. It looks up each decorated parameter and builds the services on demand. ... Many consumers are themselves created through `createInstance`. Examples are workbench contributions registered with `registerWorkbenchContribution2`, and editor panes." },
+  { "id": "BP3.5", "score": 1, "quote": "**Singleton registration:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)." },
+  { "id": "BP3.6", "score": 0, "quote": "none" }
+] }

@@ -1,0 +1,13 @@
+{
+  "id": "e3e257a3",
+  "points": [
+    { "id": "THEIA-BP1.1", "score": 0, "quote": "none" },
+    { "id": "THEIA-BP1.2", "score": 1, "quote": "The backend spawns a separate plugin host for each connected frontend. This is either a Node process (`plugin-ext/src/hosted/node/plugin-host.ts`) or a web worker (`plugin-ext/src/hosted/browser/worker/worker-main.ts`)." },
+    { "id": "THEIA-BP1.3", "score": 1, "quote": "The API is declared in `packages/plugin/src/theia.d.ts`. `createAPIFactory` in `plugin-ext/src/plugin/plugin-context.ts` implements it. ... `plugin-ext-vscode/src/node/plugin-vscode-init.ts` takes the Theia API object and overrides a few members so it matches VS Code's." },
+    { "id": "THEIA-BP1.4", "score": 1, "quote": "The host then makes that object importable by overriding module loading: Theia plugins import `@theia/plugin` in Node. ... In web workers the API is `window['theia']`. VS Code extensions import `vscode`." },
+    { "id": "THEIA-BP1.5", "score": 1, "quote": "Each side holds an RPC proxy to the other. The interface pairs and the proxy identifiers (`MAIN_RPC_CONTEXT`, `PLUGIN_RPC_CONTEXT`) are in `plugin-ext/src/common/plugin-api-rpc.ts`. Methods callable over RPC start with `$`" },
+    { "id": "THEIA-BP1.6", "score": 1, "quote": "The backend spawns a separate plugin host for each connected frontend. ... messages between plugin host and browser are relayed through the Theia backend." },
+    { "id": "THEIA-BP1.7", "score": 1, "quote": "Messages are encoded with msgpackr ... Functions and object references do not. For anything that needs a callback ... the creating side caches the object and sends a numeric handle." },
+    { "id": "THEIA-BP1.8", "score": 1, "quote": "Headless plugins ... share a single backend host process that is not tied to any frontend, and Theia defines no API object for them. Applications supply their own through custom API contributions. ... For headless plugins, `Main` runs in the Node backend instead." }
+  ]
+}

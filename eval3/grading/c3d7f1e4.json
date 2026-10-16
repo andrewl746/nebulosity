@@ -1,0 +1,13 @@
+{
+  "id": "c3d7f1e4",
+  "points": [
+    { "id": "THEIA-BP1.1", "score": 0.5, "quote": "**VS Code extensions and Theia plugins** run in a separate \"host process\" ... **Headless plugins** run in a single shared backend host." },
+    { "id": "THEIA-BP1.2", "score": 1, "quote": "Node-style plugins run in a Node process (`plugin-ext/src/hosted/node/plugin-host.ts`). Browser-style plugins run in a web worker" },
+    { "id": "THEIA-BP1.3", "score": 1, "quote": "The API is declared in `packages/plugin/src/theia.d.ts` and implemented in `plugin-ext/src/plugin/plugin-context.ts`." },
+    { "id": "THEIA-BP1.4", "score": 1, "quote": "**Theia plugins** import `@theia/plugin` in Node. ... In web workers the API is assigned to `theia` ... **VS Code extensions** get `require('vscode')`" },
+    { "id": "THEIA-BP1.5", "score": 1, "quote": "They come in pairs, such as `LanguagesMain` and `LanguagesExt`. They are declared in `plugin-ext/src/common/plugin-api-rpc.ts` ... Methods callable over RPC start with `$`." },
+    { "id": "THEIA-BP1.6", "score": 1, "quote": "The backend spawns one host per connected frontend ... the messages are relayed through the Theia backend, which sits between the browser and the host." },
+    { "id": "THEIA-BP1.7", "score": 1, "quote": "Messages are encoded with msgpackr. ... The creating side caches the object and sends a handle (an id)." },
+    { "id": "THEIA-BP1.8", "score": 1, "quote": "**Headless plugins** run in a single shared backend host. ... The application defines its own API. ... For headless plugins, Main runs in the Node backend instead." }
+  ]
+}

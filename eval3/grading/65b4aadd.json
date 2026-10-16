@@ -1,0 +1,13 @@
+{
+  "id": "65b4aadd",
+  "points": [
+    { "id": "BP6.1", "score": 0.5, "quote": "They live next to the source, in `src/vs/*/test/` folders (for example `src/vs/workbench/.../test/`)." },
+    { "id": "BP6.2", "score": 1, "quote": "Locally, run `scripts/test.sh` (`scripts\\test.bat` on Windows). It runs them in Electron, and `--run <file>` or `--grep` narrows the run." },
+    { "id": "BP6.3", "score": 1, "quote": "`npm run test-browser` (or `test-browser-no-install`) runs the browser unit tests through Playwright" },
+    { "id": "BP6.4", "score": 0.5, "quote": "Run `scripts/test-integration.sh` (`.bat` on Windows) to run them." },
+    { "id": "BP6.5", "score": 1, "quote": "The built-in extensions have their own tests, and `extensions/vscode-api-tests` tests the extension API. ... The integration scripts also run them." },
+    { "id": "BP6.6", "score": 1, "quote": "They live in `test/smoke/`. They drive the real app UI end to end. Run `npm run smoketest`, which compiles first." },
+    { "id": "BP6.7", "score": 0.5, "quote": "The runners and infrastructure are in `test/unit/`. ... `test/sanity` holds sanity tests." },
+    { "id": "BP6.8", "score": 0, "quote": "none" }
+  ]
+}

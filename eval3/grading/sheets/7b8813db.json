@@ -1,0 +1,39 @@
+{
+  "id": "7b8813db",
+  "question": "How does Theia run VS Code extensions and Theia plugins: where does a plugin's code run, how does it get the `vscode` or `theia` API, and how do calls travel between a plugin and the rest of Theia?",
+  "points": [
+    {
+      "id": "THEIA-BP1.1",
+      "text": "Theia runs three kinds of plugins, VS Code extensions, Theia plugins (a superset of the VS Code API) and headless plugins, and they can be installed and removed at runtime, unlike Theia extensions, which are built into the application"
+    },
+    {
+      "id": "THEIA-BP1.2",
+      "text": "a plugin runs isolated, in a host process that Theia's backend spawns (a Node.js process) or in a web worker in the browser, and reaches Theia's state and services only through the plugin API"
+    },
+    {
+      "id": "THEIA-BP1.3",
+      "text": "the API is declared in `packages/plugin` (`theia.d.ts`); `packages/plugin-ext` holds the machinery that runs plugins and the implementation of the `theia` API; `packages/plugin-ext-vscode` adapts that API for VS Code extensions"
+    },
+    {
+      "id": "THEIA-BP1.4",
+      "text": "the API object is handed to a plugin by hooking module loading, so a Theia plugin imports `@theia/plugin` and a VS Code extension gets the same API as `vscode`; in a web worker it is the `theia` global"
+    },
+    {
+      "id": "THEIA-BP1.5",
+      "text": "the plugin side (`Ext`) and Theia's side (`Main`, in the frontend) talk over RPC: `Main` and `Ext` interfaces come in pairs in `plugin-ext/src/common/plugin-api-rpc.ts` (such as `LanguagesMain` and `LanguagesExt`), each side holds a proxy of the other's interface, and methods called over RPC start with `$`"
+    },
+    {
+      "id": "THEIA-BP1.6",
+      "text": "there is one plugin host process for each connected frontend, and because `Main` runs in the browser, the backend relays the RPC messages between the two"
+    },
+    {
+      "id": "THEIA-BP1.7",
+      "text": "RPC messages are encoded with msgpackr; functions and object references can't cross, so such an object is cached on the side that created it and the other side gets a handle (an id) to call it through"
+    },
+    {
+      "id": "THEIA-BP1.8",
+      "text": "headless plugins serve application-specific extension points rather than the user interface, and run in a single dedicated backend host process (`plugin-ext-headless`), with their `Main` side in Node.js"
+    }
+  ],
+  "answer": "**Where plugin code runs**\n\n- VS Code extensions and Theia plugins run in a separate \"plugin host\" process. The Theia backend spawns it to isolate plugins from the main process.\n- For these plugins there is one host per connected frontend. Node plugins run in a node process (`plugin-ext/src/hosted/node/plugin-host.ts`). Browser-compatible plugins run in web workers (`plugin-ext/src/hosted/browser/worker/worker-main.ts`).\n- Headless plugins are different. They share a single backend host process that is started only if there are headless plugins. They get no default `vscode` or `theia` API.\n\n**How a plugin gets the API**\n\n- The API is declared in `packages/plugin/src/theia.d.ts`.\n- `createAPIFactory` in `plugin-ext/src/plugin/plugin-context.ts` builds the implementation. It returns a per-plugin API object made of namespaces, types and classes.\n- The plugin host overrides module loading so that the plugin's `import` or `require` returns that object:\n  - **Theia plugins** (node): `@theia/plugin`, via `plugin-ext/src/hosted/node/scanners/backend-init-theia.ts`.\n  - **VS Code extensions** (node): `vscode`, via `plugin-ext-vscode/src/node/plugin-vscode-init.ts`. This starts from the Theia API object and overrides a few members.\n  - **Web workers**: the object is assigned to `window['theia']`.\n\n**How calls travel**\n\nTheia uses a Main–Ext pattern over RPC:\n\n- **Ext** is the code inside the plugin host. It cannot use Theia's dependency-injection services directly.\n- **Main** runs in the browser frontend, so it has full access to Theia services. For headless plugins, Main runs in the node backend instead.\n- Interfaces come in pairs, such as `LanguagesExt` and `LanguagesMain`, defined in `plugin-ext/src/common/plugin-api-rpc.ts`. Each side holds an RPC proxy of the other side's interface. Proxy identifiers live in `MAIN_RPC_CONTEXT` and `PLUGIN_RPC_CONTEXT`.\n- Methods callable over RPC start with `$`, for example `$provideCodeActions`.\n- The implementations are in `plugin-ext/src/plugin/` (Ext) and `plugin-ext/src/main/browser/` (Main).\n- For VS Code and Theia plugins, the frontend and the plugin host talk through the Theia backend, which only relays messages in both directions.\n- Messages are encoded by `RpcProtocol` using msgpackr. A few common classes (errors, URI, Range) have custom msgpackr extensions. Everything else is sent as plain data transfer objects (DTOs), with converters in `plugin/type-converters.ts`.\n- Functions and object references can't be serialized. The creating side caches the object and passes a handle (an id) to the other side. For example, `registerCodeActionsProvider` caches the provider in Ext and registers its handle with Main. Later calls go back to Ext with that handle, and the cached objects must be disposed when no longer needed.\n\n**Example flow**\n\nA plugin calls `vscode.languages.registerCodeActionsProvider`. The call reaches `LanguagesExtImpl`, which caches the provider and calls `LanguagesMain` through its proxy. When the editor needs code actions, `LanguagesMainImpl` calls `$provideCodeActions(handle, ...)` on Ext. Ext runs the plugin's provider and returns DTOs.\n\nI answered this from the project docs in the context (mainly `doc/Plugin-API.md`) and didn't open the source files to check them."
+}

@@ -1,0 +1,10 @@
+{ "id": "0238eb9f", "points": [
+  { "id": "BP1.1", "score": 1, "quote": "**`base`** holds general-purpose utilities and UI primitives: strings, arrays, events, lifecycle, async helpers, URIs, and basic DOM widgets." },
+  { "id": "BP1.2", "score": 1, "quote": "**`platform`** holds the service infrastructure: dependency injection (`instantiation`), plus services such as files, configuration, storage, telemetry, log, and keybinding." },
+  { "id": "BP1.3", "score": 1, "quote": "**`editor`** is the Monaco text editor: model, view, language features, and standalone editor APIs." },
+  { "id": "BP1.4", "score": 1, "quote": "**`workbench`** is the VS Code application shell. It holds the parts (editor groups, sidebar, panels), services, and `contrib` features such as search, SCM, debug, terminal, and chat." },
+  { "id": "BP1.5", "score": 1, "quote": "`code` is the desktop app (Electron main, renderer, utility processes, and a node CLI)." },
+  { "id": "BP1.6", "score": 1, "quote": "`server` is the remote and web server (node)." },
+  { "id": "BP1.7", "score": 1, "quote": "Dependencies point downward only: `base` ← `platform` ← `editor` ← `workbench` ← `sessions`." },
+  { "id": "BP1.8", "score": 0.5, "quote": "It also holds the extension host and the API that extensions use." }
+] }

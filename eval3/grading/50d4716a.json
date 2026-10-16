@@ -1,0 +1,13 @@
+{
+  "id": "50d4716a",
+  "points": [
+    {"id": "AFFINE-BP6.1", "score": 1, "quote": "The `Workbench` entity (`entities/workbench.ts`) holds the list of open views (`views$`), the active view (`activeView$`), and the right-sidebar state (`sidebarOpen$`, `sidebarWidth$`, `toggleSidebar`)."},
+    {"id": "AFFINE-BP6.2", "score": 1, "quote": "`WorkbenchRoot` (`view/workbench-root.tsx`) renders the views side by side in a `SplitView`, then `WorkbenchSidebar`. ... A `View` (`entities/view.ts`) is one pane."},
+    {"id": "AFFINE-BP6.3", "score": 1, "quote": "It has an id, a title and icon, and its own memory `history` with a `location$`."},
+    {"id": "AFFINE-BP6.4", "score": 1, "quote": "Each view runs its own react-router `createMemoryRouter` (`view/view-root.tsx`). `ViewRoot` watches `view.location$` and calls `viewRouter.navigate(location)`."},
+    {"id": "AFFINE-BP6.5", "score": 1, "quote": "`view/view-islands.tsx` defines Provider/Target pairs. A route component renders `<ViewHeader>`, `<ViewBody>` and `<ViewSidebarTab>`. These are portals, and the workbench places the matching Targets."},
+    {"id": "AFFINE-BP6.6", "score": 1, "quote": "The browser URL only reflects the active view."},
+    {"id": "AFFINE-BP6.7", "score": 0.5, "quote": "`SidebarContainer` shows the active view's `ViewSidebarTab` content. Tabs are tracked in `entities/sidebar-tab.ts`."},
+    {"id": "AFFINE-BP6.8", "score": 1, "quote": "a change in view history is pushed or replaced into the browser location, tagged `fromView,<key>`. A browser location change is pushed into the view history as `fromBrowser`."}
+  ]
+}

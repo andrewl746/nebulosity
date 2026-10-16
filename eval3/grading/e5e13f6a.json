@@ -1,0 +1,13 @@
+{
+  "id": "e5e13f6a",
+  "points": [
+    {"id": "THEIA-BP2.1", "score": 1, "quote": "The application is itself a package, for example `examples/browser`. ... Its `dependencies` list the extension packages it wants. / `theia build` (from `@theia/cli`)"},
+    {"id": "THEIA-BP2.2", "score": 1, "quote": "Its `package.json` has a `theiaExtensions` array ... Each entry names the compiled modules to load"},
+    {"id": "THEIA-BP2.3", "score": 0.5, "quote": "`src/browser/` holds the frontend module, and `src/node/` holds the backend module. ... Electron adds `electron-browser/` and `electron-main/`."},
+    {"id": "THEIA-BP2.4", "score": 1, "quote": "Each of these modules is an InversifyJS `ContainerModule`. It binds services and contributions to the dependency injection container."},
+    {"id": "THEIA-BP2.5", "score": 0, "quote": "none"},
+    {"id": "THEIA-BP2.6", "score": 0.5, "quote": "`src/browser/` holds the frontend module, and `src/node/` holds the backend module. `src/common/` holds code and protocols shared by both. Electron adds `electron-browser/` and `electron-main/`."},
+    {"id": "THEIA-BP2.7", "score": 1, "quote": "Its `package.json` has a `theia` section with the target (`browser` or `electron`) and its configuration."},
+    {"id": "THEIA-BP2.8", "score": 1, "quote": "The generators write `src-gen/`, which contains a frontend entry and a backend entry. ... The bundler generator also writes `esbuild.mjs` ... `theia start` ... runs the generated backend. ... serves the bundled frontend at localhost:3000."}
+  ]
+}

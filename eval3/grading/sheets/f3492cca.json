@@ -1,0 +1,31 @@
+{
+  "id": "f3492cca",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Both builds share one codebase. The only difference is which entry file they start from. Code that isn't reachable by imports from that entry file never gets loaded.\n\n**How the code is shared**\n- `src/vs/workbench/workbench.common.main.ts` is the shared entry point, at about 480 lines. It is mostly side-effect imports of `contrib/**` features. These include chat (lines ~226–238), terminal (`contrib/terminal/terminal.all.js`) and many others. It also pulls in the shared services and singleton registrations.\n- `workbench.desktop.main.ts` starts with `import './workbench.common.main.js'`. It then adds desktop-only pieces:\n  - the `electron-browser` contributions (terminal, extensions, issue, webview, process explorer and others)\n  - the node-backed services\n  - `electron-browser/desktop.main.ts`\n- `workbench.web.main.ts` also starts with `import './workbench.common.main.js'`. It then adds:\n  - `browser/web.main.ts`\n  - the web service implementations (`services/**/browser/*`, such as `browserHostService`, `searchService` and `webExtensionsScannerService`)\n  - `registerSingleton(...)` calls for the web variants\n- `workbench.web.main.internal.ts` exposes the public embedder API for the web build.\n- A comment at the top of the web entry file says to put shared imports in `workbench.common.main.ts`.\n\n**What decides whether a feature loads**\n1. **Imports from the entry files.** The organization guide says \"Only code referenced from entry point files is loaded.\" Each feature has one `*.contribution.ts` file. That file registers actions, views and services as side effects. If an entry file never imports it, the feature is absent from that build. Where the import goes decides the scope:\n   - Importing it in `common.main` ships it to both builds.\n   - Importing it in `desktop.main` or `web.main` makes it specific to that build.\n2. **Folder naming.** The folder name is the target environment, and each environment may only import from the ones it's allowed to use:\n   - `common` allows only basic JavaScript.\n   - `browser` allows DOM APIs and may use `common`.\n   - `electron-browser` allows Electron IPC and may use `common` and `browser`.\n   - `node` allows Node APIs and may use `common`.\n   \n   Code in `browser` and `common` can run in both builds. Code in `electron-browser` or `node` can only appear in the desktop entry's import graph.\n3. **Service substitution.** A service interface in `common` is often implemented twice, once in `browser` and once in `electron-browser` or `node`. Each entry file registers its own implementation through `registerSingleton`.\n4. **Layering.** The `contrib` folder can't be imported from outside `contrib`. Features therefore stay isolated and depend on each other only through a common API file.\n\nAt runtime, contributions can also be gated by context keys, configuration or `when` clauses. That gating applies to code that has already been loaded. It doesn't decide which code gets loaded."
+}
