@@ -1,8 +1,8 @@
 # Nebulosity
 
-**Nebulosity does the import walk a dependency question needs in one call. Measured on VS Code and AFFiNE, Claude Code with it answered those questions in under half the time of Claude Code alone, at the same or a higher score, and for less. It didn't make big-picture answers better, and it failed the ship gate it was measured against.**
+**Nebulosity does the import walk a dependency question needs in one call. In Eval #3, Claude Code with it answered the questions that walk the import graph in 0.63 (VS Code) and 0.38 (AFFiNE) of the time of Claude Code alone, scoring 1.00 against 0.98. Its new `calls` tool, built for questions about calls through injected services, didn't make those questions faster, cheaper or more accurate, and Eval #3 failed its ship gate on four of seven conditions.**
 
-Nebulosity indexes a big TypeScript or JavaScript repository once and keeps the index fresh as files change: its folder tree, every import between its files, and, with an Anthropic API key, a short summary of every file and folder. It serves that index two ways: to AI agents like Claude Code through an MCP server, and to people through a zoomable Map. In Eval #2, 270 runs on VS Code and AFFiNE against Claude Code alone, which could write its own Node.js scripts, it made the questions that walk the import graph faster and cheaper. Over both repos the medians were 8.4 s against 28.1 s and $0.031 against $0.066, scoring 1.00 against 0.94. The gate compares each repo, and on VS Code the cost was 0.57 of Claude Code alone's, where it asked for 0.5. Part of the cost gap comes from the eval's own rules: shell commands outside an allowlist were refused instead of asked about, and Claude Code alone had one refused in 42 of its 69 runs on these questions. On the runs without a refusal, the ratios were 0.39 for time and 0.74 for cost, scoring 1.00 against 0.96. Sessions of four related questions took 0.29 of the time and 0.39 of the cost, though every one of Claude Code alone's sessions had a refused command. It didn't help on big-picture questions: 0.84 against 0.93 on VS Code and 0.68 against 0.70 on AFFiNE. On the hardest dependency questions it raised the score by 0.09, where the ship gate set before the eval asked for 0.15, and the gate failed on four of its seven conditions.
+Nebulosity indexes a big TypeScript or JavaScript repository once and keeps the index fresh as files change: its folder tree, every import between its files, the calls it can read from declared types, and, with an Anthropic API key, a short summary of every file and folder. It serves that index two ways: to AI agents like Claude Code through an MCP server, and to people through a zoomable Map. In Eval #3, 378 runs on VS Code, AFFiNE and a held-out Theia against Claude Code alone, which could write its own Node.js scripts, it didn't speed up what V1.7 aimed at. On 22 questions about who calls a method, what a signature change touches and which tests to run, Claude Code with Nebulosity reached the files the answer needs no sooner than alone (a median per-question ratio of 1.02), took 0.96 of the time and 0.99 of the cost, and scored 0.985 against 0.984. It called its tools in 58% of the runs that needed them. What it did measurably was the import walk: on Eval #2's graph questions, now with refused shell commands nearly gone from both setups, it took 0.63 of the time on VS Code and 0.38 on AFFiNE per question, at 0.92 and 0.56 of the cost, scoring 1.00 against 0.98. The gate, set before the first run, failed on conditions 1 (4× faster to the relevant context), 2 (half the errors), 3 (half the time and cost on the call and task questions) and 5 (tools used in 90% of the runs that need them).
 
 [How it compares with Claude Code alone](docs/EVAL_RESULTS.md)
 
@@ -10,7 +10,7 @@ Nebulosity indexes a big TypeScript or JavaScript repository once and keeps the 
 
 ## Why
 
-Some questions about a big repo are walks over its import graph. What depends on this file, directly or through other files? How does this entry point end up loading that file? In Eval #2, Claude Code on its own answered them by writing its own import-walking scripts or following imports with grep, a median 6 turns a question, against 2 with Nebulosity. Nebulosity reads every import once, keeps the graph current while the Map runs, and answers such a question in one call. It plugs into Claude Code instead of replacing it: Claude Code still reads the code and writes the answer. The same index draws the repo for people, one folder at a time.
+Some questions about a big repo are walks over its import graph. What depends on this file, directly or through other files? How does this entry point end up loading that file? In Eval #2, Claude Code on its own answered them by writing its own import-walking scripts or following imports with grep, a median 6 turns a question, against 2 with Nebulosity; in Eval #3, with its scripts no longer refused, 5 against 3. Nebulosity reads every import once, keeps the graph current while the Map runs, and answers such a question in one call. It plugs into Claude Code instead of replacing it: Claude Code still reads the code and writes the answer. The same index draws the repo for people, one folder at a time.
 
 ## What it does
 
@@ -20,7 +20,45 @@ Some questions about a big repo are walks over its import graph. What depends on
 
 ## How it compares with Claude Code alone
 
-**Eval #2 (2026-10-15).** Claude Code answered 39 questions about two big repos, VS Code and AFFiNE, three times each. It answered once on its own and once with Nebulosity's MCP server, registered the way `nebulosity setup` registers it. It also worked through 6 task sessions of four related questions each, in one conversation: "I'm about to change this file: what could it affect?", then an import chain, a cycle and the files nothing imports. On its own, Claude Code could read, search and write its own Node.js scripts.
+**Eval #3 (2026-10-16).** Claude Code answered 61 questions about three big repos, VS Code, AFFiNE and Theia, three times each: once on its own and once with Nebulosity's MCP server, registered the way `nebulosity setup` registers it. Theia was held out from all tuning and indexed in free mode, with no summaries. Claude Code also worked through two task sessions of four related questions each, Eval #2's. On its own it could read, search and write its own Node.js scripts. Every prompt, in both setups, ended with the same sentence on which shell commands run, which brought refused commands down to under 5% of each setup's runs (in Eval #2, 60% of Claude Code alone's runs had one).
+- *Call and task questions* (new, 22): who calls a method of a service, which files a change to its signature breaks, which callers must adopt a change, where a service is injected, and planning a signature change (the files to change and the tests to run). Each was drawn with a fixed seed from the repos' own pull requests, issues and docs, and its answer key comes from TypeScript's type checker.
+- *Graph questions:* Eval #2's 18, unchanged, and 6 new ones on Theia.
+- *Big-picture questions:* Eval #2's 9, and 2 new per repo from the repo's own docs.
+
+| Questions | Repo (runs per setup) | Score: alone / with Nebulosity | Median time | Median cost estimate |
+|---|---|---|---|---|
+| Call and task questions | VS Code (27) | 0.987 / 0.987 | 35.7 / 35.6 s | $0.132 / $0.132 |
+| Call and task questions | AFFiNE (21) | 1.000 / 0.999 | 35.7 / 34.6 s | $0.138 / $0.119 |
+| Call and task questions | Theia (18) | 0.963 / 0.964 | 37.9 / 38.8 s | $0.247 / $0.241 |
+| Graph questions (Eval #2's) | VS Code (27) | 0.979 / 1.000 | 21.1 / **14.1 s** | $0.048 / $0.047 |
+| Graph questions (Eval #2's) | AFFiNE (27) | 0.982 / 1.000 | 24.4 / **11.3 s** | $0.066 / **$0.043** |
+| Graph questions (new) | Theia (18) | 1.000 / 0.978 | 20.5 / 14.9 s | $0.169 / $0.164 |
+| Big-picture | VS Code (21) | 0.792 / 0.858 | 14.9 / 13.9 s | $0.040 / $0.043 |
+| Big-picture | AFFiNE (18) | 0.771 / 0.774 | 18.9 / 17.9 s | $0.057 / $0.053 |
+| Big-picture | Theia (6) | 0.833 / **0.813** | 13.4 / 13.8 s | $0.147 / $0.150 |
+| Task sessions (4 questions) | VS Code (3) | 0.999 / 1.000 | 61.0 / 26.0 s | $0.201 / $0.180 |
+| Task sessions (4 questions) | AFFiNE (3) | 1.000 / 1.000 | 74.6 / **24.3 s** | $0.189 / **$0.100** |
+
+The score is F1 over files for the call questions (a task's is the mean of its two lists' F1), the share of rubric points for big-picture questions, and each graph question's own score. The cost is Claude Code's own estimate at list prices. Theia's runs cost more in both setups because Theia ships its own `CLAUDE.md` and `AGENTS.md`, which Claude Code loads into every prompt.
+
+**Where it helped.**
+- **The import walk.** On Eval #2's graph questions it took 0.63 (VS Code) and 0.38 (AFFiNE) of Claude Code alone's time per question, at 0.92 and 0.56 of the cost, scoring 1.00 against 0.98. On Theia's six graph questions, which no tuning touched, it took 0.58 of the time at 0.95 of the cost, scoring 0.978 against 1.000. On those questions it reached the files the answer needs in 0.41 (Eval #2's) and 0.33 (Theia's) of the time, by the per-question median.
+- **The AFFiNE task session:** 24.3 against 74.6 s and $0.100 against $0.189 (medians), at 1.00 each.
+- **Listing the callers of a method on VS Code and Theia**, where `calls` listed all but one of them: 0.57–0.66 of the time, at the same score.
+
+**Where it lost.**
+- **No faster to the relevant context on the new questions.** Per repo, the median ratio was 0.98, 1.01 and 1.04, where the gate asked for 0.25. Nearly every run in both setups began with a `git grep` for the method's name, which names most of the answer at once.
+- **No faster or cheaper on the call and task questions:** 0.96 of the time and 0.99 of the cost, pooled, where the gate asked for 0.5. `calls` was used in 24 of the 66 runs that could have used it. On AFFiNE its index found only 1–2 of the 10–25 callers on five of seven questions, so Claude Code grepped for the rest anyway.
+- **Slightly more errors, not half as many:** 0.983 against 0.988 on the new questions. On Theia, a direct list scored 0.87 against 1.00 (two runs used one grep with a bad filter and no tool) and the what-breaks questions 0.958 against 0.977 (two runs trusted an incomplete `calls` answer).
+- **Its tools weren't always used:** in 80 of the 138 runs that should have used one (58%), against the 90% asked.
+- **Big-picture:** lower on Theia (0.813 against 0.833) and on VS Code's question about its layers (0.83 against 0.94, leaving out the extension host every time). VS Code's big-picture questions as a whole rose (0.858 against 0.792), partly because Claude Code alone scored lower on them than in Eval #2.
+- **Costlier in places:** the VS Code task session cost $0.847 against $0.582 over its three runs, one of which cross-checked the index with its own scripts.
+
+**The ship gate failed.** Its conditions were fixed before the first run. Four failed: 4× faster to the relevant context (1), half the errors (2), half the time and cost on the call and task questions (3), and tools used in 90% of the runs that need them (5). Three passed: refused commands in at most 5% of each setup's runs (V: 9 and 8 of 189), no loss elsewhere (4), and the added prompt, about 2,370 tokens a turn (6).
+
+The setup: VS Code at commit `cc3fec88`, AFFiNE at `0b69a6da` and Theia at `81ea5f93`, 3 runs per question and setup, Sonnet 5.5 at medium effort in Claude Code 2.1.301, 378 runs in all, $42.78 by Claude Code's estimate. The answer keys come from TypeScript's checker and two independent import extractors, and every disagreement with Nebulosity's index was read in the source by Claude models. The big-picture answers were graded blind by Claude models against rubrics from each repo's own docs. Details, every transcript and every grade: [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
+
+**Eval #2 (2026-10-15), an earlier result.** Claude Code answered 39 questions about two big repos, VS Code and AFFiNE, three times each. It answered once on its own and once with Nebulosity's MCP server, registered the way `nebulosity setup` registers it. It also worked through 6 task sessions of four related questions each, in one conversation: "I'm about to change this file: what could it affect?", then an import chain, a cycle and the files nothing imports. On its own, Claude Code could read, search and write its own Node.js scripts.
 - *Big-picture questions* ask how the code is organized.
 - *Graph questions* need a walk over the import graph: the shortest chain of imports between two files, every file that depends on one directly or through other files, what a change would affect, import cycles, files nothing imports, imports that break a layering rule, the entry points that load a file, and which folders import which.
 
@@ -177,7 +215,7 @@ your repo
 SQLite in WAL mode: files, imports, folders, summaries, full-text search, vectors
    │
    ▼
-engine (lib/): level · describe · search · imports · architecture
+engine (lib/): level · describe · search · imports · architecture · calls
    │
    ├── stdio ───────► MCP server, read-only on the database ──► Claude Code, any MCP client
    ├── HTTP + SSE ──► the Map (Next.js), whose background worker owns every write
@@ -198,10 +236,12 @@ Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index 
 - [ADR-045](docs/ENGINEERING_DECISIONS.md): the compressed import index behind `imports`.
 - [ADR-049](docs/ENGINEERING_DECISIONS.md) and [ADR-050](docs/ENGINEERING_DECISIONS.md): the static demo, and how the eval was kept honest.
 - [ADR-057](docs/ENGINEERING_DECISIONS.md): Eval #2 and its ship gate, fixed before the first run.
+- [ADR-059](docs/ENGINEERING_DECISIONS.md): calls through declared types, without a type checker in the product.
+- [ADR-060](docs/ENGINEERING_DECISIONS.md): Eval #3, with time to relevant context and a gate fixed before the first run.
 
 ## Status
 
-V1.6 is built: one `nebulosity` command, Windows, macOS and Linux, a free mode with no API key, and five real repos of different shapes tested. It reads TypeScript and JavaScript only. Its eval, Eval #2, failed the ship gate set before it ran ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)). What comes next is the owner's decision: work aimed at the failed conditions, a different pitch, or shipping with the losses stated. After that: Python support, clustering, and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+V1.7 is built: the `calls` tool, over calls read from declared types, on top of V1.6's single `nebulosity` command for Windows, macOS and Linux, its free mode with no API key and its five tested repos. It reads TypeScript and JavaScript only. Its eval, Eval #3, failed the ship gate set before it ran, on conditions 1, 2, 3 and 5 ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)), as Eval #2 failed its own. Going public was on hold until Eval #3's verdict. By the owner's call of 2026-10-15, the hold lifts after that verdict whatever it is, and the gate decides what this README claims: since it failed, the results above are stated as measured, with the failed conditions named, and nothing is claimed beyond them. Deploying the demo, making the repo public, publishing the package and recording the video are the owner's. What comes next is the owner's decision; the plan has Python support, clustering and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
 
 ## Why I built this
 

@@ -1144,3 +1144,28 @@ About 6,548 characters is about 2,380 tokens, so the README's "about 2,400 token
 ### Runs and cost
 
 58 runs in the three rounds (38, then 15, then 5): $9.29 list price (round 1 $5.04, round 2 $3.65, round 3 $0.60), plus the guard probe's $0.09: 59 runs, about $9.38 in all. The last rate-limit event read 5-hour 0.53, 7-day 0.64.
+
+**In Eval #3** the first-call difference came out at +2,368 (VS Code), +2,369.5 (AFFiNE) and +2,372 (Theia), within 7 tokens of the estimate above. Tool use was 80 of 138 runs (0.58), below the dev set's 13 of 17. The kinds of the dev set's four stable misses went without a tool again (VS Code's tasks, every injects question, files nothing imports and violations), and so did the adopt question and most breaks runs (docs/EVAL_RESULTS.md, Eval #3, "Tool use").
+
+## 2026 10 16 Eval #3 — Claude Code with and without Nebulosity's MCP server on VS Code, AFFiNE and Theia (S13)
+
+The eval V1.7 was measured by (ADR-060). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`, Eval #3.
+- **Targets and machine:** VS Code @ `cc3fec88`, AFFiNE @ `0b69a6da` and Theia @ `81ea5f93` (held out, free mode), with Nebulosity's engine frozen at `EVAL3_ENGINE` (`2f913ad`) and index versions 155, 134 and 2. It ran on the owner's laptop on 2026-10-16, 06:58–10:17 UTC.
+- **How:** `npm run eval:run -- --eval eval3 --pilot` (and `--sessions --pilot`), then the full schedules in batches. 61 single questions and 2 four-question task sessions, three repeats, in two arms: A, Claude Code alone, and N, with Nebulosity. 378 runs in all (384 planned; AFFiNE drew no adopt question and 2 tasks, not 3). Claude Code 2.1.301 headless, `claude-sonnet-5-5` at medium effort, Node.js scripts allowed in both arms, and the same rules sentence at the end of every prompt. `npm run eval:score -- --eval eval3` scored them and computed the gate; the big-picture answers were graded blind (`eval3/grading/`).
+- **Result: the ship gate failed** on conditions 1, 2, 3 and 5; V, 4 and 6 passed. **S13: not met.**
+
+| Questions | Repo | Runs per arm | Score A / N | Median time A / N | Time ratio | Median cost A / N | Cost ratio |
+|---|---|---|---|---|---|---|---|
+| Call and task questions (new) | VS Code | 27 | 0.987 / 0.987 | 35.7 / 35.6 s | 0.98 | $0.132 / $0.132 | 0.98 |
+| Call and task questions (new) | AFFiNE | 21 | 1.000 / 0.999 | 35.7 / 34.6 s | 0.93 | $0.138 / $0.119 | 1.01 |
+| Call and task questions (new) | Theia | 18 | 0.963 / 0.964 | 37.9 / 38.8 s | 0.88 | $0.247 / $0.241 | 0.98 |
+| Theia's graph questions (new) | Theia | 18 | 1.000 / 0.978 | 20.5 / 14.9 s | 0.58 | $0.169 / $0.164 | 0.95 |
+| Eval #2's graph questions | VS Code | 27 | 0.979 / 1.000 | 21.1 / 14.1 s | 0.63 | $0.048 / $0.047 | 0.92 |
+| Eval #2's graph questions | AFFiNE | 27 | 0.982 / 1.000 | 24.4 / 11.3 s | 0.38 | $0.066 / $0.043 | 0.56 |
+| Big-picture | all three | 45 | 0.789 / 0.818 | 16.2 / 15.7 s | 0.94 | $0.049 / $0.049 | 1.00 |
+
+- **The measures:** time is `duration_ms` and the cost is Claude Code's own list-price estimate. The ratios are N over A per question, then the median over the questions (the gate's way).
+- **Time to relevant context** (condition 1, the new file-set questions, from process start): median per-question ratios 0.98 [0.90–1.27] on VS Code, 1.01 [0.86–1.14] on AFFiNE and 1.04 [0.33–never] on Theia, against 0.25. On Eval #2's file-set questions, not gated: 0.41 [0.19–0.84] pooled.
+- **Refused commands:** 9 of A's 189 runs and 8 of N's, under V's 5% (Eval #2: 81 and 18 of 135), so the comparison is not confounded by them.
+- **The totals:** $42.78 by Claude Code's estimate. The 5-hour window read 0.49 at the first run and 0.31 at the last, across one reset; the 7-day went from 0.71 to 0.76.
+- **The losses**, named in the results: no faster to the relevant context on the new questions; no faster or cheaper on the call and task questions; 1.36 times A's error on them instead of half (0.983 against 0.988); tools used in 58% of the runs that need them; Theia's direct list (0.87 against 1.00) and what-breaks questions (0.958 against 0.977); and the calls index missing most callers of AFFiNE's drawn methods.

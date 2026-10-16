@@ -205,6 +205,8 @@
 
 **Amended (proposed, V1.7 plan, 2026-10-15):** Eval #3 (ADR-060) is the third measurement of the value proposition, with calls through injected services (ADR-059), time to relevant context, and a gate fixed before its first run.
 
+**Amended (2026-10-16, Eval #3):** three evals now say the same thing about the value proposition: Nebulosity's tools make Claude Code faster, and sometimes cheaper, on the questions that walk the import graph, at an equal or slightly higher score (in Eval #3, with refused commands under 5% in both arms, 0.63 and 0.38 of the time and 0.92 and 0.56 of the cost on Eval #2's graph questions), but they don't make its answers clearly better, and the `calls` tool built in V1.7 made the questions about calls through injected services no faster, cheaper or more accurate (Eval #3's gate failed on conditions 1, 2, 3 and 5), so this ADR's revisit condition holds a third time (docs/EVAL_RESULTS.md).
+
 ## ADR-025 — Drop the native C++ scanner (2026-10-11) — supersedes ADR-014 and ADR-015
 
 **Context:** ADR-014 justified the C++ scanner only as a benchmarked accelerator, and ADR-015 deferred it to last. v1 parses with the TypeScript Compiler API (all of VS Code in 22.3 s, single-threaded), so there's no measured bottleneck for a native scanner to remove. The regex extractor it was meant to port is being retired anyway (ADR-026).
@@ -654,6 +656,15 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
 **Amended (proposed, V1.7 plan, 2026-10-15): E2 is built in V1.7, as declared types rather than the type checker** (ADR-059), after the owner chose a V1.7 aimed at Eval #2's failed conditions (option (a)). It is measured against the checker (Calls Benchmark #1) and in Eval #3 (ADR-060). The order after V1.7 is decided at Eval #3's verdict. The default stays E4 → E5 → E1, with E3 optional.
 
+**Amended (2026-10-16, Eval #3): the order after V1.7, for the owner to decide.** Eval #3 failed its gate on conditions 1, 2, 3 and 5 (ADR-060; docs/EVAL_RESULTS.md).
+- **The order as planned:** E4 (Python first) → E5 → E1, with E3 an optional panel add-on.
+  - E4 decides who can use Nebulosity at all.
+  - E5 brings clustering and the focus view, and is where a Map view of calls would go.
+  - E1, the Guide, serves the owner's learning goal.
+- **E2 beyond V1.7** (calls through inferred types, the type checker in the product, index-time resolution, a Map view of calls) only if the owner picks it. Eval #3 doesn't make the case for it: where `calls` was nearly complete (VS Code's and Theia's callers questions) it cut the time to 0.57–0.66 of Claude Code alone's, and most runs grepped the method's name instead of calling it.
+- **Recorded after the results, as a fix candidate:** the calls index's miss classes on Eval #3's targets (inferred getter returns, `std.get(<identifier>)` where the identifier is a `createIdentifier<T>()` value, locals and fields whose type is inferred from a call or an initializer, `declare global` members, and re-exports through a package specifier such as `@theia/core/lib/common`; EVAL_RESULTS, Eval #3, "Where the index misses these callers"). A fix would be measured on new targets, not on Eval #3's, which the engine was frozen against (R-N).
+- **Also open:** ADR-024's question, now asked three times, and ADR-051's ship list, which the owner runs whatever the order.
+
 ## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
 
 **Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
@@ -822,6 +833,8 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 - V1.7 aims to pass Eval #3's gate as approved (ADR-060), and no bar moves.
 - After the verdict the hold lifts either way, and the gate decides what the README may claim: on a pass, the measured wins; on a fail, the results as measured, with each failed condition named and nothing claimed beyond them.
 - The deploy, the public switch, the package and the video stay the owner's.
+
+**Amended (2026-10-16, Eval #3): the hold is lifted.** Eval #3 failed conditions 1, 2, 3 and 5 (ADR-060). By the owner's call of 2026-10-15 (V1.7 design §5.8), the hold lifts after Eval #3 whatever its outcome, and the gate decides what the README claims. Deploying, the public switch, the package and the video are the owner's.
 
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
@@ -1199,3 +1212,5 @@ Speed was measured end to end, while what an agent needs is to reach the right f
 **Alternatives:** (a) Eval #2's set-up again: the refusals would blur the comparison again. (b) Allow rules for compound commands: item 4 showed they lift at most 1 of Eval #2's 131 refusals. (c) A precision floor on "seen": on Eval #2 it took away N's exact one-call answers, and it depended on how answers are laid out. (d) Questions picked by hand: the seeded draw keeps the picker's hand off them.
 **Consequences:** About $35–55 at list price on the owner's subscription, and every batch is asked for first. The results, losses included, go in docs/EVAL_RESULTS.md as Eval #3. By the owner's call (ADR-051, amended), the hold lifts after the verdict whatever it is, and the gate decides what the README may claim.
 **Revisit when:** the gate's verdict is in (it amends this ADR), or a new Claude Code version or model changes the baseline enough to matter for the README's claims.
+
+**Amended (2026-10-16, the runs):** 378 runs kept (366 single runs and 12 task sessions) on 2026-10-16, 06:58–10:17 UTC, with no outage and no re-run; Claude Code 2.1.301 and `claude-sonnet-5-5` in every init, the engine frozen at `2f913ad`, index versions 155 (VS Code), 134 (AFFiNE) and 2 (Theia); refused commands in 9 of A's 189 runs and 8 of N's 189; $42.78 by Claude Code's estimate (with the dev set, about $52), the 5-hour window 0.49 → 0.31 across one reset and the week 0.71 → 0.76; the gate failed: conditions 1, 2, 3, 5.
