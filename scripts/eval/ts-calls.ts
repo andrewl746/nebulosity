@@ -63,6 +63,9 @@ export function callTruth(program: ts.Program, root: string, kind: CallTruthKind
         (ts.isClassDeclaration(s) || ts.isInterfaceDeclaration(s)) && s.name?.text === target.type);
     if (!declaration?.name) throw new Error(`${target.file} declares no class or interface named ${target.type}`);
     const T = canonical(checker.getSymbolAtLocation(declaration.name))!;
+    if (kind !== "injects" && target.member !== undefined && checker.getPropertyOfType(checker.getDeclaredTypeOfSymbol(T), target.member) === undefined){
+        throw new Error(`${target.type} in ${target.file} has no member ${target.member}, inherited ones included`);
+    }
 
     // T itself, or a class or interface whose heritage reaches it: extends, implements, or a base whose instance type is T (a test double)
     const memo = new Map<ts.Symbol, boolean>();
@@ -91,6 +94,19 @@ export function callTruth(program: ts.Program, root: string, kind: CallTruthKind
         if (ts.isInterfaceDeclaration(p)) return checker.getSymbolAtLocation(p.name);
         return undefined;
     };
+    // The types a receiver stands for: a union's or intersection's parts, a type parameter's (or `this`'s) constraint, each part itself.
+    const partsOf = (t: ts.Type, depth = 0): ts.Type[] => {
+        if (depth > 8) return [];
+        if (t.isUnionOrIntersection()) return t.types.flatMap((p) => partsOf(p, depth + 1));
+        if (t.isTypeParameter()){
+            const bound = checker.getBaseConstraintOfType(t);
+            return bound && bound !== t ? partsOf(bound, depth + 1) : [];
+        }
+        return [t];
+    };
+    // D2's receiver rule: the value's type is T, a type that extends T, or a class that implements T, and the member resolves on it.
+    const receiverIsT = (receiver: ts.Expression, member: string): boolean =>
+        partsOf(checker.getTypeAtLocation(receiver)).some((part) => related(part.getSymbol() ?? part.aliasSymbol) && checker.getPropertyOfType(part, member) !== undefined);
     const inside = (file: string): boolean => target.within === undefined || file.startsWith(`${target.within}/`);
     const sites: CallTruth["sites"] = [];
     const add = (sf: ts.SourceFile, node: ts.Node, why: string): void => {
@@ -106,7 +122,8 @@ export function callTruth(program: ts.Program, root: string, kind: CallTruthKind
         const visit = (n: ts.Node): void => {
             if ((kind === "callers" || kind === "breaks") && ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === target.member){
                 const symbol = checker.getSymbolAtLocation(n.expression.name);
-                if ((symbol?.declarations ?? []).some((d) => related(ownerOf(d)))) add(sf, n.expression.name, "call");
+                // by the member's declaring type (also covers mapped types such as Readonly<T>), or by the receiver's type (inherited members)
+                if ((symbol?.declarations ?? []).some((d) => related(ownerOf(d))) || receiverIsT(n.expression.expression, target.member)) add(sf, n.expression.name, "call");
             }
             if (kind === "breaks" && (ts.isClassLike(n) || ts.isInterfaceDeclaration(n))){
                 const own = n.name ? checker.getSymbolAtLocation(n.name) : (n as unknown as { symbol?: ts.Symbol }).symbol;

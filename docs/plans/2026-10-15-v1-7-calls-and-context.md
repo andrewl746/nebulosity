@@ -963,6 +963,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - **callers of `IFileService.readFile`:** the index's 8 files **plus `src/workbench/history/inferred.ts`** (line 9): 9 files.
 - **breaks of `IFileService.readFile`:** those 9 plus `src/platform/files/browser/memoryFileService.ts` and `src/platform/files/common/files.ts`: 11 files.
 - **injects of `IFileService`:** `src/workbench/commands/openCommand.ts`, `src/workbench/editor/baseEditor.ts`, `src/workbench/editor/editorPane.ts`.
+- **callers of `IWatchingFileService.readFile`** (declared on `IFileService`, so only the receiver's type reaches it; added in Task 10's fix round): `src/platform/files/node/watchingFileService.ts` (`this.readFile`, a class that implements `IWatchingFileService` and inherits `readFile` from `FileService`) and `src/workbench/editor/editorPane.ts` (`this.watcher.readFile`, an `IWatchingFileService`). `FileService`'s own `this.readFile` and every `IFileService`-typed receiver are not callers: 2 files.
 - **callers of `IWatchingFileService.watch`:** `src/workbench/editor/editorPane.ts`, `src/workbench/files/watchView.ts`.
 - **callers of `DialogService.open`:** `src/app/components/settingsButton.tsx`. **Injects of `DialogService`:** the same file.
 - **callers of `CommandRegistry.register`** and **injects of `CommandRegistry`:** `src/app/commands/commandContribution.ts`.

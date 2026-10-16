@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import {
-    TRUTH_TABLE, applyAdjudications, applyCallVerdicts, buildRepoGraphs, buildTruth, callsEvidence, checkVerdicts, edgeDifferences, importLines, loadTruthAdjudications,
+    TRUTH_TABLE, applyAdjudications, applyCallVerdicts, buildRepoGraphs, buildTruth, callsEvidence, checkVerdicts, confirmingVerdicts, edgeDifferences, importLines, loadTruthAdjudications,
     parseAdjudications, parseArgs, parseCallAdjudications, parseTruthSpecs, restingEdges, sampleEdges, specsFor, successors, taskTests, type Adjudication,
     type CallTruthFile, type TaskTruthFile,
 } from "./build-truth";
@@ -439,11 +439,24 @@ describe("the call and task specs (Task 10)", () => {
         expect(applyCallVerdicts(callFile, [], g, known)).toBe(callFile);
     });
 
-    it("stops, naming the verdict, when it agrees with the checker or names a file the repo lacks", () => {
-        const one = (decision: "in" | "out", file: string) => [{ id: "q", file, decision, line: 1, why: "w" }];
-        expect(() => applyCallVerdicts(callFile, one("in", "src/a.ts"), g, known)).toThrow(/q's verdict "in" on src\/a\.ts changes nothing: the checker already has/);
-        expect(() => applyCallVerdicts(callFile, one("out", "src/c.ts"), g, known)).toThrow(/"out" on src\/c\.ts changes nothing: the checker doesn't have/);
-        expect(() => applyCallVerdicts(callFile, one("in", "src/zzz.ts"), g, known)).toThrow(/isn't a code file of the repo/);
+    it("stops, naming the verdict, when it names a file the repo lacks", () => {
+        expect(() => applyCallVerdicts(callFile, [{ id: "q", file: "src/zzz.ts", decision: "in", line: 1, why: "w" }], g, known)).toThrow(/q's verdict "in" on src\/zzz\.ts can't take effect: .* isn't a code file of the repo/);
+    });
+
+    it("takes a verdict that agrees with the checker as a confirmation: the truth is unchanged, and the evidence lists it", () => {
+        const verdicts = parseCallAdjudications([
+            { id: "q", file: "src/a.ts", decision: "in", line: 3, why: "the index missed a real call" },
+            { id: "q", file: "src/c.ts", decision: "out", line: 8, why: "the index's line is a comment" },
+            { id: "q", file: "src/b.ts", decision: "out", line: 5, why: "a string, not a call" },
+        ]);
+        const applied = applyCallVerdicts(callFile, verdicts, g, known);
+        expect(applied.files).toEqual(["src/a.ts"]);                       // b.ts taken out; a.ts and c.ts changed nothing
+        const confirmed = confirmingVerdicts(callFile, verdicts);
+        expect(confirmed.map((v) => [v.file, v.decision])).toEqual([["src/a.ts", "in"], ["src/c.ts", "out"]]);
+        const sheet = callsEvidence(["# top"], [{ truth: applied, sites: [{ file: "src/a.ts", line: 3, why: "call" }], confirmed }], verdicts).join("\n");
+        expect(sheet).toContain("   - read: checker right, L3: the index missed a real call");
+        expect(sheet).toContain("- read: checker right, `src/c.ts` is not one (L8): the index's line is a comment");
+        expect(sheet).toContain("- taken out by reading: `src/b.ts` (L5): a string, not a call");
     });
 
     it("applies a task's verdict to its CHANGE and recomputes its TESTS", () => {

@@ -13,7 +13,7 @@ import fs from "fs";
 import path from "path";
 import { useReadOnlyDatabase } from "../../lib/db/client";
 import { calls, type CallsAnswer } from "../../lib/engine/calls";
-import { callSitesFor, specsFor, type CallSpec, type CallTruthFile, type TaskSpec, type TaskTruthFile } from "./build-truth";
+import { callSitesFor, loadCallAdjudications, specsFor, type CallAdjudication, type CallSpec, type CallTruthFile, type TaskSpec, type TaskTruthFile } from "./build-truth";
 import { loadDefinition } from "./definition";
 import { programFor } from "./ts-calls";
 
@@ -47,6 +47,12 @@ export function differences(index: ReadonlySet<string>, checker: ReadonlySet<str
     };
 }
 
+/** How a disagreement line reads: its verdict in calls-adjudicated.json, or undecided. */
+export function decisionNote(verdicts: readonly CallAdjudication[], id: string, file: string): { decided: boolean; text: string } {
+    const v = verdicts.find((x) => x.id === id && x.file === file);
+    return v === undefined ? { decided: false, text: "undecided" } : { decided: true, text: `decided ${v.decision} (L${v.line}): ${v.why}` };
+}
+
 function main(): void {
     const checkout = forward(path.resolve(__dirname, "..", ".."));
     const argv = process.argv.slice(2);
@@ -57,6 +63,8 @@ function main(): void {
     // eslint-disable-next-line react-hooks/rules-of-hooks -- not a React hook: it makes this process open the database read-only (ADR-044)
     useReadOnlyDatabase();
 
+    const verdicts = loadCallAdjudications(definition.dir);
+    let undecided = 0;
     const programs = new Map<string, ReturnType<typeof programFor>>();
     const out = [
         `# Where the index and the checker disagree on the calls, for ${definition.name}`, "",
@@ -88,14 +96,16 @@ function main(): void {
         out.push(`## ${spec.id}: ${spec.kind} of \`${symbol}\` (${spec.file})${spec.within !== undefined ? ` within \`${spec.within}\`` : ""}`, "",
             `The index has ${index.size} files, the checker ${checkerFiles.size}; ${indexOnly.length} only the index's, ${checkerOnly.length} only the checker's.`, "");
         if (indexOnly.length + checkerOnly.length === 0) out.push("They agree on every file.", "");
-        indexOnly.forEach((f, i) => out.push(`${i + 1}. only the index: \`${f}\` (${index.get(f)})`));
-        checkerOnly.forEach((f, i) => out.push(`${indexOnly.length + i + 1}. only the checker: \`${f}\` (${sites.filter((s) => s.file === f).map((s) => `L${s.line} ${s.why}`).join("; ") || "added by a verdict"})`));
+        const note = (f: string): string => { const d = decisionNote(verdicts, spec.id, f); if (!d.decided) undecided++; return `; ${d.text}`; };
+        indexOnly.forEach((f, i) => out.push(`${i + 1}. only the index: \`${f}\` (${index.get(f)}${note(f)})`));
+        checkerOnly.forEach((f, i) => out.push(`${indexOnly.length + i + 1}. only the checker: \`${f}\` (${sites.filter((s) => s.file === f).map((s) => `L${s.line} ${s.why}`).join("; ") || "added by a verdict"}${note(f)})`));
         out.push("");
         console.log(`${spec.id}: index ${index.size}, checker ${checkerFiles.size}, ${indexOnly.length} only the index's, ${checkerOnly.length} only the checker's`);
     }
     const sheetDir = `${checkout}/.nebulosity/${path.basename(dir)}`;
     fs.mkdirSync(sheetDir, { recursive: true });
     fs.writeFileSync(`${sheetDir}/calls-disagreements.md`, `${out.join("\n")}\n`);
+    console.log(`${undecided} disagreement${undecided === 1 ? "" : "s"} undecided`);
     console.log(`sheet in ${sheetDir}/calls-disagreements.md`);
 }
 

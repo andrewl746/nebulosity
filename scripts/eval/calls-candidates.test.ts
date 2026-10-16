@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { differences, indexFiles } from "./calls-candidates";
+import { decisionNote, differences, indexFiles } from "./calls-candidates";
 import type { CallsAnswer } from "../../lib/engine/calls";
 
 // Hand-built answers: only the fields indexFiles reads.
@@ -33,5 +33,12 @@ describe("the index's side of the call disagreements", () => {
     it("lists the files only one side has, sorted", () => {
         expect(differences(new Set(["b", "a", "c"]), new Set(["c", "d", "0"]))).toEqual({ indexOnly: ["a", "b"], checkerOnly: ["0", "d"] });
         expect(differences(new Set(["a"]), new Set(["a"]))).toEqual({ indexOnly: [], checkerOnly: [] });
+    });
+
+    it("marks a disagreement decided, with its verdict, or undecided", () => {
+        const verdicts = [{ id: "q", file: "src/a.ts", decision: "out" as const, line: 7, why: "a comment" }];
+        expect(decisionNote(verdicts, "q", "src/a.ts")).toEqual({ decided: true, text: "decided out (L7): a comment" });
+        expect(decisionNote(verdicts, "q", "src/b.ts")).toEqual({ decided: false, text: "undecided" });
+        expect(decisionNote(verdicts, "other", "src/a.ts").decided).toBe(false);
     });
 });

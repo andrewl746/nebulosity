@@ -1,5 +1,7 @@
+import fs from "fs";
+import os from "os";
 import path from "path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { buildRepoGraphs, taskTests } from "./build-truth";
 import { callTruth, programFor } from "./ts-calls";
 
@@ -43,9 +45,54 @@ describe("callTruth on the calls fixture (the ground truth's checker side)", () 
         expect(files("callers", "TaskRunner", "src/workbench/tasks/taskRunner.ts", "run")).toEqual(["src/workbench/tasks/runners.ts", "src/workbench/tasks/taskHost.ts"]);
     });
 
+    it("callers of an inherited member by the receiver's type: IWatchingFileService.readFile (declared on IFileService)", () => {
+        // editorPane's this.watcher is an IWatchingFileService; WatchingFileService implements it and calls this.readFile (inherited from FileService).
+        // FileService's own this.readFile and every IFileService-typed receiver are not.
+        expect(files("callers", "IWatchingFileService", `${F}/common/files.ts`, "readFile")).toEqual([`${F}/node/watchingFileService.ts`, "src/workbench/editor/editorPane.ts"]);
+    });
+
     it("plans the task on IFileService.readFile: the 11 files to change, and the one test to run", () => {
         const change = callTruth(program, root, "breaks", { type: "IFileService", file: `${F}/common/files.ts`, member: "readFile" }).files;
         const { graph } = buildRepoGraphs(root, "di", [], { resolveBare: true });
         expect([change.length, taskTests(change, graph)]).toEqual([11, ["src/workbench/test/fileService.test.ts"]]);
+    });
+}, 60_000);
+
+// Shapes the fixture lacks, in hand-written sources (expectations read from them, not run).
+describe("callTruth by the receiver's type (inherited members), on sources written here", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nebulosity-calls-"));
+    const write = (name: string, lines: string[]): void => { fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true }); fs.writeFileSync(path.join(dir, name), `${lines.join("\n")}\n`); };
+    write("src/ifaces.ts", [
+        "export interface IFoo { m(): void; }", "export interface IOther { m(): void; }", "export interface IBase { read(): string; }",
+        "export interface ISub extends IBase {}", "export interface IBoth extends IOther, IFoo {}", "export class PlainBase { m(): void {} }",
+    ]);
+    write("src/c.ts", ['import { IFoo, PlainBase } from "./ifaces";', "export class C extends PlainBase implements IFoo { run(): void { this.m(); } }"]);
+    write("src/use-sub.ts", ['import { ISub } from "./ifaces";', "export function f(x: ISub): string { return x.read(); }"]);
+    write("src/use-c.ts", ['import { C } from "./c";', "export function f(c: C): void { c.m(); }"]);
+    write("src/use-both.ts", ['import { IBoth } from "./ifaces";', "export function f(b: IBoth): void { b.m(); }"]);
+    write("src/use-other.ts", ['import { IOther } from "./ifaces";', "export function f(o: IOther): void { o.m(); }"]);
+    write("src/use-plain.ts", ['import { PlainBase } from "./ifaces";', "export function f(p: PlainBase): void { p.m(); }"]);
+    const made = programFor(dir);
+    const callers = (type: string, member: string): string[] => callTruth(made.program, dir, "callers", { type, file: "src/ifaces.ts", member }).files;
+    afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    it("counts a call on an empty-body sub-interface of the interface that declares the member", () => {
+        expect(callers("ISub", "read")).toEqual(["src/use-sub.ts"]);
+        expect(callers("IBase", "read")).toEqual(["src/use-sub.ts"]);
+    });
+
+    it("counts a class that implements the interface but inherits the member from an unrelated base: c.m() and this.m()", () => {
+        // not o.m() on IOther, and not p.m() on the plain base
+        expect(callers("IFoo", "m")).toEqual(["src/c.ts", "src/use-both.ts", "src/use-c.ts"]);
+    });
+
+    it("counts a call on a sub-interface with several bases for each base that declares the member", () => {
+        expect(callers("IOther", "m")).toEqual(["src/use-both.ts", "src/use-other.ts"]);
+        expect(callers("IBoth", "m")).toEqual(["src/use-both.ts"]);
+    });
+
+    it("throws when the type has no such member, inherited ones included", () => {
+        expect(() => callers("IFoo", "nope")).toThrow("IFoo in src/ifaces.ts has no member nope");
+        expect(() => callers("ISub", "nope")).toThrow(/no member nope/);
     });
 }, 60_000);

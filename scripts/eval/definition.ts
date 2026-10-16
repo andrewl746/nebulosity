@@ -29,7 +29,7 @@ export type EvalDefinition = {
     repeats: number;
     /** Node scripts and edits allowed under a fresh scratch folder per run (R6). */
     scripts: boolean;
-    /** More Bash commands allowed in both arms, by preset (run-config's SHELL_PRESETS; ADR-057, amended 2026-10-15). Absent in Eval #1 and Eval #2. */
+    /** More Bash commands allowed in both arms, by preset (SHELL_PRESETS, above; ADR-057, amended 2026-10-15). Absent in Eval #1 and Eval #2. */
     shell?: ShellPreset;
     /** The sentence that ends every prompt with scripts on: Eval #2's ("scripts", the default) or Eval #3's rules sentence (ADR-060). */
     sentence?: "scripts" | "rules";
