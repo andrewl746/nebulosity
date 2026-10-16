@@ -46,24 +46,39 @@ export function pathTokens(text: string, repoId: string): string[] {
     for (const raw of cleaned.match(/[A-Za-z0-9_\-@$.+~\\/]+/g) ?? []){
         let t = raw.replace(/\\+/g, "/").replace(/\/{2,}/g, "/");
         while (t.startsWith("./")) t = t.slice(2);
+        if (t.includes("/../") || t.endsWith("/..")) t = path.posix.normalize(t);   // x/../a.ts names a.ts
         t = t.replace(/\.+$/, "");
         if (t !== "") out.push(t.toLowerCase());
     }
     return out;
 }
 
-/** Where a Bash command leaves Claude Code's working folder: its last top-level cd, from the repo root (""); null outside the repo; undefined without a cd. */
+/**
+ * Where a Bash command leaves Claude Code's working folder: every top-level cd in it, in order (each from the folder the one
+ * before left, so `cd a && cd b` is a/b and `cd ../..` climbs), from the repo root (""); null outside the repo (also for
+ * a cd that climbs out of it); undefined without a cd. A cd that failed without being refused still counts: not detectable.
+ */
 export function cdTarget(command: string, cwd: string | null, repoId: string): string | null | undefined {
     const re = /(?:^|&&|;|\|\||\n)\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|]+)/g;
-    let last: string | undefined;
-    for (let m = re.exec(command); m !== null; m = re.exec(command)) last = m[1].replace(/^["']|["']$/g, "");
-    if (last === undefined) return undefined;
-    const t = last.replace(/\\+/g, "/");
-    const rooted = new RegExp(`^<${escape(repoId)}>(?:/|$)`, "i").exec(t);
-    if (rooted) return path.posix.normalize(t.slice(rooted[0].length) || ".").replace(/^\.$/, "").replace(/\/$/, "").toLowerCase();
-    if (/^([A-Za-z]:\/|\/|~|<)/.test(t) || cwd === null) return null;
-    const joined = path.posix.normalize(path.posix.join(cwd || ".", t));
-    return joined === "." ? "" : joined.startsWith("..") ? null : joined.toLowerCase();
+    const rootedRe = new RegExp(`^<${escape(repoId)}>(?:/|$)`, "i");
+    let at: string | null | undefined;
+    let current = cwd;
+    for (let m = re.exec(command); m !== null; m = re.exec(command)){
+        const t = m[1].replace(/^["']|["']$/g, "").replace(/\+/g, "/");
+        const rooted = rootedRe.exec(t);
+        let next: string | null;
+        if (rooted) next = join("", t.slice(rooted[0].length));
+        else if (/^([A-Za-z]:\/|\/|~|<)/.test(t) || current === null) next = null;
+        else next = join(current, t);
+        at = current = next;
+    }
+    return at;
+}
+
+/** A folder joined with a relative path, normalized, lower-cased: "" for the root, null when it climbs out of the repo. */
+function join(folder: string, relative: string): string | null {
+    const joined = path.posix.normalize(path.posix.join(folder || ".", relative || "."));
+    return joined === "." || joined === "./" ? "" : joined === ".." || joined.startsWith("../") ? null : joined.replace(/\/$/, "").toLowerCase();
 }
 
 /** The best path's seen middle files and its length in middle files (all shortest paths are equally long). */

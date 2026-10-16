@@ -23,6 +23,52 @@ describe("pathTokens and cdTarget", () => {
     });
 });
 
+describe("cds that chain and paths that climb", () => {
+    it("chains the cds of one command, each from the folder the one before left", () => {
+        expect(cdTarget("cd <vscode>/src && cd vs", "", "vscode")).toBe("src/vs");
+        expect(cdTarget("cd a && ls; cd b", "src", "vscode")).toBe("src/a/b");
+        expect(cdTarget("cd <affine>/a/b/c/d && grep -rn x .; cd ../../../..", "", "affine")).toBe("");
+        expect(cdTarget("cd .. && ls", "src/vs", "vscode")).toBe("src");
+    });
+
+    it("puts a cd that climbs out of the repo outside, and a rooted cd after it back inside", () => {
+        expect(cdTarget("cd <vscode>/../x", "", "vscode")).toBeNull();
+        expect(cdTarget("cd ..", "", "vscode")).toBeNull();
+        expect(cdTarget("cd .. && cd src", "", "vscode")).toBeNull();           // still outside: src is relative to the outside folder
+        expect(cdTarget("cd /tmp && cd <vscode>/src", "", "vscode")).toBe("src");
+    });
+
+    it("resolves .. inside a path token", () => {
+        expect(pathTokens("<vscode>/src/vs/x/../a.ts", "vscode")).toEqual(["src/vs/a.ts"]);
+    });
+
+    it("sees a file through a chained cd, and through a Read path that climbs", () => {
+        const needed = { kind: "files" as const, files: ["src/vs/a.ts", "src/vs/b.ts"] };
+        const events = [
+            call("t1", "Bash", { command: "cd <vscode>/src && cd vs && ls" }, 2),
+            result("t1", "a.ts", 3),
+            call("t2", "Read", { file_path: "<vscode>/src/vs/x/../b.ts" }, 4),
+            result("t2", "export const b = 2;", 5),
+            ...end(9, 6_000),
+        ];
+        const r = relevantContext({ jsonl: jsonl(events), startedAt: at(0), repoId: "vscode", needed, tracked: TRACKED });
+        expect([r.reached, r.ttrcMs, r.coverage]).toEqual([true, 5_000, 1]);
+    });
+
+    it("loses the working folder when a command climbs out of the repo, so a later bare name is not the repo's file", () => {
+        const needed = { kind: "files" as const, files: ["src/vs/a.ts", "src/vs/b.ts"] };
+        const events = [
+            call("t1", "Bash", { command: "cd <vscode>/src/vs && cd ../../.." }, 2),
+            result("t1", "", 3),
+            call("t2", "Bash", { command: "ls" }, 4),
+            result("t2", "a.ts\nb.ts", 5),
+            ...end(9, 6_000),
+        ];
+        const r = relevantContext({ jsonl: jsonl(events), startedAt: at(0), repoId: "vscode", needed, tracked: TRACKED });
+        expect([r.reached, r.coverage]).toEqual([false, 0]);
+    });
+});
+
 describe("relevantContext", () => {
     const needed = { kind: "files" as const, files: ["src/vs/a.ts", "src/vs/b.ts"] };
 

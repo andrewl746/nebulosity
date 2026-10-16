@@ -4,14 +4,15 @@
  * The files a question's answer needs, fixed from its truth before the first run (ADR-060, D2 of V1.7's plan): a list
  * truth's files, and for a chain or cycle the shortest-path DAG of the truth's graph (every shortest path, not one example).
  * Time to relevant context (context.ts) is measured against them. Written to <dir>/truth/needed.json as
- * { [question id]: Needed }, for the single questions that have a needed set. Imports nothing from lib/.
+ * { [question id]: Needed }, for the single questions that have a needed set. It reads the truth's graph through build-truth.ts and
+ * scan.ts only, never score.ts, so (with definition.ts's route through run-config, Task 10's to cut) nothing here reaches lib/.
  */
 import fs from "fs";
 import path from "path";
-import { EVAL1, type ChainTruthFile, type CycleTruthFile, type TruthFile } from "./build-truth";
+import { buildRepoGraphs, EVAL1, parseAdjudications, type ChainTruthFile, type CycleTruthFile, type TruthFile } from "./build-truth";
 import type { Needed } from "./context";
 import { loadDefinition } from "./definition";
-import { fromTruthVerdicts, loadScorerVerdicts, repoIdFor, repoScoreContext, type Adjudicated } from "./score";
+import { scanRepo } from "./scan";
 import { adjacency, type Graph } from "./truth";
 
 type Paths = Extract<Needed, { kind: "paths" }>;
@@ -119,14 +120,21 @@ function main(): void {
     const repoIds = Object.keys(definition.repos);
     const file = JSON.parse(fs.readFileSync(`${dir}/questions.json`, "utf8")) as { questions: { id: string; repo?: string; truth?: string; session?: string }[] };
     const firstEval = definition.name === EVAL1;
-    const { truth: truthVerdicts, steps } = firstEval ? { truth: [], steps: [] } : loadScorerVerdicts(dir, repoIds);
-    const adjudicated: Adjudicated[] = firstEval
-        ? (fs.existsSync(`${dir}/truth/adjudicated.json`) ? (JSON.parse(fs.readFileSync(`${dir}/truth/adjudicated.json`, "utf8")) as Adjudicated[]) : [])
-        : fromTruthVerdicts([...truthVerdicts, ...steps]);
+    // the truth's graph: Eval #1's is the scanner's; any other eval's is buildRepoGraphs with the truths' own verdicts (adjudicated.json)
+    const verdictsFile = `${dir}/truth/adjudicated.json`;
+    const verdicts = firstEval || !fs.existsSync(verdictsFile) ? [] : parseAdjudications(JSON.parse(fs.readFileSync(verdictsFile, "utf8")), repoIds);
     const graphs = new Map<string, Graph>();
     const graphOf = (repo: string): Graph => {
-        if (!graphs.has(repo)) graphs.set(repo, repoScoreContext(forward(path.resolve(checkout, definition.repos[repo].path)), repo, firstEval, adjudicated, truthVerdicts, steps).graph);
+        if (!graphs.has(repo)){
+            const root = forward(path.resolve(checkout, definition.repos[repo].path));
+            graphs.set(repo, firstEval ? scanRepo(root) : buildRepoGraphs(root, repo, verdicts, { resolveBare: true }).graph);
+        }
         return graphs.get(repo)!;
+    };
+    const repoOf = (named: string | undefined, id: string): string => {
+        const repo = named ?? (repoIds.length === 1 ? repoIds[0] : undefined);
+        if (repo === undefined || !repoIds.includes(repo)) throw new Error(`question ${id} names no repo that eval.json lists.`);
+        return repo;
     };
 
     const needed: Record<string, Needed> = {};
@@ -135,7 +143,7 @@ function main(): void {
     for (const q of file.questions){
         if (q.session !== undefined || q.truth === undefined) continue;
         const truth = JSON.parse(fs.readFileSync(`${checkout}/${q.truth}`, "utf8")) as TruthFile;
-        const n = neededFor(truth, graphOf(repoIdFor(repoIds, q.repo, q.id)));
+        const n = neededFor(truth, graphOf(repoOf(q.repo, q.id)));
         if (n === null){
             left.push(`${q.id} (${truth.kind}${truth.kind === "impact" || truth.kind === "pairs" ? ": a count" : ": no files between or none"})`);
             continue;

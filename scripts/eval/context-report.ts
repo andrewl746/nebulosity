@@ -5,7 +5,8 @@
  * printed per question kind, per repo and pooled: each arm's reached share and median TTRC (from the run's startedAt, the
  * gate's measure, and from the query start), its ratio to Alone, the matched per-question ratios' median with a seeded
  * bootstrap interval over questions, the same for the mostly-relevant version, and the median tokens to relevant context.
- * With --refusal-free, Alone's runs with a refused call are left out (the design check's Follow-up 1). Imports nothing from lib/.
+ * With --refusal-free, Alone's runs with a refused call are left out (the design check's Follow-up 1). Reads the scorer's run-name helpers
+ * from score.ts, so it is not one of the lib-free modules.
  */
 import { execFileSync } from "child_process";
 import fs from "fs";
@@ -89,8 +90,8 @@ function main(): void {
         ["pooled", () => true],
     ];
 
-    console.log("\n| Set | Arm | Runs | Reached | TTRC from start (s) | from query (s) | Mostly relevant: reached, from start (s) | Median tokens | Ratio to A, start / query |");
-    console.log("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+    console.log("\n| Set | Arm | Runs | Reached | TTRC from start (s) | from query (s) | Median tokens | Ratio to A, start / query |");
+    console.log("| --- | --- | --- | --- | --- | --- | --- | --- |");
     for (const [label, pick] of sets){
         const base = kept.filter((r) => r.arm === "A" && pick(r));
         const baseStart = medianOf(base, (r) => r.result.ttrcMs);
@@ -101,8 +102,25 @@ function main(): void {
             const start = medianOf(mine, (r) => r.result.ttrcMs);
             const query = medianOf(mine, (r) => r.result.ttrcQueryMs);
             const reachedTokens = mine.filter((r) => r.result.tokens !== null).map((r) => r.result.tokens!);
-            const ratio = (a: number | null, b: number | null): string => (arm === "A" || a === null || b === null || b === 0 ? "-" : ratioText(a / b));
-            console.log(`| ${label} | ${arm} | ${mine.length} | ${mine.filter((r) => r.result.reached).length}/${mine.length} | ${seconds(start)} | ${seconds(query)} | ${mine.filter((r) => r.result.mostlyRelevant.reached).length}/${mine.length}, ${seconds(medianOf(mine, (r) => r.result.mostlyRelevant.ttrcMs))} | ${reachedTokens.length === 0 ? "-" : Math.round(median(reachedTokens))} | ${ratio(start, baseStart)} / ${ratio(query, baseQuery)} |`);
+            const ratio = (a: number | null, b: number | null): string => (arm === "A" || a === null || b === null || b === 0 || (a === Infinity && b === Infinity) ? "-" : ratioText(a / b));
+            console.log(`| ${label} | ${arm} | ${mine.length} | ${mine.filter((r) => r.result.reached).length}/${mine.length} | ${seconds(start)} | ${seconds(query)} | ${reachedTokens.length === 0 ? "-" : Math.round(median(reachedTokens))} | ${ratio(start, baseStart)} / ${ratio(query, baseQuery)} |`);
+        }
+    }
+
+    console.log("\nThe mostly-relevant version (a result counts only if half its tracked files are needed; the design check's floor version):");
+    console.log("| Set | Arm | Reached | TTRC from start (s) | from query (s) | Ratio to A, start / query |");
+    console.log("| --- | --- | --- | --- | --- | --- |");
+    for (const [label, pick] of sets){
+        const base = kept.filter((r) => r.arm === "A" && pick(r));
+        const baseStart = medianOf(base, (r) => r.result.mostlyRelevant.ttrcMs);
+        const baseQuery = medianOf(base, (r) => r.result.mostlyRelevant.ttrcQueryMs);
+        for (const arm of arms){
+            const mine = kept.filter((r) => r.arm === arm && pick(r));
+            if (mine.length === 0) continue;
+            const start = medianOf(mine, (r) => r.result.mostlyRelevant.ttrcMs);
+            const query = medianOf(mine, (r) => r.result.mostlyRelevant.ttrcQueryMs);
+            const ratio = (a: number | null, b: number | null): string => (arm === "A" || a === null || b === null || b === 0 || (a === Infinity && b === Infinity) ? "-" : ratioText(a / b));
+            console.log(`| ${label} | ${arm} | ${mine.filter((r) => r.result.mostlyRelevant.reached).length}/${mine.length} | ${seconds(start)} | ${seconds(query)} | ${ratio(start, baseStart)} / ${ratio(query, baseQuery)} |`);
         }
     }
 
@@ -113,6 +131,7 @@ function main(): void {
         ["plain rule, from start", (r) => r.result.ttrcMs],
         ["plain rule, from query", (r) => r.result.ttrcQueryMs],
         ["mostly relevant, from start", (r) => r.result.mostlyRelevant.ttrcMs],
+        ["mostly relevant, from query", (r) => r.result.mostlyRelevant.ttrcQueryMs],
     ];
     for (const arm of others){
         for (const [measure, value] of measures){
