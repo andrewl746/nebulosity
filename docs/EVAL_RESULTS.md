@@ -656,12 +656,13 @@ By question set (the time and cost ratios are the median over the set's question
   - AFFINE-BP1: 0.90 against 0.98, after `overview`.
   - AFFINE-BP3: 0.60 against 0.69, with no tool call: half points on how block props hold Yjs values (BP3.2).
   - THEIA-BP2: 0.71 against 0.75, with no tool call: no N run said that `@theia/core` is the extension every application builds on (BP2.5).
-- **Where N was slower or costlier than Claude Code alone**, by the per-question medians:
+- **Where N was slower or costlier than Claude Code alone**, by the per-question medians (the notable cases first, then the smaller ratios above 1.0):
   - VSCODE-TASK3: 1.14 times the time and 1.32 times the cost, at 1.00 each. N's r2 wrote three scripts and ran nine `node` commands (12 turns, $0.22).
   - The vscode-s1 session: $0.847 against $0.582 over its three runs, and 213.0 against 184.6 s. N's r1 cross-checked the index with its own script (28 tool calls, $0.578, 169 s); r2 and r3 were faster than every A run, and r3 cheaper too.
   - VSCODE-ENTRIES: $0.088 against $0.043 (scoring 1.00 against 0.95, in 8.8 against 21.0 s): two N runs added `architecture`'s files-nothing-imports report with a limit of 500.
   - VSCODE-CL1: $0.081 against $0.052, at 1.00 each.
   - Slower by the median time: AFFINE-INJECTS1 (38.7 against 35.7 s, with no `calls`), AFFINE-TASK1 (42.5 against 39.2 s) and THEIA-BREAKS1 (44.9 against 38.9 s).
+  - Smaller ratios above 1.0: VSCODE-BREAKS1 time 1.05; cost 1.05 to 1.08 on VSCODE-BREAKS2, VSCODE-INJECTS1, VSCODE-TASK1, AFFINE-CALLERS1, AFFINE-TASK2, THEIA-INJECTS1 and THEIA-TASK1.
   - TTRC on THEIA-INJECTS1 (1.85), AFFINE-TASK1 (1.49), THEIA-CALLERS1 (1.46), VSCODE-TASK3 (1.43) and AFFINE-UNUSED (2.27).
 
 ### Per question
@@ -891,7 +892,7 @@ The same 27 single questions (VS Code's 9 graph questions and BP1–BP5, AFFiNE'
   - 678 big-picture points were graded twice, blind: grader 1 a fresh Sonnet subagent per sheet, grader 2 one Opus subagent over all 90, never shown grader 1's replies. They agreed exactly on 578 (85.3%; Eval #2 84%, Eval #1 88%).
   - All 100 disagreements were half a point. A third, arms-hidden adjudicator (an Opus model) read each disputed point with the full answer and suggested a score with a reason. The controller adopted every suggestion: 32 kept grader 1's score and 68 took grader 2's.
   - The rulings are in `eval3/grading/review.json`, marked as the controller's. The owner can overturn any of them and re-run `npm run eval:grading -- --eval eval3 merge` and the scorer.
-- **The graders could still tell many N answers apart.** No answer named Nebulosity or a tool's MCP name, so the redaction changed nothing (`eval3/grading/redactions.json`). But 12 of the 90 answers mention "the index" or "the import graph", ordinary words R-AD keeps: 11 of N's 45 and 1 of A's 45. So the grading was blind to the run, but not always to the arm.
+- **The graders could still tell many N answers apart.** No answer named Nebulosity or a tool's MCP name, so the redaction changed nothing (`eval3/grading/redactions.json`). But 12 of the 90 answers mention "the index" or "the import graph", ordinary words R-AD keeps: 11 of N's 45 and 1 of A's 45. The one in A is a false positive (affine-bp5-baseline-1 writes "the `index` field", BlockSuite's z-order index), so the arm tell is 11 of N's 45 and none of A's. The grading was blind to the run, but not always to the arm.
 - **One run's time is understated.** In affine-impact-baseline-2, A's first script hit Claude Code's 120 s command timeout and was moved to the background. A rewritten script answered, and the run's first `result` came at 198.9 s, 16 turns, $0.221. About nine minutes later the background script was stopped, and Claude Code woke the session with a notification. The model added a note ("That notification is about the first script … My answer doesn't come from it"), and a second `result` closed the run with `duration_ms` 2,830, 1 turn, and a cumulative cost of $0.231. The scorer reads the last result, so the run counts 2.8 s and 1 turn (its clock ran 754 s) and is scored on the note, which repeats the answer (0.996). No gate condition uses that run's time: condition 4 on Eval #2's graph questions uses its cost, which is cumulative and right, and the question's median time (33.9 s) is another run's.
 - **Wall time is `duration_ms`.** It leaves out start-up, N's MCP server included, which leans slightly toward N on condition 3. TTRC counts from process start, which leans toward A (R-F); from the query start, N's ratios on the new questions are 0.02–0.10 lower.
 - **The threats the method named, as they turned out.**

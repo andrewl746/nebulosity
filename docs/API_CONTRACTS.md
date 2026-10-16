@@ -371,6 +371,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - nothing indexed at a path;
 - a path outside the repo;
 - overlapping places for `imports` with `to`, and a `within` that cannot match;
+- `calls`' refusals: a `symbol` that is not a class or interface name or one of its members; no class or interface by that name in the index (with `path`: none declared in that file); `X has no member m` (with the type's members listed, up to 30); a `within` that is not a folder in the index, or is a file; a `group_by` that is not a folder;
 - `architecture`'s `through` with `layers`, `conventions` or `unused`;
 - bad `show_on_map` input;
 - the MCP SDK's "Input validation error" for input outside a schema.
