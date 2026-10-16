@@ -21,3 +21,23 @@ describe("redact (R-AD)", () => {
         });
     });
 });
+
+describe("redact keeps the sentence grammatical (no doubled article)", () => {
+    it("absorbs the article and the word 'tool' or 'call' around an mcp__ name", () => {
+        expect(redact("Then the `mcp__nebulosity__search` tool found it.").text).toBe("Then a search found it.");
+        expect(redact("We used an mcp__nebulosity__imports call twice.").text).toBe("We used a search twice.");
+    });
+
+    it("does not add an article when a modifier already stands before a bare tool name", () => {
+        expect(redact("I ran a code search tool.")).toEqual({ text: "I ran a code search.", redactions: [{ from: "search tool", to: "search", count: 1 }] });
+        expect(redact("Use the web search tool first.").text).toBe("Use the web search first.");
+        expect(redact("It is a semantic search tool.").text).toBe("It is a semantic search.");
+        expect(redact("Search tool output is long.").text).toBe("A search output is long.");
+    });
+
+    it("handles Eval #2's third phrasing and capitals", () => {
+        expect(redact("Nebulosity's index of `src/vs` lists them.").text).toBe("The index of `src/vs` lists them.");
+        expect(redact("Ask NEBULOSITY about it.").text).toBe("Ask the index about it.");
+        expect(redact("NEBULOSITY found it.").text).toBe("The index found it.");
+    });
+});
