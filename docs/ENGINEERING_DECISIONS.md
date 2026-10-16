@@ -1165,6 +1165,7 @@ Speed was measured end to end, while what an agent needs is to reach the right f
 - **Arms and pins as in Eval #2:** Claude Code alone (A) and with Nebulosity (N); Sonnet 5.5 at medium effort; Claude Code pinned at the pilot; scripts allowed in both arms; three repeats.
 - **The rules sentence** ends every prompt of both arms, in place of Eval #2's scripts sentence (the V1.7 plan's D2 pins it). Run commands from the repository root, without cd. Compute with Node scripts written into the scratch folder with the Write tool. Shell writes, loops, sed, awk, xargs and paths through `..` are refused. No allow rule is added.
 - **Checked before the first run:** one live probe of Claude Code's cd-then-git guard, and a shell check on a 19-question dev set in both arms, covering every kind. The check passes with at most 1 refused command per 10 runs in each arm, and no run giving up after a refusal.
+  - The guard probe (2026-10-15): `cd /c/…/vscode; git ls-files | wc -l` was refused, with "Permission to use Bash has been denied because Claude Code is running in don't ask mode." (one run, Claude Code 2.1.301, no `shell` preset).
 - **384 runs**, each question in both arms three times:
   - 15 DI questions (callers, what breaks, adopt, injects) and 8 tasks;
   - 24 graph questions: Eval #2's first of each kind per repo, unchanged, and Theia's six new ones;
