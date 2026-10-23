@@ -838,6 +838,12 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 
 **Amended (2026-10-16, Eval #3): the hold is lifted.** Eval #3 failed conditions 1, 2, 3 and 5 (ADR-060). By the owner's call of 2026-10-15 (V1.7 design §5.8), the hold lifts after Eval #3 whatever its outcome, and the gate decides what the README claims. Deploying, the public switch, the package and the video are the owner's.
 
+**Amended (2026-10-23): the history goes public as it is.** The owner's two calls before the public switch:
+- the commit author email stays as it is in every commit;
+- the cut-off path in `4538032`'s history stays. It holds only the user name and one folder name, and the author name is already on every commit. HEAD is clean (`2bb5dc1`).
+
+Nothing is rewritten and nothing is force-pushed.
+
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
 **Context:** ADR-027 fused code keywords, summary keywords and meaning; V1.3.1 added folder names. V1.2 and V1.3 left ranking cases for V1.5's query set: "lifecycle" ranked `src/vs/base/common/lifecycle.ts` 6th then, and by V1.5's planning probe it was outside the top 8, as it was for "Disposable", though it's the most imported file in VS Code. "registerSingleton" ranked its own file 2nd; "terminal" put a smoke-test folder 2nd; a file's snippet was often its imports listing with a `File: <path> Imports:` header.
