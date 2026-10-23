@@ -207,6 +207,8 @@
 
 **Amended (2026-10-16, Eval #3):** three evals now say the same thing about the value proposition: Nebulosity's tools make Claude Code faster, and sometimes cheaper, on the questions that walk the import graph, at an equal or slightly higher score (in Eval #3, with refused commands under 5% in both arms, 0.63 and 0.38 of the time and 0.92 and 0.56 of the cost on Eval #2's graph questions), but they don't make its answers clearly better, and the `calls` tool built in V1.7 made the questions about calls through injected services no faster, cheaper or more accurate (Eval #3's gate failed on conditions 1, 2, 3 and 5), so this ADR's revisit condition holds a third time (docs/EVAL_RESULTS.md).
 
+**Amended (2026-10-22, ADR-061):** the value question is answered by narrowing the pitch to what the three evals measured. Nebulosity is described as the dependency-structure layer for Claude Code: it answers in one call the questions that take many steps over the imports, where Eval #3 measured 2.3–4.4× as fast on VS Code and AFFiNE and 1.5–3.2× on the held-out Theia, at the same or a higher score. The engine, the companion-not-competitor stance and every feature stay as this ADR decided.
+
 ## ADR-025 — Drop the native C++ scanner (2026-10-11) — supersedes ADR-014 and ADR-015
 
 **Context:** ADR-014 justified the C++ scanner only as a benchmarked accelerator, and ADR-015 deferred it to last. v1 parses with the TypeScript Compiler API (all of VS Code in 22.3 s, single-threaded), so there's no measured bottleneck for a native scanner to remove. The regex extractor it was meant to port is being retired anyway (ADR-026).
@@ -1214,3 +1216,36 @@ Speed was measured end to end, while what an agent needs is to reach the right f
 **Revisit when:** the gate's verdict is in (it amends this ADR), or a new Claude Code version or model changes the baseline enough to matter for the README's claims.
 
 **Amended (2026-10-16, the runs):** 378 runs kept (366 single runs and 12 task sessions) on 2026-10-16, 06:58–10:17 UTC, with no outage and no re-run; Claude Code 2.1.301 and `claude-sonnet-5-5` in every init, the engine frozen at `2f913ad`, index versions 155 (VS Code), 134 (AFFiNE) and 2 (Theia); refused commands in 9 of A's 189 runs and 8 of N's 189; $42.78 by Claude Code's estimate (with the dev set, about $52), the 5-hour window 0.49 → 0.31 across one reset and the week 0.71 → 0.76; the gate failed: conditions 1, 2, 3, 5.
+
+## ADR-061 — Positioned as the dependency-structure layer for Claude Code (2026-10-22) — amends ADR-024 and PIVOT_SPEC.md §0–1
+
+**Context:** ADR-024's revisit condition has held three times: in Eval #1, #2 and #3, Nebulosity's tools didn't make Claude Code's answers clearly better. All three evals found the same one thing: on questions that walk the import graph, Claude Code with Nebulosity is faster, and usually cheaper, at the same or a higher score. Eval #3 had refused commands under 5% in both arms. On its questions that need more than one step over the imports, Claude Code with Nebulosity was:
+- on VS Code and AFFiNE: 2.3–4.4× as fast and 1.4–2.6× as cheap (pooled medians, 6 runs per setup per kind);
+- on the held-out Theia: 1.5–3.2× as fast and 1.0–1.3× as cheap (3 runs per setup per kind);
+- scoring 1.00 everywhere, against 0.95–1.00.
+
+It called a tool in all 42 of those runs. Elsewhere the gains were small or none. Listing a method's callers took 0.57–0.66 of the time on VS Code and Theia, where `calls` was nearly complete, and 0.88–0.93 on AFFiNE, where its index missed most of them. One-step import questions, signature changes, tasks and big-picture questions came out about even, and some cost more. On two of the one-step kinds, files nothing imports and layer violations, Claude Code with Nebulosity called no tool in any run, so their ties say nothing about the tools. PIVOT_SPEC §0, the demo script and the Map's page description still pitch the whole engine ("Nebulosity has already mapped it"; "a code-intelligence companion for massive codebases") on three question families. Big-picture questions showed no clear gain (−0.09 and −0.08 on VS Code in Eval #1 and #2; +0.066, +0.003 and −0.021 in Eval #3), and lists gained only when building them took more than one step, not as lists of direct importers. The README's lead already named the import walk, but led with the failed gate. The figures by kind: docs/EVAL_RESULTS.md, Eval #3, "By kind, grouped after the runs".
+**Decision:**
+- **The pitch narrows; the product doesn't.** Nebulosity is described as the dependency-structure layer for Claude Code. It answers in one call the questions that take many steps over the imports: what a change affects (directly, through other files, by area), how one file comes to load another, which entry points load a file, and import cycles. The Map is how people see the same structure.
+- **Every feature stays:** `calls`, search, `overview` and `describe`, the summaries (the paid upgrade) and the Map. Each is described for what it does. None is claimed as a measured gain beyond what Eval #3 measured.
+- **The claim is defined by a rule, not a list of winners.** A question counts if its answer needs more than one step over the import graph. The rule splits Eval #2's nine kinds exactly 5 and 4, and a reason fits it: one `git grep` returns a whole step, so grep keeps up on one-step questions and has to be run again on every file it finds on multi-step ones.
+- **What the README may claim:**
+  - Eval #3's figures on the multi-step kinds, each time with its repos, its run counts and Theia's figure beside it;
+  - Eval #2's graph-question group, the figure measured before any grouping;
+  - the small gains, the ties and the failed gate, in the lead.
+
+  It may not claim "faster at finding callers" in general, "better answers", or a figure without its held-out counterpart.
+- **Labelled as grouped after the runs** wherever the per-kind figures appear, until an eval with bars set before its runs tests the rule.
+
+**Alternatives:**
+- (a) Keep the broad pitch. It claims what three evals didn't find.
+- (b) Cut the product down to `imports` and `architecture`. It gains nothing measurable. The other tools tie rather than lose, and the Map (the visual demo) and the paid upgrade would go.
+- (c) Change the pitch only after a confirmatory eval. The README's lead already led with the losses. The new one is narrower, and the post-hoc label covers the gap until then.
+- (d) Eval #2's option 3, ship as a measured tool with the losses stated. That's what the README did; this ADR keeps its honesty and changes what it leads with.
+
+**Consequences:**
+- Changed in this set: the README lead, its "Why" and Eval #3's "Where it helped"; a section in docs/EVAL_RESULTS.md, Eval #3, with the figures by kind; DEMO_VIDEO.md (the hook, and the 1:35 shot, which showed Eval #1's table, two evals old); a banner on PIVOT_SPEC §0–1; `app/layout.tsx`'s description.
+- Unchanged: the tools, the server instructions and `nebulosity setup`'s optional CLAUDE.md note.
+- Optional, the owner's call: a confirmatory eval (Eval #4). It would ask only multi-step and one-step questions, new ones drawn with a fixed seed on the three repos, with more runs per kind, and add setup's CLAUDE.md note to the with-Nebulosity arm. Its bars are set before its first run, and Eval #3 stays reported as is.
+
+**Revisit when:** a confirmatory eval misses its bars on the multi-step kinds, or Claude Code gains its own import graph, which would close the gap.

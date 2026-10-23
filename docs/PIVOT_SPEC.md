@@ -5,10 +5,13 @@
 **Supersedes:** `VISUALIZATION_DESIGN.md` §1–4 (radial layout, tier plan, and the "Tier XL is a product boundary" decision), ADR-014/015 (native scanner), and roadmap Phases 6 and S. Every other doc stays valid except where its banner points here (§16).
 **Scope:** v1 in full detail; extras E1–E5 at design level. Each extra gets its own implementation plan when it starts.
 **Amended 2026-10-13 (ADR-043):** other people should be able to use Nebulosity on their own repos. v1 gains a slice, V1.6 "Works on your repo", with a free mode that needs no API key (§2, §12), and the extras run E4 → E5 → E1, with E3 smaller and optional and E2 waiting on a measurement (§10).
+**Amended 2026-10-22 (ADR-061):** the positioning in §0–1 is narrowed to what Eval #1–#3 measured. Nebulosity is described as the dependency-structure layer for Claude Code: it answers in one call the questions that take many steps over the imports. The design and every feature are unchanged.
 
 ---
 
 ## 0. In one paragraph
+
+> **Positioning since 2026-10-22 (ADR-061):** this section and §1 are the pitch as written on 2026-10-11. Three evals found no clear gain on big-picture questions or on lists of direct importers. They found Nebulosity faster, and usually cheaper, on questions that take many steps over the import graph, so that is what it is now pitched on. The engine below is unchanged.
 
 Claude Code understands a repository by searching it on demand (grep, read, reason) and forgets everything when the session ends. That works for small repos and local questions. On massive repos it struggles with three kinds of question: **big-picture** ("what are the subsystems and how do they talk?"), **complete-list** ("every file that depends on X") and **repeated** (every session pays for the same exploration again). Nebulosity does the expensive understanding **once**, keeps it **fresh incrementally**, and serves it two ways: to AI agents through an **MCP server**, and to people through a zoomable **Map**.
 
@@ -17,6 +20,8 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 ---
 
 ## 1. Positioning and evidence
+
+> **Positioning since 2026-10-22:** see the note at the top of §0 (ADR-061).
 
 - **Companion, not competitor.** Nebulosity does not replace any agent's loop. It gives every MCP client (Claude Code, Claude Desktop, Cursor, VS Code's agent mode) a precomputed map. Its own agent, the Guide (E1), exists for guided onboarding inside the Map.
 - **Why not "better RAG".** Claude Code's team tried a local vector index early on and found agentic search better, largely because indexes go stale. Nebulosity answers staleness with incremental re-indexing (§5.6). Its value is answers that exist in no single file: summaries of whole areas, exact dependency sets, connection paths.
@@ -490,6 +495,7 @@ Each v1 slice ends demoable:
 | ADR-058 | Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (implements ADR-043's V1.6; amends ADR-048) |
 | ADR-059 | Calls through declared types: a calls index and the `calls` tool (amends ADR-043, ADR-056, §6.1, §6.2) |
 | ADR-060 | Eval #3's method: the rules sentence, time to relevant context, the call kinds, and the gate (amends ADR-057) |
+| ADR-061 | Positioned as the dependency-structure layer for Claude Code: the pitch narrowed to what Eval #1–#3 measured, every feature kept (amends ADR-024, §0–1) |
 
 ## 16. Doc migration
 

@@ -12,6 +12,7 @@
 - *Why, from the transcripts:* nearly every run in both arms began with a `git grep` for the method's name, which on these questions names most of the answer at once. On AFFiNE the calls index missed most callers of the drawn methods, so the runs that called `calls` grepped anyway.
 - *What it measurably did was the import walk.* On Eval #2's graph questions, now without refusals in either arm, it took 0.63 (VS Code) and 0.38 (AFFiNE) of the time per question, at 0.92 and 0.56 of the cost, scoring 1.00 against 0.98. On Theia's held-out graph questions it took 0.58 of the time at 0.95 of the cost (0.978 against 1.000). It reached those questions' files in 0.41 and 0.33 of the time.
 - *No loss elsewhere* held within the gate's margins (big-picture +0.066, +0.003 and −0.021; the sessions level), and the per-turn cost was 2,368–2,372 tokens.
+- *By kind, grouped after the runs (added 2026-10-22, ADR-061):* the questions whose answer takes more than one step over the imports were 2.3–4.4 times as fast with Nebulosity on VS Code and AFFiNE and 1.5–3.2 on Theia, at 1.00 against 0.95–1.00. The one-step ones came out about even. See "By kind, grouped after the runs".
 
 Eval #3 asks whether Claude Code reaches the files a question needs faster, answers better, and spends less with Nebulosity's MCP server than without it, on three big repos. Two of the repos are Eval #2's. The third, Theia, is held out from all tuning and indexed in free mode. It adds what Eval #2 lacked:
 - questions about calls through injected services, which grep can't answer cheaply: who calls a method, what breaks if its signature changes, who has to adopt a change, where a service is injected, and planning a signature change;
@@ -920,7 +921,52 @@ In plain sentences:
   - The call questions name a single method. A question that needs many methods, or one whose callers grep can't name, might go differently; this eval didn't ask one.
   - It measured the MCP tools, not the Map, which is for people and has no Claude Code equivalent.
 
-**What the README may claim** (ADR-051 as amended, R-AK). The gate failed, so the README states Eval #3's results as measured, names conditions 1, 2, 3 and 5, and claims nothing beyond the numbers. It can't claim that Nebulosity makes Claude Code reach the relevant context faster on call questions, makes fewer errors, or is faster or cheaper on questions about calls through injected services. By the owner's call of 2026-10-15, the hold on going public lifts after this verdict whatever it is; the deploy, the public switch, the package and the video are the owner's.
+**What the README may claim** (ADR-051 as amended, R-AK; amended 2026-10-22 by ADR-061, which adds the figures by kind below, labelled as grouped after the runs). The gate failed, so the README states Eval #3's results as measured, names conditions 1, 2, 3 and 5, and claims nothing beyond the numbers. It can't claim that Nebulosity makes Claude Code reach the relevant context faster on call questions, makes fewer errors, or is faster or cheaper on questions about calls through injected services. By the owner's call of 2026-10-15, the hold on going public lifts after this verdict whatever it is; the deploy, the public switch, the package and the video are the owner's.
+
+### By kind, grouped after the runs (added 2026-10-22, ADR-061)
+
+This section was added six days after the results, for ADR-061's repositioning. It changes no number above and no gate condition. Every figure is recomputed from `eval3/results.json`.
+- **Time** is `duration_ms` and **cost** is `total_cost_usd`, as above.
+- **Each ratio** is A's pooled median over N's, so above 1 means N was faster or cheaper.
+- **Runs per setup:** on VS Code and AFFiNE each kind has one question per repo, three runs each, so 6. Theia has one question per kind, so 3.
+- **Not the gate's statistic.** The gate takes per-question medians. These are small samples, and they're meant to show where the difference sits.
+
+| Kind | VS Code + AFFiNE: time / cost | Theia: time / cost | Score A / N (VS Code + AFFiNE) | Needed files seen sooner (VS Code + AFFiNE; Theia) | N runs that called a tool |
+|---|---|---|---|---|---|
+| Impact by area | 4.26 / 2.12 | not asked | 0.949 / 1.000 | n/a (a count answer) | 6 of 6 |
+| Chain | 4.43 / 2.61 | 3.16 / 1.20 | 1.000 / 1.000 | 5.20; 2.84 | 9 of 9 |
+| Entries | 4.16 / 1.61 | 2.82 / 1.02 | 0.963 / 1.000 | 5.89; 4.11 | 9 of 9 |
+| Transitive list | 2.26 / 1.42 | 1.96 / 1.29 | 0.977 / 1.000 | 5.64; 5.30 | 9 of 9 |
+| Cycle | 2.27 / 1.47 | 1.53 / 1.09 | 1.000 / 1.000 | 3.20; 3.24 | 9 of 9 |
+| Direct list | 1.19 / 1.01 | 1.13 / 1.01 | 1.000 / 1.000 | | 5 of 9 |
+| Unused | 1.22 / 1.19 | 0.91 / 1.00 | 0.955 / 1.000 | | 0 of 9 |
+| Violations | 1.17 / 1.20 | not asked | 1.000 / 1.000 | | 0 of 6 |
+| Pairs | 1.05 / 1.00 | not asked | 0.979 / 1.000 | | 5 of 6 |
+
+The tool counts are over all three repos.
+- **Theia** scored 1.000 in both arms on its four multi-step kinds. Its figures are kept apart because its runs cost about three times as much in both arms (its `CLAUDE.md` and `AGENTS.md`), so pooling them with the other two repos would mix two cost levels.
+- **Refusals** on those kinds: A had a refused command in 2 of its 42 runs, N in none.
+
+**How the kinds were grouped.** A kind counts as multi-step when its answer needs more than one step over the imports. Impact, entries and the transitive list ask for files "directly or through other files". The chain asks for a path, and the cycle for a path back to the file itself. The other four ask about one import at a time:
+- the files that import a file directly;
+- files nothing imports;
+- direct imports against a layering rule;
+- folders that import each other directly.
+
+A reason fits the split: one `git grep` returns a whole step, so on multi-step questions it has to be run again on every file it finds, or replaced by a script. **The rule was written after the runs**, and the grouping saw Theia's results too. Until an eval with bars set before its runs tests it, it's a description of this eval, not a prediction.
+
+**Read beside the pooled figures:**
+- **VS Code's entries question cost N twice as much:** medians $0.088 against $0.043. Two of the three N runs added `architecture`'s files-nothing-imports report to the `imports` call. N was 2.4 times as fast there and scored 1.00 against 0.95. AFFiNE's entries question, 3.98 times as cheap, is what makes the pooled 1.61.
+- **VS Code's direct list cost N 1.56 times as much:** medians $0.081 against $0.052. N was 1.15 times as fast there, at 1.00 each. AFFiNE's direct list, 1.16 times as cheap, evens the pooled 1.01.
+- **On the transitive list, A saw every needed file in only 3 of its 6 runs.** The 5.64 counts only those 3, so it flatters A.
+- **The other kinds, per question.** These figures are N's share of A's time and cost (the gate's direction: below 1 means N was faster or cheaper), the range over each kind's questions on all three repos:
+  - callers (5 questions): time 0.57–0.93, cost 0.77–1.05; VS Code's and Theia's 0.57–0.66 of the time, AFFiNE's 0.88–0.93;
+  - breaks (6): time 0.33–1.15, cost 0.48–1.05; the 0.33 and 0.48 are Theia's BREAKS2, where two N runs trusted an incomplete `calls` answer and scored 0.91 against 0.96;
+  - injects (3): time 0.95–1.08, cost 0.86–1.05;
+  - adopt (1): time 0.99, cost 0.81;
+  - tasks (7): time 0.81–1.14, cost 0.90–1.32;
+  - direct lists (3): time 0.83–0.89, cost 0.86–1.56;
+  - big-picture (15): time 0.57–1.26, cost 0.54–1.37, medians 0.94 and 1.00.
 
 ### Raw data
 
