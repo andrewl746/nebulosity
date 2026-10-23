@@ -76,7 +76,7 @@ Measured by the integration harness in bench mode on `../vscode` (Task 10), from
 
 Informative, no bar: a cold start (no server, the extension starts it), and the same 20 switches cold.
 
-Plan Review #1 (2026-10-23, a fresh reviewer standing in for the owner's read) was applied in commit <sha>; see the ledger's plan-review.md.
+Plan Review #1 (2026-10-23, a fresh reviewer standing in for the owner's read) was applied in commit 08f19c7; see the ledger's plan-review.md.
 
 ---
 
