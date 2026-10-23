@@ -1259,3 +1259,19 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 - Optional, the owner's call: a confirmatory eval (Eval #4). It would ask only multi-step and one-step questions, new ones drawn with a fixed seed on the three repos, with more runs per kind, and add setup's CLAUDE.md note to the with-Nebulosity arm. Its bars are set before its first run, and Eval #3 stays reported as is.
 
 **Revisit when:** a confirmatory eval misses its bars on the multi-step kinds, or Claude Code gains its own import graph, which would close the gap.
+
+## ADR-062 — A VS Code extension shows the running Map in an editor panel, as slice V1.8, before E4 and the ship (proposed 2026-10-23) — amends ADR-043
+
+**Status:** proposed; becomes accepted when the owner approves the design (`.superpowers/sdd/2026-10-23-vscode-extension/design.md`, kept in the ledger).
+**Context:** The owner tested Nebulosity on VS Code with the Map in a browser tab and wanted it inside the editor: the file structure, Claude Code's activity on the Map, and the code, in one window. They want it on the Marketplace for everyone, and built now, before the ship.
+**Decision:**
+- **The panel is an iframe of the running Map** (`nebulosity map`) in a webview, at the URL `vscode.env.asExternalUri` gives for `http://localhost:<port>`, plus `?embed=vscode`. Its requests carry the Map's own Host and Origin, so ADR-039's guards pass unchanged.
+- **The extension finds a running Map or starts one**, matches the active repo to the workspace (`POST /api/repos`), and offers the free `nebulosity index` for a folder never indexed. It never summarizes or handles a key.
+- **Two-way sync goes over a `postMessage` bridge** (API_CONTRACTS §20), not the live channel, so it moves only that panel and never shows as Claude's activity. The Map follows the active editor (the history entry replaced, so Back isn't flooded); picking a file on the Map opens it in the editor; Claude's pulses and `show_on_map` work as before.
+- **One new read route,** `GET /api/imports` (§19), for "What depends on this file?", and an optional `server` on `GET /api/repos` (§15) for the version check. `CONTRACTS_VERSION` stays 3.
+- **The Map's pages send `frame-ancestors`**, limited to themselves and VS Code's webview schemes. Until now any web page could frame the Map and trick a click onto "Summarize now".
+- **Packaging:** `vscode-extension/`, its own package, HTTP only (no `lib/` import), published by the owner to the Marketplace and Open VSX after `npm publish`.
+- **The order (owner, 2026-10-23):** V1.8 (this extension), then E4 widened to Python, Go, Java, C# and Rust in waves (its own design), then the ship list, after the owner has checked the extension. E5 → E1 follow as before.
+**Alternatives:** (a) A VS Code-native Map (a tree view or a rewrite in the webview): a second UI to keep in step with a design that's complete. (b) Editor → Map over `POST /api/live`: it would move every open Map and look like Claude's activity. (c) The webview proxying the Map's requests: it works in browser-hosted VS Code too, but moves ADR-039's guard into the extension; deferred until that's needed. (d) VS Code's language servers as the index: only alive while VS Code is open, slow at 10,000 files, and absent for Claude Code's tools.
+**Consequences:** The browser Map is unchanged; embedded, file picks open the editor. Browser-hosted VS Code (vscode.dev, Codespaces in the browser) is out: its forwarded host isn't localhost. Two windows on two repos share one server, and the last focused wins. The ship moves later by V1.8 and E4.
+**Revisit when:** browser-hosted VS Code matters (then a token or the webview proxy, ADR-039's revisit), or two-repo use is common (a server per repo).

@@ -273,6 +273,7 @@ type RepoList = { active: string | null; repos: RepoSummary[] };
 - **`GET`** lists the repos the structure stage has indexed, by root, and the active one.
 - **`remote`** (added in V1.3.1; optional, so `CONTRACTS_VERSION` stays 2) is the origin remote's owner and name, read from `<root>/.git/config` (`lib/engine/git-remote.ts`), so the top bar can say `microsoft / vscode` (VISUAL_REFRESH.md §6). The owner is everything before the last path segment, so a nested GitLab group stays whole; Azure DevOps's `_git` and `v3` markers are left out (`dev.azure.com/org/project/_git/repo` is `org/project` / `repo`), and scp-style urls may omit the user (`github.com:owner/repo`). A worktree's or submodule's `.git` pointer file is followed to the config that holds its remotes (since 2026-10-13). It's left out when there's no origin, when the url is a local path, or when the pointer leads nowhere, and the top bar then shows `name`.
 - **`POST { root }`** makes an indexed repo the active one (`activeRepo` in `.nebulosity/config.json`) and points the background worker at it. It answers with the new `RepoList`. Localhost only. A root that was never indexed gets `404 NOT_FOUND`.
+- **`server`** (designed for V1.8, ADR-062, not built; optional, so `CONTRACTS_VERSION` stays 3): `RepoList` gains `server?: { version: string; bridge: number }`, the package's version and the editor bridge's (§20, 1). The VS Code extension reads it to tell a current server from an older one (no `server`) and from another app on the port (no `RepoList` at all). It's on this route because `GET /api/repos` answers with nothing indexed, where `/api/status` gives `404 INDEX_EMPTY`.
 
 ## 16. GET /api/source?path= (slice V1.3.1)
 
@@ -407,3 +408,38 @@ Note: found through declared types: fields, constructor parameters, parameters, 
   - a fetch the caller aborted rejects with the browser's `DOMException` named `AbortError`, not an `ApiError`.
   - a valid-JSON file of the wrong shape isn't checked. A `null` or malformed manifest or describe bundle makes the call reject with a plain `TypeError` (`index()` and `describe()` in `staticApi.ts`), and a `null` level file resolves and then throws inside the Map's own handler (`app/map/MapView.tsx`). Either way no `ApiError` reaches the Map's handlers, which show an error only for an `ApiError` (`MapView.tsx`, `DetailPanel.tsx`, `SourceViewer.tsx`, `SearchPalette.tsx`), so the Map stays on "Loading the map…".
 - **What isn't here.** No source text (the demo links to GitHub at `commit`), no live events, no summarize or re-index, no code search index and no vectors: search ranks summaries and names only, and says so (`staticSearch.ts`).
+
+## 19. GET /api/imports?path=&direction=&transitive=&limit=&offset= (designed for V1.8, ADR-062; not built)
+
+The files that import a file or folder, or that it imports, for the VS Code extension's "What depends on this file?" (`lib/engine/reach.ts`'s `reach()`, the engine behind the MCP `imports` tool's plain list, §17).
+
+```ts
+type ImportsResponse = { path: string; kind: "folder" | "file"; direction: "dependents" | "dependencies";
+  transitive: boolean; files: { path: string; distance: number }[];
+  direct: number; total: number; offset: number; indexVersion: number };
+```
+
+- **`direction`** defaults to `dependents`. **`transitive`** (`false` by default) keeps only distance 1 when false; when true, every file reached, nearest first, as `reach()` orders them.
+- **`total`** counts the files the answer has across all pages (after `transitive`), `files` the page: `limit` 1–500 (50), `offset` ≥ 0 (0). `direct` counts distance-1 files whatever `transitive` is.
+- A read route: `proxy.ts`'s Host check covers it, with no Origin check (§14's rule is for routes that change things). Answers are cached by index version like `describe`.
+- **Errors:** `400 BAD_REQUEST` for a missing `path`, a path that could leave the repo, more than 1,024 characters, or a bad `direction`, `limit` or `offset`; `404 NOT_FOUND`; `404 INDEX_EMPTY`.
+
+## 20. The editor bridge (designed for V1.8, ADR-062; not built)
+
+Messages between the Map, framed in a VS Code webview with `?embed=vscode`, and that webview, which relays them to and from the extension. They travel by `window.postMessage`; nothing here is HTTP. Without `?embed=vscode` the Map never listens or posts.
+
+```ts
+type BridgeToMap =
+  | { type: "nebulosity.hello"; version: 1 }
+  | { type: "nebulosity.follow"; path: string }     // the active editor changed: focus, replacing the history entry
+  | { type: "nebulosity.show"; path: string }       // a deliberate jump: focus, pushing a history entry
+  | { type: "nebulosity.highlight"; paths: string[] }
+  | { type: "nebulosity.clear" };
+type BridgeFromMap =
+  | { type: "nebulosity.ready"; version: 1 }        // the answer to hello
+  | { type: "nebulosity.open"; path: string; line?: number };   // a file box or a declaration was picked
+```
+
+- **The handshake.** The Map accepts a `hello` only when `event.source === window.parent` and `event.origin` starts with `vscode-webview://`. It keeps that origin, answers `ready`, and from then on posts only to it (`targetOrigin`) and drops every message from any other source or origin. Before the handshake it posts nothing.
+- **Paths** are repo-relative, as everywhere (§1). A `follow` or `show` for a path the index doesn't hold is ignored; `highlight` takes at most 50 paths, like §14.
+- **`version`** is the bridge's, 1; `GET /api/repos`' `server.bridge` (§15) names the one a server speaks. A Map that gets another version ignores the hello.
