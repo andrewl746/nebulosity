@@ -147,6 +147,22 @@ export type DescribeResponse = {
   indexVersion: number;
 };
 
+/**
+ * GET /api/imports — docs/API_CONTRACTS.md §19 (added in V1.8): one page of the files that import a file or folder, or that it
+ * imports, nearest first. `total` counts every page (after `transitive`), `direct` the distance-1 files whatever `transitive` is.
+ */
+export type ImportsResponse = {
+  path: string;
+  kind: "folder" | "file";
+  direction: "dependents" | "dependencies";
+  transitive: boolean;
+  files: { path: string; distance: number }[];
+  direct: number;
+  total: number;
+  offset: number;
+  indexVersion: number;
+};
+
 /** GET /api/source — docs/API_CONTRACTS.md §16 (added in V1.3.1): an indexed file's text, for the source viewer. */
 export type SourceResponse = {
   /** The repo's root: absolute, forward slashes. */
