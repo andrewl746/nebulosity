@@ -1260,9 +1260,9 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 
 **Revisit when:** a confirmatory eval misses its bars on the multi-step kinds, or Claude Code gains its own import graph, which would close the gap.
 
-## ADR-062 — A VS Code extension shows the running Map in an editor panel, as slice V1.8, before E4 and the ship (proposed 2026-10-23) — amends ADR-043
+## ADR-062 — A VS Code extension shows the running Map in an editor panel, as slice V1.8, before E4 and the ship (2026-10-23) — amends ADR-043
 
-**Status:** proposed; becomes accepted when the owner approves the design (`.superpowers/sdd/2026-10-23-vscode-extension/design.md`, kept in the ledger).
+**Status:** accepted 2026-10-23: the owner approved the design as written, calls included (`.superpowers/sdd/2026-10-23-vscode-extension/design.md`, kept in the ledger).
 **Context:** The owner tested Nebulosity on VS Code with the Map in a browser tab and wanted it inside the editor: the file structure, Claude Code's activity on the Map, and the code, in one window. They want it on the Marketplace for everyone, and built now, before the ship.
 **Decision:**
 - **The panel is an iframe of the running Map** (`nebulosity map`) in a webview, at the URL `vscode.env.asExternalUri` gives for `http://localhost:<port>`, plus `?embed=vscode`. Its requests carry the Map's own Host and Origin, so ADR-039's guards pass unchanged.
