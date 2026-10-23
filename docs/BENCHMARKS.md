@@ -810,6 +810,25 @@ With it, Task 20 spent about $6.03 of the owner's $12.
   - AFFiNE's 2: a declaration file that imports its own name (`packages/backend/native/index.d.ts`), and `affine.wasi.cjs`, which isn't in the repo.
 - **Against Index Benchmark #4:** VS Code's relative share read 98.9% there, and AFFiNE's 95.8%. The difference is the counting (822 and 636 specifiers now counted apart), plus the import types and over-cap files ADR-053's earlier amendment added.
 
+## 2026 10 15 Variety Benchmark #2 — Theia, held out
+
+Eval #3's held-out repo, indexed once so its resolution share is known before any question is drawn (V1.7 plan, Task 17). Nothing about how either arm does on it has been seen.
+- **Target and machine:** Eclipse Theia @ `81ea5f93`, a shallow clone at `../theia` (4,530 tracked files, clean tree). The owner's laptop, Node 24, the TypeScript adapter. Indexed into the owner's database with `npx tsx scripts/index.ts ../theia --no-activate` (the Map stays on VS Code), structure only, free mode with no summaries; then `npm run report-resolution -- ../theia`.
+- **Shape:** a Lerna/npm-workspaces monorepo (`packages/*`, `dev-packages/*`, `examples/*`) in TypeScript with Inversify dependency injection. Packages import one another by their compiled paths (`@theia/core/lib/browser/…`), which ADR-053's compiled to source mapping reads as `src/`.
+
+| Repo | Files | Edges | Structure | Relative resolved | Not code | Bare resolved | Top unresolved bare names |
+|---|---|---|---|---|---|---|---|
+| Theia | 3,772 | 19,979 | 12.2 s | 9,642/9,648 (99.9%) | 127 (.css 78, .json 47, .node 2) | 10,431/13,187 (79.1%) | chai 518, @theia/monaco-editor-core 517, inversify 301, path 165, fs 91 |
+
+- **Structure time:** discover 0.2 s, parse 4.4 s, write 6.8 s, resolve 0.5 s, aggregate 0.2 s. The code search filled in a further 12.1 s after the stage. 753 folders, 6,433 folder-level edges.
+- **Theia's own code:** 10,444 bare specifiers name an `@theia/…` package other than `@theia/monaco-editor-core`, and 10,430 of them (99.9%) resolve. The 14 that don't:
+  - 13 import `@theia/core/shared/@theia/application-package/lib/environment` (or `/lib/api`), the re-export shim in `packages/core/shared/`, which points at another package's compiled output;
+  - 1 imports the JSON file `@theia/core/src/common/i18n/nls.metadata.json`, which the index doesn't read.
+  - So the compiled to source mapping covers Theia's package imports; the one pattern it misses is a package reached through core's `shared/` shim.
+- **The other unresolved bare names are outside the repo:** `chai`, `inversify`, `sinon`, Node's built-ins, and `@theia/monaco-editor-core` (517), which is a published fork of Monaco that no package.json in the checkout declares.
+- **The 6 unresolved relative specifiers of code** were not itemised; the misses seen while checking name build-time files the checkout doesn't have (`gen-esbuild.*.mjs`, `ffmpeg.node`).
+- **Call facts** (ADR-059), rows for Theia's repo: 5,812 type_decls, 13,658 call_bindings, 62,937 typed_calls. No `calls` answer was read.
+
 ## 2026 10 15 Eval #2 — Claude Code with and without Nebulosity's MCP server on VS Code and AFFiNE (S12)
 
 This is the re-measured eval that ADR-051 waits for (ADR-057). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
@@ -861,6 +880,22 @@ How fast Claude Code got the context a question needs (medians, A / N; the score
 - **Batch 1's first three runs were the dev server's cold start** (the first requests compile the routes; the log printed "watching" only during that batch), not steady state. Batches 2 and 3 are warm.
 - **S6 (≤ 2 s): FAIL as first run (worst 11,029 ms, the cold start); PASS warm (worst 1,975 ms, median 1,904 ms), with only 25–155 ms of margin.** The README quotes the warm worst.
 
+## 2026 10 15 Update Benchmark #3 — S6 with the workspace kept per worker run
+
+- **Command:** `npm run bench-update -- ../vscode <file>` (five runs each) against `npx next dev -p 3130`, as in Update Benchmark #2: the watcher (1 s debounce) → `applyFileChanges` → `GET /api/describe` showing the new export, polled every 25 ms.
+- **Setup:** the sandbox worktree `../Nebulosity-build` at `00e3293` (the commit that keeps the workspace), port 3130 (port 3000 untouched), a scratch data folder holding a fresh cold index of VS Code @ `cc3fec88` (structure 59.3 s on this run) and a `config.json` with `port: 3130`; no API key, so summaries off. VS Code was clean afterwards and the scratch folder and server were removed.
+- **Change measured:** the worker passes the workspace it read back into `applyFileChanges`, which reads the manifests again only when a tsconfig or package.json, `pnpm-workspace.yaml`, `lerna.json` or the file set changed (ADR-053, amended). Nothing else differs from #2's code.
+
+| Batch | File | Each run | Median | Worst |
+|---|---|---|---|---|
+| 1, first after server start | `src/vs/base/common/strings.ts` | 1,787, 1,399, 1,359, 1,355, 1,371 ms | 1,371 ms | 1,787 ms |
+| 2 | `src/vs/editor/common/model/textModel.ts` | 1,501, 1,374, 1,379, 1,424, 1,415 ms | 1,415 ms | 1,501 ms |
+| 3, repeat of batch 1's file | `src/vs/base/common/strings.ts` | 1,458, 1,382, 1,403, 1,352, 1,364 ms | 1,382 ms | 1,458 ms |
+
+- `applyFileChanges` alone (the worker's log, 31 updates: each run saves the file and restores it): the first update after the server started took 507 ms, which reads the manifests; every later one took 112–250 ms (typically 130–180 ms), against 0.55–0.72 s per update in Update Benchmark #2 and 115–224 ms in #1, before V1.6 read the workspace each time.
+- The remaining time is the watcher's 1 s debounce plus the poll and the route.
+- **S6 (≤ 2 s): PASS, warm (worst 1,501 ms, median 1,415 ms) and on the first batch after start (worst 1,787 ms; its first run, 1,787 ms, includes the dev server's first compile and the 507 ms manifest read).** Margin is 213 ms on the first batch and about 500 ms warm, against 25 ms in #2. The manifest cache for full runs stays recommended.
+
 ## 2026 10 15 Index Benchmark #6 — S1 on a quiet machine
 
 - **Target and machine:** VS Code @ `cc3fec88`, the owner's laptop, Node 24.14.0, code at `11e031e`. This is the quiet-machine S1 that #5 and Update Benchmark #2 asked for.
@@ -874,3 +909,264 @@ How fast Claude Code got the context a question needs (medians, A / N; the score
 | 3 | 14849 | 140583 | 0.7 s | 16.9 s | 11.2 s | 1.7 s | 0.6 s | **31.3 s** | 3.4 s |
 
 **S1 (≤ 60 s): PASS at 50.7 s worst of three** (median 35.9 s). Run 2 was slower in parse and write alike, which points to the machine rather than the code: the same work took 31–36 s on either side of it. The loaded-machine figures before it (55.7 s in #5, 66.9 s in Update Benchmark #2's cold index) carried the runaway process. Files and edges match #5's final code exactly.
+
+## 2026 10 15 Calls Benchmark #1 — calls through declared types against TypeScript's checker (S14)
+
+- **Command:** `npm run bench-calls -- --repo ../vscode --checker <checker.json>` and `npm run bench-calls -- --repo ../affine --sites <affine-sites.json> --verdicts <verdicts.json>` (`scripts/bench-calls.ts`), read-only on the owner's index. It writes `.nebulosity/measure/calls-<repo>.json`.
+- **The index:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6d`, re-indexed in the owner's database three times (R-AC, each announced): adapter version 5, then 6 and 7 after the two rounds below. Files and edges were the same every time: VS Code 14,849 and 140,583 (Index Benchmark #6), AFFiNE 6,987 and 26,261 (Eval #2). The `calls` answer for each method is asked as `calls { symbol: "<Type>.<member>", path: <declaring file> }`, VS Code's `within: "src"`.
+- **The reference on VS Code:** the type checker's run from V1.7's design check, kept in the V1.7 ledger as `evidence/e2/out/checker.json`. It built `src/tsconfig.json`'s program (10,237 roots, 21.5 s, 4,998 MB, 0 errors) and asked the checker which declaration each of the 7,347 calls named `readFile`, `store`, `getValue`, `executeCommand` or `openEditor` resolves to. Both sides are kept to the program's own files: the tsconfig's `fileNames` without `.d.ts`, 10,037 files, read without building a program.
+- **The sets (R-AB):**
+  - "Interface calls": the files with a call the checker resolves to the interface's member. On the index's side, the files with a call on the interface, or on a sub-interface that doesn't declare the member.
+  - "Interface + implementation": those files, plus calls on a class that implements the interface. The checker side counts a class whose heritage reaches the interface; the index side counts its implementations, test doubles included.
+  - A call on a sub-interface that redeclares the member is counted apart.
+- **The bar (S14, R-AL):** recall ≥ 0.98 and precision ≥ 0.99, file level, pooled over the five methods, on both sets.
+
+**Result (adapter version 7): PASS.** Interface calls 0.999 / 1.000; interface + implementation 0.987 / 0.999, pooled.
+
+Interface calls:
+
+| Method | Checker files | Index files | Both | Recall | Precision |
+|---|---|---|---|---|---|
+| IFileService.readFile | 180 | 180 | 180 | 1.000 | 1.000 |
+| IStorageService.store | 326 | 325 | 325 | 0.997 | 1.000 |
+| IConfigurationService.getValue | 726 | 725 | 725 | 0.999 | 1.000 |
+| ICommandService.executeCommand | 327 | 327 | 327 | 1.000 | 1.000 |
+| IEditorService.openEditor | 194 | 194 | 194 | 1.000 | 1.000 |
+| **Pooled** | **1,753** | **1,751** | **1,751** | **0.999** | **1.000** |
+
+Interface + implementation calls:
+
+| Method | Checker files | Index files | Both | Recall | Precision |
+|---|---|---|---|---|---|
+| IFileService.readFile | 214 | 213 | 213 | 0.995 | 1.000 |
+| IStorageService.store | 397 | 388 | 388 | **0.977** | 1.000 |
+| IConfigurationService.getValue | 768 | 758 | 758 | 0.987 | 1.000 |
+| ICommandService.executeCommand | 330 | 330 | 329 | 0.997 | 0.997 |
+| IEditorService.openEditor | 205 | 202 | 202 | 0.985 | 1.000 |
+| **Pooled** | **1,914** | **1,891** | **1,890** | **0.987** | **0.999** |
+
+`IStorageService.store` is under 0.98 on its own. Its 9 missed files are all tests: 8 take the storage from a test helper's undeclared return, and 1 from a conditional (class 1 and the conditional of class 3 below).
+
+**Rounds** (pooled; the bar first failed on interface + implementation recall):
+
+| Adapter | Change | Interface R / P | Interface + implementation R / P |
+|---|---|---|---|
+| 5 | none (Tasks 1–4) | 0.995 / 1.000 | 0.969 / 1.000 |
+| 6 | Round 1: `super.m()`, and `this` or `new` on a nested or nameless class | 0.996 / 1.000 | 0.978 / 0.999 |
+| 7 | Round 2: a member of a declared type, and a same-file function's declared return type | 0.999 / 1.000 | 0.987 / 0.999 |
+
+- **Round 1** fixed the most common miss class: 16 of the 59 files missed at version 5.
+  - `super.m()` is typed by its class's extends clause; `extends mock<I>()` gives `I`.
+  - `this` in a nested or nameless class, and `new class … {}`, name the class as `@<line>`, the key R-O gives it. The engine reads that as the file's own type at that line.
+  - It recovered 16 files, plus 1 that had been missed only as an interface call. It added the one extra below.
+  - The fixture case is `src/workbench/tasks/taskRunner.ts` and `runners.ts`.
+- **Round 2** fixed the most common class left inside ADR-059's rules: a same-file function's declared return type, 12 files. Half of those also reach a member of a declared type (`accessor.editorService.openEditor(…)`), and the same rule covered the 6 files of that class.
+  - The member rules: `x.f.m()`, `const { f } = x`, `({ f }: IServices)` and `const that = this`. The engine reads the field through the type's declaration and its bases. An interface's property types are now recorded as fields, the way a class's are.
+  - The return rules: a function declared in the same file, `await` taking `Promise<T>` to `T`, and a declared tuple or type literal destructured.
+  - It recovered 19 files, 5 of them interface misses too, and added no extra.
+  - The fixture case is `src/workbench/tasks/taskHost.ts`.
+- **Round 3 wasn't run:** the bar passed.
+- **Not done:** following a helper's undeclared return was left out, although it is the largest class left (15 files). ADR-059 keeps inferred types unseen, and the fixture's `inferred.ts` pins that.
+
+**What the index still misses** (interface + implementation, 24 files; the 2 interface misses are among them):
+
+1. **A test helper's undeclared return** (15 files, all tests). Example: `src/vs/platform/chat/test/common/agentsWindowInvitation.test.ts:252`, `h.storage.store(…)`, where `const h = createHarness()` and `createHarness` returns an object literal with no annotation. It is one of the 2 interface misses: `agentHostRemoteByokNotification.test.ts:436`.
+2. **`instantiationService.createInstance(C, …)`** (4 files, all tests). Example: `src/vs/workbench/test/browser/quickAccess.test.ts:438`, after `editorService = disposables.add(instantiationService.createInstance(EditorService, undefined))`.
+3. **One file each** (5):
+   - a conditional, `options.showDetails ? disposableStore.add(new InMemoryStorageService()) : undefined` (`suggestWidget.fixture.ts:46`);
+   - a parameter property typed only by its default, `private configurationService = new TestConfigurationService()` (`workbenchTestServices.ts:1262`);
+   - a chained assignment, `a = b = new TestConfigurationService(…)` (`aiCustomizationManagementEditor.fixture.ts:1209`);
+   - `services?.configurationService ?? testConfigurationService` (`chatInputModeValidation.test.ts:125`);
+   - the contextually typed parameter of an object literal's method, `bindTo(service)` (`src/vs/workbench/browser/parts/editor/breadcrumbs.ts:98`). This is the one production file, and the other interface miss.
+
+- **The one extra:** `src/vs/workbench/contrib/chat/test/browser/voiceClient/voiceSessionController.test.ts:766`, `super.executeCommand(…)` in `AdoptingCommandService extends TestCommandService`, where `TestCommandService extends mock<ICommandService>()`. The index counts a test double as an implementation (ADR-059). The checker run's "implements" check follows only heritage clauses that name a symbol, so it doesn't count `mock<I>()`.
+- **Counted apart:** 6 files call `store` on `IApplicationStorageMainService`, which redeclares it. Example: `src/vs/platform/native/electron-main/auth.ts:279`. The checker files these under that interface too.
+
+**AFFiNE** (reported, not judged), against the design check's syntactic L3 sets for its three planning methods:
+
+| Method | L3 files | Verdicts | Reference | Index files | Both | Recall | Precision |
+|---|---|---|---|---|---|---|---|
+| WorkspaceDialogService.open | 45 | 2 in | 47 | 47 | 47 | 1.000 | 1.000 |
+| GlobalDialogService.open | 25 | 1 in | 26 | 26 | 26 | 1.000 | 1.000 |
+| GraphQLService.gql | 18 | 1 in | 19 | 19 | 19 | 1.000 | 1.000 |
+| **Pooled** | **88** | **4** | **92** | **92** | **92** | **1.000** | **1.000** |
+
+- **Before the verdicts:** recall 1.000 and precision 0.957 (88 of 92). The index had 4 files the L3 sets lack, and all 4 are real calls, each read in the source:
+  - three are calls on a destructured parameter whose type literal names the service: `commands/affine-help.tsx:39`, `affine-navigation.tsx:98` and `affine-creation.tsx:66`. The design check's report names all three as calls its pass missed;
+  - one is `this.gql(…)` inside `GraphQLService` (`modules/cloud/services/graphql.ts:25`), since the L3 sets leave `this.m()` calls out.
+- The verdicts, each with its deciding line, are `calls-benchmark-affine-verdicts.json` in the V1.7 ledger.
+- **Neither side has two more real calls** the design check found by grep: `audio-transcription-job-store.ts:49` and `:103`. Each calls through a getter with no annotation (class 1's kind), so the reference holds only the calls that one side found.
+
+**Rows stored** (the three call tables; the counts are read-only, after each re-index):
+
+| Repo | Adapter | `type_decls` | `call_bindings` | `typed_calls` (calls + injection sites) |
+|---|---|---|---|---|
+| VS Code | 5 | 37,072 | 68,362 | 395,763 (353,014 + 42,749) |
+| VS Code | 6 | 37,072 | 68,362 | 399,811 (357,062 + 42,749) |
+| VS Code | 7 | 37,072 | 75,690 | 452,239 (409,490 + 42,749) |
+| AFFiNE | 5 | 4,839 | 11,939 | 32,789 (28,406 + 4,383) |
+| AFFiNE | 6 | 4,839 | 11,939 | 35,717 (31,334 + 4,383) |
+| AFFiNE | 7 | 4,839 | 12,787 | 39,829 (35,446 + 4,383) |
+
+Version 7 keeps more bindings because a member fact names the type it goes through, and that type's import is kept.
+
+**The re-index runs** (the owner's database, so warm and with summaries kept: these aren't S1 figures; Index Benchmark #7 measures S1):
+
+| Repo | Adapter | discover | parse | write | resolve | aggregate | structure |
+|---|---|---|---|---|---|---|---|
+| VS Code | 5 | 1.3 s | 27.0 s | 55.5 s | 2.6 s | 1.0 s | 87.4 s |
+| VS Code | 7 | 0.9 s | 26.8 s | 33.2 s | 2.0 s | 0.7 s | 63.7 s |
+| AFFiNE | 5 | 0.5 s | 5.6 s | 9.7 s | 1.2 s | 0.4 s | 17.5 s |
+| AFFiNE | 6 | 0.5 s | 5.7 s | 10.3 s | 1.0 s | 0.3 s | 17.8 s |
+| AFFiNE | 7 | 0.5 s | 5.9 s | 10.4 s | 1.1 s | 0.3 s | 18.2 s |
+
+VS Code's version 6 run printed the same files and edges, but its stage times weren't kept. The benchmark run took 1.2 s on VS Code (the tsconfig read and five answers, the first of them building the call index) and 0.2 s on AFFiNE. S14's speed half, the first answer in a fresh MCP process, is MCP Benchmark #5's.
+
+## 2026 10 15 Index Benchmark #7 — S1 with the call facts
+
+- **Target and machine:** VS Code @ `cc3fec88`, the owner's laptop, Node 24.14.0, `ADAPTER_VERSION` 7 (the call facts of ADR-059, after Calls Benchmark #1's two rounds). Before the runs: port 3000 free, no `python.exe`, no `node.exe` busy (the five running had 0.4–2.9 s of CPU in total); the owner's Map and index untouched.
+- **Command:** `NEBULOSITY_DATA=<a fresh scratch folder per run> npx tsx scripts/index.ts ../vscode`, three runs back to back (a cold database each run; the folders were deleted afterwards).
+
+| Run | Files | Edges | discover | parse | write | resolve | aggregate | **structure (S1)** | code search fill |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 14849 | 140583 | 0.8 s | 25.0 s | 21.4 s | 1.7 s | 0.6 s | **49.7 s** | 3.7 s |
+| 2 | 14849 | 140583 | 0.7 s | 25.5 s | 21.5 s | 1.8 s | 0.6 s | **50.2 s** | 3.7 s |
+| 3 | 14849 | 140583 | 0.7 s | 28.9 s | 23.9 s | 2.2 s | 1.0 s | **56.7 s** | 4.8 s |
+
+**S1 (≤ 60 s): PASS at 56.7 s worst of three** (median 50.2 s). Files and edges match Index Benchmark #6 exactly (14,849 and 140,583).
+
+- **Against #6** (31.3–50.7 s, median 35.9 s): the median is 14.3 s higher. Parse is 25.0–28.9 s against 16.9–28.6 s (median 19.1 s) and write is 21.4–23.9 s against 11.2–18.3 s (median 12.7 s). Parse carries the call facts' extraction; write carries three more tables' rows per file. #6's own spread (31 to 51 s for the same code) is wider than the gap between runs here, so part of the difference is the machine, but all three runs here are above #6's median, so the call facts cost something real: about 6 s of parse and 9 s of write at the medians. The margin to the 60 s bar is 3.3 s at the worst run.
+- **Not recorded:** the script prints no count of call rows, and the scratch databases were deleted before they could be counted. Calls Benchmark #1's index-side counts are the only row counts this task holds.
+
+## 2026 10 15 MCP Benchmark #5 — S5 with seven tools, and the first calls answer in a fresh process (S14)
+
+- **Target and machine:** VS Code @ `cc3fec88`, the owner's laptop, Node 24.14.0. The owner's index as it stood after Calls Benchmark #1's re-index (adapter version 7), read-only through the server. `NEBULOSITY_LIVE=off`: nothing was sent to any port.
+- **Command:** `npm run bench-mcp -- ../vscode` for the table (once) and `npm run bench-mcp -- ../vscode --fresh-calls` for S14's speed half. The `calls` row's inputs are five methods and five types, each with its declaring file as `path`, so every timed answer is the full one; the fresh-process check refuses an answer whose first line is the list of candidates, and stopped for none of its five.
+- **Server start** (spawn → initialized): 776 ms.
+
+| Row | First call | Warm calls | p50 | p95 | max | Largest answer (chars) |
+|---|---|---|---|---|---|---|
+| `overview` | 228 ms | 20 | 61 ms | 74 ms | 78 ms | 2,632 |
+| `describe` | 75 ms | 20 | 54 ms | 64 ms | 66 ms | 4,036 |
+| `search` | 1646 ms | 20 | 138 ms | 169 ms | 177 ms | 2,440 |
+| `imports (dependents)` | 59 ms | 20 | 60 ms | 76 ms | 80 ms | 5,944 |
+| `imports (dependencies)` | 51 ms | 20 | 46 ms | 48 ms | 50 ms | 2,491 |
+| `imports (to)` | 50 ms | 20 | 47 ms | 58 ms | 58 ms | 323 |
+| `imports (group_by)` | 66 ms | 20 | 56 ms | 71 ms | 72 ms | 2,035 |
+| `architecture (summary)` | 142 ms | 20 | 136 ms | 147 ms | 148 ms | 1,065 |
+| `architecture (cycles)` | 54 ms | 20 | 47 ms | 53 ms | 55 ms | 8,404 |
+| `calls` | 804 ms | 20 | 73 ms | 96 ms | 99 ms | 15,951 |
+| `show_on_map` | 47 ms | 20 | 47 ms | 52 ms | 62 ms | 167 |
+
+**S5 (every warm call ≤ 500 ms): PASS (worst 177 ms, a `search`).** The `calls` row's warm calls peak at 99 ms; its first call, 804 ms, builds the call index (it is the first `calls` call in the process).
+
+**S14's speed half (the first `calls` call on a fresh server ≤ 1.5 s): PASS, worst 902 ms.** The five fresh servers, each asked `IConfigurationService.getValue` with its declaring file as `path` (a 15,951-character answer): 902, 888, 899, 869 and 875 ms. No fallback (R-B's index-time resolution) is needed, so migration 0010 and the owner's re-index stay unwritten.
+
+- **Against #4:** the rows are the same inputs; the warm worst is 177 ms against #4's 388 ms (#4 ran beside the build session's runaway process), `architecture (summary)` 136 ms p50 against 204 ms. `imports` and `show_on_map` are as fast or faster than #4's.
+
+## 2026 10 16 MCP Dev Set #2 — the shell check and tool use before Eval #3
+
+- **Purpose (V1.7 Tasks 14–16):** before Eval #3's questions exist, check three things on 19 dev questions whose targets Eval #3 does not use (`eval3/dev/questions.json`: 10 on VS Code, 9 on AFFiNE):
+  - whether the rules sentence in the prompt stops Claude Code's refused commands (D2's validity condition: at most 1 refused command per arm in 19 runs);
+  - whether Claude Code calls Nebulosity's tools, now that `calls` exists;
+  - how many tokens the server adds to the first call of a session (gate condition 6: at most 2,500).
+
+  Nothing is scored.
+- **Setup:** Claude Code 2.1.301, claude-sonnet-5-5 at medium effort, permission mode `dontAsk`, isolated as Eval #2's runs are, `apiKeySource: "none"`, no owner plugins in any init. Both arms ran each question once (A alone, N with Nebulosity); N's init lists the server connected with seven tools. VS Code at `cc3fec88`, AFFiNE at `0b69a6d`; both repos were clean after every batch. The transcripts are in `eval3/dev/runs/` (round 1 in `round-1/`, round 2 in `round-2/`, round 3 in the folder itself, with `index.jsonl`); each was scrubbed of machine paths by the runner, and `scanForLeaks` over every file found 0 leaks.
+- **The guard probe (Task 14, ADR-060):** one live run of `cd /c/…/vscode; git ls-files | wc -l`. It was refused: "Permission to use Bash has been denied because Claude Code is running in don't ask mode." The model stopped there with no workaround. Cost $0.09; kept apart from the dev runs below.
+
+### The shell check
+
+| | alone (A) | with Nebulosity (N) |
+|---|---|---|
+| Round 1, 19 runs each | 5 refused | 3 refused |
+| Round 2, the 6 questions with refusals re-run (plus 3 extra N runs) | 0 in 6 | 1 in 9 (1 in the 6 re-run) |
+| **Current state, 19 each** (round 2 where re-run, round 1 otherwise) | **0** | **1** |
+
+D2's bar is at most 1 per arm: round 1 FAILED, the current state PASSES. In no run did a refusal end in a give-up: every refusing run finished with its answer line, and none said it could not do what the refused command was for. Four round-1 runs did say they had not checked every file after swapping the refused loop for Grep (a thoroughness cost).
+
+- **Round 1's eight refusals, by cause:** shell loops 4 (A: VS Code callers, VS Code task, AFFiNE task; N: VS Code transitive, after a `cd` to the scratch folder), `cd` then `git` 2 (VS Code adopt, both arms: `cd src/vs/workbench/services; git grep …`), a pipe into `sed` 1 (N, VS Code task), `cd` plus `node -e` plus a redirect 1 (A, VS Code transitive). No file writes and no `..`. Seven of the eight were on VS Code.
+- **Round 2's one refusal:** N, VS Code task, a pipe into `awk` (`… | awk 'NR>0' 2>/dev/null | head -0; git grep …`). The model re-ran the second `git grep` alone and answered. The causes of round 1 did not recur.
+- **Round 3's five runs:** 0 refusals.
+- **The rules sentence** (placeholders `<repo root>` and `<scratch>`; D2's one allowed rewording, R-L, aimed at round 1's causes).
+  - Old: "You're at the repository root, <repo root>: run grep, git grep, git ls-files, ls, cat, head and the like from here, without cd. To compute anything, write a Node.js script into <scratch> with the Write tool (the folder exists) and run it with node, or use node -e. Shell writes (redirects, heredocs, tee, sed -i, mkdir), loops, sed, awk, xargs and paths through .. are refused here. Don't change any file in the repository."
+  - New: "You're at the repository root, <repo root>, and every command runs from there: never use cd, not even into a subfolder or the scratch folder, and name paths from the root instead (git grep -n foo -- src/a src/b). Allowed: grep, rg, git grep, git ls-files, git log, git show, ls, cat, head, tail, wc, sort, uniq, find and node, alone or piped into one another. Refused: cd, shell loops (for, while), echo, sed, awk, cut, xargs, redirects, heredocs, tee, mkdir and any path with .. in it. To check many files or compute anything, write a Node.js script into <scratch> with the Write tool (the folder exists) and run it with node and its full path, or use node -e. Don't change any file in the repository."
+  - It adds about 90 to 103 tokens to the first call in both arms (the alone arm differs from round 1 only by it), so it cancels in a paired difference.
+
+### Tool use
+
+Share of the 17 non-big-picture questions where the N run called at least one Nebulosity tool (target 16 of 17):
+
+| Round | Runs | Share | ToolSearch calls |
+|---|---|---|---|
+| 1 | 38 (19 per arm) | 12 of 17 (big-picture: 1 of 2, AFFiNE `search`) | 0 of 38 runs |
+| 2 | 15 (9 N) | 12 of 17 (current state) | 0 of 15 |
+| 3 | 5 | **13 of 17 (0.76)** | 0 of 5 |
+
+Across all 31 non-big-picture N runs of the three rounds, 17 called a tool (0.55). Claude Code never needed ToolSearch: the six tools are always loaded.
+
+- **The four stable misses** used no Nebulosity tool in any run they had: 0 of 12 across three wordings. Each read the question as "find the lines containing X" and took grep, or its own Node script, as the cheap first move; the transcripts' thinking blocks are empty, and none mentions the tools or the instructions.
+  - VS Code task: grepped `openEditor` and `IEditorService`, then wrote a script for which tests import the files (the question is `calls` and `imports`).
+  - VS Code injects: one `git grep ICommandService` over the folder, then reads; judged grep enough for injection forms.
+  - AFFiNE unused: `git ls-files` plus its own import-resolution script; never considered `architecture` or `imports`.
+  - AFFiNE violations: two `git grep desktop` passes over `modules`; never considered `imports`.
+- **The questions that flip:** VS Code adopt (miss in round 1, `calls` in round 2) and AFFiNE task (`calls`, miss, `calls`): run-to-run variation, not wording. Wording gained adopt and nothing else.
+- **Other notes:** the VS Code breaks run in round 1 got "2 types are named IConfigurationService; pass path …" and never retried with a path (callers did; round 2's callers runs passed `path` first time). Big-picture was not re-run (VS Code bp used no tool).
+- **R-J's outcome: the condition was not met.** No `calls` answer had a later page left unread (they listed every file: 19, 22, 26 and 47 files in round 1); the default `limit` stays 50. (Other tools did truncate: `imports` transitive, `architecture` unused and conventions.)
+- **The owner's choice at the stop, verbatim:** "ill go with b) asw". Option (b): run Eval #3 as it is and report the tool-use share, instead of (a) more wording. The share is therefore a result of Eval #3 to report, not something the tools were tuned to.
+
+### The first-call difference, paired
+
+The difference is N minus A in the first assistant message's input, cache-creation and cache-read tokens (`firstCallContext`, which the scorer also reads). It is taken per question, within one round. Medians of all N runs minus medians of all A runs are misleading after a rewording: after round 2, N's median (9 round-2 runs) was compared with A's (6 round-2 runs, 13 round-1 runs), a longer prompt against a shorter one, and read +2,415.5 on VS Code and +2,468 on AFFiNE. Paired, the same runs gave +2,393.5 and +2,397.5.
+
+| | VS Code | AFFiNE |
+|---|---|---|
+| Round 1 (all questions) | +2,398.5 | +2,401 |
+| Round 2 (the re-run questions) | +2,393.5 | +2,397.5 |
+| Round 3 (the two or five re-run questions) | +2,401 | +2,390 direct; about +2,403 by the round-2 pairing |
+| **After this task's trim (estimate)** | **about +2,373** | **about +2,362 to +2,375** |
+
+Run-to-run noise on one question is about 6 tokens. Round 3's 22 extra characters moved the VS Code difference by about 7 tokens, as 2.75 characters a token predicts. All rows are under gate condition 6's 2,500; the trim brings both repos under R-AA's 2,400.
+
+### Every wording change, with the budget after it
+
+The budget is the six always-loaded definitions plus the instructions, in characters, as `registry.test.ts` measures it (bound 6,650; about 2.75 characters a token).
+
+| Change | Budget |
+|---|---|
+| Task 4 (the planned texts) | 6,614 |
+| Round 2 (5a0ce52): the rules sentence reworded; the instructions' second line "before grep or reading many files" became "before grep, a script of your own or reading many files" (four misses wrote their own scripts), and the `calls` bullet gained "even through injected services, where a type is injected"; `calls`' `within` and `offset` descriptions dropped to pay for it | 6,602 |
+| Round 3 (1259bc7): the instructions' second line names the question kinds (who calls or injects something, what a change touches and which tests to run, imports against the layers, cycles, files nothing imports); the docs sentence shortened to "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account."; `search`'s description cut to "Find where a feature or concept lives: the best files and folders, with their best-matching code." | 6,624 |
+| This task: the instructions' closing sentence "Paths are relative to the repo root ("" is the root) or absolute inside it." dropped, because every path input's description says it | **6,548** (instructions 1,339, was 1,415; the definitions 5,209) |
+| 2026-10-22, after Eval #3: `calls`' `path`, `group_by` and `within` gain their 1,024-character limit (`"maxLength":1024,` in the schema, 17 characters each; ADR-056 amended) | 6,599 (calls 1,058, was 1,007) |
+
+About 6,548 characters is about 2,380 tokens, so the README's "about 2,400 tokens" stands; 6,599 is about 2,400.
+
+### Runs and cost
+
+58 runs in the three rounds (38, then 15, then 5): $9.29 list price (round 1 $5.04, round 2 $3.65, round 3 $0.60), plus the guard probe's $0.09: 59 runs, about $9.38 in all. The last rate-limit event read 5-hour 0.53, 7-day 0.64.
+
+**In Eval #3** the first-call difference came out at +2,368 (VS Code), +2,369.5 (AFFiNE) and +2,372 (Theia), within 7 tokens of the estimate above. Tool use was 80 of 138 runs (0.58), below the dev set's 13 of 17. The kinds of the dev set's four stable misses went without a tool again (VS Code's tasks, every injects question, files nothing imports and violations), and so did the adopt question and most breaks runs (docs/EVAL_RESULTS.md, Eval #3, "Tool use").
+
+## 2026 10 16 Eval #3 — Claude Code with and without Nebulosity's MCP server on VS Code, AFFiNE and Theia (S13)
+
+The eval V1.7 was measured by (ADR-060). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`, Eval #3.
+- **Targets and machine:** VS Code @ `cc3fec88`, AFFiNE @ `0b69a6da` and Theia @ `81ea5f93` (held out, free mode), with Nebulosity's engine frozen at `EVAL3_ENGINE` (`2f913ad`) and index versions 155, 134 and 2. It ran on the owner's laptop on 2026-10-16, 06:58–10:17 UTC.
+- **How:** `npm run eval:run -- --eval eval3 --pilot` (and `--sessions --pilot`), then the full schedules in batches. 61 single questions and 2 four-question task sessions, three repeats, in two arms: A, Claude Code alone, and N, with Nebulosity. 378 runs in all (384 planned; AFFiNE drew no adopt question and 2 tasks, not 3). Claude Code 2.1.301 headless, `claude-sonnet-5-5` at medium effort, Node.js scripts allowed in both arms, and the same rules sentence at the end of every prompt. `npm run eval:score -- --eval eval3` scored them and computed the gate; the big-picture answers were graded blind (`eval3/grading/`).
+- **Result: the ship gate failed** on conditions 1, 2, 3 and 5; V, 4 and 6 passed. **S13: not met.**
+
+| Questions | Repo | Runs per arm | Score A / N | Median time A / N | Time ratio | Median cost A / N | Cost ratio |
+|---|---|---|---|---|---|---|---|
+| Call and task questions (new) | VS Code | 27 | 0.987 / 0.987 | 35.7 / 35.6 s | 0.98 | $0.132 / $0.132 | 0.98 |
+| Call and task questions (new) | AFFiNE | 21 | 1.000 / 0.999 | 35.7 / 34.6 s | 0.93 | $0.138 / $0.119 | 1.01 |
+| Call and task questions (new) | Theia | 18 | 0.963 / 0.964 | 37.9 / 38.8 s | 0.88 | $0.247 / $0.241 | 0.98 |
+| Theia's graph questions (new) | Theia | 18 | 1.000 / 0.978 | 20.5 / 14.9 s | 0.58 | $0.169 / $0.164 | 0.95 |
+| Eval #2's graph questions | VS Code | 27 | 0.979 / 1.000 | 21.1 / 14.1 s | 0.63 | $0.048 / $0.047 | 0.92 |
+| Eval #2's graph questions | AFFiNE | 27 | 0.982 / 1.000 | 24.4 / 11.3 s | 0.38 | $0.066 / $0.043 | 0.56 |
+| Big-picture | all three | 45 | 0.789 / 0.818 | 16.2 / 15.7 s | 0.94 | $0.049 / $0.049 | 1.00 |
+
+- **The measures:** time is `duration_ms` and the cost is Claude Code's own list-price estimate. The ratios are N over A per question, then the median over the questions (the gate's way).
+- **Time to relevant context** (condition 1, the new file-set questions, from process start): median per-question ratios 0.98 [0.90–1.27] on VS Code, 1.01 [0.86–1.14] on AFFiNE and 1.04 [0.33–never] on Theia, against 0.25. On Eval #2's file-set questions, not gated: 0.41 [0.19–0.84] pooled.
+- **Refused commands:** 9 of A's 189 runs and 8 of N's, under V's 5% (Eval #2: 81 and 18 of 135), so the comparison is not confounded by them.
+- **The totals:** $42.78 by Claude Code's estimate. The 5-hour window read 0.49 at the first run and 0.31 at the last, across one reset; the 7-day went from 0.71 to 0.76.
+- **The losses**, named in the results: no faster to the relevant context on the new questions; no faster or cheaper on the call and task questions; 1.36 times A's error on them instead of half (0.983 against 0.988); tools used in 58% of the runs that need them; Theia's direct list (0.87 against 1.00) and what-breaks questions (0.958 against 0.977); and the calls index missing most callers of AFFiNE's drawn methods.

@@ -1,0 +1,7 @@
+{ "id": "6c0889a9", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create an identifier with the same name: `export const IFooService = createDecorator<IFooService>('fooService');`. `createDecorator` is in `instantiation.ts:109`." },
+  { "id": "BP3.3", "score": 1, "quote": "**Constructor injection:** use the identifier as a parameter decorator, after any non-service arguments. `constructor(arg: string, @IFooService private readonly fooService: IFooService) {}`" },
+  { "id": "BP3.4", "score": 1, "quote": "**Creating objects:** `IInstantiationService.createInstance(Ctor, ...staticArgs)` looks up each dependency and appends it to the arguments." },
+  { "id": "BP3.5", "score": 1, "quote": "**Global registration:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed | Eager)` (`extensions.ts:25`)." },
+  { "id": "BP3.6", "score": 0.5, "quote": "Registrations are collected in a registry. They are turned into descriptors when the `InstantiationService` is created. Workbench services are usually registered in `workbench.common.main.ts` and similar entry files." }
+] }

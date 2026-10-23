@@ -1,0 +1,13 @@
+{
+  "id": "3e0eecba",
+  "points": [
+    { "id": "BP7.1", "score": 1, "quote": "Anything that holds a resource implements `IDisposable`, which has a `dispose()` method. An event subscription is also an `IDisposable`, so `emitter.event(listener)` returns the handle that unsubscribes it." },
+    { "id": "BP7.2", "score": 1, "quote": "`Disposable` is the base class for owners. It has an internal `DisposableStore`, and subclasses call `this._register(x)` so `x` is disposed along with the owner." },
+    { "id": "BP7.3", "score": 1, "quote": "`DisposableStore` is a bag of disposables that are all disposed together. ... `toDisposable(fn)` wraps a cleanup callback." },
+    { "id": "BP7.4", "score": 0.5, "quote": "`MutableDisposable` and `MandatoryMutableDisposable` hold a single replaceable resource. Assigning a new value disposes the old one." },
+    { "id": "BP7.5", "score": 0, "quote": "none" },
+    { "id": "BP7.6", "score": 0, "quote": "none" },
+    { "id": "BP7.7", "score": 0, "quote": "none" },
+    { "id": "BP7.8", "score": 1, "quote": "`ensureNoDisposablesAreLeakedInTestSuite()` in `src/vs/base/test/common/utils.ts` installs a `DisposableTracker` for each test and fails the test if any disposable is still alive afterwards." }
+  ]
+}

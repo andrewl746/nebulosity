@@ -1,0 +1,10 @@
+{ "id": "b56e7e93", "points": [
+  { "id": "THEIA-BP2.1", "score": 1, "quote": "An application is a package whose `dependencies` list the extensions it wants. ... `theia build`, from `@theia/cli`, does the following:" },
+  { "id": "THEIA-BP2.2", "score": 1, "quote": "A Theia extension is an ordinary npm package, such as those under `/packages/`. Its `package.json` has a `theiaExtensions` array. Each entry names a frontend module, a backend module, or both" },
+  { "id": "THEIA-BP2.3", "score": 0.5, "quote": "`src/browser`: frontend code that runs in the browser. `src/node`: backend code that runs in Node." },
+  { "id": "THEIA-BP2.4", "score": 1, "quote": "Each of those files is an InversifyJS `ContainerModule`. It binds services and contributions, such as `CommandContribution`, `MenuContribution`, `KeybindingContribution` and `FrontendApplicationContribution`." },
+  { "id": "THEIA-BP2.5", "score": 0.5, "quote": "Core services collect these through `ContributionProvider`." },
+  { "id": "THEIA-BP2.6", "score": 0.5, "quote": "`src/browser`: frontend code that runs in the browser. `src/node`: backend code that runs in Node. `src/common`: code shared by both, such as protocols and interfaces. `src/electron-browser` and `src/electron-main`: Electron renderer and main-process code." },
+  { "id": "THEIA-BP2.7", "score": 0.5, "quote": "It also has a `theia` section with `frontend.config` and `backend.config`. Those hold the application name, default preferences and similar settings." },
+  { "id": "THEIA-BP2.8", "score": 1, "quote": "It generates frontend and backend entry files. ... It generates an `esbuild.mjs` config, and esbuild bundles the frontend. ... `npm run start:browser` runs the generated backend. That backend is an Express server ... It serves the bundled frontend at localhost:3000. ... The Electron app follows the same pattern, with the backend run from the Electron main process." }
+] }

@@ -1,0 +1,31 @@
+{
+  "id": "fce55057",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Within each layer of `src/vs`, folders are named for the environment their code runs in. The table below comes from `.github/instructions/source-code-organization.instructions.md`. I also checked it against the actual import counts in the repo.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any environment; plain JavaScript only | `common` |\n| `browser` | The web, using DOM and web APIs | `common` |\n| `node` | Node.js | `common` |\n| `electron-browser` | The Electron renderer: browser code plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | The Electron utility process | `common`, `node` |\n| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |\n\nBoth `node` and `electron-browser` may import from their own folder type as well. For example, `electron-browser` code can import other `electron-browser` code.\n\n**Imports in the repo**\n\nThe measured imports follow these rules. They also show where the rules are not followed exactly:\n\n- `common` imports only `common` (17,809 imports).\n- `browser` imports `browser` and `common`.\n- `node` imports `node` and `common`.\n- `electron-browser` imports `electron-browser`, `browser` and `common`.\n- `electron-main` imports `electron-main`, `common` and `node`.\n- I didn't find any `electron-utility` folders in the counts. That folder name is documented but rare.\n- `test` folders can reach several environments. They import mostly `common`, with a few `browser` and `node` imports.\n\n**Two further rules from the same doc**\n\n- The `editor` layer (Monaco core) must have no `node` or `electron-*` dependencies.\n- Environments never import \"upward\" into something that has more capabilities. For example, `browser` code cannot import `node` or `electron-*` code. `common` code cannot import anything environment-specific."
+}

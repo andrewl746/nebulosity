@@ -1,0 +1,13 @@
+{
+  "id": "b051fa2a",
+  "points": [
+    {"id": "AFFINE-BP5.1", "score": 1, "quote": "Toggling the mode changes the rendering only. The page content stays in the notes, so it isn't copied or converted."},
+    {"id": "AFFINE-BP5.2", "score": 1, "quote": "Edgeless mode adds an `affine:surface` block ... Canvas-native elements are stored in the surface block's `elements` prop."},
+    {"id": "AFFINE-BP5.3", "score": 1, "quote": "Canvas-native elements are stored in the surface block's `elements` prop. This is a Boxed `Y.Map`, keyed by element id ... shape, brush, highlighter, connector, text, group, mindmap"},
+    {"id": "AFFINE-BP5.4", "score": 0.5, "quote": "Page mode renders the `affine:note` blocks as a linear flow. Edgeless mode ... renders the same notes as movable cards on a canvas."},
+    {"id": "AFFINE-BP5.5", "score": 0.5, "quote": "They are ordinary blocks placed under the surface or the page root, and they carry their own position."},
+    {"id": "AFFINE-BP5.6", "score": 1, "quote": "every element and every gfx block has an `xywh` string such as `\"[x,y,w,h]\"`."},
+    {"id": "AFFINE-BP5.7", "score": 1, "quote": "each element and gfx block has an `index` string. It is a fractional-index string, so you can insert between two items without renumbering ... Higher values render on top."},
+    {"id": "AFFINE-BP5.8", "score": 0.5, "quote": "A group element stores `children: Y.Map<boolean>` ... A group's bounds are derived from its children. A frame is a block with `childElementIds` ... It is a frame region that lists the elements inside it."}
+  ]
+}

@@ -1,0 +1,10 @@
+{ "id": "498be96c", "points": [
+  { "id": "BP7.1", "score": 1, "quote": "`IDisposable` is the base contract. ... `Event.on…` subscriptions return an `IDisposable`, so a listener's lifetime is whatever holds its handle." },
+  { "id": "BP7.2", "score": 1, "quote": "**`Disposable` (abstract base class):** an owner extends it and calls `this._register(x)`. Everything registered is disposed together with the owner." },
+  { "id": "BP7.3", "score": 1, "quote": "**`toDisposable(fn)` and `combinedDisposable(...)`:** wrap cleanup logic ... **`DisposableStore`:** a bag of disposables." },
+  { "id": "BP7.4", "score": 1, "quote": "**`MutableDisposable`:** holds one value. Assigning a new value disposes the old one, and disposing the holder disposes the current value." },
+  { "id": "BP7.5", "score": 0, "quote": "none" },
+  { "id": "BP7.6", "score": 0, "quote": "none" },
+  { "id": "BP7.7", "score": 0, "quote": "none" },
+  { "id": "BP7.8", "score": 1, "quote": "`ensureNoDisposablesAreLeakedInTestSuite()` (`src/vs/base/test/common/utils.ts:53`) installs a tracker in `setup`. In `teardown`, a passing test fails with \"There are N undisposed disposables!\" and the creation stacks." }
+] }

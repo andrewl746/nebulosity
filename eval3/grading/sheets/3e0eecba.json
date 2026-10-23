@@ -1,0 +1,39 @@
+{
+  "id": "3e0eecba",
+  "question": "How does VS Code keep event listeners and other resources from leaking: which types and patterns does its code use to tie a resource's lifetime to its owner, and how are leaks caught?",
+  "points": [
+    {
+      "id": "BP7.1",
+      "text": "a resource that must be released, a listener included, is an `IDisposable` with a `dispose()` method; subscribing to an event returns an `IDisposable` that removes the listener"
+    },
+    {
+      "id": "BP7.2",
+      "text": "classes extend `Disposable`, whose own `DisposableStore` (`_store`) holds what they register with `this._register(...)`, so disposing the object disposes its children; disposables are registered right after they're created"
+    },
+    {
+      "id": "BP7.3",
+      "text": "a `DisposableStore` collects disposables to release together (`add`, `clear`, `dispose`), and `toDisposable(fn)` turns a cleanup function into a disposable"
+    },
+    {
+      "id": "BP7.4",
+      "text": "a `MutableDisposable` holds one disposable at a time, disposing the old value when it's replaced or cleared and the current one when it's disposed itself; it's the pattern for something a method creates each time it runs, where `this._register(...)` would pile up listeners"
+    },
+    {
+      "id": "BP7.5",
+      "text": "DOM event listeners are added with `addDisposableListener()`, which returns a disposable, never with raw `addEventListener()` or `.onclick`-style properties"
+    },
+    {
+      "id": "BP7.6",
+      "text": "for an event that should be handled only once (a lifecycle or close event), `Event.once()` wraps it so the listener removes itself after the first call"
+    },
+    {
+      "id": "BP7.7",
+      "text": "a store tied to a model's lifetime adds `model.onWillDispose(() => store.dispose())` to itself, so it is cleaned up when the model goes away"
+    },
+    {
+      "id": "BP7.8",
+      "text": "leaks are caught in unit tests: a suite calls `ensureNoDisposablesAreLeakedInTestSuite()`, which tracks every disposable created during each test and fails the test if any is left undisposed"
+    }
+  ],
+  "answer": "VS Code ties a resource's lifetime to its owner through a small set of disposable types, and it catches leaks with runtime tracking, test checks and lint rules. I read the code in `src/vs/base/common/lifecycle.ts`, `src/vs/base/common/event.ts` and `src/vs/base/test/common/utils.ts`, and the lint rule in `.eslint-plugin-local`. I didn't run any of it.\n\n**Core contract.** Anything that holds a resource implements `IDisposable`, which has a `dispose()` method. An event subscription is also an `IDisposable`, so `emitter.event(listener)` returns the handle that unsubscribes it.\n\n**Types and helpers** (all in `lifecycle.ts`):\n- `Disposable` is the base class for owners. It has an internal `DisposableStore`, and subclasses call `this._register(x)` so `x` is disposed along with the owner.\n- `DisposableStore` is a bag of disposables that are all disposed together. Adding to a store that has already been disposed logs a warning, since that is itself a leak.\n- `MutableDisposable` and `MandatoryMutableDisposable` hold a single replaceable resource. Assigning a new value disposes the old one.\n- `DisposableMap` and `DisposableSet` hold keyed or unkeyed collections and dispose entries when they are removed or cleared.\n- `toDisposable(fn)` wraps a cleanup callback. `combinedDisposable(...)` merges several disposables into one.\n- `dispose()` accepts a single disposable or an iterable of them.\n- `RefCountedDisposable` and `IReference` handle shared resources. `ImmortalReference` is a reference that is never released.\n- `thenRegisterOrDispose(promise, store)` registers a promise's result in a store, or disposes it if the store is already disposed.\n\n**Event listeners.** `Emitter` in `event.ts` is the standard way to expose events, and the owner registers it (`this._register(new Emitter())`). A listener is removed when its returned disposable is disposed, usually via a store. Helpers such as `Event.debounce` and `Event.throttle` accept a `DisposableStore` so that their internal emitters are cleaned up.\n\n**How leaks are caught:**\n1. **Runtime listener monitor.** `LeakageMonitor` in `event.ts` watches each emitter against `leakWarningThreshold`, which can be set globally or per emitter. If the listener count grows past the threshold, it reports a `ListenerLeakError` with the stack of the most frequent subscriber. `ListenerRefusalError` is a subclass for when listeners are refused outright.\n2. **Disposable tracking.** `setDisposableTracker` installs an `IDisposableTracker`. `trackDisposable`, `markAsDisposed` and `setParentOfDisposable` record each disposable's creation stack and its parent. `DisposableTracker` can list the ones that were never disposed. `GCBasedDisposableTracker` finds them by garbage-collection finalization instead.\n3. **Tests.** `ensureNoDisposablesAreLeakedInTestSuite()` in `src/vs/base/test/common/utils.ts` installs a `DisposableTracker` for each test and fails the test if any disposable is still alive afterwards. `ensureNoDisposablesAreLeakedInTestSuite()` also returns a store that tests can add to. `throwIfDisposablesAreLeaked` is a related helper.\n4. **Lint.** The rule `code-ensure-no-disposables-leak-in-test` in `.eslint-plugin-local` requires every test `suite(...)` to call that function. It has an autofix that inserts the call."
+}

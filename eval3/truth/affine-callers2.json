@@ -1,0 +1,24 @@
+{
+  "id": "affine-callers2",
+  "kind": "callers",
+  "type": "DocFrontend",
+  "file": "packages/common/nbstore/src/frontend/doc.ts",
+  "member": "addPriority",
+  "within": null,
+  "files": [
+    "packages/common/nbstore/src/__tests__/frontend.spec.ts",
+    "packages/frontend/core/src/desktop/components/navigation-panel/nodes/doc/index.tsx",
+    "packages/frontend/core/src/desktop/pages/workspace/detail-page/detail-page-wrapper.tsx",
+    "packages/frontend/core/src/mobile/modules/navigation-projection/shell-data-projection.ts",
+    "packages/frontend/core/src/modules/db/services/db.ts",
+    "packages/frontend/core/src/modules/doc-summary/stores/doc-summary.ts",
+    "packages/frontend/core/src/modules/doc/entities/doc.ts",
+    "packages/frontend/core/src/modules/doc/stores/docs.ts",
+    "packages/frontend/core/src/modules/import-clipper/services/import.ts",
+    "packages/frontend/core/src/modules/peek-view/view/utils.ts",
+    "packages/frontend/core/src/modules/userspace/entities/user-db.ts",
+    "packages/frontend/core/src/modules/workspace/entities/engine.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

@@ -1,0 +1,39 @@
+{
+  "id": "d6917147",
+  "question": "How does the AFFiNE app manage what's on screen: what are the workbench and its views, how does a URL become the content a view shows, and how do the header, the right sidebar and back/forward navigation fit in?",
+  "points": [
+    {
+      "id": "AFFINE-BP6.1",
+      "text": "the workbench (`Workbench`, in `packages/frontend/core/src/modules/workbench`) is the app's window manager, covering the main area and the right sidebar"
+    },
+    {
+      "id": "AFFINE-BP6.2",
+      "text": "a view (`View`) is a managed window under the workbench; the workbench holds all the views, which can be open side by side, and decides when to show and close them"
+    },
+    {
+      "id": "AFFINE-BP6.3",
+      "text": "each view has its own navigation history, with back and forward, and its own current URL"
+    },
+    {
+      "id": "AFFINE-BP6.4",
+      "text": "a view renders the content that the app's router defines for its URL"
+    },
+    {
+      "id": "AFFINE-BP6.5",
+      "text": "each route renders its own header, body and sidebars through view islands (`ViewHeader`, `ViewBody` and `ViewSidebarTab` in `view-islands.tsx`), which the view's frame shows in their places"
+    },
+    {
+      "id": "AFFINE-BP6.6",
+      "text": "there is always one active view, and its URL counts as the URL of the whole application"
+    },
+    {
+      "id": "AFFINE-BP6.7",
+      "text": "each view can define sidebars for the right-hand area; only the active view's sidebars are shown, with a switcher when a view has more than one"
+    },
+    {
+      "id": "AFFINE-BP6.8",
+      "text": "in a browser, the workbench passes the browser's back and forward navigation to the active view, keeping the active view's history and the browser's in step"
+    }
+  ],
+  "answer": "Screen management lives in `packages/frontend/core/src/modules/workbench`. The module's `README.md` describes the design. I read the workbench, view, router-binding and island code but didn't trace the sidebar container or the desktop adapter.\n\n**Workbench and views**\n- `Workbench` (`entities/workbench.ts`) is the window manager. It holds `views$`, `activeViewIndex$` and a computed `activeView$`.\n- Its `location$` is the active view's location. The README says the active view's URL counts as the URL of the whole app.\n- It exposes `open(to, {at, replaceHistory})` and `createView(at, location)`. The `at` option places a view beside, at the head or tail, at an index, or in a new tab.\n- It also holds the right-sidebar state: open/closed and width, both persisted in `GlobalState`.\n- A `View` (`entities/view.ts`) is one pane in a split view. Each has its own `id`, title and icon.\n- Each view owns a `createNavigableHistory` stack, seeded from `defaultLocation` (default `/all`). `location$` and `entries$` are observables over that history.\n- A view also holds `sidebarTabs$`, the active sidebar tab, scroll positions and query-string helpers.\n- Each view gets its own DI `ViewScope`.\n\n**URL to content**\n- `ViewRoot` (`view/view-root.tsx`) creates a React Router `createMemoryRouter(routes)` for each view. Every view therefore has its own isolated router.\n- A layout effect calls `viewRouter.navigate(location)` whenever `view.location$` changes. The matched route component then renders.\n- `ViewRoot` resets the React Router location and route contexts, so the view's router doesn't see the outer browser router.\n- The routes come from the app's `router.tsx`.\n\n**Header, body and sidebar (islands)**\n- A route component renders `<ViewHeader>`, `<ViewBody>` and `<ViewSidebarTab>` (`view/view-islands.tsx`).\n- Each is the provider half of an island. Its content is portaled to the matching target.\n- `RouteContainer` (`view/route-container.tsx`) places `ViewHeaderTarget` and `ViewBodyTarget` for its view id.\n- The same container shows the left-sidebar switch on the first view and the right-sidebar toggle on the last view. Those buttons only appear when not running in Electron.\n- Only the active view's sidebar tabs appear in the right sidebar. A switcher appears when a view has several tabs.\n\n**Back/forward**\n- Each view's history handles its own back and forward through `history.go`.\n- In the browser, `useBindWorkbenchToBrowserRouter` (`view/browser-adapter.ts`) syncs the active view with the browser URL.\n  - A PUSH or REPLACE in the view history becomes a browser `navigate`, tagged with `state: 'fromView,<key>'` to avoid loops.\n  - A POP in the view history is not forwarded, because the two stacks can't be mirrored.\n  - A browser location change becomes `view.history.push(..., 'fromBrowser')`. If the tag points at an existing entry in the view history, it calls `history.go(delta)` instead.\n- `view/desktop-adapter.ts` is the Electron counterpart, and desktop state is synced by `services/desktop-state-synchronizer.ts`."
+}

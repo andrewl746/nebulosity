@@ -1,0 +1,31 @@
+{
+  "id": "8f0f9e70",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "Both builds start from a shared entry file and add their own platform-specific files on top.\n\n**Sharing**\n- `src/vs/workbench/workbench.common.main.ts` is the shared entry point. It is a long list of side-effect imports: the editor (`editor.all`), workbench actions, extension points, services and `contrib/` features.\n- The platform entry points import it first and then add their own files:\n  - `workbench.web.main.ts` imports `./browser/web.main.js`, then browser-specific services such as `services/search/browser/...`, `textfile/browser/browserTextFileService` and `host/browser/browserHostService`.\n  - `workbench.desktop.main.ts` imports `./electron-browser/desktop.main.js` and `desktop.contribution.js`, then Electron-specific services such as `nativeTextFileService`, the native dialogs and the `menubarService`.\n- Both entry files carry a banner telling contributors to add common imports to `workbench.common.main.ts`. Only platform-specific files go in the web or desktop file.\n- The common code itself lives in `src/vs/workbench/browser`, `common`, `services` and `contrib`. Each service has an interface plus per-platform implementations, which the platform entry files choose between.\n\n**What decides whether code loads**\n1. **Imports.** Features register themselves as a side effect of being imported. They add to registries, extension points, actions or service registrations. If no entry file imports a feature's `*.contribution.ts`, the bundler never includes it. Shipping a feature to one platform only means importing it from only that platform's entry file.\n2. **Folder naming and layering.** Files are split into `common`, `browser`, `electron-browser` and similar folders. These names control what each file may import, and `npm run valid-layers-check` enforces them. Common code can't depend on platform-specific code.\n3. **Runtime gating.** Code that is bundled can still sit idle. Contributions register with lifecycle phases, so the workbench instantiates them lazily. They can also be gated by context keys, `when` clauses and configuration. Extension-contributed features load only when their activation events fire.\n\nI didn't check the build scripts, so I haven't confirmed how the bundler picks which entry point goes into each build. Separately, the repo's `src/vs/sessions/` layer (the Agents window) sits alongside the workbench. It may import from the workbench but not the reverse."
+}

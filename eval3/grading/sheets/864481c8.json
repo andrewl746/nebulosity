@@ -1,0 +1,39 @@
+{
+  "id": "864481c8",
+  "question": "How does AFFiNE store a document's content in edgeless (whiteboard) mode: how does it relate to the same document in page mode, where do shapes and drawings live, and how are position, stacking order and grouping represented?",
+  "points": [
+    {
+      "id": "AFFINE-BP5.1",
+      "text": "an edgeless document is the same document as in page mode, made of the same blocks: switching modes converts nothing, and the same doc can be attached to a page editor or an edgeless editor"
+    },
+    {
+      "id": "AFFINE-BP5.2",
+      "text": "a surface block, by default the root block's first child, is the container for the whiteboard's graphical content"
+    },
+    {
+      "id": "AFFINE-BP5.3",
+      "text": "shapes, brush strokes, connectors and other drawings are not blocks but surface elements (such as `ShapeElement`, `BrushElement` and `ConnectorElement`), kept in the surface block's `elements` field and drawn on an HTML5 canvas"
+    },
+    {
+      "id": "AFFINE-BP5.4",
+      "text": "flowing content (paragraphs, lists, images and so on) sits in note blocks: page mode shows the notes in their order among the root block's children, while in edgeless mode a document can be split into several notes placed separately on the canvas"
+    },
+    {
+      "id": "AFFINE-BP5.5",
+      "text": "a block can sit in one of two places: as a direct child of the surface block (edgeless-only, placed anywhere on the canvas, without nesting) or outside it as in page mode (shared with page mode, nestable, laid out inside its note); some types, such as images, can be in either"
+    },
+    {
+      "id": "AFFINE-BP5.6",
+      "text": "every note block, every child of the surface block and every surface element has an `xywh` field giving its absolute position and size on the canvas"
+    },
+    {
+      "id": "AFFINE-BP5.7",
+      "text": "stacking order on the canvas comes from an `index` field compared across those blocks and the surface elements, with fractional indexing (as in Figma), not from the order of the block tree"
+    },
+    {
+      "id": "AFFINE-BP5.8",
+      "text": "content is associated in two ways: frame blocks, surface-only blocks that mark an area, where moving a frame moves whatever lies inside it by geometry rather than by nesting (and presentation mode steps through frames); and group elements, surface elements that store their children's IDs, take their size from them and can nest"
+    }
+  ],
+  "answer": "Edgeless mode doesn't store a separate copy of the document. It adds data to the same Yjs doc that page mode uses. I read this from the code but did not run AFFiNE to check it.\n\n**Relation to page mode**\n- The page-mode block tree is `affine:page` → `affine:note` blocks → paragraphs, lists and so on. Edgeless mode reuses it.\n- Each `affine:note` block (`blocksuite/affine/model/src/blocks/note/note-model.ts`) also carries edgeless props: `xywh`, `index` (default `'a0'`) and an `edgeless` style object. This is how a note appears as a card on the canvas.\n- A note's `displayMode` controls where it shows. It can be edgeless-only, or visible in both the doc and edgeless views.\n- The `affine:surface` block is the page's second child. It is the edgeless layer, and its schema declares `parent: ['@root']`. Page mode ignores it.\n\n**Where shapes and drawings live**\n- Shapes, brush strokes, highlighter strokes, connectors, groups, mindmaps and canvas text are not blocks. They live inside the surface block's single `elements` prop. That prop is a boxed `Y.Map<Y.Map>`, keyed by element id (`SurfaceBlockSchema` in `blocksuite/affine/blocks/surface/src/surface-model.ts`). Each value is a Y.Map of that element's props, with a `type` field such as `shape`, `brush`, `connector` or `group`.\n- The model classes are in `blocksuite/affine/model/src/elements/*`.\n- Rich objects are real child blocks of the surface: `affine:frame`, `affine:image`, `affine:bookmark`, `affine:attachment`, `affine:embed-*` and `affine:edgeless-text`.\n- Notes, frames and images are therefore blocks, while shapes and strokes are entries in `elements`.\n\n**Position, stacking and grouping**\n- **Position:** every element and every edgeless block has `xywh`. It is a serialized string such as `\"[x,y,w,h]\"`. Elements also have `rotate`.\n- **Stacking:** each element and block has a fractional-indexing string in `index`, generated with `generateKeyBetween`. Insertion order is encoded in the string, so inserting between two items needs only one new key. This also merges cleanly across collaborators. `blocksuite/framework/std/src/gfx/layer.ts` sorts by this string to produce the z-order.\n- **Grouping:** a `group` element (`blocksuite/affine/model/src/elements/group/group.ts`) has a `children` prop that is a `Y.Map<boolean>` of child id → `true`, plus a `title` Y.Text. A child can be an element or a block, and the group's bounds come from them. The group is the parent and the children don't point back to it. Child ids are exposed as `childIds`. Connectors refer to their endpoints by id."
+}

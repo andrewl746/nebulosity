@@ -1,0 +1,13 @@
+{
+  "id": "c94e393f",
+  "points": [
+    {"id": "THEIA-BP2.1", "score": 1, "quote": "An application is itself a package, such as `examples/browser`. Its `dependencies` list the `@theia/*` extensions it wants. / `theia build` is the CLI from `@theia/cli`."},
+    {"id": "THEIA-BP2.2", "score": 1, "quote": "A Theia extension is an ordinary npm package. It declares its entry points in `package.json` under `theiaExtensions`"},
+    {"id": "THEIA-BP2.3", "score": 0.5, "quote": "The `frontend` entry is for the browser. The `backend` entry is for Node. ... Electron packages can add their own entries."},
+    {"id": "THEIA-BP2.4", "score": 1, "quote": "That module default-exports an InversifyJS `ContainerModule`. ... Each module binds services into the container with `bind(...)`."},
+    {"id": "THEIA-BP2.5", "score": 0.5, "quote": "Features plug in through contribution points. Examples are `CommandContribution`, `MenuContribution`, `KeybindingContribution`"},
+    {"id": "THEIA-BP2.6", "score": 0.5, "quote": "Code is split by folder: `src/browser`, `src/node` and `src/common` (shared, including the RPC protocols between frontend and backend)."},
+    {"id": "THEIA-BP2.7", "score": 0.5, "quote": "A `theia` section in its `package.json` holds the frontend and backend config, for example `applicationName` and `preferences`."},
+    {"id": "THEIA-BP2.8", "score": 0.5, "quote": "The frontend, backend and bundler generators write into the app's `src-gen/` folder ... They also produce the esbuild config ... `theia start` ... launches the generated backend."}
+  ]
+}

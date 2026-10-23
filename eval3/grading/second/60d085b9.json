@@ -1,0 +1,10 @@
+{ "id": "60d085b9", "points": [
+  { "id": "BP4.1", "score": 0.5, "quote": "`browser/`: core workbench UI, including parts, layout and actions. `common/`: shared code with no UI dependencies. `electron-browser/`: desktop-only renderer code." },
+  { "id": "BP4.2", "score": 1, "quote": "`api/`: the extension host and the implementation of the VS Code API." },
+  { "id": "BP4.3", "score": 0.5, "quote": "`services/`: service implementations. They are grouped per service and then split by environment layer." },
+  { "id": "BP4.4", "score": 0.5, "quote": "`contrib/`: feature contributions such as git, debug, search, terminal, chat, notebook, scm, testing and extensions. It has about 100 feature folders." },
+  { "id": "BP4.5", "score": 0.5, "quote": "**Contribution model:** features plug in by registering with registries and extension points ... The core doesn't call into features directly." },
+  { "id": "BP4.6", "score": 1, "quote": "Each feature normally has a `*.contribution.ts` that wires this up." },
+  { "id": "BP4.7", "score": 0, "quote": "none" },
+  { "id": "BP4.8", "score": 0, "quote": "none" }
+] }

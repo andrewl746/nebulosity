@@ -1,0 +1,10 @@
+{ "id": "cd91f4de", "points": [
+  { "id": "AFFINE-BP6.1", "score": 1, "quote": "The code is in `packages/frontend/core/src/modules/workbench`. ... `Workbench` (`entities/workbench.ts`) holds the list of open `View`s, the active view, a `basename`, and the right-sidebar state." },
+  { "id": "AFFINE-BP6.2", "score": 1, "quote": "`View` (`entities/view.ts`) is one pane in the split-view layout. ... `open(to, options)` pushes or replaces a location on a view, and can open it in a new split view." },
+  { "id": "AFFINE-BP6.3", "score": 1, "quote": "It also has a navigable memory history (`createNavigableHistory`) exposed as `location$` and `entries$`, with `push`, `replace` and `go(n)`" },
+  { "id": "AFFINE-BP6.4", "score": 1, "quote": "`ViewRoot` (`view/view-root.tsx`) creates a react-router `createMemoryRouter(routes)` for each view. A layout effect calls `router.navigate(location)` whenever `view.location$` changes." },
+  { "id": "AFFINE-BP6.5", "score": 1, "quote": "A route component renders `<ViewHeader>`, `<ViewBody>` and `<ViewSidebarTab>` (`view/view-islands.tsx`). These are \"islands\": the content is portalled into targets placed by the workbench, which are looked up by view id." },
+  { "id": "AFFINE-BP6.6", "score": 1, "quote": "`Workbench.location$` is the active view's location." },
+  { "id": "AFFINE-BP6.7", "score": 1, "quote": "The right sidebar (`view/sidebar/*`) shows the active view's sidebar tabs." },
+  { "id": "AFFINE-BP6.8", "score": 1, "quote": "On web, `view/browser-adapter.ts` (`useBindWorkbenchToBrowserRouter`) keeps the active view's history and the browser's history in sync. ... If that location came from the view, the adapter instead finds the matching entry and calls `go(delta)`." }
+] }

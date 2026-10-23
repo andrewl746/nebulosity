@@ -1,0 +1,7 @@
+{ "id": "4da53a92", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "The convention is to export a `const` with the same name as the interface: `export const IFooService = createDecorator<IFooService>(...)`. The result is a `ServiceIdentifier<T>`, and it also works as a parameter decorator." },
+  { "id": "BP3.3", "score": 1, "quote": "Its own dependencies are constructor parameters, each tagged with a decorator: `constructor(@IBarService private readonly barService: IBarService)`." },
+  { "id": "BP3.4", "score": 1, "quote": "**Creating instances:** use `instantiationService.createInstance(MyClass, ...nonServiceArgs)`. A class created this way gets its decorated parameters filled in automatically." },
+  { "id": "BP3.5", "score": 1, "quote": "**Lazy singleton:** call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)." },
+  { "id": "BP3.6", "score": 0, "quote": "none" }
+] }

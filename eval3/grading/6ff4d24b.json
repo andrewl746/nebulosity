@@ -1,0 +1,13 @@
+{
+  "id": "6ff4d24b",
+  "points": [
+    {"id": "AFFINE-BP4.1", "score": 0.5, "quote": "Each AFFiNE document is a Yjs CRDT document. A \"doc\" is one Y.Doc, and a workspace is a set of them."},
+    {"id": "AFFINE-BP4.2", "score": 0.5, "quote": "Updates that arrive from other peers get an `apply` job, which calls `Y.applyUpdate` on the doc. The editor then re-renders from the Y.Doc."},
+    {"id": "AFFINE-BP4.3", "score": 1, "quote": "Storage and the wire carry only binary Yjs updates (`Uint8Array`) and snapshots, which are merged updates."},
+    {"id": "AFFINE-BP4.4", "score": 0, "quote": "none"},
+    {"id": "AFFINE-BP4.5", "score": 0.5, "quote": "`BroadcastChannel` is used between tabs, mainly for awareness (presence) (`impls/broadcast-channel`)."},
+    {"id": "AFFINE-BP4.6", "score": 1, "quote": "**Browser:** IndexedDB, in one database per workspace (`impls/idb/schema.ts`). ... **Desktop and mobile:** a per-workspace SQLite file"},
+    {"id": "AFFINE-BP4.7", "score": 0.5, "quote": "`DocSyncPeer` (`sync/doc/peer.ts`) syncs the local storage with each remote storage. ... The AFFiNE server (`impls/cloud`) over socket.io"},
+    {"id": "AFFINE-BP4.8", "score": 0, "quote": "none"}
+  ]
+}

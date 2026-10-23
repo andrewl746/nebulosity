@@ -1,0 +1,10 @@
+{ "id": "e7355467", "points": [
+  { "id": "BP7.1", "score": 1, "quote": "**Core idea:** every resource that must be released is an `IDisposable` (`{ dispose(): void }`). ... **`Event` subscriptions** return an `IDisposable`. Calling `dispose()` removes the listener." },
+  { "id": "BP7.2", "score": 1, "quote": "**`Disposable`** is an abstract base class. Subclasses call `this._register(x)` on anything they own. When the owner is disposed, everything registered is disposed too." },
+  { "id": "BP7.3", "score": 1, "quote": "**`DisposableStore`** is a bag of disposables. ... `toDisposable(fn)` wraps a cleanup function." },
+  { "id": "BP7.4", "score": 1, "quote": "**`MutableDisposable`** holds a single value. Assigning a new one disposes the old." },
+  { "id": "BP7.5", "score": 0, "quote": "none" },
+  { "id": "BP7.6", "score": 0, "quote": "none" },
+  { "id": "BP7.7", "score": 0, "quote": "none" },
+  { "id": "BP7.8", "score": 1, "quote": "`ensureNoDisposablesAreLeakedInTestSuite()` in `src/vs/base/test/common/utils.ts` installs a `DisposableTracker` before each suite and checks after each test that nothing is left undisposed." }
+] }

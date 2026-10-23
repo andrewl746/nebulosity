@@ -19,6 +19,9 @@
  * asks the definition's `pilotSessions`, one repeat in each arm. A session's questions (marked "session" in questions.json)
  * are asked only inside it: the single-run schedule, --pilot and --only leave them out.
  *
+ * An eval's `sentence` ("rules": Eval #3's rules sentence, ADR-060) replaces Eval #2's scripts sentence in every prompt, both arms.
+ * Each index line carries `refusals`: the count of tool calls Claude Code refused (transcript.ts's refusedCalls).
+ *
  * The eval's runner (D3, D4 in docs/plans/2026-10-13-v1-5-ship.md). It starts `claude -p` headless on each question in
  * three arms (A: no MCP server; B: Nebulosity's, its tools deferred as in Claude Code's default; U: B with its tools
  * loaded up front, named nebulosity-upfront), checks every run's init message against the agreed setup instead of
@@ -60,7 +63,7 @@ import {
 } from "./run-config";
 import { archiveScratch } from "./scratch";
 import { chosenSessions, feedStep, scheduleSessions, sessionIndexFields, sessionInitProblems, sessionOutage, sessionProblems, summarizeSession, userMessage, type SessionDef } from "./session";
-import { summarizeRun, type RunSummary } from "./transcript";
+import { refusedCalls, summarizeRun, type RunSummary } from "./transcript";
 import { firstInitLine, infrastructureFailure, resultNotes, validateInit } from "./validate";
 
 const TIMEOUT_MS = 30 * 60 * 1000;
@@ -481,7 +484,8 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
     // a session is one process over one repo with the prompts of its questions in order; a single run has one
     const asked = session === undefined ? [ctx.questions.questions.find((q) => q.id === run.question)!] : session.questions.map((id) => ctx.questions.questions.find((q) => q.id === id)!);
     const repo = session === undefined ? questionRepo(asked[0]) : repoOf(session.repo);
-    const prompts = asked.map((q) => promptFor(q, ctx.questions.formats, scratch));
+    const rules = DEF.sentence === "rules" ? { repoRoot: repo.root } : undefined;
+    const prompts = asked.map((q) => promptFor(q, ctx.questions.formats, scratch, rules));
     // the N arm's tools answer from the index, so a repo without one stops the batch; the A arm just records what there is
     const found = indexVersionOf(repo.root);
     if ("problem" in found && run.arm === "nebulosity") throw new Stop(1, `${name}: ${found.problem}, so Nebulosity's tools would fail. Nothing was run.`);
@@ -539,7 +543,7 @@ async function runOneIn(run: RunId, ctx: Context, scratchRun: { folder: string; 
     const models = [DEF.pins.model, EXPLORE_MODEL];
     const own = session === undefined ? null : sessionIndexFields(summary, summarizeSession(raw), session, models);
     const entry = {
-        name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, models), repo: repo.id, indexVersion, scratch: scratchRun?.hex,
+        name, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), ...summary, finalText: undefined, resultNotes: resultNotes(summary, models), repo: repo.id, indexVersion, scratch: scratchRun?.hex, refusals: refusedCalls(raw),
         ...(own ?? {}),
     };
     const indexLine = JSON.stringify(entry);
@@ -685,13 +689,13 @@ async function main(): Promise<void> {
                 console.log(`  command: ${quote(claude)} ${sessionArgs(run.arm, mcp, DEF.pins, { scratch, shell: DEF.shell }).map(quote).join(" ")}`);
                 console.log(`  cwd: ${repoRoot(session.repo)}`);
                 session.questions.forEach((id, i) => {
-                    const message = userMessage(promptFor(questions.questions.find((x) => x.id === id)!, questions.formats, scratch));
+                    const message = userMessage(promptFor(questions.questions.find((x) => x.id === id)!, questions.formats, scratch, DEF.sentence === "rules" ? { repoRoot: repoRoot(session.repo) } : undefined));
                     console.log(`  stdin line ${i + 1}, written ${i === 0 ? "at once" : "after the previous result"} (${message.length} characters): ${message}`);
                 });
                 console.log(`  then stdin closes after result ${session.questions.length}; limit 60 minutes`);
             } else {
                 const q = questions.questions.find((x) => x.id === run.question)!;
-                const stdin = promptFor(q, questions.formats, scratch);
+                const stdin = promptFor(q, questions.formats, scratch, DEF.sentence === "rules" ? { repoRoot: questionRepo(q).root } : undefined);
                 console.log(`  command: ${quote(claude)} ${claudeArgs(run.arm, mcp, DEF.pins, { scratch, shell: DEF.shell }).map(quote).join(" ")}`);
                 console.log(`  cwd: ${questionRepo(q).root}`);
                 console.log(`  stdin (${stdin.length} characters): ${JSON.stringify(stdin)}`);

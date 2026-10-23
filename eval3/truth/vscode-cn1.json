@@ -1,0 +1,26 @@
+{
+  "id": "vscode-cn1",
+  "kind": "chain",
+  "from": "src/vs/workbench/workbench.desktop.main.ts",
+  "to": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+  "connected": true,
+  "shortest": 4,
+  "example": [
+    "src/vs/workbench/workbench.desktop.main.ts",
+    "src/vs/workbench/workbench.common.main.ts",
+    "src/vs/workbench/contrib/terminal/terminal.all.ts",
+    "src/vs/workbench/contrib/terminalContrib/inlineHint/browser/terminal.initialHint.contribution.ts",
+    "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts"
+  ],
+  "verified": true,
+  "notes": [
+    {
+      "check": "Each step read in its source (L15, L334, L25, L29). Nebulosity's importChain (read only) returned the same 4-step chain. A widened graph (the scanner's edges plus every quoted string in any code file that names a repo file, 1,618 extra edges) also gives 4.",
+      "decision": "Truth kept: 4 steps, example as built. No alternative chain recorded (the index's chain is the same one)."
+    },
+    {
+      "check": "Owner's rule ('refers to', 2026-10-14) applied: every non-relative `vs/…` module id in an import-like statement anywhere in the repo (781 specifiers, 682 edges the scanner lacks) and the 8 computed loaders read in the source (10 edges) were added to the graph. The shortest length stays 4 and the example is still a shortest chain.",
+      "decision": "Truth kept: 4 steps, example as built."
+    }
+  ]
+}

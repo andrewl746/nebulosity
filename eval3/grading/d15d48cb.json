@@ -1,0 +1,13 @@
+{
+  "id": "d15d48cb",
+  "points": [
+    {"id": "THEIA-BP2.1", "score": 1, "quote": "A Theia application is an npm package that depends on a set of Theia extensions. / `theia build` is the CLI from `dev-packages/cli`"},
+    {"id": "THEIA-BP2.2", "score": 1, "quote": "It declares `theiaExtensions` in its `package.json`. Each entry names a frontend module, a backend module, or both."},
+    {"id": "THEIA-BP2.3", "score": 0.5, "quote": "The frontend modules are loaded into the browser-side Inversify container. The backend modules are loaded into the Node-side container."},
+    {"id": "THEIA-BP2.4", "score": 1, "quote": "The modules are InversifyJS `ContainerModule`s. They bind services and contributions such as `CommandContribution`, `MenuContribution`"},
+    {"id": "THEIA-BP2.5", "score": 0, "quote": "none"},
+    {"id": "THEIA-BP2.6", "score": 0.5, "quote": "Each package splits its source by platform: `src/browser` for the frontend, `src/node` for the backend, `src/common` for shared code, plus the Electron folders."},
+    {"id": "THEIA-BP2.7", "score": 0.5, "quote": "It also has a `theia` section holding the application's target and config."},
+    {"id": "THEIA-BP2.8", "score": 0.5, "quote": "They write entry files into the application's `src-gen/`, plus the esbuild config. / `theia start` ... launches the generated backend ... The server serves the bundled frontend, by default at localhost:3000."}
+  ]
+}

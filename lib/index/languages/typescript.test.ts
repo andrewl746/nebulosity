@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countLines, languageOf, parseTypeScriptFile, parseTypeScriptImportsOnly, scanTypeScriptImports } from "./typescript";
+import { ADAPTER_VERSION, countLines, languageOf, parseTypeScriptFile, parseTypeScriptImportsOnly, scanTypeScriptImports } from "./typescript";
 
 const LOG_TS = [
     "/** Writes a message. */",
@@ -184,6 +184,11 @@ describe("parseTypeScriptImportsOnly — a file over the 1 MB cap, up to 5 MB (A
             imports: ["./a", "../b", "./side-effect", "./c", "./d", "./e", "./f", "./g", "./h"],
             symbols: [],
             chunks: [],
+            calls: {
+                types: [{ name: "Big", kind: "class", line: 10, exported: true, nested: false, extendsRefs: [], implementsRefs: [], testDoubleOf: null, members: ["run"], fields: {} }],
+                bindings: [{ kind: "reexport", local: "c", imported: "c", specifier: "./c" }, { kind: "reexport", local: "*", imported: "*", specifier: "./d" }],
+                calls: [],
+            },
             lineCount: 10,
         });
     });
@@ -246,6 +251,7 @@ describe("scanTypeScriptImports — the token scan, for a file over 5 MB (ADR-05
             imports: ["./a", "../b", "./side-effect", "./c", "./d", "./e", "./f", "./g", "./h"],
             symbols: [],
             chunks: [],
+            calls: { types: [], bindings: [], calls: [] },
             lineCount: 10,
         });
     });
@@ -277,5 +283,14 @@ describe("scanTypeScriptImports — the token scan, for a file over 5 MB (ADR-05
     it("reads an AMD define list, and doesn't follow a computed import()", () => {
         expect(scan('define(["./a", "./b"], function (a, b) {});\n')).toEqual(["./a", "./b"]);
         expect(scan('const u = "./a"; import(u);\n')).toEqual([]);
+    });
+});
+
+describe("parseTypeScriptFile: call facts (ADR-059)", () => {
+    it("is the adapter's fourth product, and the adapter is at version 7", () => {
+        const { types } = parseTypeScriptFile("src/a.ts", "export class A {}\n").calls;
+        expect(types).toHaveLength(1);
+        expect(types[0].name).toBe("A");
+        expect(ADAPTER_VERSION).toBe(7);
     });
 });

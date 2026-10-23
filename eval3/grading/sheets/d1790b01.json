@@ -1,0 +1,27 @@
+{
+  "id": "d1790b01",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code uses constructor-based dependency injection, built from the pieces below. I confirmed the locations in `src/vs/platform/instantiation/common/` with a search. The rest is from my knowledge of the codebase, and I didn't open those files.\n\n**1. Defining a service**\n- Declare an interface, conventionally named `IFooService`.\n- Add a brand property, `readonly _serviceBrand: undefined`.\n- Declare the identifier with the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService')`.\n- `createDecorator` is in `instantiation.ts:109`. It returns a `ServiceIdentifier<T>` that is also a parameter decorator. Applying it records the dependency in the class's metadata.\n- The interface and the const share one name, so a single import gives you both the type and the decorator.\n- `IInstantiationService` (`instantiation.ts:41`) is itself a service defined this way.\n\n**2. Making an implementation available**\n- Write the implementation class, `FooService implements IFooService`.\n- Register it in one of two ways:\n  - **Global singleton:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`).\n    - `InstantiationType.Eager` (the other option, value 0) creates the service at startup.\n    - `Delayed` hands out a lazy proxy, so the real instance is created on first use.\n    - A `SyncDescriptor` (`descriptors.ts`) can be passed instead of the type argument. It wraps the constructor plus any static arguments.\n    - The registrations are collected and read back with `getSingletonServiceDescriptors()`.\n  - **Explicit registration:** Entry points such as the workbench, `main` and `server` build a `ServiceCollection`. They call `services.set(IFooService, instanceOrSyncDescriptor)` and pass the collection to `new InstantiationService(services, ...)`. Services needed before the collection is complete are created by hand and `set` as instances.\n- Contributions that need `ServiceCollection` entries per window or per scope use this path.\n\n**3. Injecting into consumers**\n- Add the service as a constructor parameter with the decorator:\n  ```ts\n  constructor(@IFooService private readonly fooService: IFooService) { super(); }\n  ```\n- Convention: decorated service parameters come last, after any non-service arguments.\n- The class must be created through the instantiation service, not with a bare `new`:\n  - `instantiationService.createInstance(MyClass, ...nonServiceArgs)`, or\n  - `instantiationService.invokeFunction(accessor => accessor.get(IFooService))`. This is how actions and commands fetch services, usually via a `ServicesAccessor` parameter.\n- Child scopes use `instantiationService.createChild(serviceCollection)`.\n- When the container builds a class, it reads the decorator metadata, resolves each service, and passes the instances in. Circular dependencies throw an error.\n- Services resolve their own dependencies the same way.\n\n**Other conventions**\n- Service files are named `fooService.ts`, with the interface in `common/` or `browser/`.\n- Layering rules keep the interfaces separate from the implementations."
+}

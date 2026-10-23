@@ -104,3 +104,11 @@ describe("overlapReport on an eval folder", () => {
         }
     });
 });
+
+it("compares a calls question's targets: the file that declares its type, and the method or type it names", () => {
+    const dev = [askedOfSpec({ id: "d1", repo: "vscode", kind: "callers", type: "IFoo", file: "src/foo.ts", member: "save" })];
+    const q = askedOfSpec({ id: "q1", repo: "vscode", kind: "breaks", type: "IFoo", file: "src/foo.ts", member: "load" });
+    expect(q.targets).toEqual(["src/foo.ts", "IFoo.load"]);
+    expect(overlaps([q], dev)).toEqual(["vscode: src/foo.ts is a target of q1 and of the dev set's d1"]);
+    expect(askedOfSpec({ id: "q2", repo: "vscode", kind: "injects", type: "IBar", file: "src/bar.ts" }).targets).toEqual(["src/bar.ts", "IBar"]);
+});

@@ -1,0 +1,27 @@
+{
+  "id": "affine-task1",
+  "kind": "task",
+  "type": "DocsService",
+  "file": "packages/frontend/core/src/modules/doc/services/docs.ts",
+  "member": "createDoc",
+  "within": null,
+  "change": [
+    "packages/frontend/apps/electron-renderer/src/app/effects/events.ts",
+    "packages/frontend/apps/electron-renderer/src/app/effects/recording.ts",
+    "packages/frontend/core/src/blocksuite/block-suite-page-list/utils.tsx",
+    "packages/frontend/core/src/blocksuite/view-extensions/editor-view/quick-search-service.ts",
+    "packages/frontend/core/src/modules/at-menu-config/services/index.ts",
+    "packages/frontend/core/src/modules/doc/services/docs.ts",
+    "packages/frontend/core/src/modules/import-clipper/services/import.ts",
+    "packages/frontend/core/src/modules/journal/services/journal.ts",
+    "packages/frontend/core/src/modules/quicksearch/services/cmdk.ts",
+    "packages/frontend/core/src/modules/template-doc/view/template-list-menu.tsx",
+    "packages/frontend/core/src/modules/workspace/entities/workspace.ts"
+  ],
+  "tests": [
+    "packages/frontend/apps/electron/test/main/recording-effect.spec.ts",
+    "packages/frontend/core/src/modules/import-clipper/services/share-import.spec.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

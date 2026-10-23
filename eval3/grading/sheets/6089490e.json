@@ -1,0 +1,39 @@
+{
+  "id": "6089490e",
+  "question": "What are the main parts of the AFFiNE repository and what is each one for? Say which apps are built from it, what the server is for and what it needs to run.",
+  "points": [
+    {
+      "id": "AFFINE-BP1.1",
+      "text": "`packages/` holds the code that runs in production, split into `backend/` (the server), `frontend/` (the apps and the business libraries they share) and `common/` (isomorphic or basic libraries with no business logic)"
+    },
+    {
+      "id": "AFFINE-BP1.2",
+      "text": "`tools/` holds development and CI tooling that doesn't ship (such as the `yarn affine` CLI), and `tests/` holds the end-to-end and integration tests that span packages"
+    },
+    {
+      "id": "AFFINE-BP1.3",
+      "text": "the editor is BlockSuite, which lives in the same repository under `blocksuite/` and is used by the app as workspace packages (`@blocksuite/*`)"
+    },
+    {
+      "id": "AFFINE-BP1.4",
+      "text": "several apps are built from the shared frontend code under `packages/frontend`: the web app, the Electron desktop app, a mobile web app, iOS and Android apps, and an admin app"
+    },
+    {
+      "id": "AFFINE-BP1.5",
+      "text": "some code is written in Rust and built into Node.js bindings with napi-rs: `@affine/native` (`packages/frontend/native`) for the clients and `@affine/server-native` for the server"
+    },
+    {
+      "id": "AFFINE-BP1.6",
+      "text": "the server (`@affine/server`, in `packages/backend/server`) is only needed for cloud features (accounts, sync and collaboration, AI); without it the web app keeps workspaces locally in the browser"
+    },
+    {
+      "id": "AFFINE-BP1.7",
+      "text": "the server runs on PostgreSQL (with the pgvector extension) and Redis, and serves a GraphQL API at `/graphql`"
+    },
+    {
+      "id": "AFFINE-BP1.8",
+      "text": "`@affine/component` (`packages/frontend/component`) is the shared UI component library"
+    }
+  ],
+  "answer": "AFFiNE is a Yarn-workspace monorepo, version 0.27.5. It mixes TypeScript and Rust.\n\n**Main parts**\n\n- **`blocksuite/`** is the editor framework the app is built on.\n  - `framework/` is the core: `store` and `sync` are Yjs-backed, `std` is the standard layer, and `global` holds shared utilities.\n  - `affine/` holds the concrete pieces: blocks, widgets, inlines, rich-text, data-view, gfx (the edgeless canvas), model and shared code.\n  - `playground/`, `integration-test/` and `docs-site/` are a demo app, tests and documentation.\n- **`packages/frontend/`** is the client side.\n  - `core` holds the main app logic and modules.\n  - `component` is the UI library, and `i18n` handles translations.\n  - `admin` is the admin panel, `routes` holds routing, and `templates` holds workspace templates.\n  - `native` and `mobile-native` hold Rust/native bindings, and `electron-api` is the desktop API.\n  - `apps/` holds the app shells (listed below).\n- **`packages/backend/`**\n  - `server` is the NestJS backend.\n  - `native` is the Rust backend code, which the server loads through `native.ts`.\n- **`packages/common/`** holds code shared by the client and the server:\n  - `infra` is the dependency-injection and state framework (the most-imported package).\n  - `nbstore` is the storage and sync layer, and `graphql` holds the API schema and types.\n  - `auth`, `error`, `env`, `debug`, `theme`, `reader`, `realtime`, `s3-compat` and a native crate are also here.\n- **`tools/`** holds the `affine` CLI (`yarn affine dev` and `yarn affine build`) plus CI and changelog helpers.\n- **`tests/`** holds the e2e and other tests, and `scripts/` holds build and release scripts.\n- **`docs/`** and **`.docker/`** hold documentation and the dev and self-host Docker setups.\n\n**Apps built from it** (`packages/frontend/apps/`)\n\n- `web` is the browser app, and `admin` is the admin dashboard.\n- `electron` and `electron-renderer` make up the desktop app.\n- `mobile` is the mobile web build, which `ios` and `android` wrap as native apps.\n\n**What the server is for**\n\nThe server is the NestJS backend, used for cloud and self-hosted deployments. Its `core/` modules include auth, users, workspaces, permissions and quota. They also include doc storage and sync, realtime sockets, notifications, mail and static file serving. Optional `plugins/` add Copilot (AI), OAuth, payment, licensing, a calendar, a captcha, an indexer, a worker and GCloud support. It exposes a GraphQL API (`schema.gql`) and websockets. It stores data with Prisma, and the Prisma schema is `schema.prisma`.\n\n**What it needs to run**\n\n- Node 22.12 or newer, with Yarn.\n- Postgres with the pgvector extension, read from `DATABASE_URL`.\n- Redis, which the realtime layer uses for its socket.io adapter.\n- The compiled Rust native module, so a Rust toolchain is needed to build it.\n- A mail server for email. The dev compose file uses Mailpit.\n- Object or blob storage. It can be local or S3-compatible.\n- Config in `config.example.json` and environment variables.\n\nFor local development, `.docker/dev/compose.yml.example` starts Postgres (pgvector), Redis and Mailpit. Elasticsearch is commented out there, and I didn't check whether the indexer plugin needs it."
+}

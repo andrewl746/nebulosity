@@ -1,0 +1,62 @@
+{
+  "id": "vscode-bp7",
+  "source": "VS Code's own docs at cc3fec88: .github/instructions/disposable.instructions.md, .github/skills/memory-leak-audit/SKILL.md, .github/instructions/coding-guidelines.instructions.md, .github/instructions/writing-tests.instructions.md",
+  "points": [
+    {
+      "id": "BP7.1",
+      "text": "a resource that must be released, a listener included, is an `IDisposable` with a `dispose()` method; subscribing to an event returns an `IDisposable` that removes the listener",
+      "check": "Doc: .github/instructions/disposable.instructions.md L5-7 (`IDisposable`, `dispose(): void`); .github/skills/memory-leak-audit/SKILL.md L52-65 and L137 (an event subscription is registered with `this._register(...)`, assigned to a `MutableDisposable`, or returned to the caller as an `IDisposable`). Code (author's pointers, for the re-checker): src/vs/base/common/lifecycle.ts L312 (interface IDisposable); src/vs/base/common/event.ts L46-47 (an `Event<T>` is a function that takes a listener and returns an `IDisposable`).",
+      "holds": true,
+      "note": "Doc: .github/instructions/disposable.instructions.md L6-7 (`IDisposable`, `dispose(): void`). Code: src/vs/base/common/lifecycle.ts L312-314 (interface IDisposable), its doc comment L308 ('An event listener that removes itself when `.dispose()` is called'); src/vs/base/common/event.ts L46-47 (an `Event<T>` takes a listener and returns an `IDisposable`). In scope."
+    },
+    {
+      "id": "BP7.2",
+      "text": "classes extend `Disposable`, whose own `DisposableStore` (`_store`) holds what they register with `this._register(...)`, so disposing the object disposes its children; disposables are registered right after they're created",
+      "check": "Doc: disposable.instructions.md L8-11 (`Disposable` with `this._store: DisposableStore` and `this._register<T extends IDisposable>(t: T): T`; 'Try to immediately register created disposables!'); .github/instructions/coding-guidelines.instructions.md L65 ('Register disposables immediately after creation — use `DisposableStore`, `MutableDisposable`, or `this._register()`'). Code (author's pointers, for the re-checker): lifecycle.ts L526 (abstract class Disposable), L535 (`protected readonly _store = new DisposableStore()`), L551 (`_register`).",
+      "holds": true,
+      "note": "Doc: disposable.instructions.md L8-11 (`Disposable` with `this._store: DisposableStore`, `this._register`, 'Try to immediately register created disposables!'); .github/instructions/coding-guidelines.instructions.md L65 ('Register disposables immediately after creation'). Code: lifecycle.ts L526 (abstract class Disposable), L535 (`protected readonly _store = new DisposableStore()`), L542-546 (dispose() disposes _store), L551-556 (`_register` adds to _store). In scope."
+    },
+    {
+      "id": "BP7.3",
+      "text": "a `DisposableStore` collects disposables to release together (`add`, `clear`, `dispose`), and `toDisposable(fn)` turns a cleanup function into a disposable",
+      "check": "Doc: disposable.instructions.md L12-15 (`DisposableStore` with `add` and `clear`; `toDisposable(fn: () => void): IDisposable`); memory-leak-audit/SKILL.md L104-110 (an item-scoped `DisposableStore`). Code (author's pointers, for the re-checker): lifecycle.ts L416 (class DisposableStore), L405 (toDisposable).",
+      "holds": true,
+      "note": "Doc: disposable.instructions.md L12-15 (`DisposableStore` with `add` and `clear`; `toDisposable(fn)`). Code: lifecycle.ts L405-407 (toDisposable), L416 (class DisposableStore), L432 dispose(), L454 clear(), L469 add(). In scope."
+    },
+    {
+      "id": "BP7.4",
+      "text": "a `MutableDisposable` holds one disposable at a time, disposing the old value when it's replaced or cleared and the current one when it's disposed itself; it's the pattern for something a method creates each time it runs, where `this._register(...)` would pile up listeners",
+      "check": "Doc: disposable.instructions.md L17-20 ('A value that enters a mutable disposable (at least once) will be disposed the latest when the mutable disposable is disposed (or when the value is replaced or cleared)'); memory-leak-audit/SKILL.md L50-66 (Step 3: 'Objects created in methods called multiple times must NOT be registered to the class `this._register()`. Use `MutableDisposable` or return `IDisposable` to the caller') and L137. Code (author's pointers, for the re-checker): lifecycle.ts L565 (class MutableDisposable).",
+      "holds": true,
+      "note": "Doc: disposable.instructions.md L17-20 (value disposed when replaced, cleared or when the mutable disposable is disposed); .github/skills/memory-leak-audit/SKILL.md L50-66 (Step 3: objects created in methods called multiple times must not go to `this._register()`; use `MutableDisposable`) and L137. Code: lifecycle.ts L565 (class MutableDisposable); the value setter disposes the old value (L592-602), clear() (L607-609), dispose() disposes the current value (L611-616). In scope."
+    },
+    {
+      "id": "BP7.5",
+      "text": "DOM event listeners are added with `addDisposableListener()`, which returns a disposable, never with raw `addEventListener()` or `.onclick`-style properties",
+      "check": "Doc: memory-leak-audit/SKILL.md L22-32 (Step 1: 'Never use raw `.onload`, `.onclick`, or `addEventListener()` directly. Always use `addDisposableListener()`') and L135. Code (author's pointers, for the re-checker): src/vs/base/browser/dom.ts L253-255 (the addDisposableListener overloads return IDisposable).",
+      "holds": true,
+      "note": "Doc: memory-leak-audit/SKILL.md L22-32 (Step 1: 'Never use raw `.onload`, `.onclick`, or `addEventListener()` directly. Always use `addDisposableListener()`') and L135. Code: src/vs/base/browser/dom.ts L253-257 (addDisposableListener overloads return IDisposable, a DomListener whose dispose removes the listener, L245). Holds as the documented rule: raw `.addEventListener(` still appears 229 times in 74 non-test files under src/vs (against 1,585 addDisposableListener calls), so 'never' describes the rule, not every line of code. In scope."
+    },
+    {
+      "id": "BP7.6",
+      "text": "for an event that should be handled only once (a lifecycle or close event), `Event.once()` wraps it so the listener removes itself after the first call",
+      "check": "Doc: memory-leak-audit/SKILL.md L36-46 (Step 2: 'Use `Event.once()` for events that should only fire once (lifecycle events, close events, first-change events)'; 'auto-removes after first invocation') and L136. Code (author's pointers, for the re-checker): src/vs/base/common/event.ts L96 (`export function once<T>` in the Event namespace).",
+      "holds": true,
+      "note": "Doc: memory-leak-audit/SKILL.md L36-46 (Step 2: `Event.once()` for lifecycle, close and first-change events; 'auto-removes after first invocation') and L136. Code: src/vs/base/common/event.ts L96-119 (`Event.once` disposes its subscription on the first event). In scope."
+    },
+    {
+      "id": "BP7.7",
+      "text": "a store tied to a model's lifetime adds `model.onWillDispose(() => store.dispose())` to itself, so it is cleaned up when the model goes away",
+      "check": "Doc: memory-leak-audit/SKILL.md L80-90 (Step 4: 'When creating a `DisposableStore` tied to a model's lifetime, register `model.onWillDispose(() => store.dispose())` to the store itself', naming chatEditingSession.ts, fileBasedRecommendations.ts and testingContentProvider.ts) and L138. Code (author's pointers, for the re-checker): src/vs/workbench/contrib/chat/browser/chatEditing/chatEditingSession.ts L407-408; src/vs/workbench/contrib/extensions/browser/fileBasedRecommendations.ts L262; src/vs/workbench/contrib/testing/common/testingContentProvider.ts L81.",
+      "holds": true,
+      "note": "Doc: memory-leak-audit/SKILL.md L80-90 (Step 4: register `model.onWillDispose(() => store.dispose())` to the store itself; names chatEditingSession.ts, fileBasedRecommendations.ts, testingContentProvider.ts) and L138. Code: src/vs/workbench/contrib/chat/browser/chatEditing/chatEditingSession.ts L407-408; src/vs/workbench/contrib/extensions/browser/fileBasedRecommendations.ts L262; src/vs/workbench/contrib/testing/common/testingContentProvider.ts L81. In scope, though the most specialized of the eight."
+    },
+    {
+      "id": "BP7.8",
+      "text": "leaks are caught in unit tests: a suite calls `ensureNoDisposablesAreLeakedInTestSuite()`, which tracks every disposable created during each test and fails the test if any is left undisposed",
+      "check": "Doc: memory-leak-audit/SKILL.md L115-129 (Step 6: 'Every test suite that creates disposable objects must call `ensureNoDisposablesAreLeakedInTestSuite()`') and L140; .github/instructions/writing-tests.instructions.md L30-43 ('Always use `ensureNoDisposablesAreLeakedInTestSuite()` to catch disposal leaks'). Code (author's pointers, for the re-checker): src/vs/base/test/common/utils.ts L53-73 (installs a DisposableTracker in setup; in teardown throws 'There are N undisposed disposables!' unless the test already failed); lifecycle.ts L229 (setDisposableTracker), L271 (trackDisposable).",
+      "holds": true,
+      "note": "Doc: memory-leak-audit/SKILL.md L115-129 (Step 6) and L140; writing-tests.instructions.md L30-43. Code: src/vs/base/test/common/utils.ts L53-73 (setup installs a DisposableTracker via setDisposableTracker; teardown throws 'There are N undisposed disposables!' unless the test already failed); lifecycle.ts L229 (setDisposableTracker), L271-274 (trackDisposable, called from the constructors of Disposable, DisposableStore, MutableDisposable). In scope."
+    }
+  ]
+}

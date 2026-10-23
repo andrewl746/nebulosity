@@ -41,6 +41,19 @@ describe("loadDefinition", () => {
         expect(loadDefinition(path.join(checkout, "eval2")).shell).toBeUndefined();
     });
 
+    it("reads Eval #3's sentence, gate and a repo's project, and refuses other values in a sentence", () => {
+        const def = loadDefinition(write({ ...good, sentence: "rules", gate: "eval3", repos: { vscode: { ...good.repos.vscode, project: "src/tsconfig.json" } } }));
+        expect([def.sentence, def.gate, def.repos.vscode.project]).toEqual(["rules", "eval3", "src/tsconfig.json"]);
+        expect(() => loadDefinition(write({ ...good, sentence: "loud" }))).toThrow('eval.json: sentence, when given, is "scripts" or "rules".');
+        expect(() => loadDefinition(write({ ...good, gate: "d2" }))).toThrow('eval.json: gate, when given, is "eval3".');
+        expect(() => loadDefinition(write({ ...good, repos: { vscode: { ...good.repos.vscode, project: 3 } } }))).toThrow("eval.json: repo vscode's project, when given, is a tsconfig's path inside it.");
+    });
+
+    it("leaves Eval #1's and Eval #2's definitions without a sentence or a gate, and gives Eval #3 both", () => {
+        expect([loadDefinition("eval").sentence, loadDefinition("eval2").sentence, loadDefinition("eval2").gate]).toEqual([undefined, undefined, undefined]);
+        expect([loadDefinition("eval3").sentence, loadDefinition("eval3").gate]).toEqual(["rules", "eval3"]);
+    });
+
     it("refuses an unknown arm, a repeat count outside 1–3, and a commit that isn't a full sha, each in a sentence", () => {
         expect(() => loadDefinition(write({ ...good, arms: ["baseline", "other"] }))).toThrow('eval.json: arms may be "baseline", "nebulosity" and "nebulosity-upfront", not "other".');
         expect(() => loadDefinition(write({ ...good, repeats: 4 }))).toThrow("eval.json: repeats is 1, 2 or 3.");

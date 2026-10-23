@@ -1,0 +1,13 @@
+{
+  "id": "6e2097f1",
+  "points": [
+    {"id": "AFFINE-BP5.1", "score": 1, "quote": "edgeless mode is not a separate document. The page and its whiteboard are one BlockSuite block tree stored in a single Yjs doc, and \"edgeless\" is only a different view of it."},
+    {"id": "AFFINE-BP5.2", "score": 1, "quote": "The root `affine:page` block has an `affine:surface` child and one or more `affine:note` children."},
+    {"id": "AFFINE-BP5.3", "score": 1, "quote": "Canvas-native elements (shape, brush, connector, group, mindmap, text, highlighter) are not blocks. They live in the `affine:surface` block's `elements` prop"},
+    {"id": "AFFINE-BP5.4", "score": 1, "quote": "The note blocks hold the paragraphs, lists and so on that page mode renders. Page mode shows the notes as a linear document. Edgeless mode shows the same notes as movable cards on the canvas."},
+    {"id": "AFFINE-BP5.5", "score": 0.5, "quote": "Elements that are heavier or document-like are real blocks. These are `affine:note`, `affine:frame`, `affine:image`... they are listed as allowed children of the surface block in its schema metadata."},
+    {"id": "AFFINE-BP5.6", "score": 1, "quote": "every element and every canvas block has an `xywh` field. It is a serialized string such as \"[x,y,w,h]\"."},
+    {"id": "AFFINE-BP5.7", "score": 1, "quote": "a fractional-index string in the `index` field (for example 'a0') sets the z-order... The layer manager sorts blocks and canvas elements together by this index."},
+    {"id": "AFFINE-BP5.8", "score": 0.5, "quote": "A `group` element ... keeps a `children` `Y.Map<boolean>` that maps child id to `true`... The group's bounds are derived from its children. Frames ... hold child ids in a similar way."}
+  ]
+}

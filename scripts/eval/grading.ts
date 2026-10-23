@@ -6,7 +6,10 @@
  *   sheets: writes one sheet per big-picture run to eval/grading/sheets/<8 hex>.json, { id, question, points that hold,
  *           answer }, with no arm and no run name, and keeps the id -> run map in .nebulosity/eval/grading-key.json. It
  *           is idempotent: a run that already has a sheet keeps its id and file; only new runs get a new sheet. The
- *           answers are not redacted, so it prints how many mention "nebulosity" or "mcp__" (the results disclose it).
+ *           answers of Eval #1 and Eval #2 are not redacted, so it prints how many mention "nebulosity" or "mcp__" (the
+ *           results disclose it). The sheets of an eval with "gate": "eval3" are redacted (redact.ts, R-M, R-AD): what was
+ *           replaced goes in .nebulosity/<eval>/redactions.json (sheet id -> list), and merge publishes it as
+ *           <eval>/grading/redactions.json.
  *   merge:  reads each grader's reply (eval/grading/<id>.json), checks its shape, joins it to its run through the key
  *           and writes eval/grading/grades.json (the shape score.ts reads: run name -> point id -> { score, sentence }),
  *           then copies the key to eval/grading/key.json: grading is done, so the mapping is published. It refuses
@@ -19,6 +22,7 @@ import fs from "fs";
 import path from "path";
 import zlib from "zlib";
 import { loadDefinition } from "./definition";
+import { redact, type Redaction } from "./redact";
 import { parseRunName, type Rubric, type RunGrade } from "./score";
 import { summarizeRun } from "./transcript";
 
@@ -34,6 +38,13 @@ export function buildSheet(id: string, question: string, rubric: Rubric, answer:
     const unchecked = rubric.points.find((p) => p.holds === null);
     if (unchecked !== undefined) throw new Error(`${rubric.id}: point ${unchecked.id} is unchecked (holds: null); settle it before grading`);
     return { id, question, points: rubric.points.filter((p) => p.holds === true).map((p) => ({ id: p.id, text: p.text })), answer };
+}
+
+/** A sheet's answer: redacted for Eval #3 (R-AD), as it is otherwise; the list says what was replaced. */
+export function sheetAnswer(finalText: string, redactAnswers: boolean): { answer: string; redactions: Redaction[] } {
+    if (!redactAnswers) return { answer: finalText, redactions: [] };
+    const r = redact(finalText);
+    return { answer: r.text, redactions: r.redactions };
 }
 
 /** Why a reply can't be used for its sheet: an empty list means it is fine. */
@@ -114,9 +125,11 @@ const writeJson = (file: string, value: unknown): void => {
 
 type QuestionsFile = { questions: { id: string; family: string; prompt: string; rubric?: string }[] };
 
-function sheets(checkout: string, evalName: string): void {
+function sheets(checkout: string, evalName: string, redactAnswers: boolean): void {
     const keyFile = `${checkout}/.nebulosity/${evalName}/grading-key.json`;
+    const redactionsFile = `${checkout}/.nebulosity/${evalName}/redactions.json`;
     const key: Key = fs.existsSync(keyFile) ? readJson<Key>(keyFile) : {};
+    const redactions: Record<string, Redaction[]> = redactAnswers && fs.existsSync(redactionsFile) ? readJson<Record<string, Redaction[]>>(redactionsFile) : {};
     const sheetsDir = `${checkout}/${evalName}/grading/sheets`;
     const bigPicture = readJson<QuestionsFile>(`${checkout}/${evalName}/questions.json`).questions.filter((q) => q.family === "bigPicture");
     const runsDir = `${checkout}/${evalName}/runs`;
@@ -136,8 +149,13 @@ function sheets(checkout: string, evalName: string): void {
         if (answer === "") empty++;
         let id: string;
         do id = crypto.randomBytes(4).toString("hex"); while (key[id] !== undefined);
-        writeJson(`${sheetsDir}/${id}.json`, buildSheet(id, q.prompt, readJson<Rubric>(`${checkout}/${q.rubric}`), answer));
+        const shown = sheetAnswer(answer, redactAnswers);
+        writeJson(`${sheetsDir}/${id}.json`, buildSheet(id, q.prompt, readJson<Rubric>(`${checkout}/${q.rubric}`), shown.answer));
         key[id] = name;
+        if (redactAnswers){
+            redactions[id] = shown.redactions;
+            writeJson(redactionsFile, redactions);
+        }
         writeJson(keyFile, key);   // after each sheet, so a crash can't leave a sheet without its key
         made++;
     }
@@ -148,7 +166,21 @@ function sheets(checkout: string, evalName: string): void {
         if (fs.existsSync(file) && /nebulosity|mcp__/i.test(readJson<Sheet>(file).answer)) mentions++;
     }
     console.log(`new sheets: ${made} (${Object.keys(key).length} in all) in ${sheetsDir}; key: ${keyFile}`);
-    console.log(`answers mentioning nebulosity or mcp__: ${mentions} of ${Object.keys(key).length} (case-insensitive; the answers are not redacted)`);
+    if (redactAnswers){
+        // the sheets hold redacted answers: what still names Nebulosity should be 0; the index / import graph count is on
+        // the answers before redaction (re-derived from the runs), so rule 3's own "the index" doesn't add to it
+        let ordinary = 0;
+        for (const id of Object.keys(key)){
+            const run = `${runsDir}/${key[id]}.jsonl.gz`;
+            if (!fs.existsSync(run)) continue;
+            const before = summarizeRun(zlib.gunzipSync(fs.readFileSync(run)).toString("utf8")).finalText ?? "";
+            if (/the index|the import graph/i.test(before)) ordinary++;
+        }
+        const withRedactions = Object.values(redactions).filter((l) => l.length > 0).length;
+        console.log(`answers still mentioning nebulosity or mcp__ after redaction: ${mentions} of ${Object.keys(key).length} (expected 0; any is read and the rules extended before grading)`);
+        console.log(`answers naming the index or the import graph: ${ordinary} of ${Object.keys(key).length} (ordinary words, kept; R-AD)`);
+        console.log(`answers with redactions: ${withRedactions} of ${Object.keys(key).length}`);
+    } else console.log(`answers mentioning nebulosity or mcp__: ${mentions} of ${Object.keys(key).length} (case-insensitive; the answers are not redacted)`);
     if (empty > 0) console.log(`${empty} of the new answers have no final text; their sheets carry an empty answer.`);
 }
 
@@ -202,6 +234,8 @@ function merge(checkout: string, evalName: string): void {
     }
     writeJson(`${checkout}/${evalName}/grading/grades.json`, grades);
     writeJson(`${checkout}/${evalName}/grading/key.json`, Object.fromEntries(Object.entries(key).sort(([a], [b]) => a.localeCompare(b))));
+    const redactionsFile = `${checkout}/.nebulosity/${evalName}/redactions.json`;
+    if (fs.existsSync(redactionsFile)) fs.copyFileSync(redactionsFile, `${checkout}/${evalName}/grading/redactions.json`);
     if (reviewNote !== "") console.log(reviewNote.trim());
     console.log(`${Object.keys(grades).length} runs graded -> ${evalName}/grading/grades.json; the key is published as ${evalName}/grading/key.json`);
 }
@@ -232,14 +266,17 @@ function main(): void {
         process.exit(1);
     }
     let evalName: string;
+    let redactAnswers: boolean;
     try{
-        evalName = path.basename(loadDefinition(path.resolve(checkout, args.evalDir)).dir);
+        const definition = loadDefinition(path.resolve(checkout, args.evalDir));
+        evalName = path.basename(definition.dir);
+        redactAnswers = definition.gate === "eval3";
     } catch(e){
         // a folder with no eval.json, or one that isn't valid: a sentence, not a stack trace
         console.error(`${args.evalDir}: ${(e as Error).message.split("\n")[0]}`);
         process.exit(1);
     }
-    if (args.command === "sheets") sheets(checkout, evalName);
+    if (args.command === "sheets") sheets(checkout, evalName, redactAnswers);
     else merge(checkout, evalName);
 }
 

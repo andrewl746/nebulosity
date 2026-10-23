@@ -1,0 +1,31 @@
+{
+  "id": "9c0e34a1",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Inside each layer of `src/vs`, the environment folders and their import rules are listed in `.github/instructions/source-code-organization.instructions.md`. I compared them with the actual import counts from the import graph.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any environment, using basic JavaScript only | `common` only |\n| `browser` | Web or DOM environments | `common` |\n| `node` | Node.js | `common` |\n| `electron-browser` | Electron renderer: browser plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | Electron utility process | `common`, `node` |\n| `electron-main` | Electron main process | `common`, `node`, `electron-utility` |\n\nTwo points are easy to miss:\n- `browser` and `node` are siblings, and neither may import the other.\n- `electron-browser` may import `browser` but not `node`.\n\nThe import graph mostly agrees with this. These are the counts of imports from each folder type:\n- `common` imports only `common` (17,809).\n- `browser` imports `browser` and `common`.\n- `node` imports `node` and `common`.\n- `electron-browser` imports `electron-browser`, `browser` and `common`.\n- `electron-main` imports `electron-main`, `common` and `node`.\n\nI didn't check whether any individual file breaks a rule, so treat the graph as a summary and not a full audit.\n\n`test` folders also recur (263 of them). They aren't an environment, and they import `common` most often, with a few imports of `browser`, `node` and other `test` folders.\n\nSome layers don't use every environment folder. For example, the `editor` layer has no `node` or `electron-*` dependencies. The layers themselves are ordered, with `editor` below `workbench` and `code` as the desktop entry point. Workbench contributions share internals through a single `common` file."
+}

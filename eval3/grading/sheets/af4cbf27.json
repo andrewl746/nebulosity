@@ -1,0 +1,39 @@
+{
+  "id": "af4cbf27",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "The layers below are in `src/vs`, lowest first. The descriptions come from `.github/copilot-instructions.md` and `src/vs/sessions/LAYERS.md`. I didn't run the layer checker (`npm run valid-layers-check`).\n\n**Layers, lowest first**\n\n1. **`base`** holds foundation utilities and cross-platform abstractions: collections, events, lifecycle, strings, URIs, async helpers and basic DOM widgets. It depends on nothing above it.\n2. **`platform`** holds platform services and the dependency-injection infrastructure: files, configuration, storage, log, instantiation and the like. It may use `base`.\n3. **`editor`** is the Monaco text editor: the model, view, language services, syntax highlighting and editing features. It may use `base` and `platform`.\n4. **`workbench`** is the main application for desktop and web. It may use `base`, `platform` and `editor`. It contains:\n   - `browser/`: core UI such as parts, layout and actions.\n   - `services/`: service implementations.\n   - `contrib/`: feature contributions such as git, debug, search and terminal.\n   - `api/`: the extension host and the VS Code extension API implementation.\n5. **`sessions`** is the agent-sessions window, a dedicated workbench-like layer for agentic workflows. It sits above `workbench`.\n\n**Other top-level folders**\n- **`code`** is the Electron main-process code.\n- **`server`** is the server-specific code for remote and web hosting.\n- **`amdX.ts`, `nls.ts` and `monaco.d.ts`** are loose files at the root, not layers.\n\n`code` and `server` are entry-point-style code. They sit on top of the layers above and use them.\n\n**Dependency rules**\n- Dependencies point downward only: `base` ← `platform` ← `editor` ← `workbench` ← `sessions`. A lower layer never imports from a higher one. For example, `base` can't import `platform`, and `workbench` can't import `sessions`.\n- `sessions` may import from `workbench`, but not the reverse.\n- Inside a layer, `common/` is the most portable code. `browser/` may use `common/`. `node/`, `electron-browser/` and `electron-main/` are environment-specific. A folder for a lighter environment can't import from a heavier one. For example, `common` can't import `browser` or `node`.\n- Inside `workbench`, `contrib/` features should depend on `services/` and `browser/`, not on each other, and nothing else should import `contrib/` except through designated entry points.\n- Inside `sessions`, entry points can import everything. `contrib/*` and `services/*` come next, and the sessions core (`browser/`, `common/`, `electron-browser/`) is at the bottom.\n\nThese rules are enforced by the `local/code-import-patterns` ESLint rule. The broader rules are in `.github/instructions/source-code-organization.instructions.md`. I haven't read that file, so the within-layer rules above come from general knowledge of the repo rather than from it."
+}

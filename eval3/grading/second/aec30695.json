@@ -1,0 +1,10 @@
+{ "id": "aec30695", "points": [
+  { "id": "AFFINE-BP3.1", "score": 1, "quote": "`defineBlockSchema({ flavour, metadata, toModel })` is in `model/block/zod.ts`. The flavour is a namespaced string, e.g. `'affine:divider'`. `metadata` holds `version`, `role` (e.g. `'content'`) and the allowed `children`. `props` gives the block's data shape." },
+  { "id": "AFFINE-BP3.2", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP3.3", "score": 0.5, "quote": "`metadata` holds `version`, `role` (e.g. `'content'`) and the allowed `children`." },
+  { "id": "AFFINE-BP3.4", "score": 1, "quote": "The model is a class extending `BlockModel<Props>` (`model/block/block-model.ts`), e.g. `DividerBlockModel`." },
+  { "id": "AFFINE-BP3.5", "score": 1, "quote": "The view is a Lit custom element extending `BlockComponent<Model>` (`view/element/block-component.ts`). ... `BlockViewExtension(flavour, literal\\`tag-name\\`)` (`extension/block-view.ts`) maps a flavour to a static-html tag." },
+  { "id": "AFFINE-BP3.6", "score": 0.5, "quote": "Widgets attach to a block through `WidgetViewExtension`." },
+  { "id": "AFFINE-BP3.7", "score": 1, "quote": "The store half is a class extending `StoreExtensionProvider` ... Its `setup(context)` calls `context.register(...)` with the schema extension and the adapter extensions. The view half is a class extending `ViewExtensionProvider` ... Other per-block pieces, such as markdown shortcuts and toolbar config, are registered here too." },
+  { "id": "AFFINE-BP3.8", "score": 0.5, "quote": "Its `effect()` runs `effects()`." }
+] }

@@ -1,0 +1,39 @@
+{
+  "id": "290400e7",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "Under `src/vs` the layers run bottom to top as follows. This comes from the import graph plus the folder summaries. I didn't open `.github/instructions/source-code-organization.instructions.md`, which is the maintainers' own account.\n\n**Layers, bottom to top**\n\n0. **`nls.ts`** holds localization helpers and the NLS configuration types.\n1. **`base/`** holds foundational, dependency-free primitives such as utilities, events, lifecycle and DOM helpers. It has about 500 files.\n2. **`amdX.ts`** is an AMD loader for node modules.\n3. **`platform/`** holds the core services and their contracts. These are dependency-injected services such as files, configuration, storage and quick input. It has about 3,100 files.\n4. **`editor/`** is the Monaco code editor core. It has about 880 files.\n5. **`workbench/`** holds the VS Code application and its features. It has about 4,600 files, most of them under `contrib/`.\n6. **Top layer**, three siblings:\n   - **`code/`** is the startup code for desktop, CLI and web.\n   - **`server/`** is the remote server runtime.\n   - **`sessions/`** is the separate Agents window application, built on the workbench.\n\n`monaco.d.ts` declares the public Monaco types and isn't linked to the layers.\n\n**Dependency rule**\n\nEach layer may import only from the layers below it. For example, `workbench` may use `editor`, `platform` and `base`, but `base` may not use `platform`. Nothing under `src/vs` imports anything outside it. `extensions/`, `build/` and the `src/*.ts` entry points import into it.\n\n**Violations the graph shows (94 imports)**\n\n- `workbench/` → `sessions/` accounts for 89 of the 94. Examples are `agentHostCustomizationService.ts` and `fixtureUtils.ts`, a test fixture. This is the Agents window code being reached from the workbench's chat features.\n- `platform/` → `editor/` accounts for 3. All three are in `platform/agentHost/node/diffWorkerMain.ts`, which uses the editor's diff computer.\n- `base/` → `platform/` and `base/` → `amdX.ts` account for 1 each. Both are in test files, `actionbar.test.ts` and `filters.perf.test.ts`.\n\n**Folder conventions within a layer**\n\nI didn't run the conventions report, so this part is from general knowledge. Inside each layer, code is usually split into `common`, `browser`, `node`, `electron-main` and similar environment folders. Code in `common` is not supposed to depend on `browser` or `node`."
+}

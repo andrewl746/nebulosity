@@ -1,3 +1,981 @@
+# 2026 10 16 Eval #3 — Claude Code with and without Nebulosity, on VS Code, AFFiNE and Theia
+
+**Status: run, scored and published (2026-10-16): 378 runs (366 single, 12 task sessions) on Claude Code 2.1.301, with the engine frozen at `2f913ad` (2026-10-16, before the pilot). The ship gate failed: conditions 1, 2, 3 and 5. The results, losses included, are under "Results" at the end of this section.** Everything in this section down to "Results", apart from this status line and the "In short" block below it, was written before the first run: the arms, the setup, the questions and their truths, the scoring, time to relevant context and the ship gate. The gate does not change after the first run.
+
+**In short:** the ship gate failed. Conditions 1, 2, 3 and 5 failed; V, 4 and 6 passed.
+- *The comparison was clean:* Claude Code alone had a refused command in 9 of its 189 runs and Claude Code with Nebulosity in 8 of 189, under V's 5% (Eval #2: 81 and 18 of 135).
+- *What V1.7 aimed at didn't happen.*
+  - On the new questions, with Nebulosity Claude Code reached the files an answer needs no sooner than alone: median ratios 0.98, 1.01 and 1.04 on VS Code, AFFiNE and Theia, where the gate asked for 0.25.
+  - On the questions about calls through injected services and the tasks, it took 0.88–0.98 of the time and 0.98–1.01 of the cost, where the gate asked for 0.5.
+  - Its mean error on the new questions was 1.36 times Claude Code alone's, not half (scores 0.983 against 0.988).
+  - It called a Nebulosity tool in 80 of 138 runs (0.58), and `calls` in 24 of its 66 call and task runs.
+- *Why, from the transcripts:* nearly every run in both arms began with a `git grep` for the method's name, which on these questions names most of the answer at once. On AFFiNE the calls index missed most callers of the drawn methods, so the runs that called `calls` grepped anyway.
+- *What it measurably did was the import walk.* On Eval #2's graph questions, now without refusals in either arm, it took 0.63 (VS Code) and 0.38 (AFFiNE) of the time per question, at 0.92 and 0.56 of the cost, scoring 1.00 against 0.98. On Theia's held-out graph questions it took 0.58 of the time at 0.95 of the cost (0.978 against 1.000). It reached those questions' files in 0.41 and 0.33 of the time.
+- *No loss elsewhere* held within the gate's margins (big-picture +0.066, +0.003 and −0.021; the sessions level), and the per-turn cost was 2,368–2,372 tokens.
+- *By kind, grouped after the runs (added 2026-10-22, ADR-061):* the questions whose answer takes more than one step over the imports were 2.3–4.4 times as fast with Nebulosity on VS Code and AFFiNE and 1.5–3.2 on Theia, at 1.00 against 0.95–1.00. The one-step ones came out about even. See "By kind, grouped after the runs".
+
+Eval #3 asks whether Claude Code reaches the files a question needs faster, answers better, and spends less with Nebulosity's MCP server than without it, on three big repos. Two of the repos are Eval #2's. The third, Theia, is held out from all tuning and indexed in free mode. It adds what Eval #2 lacked:
+- questions about calls through injected services, which grep can't answer cheaply: who calls a method, what breaks if its signature changes, who has to adopt a change, where a service is injected, and planning a signature change;
+- a measure of how fast each arm reaches the relevant context;
+- a rules sentence against the refused commands that confounded Eval #2's comparison.
+
+Losses will be reported beside wins. The decisions are ADR-060, which amends ADR-057. The plan is `docs/plans/2026-10-15-v1-7-calls-and-context.md` (D1, D2, the rulings R-A to R-AL, and Tasks 14–18). Eval #2 stays whole below this section.
+
+Where things are:
+- The definition (repos, pins, arms, repeats, scripts, the rules sentence, the gate and the pilot): `eval3/eval.json`.
+- The questions and format lines: `eval3/questions.json`. The two task sessions: `eval3/sessions.json`.
+- The candidates and the draw: `eval3/candidates.json`, with Theia's graph candidates in `eval3/candidates-theia-graph.json.gz`.
+- The truths: `eval3/truth/<id>.json`. The new ones are built from `eval3/truth-specs.json`.
+  - The hand decisions on imports are in `eval3/truth/adjudicated.json` (Eval #2's 32, copied, then Theia's 37), and those on calls in `eval3/truth/calls-adjudicated.json`.
+  - Grading-time verdicts on the models' chain and cycle steps go in `eval3/truth/steps.json`.
+  - The files each answer needs, for time to relevant context, are in `eval3/truth/needed.json`.
+- The rubrics: `eval3/rubric/<id>.json`.
+- The dev set, which is never scored and whose targets appear nowhere here: `eval3/dev/`.
+- The truth builder, the checker's call truths, the draw, the runner, the scorer and the gate: `scripts/eval/`.
+- Kept transcripts will go in `eval3/runs/`, scrubbed, leak-scanned and gzipped. Raw ones and each run's scratch folder go in `.nebulosity/eval3/raw/`, which git ignores.
+
+## The arms
+
+- **A, baseline:** Claude Code alone, with its read-only built-in tools, its subagents, and Node.js scripts in a scratch folder (below).
+- **N, Nebulosity:** the same, plus Nebulosity's MCP server.
+  - It is registered the way `nebulosity setup` registers it, plus `NEBULOSITY_LIVE=off`, so no live event reaches the owner's Map.
+  - It has seven tools (ADR-056 as amended, ADR-059): `overview`, `describe`, `search`, `imports`, `architecture`, `calls` and `show_on_map`.
+  - The six that answer questions carry `_meta["anthropic/alwaysLoad"]: true`, so they load without ToolSearch. `show_on_map` stays deferred.
+  - The registration carries no `alwaysLoad`.
+  - It answers about the index of the repo the run is in. Theia's index is in free mode (R-K): structure, imports and calls, with no summaries.
+
+A and N differ only in the MCP config file. The prompts, the scratch folder's rules and everything else are the same, and no prompt names Nebulosity.
+
+## Setup
+
+| What | Value |
+|---|---|
+| Claude Code | 2.1.301 in `eval3/eval.json`'s `claudeVersion`, pinned at the pilot (Task 19): `claude --version` said 2.1.301, so the pin didn't move since the shell check (Task 15). The guard probe and the dev set ran on 2.1.301. The runner refuses to start on any other version, and refuses any run whose init message reports another. |
+| Model | `claude-sonnet-5-5` (R-E) |
+| Effort | `medium` |
+| Limits | A single run: 80 turns, $4 (Claude Code's estimate) and 30 minutes. A task session: one budget of $10 for its four messages, and 60 minutes. |
+| Repos | VS Code at `cc3fec8846d0e678357e476fa611774da26d7e24` (`../vscode`). AFFiNE at `0b69a6da21e8fd35beb85667bb8496d9b3852238` (`../affine`). Theia at `81ea5f939c40c905de91083d07e284bfd7437fac` (`../theia`): the head of `master` when it was cloned on 2026-10-15, a shallow clone of 4,530 tracked files, held out. The runner stops if any HEAD is anything else. |
+| Nebulosity's engine | Frozen at `2f913ad` (`EVAL3_ENGINE`), the commit the pilot starts from (R-N). Nothing in `lib/engine`, `lib/tools`, `lib/index`, `lib/db`, `lib/home.ts`, `lib/config.ts` or `mcp/` changes from then until the results are committed. A bug found in that time is recorded, not fixed, and reported with the results. |
+| Nebulosity's index | The owner's database, current at adapter version 7 for all three repos (VS Code and AFFiNE re-indexed in Task 5, Theia indexed in Task 17; nothing that changes stored facts has changed since, so no re-index): VS Code and AFFiNE with summaries, Theia in free mode (3,772 files and 19,979 import edges, Variety Benchmark #2). The pilot's dry run (2026-10-16) read the index versions VS Code 155, AFFiNE 134 and Theia 2. Every run records the version it saw, and the server opens the database read-only. |
+| Working folder | The repo the question asks about. |
+
+### The command
+
+The prompt goes on stdin. A task session writes its four prompts as stream-json user messages, each one after the previous answer's result. Everything is the same in both arms except the file after `--mcp-config`.
+
+```
+claude -p --output-format stream-json --verbose
+  --model claude-sonnet-5-5 --effort medium
+  --max-turns 80 --max-budget-usd 4
+  --setting-sources project,local
+  --strict-mcp-config --mcp-config <A: eval3/mcp/empty.json, N: .nebulosity/eval3/mcp-nebulosity.json>
+  --permission-mode dontAsk --permission-prompts none
+  --allowedTools Read,Grep,Glob,Agent,Bash(git grep:*),Bash(git ls-files:*),Bash(git log:*),Bash(git show:*),
+                 Bash(rg:*),Bash(grep:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),
+                 Bash(sort:*),Bash(uniq:*),Bash(find:*),mcp__nebulosity,Bash(node:*),Edit(//<scratch>/**)
+  --disallowedTools NotebookEdit,WebFetch,WebSearch,Skill,PowerShell,Monitor
+  --add-dir <scratch>
+  --no-session-persistence
+```
+
+- A task session runs the same command with `--max-budget-usd 10`, followed by `--input-format stream-json --replay-user-messages`.
+- `<scratch>` is the run's own scratch folder, as in Eval #2: a fresh, empty, opaque folder per run, `<system temp folder>/eval-scratch/<16 random hex digits>/`, outside the checkout and every repo. The Edit rule writes its absolute path the way Claude Code's permission rules want it: `//c/…/eval-scratch/<hex>/**`.
+- N's config file is Eval #2's: `{ "mcpServers": { "nebulosity": { "command": "node", "args": ["<checkout>/mcp/launch.mjs"], "env": { "NEBULOSITY_LIVE": "off" } } } }`. `eval3/mcp/empty.json` is `{ "mcpServers": {} }`.
+- `eval3/eval.json` leaves `"shell"` unset, so the `"compound"` preset (`Bash(cd:*)`, `Bash(echo:*)`) stays off and no allow rule is added.
+
+### The scripts rules and the rules sentence
+
+**The scripts rules are Eval #2's.** `Bash(node:*)` is allowed, and so are edits under the run's scratch folder (`Edit(//<scratch>/**)`, with `--add-dir <scratch>`), which covers the Write tool too. Under `dontAsk`, any other edit and any other Bash command is refused. After the run the folder's contents are archived beside the raw transcript and the folder is removed, as in Eval #2.
+
+**The rules sentence** (R-L) ends every prompt of both arms, after the format line, in place of Eval #2's scripts sentence. `<repo root>` and `<scratch>` are absolute paths in drive-letter form with forward slashes.
+- As the plan pinned it (D2): `You're at the repository root, <repo root>: run grep, git grep, git ls-files, ls, cat, head and the like from here, without cd. To compute anything, write a Node.js script into <scratch> with the Write tool (the folder exists) and run it with node, or use node -e. Shell writes (redirects, heredocs, tee, sed -i, mkdir), loops, sed, awk, xargs and paths through .. are refused here. Don't change any file in the repository.`
+- **The runs use the rewording**, the one R-L allows, made after the shell check's first round (2026-10-15): `You're at the repository root, <repo root>, and every command runs from there: never use cd, not even into a subfolder or the scratch folder, and name paths from the root instead (git grep -n foo -- src/a src/b). Allowed: grep, rg, git grep, git ls-files, git log, git show, ls, cat, head, tail, wc, sort, uniq, find and node, alone or piped into one another. Refused: cd, shell loops (for, while), echo, sed, awk, cut, xargs, redirects, heredocs, tee, mkdir and any path with .. in it. To check many files or compute anything, write a Node.js script into <scratch> with the Write tool (the folder exists) and run it with node and its full path, or use node -e. Don't change any file in the repository.`
+- Why it was reworded: the first round refused 5 commands in 19 runs alone and 3 in 19 with Nebulosity, against a bar of 1 per 10 runs in each arm. The causes were shell loops (4), `cd` into a subfolder before `git grep` (2), a pipe into `sed` (1), and `cd` with `node -e` and a redirect (1). The allow list it names is the runner's, plus `node`.
+- After the rewording, the six questions that had a refusal were run again in both arms. That gave 0 refused alone and 1 with Nebulosity (an `awk`, which the run dropped and answered). Counting the latest round of each question, the 19 dev questions stand at 0 refused alone and 1 with Nebulosity, so the shell check passes. No run gave up after a refusal. MCP Dev Set #2 in `docs/BENCHMARKS.md` has the rounds.
+- **The guard probe** (Task 14, 2026-10-15) ran once. `cd /c/…/vscode; git ls-files | wc -l` was refused with "Permission to use Bash has been denied because Claude Code is running in don't ask mode." That is Claude Code's guard on cd-then-git, which caused 33 of Eval #2's 131 refusals. The sentence's "never use cd" is aimed at it.
+
+### Isolation from the owner's own Claude Code setup
+
+As in Eval #2, and on the owner's subscription, never an API key:
+- `--setting-sources project,local` keeps out the owner's plugins, hooks, model and effort.
+- `--strict-mcp-config` keeps out the repo's `.mcp.json`, the owner's own registration of Nebulosity and claude.ai connectors.
+- The child's variables are set and removed as in Eval #2's "Isolation" (the Git Bash path, PowerShell off, auto memory off, claude.ai MCP servers off, the auto-updater off, `NEBULOSITY_LIVE=off`; no API key or auth token, and no `CLAUDE*`, `ANTHROPIC_*` or `MCP_*` name). The runner prints the removed names, never their values.
+- Every run is checked as in Eval #2's "Checked on every run, not assumed": the init message, each repo clean after the run, the checkout's status, the index version, the transcripts scrubbed and scanned, outages re-run, the usage windows. The arms' order alternates by question and by repeat.
+- The repos' own guides stay, as they would for any user there:
+  - VS Code's `AGENTS.md`;
+  - AFFiNE has none at its root;
+  - Theia ships a `CLAUDE.md` (133 lines: commands and architecture notes) and an `AGENTS.md` (148 lines) at its root.
+
+  Both arms see the same files.
+
+## The runs planned
+
+- **The pilot, 28 runs (R-Y)**, one repeat in both arms of 12 single questions (24 runs) and of 2 task sessions (4 runs):
+  - per repo, one breaks question, one task, one new big-picture question and one chain: `vscode-breaks1`, `vscode-task1`, `vscode-bp6` and `vscode-cn1`; `affine-breaks1`, `affine-task1`, `affine-bp5` and `affine-cn1`; `theia-breaks1`, `theia-task1`, `theia-bp1` and `theia-cn1`;
+  - the sessions `vscode-s1` and `affine-s1` (`pilotSessions`), because in Eval #2 every session run by Claude Code alone had a refused command (18 of 18), and condition V counts sessions.
+
+  They run with `npm run eval:run -- --eval eval3 --pilot` and `npm run eval:run -- --eval eval3 --pilot --sessions`. The pilot counts refusals against V before the full count is asked for. Then each run's usage and the extrapolation are reported (Task 19).
+- **The full run:** 61 single questions (VS Code 25, AFFiNE 22, Theia 14) and 2 task sessions, in both arms, three times:
+
+  | Repo | Single runs | Session runs | Runs |
+  |---|---|---|---|
+  | VS Code | 25 × 2 × 3 = 150 | 1 × 2 × 3 = 6 | 156 |
+  | AFFiNE | 22 × 2 × 3 = 132 | 6 | 138 |
+  | Theia | 14 × 2 × 3 = 84 | none | 84 |
+  | **Total** | 366 | 12 | **378** |
+
+  The pilot's 28 are among their first repeats, so 350 remain after it: 342 single runs and 8 session runs. The sessions' 8 questions are asked only inside their sessions, never as single runs.
+- **378 runs, not the plan's 384.** AFFiNE has no adopt question: under R-X, with no adopt candidate passing, it draws a second callers question instead. It has 2 tasks, not 3: R-AF's shortfall, since its only other passing task (`Store.updateBlock`) shares its type with the drawn `Store.resetHistory`. Two tasks on one type would share most of their truth. R-X leaves the count as it was, and the shortfall takes off 6 runs.
+- **Expected usage:** about $35–55 at list price (D2). Eval #2's 270 runs cost $22.26.
+
+## The questions
+
+Prompts are the same in both arms and never name Nebulosity. Each ends with its kind's format line, then the rules sentence. The format lines are `eval3/questions.json`'s `formats`:
+- Eval #2's kinds keep Eval #2's lines (see Eval #2's "The questions").
+- `callers`, `breaks`, `adopt` and `injects` take Eval #1's list line.
+- `task` takes: `End with a line that says ANSWER CHANGE: and then every file to change, one path per line relative to the repository root; then a line that says ANSWER TESTS: and then every test file to run, one per line, with nothing after the list.`
+
+**The call and task prompts** are `callPrompt(kind, target, change)` in `scripts/eval/prompts.ts` (Task 15), from D2's fixed stems and rules. A test pins every prompt to it (`scripts/eval/questions3.test.ts`). D2, verbatim:
+
+- **The call rule sentences** (pinned; `<T>`, `<m>` and the declaring file are named in backticks in each prompt):
+  - *callers* and *adopt:* `Count a file if it calls <m> on a value whose type is <T>, a type that extends <T>, or a class that implements <T> (directly or through a base class); test files count.`
+  - *breaks* (and a task's CHANGE): `Count a file if it calls <m> on a value whose type is <T>, a type that extends <T>, or a class that implements <T> (directly or through a base class), or if it declares <T>, a type that extends <T>, a class that implements <T> or a class that extends mock<<T>>(), where that declaration defines <m>; test files count.`
+  - *injects:* `Count a file if it receives <T> through a constructor parameter typed <T>, a field decorated @inject(<T>), or a call that asks a service container or hook for it (get(<T>), getOptional(<T>), useService(<T>), useServiceOptional(<T>) or useServices({ <T> })); test files count.`
+  - *a task's TESTS:* `A test file should run if it is among the files to change or directly imports one of them, counting imports by this rule: <the import rule>. A test file has a folder named test, tests or __tests__ on its path, or .test. or .spec. in its name.`
+  - On VS Code every call prompt adds `Count only files under src/.` (R-R).
+- **The new kinds' prompts** are built by `scripts/eval/prompts.ts` (Task 15), from fixed stems, with `<T>`, `<m>` and the declaring file in backticks:
+  - *callers:* ``List every file that calls `T.m` (`T` is declared in `<file>`).``
+  - *breaks:* ``If the signature of `T.m` changes (`T` is declared in `<file>`), which files have to change? List them.``
+  - *adopt:* ``<the change, in its source's words> List every file with a call to `T.m` that would have to adopt it (`T` is declared in `<file>`).``
+  - *injects:* ``List every file that has `T` injected (`T` is declared in `<file>`).``
+  - *task:* ``I'm changing the signature of `T.m` (`T` is declared in `<file>`): <the change, in its source's words> Plan it: which files will I have to change, and which tests should I run?``
+  - Each stem is followed by its call rule (a task's by the breaks rule, then the tests rule), then the scope sentence when the question has one: `Count only files under <folder>/.` (a task's adds `, in both lists`). Every VS Code call question has one: `src/` or a folder inside it (R-R, R-AI).
+  - The tests rule's import clause is pinned (R-AH): `counting imports by this rule: any import, export … from, side-effect import, import() or require() statement that refers to the file counts, type-only imports included.`
+
+**Theia's graph prompts** use V1.6's templates verbatim, and Eval #1's list and chain stems with the import rule where those carry it. Each is word for word as Eval #2 asked it (see Eval #2's "The questions"); a check rebuilt nine of Eval #2's prompts from the same templates, exactly.
+- direct list: List every file that directly imports `<file>`. + the import rule;
+- transitive list: List every file that depends on `<file>`, directly or through other files. + the import rule;
+- chain: How does `<from>` end up loading `<to>`? Give the shortest chain of imports. (Eval #1's first chain wording; it carries no import rule);
+- cycle, files nothing imports and entries: Eval #2's templates, the cycle's with the import rule after "A file imports another when this rule counts it:".
+
+**Big-picture prompts** are the author's (below), each followed by Eval #1's format line, `Answer in at most 400 words.`
+
+**Test files** are as in Eval #2: a folder named `test`, `tests` or `__tests__` on the path, or `.test.` or `.spec.` in the name. The call kinds count test files, as their rules say.
+
+### VS Code: 25 single questions and one session
+
+Eleven new questions, then Eval #2's fourteen, unchanged. The truths and rubrics of Eval #2's are copied byte for byte (see "How the truths were made and checked").
+
+| Id | Kind | Target | Source | Truth |
+|---|---|---|---|---|
+| VSCODE-CALLERS1 | callers | `IKeybindingService.appendKeybinding` in `src/vs/platform/keybinding/common/keybinding.ts`, within `src` | PR microsoft/vscode#283994 | 34 files |
+| VSCODE-CALLERS2 | callers | `IWorkbenchLayoutService.setPartHidden` in `src/vs/workbench/services/layout/browser/layoutService.ts`, within `src/vs/sessions` | PR microsoft/vscode#314572 | 12 files |
+| VSCODE-BREAKS1 | what breaks | `ICodeEditor.restoreViewState` in `src/vs/editor/browser/editorBrowser.ts`, within `src` | PR microsoft/vscode#146866 | 13 files |
+| VSCODE-BREAKS2 | what breaks | `ISpliceable.splice` in `src/vs/base/common/sequence.ts`, within `src` | PR microsoft/vscode#166751 | 44 files |
+| VSCODE-ADOPT1 | adopt | `IFileDialogService.showOpenDialog` in `src/vs/platform/dialogs/common/dialogs.ts`, within `src` | PR microsoft/vscode#312751 | 33 files |
+| VSCODE-INJECTS1 | injects | `IWorkbenchAssignmentService` in `src/vs/workbench/services/assignment/common/assignmentService.ts`, within `src` | `.github/skills/experiments/SKILL.md` L11 at the pin | 27 files |
+| VSCODE-TASK1 | task | `ILanguageModelsService.sendChatRequest` in `src/vs/workbench/contrib/chat/common/languageModels.ts`, within `src` | PR microsoft/vscode#298767 | 15 files to change, 99 tests |
+| VSCODE-TASK2 | task | `ITerminalInstance.runCommand` in `src/vs/workbench/contrib/terminal/browser/terminal.ts`, within `src` | PR microsoft/vscode#309346 | 11 files to change, 48 tests |
+| VSCODE-TASK3 | task | `IContextKeyService.createScoped` in `src/vs/platform/contextkey/common/contextkey.ts`, within `src/vs/workbench/contrib` | PR microsoft/vscode#115890 | 42 files to change, 50 tests |
+| VSCODE-BP6 | big-picture | How is VS Code tested: what kinds of tests does the repository have, where does each kind live, and how is each kind run? | VS Code's docs at `cc3fec88`: `.github/instructions/writing-tests.instructions.md`, the unit, integration and smoke test skills in `.github/skills/`, and the READMEs in `test/`, `test/unit`, `test/smoke`, `test/automation` and `test/sanity` | 8 of 8 rubric points hold |
+| VSCODE-BP7 | big-picture | How does VS Code keep event listeners and other resources from leaking: which types and patterns does its code use to tie a resource's lifetime to its owner, and how are leaks caught? | VS Code's docs at `cc3fec88`: `.github/instructions/disposable.instructions.md`, `.github/skills/memory-leak-audit/SKILL.md`, `.github/instructions/coding-guidelines.instructions.md` and `.github/instructions/writing-tests.instructions.md` | 8 of 8 |
+| VSCODE-BP1–BP5 | big-picture | Eval #2's (Eval #1's BP1–BP5) | VS Code's wiki page "Source Code Organization" | 8, 6, 5 (of 6), 8 and 6 rubric points that hold |
+| VSCODE-CL1 | direct list | Eval #2's: `src/vs/workbench/contrib/search/common/search.ts` | Eval #1 | 22 files |
+| VSCODE-CL4 | transitive list | Eval #2's: `src/vs/workbench/contrib/markers/common/markers.ts` | Eval #1 | 66 files, 10 of them direct |
+| VSCODE-CN1 | chain | Eval #2's: `src/vs/workbench/workbench.desktop.main.ts` → `src/vs/workbench/contrib/terminal/browser/terminalInstance.ts` | Eval #1 | 4 steps |
+| VSCODE-IMPACT | impact | Eval #2's: `src/vs/platform/storage/common/storage.ts`, per seven folders | Eval #2 | 4,503 |
+| VSCODE-CYCLE | cycle | Eval #2's: `src/vs/workbench/contrib/chat/common/languageModels.ts` | Eval #2 | 4 steps |
+| VSCODE-UNUSED | files nothing imports | Eval #2's: `src/vs/sessions/browser` | Eval #2 | 4 of its 87 non-test files |
+| VSCODE-VIOLATIONS | violations | Eval #2's: `src/vs/workbench/services` → `src/vs/workbench/contrib` | Eval #2 | 5 files, all tests |
+| VSCODE-ENTRIES | entries | Eval #2's: `src/vs/platform/environment/node/argv.ts` | Eval #2 | 9 files |
+| VSCODE-PAIRS | pairs | Eval #2's: the seven environment names under `src/vs` | Eval #2 | 21 pairs |
+
+### AFFiNE: 22 single questions and one session
+
+| Id | Kind | Target | Source | Truth |
+|---|---|---|---|---|
+| AFFINE-CALLERS1 | callers | `ViewExtensionManager.get` in `blocksuite/affine/ext-loader/src/view-manager.ts` | `blocksuite/affine/ext-loader/README.md` at the pin | 20 files |
+| AFFINE-CALLERS2 | callers (R-X, for adopt) | `DocFrontend.addPriority` in `packages/common/nbstore/src/frontend/doc.ts` | PR toeverything/AFFiNE#15595 | 12 files |
+| AFFINE-BREAKS1 | what breaks | `Editor.setMode` in `packages/frontend/core/src/modules/editor/entities/editor.ts` | PR toeverything/AFFiNE#7873 | 11 files |
+| AFFINE-BREAKS2 | what breaks | `UIEventDispatcher.add` in `blocksuite/framework/std/src/event/dispatcher.ts` | PR toeverything/AFFiNE#14830 | 25 files |
+| AFFINE-INJECTS1 | injects | `AuthService` in `packages/frontend/core/src/modules/cloud/services/auth.ts` | PR toeverything/AFFiNE#15308 | 78 files |
+| AFFINE-TASK1 | task | `DocsService.createDoc` in `packages/frontend/core/src/modules/doc/services/docs.ts` | PR toeverything/AFFiNE#8291 | 11 files to change, 2 tests |
+| AFFINE-TASK2 | task | `Store.resetHistory` in `blocksuite/framework/store/src/model/store/store.ts` | PR toeverything/AFFiNE#12131 | 21 files to change, 60 tests |
+| AFFINE-BP5 | big-picture | How does AFFiNE store a document's content in edgeless (whiteboard) mode: how does it relate to the same document in page mode, where do shapes and drawings live, and how are position, stacking order and grouping represented? | BlockSuite's docs in AFFiNE at `0b69a6da`: `blocksuite/docs-site/components/editors/edgeless-data-structure.md` and `edgeless-editor.md`, and the surface, note and frame block pages | 8 of 8 |
+| AFFINE-BP6 | big-picture | How does the AFFiNE app manage what's on screen: what are the workbench and its views, how does a URL become the content a view shows, and how do the header, the right sidebar and back/forward navigation fit in? | AFFiNE's docs at `0b69a6da`: `packages/frontend/core/src/modules/workbench/README.md` | 8 of 8 |
+| AFFINE-BP1–BP4 | big-picture | Eval #2's | AFFiNE's and BlockSuite's docs | 8 of 10, 8 of 8, 8 of 11 and 8 of 9 |
+| AFFINE-CL1 | direct list | Eval #2's: `packages/frontend/electron-api/src/index.ts` | Eval #2 | 26 files |
+| AFFINE-CL4 | transitive list | Eval #2's: `packages/frontend/core/src/mobile/modules/haptics/index.ts` | Eval #2 | 56 files, 4 of them direct |
+| AFFINE-CN1 | chain | Eval #2's: `packages/frontend/apps/web/src/index.tsx` → `packages/common/nbstore/src/impls/idb/index.ts` | Eval #2 | 4 steps |
+| AFFINE-IMPACT | impact | Eval #2's: `packages/common/env/src/constant.ts`, per four folders | Eval #2 | 1,620 |
+| AFFINE-CYCLE | cycle | Eval #2's: `packages/common/infra/src/framework/core/components/service.ts` | Eval #2 | 4 steps |
+| AFFINE-UNUSED | files nothing imports | Eval #2's: `packages/frontend/core/src/components/page-list` | Eval #2 | 5 of its 70 non-test files |
+| AFFINE-VIOLATIONS | violations | Eval #2's: `packages/frontend/core` → `packages/frontend/apps` | Eval #2 | 4 files |
+| AFFINE-ENTRIES | entries | Eval #2's: `packages/frontend/core/src/modules/organize/services/organize.ts` | Eval #2 | 7 files |
+| AFFINE-PAIRS | pairs | Eval #2's: the folders directly inside `packages/frontend` | Eval #2 | 17 pairs |
+
+### Theia: 14 single questions, held out
+
+| Id | Kind | Target | Source | Truth |
+|---|---|---|---|---|
+| THEIA-CALLERS1 | callers | `MenuModelRegistry.registerSubmenu` in `packages/core/src/common/menu/menu-model-registry.ts` | issue eclipse-theia/theia#7299 | 14 files |
+| THEIA-BREAKS1 | what breaks | `ContextMenuRenderer.render` in `packages/core/src/browser/context-menu-renderer.ts` | `doc/changelogs/CHANGELOG-2022.md` L349 at the pin | 42 files |
+| THEIA-BREAKS2 | what breaks | `PreferenceService.set` in `packages/core/src/common/preferences/preference-service.ts` | issue eclipse-theia/theia#16046 | 36 files |
+| THEIA-INJECTS1 | injects | `EnvVariablesServer` in `packages/core/src/common/env-variables/env-variables-protocol.ts` | `CHANGELOG.md` L88 at the pin | 42 files |
+| THEIA-TASK1 | task | `BackendApplicationContribution.onStop` in `packages/core/src/node/backend-application.ts` | `CHANGELOG.md` L433 at the pin | 11 files to change, 4 tests |
+| THEIA-TASK2 | task | `CommandRegistry.isEnabled` in `packages/core/src/common/command.ts` | issue eclipse-theia/theia#18030 | 14 files to change, 22 tests |
+| THEIA-CL1 | direct list | `packages/ai-core/src/common/language-model.ts` | the truth's import graph | 31 files |
+| THEIA-CL2 | transitive list | `packages/scm/src/browser/scm-avatar-service.ts` | the truth's import graph | 86 files, 3 of them direct |
+| THEIA-CN1 | chain | `packages/scm/src/browser/decorations/scm-navigator-decorator.ts` → `packages/core/src/browser/shell/current-widget-command-adapter.ts` | the truth's import graph | 3 steps |
+| THEIA-CYCLE | cycle | `packages/core/src/common/index.ts` | the truth's import graph | 3 steps |
+| THEIA-UNUSED | files nothing imports | `packages/ai-chat/src` | the truth's import graph | 2 of its 64 non-test files |
+| THEIA-ENTRIES | entries | `packages/ai-core/src/browser/agents-md-frontend-application-contribution.ts` | the truth's import graph | 21 files |
+| THEIA-BP1 | big-picture | How does Theia run VS Code extensions and Theia plugins: where does a plugin's code run, how does it get the `vscode` or `theia` API, and how do calls travel between a plugin and the rest of Theia? | Theia's docs at `81ea5f93`: `doc/Plugin-API.md` | 8 of 8 |
+| THEIA-BP2 | big-picture | How is a Theia application put together from extensions: what is a Theia extension, how does it add code to the frontend and the backend, and how does an application pick its extensions, get built and start? | Theia's docs at `81ea5f93`: `packages/core/README.md`, `dev-packages/cli/README.md` and `doc/code-organization.md` | 8 of 8 |
+
+Theia has no Eval #2 question and no session (R-I, R-W). Its big-picture questions test free mode's no-loss (R-K).
+
+### The two task sessions, Eval #2's, unchanged
+
+| Session | X | Impact | Chain from | Cycle | Files nothing imports |
+|---|---|---|---|---|---|
+| vscode-s1 | `src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts` | 3,152, per `contrib/notebook` 225, `contrib/chat` 1,068, `workbench/api` 325, `src/vs/sessions` 703, and 831 elsewhere | `src/vs/workbench/api/node/extensionHostProcess.ts`: 4 steps | 3 steps | in `src/vs/workbench/contrib/notebook/common`: 1 of 29 |
+| affine-s1 | `blocksuite/affine/blocks/database/src/database-block.ts` | 1,546, per `blocksuite/affine` 52, `blocksuite/integration-test` 20, `packages/frontend/core` 1,277, `packages/frontend/apps` 58, `tests` 112, and 27 elsewhere | `packages/frontend/apps/android/src/index.tsx`: 7 steps | 3 steps | in `blocksuite/affine/blocks/database/src`: 1 of 50 |
+
+### The overlap check (R1)
+
+`npm run eval:overlap -- --eval eval3` compares every question's targets with the dev set's 19 questions, and every session question's with every single question's. A question's targets are what Eval #2's were (the file or folder it asks about, a chain's two ends, a violation's two folders). A call question's are also its type's file and the `Type.member` or type it names, so another method of a type the dev set asked about overlaps through the file. On the final `eval3/questions.json` (69 entries: 61 single questions and the sessions' 8), it printed nothing. The draw had already refused any candidate sharing a target with the dev set or with the two reused sessions.
+
+## How the questions were sourced and drawn
+
+Nobody saw how either arm, or Nebulosity's index, does on a candidate before the draw ran (design §5.4).
+
+- **The collectors.** Three fresh Opus subagents, one per repo, collected the call and task candidates. They never called a Nebulosity tool, opened its database or counted a candidate's callers.
+  - **Searches:** `gh search issues` and `gh search prs` on `microsoft/vscode`, `toeverything/AFFiNE` and `eclipse-theia/theia` (`--limit 100`), for each of the terms adopt, deprecate, rename, signature, parameter and remove. They read the promising results, and they read the repos' docs at the pins (CHANGELOGs, READMEs, docs folders).
+  - **A candidate** is a class or interface `T` and, except for injects, a method `m`. Its source names both, and both are declared at the pinned commit, which was checked with `git grep`. Each records the source's URL and a quote of at most two sentences. VS Code's carry `within`: `src`, or a folder under it that the source names (R-R, R-AI).
+  - **Excluded:** R-A's eight planning methods, and the dev set's targets.
+- **The counts.**
+  - VS Code, 65 candidates: callers 25, breaks 12, adopt 6, injects 8, task 14. 32 come from pull requests, 23 from issues and 10 from docs at the pin.
+  - AFFiNE, 68: callers 21, breaks 20, adopt 7, injects 12, task 8. 42 come from pull requests, 3 from issues and 23 from docs. Its task pool is short of the 3× asked for, because AFFiNE's pull requests rarely state a signature change on a named `T.m`.
+  - Theia, 92: callers 30, breaks 20, injects 24, task 18, and no adopt. 7 come from pull requests, 21 from issues and 64 from docs, mostly CHANGELOG entries at the pin.
+- **Theia's graph candidates** are every qualifying target in the truth's own graph, by V1.6's rules (46,929 candidates, committed gzipped):
+  - direct list: a file with 10–100 direct importers (293);
+  - transitive list: a file with 10–100 dependents (773);
+  - chain: an entry file and a file it reaches in 3–6 steps (44,891);
+  - cycle: a file whose shortest cycle is 3–6 steps (126);
+  - files nothing imports: a folder of 20–120 non-test files, 2–10 of them imported by nothing (61);
+  - entries: a file that 5–30 non-test roots load (785).
+- **The draw** (`npm run eval:draw -- --eval eval3`, `scripts/eval/draw.ts`, run 2026-10-16, 4 m 10 s):
+  - **Sizing:** each call and task candidate gets its truth's size from TypeScript's checker (a task's is its CHANGE).
+  - **Passing:** it passes when its size is 10–80 files, it isn't a planning method, and it shares no target with the dev set or the two reused sessions. A graph candidate keeps the pass its range gave it, and is checked for overlap.
+  - **Drawing:** per repo and kind, in the order breaks, task, callers, adopt, injects, then the graph kinds, the passing candidates are sorted by id and shuffled with mulberry32(1); the first n are drawn.
+  - **One type per repo (R-AF):** a type drawn once leaves the repo's later pools, within a kind too.
+  - **R-X:** a repo with no passing adopt candidate draws one more callers question instead.
+
+| Repo | Kind | Candidates | Passing | Drawn |
+|---|---|---|---|---|
+| VS Code | breaks | 12 | 9 | 2 |
+| VS Code | task | 14 | 7 | 3 |
+| VS Code | callers | 25 | 17 | 2 |
+| VS Code | adopt | 6 | 4 | 1 |
+| VS Code | injects | 8 | 6 | 1 |
+| AFFiNE | breaks | 20 | 10 | 2 |
+| AFFiNE | task | 8 | 3 | 2 of the 3 wanted (R-AF) |
+| AFFiNE | callers | 21 | 5 | 1 |
+| AFFiNE | adopt | 7 | 0 | 0 (R-X) |
+| AFFiNE | callers, for adopt | 21 | 4 | 1 |
+| AFFiNE | injects | 12 | 8 | 1 |
+| Theia | breaks | 20 | 5 | 2 |
+| Theia | task | 18 | 3 | 2 |
+| Theia | callers | 30 | 8 | 1 |
+| Theia | injects | 24 | 14 | 1 |
+| Theia | direct list / transitive list / chain / cycle / files nothing imports / entries | 293 / 773 / 44,891 / 126 / 61 / 785 | all | 1 each |
+
+- **No drawn candidate was replaced:** every truth held on reading.
+- **The change words.** A fresh Opus writer wrote each adopt and task question's `change` from its drawn source, in the source's words. It never saw Eval #2's questions, the dev set or R-A's methods. The controller checked each against the source passage it was based on. It accepted two omissions:
+  - VSCODE-TASK3 drops the pull request's garbled checklist line;
+  - THEIA-TASK2 drops "Adding one touches every command in the application", which would hint at the answer.
+
+  AFFINE-TASK2's change describes a refactor more than a signature change (history moves from the doc to the store). Those are the source's words, so it is kept, and the truth doesn't depend on it.
+- **The new big-picture questions**, two per repo (Step 5). Their topics are ones neither Eval #2's questions nor the dev set's two ask about.
+  - **The author**, a fresh Opus subagent, wrote each question and its 8 points from the repo's own docs at the pin.
+  - **The re-checker**, an independent fresh Opus subagent, checked every point in the source at the pin. All 48 hold.
+  - 17 points carry an immaterial imprecision, noted in the point's `note` for the graders. For example, AFFINE-BP5.8: at this commit frames also record their members' ids.
+  - THEIA-BP1.8 (headless plugins) is borderline, since the question names only VS Code extensions and Theia plugins. It stays: the re-checker sets `holds` and notes, not the points, and a point a good answer may leave out costs both arms alike.
+
+## How the truths were made and checked
+
+The truth never comes from Nebulosity's index (R2).
+
+**Eval #2's truths are copied unchanged** (R-I): its 26 truths and 9 rubrics for the reused questions, and its `adjudicated.json` and `steps.json`, byte for byte. A test checks the bytes. These verdicts are facts about VS Code's and AFFiNE's imports at the same commits.
+
+**The call and task truths come from TypeScript's own type checker** (`scripts/eval/ts-calls.ts`), one program per repo, built by `npm run eval:truth -- --eval eval3`.
+
+| Repo | The checker's program | Files | Program and call truths | Peak memory |
+|---|---|---|---|---|
+| VS Code | `src/tsconfig.json`'s (R-R) | 10,053 | 69.0 s for 9 truths | 5,113 MB |
+| AFFiNE | every tracked `.ts` and `.tsx` file, resolved by the truth's own resolver | 6,937 | 13.1 s for 7 truths | 6,156 MB |
+| Theia | the same | 3,451 | 9.0 s for 6 truths | 6,933 MB |
+
+- AFFiNE's and Theia's checkouts have no `node_modules`. Their programs resolve modules with `scripts/eval/resolve-truth.ts` (workspace packages, `exports`, compiled paths mapped to sources), and npm packages stay unresolved.
+- The peak is the one process's, cumulative over the three repos, under a 12 GB heap cap.
+- The rules are D2's sentences, and a type is the same type when its exported symbol is.
+- A task's CHANGE is the breaks set of its `T.m`. Its TESTS are the test files among CHANGE, or that directly import a file of CHANGE by the import rule, in the truth's import graph (R-U).
+- The checker's call truths are tested against the di-repo fixture's hand-derived ground truth (`scripts/eval/ts-calls.test.ts`).
+
+**Every disagreement with the index was read in the source.**
+- After the draw, `scripts/eval/calls-candidates.ts` listed every file only one side counts, the checker or Nebulosity's index. This is the only place the index was consulted, and only for candidates.
+- There were 106 such lines: 105 files only the checker counts, and 1 only the index counts.
+- Each was read at its line, against the question's call rule, and decided in `eval3/truth/calls-adjudicated.json`. The rule counts a value's type as TypeScript sees it, declared or inferred.
+  - All 105 checker-only files are "in": the checker was right.
+  - The index-only file is "out". It is THEIA-INJECTS1's `remote-user-storage-provider.ts`: L40 is `@inject(LocalEnvVariablesServer)`, a different symbol, only typed `EnvVariablesServer`. That was the index's error.
+- Those 106 verdicts changed no truth: a rebuild with them gave every truth byte for byte as before. None is left undecided.
+- A sweep for the checker's blind spot then added 34 more verdicts (below), so `calls-adjudicated.json` holds 140: 116 "in" and 24 "out". Eleven of the "in" verdicts add a file the checker missed, and they changed three truths.
+
+| Truth | Index only / checker only | Truth | Index only / checker only | Truth | Index only / checker only |
+|---|---|---|---|---|---|
+| VSCODE-CALLERS1 | 0 / 1 | AFFINE-CALLERS1 | 0 / 18 | THEIA-CALLERS1 | 0 / 1 |
+| VSCODE-CALLERS2 | 0 / 1 | AFFINE-CALLERS2 | 0 / 11 | THEIA-BREAKS1 | 0 / 0 |
+| VSCODE-BREAKS1 | 0 / 6 | AFFINE-BREAKS1 | 0 / 8 | THEIA-BREAKS2 | 0 / 3 |
+| VSCODE-BREAKS2 | 0 / 7 | AFFINE-BREAKS2 | 0 / 23 | THEIA-INJECTS1 | 1 / 0 |
+| VSCODE-ADOPT1 | 0 / 1 | AFFINE-INJECTS1 | 0 / 1 | THEIA-TASK1 | 0 / 0 |
+| VSCODE-INJECTS1 | 0 / 0 | AFFINE-TASK1 | 0 / 1 | THEIA-TASK2 | 0 / 0 |
+| VSCODE-TASK1 | 0 / 0 | AFFINE-TASK2 | 0 / 19 | | |
+| VSCODE-TASK2 | 0 / 3 | | | | |
+| VSCODE-TASK3 | 0 / 1 | | | | |
+
+**Theia's import truths** (its six graph questions) were checked as Eval #2's were.
+- The regex scanner and `preProcessFile` read its imports through the eval's own resolver. Theia has 3,772 code files, with 20,008 scanner edges and 19,976 `preProcessFile` edges: 32 only the scanner finds, and none only `preProcessFile` finds.
+- A sweep listed 5 computed `import(<name>)` sites.
+- All 37 were read and decided "out". They are appended to `eval3/truth/adjudicated.json` with `"repo": "theia"`, after Eval #2's 32, which are unchanged.
+  - Of the 32 edges, 23 are `require` or `import` text inside the template literals a generator writes out, and 9 are JSDoc `import('…')` types in `examples/api-tests/*.spec.js`. The JSDoc ones are ruled as Eval #2 ruled them.
+  - The 5 sites load nothing in the repo: three load npm packages at run time, one loads an installed plugin chosen at run time, and one is inside a template literal.
+- A fixed-seed sample of 30 of the 200 edges the Theia truths rest on were read at their lines: all are real imports, with `@theia/x/lib/…` mapped to `packages/x/src/…` correctly. The truth's graph has 19,976 edges after the verdicts.
+
+**Who read what.** Claude models did the reading; no person read every entry.
+- **The disagreements:**
+  - a Sonnet reader read VS Code's and Theia's 25 call lines;
+  - an Opus reader read AFFiNE's 81;
+  - a Sonnet reader read Theia's import sheets: the 32 edges, the 5 sites and the 30 sampled edges.
+- **The controller's sample:** it read three decided lines itself, and confirmed all three:
+  - AFFINE-CALLERS1, `render-linked-doc.ts` L189–191: `std.get(ViewExtensionManagerIdentifier).get`, where the identifier is `createIdentifier<ViewExtensionManager>`;
+  - AFFINE-BREAKS2, `page-clipboard.ts` L193: `this.std.event.add`, where the getter `event` returns `this.get(UIEventDispatcher)`;
+  - VSCODE-BREAKS1, `diffEditorWidget.ts` L551.
+- **The agreements:** the session that assembled the questions read a seeded sample of 22 files both the checker and the index count, one per call truth (mulberry32(1) over each truth's files that no verdict covers). All 22 hold. It also read Theia's chain and cycle steps (THEIA-CN1's 3 and THEIA-CYCLE's 3) at their lines: all six hold.
+- **The full reading** (2026-10-16, after an independent review): every entry of the call truths' evidence sheet (`calls-evidence.md`) was read at its line by three Sonnet readers, one per repo, with a script printing every cited line: VS Code's 9 questions, AFFiNE's 7 and Theia's 6, tests included. So were all of Theia's graph evidence (`truth-evidence.md`): its lists, roots, steps and 186 import-edge lines. They found no problems. Four look-alikes in VS Code were checked and hold.
+- **The sweep for the checker's blind spot** (2026-10-16, after the review). The checker types a receiver `any` when its type comes through React props or an npm package (no `node_modules`), and the program leaves out `// @ts-check` JS tests. An Opus reader listed every call to each question's member whose receiver the checker types `any` or `unknown`, every `.js` file with such a call, and the producers of AFFiNE's high-volume members, then read 34 candidates and decided each. Eleven were "in": THEIA-BREAKS1 +7 (six calls through React props, such as `this.props.contextMenuRenderer.render(…)` in a `React.Component<Props>` whose Props declare the type, and one `container.get(ContextMenuRenderer)` in `menus.spec.js`), THEIA-BREAKS2 +3 (three `.spec.js` files typed by a JSDoc import) and AFFINE-BREAKS1 +1 (`peek-view/view/utils.ts`, a `useState<Doc | null>`). Twenty-three were "out" (Node and Electron receivers, sinon stubs, Playwright, an rxjs subject, untyped vendored JS, a JSDoc path that resolves to nothing). The blind-spot labels: react-props-any 7 in and 5 out; ts-check-js 4 in and 4 out. THEIA-BREAKS1 went from 35 to 42, THEIA-BREAKS2 from 33 to 36 and AFFINE-BREAKS1 from 10 to 11, all inside 10–80; every other truth is byte for byte as before, and the needed sets of those three were rebuilt.
+- **What wasn't read one by one:** the graph under Theia's truths (20,008 scanner edges), which rests on the two extractors agreeing, the 37 verdicts and the 30-edge sample; and any file that neither the checker nor the index counts, beyond what the sweep looked for.
+- Each of the 28 new truths carries `verified: true`. Each of the 6 new rubrics has every point's `holds` set.
+
+**The needed files** were fixed from the truths before the first run (`npm run eval:needed -- --eval eval3`, `eval3/truth/needed.json`).
+- There are 42 needed sets: the 14 of Eval #2's file-set questions, and every one of the 28 new questions'.
+- A task's needed set is the union of its CHANGE and TESTS.
+- A chain or cycle's is the shortest-path DAG: THEIA-CN1's has 4 files and 3 edges, and THEIA-CYCLE's has 7 files and 8 edges.
+- Left out, as counts: VSCODE-IMPACT, VSCODE-PAIRS, AFFINE-IMPACT and AFFINE-PAIRS. No new question's answer is "none", and every new chain and cycle has a file between its ends.
+
+## Where the index misses these callers
+
+The 105 checker-only files, read above, show why a declared-type index misses calls. The labels are the readers', grouped.
+
+| Why the index misses the file | VS Code | AFFiNE | Theia |
+|---|---|---|---|
+| A local's type is inferred from a call's return: a method, a test helper, `createInstance`, `accessor.get(…)`, a generic wrapper such as `_register(…)` or `assertReturnsDefined(…)`, or a pooled reference's `.object` | 14 | 24 | 0 |
+| A getter's return type is inferred, not declared (AFFiNE's `std.event` returns `this.get(UIEventDispatcher)`) | 2 | 37 | 0 |
+| A field's type is inferred from its initializer or a constructor assignment | 2 | 8 | 0 |
+| `std.get(<identifier>)`, where the identifier is a `createIdentifier<T>()` value, not the type | 0 | 7 | 0 |
+| A global's member (`declare global`, `window.doc: Store`) | 0 | 4 | 0 |
+| A re-export through a package specifier (`@theia/core/lib/common`) | 0 | 0 | 4 |
+| Other: a property chain through a context interface, `a \|\| b`, a module imported under two specifiers (one import row per file pair) | 2 | 1 | 0 |
+| **Files the index misses** | **20** | **81** | **4** |
+
+On five of AFFiNE's seven call truths, the index holds 1–2 of the checker's 10–25 files: CALLERS1 2 of 20, CALLERS2 1 of 12, BREAKS1 2 of 11, BREAKS2 2 of 25 and TASK2 2 of 21. On VS Code, BREAKS1 has 7 of 13 and BREAKS2 37 of 44.
+
+**The engine was not tuned on these misses** (the ledger's ruling, 2026-10-16). They were found on Eval #3's own questions after the draw, and tuning the index on them would fit the test set. Eval #3 measures the index as it stands, and the engine freezes at the pilot (R-N). A fix comes after the results, measured on a new set.
+
+## Scoring
+
+`npm run eval:score -- --eval eval3` scores everything but the big-picture answers, each repo against its own truth graph and verdicts.
+- **Eval #2's kinds** score as in Eval #2's "Scoring":
+  - lists by recall, with precision beside it (Theia's two lists included);
+  - chains and cycles 1 / 0.5 / 0;
+  - impact by the mean of 1 − the relative error;
+  - files nothing imports, violations and entries by F1;
+  - pairs by F1;
+  - big-picture by two blind graders, the owner ruling where they disagree;
+  - sessions message by message.
+- **The call kinds** (`callers`, `breaks`, `adopt`, `injects`) are scored by F1 over the files after the last `ANSWER:` line, with recall and precision beside it.
+  - A listed path that isn't a file of the repo counts as a false positive when it reads as a file, as for Eval #2's F1 kinds.
+  - The type's own declaring file, when the answer names it and the truth doesn't hold it, is not counted.
+- **A task** has two parts (R-U): the files after `ANSWER CHANGE:` against CHANGE, and the files after `ANSWER TESTS:` against TESTS. Each is F1, and the task scores their mean. A missing block scores its part 0 and is flagged.
+- A run or session message that hits its turn or budget limit scores 0 and counts. Outages are re-run (Eval #1's rule).
+- **Reported per run**, beyond Eval #2's fields:
+  - its question's set: "new", "eval2" or "bigPicture";
+  - its refused calls: the denied tool results in the transcript (R-V);
+  - when the question has a needed set, its time to relevant context under both rules, from process start and from the query start, and the tokens to it.
+- **Grading** is Eval #2's, with the answers redacted before the blind sheets: Nebulosity and its tools' names become neutral words.
+
+## Time to relevant context
+
+Fixed in the plan (D2, design §5.3) and computed by `scripts/eval/context.ts` from each run's transcript and `eval3/truth/needed.json`. D2's method, verbatim:
+
+- *Scope:* single runs whose truth is a set of files: callers, breaks, adopt, injects, tasks (the union of their parts), lists, chains, cycles, files nothing imports, violations and entries. Count answers (impact, pairs) and big-picture answers are left out; they report time and score. A question whose answer is "none", or a chain or cycle with no file strictly between its ends, is left out.
+- *Needed files,* fixed before the first run from the truth (`eval3/truth/needed.json`, Task 9's `eval:needed`). For chains and cycles: the files strictly between the ends of every shortest valid path in the truth's graph, as a shortest-path DAG; one full path's files reach it.
+- *Seen:* a needed file is seen at a main-conversation `user` event carrying tool results, when it is named by the result's text, or by the call it answers (Read's `file_path`, Grep's and Glob's `path`, any path in a Bash command that wasn't refused).
+- *The plain rule is gated:* any result naming a needed file counts, however much else it names.
+- *Reported beside it, never gated:* the mostly-relevant version (a result, with its call, counts only if at least half of the distinct tracked repo files it names are needed; a Read of one file names that file), and tokens to relevant context.
+- *Matching:* whole path tokens after `\` becomes `/`, ignoring case, with the repo-root prefix and a leading `./` removed and a trailing `:line` allowed; relative paths are resolved against Claude Code's working folder, as the executed `cd` commands have left it; a paged result counts only for what it prints.
+- *Reached:* the first event after which every needed file has been seen. *TTRC:* that event's `timestamp` minus the run's `startedAt` (from process start: the gate's). Also reported: from the query start, the last event's timestamp minus `duration_ms` (R-F).
+- *Tokens to relevant context:* input + cache-write + cache-read of every main-conversation API call before that event, counted once per message id.
+- *Never reached:* infinitely late in medians; the run's final coverage and the reached share are reported.
+- *Eval #2's references* (references, not bars): plain rule from process start, matched per question, VS Code 0.33 and AFFiNE 0.29 with all runs, pooled 0.29 [0.21–0.33] with all runs, pooled 0.31 [0.23–0.58] on refusal-free runs; pooled 0.27; the floor version pooled 0.17 from process start, with N's entries runs never reaching under it.
+
+## The ship gate (D1)
+
+Eval #3 has two arms: **A**, Claude Code alone, and **N**, Claude Code with Nebulosity registered the way `nebulosity setup` registers it. `scripts/eval/gate3.ts` computes the gate from `eval3/results.json`. D1, verbatim:
+
+"New questions" means the DI, task and Theia graph questions. A ratio is per question (N's median ÷ A's median), then the median over the questions in the set. Intervals resample questions (seeded). **All must hold.**
+
+| # | Condition | Measured over |
+|---|---|---|
+| V | **Valid:** at most 5% of each arm's runs have a refused command (`permission_denials` > 0). Otherwise the gate fails, and the results say the comparison is confounded. | every run, each arm |
+| 1 | **4× faster to the relevant context:** the median per-question TTRC ratio, from process start under the plain "named anywhere" rule, is ≤ 0.25, and the upper end of its 95% interval is ≤ 0.50 | each repo's new file-set questions, each repo separately |
+| 2 | **Half the errors:** N's mean error ≤ 0.5 × A's mean error (error = 1 − score); and on each repo, N's mean ≥ A's − 0.02 | all new questions, repos pooled; the floor per repo |
+| 3 | **Faster and cheaper end to end:** median per-question ratio of `duration_ms` ≤ 0.5, and of cost ≤ 0.5 | each repo's DI and task questions |
+| 4 | **No loss elsewhere:** big-picture (Eval #2's and new, pooled) N ≥ A − 0.03 with cost ratio ≤ 1.15; Eval #2's graph questions N ≥ A − 0.03 with cost ratio ≤ 1.0; the session N ≥ A − 0.03 | each repo where it has them |
+| 5 | **Tools used:** ≥ 0.90 of N's runs call a Nebulosity tool | N's runs on new and graph questions |
+| 6 | **Cheap per turn:** N's median first-call context ≤ A's + 2,500 tokens | each repo |
+
+- **Score** is the kind's score, and an error is 1 − score.
+- **Cost** is Claude Code's `total_cost_usd` and **time** is `duration_ms`. TTRC is defined in D2.
+- A run that hits its turn or budget limit scores 0 and counts. Outages are re-run (Eval #1's rule).
+- **Computed only on complete data:** every repo, and every scheduled run kept in both arms. A condition with nothing to compare fails, and the gate passes only when every condition passes.
+
+**Written before the first run; it does not change after.**
+
+**How `scripts/eval/gate3.ts` computes it** (fixed here, written into ADR-060 and Eval #3's method before the first run):
+- *Runs.* Single runs and session runs of arms A and N, repeats 1..`repeats` only (B-9). A refused command is a run whose transcript holds a denied tool result (R-V).
+- *V* counts each arm's single and session runs together.
+- *1.* For each repo, the new questions whose kind is a file set (callers, breaks, adopt, injects, task, list-direct, list-transitive, chain, cycle, unused, violations, entries) and whose needed set is non-empty. Per question: the median of A's TTRCs and of N's, a run that never reached counting as infinitely late; the ratio N ÷ A, with A never reaching → 0, N never reaching → ∞, both never reaching → 1. The statistic is the median of those ratios; the interval is a 95% percentile bootstrap over the repo's questions, taken in order of their ids (10,000 resamples, mulberry32 seed 1, quantiles by linear interpolation).
+- *2.* Means over runs (questions × repeats). Pooled: every new question of every repo. The floor: each repo's new questions.
+- *3.* Per question, the ratio of N's median `duration_ms` to A's, and of N's median cost to A's; then the median over each repo's DI and task questions.
+- *4.* Per repo: big-picture runs (Eval #2's and new) by mean score, and the median over those questions of the per-question cost ratio; Eval #2's graph questions likewise with ≤ 1.0; the session by mean session score. A repo without a set skips it (Theia has no Eval #2 question and no session).
+- *5.* N's single runs on new questions and on Eval #2's graph questions, all repos pooled: the share with at least one Nebulosity tool call.
+- *6.* Per repo, the medians of the single runs' first-call context.
+- *Numbers.* Comparisons use unrounded values with a tolerance of 1e-9; printed values are rounded to 4 decimal places; a ratio over an A value of 0 is 0 when N's is 0 too, else infinite.
+
+## Decisions made since the plan
+
+- **The rules sentence was reworded once** after the shell check (R-L), as recorded above. Both texts are in ADR-060.
+- **Nebulosity's wording was tuned on the dev set only.** There were three rounds of tool-use wording (Task 16), plus trims to keep the first-call difference near 2,400 tokens (R-AA): the descriptions of `calls`' `within` and `offset`, the docs sentence, `search`'s description, and the instructions' closing sentence on paths. N's tool use on the dev set's 17 non-big-picture questions went from 12 to 13. The owner chose to run Eval #3 as it is and report the share (2026-10-16). MCP Dev Set #2 in `docs/BENCHMARKS.md` has the rounds.
+- **The first-call difference is judged on paired runs** (the same question in the same round), not on medians over a mix of rounds. After a rewording, not every run carries the same prompt.
+- **AFFiNE asks 2 tasks and a second callers question** (R-X, R-AF), so Eval #3 has 378 runs.
+- **R-AF applies within a kind too:** each pick's type leaves the pool before the next pick, so two breaks or two tasks on one repo can't share a type. A repo in the mix with no candidates prints a warning.
+- **Theia's graph candidates are committed gzipped** (`eval3/candidates-theia-graph.json.gz`, 46,929 candidates), and the draw reads them from there. `eval3/candidates.json` keeps the call and task candidates, plus, per graph kind, the pool, the passing count and the drawn ids.
+- **The engine is not changed for the index's misses** on these questions (see "Where the index misses these callers").
+- **The big-picture prompts** are the author's "Prompt" lines, in the ledger's author notes. Eval #2's rubric files carry no question text, and these follow their shape.
+- **THEIA-BP1.8 stays** in its rubric, as above.
+
+## Threats to validity
+
+- **The rules sentence is advisory.** It tells both arms what the permission rules refuse, but the rules do the refusing. A model may still try a refused command, and condition V counts every run that does.
+- **Condition 1 rests on the multi-step kinds.** One broad grep can "see" all of a single method's callers. The plain rule counts any result naming a needed file, so a callers or injects question may be reached quickly in both arms. The tasks (whose needed set is CHANGE and TESTS together), Theia's lists, chains and cycles, and the larger breaks sets carry the 4× bar.
+- **The model may know VS Code from training.** VS Code also ships its own guide for agents (`AGENTS.md`). Theia ships a `CLAUDE.md` and an `AGENTS.md` too, which both arms read alike.
+- **Theia is unknown to the tuning**: no dev question touches it, and it runs in free mode. Its truths and AFFiNE's rest on the checker with the truth's own module resolution, since neither checkout has `node_modules`. A call made through an npm package's types is invisible to the truth. This was not wholly so for the repo's own types passed through React props or hooks, which the checker also lost without `node_modules`; a sweep after the draw found those and added 11 files to three truths (see "Who read what"). A residual risk remains for other paths that go through npm types.
+- **Most of the task changes are already in the code.** At the pinned commits, six of the seven task changes are already made (vscode-task1, vscode-task2 and vscode-task3, affine-task1 and affine-task2, theia-task1); only theia-task2's is proposed. vscode-adopt1 is partly adopted: its PR fixes one site and says others already follow it. The prompts say "I'm changing…", so a run may answer that the change is done. The rule (breaks plus tests) decides the truth either way.
+- **theia-injects1's truth follows the rule's letter.** A field `@inject(LocalEnvVariablesServer)` typed `EnvVariablesServer` is not counted, though its type is the one asked about.
+- **The dev set and the eval share kinds, not targets.** The overlap check refuses any shared target, and the draw refused them too, but the tools' wording may suit these kinds better than a user's own questions.
+- **Three repeats is a small sample.** Each repo has one to three questions per kind, so a per-repo condition can turn on a few runs.
+- **The owner set the bars after Eval #2**, knowing where Eval #2 fell short. They were fixed with the plan on 2026-10-15, before Eval #3's questions existed, and they don't change after the first run.
+- **The dev set's tool use was 13 of 17 (0.76)**, after three rounds of wording, so condition 5 (0.90) is at risk. Four dev questions used no Nebulosity tool in any of their runs (0 of 12, across three wordings): VS Code's task and injects, and AFFiNE's files nothing imports and violations. Each run read its question as a text search.
+- **The calls index misses many of these callers.** On AFFiNE it holds 1–2 of the checker's 10–25 files on five of the seven call truths, and on VS Code 7 of 13 and 37 of 44 on the two breaks questions. An answer built on `calls` alone misses the rest. Conditions 2 and 3 will show that as a loss, and the engine was not tuned on it.
+- **The truths were read by models; no person read them all.** Every disagreement with the index was read. Every entry of the call truths was then read at its line, and so were Theia's graph evidence (three Sonnet readers, no problems). Agreement between the checker and the index covers the files they both include. The files both could miss are covered by the sweep for the checker's blind spot only, and a residual risk remains (see the npm types line above).
+
+## Results
+
+**The runs.** All 378 ran on 2026-10-16 between 06:58 and 10:17 UTC: the pilot's 28 (24 single runs and 4 session runs), then the other 342 single runs in six batches, then the other 8 session runs. 378 runs were kept: 366 single runs and 12 task sessions. No run was an outage, none was re-run, and none was refused by the checks. Every init message showed Claude Code 2.1.301, `claude-sonnet-5-5`, permission mode `dontAsk` and no API key. Every N run had `nebulosity` connected with seven tools, and A had no MCP server. Sonnet 5.5 was the only model that answered: no run called a subagent. Every run ended in `success`, so none hit its turn or budget limit. The three repos were at their commits with a clean `git status` after every run. Nebulosity's index was at version 155 (VS Code), 134 (AFFiNE) and 2 (Theia) in every run, with the engine frozen at `2f913ad`.
+
+The lists, chains, call and task answers were scored by `npm run eval:score -- --eval eval3`. Two chain steps the scorer asked about (in affine-cn1's first and third A runs: `packages/frontend/core/src/modules/workspace-engine/impls/local.ts` → `packages/common/nbstore/src/impls/idb/index.ts` through `@affine/nbstore`'s `./idb` export, and `workspace-engine/index.ts` → `workspace-engine/impls/local.ts`) were read in the source and added to `eval3/truth/steps.json` as imports. The 90 big-picture answers were graded as "Scoring" says (details under "What the runs showed about the method").
+
+Every number below is recomputed from `eval3/results.json`, `eval3/runs/index.jsonl` and the kept transcripts. "A" is Claude Code alone and "N" is Claude Code with Nebulosity. Time is `duration_ms` throughout, as D1 defines it. Cost is Claude Code's own list-price estimate (`total_cost_usd`), not a bill: the runs used the owner's subscription.
+
+### The gate (D1): FAIL
+
+| # | Condition | VS Code | AFFiNE | Theia | Result |
+|---|---|---|---|---|---|
+| V | At most 5% of each arm's runs have a refused command (all repos) | A 2 of 78, N 0 of 78 | A 4 of 69, N 3 of 69 | A 3 of 42, N 5 of 42 | A 9 of 189 (**0.0476**), N 8 of 189 (0.0423): **PASS** |
+| 1 | TTRC on each repo's new file-set questions: median per-question ratio ≤ 0.25, upper end of the 95% interval ≤ 0.50 | 9 questions: **0.9824** [0.8957–1.2667] | 7 questions: **1.0102** [0.8649–1.1389] | 12 questions: **1.0399** [0.3303–infinite] | **FAIL** (every repo) |
+| 2 | Half the errors on the new questions, repos pooled; no repo more than 0.02 below A | A 0.9866, N 0.9873 (+0.0007) | A 1.0000, N 0.9990 (−0.0010) | A 0.9815, N 0.9714 (−0.0101) | Mean error A 0.0122, N 0.0166: **1.3559 of A's** (needs 0.50). The floor holds. **FAIL** |
+| 3 | Each repo's DI and task questions: median per-question ratio of time ≤ 0.5 and of cost ≤ 0.5 | 9 questions: time **0.9773**, cost **0.9782** | 7 questions: time **0.9331**, cost **1.0067** | 6 questions: time **0.8790**, cost **0.9772** | **FAIL** (every repo) |
+| 4 | No loss elsewhere: big-picture N ≥ A − 0.03 with cost ratio ≤ 1.15; Eval #2's graph questions N ≥ A − 0.03 with cost ratio ≤ 1.0; the session N ≥ A − 0.03 | Big-picture +0.0659, cost 1.0020. Graph +0.0215, cost 0.9194. Session +0.0007 | Big-picture +0.0035, cost 0.9485. Graph +0.0179, cost 0.5588. Session +0.0004 | Big-picture −0.0208, cost 0.9835 | PASS |
+| 5 | ≥ 0.90 of N's runs on new and graph questions call a Nebulosity tool (all repos) | new 7 of 27, graph 20 of 27 | new 16 of 21, graph 20 of 27 | new 17 of 36 | 80 of 138, **0.5797**: **FAIL** |
+| 6 | Each repo: N's median first-call context − A's ≤ 2,500 tokens | 21,661 → 24,029, +2,368 | 21,426 → 23,795.5, +2,369.5 | 50,546 → 52,918, +2,372 | PASS |
+
+`gate3Verdict` reports only the deciding repo of each per-repo condition (Theia for 1, 4 and 6; AFFiNE for 3). The other repos' numbers in this table were recomputed from `eval3/results.json` with `gate3.ts`'s own statistics functions (`scripts/eval/stats.ts`), and match its printout wherever it prints them. Values are rounded to 4 places as the gate prints them.
+
+**The verdict: the gate failed on conditions 1, 2, 3 and 5; V, 4 and 6 passed.** With Nebulosity, Claude Code reached the files the new questions need no sooner than Claude Code alone (median ratios 0.98, 1.01 and 1.04, where the gate asked for 0.25), made slightly more errors on them rather than half as many, took about as long and cost about as much on the call and task questions, and called a Nebulosity tool in 58% of the runs that should have.
+
+**V passed, so the comparison isn't confounded by refused commands**, as Eval #2's was (there, 81 of A's 135 runs had one). It passed with no margin in the alone arm: 9 of 189 is the most 5% allows, and a tenth would have failed it.
+
+### Time to relevant context
+
+When a run had first seen every file its answer needs (D2). The gated rule is the plain one, from process start. "Reached" is the share of runs that saw every needed file; a run that never did counts as infinitely late in the medians. The ratio is per question, N's median over A's, then the median over the questions, with a 95% bootstrap interval over questions (10,000 resamples, mulberry32 seed 1). Tokens to context are the median, over the runs that reached it, of the main conversation's input, cache writes and cache reads before the reaching event.
+
+**The new file-set questions (condition 1's set):**
+
+| Repo | Questions | Reached A / N | Median TTRC A / N | Ratio [95% interval] | Mostly-relevant: reached A / N | Mostly-relevant ratio | Tokens to context A / N | From the query start: median A / N | Ratio [95% interval] |
+|---|---|---|---|---|---|---|---|---|---|
+| VS Code | 9 | 0.85 / 0.89 | 8.8 / 6.7 s | **0.98** [0.90–1.27] | 0.63 / 0.56 | 1.00 | 21,849 / 24,204 | 8.0 / 5.3 s | 0.88 [0.79–1.25] |
+| AFFiNE | 7 | 1.00 / 0.95 | 12.8 / 11.0 s | **1.01** [0.86–1.14] | 0.62 / 0.57 | 1.00 | 76,196 / 49,279 | 12.1 / 9.8 s | 0.97 [0.85–1.03] |
+| Theia | 12 | 0.89 / 0.75 | 15.4 / 12.6 s | **1.04** [0.33–never] | 0.78 / 0.56 | 1.00 | 102,351 / 52,951 | 14.8 / 11.4 s | 1.02 [0.23–never] |
+| Pooled (not gated) | 28 | 0.90 / 0.85 | 13.8 / 11.0 s | 1.01 [0.94–1.11] | 0.69 / 0.56 | 1.00 | 78,580 / 52,934 | 13.1 / 9.8 s | 0.98 [0.86–1.03] |
+
+The same, split by kind (pooled over repos, not gated):
+
+| Kind | Questions | Reached A / N | Median TTRC A / N | Ratio [95% interval] |
+|---|---|---|---|---|
+| Callers | 5 | 1.00 / 1.00 | 5.7 / 6.1 s | 1.07 [0.64–1.46] |
+| What breaks | 6 | 0.72 / 0.56 | 14.2 / 36.7 s | 1.01 [0.96–never] |
+| Adopt | 1 | 1.00 / 1.00 | 5.2 / 5.3 s | 1.02 |
+| Injects | 3 | 1.00 / 1.00 | 6.3 / 6.2 s | 0.96 [0.77–1.85] |
+| Task (both parts) | 7 | 0.86 / 0.86 | 35.0 / 36.0 s | 1.06 [0.90–1.43] |
+| DI and task, all | 22 | 0.88 / 0.83 | 12.8 / 12.7 s | 1.02 [0.98–1.27] |
+| Theia's six graph questions | 6 | 1.00 / 0.89 | 15.2 / 5.2 s | 0.33 [0.22–never] |
+
+**Eval #2's file-set questions, reused unchanged** (not gated; a reference):
+
+| Repo | Questions | Reached A / N | Median TTRC A / N | Ratio [95% interval] | Mostly-relevant ratio | Tokens to context A / N | From the query start: ratio [95% interval] |
+|---|---|---|---|---|---|---|---|
+| VS Code | 7 | 0.86 / 1.00 | 14.5 / 3.6 s | 0.31 [0.21–0.94] | 0.94 | 44,399 / 24,030 | 0.21 [0.14–0.91] |
+| AFFiNE | 7 | 1.00 / 1.00 | 13.5 / 3.5 s | 0.51 [0.17–1.11] | 0.51 | 66,689 / 23,804 | 0.38 [0.11–1.02] |
+| Pooled | 14 | 0.93 / 1.00 | 14.0 / 3.6 s | 0.41 [0.19–0.84] | 0.64 | 44,453 / 24,022 | 0.30 [0.12–0.71] |
+
+**A trap in the scorer's printout.** Its "Time to relevant context" table pools every run with a needed set on a repo, so its VS Code row (16 questions, ratio 0.926) and AFFiNE row (14 questions, 0.936) mix the new questions with Eval #2's. Those are not condition 1's statistic. Its Theia row (12 questions, 1.040) is, because Theia has only new questions. The tables above split the two sets.
+
+**Per question** (median TTRC A / N, ratio):
+- *VS Code, new:* CALLERS1 5.0 / 4.9 s, 0.98; CALLERS2 8.8 / 5.7 s, 0.64; BREAKS1 5.7 / 5.2 s, 0.91; BREAKS2 never / never, 1.00 (both arms missed the same two files); ADOPT1 5.2 / 5.3 s, 1.02; INJECTS1 5.1 / 4.9 s, 0.96; TASK1 32.2 / 40.8 s, 1.27; TASK2 43.9 / 39.3 s, 0.90; TASK3 14.4 / 20.6 s, 1.43.
+- *AFFiNE, new:* CALLERS1 14.7 / 15.7 s, 1.07; CALLERS2 5.2 / 5.9 s, 1.14; BREAKS1 6.0 / 6.0 s, 1.01; BREAKS2 15.4 / 15.5 s, 1.01; INJECTS1 12.8 / 9.8 s, 0.77; TASK1 6.0 / 8.9 s, 1.49; TASK2 50.5 / 43.7 s, 0.86.
+- *Theia:* CALLERS1 5.4 / 7.8 s, 1.46; BREAKS1 24.2 s / never, infinite; BREAKS2 16.3 s / never, infinite; INJECTS1 5.8 / 10.7 s, 1.85; TASK1 22.3 / 23.6 s, 1.06; TASK2 never / never, 1.00; CL1 12.9 s / never, infinite; CL2 22.2 / 4.2 s, 0.19; CN1 11.6 / 4.1 s, 0.35; CYCLE 12.6 / 3.9 s, 0.31; UNUSED 15.3 / 15.6 s, 1.02; ENTRIES 18.0 / 4.4 s, 0.24.
+- *Eval #2's:* VS Code CL1 0.52, CL4 0 (no A run reached it: all three missed the same three entry files), CN1 0.21, CYCLE 0.31, UNUSED 0.94, VIOLATIONS 1.00, ENTRIES 0.21; AFFiNE CL1 0.51, CL4 0.17, CN1 0.18, CYCLE 0.67, UNUSED 2.27, VIOLATIONS 1.11, ENTRIES 0.13.
+
+**Never reached:** 24 runs, by their final coverage. A 11: VS Code BREAKS2 r1–r3 (0.95, 0.80, 0.95), TASK1 r2 (0.91) and Eval #2's CL4 r1–r3 (0.95 each); Theia BREAKS1 r2 (0.98), BREAKS2 r3 (0.92), TASK2 r1 and r2 (0.71). N 13, all on new questions: VS Code BREAKS2 r1 and r3 (0.95), TASK1 r1 (0.90); AFFiNE BREAKS2 r2 (0.96); Theia BREAKS1 r1 and r3 (0.98), BREAKS2 r1–r3 (0.83, 0.92, 0.83), CL1 r1 and r2 (0.81), TASK2 r1 and r2 (0.71).
+
+**What this shows.**
+- *On the new questions, neither arm got there first.* The DI and task questions pool at 1.02. The plain rule counts a result as soon as it names a needed file, and nearly every run of both arms began with a `git grep` for the member's name, which names most callers at once. Where N called `calls`, it came back in the same turn as that grep, not earlier (on AFFiNE, in some runs in parallel with it).
+- *The tasks' time goes into the tests.* A task's needed set is its CHANGE and TESTS together, and the tests are the files that import the files to change. Both arms found them with a Node script of their own, in about the same time. N called `imports` for them only on AFFINE-TASK2 (4–14 calls a run) and AFFINE-TASK1 r1.
+- *Where N was faster, it walked imports.* On Theia's transitive list, chain, cycle and entries questions, N reached the files in 0.19–0.35 of A's time with one `imports` or `architecture` call. On Eval #2's questions, pooled 0.41. That is the existing tools' work, not `calls`'.
+- *Where N never got there, it trusted an answer or a grep that was short.* Theia's BREAKS2 (r1 and r3 trusted `calls`, which misses six of the truth's files), CL1 (r1 and r2 ran one grep whose filter dropped six files) and BREAKS1 (a `.js` test typed through a container lookup, which both arms missed in some runs).
+- *Condition 1 rested on the multi-step kinds, as the method's threats said it would.* The kinds it rested on (tasks, the larger breaks sets, Theia's graph questions) split: Theia's transitive list, chain, cycle and entries questions were reached about 3–5 times sooner, and the tasks and breaks sets weren't.
+- *The mostly-relevant version* sits at 1.00 on each repo for the new questions, so the result doesn't depend on how much else a grep printed.
+- *From the query start* the ratios are a little lower (0.88, 0.97 and 1.02), because N's MCP server adds start-up time before the query: the median gap between process start and query start was 1,235 ms for N and 684 ms for A, over the runs that reached their context.
+- *Tokens to context* were lower for N on AFFiNE and Theia (49,279 against 76,196; 52,951 against 102,351) and higher on VS Code (24,204 against 21,849). A first call is already about 24,000 tokens for N (50,500 on Theia, whose own `CLAUDE.md` and `AGENTS.md` both arms load), so on questions reached in the first turn or two the medians mostly measure the prompt.
+
+### The headline
+
+The score is the mean over the kind's runs: F1 for the call kinds, the mean of a task's two F1 scores, the share of rubric points for big-picture, recall for lists, and each Eval #2 kind's own score. Recall and precision are the means over the runs that have them. The medians are over the same runs. "Tokens, all" counts every token of every model, output included.
+
+| Repo | Kind | Runs per arm | Score A / N | Recall A / N | Precision A / N | Median tokens, all, A / N | Median first call A / N | Median cost A / N | Median time A / N | Median tool calls A / N |
+|---|---|---|---|---|---|---|---|---|---|---|
+| VS Code | Callers | 6 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 154,483 / 139,027 | 21,735 / 24,104 | $0.097 / $0.086 | 29.8 / 16.9 s | 4.5 / 4 |
+| VS Code | What breaks | 6 | 0.944 / 0.965 | 0.94 / 0.96 | 0.95 / 0.97 | 223,695 / 342,852 | 21,794 / 24,161 | $0.160 / $0.199 | 47.1 / 51.7 s | 6.5 / 8.5 |
+| VS Code | Adopt | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 121,798 / 123,922 | 21,818 / 24,191 | $0.114 / $0.093 | 25.1 / 25.0 s | 3 / 3 |
+| VS Code | Injects | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 90,226 / 131,547 | 21,849 / 24,219 | $0.088 / $0.092 | 17.4 / 16.8 s | 2 / 3 |
+| VS Code | Task | 9 | 0.997 / 0.985 | – | – | 198,613 / 256,730 | 22,057 / 24,424 | $0.178 / $0.196 | 55.7 / 57.8 s | 7 / 7 |
+| VS Code | Big-picture | 21 | 0.792 / 0.858 | – | – | 69,178 / 77,668 | 21,582 / 23,953 | $0.040 / $0.043 | 14.9 / 13.9 s | 2 / 3 |
+| VS Code | Direct list | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 96,087 / 105,692 | 21,641 / 24,015 | $0.052 / $0.081 | 20.1 / 17.4 s | 3 / 4 |
+| VS Code | Transitive list | 3 | 0.955 / 1.000 | 0.95 / 1.00 | 1.00 / 1.00 | 73,150 / 53,335 | 21,650 / 24,020 | $0.065 / $0.052 | 25.6 / 14.1 s | 2 / 1 |
+| VS Code | Chain | 3 | 1.000 / 1.000 | – | – | 93,080 / 49,062 | 21,657 / 24,024 | $0.048 / $0.023 | 23.9 / 5.7 s | 3 / 1 |
+| VS Code | Impact | 3 | 0.905 / 1.000 | – | – | 98,949 / 50,091 | 21,788 / 24,158 | $0.070 / $0.027 | 35.9 / 6.2 s | 4 / 1 |
+| VS Code | Cycle | 3 | 1.000 / 1.000 | – | – | 69,273 / 74,950 | 21,735 / 24,104 | $0.037 / $0.031 | 15.3 / 9.6 s | 2 / 2 |
+| VS Code | Files nothing imports | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 92,473 / 101,801 | 21,648 / 24,016 | $0.041 / $0.043 | 20.2 / 16.8 s | 3 / 3 |
+| VS Code | Violations | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 116,051 / 127,966 | 21,653 / 24,022 | $0.046 / $0.048 | 16.1 / 16.0 s | 4 / 4 |
+| VS Code | Entries | 3 | 0.947 / 1.000 | 1.00 / 1.00 | 0.90 / 1.00 | 70,292 / 64,773 | 21,660 / 24,029 | $0.043 / $0.088 | 21.0 / 8.8 s | 2 / 2 |
+| VS Code | Pairs | 3 | 1.000 / 1.000 | – | – | 72,404 / 102,527 | 21,757 / 24,130 | $0.051 / $0.047 | 21.8 / 18.1 s | 2 / 3 |
+| AFFiNE | Callers | 6 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 225,343 / 178,026 | 21,473 / 23,843 | $0.118 / $0.101 | 29.9 / 23.0 s | 7 / 6 |
+| AFFiNE | What breaks | 6 | 1.000 / 0.997 | 1.00 / 0.99 | 1.00 / 1.00 | 126,773 / 115,161 | 21,550 / 23,921 | $0.079 / $0.075 | 22.0 / 20.2 s | 5 / 6.5 |
+| AFFiNE | Injects | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 165,535 / 156,250 | 21,522 / 23,894 | $0.138 / $0.119 | 35.7 / 38.7 s | 5 / 4 |
+| AFFiNE | Task | 6 | 1.000 / 1.000 | – | – | 315,187 / 430,169 | 21,743 / 24,112 | $0.195 / $0.215 | 52.6 / 52.3 s | 9 / 12 |
+| AFFiNE | Big-picture | 18 | 0.771 / 0.774 | – | – | 101,044 / 104,185 | 21,368 / 23,741 | $0.057 / $0.053 | 18.9 / 17.9 s | 4 / 3.5 |
+| AFFiNE | Direct list | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 94,240 / 52,680 | 21,407 / 23,782 | $0.051 / $0.044 | 18.7 / 15.6 s | 3 / 2 |
+| AFFiNE | Transitive list | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 96,922 / 51,623 | 21,426 / 23,793 | $0.076 / $0.042 | 29.6 / 11.2 s | 4 / 1 |
+| AFFiNE | Chain | 3 | 1.000 / 1.000 | – | – | 124,152 / 48,488 | 21,422 / 23,789 | $0.067 / $0.021 | 23.2 / 5.1 s | 5 / 1 |
+| AFFiNE | Impact | 3 | 0.994 / 1.000 | – | – | 147,971 / 78,663 | 21,521 / 23,888 | $0.086 / $0.045 | 33.9 / 8.8 s | 6 / 3 |
+| AFFiNE | Cycle | 3 | 1.000 / 1.000 | – | – | 92,307 / 48,519 | 21,503 / 23,869 | $0.041 / $0.020 | 15.9 / 4.4 s | 3 / 1 |
+| AFFiNE | Files nothing imports | 3 | 0.909 / 1.000 | 1.00 / 1.00 | 0.83 / 1.00 | 149,806 / 102,968 | 21,426 / 23,796 | $0.066 / $0.051 | 25.3 / 20.2 s | 5 / 3 |
+| AFFiNE | Violations | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 151,506 / 103,344 | 21,418 / 23,788 | $0.064 / $0.043 | 24.5 / 19.8 s | 6 / 3 |
+| AFFiNE | Entries | 3 | 0.978 / 1.000 | 1.00 / 1.00 | 0.96 / 1.00 | 313,705 / 51,789 | 21,440 / 23,807 | $0.137 / $0.034 | 49.6 / 5.6 s | 11 / 1 |
+| AFFiNE | Pairs | 3 | 0.958 / 1.000 | – | – | 114,823 / 127,997 | 21,425 / 23,794 | $0.051 / $0.056 | 21.2 / 22.2 s | 4 / 5 |
+| Theia | Callers | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 281,134 / 218,313 | 50,573 / 52,944 | $0.199 / $0.167 | 22.6 / 12.9 s | 4 / 4 |
+| Theia | What breaks | 6 | 0.977 / 0.958 | 0.98 / 0.92 | 0.97 / 1.00 | 546,812 / 473,012 | 50,645 / 53,017 | $0.326 / $0.282 | 44.5 / 42.8 s | 9.5 / 9 |
+| Theia | Injects | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 171,878 / 177,069 | 50,655 / 53,032 | $0.199 / $0.209 | 21.8 / 20.7 s | 2 / 3 |
+| Theia | Task | 6 | 0.911 / 0.934 | – | – | 416,706 / 458,805 | 50,888 / 53,260 | $0.267 / $0.267 | 48.4 / 48.0 s | 7.5 / 7.5 |
+| Theia | Big-picture | 6 | 0.833 / 0.813 | – | – | 102,956 / 107,850 | 50,457 / 52,827 | $0.147 / $0.150 | 13.4 / 13.8 s | 1 / 1 |
+| Theia | Direct list | 3 | 1.000 / **0.871** | 1.00 / 0.87 | 0.95 / 1.00 | 156,305 / 110,623 | 50,498 / 52,869 | $0.164 / $0.163 | 22.3 / 19.8 s | 2 / 1 |
+| Theia | Transitive list | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 320,269 / 111,987 | 50,506 / 52,873 | $0.228 / $0.177 | 36.7 / 18.7 s | 6 / 1 |
+| Theia | Chain | 3 | 1.000 / 1.000 | – | – | 208,633 / 106,575 | 50,519 / 52,889 | $0.168 / $0.140 | 16.2 / 5.1 s | 3 / 1 |
+| Theia | Cycle | 3 | 1.000 / 1.000 | – | – | 208,902 / 214,496 | 50,564 / 52,936 | $0.169 / $0.155 | 17.1 / 11.2 s | 3 / 3 |
+| Theia | Files nothing imports | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 156,822 / 163,260 | 50,502 / 52,870 | $0.163 / $0.162 | 17.5 / 19.2 s | 2 / 2 |
+| Theia | Entries | 3 | 1.000 / 1.000 | 1.00 / 1.00 | 1.00 / 1.00 | 157,333 / 113,828 | 50,524 / 52,899 | $0.175 / $0.172 | 24.3 / 8.6 s | 3 / 1 |
+
+By question set (the time and cost ratios are the median over the set's questions of each question's ratio of medians, as the gate takes them; "context read" is input, cache writes and cache reads over every model call):
+
+| Set | Repo | Questions | Score A / N | Median time A / N | Time ratio | Median cost A / N | Cost ratio | Context read A / N | Turns A / N | N runs with a call |
+|---|---|---|---|---|---|---|---|---|---|---|
+| DI and task (new) | VS Code | 9 | 0.987 / 0.987 | 35.7 / 35.6 s | 0.98 | $0.132 / $0.132 | 0.98 | 188,113 / 207,752 | 7 / 7 | 7 of 27 |
+| DI and task (new) | AFFiNE | 7 | 1.000 / 0.999 | 35.7 / 34.6 s | 0.93 | $0.138 / $0.119 | 1.01 | 184,740 / 169,129 | 6 / 9 | 16 of 21 |
+| DI and task (new) | Theia | 6 | 0.963 / 0.964 | 37.9 / 38.8 s | 0.88 | $0.247 / $0.241 | 0.98 | 400,654 / 385,648 | 7 / 7 | 5 of 18 |
+| DI and task (new) | Pooled | 22 | 0.984 / 0.985 | 35.8 / 36.9 s | 0.96 | $0.170 / $0.168 | 0.99 | 197,791 / 217,373 | 6.5 / 7 | 28 of 66 |
+| Theia's graph questions (new) | Theia | 6 | 1.000 / 0.978 | 20.5 / 14.9 s | 0.58 | $0.169 / $0.164 | 0.95 | 180,776 / 112,874 | 4 / 2 | 12 of 18 |
+| Eval #2's graph questions | VS Code | 9 | 0.979 / 1.000 | 21.1 / 14.1 s | 0.63 | $0.048 / $0.047 | 0.92 | 90,759 / 77,580 | 4 / 3 | 20 of 27 |
+| Eval #2's graph questions | AFFiNE | 9 | 0.982 / 1.000 | 24.4 / 11.3 s | 0.38 | $0.066 / $0.043 | 0.56 | 119,360 / 73,282 | 5 / 3 | 20 of 27 |
+| Eval #2's graph questions | Pooled | 18 | 0.980 / 1.000 | 22.8 / 13.3 s | 0.59 | $0.052 / $0.043 | 0.79 | 93,599 / 76,204 | 5 / 3 | 40 of 54 |
+| Big-picture | VS Code | 7 | 0.792 / 0.858 | 14.9 / 13.9 s | 0.79 | $0.040 / $0.043 | 1.00 | 67,923 / 76,356 | 3 / 4 | 12 of 21 |
+| Big-picture | AFFiNE | 6 | 0.771 / 0.774 | 18.9 / 17.9 s | 0.94 | $0.057 / $0.053 | 0.95 | 99,344 / 102,456 | 5 / 4.5 | 12 of 18 |
+| Big-picture | Theia | 2 | 0.833 / 0.813 | 13.4 / 13.8 s | 1.04 | $0.147 / $0.150 | 0.98 | 101,761 / 106,576 | 2 / 2 | 0 of 6 |
+| Every single question | Pooled | 61 | 0.937 / 0.948 | 22.5 / 17.5 s | 0.87 | $0.082 / $0.071 | 0.95 | 115,128 / 106,183 | 5 / 4 | 104 of 183 |
+
+**What this shows.**
+- *On the call and task questions, the two arms were level.* Pooled over the 22 questions, the scores were 0.984 and 0.985, the median time 35.8 and 36.9 s, and the median cost $0.170 and $0.168. N read more tokens on VS Code and fewer on AFFiNE and Theia.
+- *On the callers questions N was faster on VS Code and Theia* (16.9 against 29.8 s, and 12.9 against 22.6 s), where `calls` listed all but one caller and N checked it with greps. It was still above half the time, and its cost was 0.84–0.89 of A's.
+- *On the questions that walk the import graph N was faster*, and on AFFiNE cheaper. On Eval #2's graph questions it took 0.63 (VS Code) and 0.38 (AFFiNE) of A's time per question, at 0.92 and 0.56 of the cost, scoring 1.00 against 0.98. On Theia's six, which no tuning touched and whose index is in free mode, it took 0.58 of the time at 0.95 of the cost, scoring 0.978 against 1.000.
+- *On big-picture questions the arms were close:* VS Code 0.858 against 0.792, AFFiNE 0.774 against 0.771, Theia 0.813 against 0.833.
+
+### The losses
+
+- **Condition 1: no faster to the relevant context on the new questions.** The median ratios were 0.98, 1.01 and 1.04, against the 0.25 asked; pooled, 1.01 [0.94–1.11]. This was V1.7's headline claim ("4× faster to the relevant context"), and it doesn't hold. On the 22 call and task questions N reached the needed files at 1.02 of A's time, and on Theia's graph questions at 0.33, which the tasks and breaks sets outweighed.
+- **Condition 3: no faster or cheaper end to end on the call and task questions.** The median time ratios were 0.98, 0.93 and 0.88 and the cost ratios 0.98, 1.01 and 0.98, against 0.5. Of the 22 questions, one came under 0.5 on both: THEIA-BREAKS2 (0.33 and 0.48), and there N got there by trusting an incomplete `calls` answer and scored 0.92 against 0.96. The callers questions on VS Code and Theia came nearest (time 0.57–0.66, cost 0.77–0.84), at 1.00 in both arms.
+- **Condition 2: more errors, not half as many.** N's mean error on the new questions was 0.0166 against A's 0.0122 (1.36 of A's). Both arms were close to the ceiling (A 0.988, N 0.983), so half of A's error was 0.0061, a mean of 0.994 for N. N's errors came mostly from three questions:
+  - THEIA-CL1, the direct list: 0.87 against 1.00. Two N runs ran one `git grep` whose `grep -v "language-model-"` filter also dropped the six files in the target's own folder whose names start with `language-model-`, and answered from it without a tool call. The third wrote a script and scored 1.00. Every A run wrote a script or a `node -e` scan.
+  - THEIA-BREAKS2: 0.92 against 0.96. N's r1 and r3 listed `calls`' 30 files and spot-checked with three or four greps. They missed six: three `ai-ide` files whose receivers the index misses through `@theia/core`'s re-exports, and three `.spec.js` tests typed through JSDoc, which the checker missed too until the sweep. Their answers said so: "This comes from the call-graph index, and I only spot-checked it with grep" (r1).
+  - VSCODE-TASK1: 0.96 against 0.99. Every N run listed a test file that only stubs the method among the files to change, and two missed 11 of the 99 tests.
+
+  The floor held on every repo (+0.0007, −0.0010 and −0.0101).
+- **Condition 5: tools used in 80 of 138 runs (0.58), against 0.90.** `calls` was called in 24 of N's 66 call and task runs: 14 of 15 callers runs, 8 of 18 breaks runs, 2 of 21 task runs, and none of the 3 adopt and 9 injects runs. Of Eval #2's graph questions, N's runs on files nothing imports and violations called no tool on either repo (0 of 12; in Eval #2, AFFiNE's 6 all did), and neither did Theia's files nothing imports and direct list (0 of 6).
+- **The calls index misses most callers on AFFiNE's targets** (see "Where the index misses these callers" above): on five of its seven call truths it holds 1–2 of the checker's 10–25 files. Every N run that called `calls` there got back one or two files, read the answer's note ("A call on a value whose type is only inferred isn't seen"), and grepped the rest, so it paid for both. No AFFiNE score dropped for it (one breaks run missed one file), and none got faster.
+- **Theia, the held-out repo, came out lower with Nebulosity on three kinds:** the direct list (0.871 against 1.000, above), what breaks (0.958 against 0.977, above) and big-picture (0.813 against 0.833). Its tasks were higher (0.934 against 0.911).
+- **Big-picture questions lower with Nebulosity, one by one:**
+  - VSCODE-BP1: 0.83 against 0.94. Every N run called `architecture` (layers) and `describe` on `src/vs`, and every one left out the extension host (BP1.8), which every A run named at least in part. One N run read the organization doc and still left it out.
+  - AFFINE-BP1: 0.90 against 0.98, after `overview`.
+  - AFFINE-BP3: 0.60 against 0.69, with no tool call: half points on how block props hold Yjs values (BP3.2).
+  - THEIA-BP2: 0.71 against 0.75, with no tool call: no N run said that `@theia/core` is the extension every application builds on (BP2.5).
+- **Where N was slower or costlier than Claude Code alone**, by the per-question medians (the notable cases first, then the smaller ratios above 1.0):
+  - VSCODE-TASK3: 1.14 times the time and 1.32 times the cost, at 1.00 each. N's r2 wrote three scripts and ran nine `node` commands (12 turns, $0.22).
+  - The vscode-s1 session: $0.847 against $0.582 over its three runs, and 213.0 against 184.6 s. N's r1 cross-checked the index with its own script (28 tool calls, $0.578, 169 s); r2 and r3 were faster than every A run, and r3 cheaper too.
+  - VSCODE-ENTRIES: $0.088 against $0.043 (scoring 1.00 against 0.95, in 8.8 against 21.0 s): two N runs added `architecture`'s files-nothing-imports report with a limit of 500.
+  - VSCODE-CL1: $0.081 against $0.052, at 1.00 each.
+  - Slower by the median time: AFFINE-INJECTS1 (38.7 against 35.7 s, with no `calls`), AFFINE-TASK1 (42.5 against 39.2 s) and THEIA-BREAKS1 (44.9 against 38.9 s).
+  - Smaller ratios above 1.0: VSCODE-BREAKS1 time 1.05; cost 1.05 to 1.08 on VSCODE-BREAKS2, VSCODE-INJECTS1, VSCODE-TASK1, AFFINE-CALLERS1, AFFINE-TASK2, THEIA-INJECTS1 and THEIA-TASK1.
+  - TTRC on THEIA-INJECTS1 (1.85), AFFINE-TASK1 (1.49), THEIA-CALLERS1 (1.46), VSCODE-TASK3 (1.43) and AFFINE-UNUSED (2.27).
+
+### Per question
+
+Every run's score, and what the transcripts show. A question's six runs differ only in arm and repeat. The cost and time columns are the means of the three runs. "Greps" counts `git grep`, `grep` and `rg` commands and the Grep tool.
+
+**VS Code**
+
+| Question | A: r1, r2, r3 | N: r1, r2, r3 | Mean cost A / N | Mean time A / N | What happened |
+|---|---|---|---|---|---|
+| CALLERS1 (callers) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.084 / $0.070 | 23.9 / 15.5 s | A: two or three greps for `appendKeybinding` under `src`. N: `calls` (33 of the 34 files, one page) and one grep, in 2 tool calls. |
+| CALLERS2 (callers) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.132 / $0.110 | 33.1 / 21.6 s | A: 6–7 greps. N: `calls` with `within: "src/vs/sessions"` (11 of 12), then 5–6 greps to check the receivers. |
+| BREAKS1 (what breaks) | 0.92, 0.92, 0.89 | 1.00, 0.92, 0.92 | $0.135 / $0.143 | 36.6 / 38.8 s | No N run called `calls`; both arms ran 5–7 greps. Every A run missed `diffEditorWidget.ts` (a call through `this._editors.original`, which the index misses too) and listed `monaco.d.ts`; N r2 and r3 did the same, N r1 got all 13. |
+| BREAKS2 (what breaks) | 0.98, 0.98, 0.98 | 0.98, 0.99, 0.98 | $0.246 / $0.274 | 72.9 / 69.9 s | No N run called `calls`. Both arms ran 7–14 greps, some with a script, and five of six runs missed the same two files. A r3's refused command was a search of the whole disk for `typescript.js`, to type-check the repo itself. |
+| ADOPT1 (adopt) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.106 / $0.093 | 27.0 / 25.0 s | Every run of both arms: three greps for `showOpenDialog`. No `calls`. |
+| INJECTS1 (injects) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.088 / $0.097 | 19.4 / 17.6 s | Every run of both arms: two or three greps for `IWorkbenchAssignmentService`. No `calls`. |
+| TASK1 (task) | 1.00, 0.97, 1.00 | 0.95, 0.98, 0.95 | $0.193 / $0.199 | 58.2 / 62.4 s | No tool in N. Both arms grepped the callers and wrote a script to find the tests that import them. Every N run listed `chatThinkingContentPart.test.ts` (it stubs the method) among the files to change; N r1 and r3 missed 11 of the 99 tests and A r2 missed 10. |
+| TASK2 (task) | 1.00, 1.00, 1.00 | 1.00, 0.98, 1.00 | $0.205 / $0.201 | 59.3 / 71.1 s | No tool in N. Both arms: greps, then a test-import script. N r2 missed `terminalInstance.test.ts` among the files to change; N r3 took 113 s. A r3's first script heredoc was refused, and it wrote the script with Write instead. |
+| TASK3 (task) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.116 / $0.159 | 37.6 / 46.1 s | A: two or three commands, one a `node -e` scan. N r1 called `calls` (limit 500; 74 files across `src`, the question asks for `contrib`) and wrote a script; N r2 wrote three scripts and ran nine `node` commands; N r3 matched A. |
+| BP1 (big-picture) | 0.94, 0.94, 0.94 | 0.81, 0.88, 0.81 | $0.033 / $0.039 | 13.8 / 11.0 s | A grepped `.github` and the layout. N called `architecture` (layers) and `describe` on `src/vs`; r1 then read the organization doc. Every N run missed BP1.8 (the extension host). |
+| BP2 (big-picture) | 1.00, 0.75, 1.00 | 1.00, 1.00, 1.00 | $0.036 / $0.033 | 15.1 / 10.1 s | N called `architecture` (conventions), whose answer now names the folder's docs, then grepped `source-code-organization.instructions.md`: 1.00 in every run (Eval #2: 0.75 in every run). A r2 answered from `.github/copilot-instructions.md` alone. |
+| BP3 (big-picture) | 0.80, 0.90, 0.80 | 0.90, 0.90, 1.00 | $0.031 / $0.033 | 15.0 / 14.6 s | No tool in N. Both arms answered from one or two commands. |
+| BP4 (big-picture) | 0.56, 0.56, 0.94 | 1.00, 0.94, 1.00 | $0.062 / $0.051 | 18.1 / 11.1 s | N: `describe` on `workbench` and `workbench/contrib`, `architecture`, then the docs file. A r1 and r2 answered from greps and missed half or all of BP4.1, 4.3–4.5, 4.7 and 4.8 (Eval #2's A: 0.92). |
+| BP5 (big-picture) | 0.83, 0.83, 0.83 | 0.83, 0.92, 0.83 | $0.047 / $0.048 | 19.8 / 15.6 s | N: `describe` on `workbench`, then two greps. A: three or four commands. |
+| BP6 (big-picture, new: how it's tested) | 0.75, 0.88, 0.69 | 0.75, 0.88, 0.75 | $0.041 / $0.040 | 13.6 / 15.2 s | No tool in N; one to three commands in both arms. |
+| BP7 (big-picture, new: disposables) | 0.56, 0.56, 0.56 | 0.56, 0.63, 0.63 | $0.045 / $0.058 | 15.1 / 18.5 s | No tool in N. Both arms answered from two to five commands; no run scored above 0.63. |
+| CL1 (direct list) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.049 / $0.073 | 18.7 / 19.9 s | A: a script. N r1 and r2: `imports` (limit 500), then greps, r1 a script too; N r3: a script. |
+| CL4 (transitive list) | 0.95, 0.95, 0.95 | 1.00, 1.00, 1.00 | $0.065 / $0.055 | 27.8 / 15.0 s | A: one script, missing the same three entry files in every run. N: one `imports` call. |
+| CN1 (chain) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.069 / $0.050 | 24.2 / 6.1 s | A: a breadth-first search script. N: one `imports` call in two turns. |
+| IMPACT (impact) | 0.91, 0.91, 0.90 | 1.00, 1.00, 1.00 | $0.069 / $0.032 | 36.6 / 7.4 s | A: a script (0.90–0.91). N: one or two `imports` calls (1.00). |
+| CYCLE (cycle) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.038 / $0.030 | 14.7 / 8.9 s | A: a script. N: `architecture` (cycles). |
+| UNUSED (files nothing imports) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.042 / $0.044 | 20.4 / 17.8 s | Both arms: the same kind of script. No N run called a tool (Eval #2: 2 of 3). |
+| VIOLATIONS (violations) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.045 / $0.048 | 17.3 / 17.1 s | Both arms: a script. No N run called a tool (as in Eval #2). |
+| ENTRIES (entries) | 0.95, 0.95, 0.95 | 1.00, 1.00, 1.00 | $0.043 / $0.073 | 20.7 / 8.3 s | A: a script that listed `cliProcessMain.ts` too. N: `imports` (transitive), and in r1 and r3 `architecture`'s files-nothing-imports report with a limit of 500. |
+| PAIRS (pairs) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.053 / $0.047 | 21.5 / 18.2 s | A: a script. N: `architecture` (conventions), then a script. |
+
+**AFFiNE**
+
+| Question | A: r1, r2, r3 | N: r1, r2, r3 | Mean cost A / N | Mean time A / N | What happened |
+|---|---|---|---|---|---|
+| CALLERS1 (callers) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.170 / $0.160 | 39.5 / 37.7 s | A: a Read and 8–11 greps. N: `calls` (2 of the 20 files: most of the rest go through `std.get(ViewExtensionManagerIdentifier)`, an identifier value), then 6–9 greps. |
+| CALLERS2 (callers) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.068 / $0.068 | 20.8 / 18.8 s | A: four or five greps. N: `calls` (1 of 12), then three greps. |
+| BREAKS1 (what breaks) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.063 / $0.065 | 19.4 / 18.3 s | A: three to five greps. N r2 and r3: `calls` (2 of 11), then greps; N r1: greps, after a refused command (a stray `echo; for f in 1; do :; done`). |
+| BREAKS2 (what breaks) | 1.00, 1.00, 1.00 | 1.00, 0.98, 1.00 | $0.109 / $0.089 | 30.3 / 27.8 s | A: a Read and four or five greps. N: `calls` (1 of 25: the rest call `std.event.add`, whose getter's type is inferred), then 4–8 greps; N r2 missed `extension/service.ts`. |
+| INJECTS1 (injects) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.136 / $0.122 | 34.7 / 40.5 s | Both arms: greps for `AuthService`, and in five of the six runs a script or `node -e`. No `calls`. |
+| TASK1 (task) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.164 / $0.180 | 38.7 / 43.9 s | A: greps and a test-import script. N r1: greps, then `imports` for the tests; r2: greps and a script, after a refused `$(…)`; r3: `calls` (10 of 11), then greps. |
+| TASK2 (task) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.222 / $0.224 | 67.4 / 69.0 s | A: 9–10 greps and a test-import script. N: 8–11 greps, then 4–14 `imports` calls for the tests, with no script. |
+| BP1 (big-picture) | 1.00, 0.94, 1.00 | 0.81, 0.94, 0.94 | $0.052 / $0.053 | 18.6 / 18.3 s | N: `overview`, then greps; half points lost on BP1.5–1.7. |
+| BP2 (big-picture) | 0.63, 0.56, 0.50 | 0.56, 0.63, 0.56 | $0.037 / $0.038 | 14.8 / 15.8 s | N: `describe` on `blocksuite`, then two greps. Both arms low, as in Eval #2. |
+| BP3 (big-picture) | 0.56, 0.81, 0.69 | 0.56, 0.56, 0.69 | $0.048 / $0.047 | 17.2 / 21.8 s | No tool in N; two or three greps in both arms. |
+| BP4 (big-picture) | 0.56, 0.56, 0.50 | 0.69, 0.63, 0.69 | $0.089 / $0.049 | 22.9 / 19.2 s | N: `search` for storage and sync, then grep. A: six or seven commands. |
+| BP5 (big-picture, new: edgeless storage) | 0.88, 0.81, 0.88 | 0.94, 0.88, 0.88 | $0.063 / $0.055 | 19.9 / 18.5 s | No tool in N; three to six greps in both arms. |
+| BP6 (big-picture, new: the workbench) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.071 / $0.072 | 20.4 / 18.4 s | N: `search`, then reads or greps. A: three or four commands. 1.00 in every run. |
+| CL1 (direct list) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.051 / $0.046 | 18.3 / 16.0 s | A: two to four greps. N: `imports` and a grep. |
+| CL4 (transitive list) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.073 / $0.042 | 28.6 / 11.2 s | A: a script (r3's first run of it piped through `tee`, refused). N: one `imports` call. |
+| CN1 (chain) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.061 / $0.021 | 24.7 / 5.1 s | A: greps, r2 a script. N: one `imports` call. |
+| IMPACT (impact) | 0.99, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.133 / $0.043 | 25.3 / 9.1 s | A: a script; r2's first script went to the background after 120 s (see "What the runs showed about the method"). N: two or three `imports` calls. |
+| CYCLE (cycle) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.041 / $0.024 | 16.8 / 7.0 s | A: reads and greps, r2 a script. N: `architecture` (cycles). |
+| UNUSED (files nothing imports) | 0.91, 0.91, 0.91 | 1.00, 1.00, 1.00 | $0.068 / $0.050 | 26.1 / 21.0 s | Both arms: a script. No N run called a tool (Eval #2: 3 of 3). Every A run listed `page-list/readme.md`. |
+| VIOLATIONS (violations) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.066 / $0.044 | 24.2 / 21.4 s | A: greps and a script. N: three or four greps, no tool (Eval #2: 3 of 3). |
+| ENTRIES (entries) | 0.93, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.126 / $0.034 | 57.1 / 5.7 s | A: scripts, edited and re-run in r2 and r3 (12–15 turns); r1 listed `auth.tsx` too. N: one `imports` call. |
+| PAIRS (pairs) | 0.94, 0.94, 1.00 | 1.00, 1.00, 1.00 | $0.053 / $0.065 | 21.3 / 25.1 s | A: a script. N r1: 12 `imports` calls, one per folder; r2: one `imports` call and a script; r3: a script, after a refused stray loop. |
+
+**Theia** (held out, free mode)
+
+| Question | A: r1, r2, r3 | N: r1, r2, r3 | Mean cost A / N | Mean time A / N | What happened |
+|---|---|---|---|---|---|
+| CALLERS1 (callers) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.204 / $0.184 | 21.1 / 19.9 s | A: three to seven greps. N r1 and r2: a grep, then `calls` (13 of 14), then one or two greps; N r3: greps only. |
+| BREAKS1 (what breaks) | 1.00, 0.99, 1.00 | 0.99, 1.00, 0.99 | $0.295 / $0.294 | 40.9 / 44.7 s | A: greps, r1 a script after a refused `$(…)`. N r1: a script after the same refusal, then 13 Grep calls; r3: `calls` (34 calling files), then greps. Three runs (A r2, N r1, N r3) missed `examples/api-tests/src/menus.spec.js`, a `.js` test that gets the type through `container.get`. |
+| BREAKS2 (what breaks) | 0.96, 0.96, 0.96 | 0.91, 0.96, 0.91 | $0.394 / $0.227 | 53.6 / 30.2 s | A: 7–10 greps and scripts (37–67 s, $0.31–0.49); r1 and r2 also listed three `api-tests` the truth leaves out, r3 missed the three JSDoc-typed tests. N r1 and r3 trusted `calls` (16–19 s, $0.18–0.19) and missed six files (see "The losses"). N r2: no tool, missed the three JSDoc-typed tests. |
+| INJECTS1 (injects) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.202 / $0.209 | 20.6 / 20.3 s | Every run of both arms: one to three greps for `EnvVariablesServer`. No `calls`. |
+| TASK1 (task) | 1.00, 0.85, 0.95 | 0.90, 1.00, 1.00 | $0.229 / $0.244 | 38.9 / 43.7 s | No tool in N. A r2 and N r1 listed two `.slow-spec.ts` files as tests, which the rule's naming test doesn't count; A r2 and r3 missed two files to change. |
+| TASK2 (task) | 0.83, 0.85, 0.98 | 0.85, 0.85, 1.00 | $0.308 / $0.297 | 63.7 / 54.8 s | No tool in N. In two runs of each arm the tests list missed ten `api-tests` `.spec.js` files (TESTS recall 0.55). N r2 and r3 each had one refused command. |
+| CL1 (direct list) | 1.00, 1.00, 1.00 | 0.81, 0.81, 1.00 | $0.165 / $0.165 | 20.1 / 18.5 s | A: a script or a `node -e` scan; r1 listed five extra files (precision 0.86). N r1 and r2: one grep whose filter dropped six files (see "The losses"); N r3: a script. No tool call. |
+| CL2 (transitive list) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.241 / $0.177 | 41.6 / 22.5 s | A: four or five greps and a script. N: one `imports` call. |
+| CN1 (chain) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.166 / $0.140 | 16.1 / 5.3 s | A: a script. N: one `imports` call. |
+| CYCLE (cycle) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.169 / $0.157 | 21.2 / 10.7 s | A: a script. N: `architecture` (cycles), then a grep or two. |
+| UNUSED (files nothing imports) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.162 / $0.165 | 17.9 / 18.2 s | Both arms: the same script. No tool call. |
+| ENTRIES (entries) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | $0.175 / $0.172 | 25.0 / 11.3 s | A: a script. N: one `imports` call. |
+| BP1 (big-picture, new: plugins) | 0.94, 0.88, 0.94 | 0.94, 0.94, 0.88 | $0.142 / $0.145 | 11.4 / 10.5 s | Both arms answered almost from memory: zero or one tool call. |
+| BP2 (big-picture, new: applications) | 0.75, 0.75, 0.75 | 0.69, 0.75, 0.69 | $0.155 / $0.151 | 14.4 / 16.5 s | One grep or read in both arms. No N run named `@theia/core` as the base extension (BP2.5). |
+
+### The sessions
+
+Each session is four questions in one conversation (Eval #2's, unchanged): the impact of a change to X, a chain from an entry point to X, a cycle through X, and the files nothing imports in X's folder. The score is the mean of the four messages' scores. The cost and time are the session's totals; the "3 runs" columns add up the three repeats.
+
+| Session | A: scores | N: scores | Mean score A / N | Cost, 3 runs, A / N | Time, 3 runs, A / N | Median session cost A / N | Median session time A / N |
+|---|---|---|---|---|---|---|---|
+| vscode-s1 (notebook cell model) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | 0.999 / 1.000 | $0.582 / **$0.847** | 184.6 / **213.0 s** | $0.201 / $0.180 | 61.0 / 26.0 s |
+| affine-s1 (database block) | 1.00, 1.00, 1.00 | 1.00, 1.00, 1.00 | 1.000 / 1.000 | $0.603 / $0.367 | 230.6 / 81.8 s | $0.189 / $0.100 | 74.6 / 24.3 s |
+
+- *A* wrote and reused its own import-graph scripts in all six sessions (4–7 `node` commands each). affine-s1 r1's first message had one refused command (a `sed` with a redirect), and the session went on with a script.
+- *N* called a tool in all 24 of its messages: 2–5 calls on the impact message (`imports` and `architecture`), then one call on each of the other three. vscode-s1 N r1 also wrote two scripts and ran ten `node` commands to cross-check the index's count, which made it the costliest session of the twelve ($0.578, 169 s). Without it, N's two other VS Code sessions cost $0.180 and $0.088 and took 18 and 26 s.
+- In Eval #2, every alone session had a refused command and affine-s1 alone scored 0.83 (two first messages gave up). Here both sessions score 1.00 in both arms, so condition 4's session check passed by +0.0007 and +0.0004.
+
+### Refusals
+
+17 calls were refused, each in a different run: 9 runs of A (4.8%) and 8 of N (4.2%). Every refused call was a Bash command, every one was read, and every run went on to an answer: none gave up.
+
+| Arm | Run | Kind | Score | The refused command, in short | Cause |
+|---|---|---|---|---|---|
+| A | affine-cl4-baseline-3 | transitive list (Eval #2) | 1.00 | `node <scratch>/g.js \| tee /dev/null \| wc -l; …` | `tee` (named in the sentence), as a no-op |
+| A | affine-impact-baseline-3 | impact (Eval #2) | 1.00 | `git ls-files \| … \| sed 's/.*\.//' 2>/dev/null \| head -0` | `sed` and a redirect (named), in a tail that prints nothing |
+| A | affine-s1-baseline-1, message 1 | session | 1.00 | `… \| sed 's/.*\.//' 2>/dev/null \| head -0; …` | `sed` and a redirect (named), in a tail that prints nothing |
+| A | affine-task2-baseline-3 | task | 1.00 | `node <scratch>/imp.js \| sed 's/ ->.*//' 2>/dev/null \|\| …` | `sed` and a redirect (named) |
+| A | theia-breaks1-baseline-1 | what breaks | 1.00 | `git grep -n … -- $(git grep -l "ContextMenuRenderer" …) \| grep -v …` | command substitution `$(…)`, which the sentence doesn't name |
+| A | theia-breaks2-baseline-2 | what breaks | 0.96 | `git grep -nE … -- $(git grep -lw "PreferenceService" …) \| grep -v …` | `$(…)` |
+| A | theia-task2-baseline-2 | task | 0.85 | `… \| awk 'length($0)>=260' 2>/dev/null \| head -0; …` | `awk` and a redirect (named), in a tail that prints nothing |
+| A | vscode-breaks2-baseline-3 | what breaks | 0.98 | `ls node_modules 2>&1 \| head -3; find / -name typescript.js … 2>/dev/null` | redirects (named), in a search of the whole disk for TypeScript |
+| A | vscode-task2-baseline-3 | task | 1.00 | `cat > <scratch>/t.js <<'EOF' …` | a heredoc and a redirect (named) |
+| N | affine-breaks1-nebulosity-1 | what breaks | 1.00 | `git grep -ln "setMode" \| …; echo; for f in 1; do :; done` | `echo` and a loop (named), as a tail that does nothing |
+| N | affine-pairs-nebulosity-3 | pairs (Eval #2) | 1.00 | `ls packages/frontend; …; for d in 1; do :; done` | a loop (named), as a tail that does nothing |
+| N | affine-task1-nebulosity-2 | task | 1.00 | `git grep -n -E "…" -- $(git ls-files '…spec.ts' …)` | `$(…)` |
+| N | theia-breaks1-nebulosity-1 | what breaks | 0.99 | `git grep -n -E … $(git grep -l "ContextMenuRenderer" …) \| grep -v …` | `$(…)` |
+| N | theia-breaks1-nebulosity-3 | what breaks | 0.99 | `… \| grep -v -F -f /dev/null \| cut -d: -f1 2>/dev/null \| sort -u \| wc -l` | `cut` and a redirect (named) |
+| N | theia-breaks2-nebulosity-3 | what breaks | 0.91 | `… \| grep -v -E "$(echo x)" \| wc -l; …` | `$(…)`, with `echo` inside it |
+| N | theia-task2-nebulosity-2 | task | 0.85 | `git grep -lE "CommandRegistry" … \| xargs 2>/dev/null; git grep … > /dev/null; …` | `xargs` and redirects (named), as steps that print nothing |
+| N | theia-task2-nebulosity-3 | task | 1.00 | `for f in ai-chat-ui/… ; do …` | a loop (named) |
+
+By kind, A had refused commands in 1 transitive list, 1 impact, 3 breaks, 3 task runs and 1 session; N in 1 pairs, 4 breaks and 3 task runs. Big-picture, callers, adopt and injects runs had none in either arm. Theia had 8 of the 17 (A 3 of 42 runs, N 5 of 42).
+
+**Causes.**
+- *Command substitution, `$(…)`: 5* (A 2, N 3). The rules sentence names neither allowing nor refusing it; the pilot saw it twice and the sentence could not be reworded again (R-L allows one rewording).
+- *A pipe into `sed`, `awk`, `cut` or `tee`: 6* (A 5, N 1), each named in the sentence as refused.
+- *A shell loop: 3* (all N), named.
+- *A heredoc: 1* (A), named.
+- *Redirects or `xargs` alone: 2* (A 1, N 1), named.
+
+**A pattern worth recording.** Seven of the 17 refused commands carry the refused construct in a part that does nothing: `; for f in 1; do :; done`, `| head -0` after a `sed` or an `awk`, `| tee /dev/null |`, `xargs 2>/dev/null; … > /dev/null`. Each is one of the constructs the rules sentence lists as refused. The transcripts keep the model's thinking redacted, so why it appended them isn't recorded. It happened in both arms (A 4, N 3), so it doesn't tilt the comparison, but a sentence that lists refused constructs may itself prompt them.
+
+**Against Eval #2.** Over all their runs, Eval #2's alone arm had a refused command in 81 of 135 and its N arm in 18 of 135 (counted from Eval #2's transcripts with the same `refusedCalls`). Eval #3's were 9 of 189 and 8 of 189. On the questions Eval #3 reused, A's graph runs went from 13 of 27 (VS Code) and 24 of 27 (AFFiNE) with a refusal to 0 and 2, and its sessions from 6 of 6 to 1 of 6.
+
+### Tool use
+
+How often N called Nebulosity's tools, by kind (single runs; a session's row counts messages):
+
+| Kind | VS Code | AFFiNE | Theia | All |
+|---|---|---|---|---|
+| Callers | 6 of 6 | 6 of 6 | 2 of 3 | 14 of 15 |
+| What breaks | 0 of 6 | 5 of 6 | 3 of 6 | 8 of 18 |
+| Adopt | 0 of 3 | – | – | 0 of 3 |
+| Injects | 0 of 3 | 0 of 3 | 0 of 3 | 0 of 9 |
+| Task | 1 of 9 | 5 of 6 | 0 of 6 | 6 of 21 |
+| Theia's graph questions | – | – | 12 of 18 | 12 of 18 |
+| Eval #2's graph questions | 20 of 27 | 20 of 27 | – | 40 of 54 |
+| **Condition 5's set** (new and graph) | 27 of 54 | 36 of 48 | 17 of 36 | **80 of 138** |
+| Big-picture | 12 of 21 | 12 of 18 | 0 of 6 | 24 of 45 |
+| Session messages | 12 of 12 | 12 of 12 | – | 24 of 24 |
+
+Within the graph sets: every chain, cycle, impact, transitive-list and entries run of N called a tool (42 of 42); direct lists 5 of 9 and pairs 5 of 6; files nothing imports 0 of 9 and violations 0 of 6.
+
+- **Which tools.** Over all 189 N runs, sessions included: `imports` 112 calls in 50 runs; `architecture` 35 in 29; `calls` 24 in 24; `describe` 15 in 12; `search` 6 in 6; `overview` 4 in 4. `show_on_map` was never called, which is right with no Map open. One call returned an error (an `imports` call in affine-pairs-nebulosity-1), and the run went on.
+- **`calls`.** It was N's first tool call in 19 of its 66 call and task runs; in 40 the first was a Bash command, nearly always a `git grep` for the member's name. It was called once per run, never with `offset`: no run paged. Eight calls asked for a limit of 200 or 500 and three used `within`. Its answers ran from 664 to 10,433 characters. On VS Code's two callers questions and Theia's callers question it listed all but one file. On AFFiNE's callers and breaks questions it listed one or two of 11–25 (and 10 of 11 on TASK1). On Theia's breaks questions it listed most but not all.
+- **ToolSearch: 0 calls in all 378 runs.** The six question tools load through their own `_meta`, as on the dev set.
+- **Scripts.** A wrote or ran a Node script in 96 of its 183 single runs and in all 6 sessions; N in 42 of 183 and 1 of its 6 sessions. By set: the new questions A 49 of 84, N 25 of 84; Eval #2's graph questions A 47 of 54, N 17 of 54; big-picture none in either arm.
+- **The per-turn cost.** N's median first-call context was 2,368 tokens above A's on VS Code, 2,369.5 on AFFiNE and 2,372 on Theia. MCP Dev Set #2 estimated about +2,373 on VS Code and +2,362 to +2,375 on AFFiNE after its last trim (BENCHMARKS.md), so the eval agrees with it to within 7 tokens. Eval #2's six tools cost +2,094 and +2,092; `calls` and the instructions' rewording added about 275 tokens a turn.
+
+### Against Eval #2
+
+The same 27 single questions (VS Code's 9 graph questions and BP1–BP5, AFFiNE's 9 and BP1–BP4) and the same two sessions, with the same prompts apart from the closing sentence, truths and rubrics. Both evals ran three repeats per arm.
+
+| Question | Eval #2: A | Eval #2: N | Eval #3: A | Eval #3: N | N runs with a call, Eval #2 / #3 | Median cost A / N, Eval #2 | Median cost A / N, Eval #3 | Median time A / N, Eval #2 | Median time A / N, Eval #3 |
+|---|---|---|---|---|---|---|---|---|---|
+| VSCODE-CL1 | 0.97 | 1.00 | 1.00 | 1.00 | 3 / 2 | $0.040 / $0.086 | $0.052 / $0.081 | 17.6 / 19.7 s | 20.1 / 17.4 s |
+| VSCODE-CL4 | 0.92 | 1.00 | 0.95 | 1.00 | 3 / 3 | $0.261 / $0.049 | $0.065 / $0.052 | 81.6 / 13.8 s | 25.6 / 14.1 s |
+| VSCODE-CN1 | 1.00 | 1.00 | 1.00 | 1.00 | 3 / 3 | $0.037 / $0.022 | $0.048 / $0.023 | 19.6 / 5.5 s | 23.9 / 5.7 s |
+| VSCODE-IMPACT | 0.91 | 1.00 | 0.90 | 1.00 | 3 / 3 | $0.105 / $0.028 | $0.070 / $0.027 | 51.4 / 9.6 s | 35.9 / 6.2 s |
+| VSCODE-CYCLE | 1.00 | 1.00 | 1.00 | 1.00 | 3 / 3 | $0.035 / $0.022 | $0.037 / $0.031 | 13.1 / 6.2 s | 15.3 / 9.6 s |
+| VSCODE-UNUSED | 0.87 | 1.00 | 1.00 | 1.00 | 2 / 0 | $0.073 / $0.100 | $0.041 / $0.043 | 32.5 / 33.3 s | 20.2 / 16.8 s |
+| VSCODE-VIOLATIONS | 1.00 | 1.00 | 1.00 | 1.00 | 0 / 0 | $0.047 / $0.052 | $0.046 / $0.048 | 18.1 / 19.3 s | 16.1 / 16.0 s |
+| VSCODE-ENTRIES | 0.63 | 1.00 | 0.95 | 1.00 | 3 / 3 | $0.189 / $0.108 | $0.043 / $0.088 | 56.7 / 17.5 s | 21.0 / 8.8 s |
+| VSCODE-PAIRS | 1.00 | 0.99 | 1.00 | 1.00 | 3 / 3 | $0.100 / $0.192 | $0.051 / $0.047 | 44.8 / 77.3 s | 21.8 / 18.1 s |
+| VSCODE-BP1 | 0.90 | 0.85 | 0.94 | 0.83 | 3 / 3 | $0.032 / $0.031 | $0.031 / $0.041 | 13.9 / 11.0 s | 14.1 / 11.1 s |
+| VSCODE-BP2 | 1.00 | 0.75 | 0.92 | 1.00 | 3 / 3 | $0.047 / $0.027 | $0.036 / $0.033 | 13.4 / 10.2 s | 14.9 / 9.4 s |
+| VSCODE-BP3 | 0.93 | 0.87 | 0.83 | 0.93 | 0 / 0 | $0.029 / $0.024 | $0.031 / $0.034 | 13.8 / 10.5 s | 14.6 / 14.5 s |
+| VSCODE-BP4 | 0.92 | 0.92 | 0.69 | 0.98 | 3 / 3 | $0.062 / $0.050 | $0.060 / $0.050 | 19.2 / 12.9 s | 19.2 / 10.9 s |
+| VSCODE-BP5 | 0.89 | 0.83 | 0.83 | 0.86 | 3 / 3 | $0.029 / $0.046 | $0.048 / $0.046 | 13.0 / 15.1 s | 19.7 / 14.6 s |
+| AFFINE-CL1 | 1.00 | 1.00 | 1.00 | 1.00 | 3 / 3 | $0.052 / $0.043 | $0.051 / $0.044 | 22.4 / 12.0 s | 18.7 / 15.6 s |
+| AFFINE-CL4 | 1.00 | 1.00 | 1.00 | 1.00 | 3 / 3 | $0.353 / $0.041 | $0.076 / $0.042 | 99.9 / 11.5 s | 29.6 / 11.2 s |
+| AFFINE-CN1 | 1.00 | 1.00 | 1.00 | 1.00 | 3 / 3 | $0.071 / $0.020 | $0.067 / $0.021 | 28.1 / 5.1 s | 23.2 / 5.1 s |
+| AFFINE-IMPACT | 0.66 | 1.00 | 0.99 | 1.00 | 3 / 3 | $0.124 / $0.044 | $0.086 / $0.045 | 44.4 / 9.9 s | 33.9 / 8.8 s |
+| AFFINE-CYCLE | 1.00 | 1.00 | 1.00 | 1.00 | 3 / 3 | $0.054 / $0.019 | $0.041 / $0.020 | 15.9 / 4.8 s | 15.9 / 4.4 s |
+| AFFINE-UNUSED | 0.94 | 1.00 | 0.91 | 1.00 | 3 / 0 | $0.147 / $0.049 | $0.066 / $0.051 | 40.2 / 17.6 s | 25.3 / 20.2 s |
+| AFFINE-VIOLATIONS | 1.00 | 1.00 | 1.00 | 1.00 | 3 / 0 | $0.057 / $0.039 | $0.064 / $0.043 | 22.4 / 13.7 s | 24.5 / 19.8 s |
+| AFFINE-ENTRIES | 0.92 | 1.00 | 0.98 | 1.00 | 3 / 3 | $0.158 / $0.034 | $0.137 / $0.034 | 56.9 / 7.0 s | 49.6 / 5.6 s |
+| AFFINE-PAIRS | 1.00 | 1.00 | 0.96 | 1.00 | 3 / 2 | $0.079 / $0.094 | $0.051 / $0.056 | 32.1 / 21.3 s | 21.2 / 22.2 s |
+| AFFINE-BP1 | 0.94 | 0.88 | 0.98 | 0.90 | 3 / 3 | $0.051 / $0.071 | $0.053 / $0.055 | 20.4 / 22.0 s | 19.5 / 18.3 s |
+| AFFINE-BP2 | 0.52 | 0.54 | 0.56 | 0.58 | 3 / 3 | $0.042 / $0.044 | $0.038 / $0.039 | 15.2 / 15.4 s | 15.0 / 15.7 s |
+| AFFINE-BP3 | 0.71 | 0.69 | 0.69 | 0.60 | 0 / 0 | $0.054 / $0.060 | $0.047 / $0.042 | 18.7 / 20.3 s | 17.2 / 17.5 s |
+| AFFINE-BP4 | 0.63 | 0.63 | 0.54 | 0.67 | 3 / 3 | $0.075 / $0.073 | $0.090 / $0.049 | 25.3 / 22.4 s | 22.5 / 20.2 s |
+
+| Set (the reused questions) | Score A / N, Eval #2 | Score A / N, Eval #3 | Median cost A / N, Eval #2 | Median cost A / N, Eval #3 | Median time A / N, Eval #2 | Median time A / N, Eval #3 | Runs with a refused command A / N, Eval #2 | Eval #3 |
+|---|---|---|---|---|---|---|---|---|
+| VS Code graph (9) | 0.923 / 0.999 | 0.979 / 1.000 | $0.064 / $0.050 | $0.048 / $0.047 | 27.1 / 15.7 s | 21.1 / 14.1 s | 13 / 7 of 27 | 0 / 0 of 27 |
+| AFFiNE graph (9) | 0.947 / 1.000 | 0.982 / 1.000 | $0.079 / $0.041 | $0.066 / $0.043 | 32.1 / 10.4 s | 24.4 / 11.3 s | 24 / 4 of 27 | 2 / 1 of 27 |
+| VS Code big-picture (5) | 0.927 / 0.844 | 0.842 / 0.921 | $0.033 / $0.031 | $0.037 / $0.041 | 13.9 / 11.5 s | 15.8 / 11.6 s | 2 / 0 of 15 | 0 / 0 of 15 |
+| AFFiNE big-picture (4) | 0.698 / 0.682 | 0.693 / 0.688 | $0.054 / $0.065 | $0.049 / $0.044 | 20.5 / 20.9 s | 17.5 / 17.9 s | 5 / 5 of 12 | 0 / 0 of 12 |
+| vscode-s1 (3 sessions) | 0.999 / 1.000 | 0.999 / 1.000 | $0.617 / $0.350 (3 runs) | $0.582 / $0.847 (3 runs) | 249.7 / 85.7 s (3 runs) | 184.6 / 213.0 s (3 runs) | 3 / 0 of 3 | 0 / 0 of 3 |
+| affine-s1 (3 sessions) | 0.833 / 1.000 | 1.000 / 1.000 | $1.382 / $0.270 (3 runs) | $0.603 / $0.367 (3 runs) | 447.0 / 71.4 s (3 runs) | 230.6 / 81.8 s (3 runs) | 3 / 0 of 3 | 1 / 0 of 3 |
+
+**What changed between the evals:**
+- *The rules sentence*, in place of Eval #2's scripts sentence, in both arms ("The scripts rules and the rules sentence"). Runs with a refused command fell from 60% to 4.8% in A and from 13% to 4.2% in N.
+- *Nebulosity, frozen at `2f913ad` instead of `90f9f63`:* the `calls` tool and its index (ADR-059); `architecture` naming its folder's docs and the server's instructions saying to open the docs first (ADR-054 amended after Eval #2); the definitions trimmed to 6,548 characters (R-Q, R-AA); and the instructions reworded three times on the dev set (Task 16).
+- *Claude Code 2.1.301* instead of 2.1.300; the same model and effort. The index versions moved from 152 and 131 to 155 and 134 with the re-indexes of R-AC; the files and imports stayed the same.
+
+**What that did:**
+- *Claude Code alone got faster and cheaper on the graph questions*, with its scripts no longer refused: VSCODE-CL4 went from $0.261 and 81.6 s to $0.065 and 25.6 s, AFFINE-CL4 from $0.353 and 99.9 s to $0.076 and 29.6 s, VSCODE-ENTRIES from 0.63 to 0.95 and AFFINE-IMPACT from 0.66 to 0.99. N's numbers barely moved. So N's lead on these nine questions per repo narrowed. Taken the gate's way (the median over the questions of each question's ratio of medians), N's time went from 0.48 of A's in Eval #2 to 0.63 here on VS Code, and from 0.30 to 0.38 on AFFiNE (0.37 to 0.59 pooled); its cost from 0.63 to 0.92 and from 0.36 to 0.56 (0.58 to 0.79 pooled). The time lead holds without the refusals; on VS Code, the cost lead is down to 0.92.
+- *TTRC on these questions* came out at 0.31 (VS Code) and 0.51 (AFFiNE), 0.41 [0.19–0.84] pooled. Eval #2's references, from its own transcripts and its own graph questions, were 0.33, 0.29 and 0.29 pooled (0.31 on its refusal-free runs).
+- *VS Code's big-picture result turned over*, from 0.927 / 0.844 to 0.842 / 0.921. N rose on BP2 (0.75 to 1.00: `architecture`'s answer now names the organization doc, and every N run opened it) and BP4. A fell on BP4 (0.92 to 0.69) and BP3 (0.93 to 0.83) with no change on its side but the closing sentence and Claude Code's version. BP1 stayed a loss for N (0.83 against 0.94). So part of the turnover is A's variance, not N's gain.
+- *AFFiNE's files nothing imports and violations questions lost their tool calls*: 6 of 6 N runs called a tool in Eval #2, 0 of 6 here. Both kinds were among the dev set's four stable misses on AFFiNE before the eval. N still scored 1.00 on both.
+- *The sessions* lost their refusals in A. affine-s1 alone rose from 0.833 to 1.000 and its cost fell by more than half, so N's lead there shrank from 0.20 to 0.61 of A's cost; vscode-s1 with Nebulosity cost more than alone (above).
+
+### Usage
+
+- **The windows.** The 5-hour window read 0.49 at the first run (06:58 UTC) and rose to 0.81 before it reset at about 09:00 UTC; it read 0.31 at the last run (10:17 UTC). The 7-day window went from 0.71 to 0.76. These are two-decimal readings from the runs' `rate_limit_event`s. The session that ran the eval used the same windows meanwhile (its subagents had moved the week from 0.64 to 0.71 during the night, before the pilot), so the eval's share is at most 0.05 of the week. Neither stop (0.9 and 0.85) was reached.
+- **The cost estimate.** Claude Code's list-price estimate for the 378 runs is $42.78:
+  - single runs: A $21.13, N $19.25;
+  - sessions: A $1.19, N $1.21.
+
+  The pilot's 28 runs were $4.60 of it. The plan expected $35–55. The median single run was $0.077. The costliest single run was THEIA-BREAKS2's second A run, at $0.488, and the costliest session vscode-s1's first N run, at $0.578. Theia's runs cost more in both arms because its first call is about 50,500 tokens: Theia's own `CLAUDE.md` and `AGENTS.md`, which both arms load.
+- **Time and tokens.** The single runs' `duration_ms` add up to 84.7 minutes for A and 70.0 for N; the sessions' to 6.9 and 4.9. The single runs' tokens add up to 31.29 million for A and 28.46 million for N, nearly all cache reads. With the dev set ($9.38 for 59 runs), Eval #3 cost about $52 in all.
+
+### What the runs showed about the method
+
+- **The controller, not the owner, approved the full count and ruled on the grades.** The owner was away overnight and had delegated every stop ("just do everything and make the best decisions until i respond tmrw morning"). After the pilot showed that the gate would very likely fail (refusals in 2 of 14 runs per arm, and no `calls` call in the pilot), the controller ran the full schedule rather than cut it, since a cut would drop Theia's only big-picture questions. Every such decision is listed for the owner in the V1.7 ledger.
+- **Grading.**
+  - 678 big-picture points were graded twice, blind: grader 1 a fresh Sonnet subagent per sheet, grader 2 one Opus subagent over all 90, never shown grader 1's replies. They agreed exactly on 578 (85.3%; Eval #2 84%, Eval #1 88%).
+  - All 100 disagreements were half a point. A third, arms-hidden adjudicator (an Opus model) read each disputed point with the full answer and suggested a score with a reason. The controller adopted every suggestion: 32 kept grader 1's score and 68 took grader 2's.
+  - The rulings are in `eval3/grading/review.json`, marked as the controller's. The owner can overturn any of them and re-run `npm run eval:grading -- --eval eval3 merge` and the scorer.
+- **The graders could still tell many N answers apart.** No answer named Nebulosity or a tool's MCP name, so the redaction changed nothing (`eval3/grading/redactions.json`). But 12 of the 90 answers mention "the index" or "the import graph", ordinary words R-AD keeps: 11 of N's 45 and 1 of A's 45. The one in A is a false positive (affine-bp5-baseline-1 writes "the `index` field", BlockSuite's z-order index), so the arm tell is 11 of N's 45 and none of A's. The grading was blind to the run, but not always to the arm.
+- **One run's time is understated.** In affine-impact-baseline-2, A's first script hit Claude Code's 120 s command timeout and was moved to the background. A rewritten script answered, and the run's first `result` came at 198.9 s, 16 turns, $0.221. About nine minutes later the background script was stopped, and Claude Code woke the session with a notification. The model added a note ("That notification is about the first script … My answer doesn't come from it"), and a second `result` closed the run with `duration_ms` 2,830, 1 turn, and a cumulative cost of $0.231. The scorer reads the last result, so the run counts 2.8 s and 1 turn (its clock ran 754 s) and is scored on the note, which repeats the answer (0.996). No gate condition uses that run's time: condition 4 on Eval #2's graph questions uses its cost, which is cumulative and right, and the question's median time (33.9 s) is another run's.
+- **Wall time is `duration_ms`.** It leaves out start-up, N's MCP server included, which leans slightly toward N on condition 3. TTRC counts from process start, which leans toward A (R-F); from the query start, N's ratios on the new questions are 0.02–0.10 lower.
+- **The threats the method named, as they turned out.**
+  - *"Condition 1 rests on the multi-step kinds."* It did, and they split (above).
+  - *"The dev set's tool use was 13 of 17 (0.76), so condition 5 is at risk."* The eval's was 0.58. The dev set's four stable misses were VS Code's task and injects questions and AFFiNE's files nothing imports and violations questions. Here VS Code's tasks (1 of 9 runs with a tool), every injects question (0 of 9), and files nothing imports and violations on both repos (0 of 12) went without a tool too, and so did the adopt question and 10 of the 18 breaks runs.
+  - *"The calls index misses many of these callers."* It did, and conditions 2 and 3 show it on Theia's BREAKS2. On AFFiNE the runs grepped past it, so it showed as no gain rather than a loss.
+  - *"Most of the task changes are already in the code."* No run answered "nothing to change"; every run listed the files the rule defines.
+- **No engine change was made after the freeze** (`EVAL3_ENGINE`, `2f913ad`). The index's misses on these targets are recorded above and are the first candidate for work after the results, measured on new targets (ADR-043, amended).
+
+### What this says about the claim
+
+The claim Eval #3 tests is V1.7's: with Nebulosity, Claude Code reaches the files a question needs four times as fast, makes half the errors, and is faster and cheaper end to end on questions about calls through injected services, with no loss elsewhere and no confound from refused commands (D1). **It doesn't.** The gate failed on four of its seven conditions.
+
+In plain sentences:
+- **The comparison was clean this time.** The rules sentence brought refused commands down to 4.8% of A's runs and 4.2% of N's, under V's 5%. Eval #3 is the first eval in which neither arm's results are shaped by refusals.
+- **Condition 1 failed because both arms find callers the same way, and fast.** Nearly every run, in both arms, began with a `git grep` for the member's name. On these single-method questions that one grep names most of the files at once, so Claude Code alone reached the relevant context as soon as Claude Code with Nebulosity did. `calls` was called in only 24 of 66 call and task runs, and where it was, it arrived in the same turn as the grep.
+- **Condition 2 failed because there was little to win, and N lost a little.** Careful grep is nearly exact on a single method's callers: Claude Code alone scored 0.988 on the new questions. Half its error was 0.006. N's few errors came from trusting short answers: an incomplete `calls` answer on Theia's BREAKS2 (the index misses calls through `@theia/core`'s re-exports), and a grep with a bad filter on Theia's direct list, where it called no tool.
+- **Condition 3 failed because `calls` saved nothing where it was used, and wasn't used elsewhere.** On AFFiNE, the index missed most callers of the drawn methods (inferred getters, identifier values, inferred locals), so every N run grepped the rest and paid for both. On VS Code and Theia, where `calls` was nearly complete, it cut the callers questions to 0.57–0.66 of the time, not 0.5. VS Code's breaks, adopt, injects and task runs called it once in 21; Theia's breaks runs called it in 3 of 6, and two of those trusted it and lost files.
+- **Condition 5 failed because the runs grep the member name first.** That was true on the dev set across three rounds of wording, and true here: 58% of N's runs on new and graph questions called a tool. When a question names a method and a type, Claude Code reaches for grep; when it names a file and asks about imports, it reaches for `imports`.
+- **What Nebulosity measurably did, again, was the import walk.** On Eval #2's graph questions, now without refusals in either arm, Claude Code with Nebulosity answered in 0.63 (VS Code) and 0.38 (AFFiNE) of the time per question, at 0.92 and 0.56 of the cost, scoring 1.00 against 0.98. On Theia's held-out graph questions, in free mode, it took 0.58 of the time at 0.95 of the cost and scored 0.978 against 1.000 (one direct-list question with no tool call). On those questions it reached the relevant context in 0.33–0.41 of the time. On the same questions in Eval #2 the ratios were 0.48 and 0.30 for time and 0.63 and 0.36 for cost: part of Eval #2's lead was the refusals, as Eval #2 said, and on VS Code little of the cost lead is left.
+- **No loss elsewhere held**, within the gate's margins: big-picture +0.066 (VS Code), +0.003 (AFFiNE) and −0.021 (Theia); the sessions level in score. VS Code's big-picture turnover is partly the alone arm scoring lower than in Eval #2.
+- **ADR-024's test, a third time.** Three evals say the same thing: Nebulosity makes Claude Code faster, and sometimes cheaper, on questions that walk the import graph, at an equal or slightly higher score; it doesn't make Claude Code's answers clearly better; and the `calls` tool V1.7 built didn't change that for questions about calls.
+- **What this eval doesn't show.**
+  - It covers three repos, one model at one effort, three runs per question, and one to three questions per kind per repo.
+  - The call questions name a single method. A question that needs many methods, or one whose callers grep can't name, might go differently; this eval didn't ask one.
+  - It measured the MCP tools, not the Map, which is for people and has no Claude Code equivalent.
+
+**What the README may claim** (ADR-051 as amended, R-AK; amended 2026-10-22 by ADR-061, which adds the figures by kind below, labelled as grouped after the runs). The gate failed, so the README states Eval #3's results as measured, names conditions 1, 2, 3 and 5, and claims nothing beyond the numbers. It can't claim that Nebulosity makes Claude Code reach the relevant context faster on call questions, makes fewer errors, or is faster or cheaper on questions about calls through injected services. By the owner's call of 2026-10-15, the hold on going public lifts after this verdict whatever it is; the deploy, the public switch, the package and the video are the owner's.
+
+### By kind, grouped after the runs (added 2026-10-22, ADR-061)
+
+This section was added six days after the results, for ADR-061's repositioning. It changes no number above and no gate condition. Every figure is recomputed from `eval3/results.json`.
+- **Time** is `duration_ms` and **cost** is `total_cost_usd`, as above.
+- **Each ratio** is A's pooled median over N's, so above 1 means N was faster or cheaper.
+- **Runs per setup:** on VS Code and AFFiNE each kind has one question per repo, three runs each, so 6. Theia has one question per kind, so 3.
+- **Not the gate's statistic.** The gate takes per-question medians. These are small samples, and they're meant to show where the difference sits.
+
+| Kind | VS Code + AFFiNE: time / cost | Theia: time / cost | Score A / N (VS Code + AFFiNE) | Needed files seen sooner (VS Code + AFFiNE; Theia) | N runs that called a tool |
+|---|---|---|---|---|---|
+| Impact by area | 4.26 / 2.12 | not asked | 0.949 / 1.000 | n/a (a count answer) | 6 of 6 |
+| Chain | 4.43 / 2.61 | 3.16 / 1.20 | 1.000 / 1.000 | 5.20; 2.84 | 9 of 9 |
+| Entries | 4.16 / 1.61 | 2.82 / 1.02 | 0.963 / 1.000 | 5.89; 4.11 | 9 of 9 |
+| Transitive list | 2.26 / 1.42 | 1.96 / 1.29 | 0.977 / 1.000 | 5.64; 5.30 | 9 of 9 |
+| Cycle | 2.27 / 1.47 | 1.53 / 1.09 | 1.000 / 1.000 | 3.20; 3.24 | 9 of 9 |
+| Direct list | 1.19 / 1.01 | 1.13 / 1.01 | 1.000 / 1.000 | | 5 of 9 |
+| Unused | 1.22 / 1.19 | 0.91 / 1.00 | 0.955 / 1.000 | | 0 of 9 |
+| Violations | 1.17 / 1.20 | not asked | 1.000 / 1.000 | | 0 of 6 |
+| Pairs | 1.05 / 1.00 | not asked | 0.979 / 1.000 | | 5 of 6 |
+
+The tool counts are over all three repos.
+- **Theia** scored 1.000 in both arms on its four multi-step kinds. Its figures are kept apart because its runs cost about three times as much in both arms (its `CLAUDE.md` and `AGENTS.md`), so pooling them with the other two repos would mix two cost levels.
+- **Refusals** on those kinds: A had a refused command in 2 of its 42 runs, N in none.
+
+**How the kinds were grouped.** A kind counts as multi-step when its answer needs more than one step over the imports. Impact, entries and the transitive list ask for files "directly or through other files". The chain asks for a path, and the cycle for a path back to the file itself. The other four ask about one import at a time:
+- the files that import a file directly;
+- files nothing imports;
+- direct imports against a layering rule;
+- folders that import each other directly.
+
+A reason fits the split: one `git grep` returns a whole step, so on multi-step questions it has to be run again on every file it finds, or replaced by a script. **The rule was written after the runs**, and the grouping saw Theia's results too. Until an eval with bars set before its runs tests it, it's a description of this eval, not a prediction.
+
+**Read beside the pooled figures:**
+- **VS Code's entries question cost N twice as much:** medians $0.088 against $0.043. Two of the three N runs added `architecture`'s files-nothing-imports report to the `imports` call. N was 2.4 times as fast there and scored 1.00 against 0.95. AFFiNE's entries question, 3.98 times as cheap, is what makes the pooled 1.61.
+- **VS Code's direct list cost N 1.56 times as much:** medians $0.081 against $0.052. N was 1.15 times as fast there, at 1.00 each. AFFiNE's direct list, 1.16 times as cheap, evens the pooled 1.01.
+- **On the transitive list, A saw every needed file in only 3 of its 6 runs.** The 5.64 counts only those 3, so it flatters A.
+- **The other kinds, per question.** These figures are N's share of A's time and cost (the gate's direction: below 1 means N was faster or cheaper), the range over each kind's questions on all three repos:
+  - callers (5 questions): time 0.57–0.93, cost 0.77–1.05; VS Code's and Theia's 0.57–0.66 of the time, AFFiNE's 0.88–0.93;
+  - breaks (6): time 0.33–1.15, cost 0.48–1.05; the 0.33 and 0.48 are Theia's BREAKS2, where two N runs trusted an incomplete `calls` answer and scored 0.91 against 0.96;
+  - injects (3): time 0.95–1.08, cost 0.86–1.05;
+  - adopt (1): time 0.99, cost 0.81;
+  - tasks (7): time 0.81–1.14, cost 0.90–1.32;
+  - direct lists (3): time 0.83–0.89, cost 0.86–1.56;
+  - big-picture (15): time 0.57–1.26, cost 0.54–1.37, medians 0.94 and 1.00.
+
+### Raw data
+
+- `eval3/runs/`: the 378 scrubbed transcripts (`<question or session>-<arm>-<repeat>.jsonl.gz`) and `index.jsonl`, one summary line per run with its refused calls and index version.
+- `eval3/results.json`: every run's and session's score, the files its answer named, its misses and extras (a task's per part), tokens, cost estimate, time, tool calls, refused calls and time to relevant context, each repo's commit, and the gate's verdict. `npm run eval:score -- --eval eval3` writes it and prints the per-run, per-question, per-family, per-repo and kind, session, TTRC, refusal and gate tables.
+- `eval3/grading/`: grader 1's replies, the second grader's in `second/`, the 100 rulings in `review.json`, the merged grades in `grades.json`, the redactions in `redactions.json`, the blind sheets in `sheets/` and the key from sheet to run in `key.json`.
+- `eval3/questions.json`, `eval3/sessions.json`, `eval3/truth/` (with `adjudicated.json`, `calls-adjudicated.json`, `steps.json` and `needed.json`) and `eval3/rubric/`: the questions, truths and rubrics the scores rest on.
+- **What isn't in `results.json`.** The per-repo splits of the gate's per-repo conditions, the TTRC tables split by question set, the tool-use counts by tool, the script counts, the refusal causes, the start-up gap and Eval #2's refusal counts were computed from `results.json` and the kept transcripts by read-only scripts with `scripts/eval/stats.ts` and `scripts/eval/transcript.ts`, by the rules stated here, so anyone can count them again from `eval3/runs/` and `eval2/runs/`.
+
 # 2026 10 14 Eval #2 — Claude Code with and without Nebulosity, on VS Code and AFFiNE
 
 **Status: run, scored and published (2026-10-15): 270 runs (234 single, 36 task sessions) on Claude Code 2.1.300, with the engine frozen at `90f9f63` (2026-10-15, before the pilot). The ship gate failed: conditions 1, 2, 3a and 5a. The results, losses included, are under "Results" at the end of this section.** Everything in this section down to "Results", apart from this status line and the "In short" block below it, was written before the first run: the arms, the setup, the questions and their truths, the scoring and the ship gate. The gate does not change after the first run.

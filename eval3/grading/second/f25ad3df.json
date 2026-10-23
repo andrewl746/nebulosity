@@ -1,0 +1,10 @@
+{ "id": "f25ad3df", "points": [
+  { "id": "AFFINE-BP3.1", "score": 1, "quote": "`defineBlockSchema({ flavour, metadata, toModel })` comes from `@blocksuite/store`. The flavour is a namespaced string such as `'affine:divider'`. `metadata` holds `version`, `role` (for example `'content'`) and the allowed `children`." },
+  { "id": "AFFINE-BP3.2", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP3.3", "score": 0.5, "quote": "`metadata` holds `version`, `role` (for example `'content'`) and the allowed `children`." },
+  { "id": "AFFINE-BP3.4", "score": 1, "quote": "The model is a class that extends `BlockModel<Props>`. Here that is `DividerBlockModel`." },
+  { "id": "AFFINE-BP3.5", "score": 1, "quote": "The view is a Lit element that extends `BlockComponent<Model>` from `@blocksuite/std`. ... `this.renderChildren(this.model)` renders child blocks. ... `setup(context)` calls `context.register([BlockViewExtension('affine:divider', literal\\`affine-divider\\`), …])`." },
+  { "id": "AFFINE-BP3.6", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP3.7", "score": 1, "quote": "Store side, in `store.ts`: `class DividerStoreExtension extends StoreExtensionProvider`. ... View side, in `view.ts`: `class DividerViewExtension extends ViewExtensionProvider`. ... The providers are loaded through `StoreExtensionManager` and `ViewExtensionManager` (`blocksuite/affine/ext-loader/src/`)." },
+  { "id": "AFFINE-BP3.8", "score": 0.5, "quote": "`effect()` calls `effects()`, which defines the custom element." }
+] }

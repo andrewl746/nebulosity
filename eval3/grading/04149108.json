@@ -1,0 +1,11 @@
+{
+  "id": "04149108",
+  "points": [
+    { "id": "BP2.1", "score": 1, "quote": "| `common` | Any environment, using only basic JavaScript | `common` only |" },
+    { "id": "BP2.2", "score": 1, "quote": "| `browser` | A browser, with web and DOM APIs | `common`, `browser` |" },
+    { "id": "BP2.3", "score": 1, "quote": "| `node` | Node.js | `common`, `node` |" },
+    { "id": "BP2.4", "score": 1, "quote": "| `electron-browser` | The Electron renderer, which is browser code plus limited Electron IPC | `common`, `browser`, `electron-browser` |" },
+    { "id": "BP2.5", "score": 1, "quote": "| `electron-utility` | The Electron utility process | `common`, `node` |" },
+    { "id": "BP2.6", "score": 1, "quote": "| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |" }
+  ]
+}

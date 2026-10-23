@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
@@ -17,7 +17,14 @@ import { indexRepository } from "../index/pipeline";
 import { runSummaries } from "../index/summarize/run";
 import type { Summarizer } from "../index/summarize/types";
 import type { RepoWatcher } from "../index/watch";
+import { readWorkspace } from "../index/workspace";
 import { createBackgroundService, MAX_AUTO_REFRESH_FILES } from "./service";
+
+// keep the real module, but count the manifest reads (ADR-053, amended)
+vi.mock("../index/workspace", async (importOriginal) => {
+    const original = await importOriginal<typeof import("../index/workspace")>();
+    return { ...original, readWorkspace: vi.fn(original.readWorkspace) };
+});
 
 const fakeEmbed: EmbedFn = async (texts) => texts.map(() => Float32Array.from([1, 0, 0]));
 
@@ -281,6 +288,28 @@ describe("background service", () => {
         watcher.changed(Array.from({ length: 501 }, (_, i) => `gen/f${i}.ts`));
         await service.idle();
         expect(logs).toContain("re-indexing the whole repo (501 paths changed)");
+        await service.stop();
+    });
+
+    it("reads the workspace manifests for the first update after the startup check, not for the next (ADR-053, amended)", async () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        indexRepository(root);
+        const watcher = fakeWatcher();
+        const service = createBackgroundService({ summarizer: null, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+        const reads = vi.mocked(readWorkspace);
+        const afterStartup = reads.mock.calls.length;
+
+        fs.appendFileSync(path.join(root, "src/app/legacy.ts"), "// one\n");
+        watcher.changed(["src/app/legacy.ts"]);
+        await service.idle();
+        expect(reads.mock.calls.length).toBe(afterStartup + 1);
+
+        fs.appendFileSync(path.join(root, "src/app/legacy.ts"), "// two\n");
+        watcher.changed(["src/app/legacy.ts"]);
+        await service.idle();
+        expect(reads.mock.calls.length).toBe(afterStartup + 1);
         await service.stop();
     });
 

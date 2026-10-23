@@ -1,0 +1,13 @@
+{
+  "id": "d6917147",
+  "points": [
+    {"id": "AFFINE-BP6.1", "score": 1, "quote": "`Workbench` (`entities/workbench.ts`) is the window manager. ... It also holds the right-sidebar state"},
+    {"id": "AFFINE-BP6.2", "score": 1, "quote": "It holds `views$`, `activeViewIndex$` and a computed `activeView$`. ... A `View` (`entities/view.ts`) is one pane in a split view."},
+    {"id": "AFFINE-BP6.3", "score": 1, "quote": "Each view owns a `createNavigableHistory` stack, seeded from `defaultLocation` (default `/all`). `location$` and `entries$` are observables over that history."},
+    {"id": "AFFINE-BP6.4", "score": 1, "quote": "A layout effect calls `viewRouter.navigate(location)` whenever `view.location$` changes. The matched route component then renders. ... The routes come from the app's `router.tsx`."},
+    {"id": "AFFINE-BP6.5", "score": 1, "quote": "A route component renders `<ViewHeader>`, `<ViewBody>` and `<ViewSidebarTab>` (`view/view-islands.tsx`). ... `RouteContainer` places `ViewHeaderTarget` and `ViewBodyTarget` for its view id."},
+    {"id": "AFFINE-BP6.6", "score": 1, "quote": "Its `location$` is the active view's location. The README says the active view's URL counts as the URL of the whole app."},
+    {"id": "AFFINE-BP6.7", "score": 1, "quote": "Only the active view's sidebar tabs appear in the right sidebar. A switcher appears when a view has several tabs."},
+    {"id": "AFFINE-BP6.8", "score": 1, "quote": "`useBindWorkbenchToBrowserRouter` (`view/browser-adapter.ts`) syncs the active view with the browser URL. ... A browser location change becomes `view.history.push(..., 'fromBrowser')`. If the tag points at an existing entry in the view history, it calls `history.go(delta)` instead."}
+  ]
+}

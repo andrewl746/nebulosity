@@ -1,5 +1,6 @@
 import type { AreaCount, DescribeResponse, DocPointer, SearchResult } from "../contracts";
 import { RARE_PAIR, type ArchitectureAnswer, type Conventions, type Layers, type Part, type Unused } from "../engine/architecture";
+import type { CallsAnswer, ImplementationLine } from "../engine/calls";
 import type { Impact, Roots } from "../engine/impact";
 import type { Overview } from "../engine/overview";
 import { FILE_CHUNK } from "../engine/rank";
@@ -389,4 +390,127 @@ export function architectureAnswer(a: ArchitectureAnswer, page: { limit: number;
             return { body: [...lines, ...docs], notes };
         }
     }
+}
+
+// ---- calls (ADR-059)
+
+const CALLS_NOTE = "found through declared types: fields, constructor parameters, parameters, locals, X.get(T), useService(T), new C(), base classes and aliases. A call on a value whose type is only inferred isn't seen.";
+/** How many implementations and extra declaring files an answer names before "… N more". */
+const CALLS_LISTED = 30;
+
+function cappedList(header: string, items: readonly string[]): string[] {
+    const shown = items.slice(0, CALLS_LISTED).map((i) => `  ${i}`);
+    return [header, ...shown, ...(items.length > CALLS_LISTED ? [`  ${moreLine(items.length - CALLS_LISTED)}`] : [])];
+}
+
+function callsAreaLines(a: { groupBy: string | null; areas: readonly { path: string; kind: "folder" | "file"; count: number }[]; elsewhere: number }): string[] {
+    const lines = [a.groupBy === null ? "By area:" : a.groupBy === "" ? "By area (the repo's top level):" : `By area (inside ${a.groupBy}/):`];
+    for (const area of a.areas.slice(0, LIST_SHOWN)) lines.push(`  ${shownPath(area.path, area.kind)}  ${formatCount(area.count)}`);
+    if (a.areas.length > LIST_SHOWN) lines.push(`  ${moreLine(a.areas.length - LIST_SHOWN)} areas`);
+    if (a.elsewhere > 0) lines.push(`  elsewhere (outside ${a.groupBy}/)  ${formatCount(a.elsewhere)}`);
+    return lines;
+}
+
+function implementationLines(impls: readonly ImplementationLine[], type: string, member: string | null): string[] {
+    if (impls.length === 0) return [];
+    const declaring = impls.filter((i) => i.declares).length;
+    const label = (i: ImplementationLine): string => {
+        const how = i.via === "implements" ? `implements ${type}` : i.via === "sub-interface" ? `through ${i.through}` : i.via === "base class" ? `through its base class ${i.through}` : "test double";
+        return member !== null && i.declares ? `${how}, declares ${member}` : how;
+    };
+    const header = member === null ? `Implementations of ${type} (${formatCount(impls.length)}):` : `Implementations of ${type} (${formatCount(impls.length)}; ${formatCount(declaring)} declare ${member}):`;
+    return cappedList(header, impls.map((i) => `${i.name ?? "(anonymous class)"}  ${i.path}:${i.line}  ${label(i)}`));
+}
+
+/** A file's row in the files block: its path, the lines it calls or injects on, and what follows them. */
+type FileRow = { path: string; lines: readonly number[]; after: string };
+
+const rowText = (r: FileRow): string => `${r.path}  ${r.lines.join(", ")}${r.after}`;
+
+/**
+ * A row too long for a whole page (generated code, with thousands of calls in one file) keeps the first line numbers
+ * that fit and counts the rest. Only the line numbers are cut: what follows them is short (receivers are type names,
+ * and the ways a type is injected are a few fixed words).
+ */
+function cutRow(r: FileRow, budget: number): string {
+    const start = `  ${r.path}  `;
+    // the room left for line numbers, keeping space for the widest "… N more lines" this row could need
+    const room = budget - 1 - start.length - `, ${moreLine(r.lines.length)} lines`.length - r.after.length;
+    const shown: number[] = [];
+    let used = 0;
+    for (const line of r.lines){
+        const width = String(line).length + 2;   // the number and the ", " after it
+        if (used + width > room) break;
+        shown.push(line);
+        used += width;
+    }
+    return `${start}${shown.length > 0 ? `${shown.join(", ")}, ` : ""}${moreLine(r.lines.length - shown.length)} lines${r.after}`;
+}
+
+/** The files block, paged within what the answer's other lines leave of MAX_ANSWER_CHARS. */
+function pagedFiles(header: string, rows: readonly FileRow[], page: { limit: number; offset: number }, used: number): string[] {
+    if (rows.length === 0) return [];
+    if (page.offset >= rows.length) return [header, `Nothing at offset ${page.offset}: the list has ${formatCount(rows.length)}.`];
+    const budget = MAX_ANSWER_CHARS - REACH_HEADROOM - used;
+    const rest = rows.slice(page.offset).map((r) => `  ${rowText(r)}`);
+    let shown = fitting(rest, page.limit, budget);
+    // a first row longer than the whole budget would show nothing and send the next page to this same offset, forever
+    if (shown === 0){
+        rest[0] = cutRow(rows[page.offset], budget);
+        shown = 1;
+    }
+    const lines = [header];
+    if (page.offset > 0) lines.push(`Showing ${formatCount(page.offset + 1)}–${formatCount(page.offset + shown)} of ${formatCount(rows.length)}.`);
+    lines.push(...rest.slice(0, shown));
+    const hidden = rows.length - page.offset - shown;
+    if (hidden > 0) lines.push(moreLine(hidden, page.offset + shown));
+    return lines;
+}
+
+const size = (lines: readonly string[]): number => lines.reduce((sum, line) => sum + line.length + 1, 0);
+const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** calls (ADR-059): a member's callers, or a type's injection sites; on the first page, what a signature change touches and the implementations. */
+export function callsAnswer(a: CallsAnswer, page: { limit: number; offset: number }): AnswerParts {
+    if (a.kind === "ambiguous"){
+        return { body: [
+            `${formatCount(a.candidates.length)} types are named ${a.name}; pass path, the file that declares the one you mean:`,
+            ...a.candidates.map((c) => `  ${c.kind} ${a.name}  ${c.path}:${c.line}`),
+        ] };
+    }
+    const where = `${a.type.path}:${a.type.line}`;
+    const scope = a.within === undefined ? "" : ` Only files inside ${a.within}/ are counted.`;
+    const first = page.offset === 0;
+    if (a.kind === "type"){
+        const tests = a.tests > 0 ? ` Tests among the files: ${formatCount(a.tests)}.` : "";
+        const head = a.files.length === 0
+            ? [`${a.type.name} (${a.type.kind}, ${where}): injected nowhere the declared types show.${scope}`]
+            : [`${a.type.name} (${a.type.kind}, ${where}): injected in ${plural(a.files.length, "file")}, ${plural(a.places, "place")} in all.${tests}${scope}`, ...callsAreaLines(a)];
+        const tail = first ? implementationLines(a.implementations, a.type.name, null) : [];
+        const rows = a.files.map((f) => ({ path: f.path, lines: f.lines, after: `  (${f.hows.join(", ")})` }));
+        return { body: [...head, ...pagedFiles("Files, most places first (lines):", rows, page, size(head) + size(tail)), ...tail], notes: [CALLS_NOTE] };
+    }
+    const { type, member } = a;
+    // the first category names its files ("in 4 files"); the others are bare counts ("in 1")
+    const byCategory = [
+        { what: `on ${type.name} itself`, n: a.categories.type },
+        { what: `on a ${a.subtypeWord}`, n: a.categories.subtype },
+        { what: "on an implementation", n: a.categories.implementation },
+    ].filter((p) => p.n > 0).map((p, i) => `${p.what} in ${i === 0 ? plural(p.n, "file") : formatCount(p.n)}`);
+    const tests = a.tests > 0 ? ` Tests among the files: ${formatCount(a.tests)}.` : "";
+    const head = a.files.length === 0
+        ? [`${type.name}.${member} (${type.kind} ${type.name}, ${where}): no call found through declared types.${scope}`]
+        : [
+            `${type.name}.${member} (${type.kind} ${type.name}, ${where}): called in ${plural(a.files.length, "file")}, ${plural(a.calls, "call")} in all.${scope}`,
+            `${capitalize(byCategory.join(", "))}.${tests}`,
+            ...callsAreaLines(a),
+        ];
+    const total = a.files.length + a.declaring.length;
+    const changes = !first || total === 0 ? []
+        : a.declaring.length === 0 ? [`If ${member}'s signature changes, these ${plural(a.files.length, "file")} change; no other file declares it.`]
+        : a.files.length === 0 ? cappedList(`If ${member}'s signature changes, ${plural(total, "file")} change, each declaring it:`, a.declaring)
+        : cappedList(`If ${member}'s signature changes, ${plural(total, "file")} change: these ${formatCount(a.files.length)}, and ${formatCount(a.declaring.length)} that declare it:`, a.declaring);
+    const tail = [...changes, ...(first ? implementationLines(a.implementations, type.name, member) : [])];
+    const rows = a.files.map((f) => ({ path: f.path, lines: f.lines, after: f.receivers.length > 0 ? `  (on ${f.receivers.join(", ")})` : "" }));
+    return { body: [...head, ...pagedFiles("Files, most calls first (lines):", rows, page, size(head) + size(tail)), ...tail], notes: [CALLS_NOTE] };
 }

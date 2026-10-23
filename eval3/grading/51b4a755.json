@@ -1,0 +1,13 @@
+{
+  "id": "51b4a755",
+  "points": [
+    {"id": "AFFINE-BP2.1", "score": 0.5, "quote": "It has a small framework layer and a large set of AFFiNE-specific packages built on it. (no statement that the framework does not depend on the components)"},
+    {"id": "AFFINE-BP2.2", "score": 0.5, "quote": "`store`: the document data layer. It holds the schema, block models, reactive state, transformers, adapters and store extensions."},
+    {"id": "AFFINE-BP2.3", "score": 0.5, "quote": "`std`: the editor runtime. It covers the view layer, commands, events, selection, clipboard, inline text, gfx (the edgeless canvas) and the extension and spec system."},
+    {"id": "AFFINE-BP2.4", "score": 0, "quote": "none"},
+    {"id": "AFFINE-BP2.5", "score": 0.5, "quote": "`widgets/*`: UI overlays such as the slash menu, toolbars, drag handle... `fragments/*`: side panels such as outline, frame panel, doc title and adapter panel."},
+    {"id": "AFFINE-BP2.6", "score": 0.5, "quote": "Block views, which are lit web components."},
+    {"id": "AFFINE-BP2.7", "score": 0, "quote": "none"},
+    {"id": "AFFINE-BP2.8", "score": 0.5, "quote": "About 391 files under `packages/frontend/core/src` import `@blocksuite/affine*` packages."}
+  ]
+}

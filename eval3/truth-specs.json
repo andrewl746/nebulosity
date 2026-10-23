@@ -1,0 +1,223 @@
+[
+  {
+    "id": "vscode-callers1",
+    "repo": "vscode",
+    "kind": "callers",
+    "type": "IKeybindingService",
+    "file": "src/vs/platform/keybinding/common/keybinding.ts",
+    "member": "appendKeybinding",
+    "within": "src"
+  },
+  {
+    "id": "vscode-callers2",
+    "repo": "vscode",
+    "kind": "callers",
+    "type": "IWorkbenchLayoutService",
+    "file": "src/vs/workbench/services/layout/browser/layoutService.ts",
+    "member": "setPartHidden",
+    "within": "src/vs/sessions"
+  },
+  {
+    "id": "vscode-breaks1",
+    "repo": "vscode",
+    "kind": "breaks",
+    "type": "ICodeEditor",
+    "file": "src/vs/editor/browser/editorBrowser.ts",
+    "member": "restoreViewState",
+    "within": "src"
+  },
+  {
+    "id": "vscode-breaks2",
+    "repo": "vscode",
+    "kind": "breaks",
+    "type": "ISpliceable",
+    "file": "src/vs/base/common/sequence.ts",
+    "member": "splice",
+    "within": "src"
+  },
+  {
+    "id": "vscode-adopt1",
+    "repo": "vscode",
+    "kind": "adopt",
+    "type": "IFileDialogService",
+    "file": "src/vs/platform/dialogs/common/dialogs.ts",
+    "member": "showOpenDialog",
+    "within": "src"
+  },
+  {
+    "id": "vscode-injects1",
+    "repo": "vscode",
+    "kind": "injects",
+    "type": "IWorkbenchAssignmentService",
+    "file": "src/vs/workbench/services/assignment/common/assignmentService.ts",
+    "within": "src"
+  },
+  {
+    "id": "vscode-task1",
+    "repo": "vscode",
+    "kind": "task",
+    "type": "ILanguageModelsService",
+    "file": "src/vs/workbench/contrib/chat/common/languageModels.ts",
+    "member": "sendChatRequest",
+    "within": "src"
+  },
+  {
+    "id": "vscode-task2",
+    "repo": "vscode",
+    "kind": "task",
+    "type": "ITerminalInstance",
+    "file": "src/vs/workbench/contrib/terminal/browser/terminal.ts",
+    "member": "runCommand",
+    "within": "src"
+  },
+  {
+    "id": "vscode-task3",
+    "repo": "vscode",
+    "kind": "task",
+    "type": "IContextKeyService",
+    "file": "src/vs/platform/contextkey/common/contextkey.ts",
+    "member": "createScoped",
+    "within": "src/vs/workbench/contrib"
+  },
+  {
+    "id": "affine-callers1",
+    "repo": "affine",
+    "kind": "callers",
+    "type": "ViewExtensionManager",
+    "file": "blocksuite/affine/ext-loader/src/view-manager.ts",
+    "member": "get"
+  },
+  {
+    "id": "affine-callers2",
+    "repo": "affine",
+    "kind": "callers",
+    "type": "DocFrontend",
+    "file": "packages/common/nbstore/src/frontend/doc.ts",
+    "member": "addPriority"
+  },
+  {
+    "id": "affine-breaks1",
+    "repo": "affine",
+    "kind": "breaks",
+    "type": "Editor",
+    "file": "packages/frontend/core/src/modules/editor/entities/editor.ts",
+    "member": "setMode"
+  },
+  {
+    "id": "affine-breaks2",
+    "repo": "affine",
+    "kind": "breaks",
+    "type": "UIEventDispatcher",
+    "file": "blocksuite/framework/std/src/event/dispatcher.ts",
+    "member": "add"
+  },
+  {
+    "id": "affine-injects1",
+    "repo": "affine",
+    "kind": "injects",
+    "type": "AuthService",
+    "file": "packages/frontend/core/src/modules/cloud/services/auth.ts"
+  },
+  {
+    "id": "affine-task1",
+    "repo": "affine",
+    "kind": "task",
+    "type": "DocsService",
+    "file": "packages/frontend/core/src/modules/doc/services/docs.ts",
+    "member": "createDoc"
+  },
+  {
+    "id": "affine-task2",
+    "repo": "affine",
+    "kind": "task",
+    "type": "Store",
+    "file": "blocksuite/framework/store/src/model/store/store.ts",
+    "member": "resetHistory"
+  },
+  {
+    "id": "theia-callers1",
+    "repo": "theia",
+    "kind": "callers",
+    "type": "MenuModelRegistry",
+    "file": "packages/core/src/common/menu/menu-model-registry.ts",
+    "member": "registerSubmenu"
+  },
+  {
+    "id": "theia-breaks1",
+    "repo": "theia",
+    "kind": "breaks",
+    "type": "ContextMenuRenderer",
+    "file": "packages/core/src/browser/context-menu-renderer.ts",
+    "member": "render"
+  },
+  {
+    "id": "theia-breaks2",
+    "repo": "theia",
+    "kind": "breaks",
+    "type": "PreferenceService",
+    "file": "packages/core/src/common/preferences/preference-service.ts",
+    "member": "set"
+  },
+  {
+    "id": "theia-injects1",
+    "repo": "theia",
+    "kind": "injects",
+    "type": "EnvVariablesServer",
+    "file": "packages/core/src/common/env-variables/env-variables-protocol.ts"
+  },
+  {
+    "id": "theia-task1",
+    "repo": "theia",
+    "kind": "task",
+    "type": "BackendApplicationContribution",
+    "file": "packages/core/src/node/backend-application.ts",
+    "member": "onStop"
+  },
+  {
+    "id": "theia-task2",
+    "repo": "theia",
+    "kind": "task",
+    "type": "CommandRegistry",
+    "file": "packages/core/src/common/command.ts",
+    "member": "isEnabled"
+  },
+  {
+    "id": "theia-cl1",
+    "repo": "theia",
+    "kind": "list",
+    "target": "packages/ai-core/src/common/language-model.ts",
+    "scope": "direct"
+  },
+  {
+    "id": "theia-cl2",
+    "repo": "theia",
+    "kind": "list",
+    "target": "packages/scm/src/browser/scm-avatar-service.ts",
+    "scope": "transitive"
+  },
+  {
+    "id": "theia-cn1",
+    "repo": "theia",
+    "kind": "chain",
+    "from": "packages/scm/src/browser/decorations/scm-navigator-decorator.ts",
+    "to": "packages/core/src/browser/shell/current-widget-command-adapter.ts"
+  },
+  {
+    "id": "theia-cycle",
+    "repo": "theia",
+    "kind": "cycle",
+    "file": "packages/core/src/common/index.ts"
+  },
+  {
+    "id": "theia-unused",
+    "repo": "theia",
+    "kind": "unused",
+    "folder": "packages/ai-chat/src"
+  },
+  {
+    "id": "theia-entries",
+    "repo": "theia",
+    "kind": "entries",
+    "target": "packages/ai-core/src/browser/agents-md-frontend-application-contribution.ts"
+  }
+]

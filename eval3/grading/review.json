@@ -1,0 +1,914 @@
+{
+  "reviewedBy": "controller (the owner's overnight delegation)",
+  "date": "2026-10-16",
+  "method": "A second blind grader (one Opus subagent given the same sheets and instruction, never grader 1's replies or the key) graded all 90 answers; the two agreed exactly on 578 of 678 points. The owner was away and had delegated the stops; for each of the 100 disagreements (all half a point apart) a third, arms-hidden adjudicator (Opus) read the full answer and suggested a score with a reason, and the controller adopted every suggestion (32 sided with grader 1, 68 with grader 2). Every other grade is grader 1's. The owner can overturn any ruling here and re-run npm run eval:grading -- --eval eval3 merge and the scorer.",
+  "ownerWords": "im gonna leave my pc on overnight so just do everything and make the best decisions until i respond tmrw morning. just put the chances u wanted in a file and show me it tmrw morning or smth. dont stop until ur done all the tasks",
+  "agreement": {
+    "points": 678,
+    "exact": 578,
+    "disagreements": 100
+  },
+  "secondGrader": "eval3/grading/second/",
+  "rulings": [
+    {
+      "sheet": "0eaa170a",
+      "point": "BP4.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`services/` holds the core service implementations (about 660 files).",
+      "reason": "Says `services` holds the core workbench service implementations, which is the point; the contrast with contribution-only services is a clarification that \"core\" already carries."
+    },
+    {
+      "sheet": "0fa31d6c",
+      "point": "BP6.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Build the client output before running tests. `npm run build-fast -- --client-only` does that.",
+      "reason": "Says the tests run on the built output, so the code has to be compiled first, which is the point; naming `out/` is a detail."
+    },
+    {
+      "sheet": "1dea04a6",
+      "point": "BP7.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`MutableDisposable` holds a single value. Assigning a new value disposes the old one.",
+      "reason": "Gives the replace-disposes-old behaviour, but not that disposing the holder disposes the current value, and not the use case (something a method creates on each run, where `this._register(...)` would pile up listeners)."
+    },
+    {
+      "sheet": "2a00bb77",
+      "point": "AFFINE-BP3.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`StoreExtensionProvider` is a subclass with `name` and `setup(context)`. ... It calls `context.register(ParagraphBlockSchemaExtension)` and registers the adapter extensions (markdown, html and so on). ... Its `setup()` calls `context.register([...])` with `FlavourExtension`, `BlockViewExtension`, keymaps, a config extension and markdown shortcuts. ... An editor then loads these providers into its store and view extension lists",
+      "reason": "Both providers are named with the right data and UI split, and the editor collecting the providers into store and view extension lists is described; only the two manager class names are missing."
+    },
+    {
+      "sheet": "3095c2da",
+      "point": "AFFINE-BP4.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "AFFiNE stores each document as a Yjs CRDT, a `Y.Doc` whose content is a tree of shared types.",
+      "reason": "Each document as its own Yjs CRDT is stated, but the answer never ties BlockSuite's blocks or block tree to the Y.Doc, so the blocks-kept-in-it and source-of-truth parts stay vague."
+    },
+    {
+      "sheet": "3095c2da",
+      "point": "AFFINE-BP4.2",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Changes from other users or tabs arrive as storage `update` events. `onStorageUpdate` schedules an `apply` job, which calls Yjs `applyUpdate` on the doc. The editor then re-renders from the doc.",
+      "reason": "Shows remote changes applied to the Yjs doc with the editor re-rendering from it, but not the store turning Yjs events into block-model updates, nor that local edits, undo/redo and remote changes share that one path."
+    },
+    {
+      "sheet": "3095c2da",
+      "point": "AFFINE-BP4.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`sync/doc/peer.ts` syncs the local storage with each remote peer by running connect, pull, push, pullAndPush and save jobs.",
+      "reason": "Describes the cloud peer syncing local storage with the server, but never says the device copy is the primary one (local-first)."
+    },
+    {
+      "sheet": "30cefbee",
+      "point": "AFFINE-BP5.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "A `group` element (`blocksuite/affine/model/src/elements/group/group.ts`) keeps a `children` `Y.Map<boolean>` that maps child id → `true`. ... Frames also contain items by geometry.",
+      "reason": "Both mechanisms appear (frames by geometry, groups storing child ids), but groups taking their size from their children and nesting are missing, and so is presentation mode."
+    },
+    {
+      "sheet": "376706d9",
+      "point": "AFFINE-BP4.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "A document is a Yjs CRDT (`Y.Doc`). The editor is BlockSuite, and each block is a `Y.Map` inside it.",
+      "reason": "Each document is its own Y.Doc with the blocks kept inside it; with remote updates applied to the Y.Doc and the editor re-rendering from it, the CRDT as the source of truth is conveyed."
+    },
+    {
+      "sheet": "38888020",
+      "point": "AFFINE-BP2.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`store` is the document model. It holds blocks and schemas, and is built on Yjs CRDTs.",
+      "reason": "Identifies `store` as the data layer built on the Yjs CRDT; the collaboration and undo/redo it brings follow from Yjs rather than being a separate claim."
+    },
+    {
+      "sheet": "38888020",
+      "point": "AFFINE-BP2.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`std` is the standard runtime: the extension system, commands, events, clipboard, the gfx (edgeless canvas) core, and the block-view and widget infrastructure.",
+      "reason": "Covers event handling, clipboard, commands and the block-view infrastructure that renders the tree; only selection is missing."
+    },
+    {
+      "sheet": "38888020",
+      "point": "AFFINE-BP2.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "**Widgets:** UI overlays such as `toolbar`, `slash-menu`, `drag-handle`, `linked-doc`, `remote-selection` and the edgeless toolbars. ... **Fragments:** side panels, such as `outline`, `frame-panel`, `doc-title` and `adapter-panel`.",
+      "reason": "Blocks, widgets and fragments are given with correct examples, but editors (the page and edgeless editors) are not named as a component type."
+    },
+    {
+      "sheet": "38888020",
+      "point": "AFFINE-BP2.6",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "It re-exports the other packages, registers schemas, and has an `effects.ts` that registers custom elements.",
+      "reason": "Registering custom elements (with the Lit helpers in `global`) vaguely shows the components are Lit web components, but the React app wrapping the editors is missing."
+    },
+    {
+      "sheet": "38888020",
+      "point": "AFFINE-BP2.7",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "`root` is the page and edgeless root block.",
+      "reason": "Conveys that one root block serves both page and edgeless modes, but not that an editor is just registrations on an `EditorHost` or that the two editors are views of one document."
+    },
+    {
+      "sheet": "3e0eecba",
+      "point": "BP7.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`MutableDisposable` and `MandatoryMutableDisposable` hold a single replaceable resource. Assigning a new value disposes the old one.",
+      "reason": "Gives the replace-disposes-old behaviour, but not that disposing the holder disposes the current value, and not the use case (something a method creates on each run, where `this._register(...)` would pile up listeners)."
+    },
+    {
+      "sheet": "4da53a92",
+      "point": "BP3.6",
+      "grader1": 0.5,
+      "grader2": 0,
+      "score": 0.5,
+      "sentence": "These calls usually sit in a `*.main.ts` or `*.contribution.ts` file.",
+      "reason": "Placing the calls in the entry and contribution files hints that they run as those modules load, but the answer never says the call runs at module scope, at startup."
+    },
+    {
+      "sheet": "50d4716a",
+      "point": "AFFINE-BP6.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Because of the islands, a view's content defines its own header, body and sidebar tabs. ... `SidebarContainer` shows the active view's `ViewSidebarTab` content. Tabs are tracked in `entities/sidebar-tab.ts`.",
+      "reason": "Each view defines its own sidebar tabs and only the active view's are shown; the tracked tabs stand for the switcher."
+    },
+    {
+      "sheet": "51b4a755",
+      "point": "AFFINE-BP2.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "It has a small framework layer and a large set of AFFiNE-specific packages built on it.",
+      "reason": "Gives the two groups (`framework/` with store and std, `affine/` with blocks, widgets, fragments, model and shared) and that the components are built on the framework, which states the one-way dependency."
+    },
+    {
+      "sheet": "51b4a755",
+      "point": "AFFINE-BP2.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`std`: the editor runtime. It covers the view layer, commands, events, selection, clipboard, inline text, gfx (the edgeless canvas) and the extension and spec system.",
+      "reason": "Names event handling, selection, clipboard, commands and the view layer that renders the blocks, which is the point."
+    },
+    {
+      "sheet": "51b4a755",
+      "point": "AFFINE-BP2.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`widgets/*`: UI overlays such as the slash menu, toolbars, drag handle, linked-doc and remote-selection. ... `fragments/*`: side panels such as outline, frame panel, doc title and adapter panel.",
+      "reason": "Blocks, widgets and fragments are covered with examples, but editors are not listed as a component type."
+    },
+    {
+      "sheet": "51b4a755",
+      "point": "AFFINE-BP2.7",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "It composes the editor by supplying its own store and view extensions: `store-extensions` and `view-extensions` hold app-specific specs for storage and rendering.",
+      "reason": "Vaguely conveys that an editor is a composition of extension registrations, but says nothing of `EditorHost`, of page and edgeless as two views of one document, or of the shared root model."
+    },
+    {
+      "sheet": "5528b1a8",
+      "point": "AFFINE-BP2.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`store`: the Yjs-backed document and block model.",
+      "reason": "Identifies `store` as the data layer built on the Yjs CRDT; the collaboration and undo/redo it brings follow from Yjs rather than being a separate claim."
+    },
+    {
+      "sheet": "5528b1a8",
+      "point": "AFFINE-BP2.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`widgets/`: UI overlays such as toolbar, slash-menu, drag-handle, linked-doc, remote-selection, and the edgeless toolbars. ... `fragments/`: side panels such as outline, frame-panel, doc-title, and adapter-panel.",
+      "reason": "Blocks, widgets and fragments are given, and the root block hosts page and edgeless, but editors are not named as a component type."
+    },
+    {
+      "sheet": "5528b1a8",
+      "point": "AFFINE-BP2.7",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "The `root` block is the page and edgeless host.",
+      "reason": "Conveys that one root block serves both page and edgeless modes, but not that an editor is just registrations on an `EditorHost` or that the two editors are views of one document."
+    },
+    {
+      "sheet": "5648c002",
+      "point": "AFFINE-BP2.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`store`: the Yjs-backed document and block model.",
+      "reason": "Identifies `store` as the data layer built on the Yjs CRDT; the collaboration and undo/redo it brings follow from Yjs rather than being a separate claim."
+    },
+    {
+      "sheet": "5d525686",
+      "point": "BP5.6",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 1,
+      "sentence": "Features register themselves through side-effect imports of their `.contribution.ts` file. Each contribution has a single `.contribution.ts` entry point, which registers its services, actions, views and workbench contributions. A feature that no entry file imports, directly or transitively, is never bundled or run.",
+      "reason": "With the `.contribution.ts` as each feature's single entry point and only directly or transitively imported code loading, the answer states that a feature's files load through that file."
+    },
+    {
+      "sheet": "5e5f2ed8",
+      "point": "BP5.6",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "If no entry point imports a `*.contribution.ts` file, it is never bundled or run.",
+      "reason": "Says a contribution file must be imported by an entry point, but not that a new file inside a feature has to be imported from its `.contribution.ts` to be loaded."
+    },
+    {
+      "sheet": "5e85d4f5",
+      "point": "AFFINE-BP2.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`store`: the document model. It holds blocks, schemas and the doc and collection layer, and sits on a CRDT.",
+      "reason": "Calls `store` the data layer on a CRDT, but never names Yjs or what it gives the documents (collaboration, history), so the point is only vaguely stated."
+    },
+    {
+      "sheet": "5e85d4f5",
+      "point": "AFFINE-BP2.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`std`: the standard runtime. It covers the dependency-injection and extension system, block components and views, commands, selection, the event/UI layer, and the gfx (canvas) base.",
+      "reason": "Covers the event/UI layer, selection, commands and the block views that render the tree; only clipboard is missing."
+    },
+    {
+      "sheet": "5e85d4f5",
+      "point": "AFFINE-BP2.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`widgets/*`: UI overlays such as toolbar, slash-menu, drag-handle, linked-doc, keyboard-toolbar, remote-selection and the edgeless zoom and toolbar widgets. ... `fragments/*`: side panels such as outline, frame-panel, doc-title and adapter-panel.",
+      "reason": "Blocks, widgets and fragments are given; the editor appears only as something mounted in page and edgeless modes, not as a component type of its own."
+    },
+    {
+      "sheet": "5e85d4f5",
+      "point": "AFFINE-BP2.7",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "The extension loader and the `std` DI container compose these into an editor. ... The app selects the extension sets it needs, adds its own (AI, workspace and doc services, custom embeds), and mounts the resulting editor in page and edgeless modes.",
+      "reason": "Conveys an editor composed from extensions and shown in page and edgeless modes, but not `EditorHost`, the two editors as views of one document, or the shared root model."
+    },
+    {
+      "sheet": "5ff469f2",
+      "point": "AFFINE-BP1.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`packages/frontend/` is everything the user sees: ... `packages/backend/` has two parts: ... `packages/common/` holds shared libraries: `nbstore` (the local-first storage and sync layer), `infra`, `graphql`, `auth`, `error`, `env`, `theme`, `debug`, `reader`, `realtime`, `s3-compat` and `native`.",
+      "reason": "Gives the frontend, backend and common split with the right role for each; the \"runs in production\" framing and the \"no business logic\" wording are details."
+    },
+    {
+      "sheet": "5ff469f2",
+      "point": "AFFINE-BP1.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`blocksuite/` is the editor engine, with its own packages:",
+      "reason": "Identifies BlockSuite under `blocksuite/` in the same monorepo as the editor, with its own packages; the `@blocksuite/*` naming is a detail."
+    },
+    {
+      "sheet": "5ff469f2",
+      "point": "AFFINE-BP1.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "It's a Yarn monorepo that mixes TypeScript and Rust. ... `native` and `mobile-native` are the native bindings. ... `native` is the Rust bindings the server uses.",
+      "reason": "States Rust code built into native bindings for both the clients and the server (`@affine/server-native`); only napi-rs is missing."
+    },
+    {
+      "sheet": "6089490e",
+      "point": "AFFINE-BP1.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`packages/frontend/`** is the client side. ... `server` is the NestJS backend. ... **`packages/common/`** holds code shared by the client and the server:",
+      "reason": "Gives frontend (client and apps), backend (the server) and common (shared by client and server, i.e. isomorphic) with the right roles."
+    },
+    {
+      "sheet": "6089490e",
+      "point": "AFFINE-BP1.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`native` and `mobile-native` hold Rust/native bindings, and `electron-api` is the desktop API. ... `native` is the Rust backend code, which the server loads through `native.ts`.",
+      "reason": "States Rust bindings for the clients and Rust native code loaded by the server; only napi-rs is missing."
+    },
+    {
+      "sheet": "60d085b9",
+      "point": "BP4.8",
+      "grader1": 0.5,
+      "grader2": 0,
+      "score": 0.5,
+      "sentence": "other `vs/workbench/contrib/*` features ... a few terminal exports are whitelisted explicitly (`terminalContribExports*`, `terminalContribChatExports*`).",
+      "reason": "Says contributions may import one another and that some terminal exports are whitelisted, but never states the rule that they use only the exposed API and never another's internals."
+    },
+    {
+      "sheet": "65b4aadd",
+      "point": "BP6.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "The runners and infrastructure are in `test/unit/`. ... They live in `test/integration/`. ... They live in `test/smoke/`. ... `test/sanity` holds sanity tests.",
+      "reason": "Places the unit-test runners in `test/unit` and the integration, smoke and sanity suites in `test/`; only the sanity suite's purpose is thin."
+    },
+    {
+      "sheet": "6e2097f1",
+      "point": "AFFINE-BP5.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "A `group` element (`GroupElementModel`, in `blocksuite/affine/model/src/elements/group/group.ts`) keeps a `children` `Y.Map<boolean>` that maps child id to `true`, plus a `title` as `Y.Text`. ... The group's bounds are derived from its children. ... Frames are the other container. They are `affine:frame` blocks that hold child ids in a similar way.",
+      "reason": "The group half is right (child ids, bounds from the children), but frames are described only as holding child ids, not as areas that carry their contents by geometry."
+    },
+    {
+      "sheet": "6ff4d24b",
+      "point": "AFFINE-BP4.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "Each AFFiNE document is a Yjs CRDT document. A \"doc\" is one Y.Doc, and a workspace is a set of them.",
+      "reason": "Each document as its own Y.Doc is stated, but the answer says it didn't trace how the blocks map onto the Y.Doc, so the blocks kept in it and the block tree's source of truth are not stated."
+    },
+    {
+      "sheet": "6ff4d24b",
+      "point": "AFFINE-BP4.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`DocSyncPeer` (`sync/doc/peer.ts`) syncs the local storage with each remote storage.",
+      "reason": "Describes syncing local storage with the server, but never says the device copy is the primary one (local-first)."
+    },
+    {
+      "sheet": "777e9f50",
+      "point": "AFFINE-BP4.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Presence and cursors go through a separate awareness sync, not through the document store.",
+      "reason": "Cursors and presence travel through awareness, kept apart from the document store, which is the point."
+    },
+    {
+      "sheet": "777e9f50",
+      "point": "AFFINE-BP4.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Remote changes take the same route: they reach local storage first, then get applied to the open `Y.Doc`. ... It compares clocks between the local and remote storage, then pushes and pulls updates in both directions",
+      "reason": "Local storage comes first for local and remote changes alike, and the cloud storage syncs it both ways with the server, carrying other users' updates; that is the local-first model."
+    },
+    {
+      "sheet": "79626268",
+      "point": "BP3.6",
+      "grader1": 0.5,
+      "grader2": 0,
+      "score": 0.5,
+      "sentence": "Services in `workbench/services/**` are registered through `registerSingleton` in `*.contribution.ts` or `workbench.common.main.ts`.",
+      "reason": "Placing the calls in the contribution and main files hints that they run as those modules load, but the answer never says the call runs at module scope, at startup."
+    },
+    {
+      "sheet": "7b8813db",
+      "point": "THEIA-BP1.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "They share a single backend host process that is started only if there are headless plugins. They get no default `vscode` or `theia` API. ... For headless plugins, Main runs in the node backend instead.",
+      "reason": "The single backend host and `Main` in Node are stated, but not what headless plugins are for (application-specific extension points rather than the user interface)."
+    },
+    {
+      "sheet": "864481c8",
+      "point": "AFFINE-BP5.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "The page-mode block tree is `affine:page` → `affine:note` blocks → paragraphs, lists and so on. Edgeless mode reuses it. ... This is how a note appears as a card on the canvas.",
+      "reason": "Flowing content sits in note blocks shown in order in page mode, and each note gets its own position as a card on the canvas in edgeless mode."
+    },
+    {
+      "sheet": "86f3920e",
+      "point": "BP4.8",
+      "grader1": 0.5,
+      "grader2": 0,
+      "score": 0.5,
+      "sentence": "A contrib folder may import from these places: ... other `vs/workbench/contrib/*` folders",
+      "reason": "Says contributions may import one another, but never states the rule that they use only the exposed API and never another's internals."
+    },
+    {
+      "sheet": "8a49f7ef",
+      "point": "BP1.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`workbench/`** is the VS Code application: parts, layout, and features under `contrib/` such as chat, SCM, and debug.",
+      "reason": "Identifies `workbench` as the application layer holding the parts and layout around the editor; the specific editors and panels in the point are examples."
+    },
+    {
+      "sheet": "929c7201",
+      "point": "BP5.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`workbench.desktop.main.ts` and `workbench.web.main.ts` each start with `import './workbench.common.main.js'`. They then add their own platform-specific imports and service registrations.",
+      "reason": "States the desktop entry adds its own platform-specific imports and registrations, and later that only the desktop build loads what only it imports."
+    },
+    {
+      "sheet": "9431653d",
+      "point": "AFFINE-BP4.5",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Blobs and awareness use parallel storages, and blobs also have their own IndexedDB or SQLite stores.",
+      "reason": "Mentions awareness kept beside the document storage, but never says it is what shares cursors and selections."
+    },
+    {
+      "sheet": "9431653d",
+      "point": "AFFINE-BP4.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "A remote update goes into local storage first. ... For cloud workspaces, `impls/cloud/doc.ts` talks to the NestJS server over socket.io. ... Local-only workspaces have no remote peer.",
+      "reason": "Local storage comes first, a cloud workspace syncs it with the server that broadcasts to other clients, and local-only workspaces need no server; that is the local-first model."
+    },
+    {
+      "sheet": "99bfb39c",
+      "point": "THEIA-BP2.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`theia build` (from `@theia/cli`, implemented in `dev-packages/application-manager`) generates files from the collected modules: ... `esbuild.mjs` and its `gen-esbuild.*.mjs` imports, from `BundlerGenerator`. esbuild bundles the frontend (webpack support was removed in 1.75.0). ... `theia start` (or `npm run start:browser`) runs the generated backend.",
+      "reason": "Covers the generated frontend and backend code, the esbuild config, bundling and `theia start` running the backend server; the port is a parenthetical and the loose Electron line (main process runs the backend, not a forked subprocess) is a secondary detail."
+    },
+    {
+      "sheet": "9bcd7401",
+      "point": "BP7.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`MutableDisposable` and `MandatoryMutableDisposable` hold one replaceable resource. Assigning a new value disposes the old one.",
+      "reason": "Gives the replace-disposes-old behaviour, but not that disposing the holder disposes the current value, and not the use case (something a method creates on each run, where `this._register(...)` would pile up listeners)."
+    },
+    {
+      "sheet": "9f112045",
+      "point": "AFFINE-BP1.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`packages/frontend/`** is the client side: ... **`packages/common/`** is shared code: ... **`packages/backend/`** has `server` (NestJS) and `native` (the Rust bindings used by the server).",
+      "reason": "Gives the frontend, backend and common split with the right role for each; the \"runs in production\" framing and the \"no business logic\" wording are details."
+    },
+    {
+      "sheet": "9f112045",
+      "point": "AFFINE-BP1.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`electron-api`, `native` and `mobile-native` bridge to native code. ... **`packages/backend/`** has `server` (NestJS) and `native` (the Rust bindings used by the server).",
+      "reason": "Rust is tied only to the server's bindings; the client bindings are just \"native code\", and napi-rs is absent, so the point is only partly stated."
+    },
+    {
+      "sheet": "9f112045",
+      "point": "AFFINE-BP1.6",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "It is what makes the self-hosted or cloud version work. The local-first clients can work without it.",
+      "reason": "The server is needed only for the cloud version (auth, synced storage and the copilot AI are listed above it) and the clients work locally without it, which is the point."
+    },
+    {
+      "sheet": "a29aa0fa",
+      "point": "AFFINE-BP1.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`packages/frontend/` holds the client code: ... `packages/backend/` holds `server` (`@affine/server`) and `native`, the Rust bindings for the server (`@affine/server-native`). ... `packages/common/` holds code shared by client and server:",
+      "reason": "Gives frontend (client and apps), backend (the server) and common (shared by client and server, i.e. isomorphic) with the right roles."
+    },
+    {
+      "sheet": "a29aa0fa",
+      "point": "AFFINE-BP1.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`blocksuite/` is the editor engine, split into three layers:",
+      "reason": "Identifies BlockSuite under `blocksuite/` in the same monorepo as the editor; the `@blocksuite/*` workspace-package naming is a detail."
+    },
+    {
+      "sheet": "a29aa0fa",
+      "point": "AFFINE-BP1.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "It's a Yarn monorepo that mixes TypeScript and Rust. ... `native` and `mobile-native` are native bindings. ... `native`, the Rust bindings for the server (`@affine/server-native`)",
+      "reason": "States Rust code built into native bindings for both the clients and the server (`@affine/server-native`); only napi-rs is missing."
+    },
+    {
+      "sheet": "a29aa0fa",
+      "point": "AFFINE-BP1.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "It serves a GraphQL API at `/graphql`, plus Socket.IO realtime sync. ... PostgreSQL, accessed through Prisma (`schema.prisma` and `migrations/`). ... Redis, set through `REDIS_SERVER_HOST`.",
+      "reason": "Names PostgreSQL, Redis and the GraphQL API at `/graphql`; only the pgvector extension, a parenthetical in the point, is missing."
+    },
+    {
+      "sheet": "a61b82f3",
+      "point": "BP7.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`MutableDisposable`:** holds one replaceable resource. Setting a new value disposes the old one, and disposing the holder disposes the current value.",
+      "reason": "States the whole behaviour (one value at a time, the old one disposed on replace, the current one disposed with the holder); only the use-case clause is missing."
+    },
+    {
+      "sheet": "aba18c1c",
+      "point": "THEIA-BP1.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "Headless plugins use a single shared backend host and have no frontend. ... For headless plugins, Main runs in Node instead.",
+      "reason": "The single backend host, no frontend and `Main` in Node are stated, but not that headless plugins serve application-specific extension points."
+    },
+    {
+      "sheet": "ac5af630",
+      "point": "AFFINE-BP1.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`packages/frontend/`** holds the client side. ... `server` is the NestJS backend (`@affine/server`). ... **`packages/common/`** holds libraries shared by client and server.",
+      "reason": "Gives frontend (client and apps), backend (the server) and common (shared by client and server, i.e. isomorphic) with the right roles."
+    },
+    {
+      "sheet": "ac5af630",
+      "point": "AFFINE-BP1.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`blocksuite/`** is the editor engine.",
+      "reason": "Identifies BlockSuite under `blocksuite/` in the same monorepo as the editor; the `@blocksuite/*` workspace-package naming is a detail."
+    },
+    {
+      "sheet": "acef88ef",
+      "point": "THEIA-BP2.5",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0,
+      "sentence": "none",
+      "reason": "`@theia/core` appears only as one of the example app's dependencies; nothing says it is the base every application builds on or that it provides the shell, widgets and command, menu and keybinding contribution points."
+    },
+    {
+      "sheet": "acef88ef",
+      "point": "THEIA-BP2.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "It also has a `theia` section in its `package.json` for application properties such as the target (browser or Electron).",
+      "reason": "The `theia` section and the target are stated, but the frontend and backend settings (application name, default preferences) are not."
+    },
+    {
+      "sheet": "acef88ef",
+      "point": "THEIA-BP2.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`frontend-generator.ts` writes a frontend entry that loads every extension's frontend module into one Inversify container. ... `bundler-generator.ts` writes the esbuild configuration (`esbuild.mjs`). ... `theia start` runs the generated backend, which loads the backend modules and serves the bundled frontend. In this repo, `npm run start:browser` does this and serves on localhost:3000.",
+      "reason": "Covers the generated frontend and backend code, the esbuild config, bundling and the backend server on localhost:3000; only the Electron backend fork is missing."
+    },
+    {
+      "sheet": "ada4dce3",
+      "point": "BP6.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Use `scripts/test.sh` or `scripts\\test.bat`, which run in Electron. Add `--grep` or `--run <file>` to target specific tests.",
+      "reason": "Names the script and its Windows twin, that it runs the unit tests in Electron, and the selectors; Mocha and the renderer's DOM-plus-Node rationale are detail."
+    },
+    {
+      "sheet": "ada4dce3",
+      "point": "BP6.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Compile or transpile first (for example `npm run build-fast -- --client-only`) when the tests need fresh output.",
+      "reason": "Says the tests use the compiled output, so the code has to be compiled first unless it is already fresh, which matches the point including the watch-build case."
+    },
+    {
+      "sheet": "aec30695",
+      "point": "AFFINE-BP3.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "The store half is a class extending `StoreExtensionProvider` (e.g. `DividerStoreExtension`). ... Its `setup(context)` calls `context.register(...)` with the schema extension and the adapter extensions. ... The view half is a class extending `ViewExtensionProvider` (e.g. `DividerViewExtension`). ... The editor or store is given the list of these providers, and they are loaded into its extension container.",
+      "reason": "Both providers are named with the right data and UI split, and the editor being given the providers to load is described; only the two manager class names are missing."
+    },
+    {
+      "sheet": "af4cbf27",
+      "point": "BP1.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`workbench`** is the main application for desktop and web. ... `browser/`: core UI such as parts, layout and actions.",
+      "reason": "Identifies `workbench` as the application layer holding the parts and layout around the editor; the specific editors and panels in the point are examples."
+    },
+    {
+      "sheet": "b051fa2a",
+      "point": "AFFINE-BP5.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Page mode renders the `affine:note` blocks as a linear flow. ... Edgeless mode adds an `affine:surface` block (`blocksuite/affine/blocks/surface/src/surface-model.ts`) and renders the same notes as movable cards on a canvas. ... The page content stays in the notes, so it isn't copied or converted.",
+      "reason": "Flowing content sits in note blocks, which page mode shows as a linear flow and edgeless mode places as separate movable cards."
+    },
+    {
+      "sheet": "b051fa2a",
+      "point": "AFFINE-BP5.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "A group element stores `children: Y.Map<boolean>`, which maps child id to `true` (`elements/group/group.ts:18,134`). A group's bounds are derived from its children. ... It is a frame region that lists the elements inside it.",
+      "reason": "Groups are right (child ids, bounds from the children) and frames are regions, but frames carrying their contents by geometry rather than nesting, and groups nesting, are not stated."
+    },
+    {
+      "sheet": "b56e7e93",
+      "point": "THEIA-BP2.5",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Core services collect these through `ContributionProvider`.",
+      "reason": "Ties the command, menu and keybinding contributions to core, but doesn't name `@theia/core` as the base every application builds on or mention its shell APIs and widgets."
+    },
+    {
+      "sheet": "b56e7e93",
+      "point": "THEIA-BP2.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "It generates frontend and backend entry files. ... It generates an `esbuild.mjs` config, and esbuild bundles the frontend. ... It serves the bundled frontend at localhost:3000. ... The Electron app follows the same pattern, with the backend run from the Electron main process.",
+      "reason": "Covers generation, the esbuild config, bundling and the backend server on localhost:3000; the Electron line is vague about the fork, a secondary detail."
+    },
+    {
+      "sheet": "c94e393f",
+      "point": "THEIA-BP2.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "The `frontend` entry is for the browser. The `backend` entry is for Node. An extension can have either or both. Electron packages can add their own entries.",
+      "reason": "The frontend module runs in the browser and the backend module in Node, which is the point; the Electron-specific entries, a parenthetical, are touched on."
+    },
+    {
+      "sheet": "c94e393f",
+      "point": "THEIA-BP2.5",
+      "grader1": 0.5,
+      "grader2": 0,
+      "score": 0,
+      "sentence": "none",
+      "reason": "Lists command, menu and keybinding contribution points but never mentions `@theia/core` or attributes them to it, so what core is and provides is missing."
+    },
+    {
+      "sheet": "c94e393f",
+      "point": "THEIA-BP2.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "The frontend, backend and bundler generators write into the app's `src-gen/` folder. ... They also produce the esbuild config (`esbuild.mjs` and the `gen-esbuild.*.mjs` files it imports). ... `theia start` (the `start` script in `examples/browser/package.json`) launches the generated backend. ... It serves the bundled frontend over Express and opens a connection to it.",
+      "reason": "Covers the generated frontend and backend code, the esbuild config, bundling and `theia start` running the backend server; the port is a parenthetical and the Electron fork a secondary detail."
+    },
+    {
+      "sheet": "cd543ee9",
+      "point": "AFFINE-BP4.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "A document is a Yjs `Doc`. The BlockSuite block tree lives inside it as Y.Maps.",
+      "reason": "Each document is its own Yjs doc holding the block tree; with remote updates applied to it and the editor changing from it, the CRDT as the source of truth is conveyed."
+    },
+    {
+      "sheet": "cd543ee9",
+      "point": "AFFINE-BP4.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "AFFiNE stores each document as a Yjs CRDT, saves it locally as binary updates and snapshots, and syncs those updates with the server over a websocket. ... Those updates go into local storage, and the frontend runs `applyUpdate(doc, update, NBSTORE_ORIGIN)`, so the editor changes without echoing the update back. ... These skip the cloud peer and keep everything in the local store.",
+      "reason": "Saves locally first, syncs with the server, routes other users' updates through local storage, and local-only workspaces skip the cloud; that is the local-first model."
+    },
+    {
+      "sheet": "cd91f4de",
+      "point": "AFFINE-BP6.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "plus per-view sidebar tabs (`sidebarTabs$`, `activeSidebarTab$`). ... The right sidebar (`view/sidebar/*`) shows the active view's sidebar tabs.",
+      "reason": "Each view has its own sidebar tabs with an active tab, and only the active view's are shown, which covers the point including the switcher."
+    },
+    {
+      "sheet": "d15d48cb",
+      "point": "THEIA-BP2.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "It also has a `theia` section holding the application's target and config.",
+      "reason": "The `theia` section and the target are stated; the frontend and backend settings appear only as \"config\", with no application name or preferences."
+    },
+    {
+      "sheet": "d15d48cb",
+      "point": "THEIA-BP2.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "They write entry files into the application's `src-gen/`, plus the esbuild config. ... `theia start`, or `npm run start:browser` here, launches the generated backend. ... The server serves the bundled frontend, by default at localhost:3000.",
+      "reason": "Covers the generated entry files, the esbuild config, bundling and the backend server on localhost:3000; the Electron line is vague about the fork, a secondary detail."
+    },
+    {
+      "sheet": "d43a09d8",
+      "point": "AFFINE-BP1.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`packages/frontend/`** is the client side. ... **`packages/backend/`** has `server` (NestJS) and `native` (Rust, exposed to Node as `@affine/server-native`). ... **`packages/common/`** has code shared by the client and the server:",
+      "reason": "Gives frontend (client and apps), backend (the server) and common (shared by client and server, i.e. isomorphic) with the right roles."
+    },
+    {
+      "sheet": "d43a09d8",
+      "point": "AFFINE-BP1.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**`blocksuite/`** holds the editor AFFiNE is built on.",
+      "reason": "Identifies BlockSuite under `blocksuite/` in the same repository as the editor the app is built on; the `@blocksuite/*` workspace-package naming is a detail."
+    },
+    {
+      "sheet": "d4e8268a",
+      "point": "AFFINE-BP2.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "**Framework (`blocksuite/framework/`)** has four core packages: ... **Affine feature layer (`blocksuite/affine/`)** builds on the framework.",
+      "reason": "Gives the two groups with their contents and that the components build on the framework, which states the one-way dependency."
+    },
+    {
+      "sheet": "d4e8268a",
+      "point": "AFFINE-BP2.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`store`: the Yjs-backed document model, meaning blocks, schemas and transactions.",
+      "reason": "Identifies `store` as the data layer built on the Yjs CRDT; the collaboration and undo/redo it brings follow from Yjs rather than being a separate claim."
+    },
+    {
+      "sheet": "d4e8268a",
+      "point": "AFFINE-BP2.3",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`std`: the runtime for block views, selection, commands and the canvas (gfx).",
+      "reason": "Has block views, selection and commands, but leaves out both UI event handling and clipboard, so the description is partial."
+    },
+    {
+      "sheet": "d4e8268a",
+      "point": "AFFINE-BP2.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "**`widgets/`**: UI overlays such as the drag handle, slash menu, toolbar, keyboard toolbar, linked-doc, remote-selection, and the edgeless toolbar and zoom toolbar. ... **`fragments/`**: side panels such as outline, frame-panel, adapter-panel and doc-title.",
+      "reason": "Blocks, widgets and fragments are covered with examples, but editors are not listed as a component type."
+    },
+    {
+      "sheet": "d4e8268a",
+      "point": "AFFINE-BP2.7",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Blocks, widgets, inlines and gfx elements each ship their own store and view extensions. `std` collects those extensions into an editor.",
+      "reason": "Conveys that an editor is a collection of block and widget registrations, but not `EditorHost`, page and edgeless as two views of one document, or the shared root model."
+    },
+    {
+      "sheet": "d6feac2b",
+      "point": "AFFINE-BP5.2",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Its children are one `affine:surface` block and the `affine:note` blocks. ... The `affine:surface` block has one prop, `elements`.",
+      "reason": "The surface block is a child of the root and holds the canvas elements and the canvas blocks, i.e. it is the container for the graphical content; \"first child\" is a detail."
+    },
+    {
+      "sheet": "d6feac2b",
+      "point": "AFFINE-BP5.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Notes hold the page-mode content (paragraphs, lists and so on). In edgeless mode they appear as movable cards.",
+      "reason": "Flowing content sits in note blocks among the root's children, shown as the document in page mode and placed as separate movable cards in edgeless mode."
+    },
+    {
+      "sheet": "d6feac2b",
+      "point": "AFFINE-BP5.8",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "A `group` element has a `children` Y.Map of `childId → true`, plus a `title` Y.Text (`elements/group/group.ts`). ... A `frame` is a block. It keeps `childElementIds: Record<id, boolean>` and its own `xywh` and `index` (`frame-model.ts`).",
+      "reason": "Groups store child ids, but frames appear only as blocks with child ids and a position, not as areas that carry their contents by geometry, and group bounds and nesting are missing."
+    },
+    {
+      "sheet": "e3e257a3",
+      "point": "THEIA-BP1.1",
+      "grader1": 0,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "Headless plugins are the exception. ... **Theia plugins** import `@theia/plugin` in Node. ... **VS Code extensions** import `vscode`. ... This is why Theia's API is meant to be a superset of VS Code's.",
+      "reason": "The three kinds and the superset relation are there, but not that plugins can be installed and removed at runtime, unlike Theia extensions built into the application."
+    },
+    {
+      "sheet": "e7355467",
+      "point": "BP7.4",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "**`MutableDisposable`** holds a single value. Assigning a new one disposes the old.",
+      "reason": "Gives the replace-disposes-old behaviour, but not that disposing the holder disposes the current value, and not the use case (something a method creates on each run, where `this._register(...)` would pile up listeners)."
+    },
+    {
+      "sheet": "e8f357e3",
+      "point": "BP6.5",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "The `vscode-api-tests` extension and other extension tests also run in this group. ... Run them with `scripts/test-integration.sh` (or `.bat`).",
+      "reason": "The extension and API tests run by `test-integration.sh` are stated, but not that it launches a full VS Code with `--extensionDevelopmentPath`, nor that `--suite` picks which ones."
+    },
+    {
+      "sheet": "ed478d6c",
+      "point": "AFFINE-BP3.2",
+      "grader1": 1,
+      "grader2": 0.5,
+      "score": 0.5,
+      "sentence": "`props: (internal) => ({...})` gives the default props. It uses helpers such as `internal.Text()`.",
+      "reason": "Names the `internal` helpers and `internal.Text()`, but not that they create Yjs-backed values (a Y.Text for the block's rich text), which is what the point is about."
+    },
+    {
+      "sheet": "ed478d6c",
+      "point": "AFFINE-BP3.7",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "`StoreExtensionProvider` is in `store.ts`. In `setup(context)` it calls `context.register(...)` with the schema extension and the adapter extensions (`ParagraphBlockAdapterExtensions`). ... Its `setup(context, options)` registers `FlavourExtension('affine:paragraph')`, `BlockViewExtension`, keymap extensions, a block config extension and markdown extensions. ... An editor or workspace then adds these providers to its store and view extension lists.",
+      "reason": "Both providers are named with the right data and UI split, and the editor collecting the providers into store and view extension lists is described; only the two manager class names are missing."
+    },
+    {
+      "sheet": "f25ad3df",
+      "point": "AFFINE-BP3.1",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 0.5,
+      "sentence": "`defineBlockSchema({ flavour, metadata, toModel })` comes from `@blocksuite/store`. ... The flavour is a namespaced string such as `'affine:divider'`. ... `metadata` holds `version`, `role` (for example `'content'`) and the allowed `children`.",
+      "reason": "The flavour and the metadata with version and role are right, but the schema's `props`, one of its three parts, are never mentioned."
+    },
+    {
+      "sheet": "fd3cdacc",
+      "point": "BP3.6",
+      "grader1": 0.5,
+      "grader2": 1,
+      "score": 1,
+      "sentence": "Registration happens as a side effect of importing the module, for example from `workbench.common.main.ts` and the other `*.main.ts` files.",
+      "reason": "A side effect of importing the module is module-scope code, and importing it from the main entry files means it runs at startup."
+    }
+  ]
+}

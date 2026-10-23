@@ -1,0 +1,39 @@
+{
+  "id": "376706d9",
+  "question": "How does AFFiNE represent, store and sync a document's content: what form does the data take, how do local edits and other users' changes reach the editor, and where is the data kept on the device and synced to?",
+  "points": [
+    {
+      "id": "AFFINE-BP4.1",
+      "text": "a document's content is a Yjs CRDT: each doc is its own Yjs document (the docs say a subdocument), its blocks are kept in it, and that CRDT data is the single source of truth for the block tree"
+    },
+    {
+      "id": "AFFINE-BP4.2",
+      "text": "an edit changes the Yjs data first; the store turns the resulting Yjs events into updates of the block models, which then notify the UI; local edits, undo/redo and other users' changes all take that same path, so app code doesn't need to tell them apart"
+    },
+    {
+      "id": "AFFINE-BP4.3",
+      "text": "what is stored and synced is the CRDT's binary update data, not JSON"
+    },
+    {
+      "id": "AFFINE-BP4.4",
+      "text": "JSON snapshots of the block tree exist for import and export: a transformer turns a doc into a snapshot and back, and adapters convert snapshots to and from formats such as Markdown and HTML"
+    },
+    {
+      "id": "AFFINE-BP4.5",
+      "text": "cursors and selections are shared through Yjs awareness, kept beside the document and outside its history"
+    },
+    {
+      "id": "AFFINE-BP4.6",
+      "text": "on the device, documents and files are kept through `@affine/nbstore`'s storages (doc, blob and more, grouped per workspace), which come in IndexedDB and SQLite implementations"
+    },
+    {
+      "id": "AFFINE-BP4.7",
+      "text": "it is local-first: the copy on the device is the primary one, and a cloud workspace syncs it in real time with the server (one more storage it syncs with), which is what makes collaboration work"
+    },
+    {
+      "id": "AFFINE-BP4.8",
+      "text": "y-octo, a native Rust implementation of Yjs, handles the CRDT data in native code on both the client and the server"
+    }
+  ],
+  "answer": "**Form of the data.** A document is a Yjs CRDT (`Y.Doc`). The editor is BlockSuite, and each block is a `Y.Map` inside it. Persistence and sync deal in binary Yjs updates (Uint8Array diffs) and merged snapshots. They never deal in JSON.\n\n**Storage layer.** `packages/common/nbstore` is the local-first storage and sync library. Its abstract `DocStorage` (`src/storage/doc.ts`) stores a snapshot plus pending updates for each doc ID, with a timestamp clock for each doc. There are interchangeable backends:\n- **Web:** `impls/idb` uses IndexedDB. Its schema (`impls/idb/schema.ts`) has the object stores `snapshots`, `updates`, `clocks` and `peerClocks`. It also has `blobs`, `blobData`, `blobSync`, `locks`, and indexer stores.\n- **Desktop and mobile:** `impls/sqlite` uses a native SQLite database (`SqliteDocStorage`).\n- **Remote:** `impls/cloud` talks to the server over socket.io.\n- **Legacy:** `idb/v1` is a read-only reader for the old format. BlockSuite also has its own older IndexedDB source in `blocksuite/framework/sync`.\n\nBlobs such as images are stored separately from docs, in the blob stores.\n\n**Local edit path.**\n1. The user edits and BlockSuite changes the `Y.Doc`.\n2. `DocFrontend` (`nbstore/src/frontend/doc.ts`) listens for Yjs `update` events. It batches them and writes them to the local `DocStorage`, so the edit is saved on the device first. It also tracks `updating` and `syncing` state for each doc.\n3. `Sync` (`nbstore/src/sync/index.ts`) coordinates the doc, blob, awareness and indexer syncs. The doc sync (`sync/doc/`) compares clocks between the local storage and each remote peer. It pushes local updates and pulls remote ones.\n\n**Remote changes.** The cloud storage receives updates from the server over socket.io. These can be other users' edits or edits from your other devices. The sync layer writes them into local storage and notifies the frontend. The frontend calls `applyUpdate` on the live `Y.Doc`, and the editor re-renders. Yjs merges concurrent edits without conflicts. Awareness (cursors and presence) travels over a separate, non-persisted channel.\n\n**Server.** `packages/backend/server/src/core/doc` stores each doc's updates in the database and periodically squashes them with `mergeUpdatesWithYjs`. It broadcasts new updates to the other clients connected to the workspace.\n\n**Where the data lives.**\n- **Local workspace:** the device only (IndexedDB or SQLite).\n- **Cloud workspace:** the same local copy, kept in sync with the server. The local copy is the primary store, so the app works offline and syncs when it reconnects.\n\nThe workspace flavour providers (`workspace-engine/impls/local.ts` and `cloud.ts`) choose which storages to combine for each workspace."
+}

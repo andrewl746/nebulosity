@@ -1,0 +1,10 @@
+{ "id": "04f1fb48", "points": [
+{ "id": "BP1.1", "score": 1, "quote": "`base/` holds general utilities and UI building blocks, such as events, lifecycle, strings, and DOM widgets." },
+{ "id": "BP1.2", "score": 1, "quote": "`platform/` provides dependency-injection support and the base services shared across layers" },
+{ "id": "BP1.3", "score": 1, "quote": "`editor/` is the Monaco editor core." },
+{ "id": "BP1.4", "score": 0.5, "quote": "`workbench/` is the full VS Code application: the workbench framework, `api/`, `services/`, and `contrib/` feature contributions." },
+{ "id": "BP1.5", "score": 1, "quote": "`code/` is the desktop, CLI and web startup code (Electron main, shared process)." },
+{ "id": "BP1.6", "score": 1, "quote": "`server/` is the remote server runtime." },
+{ "id": "BP1.7", "score": 1, "quote": "Layers, bottom to top ... Imports go downward only." },
+{ "id": "BP1.8", "score": 0, "quote": "none" }
+] }

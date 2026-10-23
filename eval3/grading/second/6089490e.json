@@ -1,0 +1,10 @@
+{ "id": "6089490e", "points": [
+  { "id": "AFFINE-BP1.1", "score": 1, "quote": "**`packages/frontend/`** is the client side. ... **`packages/backend/`** `server` is the NestJS backend. ... **`packages/common/`** holds code shared by the client and the server:" },
+  { "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tools/`** holds the `affine` CLI (`yarn affine dev` and `yarn affine build`) plus CI and changelog helpers. **`tests/`** holds the e2e and other tests" },
+  { "id": "AFFINE-BP1.3", "score": 1, "quote": "**`blocksuite/`** is the editor framework the app is built on." },
+  { "id": "AFFINE-BP1.4", "score": 1, "quote": "`web` is the browser app, and `admin` is the admin dashboard. `electron` and `electron-renderer` make up the desktop app. `mobile` is the mobile web build, which `ios` and `android` wrap as native apps." },
+  { "id": "AFFINE-BP1.5", "score": 1, "quote": "It mixes TypeScript and Rust. ... `native` and `mobile-native` hold Rust/native bindings ... `native` is the Rust backend code, which the server loads through `native.ts`." },
+  { "id": "AFFINE-BP1.6", "score": 0.5, "quote": "The server is the NestJS backend, used for cloud and self-hosted deployments." },
+  { "id": "AFFINE-BP1.7", "score": 1, "quote": "Postgres with the pgvector extension, read from `DATABASE_URL`. Redis, which the realtime layer uses for its socket.io adapter. ... It exposes a GraphQL API (`schema.gql`) and websockets." },
+  { "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the UI library, and `i18n` handles translations." }
+] }

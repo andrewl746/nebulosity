@@ -1,0 +1,31 @@
+{
+  "id": "04149108",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Inside each layer of `src/vs`, the folder names below mark the environment the code runs in. The rules come from `.github/instructions/source-code-organization.instructions.md`. I checked them against the actual import counts, which come from the repo's import graph.\n\n| Folder | Runs in | May import |\n|---|---|---|\n| `common` | Any environment, using only basic JavaScript | `common` only |\n| `browser` | A browser, with web and DOM APIs | `common`, `browser` |\n| `node` | Node.js | `common`, `node` |\n| `electron-browser` | The Electron renderer, which is browser code plus limited Electron IPC | `common`, `browser`, `electron-browser` |\n| `electron-utility` | The Electron utility process | `common`, `node` |\n| `electron-main` | The Electron main process | `common`, `node`, `electron-utility` |\n\nCode can always import from its own environment as well, and the table shows that. The guide's own table doesn't list this, but it is implied.\n\nThe import counts match the rules:\n- `common` imports only `common` (17,809 imports).\n- `browser` imports `browser` and `common`, with no `node`.\n- `node` imports `node` and `common`.\n- `electron-browser` imports `browser`, `common` and itself.\n- `electron-main` imports `common`, `node` and itself.\n\n- **`test` folders:** `test` is a sixth recurring folder name, but it is not an environment. Tests mostly import `common`, with a few imports of `browser`, `node` and other tests. Test files usually sit inside one of the environment folders, so I'd expect them to follow that environment's rules, but I didn't check.\n- **`electron-utility` rule:** The guide allows `electron-main` to import `electron-utility`, but the graph shows no such imports under `src/vs`. The count is too small to appear as its own folder name.\n- **`editor` layer:** The guide says the `editor` layer, which is Monaco, has no `node` or `electron-*` dependencies.\n- **`workbench` layer:** The guide says `vs/workbench/{common|browser|electron-browser}` form the minimal workbench core."
+}

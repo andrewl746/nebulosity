@@ -1,0 +1,10 @@
+{ "id": "3afbd48e", "points": [
+  { "id": "AFFINE-BP3.1", "score": 1, "quote": "`defineBlockSchema({ flavour, props, metadata })` is in `store/src/model/block/zod.ts`. The flavour is a string with an `affine:` prefix, such as `affine:paragraph`. `props` gives the default props. `metadata` holds the `version`, `role` (`content`, `hub` or `root`), and `parent` and `children` constraints." },
+  { "id": "AFFINE-BP3.2", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP3.3", "score": 0.5, "quote": "`metadata` holds the `version`, `role` (`content`, `hub` or `root`), and `parent` and `children` constraints." },
+  { "id": "AFFINE-BP3.4", "score": 1, "quote": "A model class extends `BlockModel`. Paragraph's is `ParagraphBlockModel`." },
+  { "id": "AFFINE-BP3.5", "score": 1, "quote": "The view is a Lit custom element that extends `BlockComponent<Model>`. ... It renders the model, and `renderChildren` renders child blocks. ... `BlockViewExtension(flavour, literal\\`affine-paragraph\\`)` is in `std/src/extension/block-view.ts`." },
+  { "id": "AFFINE-BP3.6", "score": 0.5, "quote": "`WidgetViewExtension` (`std/src/extension/widget-view-map.ts`) attaches widgets to a block in the same way." },
+  { "id": "AFFINE-BP3.7", "score": 0.5, "quote": "`store.ts` for the schema extensions `view.ts` for the view extensions ... The editor takes the combined extension arrays, split into store and view, and the doc store and view manager read them." },
+  { "id": "AFFINE-BP3.8", "score": 0, "quote": "none" }
+] }

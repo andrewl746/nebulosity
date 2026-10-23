@@ -1,0 +1,13 @@
+{
+  "id": "458e0474",
+  "points": [
+    {"id": "BP4.1", "score": 1, "quote": "`common/`, `browser/`, `electron-browser/`:** the minimal core."},
+    {"id": "BP4.2", "score": 1, "quote": "`api/`:** the `vscode.d.ts` API provider. It bridges extensions across the process boundary."},
+    {"id": "BP4.3", "score": 1, "quote": "`services/`:** core service implementations that aren't specific to one feature (about 660 files)."},
+    {"id": "BP4.4", "score": 1, "quote": "`contrib/`:** the individual features (about 3,270 files)." },
+    {"id": "BP4.5", "score": 1, "quote": "Nothing outside `contrib/` may depend on `contrib/`."},
+    {"id": "BP4.6", "score": 1, "quote": "Each contribution has a single `*.contribution.ts` entry point."},
+    {"id": "BP4.7", "score": 1, "quote": "A contribution exposes its internal API from a single `common` file."},
+    {"id": "BP4.8", "score": 1, "quote": "Other contributions must depend only on that common API, never on another contribution's internals."}
+  ]
+}

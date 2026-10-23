@@ -1,0 +1,24 @@
+{
+  "id": "vscode-callers2",
+  "kind": "callers",
+  "type": "IWorkbenchLayoutService",
+  "file": "src/vs/workbench/services/layout/browser/layoutService.ts",
+  "member": "setPartHidden",
+  "within": "src/vs/sessions",
+  "files": [
+    "src/vs/sessions/browser/layoutActions.ts",
+    "src/vs/sessions/contrib/canvases/test/electron-browser/sessionCanvasWorkingSet.test.ts",
+    "src/vs/sessions/contrib/editor/browser/editor.contribution.ts",
+    "src/vs/sessions/contrib/layout/browser/baseSessionLayoutController.ts",
+    "src/vs/sessions/contrib/layout/browser/desktop/desktopDraftSessionStrategy.ts",
+    "src/vs/sessions/contrib/layout/browser/desktop/desktopExistingSessionStrategy.ts",
+    "src/vs/sessions/contrib/layout/test/browser/chatLayoutOwnership.test.ts",
+    "src/vs/sessions/contrib/layout/test/browser/desktopLayoutController.test.ts",
+    "src/vs/sessions/contrib/layout/test/browser/layoutControllerTestUtils.ts",
+    "src/vs/sessions/contrib/sessionComparison/browser/sessionComparisonGridController.ts",
+    "src/vs/sessions/contrib/sessions/browser/sessionsActions.ts",
+    "src/vs/sessions/contrib/sessions/browser/views/sessionsView.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

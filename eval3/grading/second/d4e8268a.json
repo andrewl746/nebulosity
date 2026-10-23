@@ -1,0 +1,10 @@
+{ "id": "d4e8268a", "points": [
+  { "id": "AFFINE-BP2.1", "score": 1, "quote": "**Framework (`blocksuite/framework/`)** has four core packages: ... **Affine feature layer (`blocksuite/affine/`)** builds on the framework." },
+  { "id": "AFFINE-BP2.2", "score": 1, "quote": "`store`: the Yjs-backed document model, meaning blocks, schemas and transactions." },
+  { "id": "AFFINE-BP2.3", "score": 1, "quote": "`std`: the runtime for block views, selection, commands and the canvas (gfx)." },
+  { "id": "AFFINE-BP2.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.5", "score": 1, "quote": "**`widgets/`**: UI overlays such as the drag handle, slash menu, toolbar, ... **`fragments/`**: side panels such as outline, frame-panel, adapter-panel and doc-title." },
+  { "id": "AFFINE-BP2.6", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP2.7", "score": 0.5, "quote": "Blocks, widgets, inlines and gfx elements each ship their own store and view extensions. `std` collects those extensions into an editor." },
+  { "id": "AFFINE-BP2.8", "score": 1, "quote": "`blocksuite/` doesn't import anything outside itself. ... In short, AFFiNE doesn't fork the editor. It composes BlockSuite packages and adds its own extensions" }
+] }

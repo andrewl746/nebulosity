@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { runName } from "./run-config";
 import {
     cleanliness, cleanlinessLine, familyArmRows, familyOfKind, kindArmRows, kindOf, lastPerName, loadRuns, loadScorerVerdicts, makeImports, median, missingForGate, openSteps, renderAdjudicate, renderRecheck, repoScoreContext, stepsOnTruths, overrides, parseRunName, pendingSteps, questionArmRows, renderFamilyTable, renderGate, renderSessionTable, repoReadouts,
-    renderQuestionTable, renderTable, repoIdFor, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, scoreSession, sumTokens, toGateRun, toGateSession, type Adjudicated, type FamilyArmRow, type SessionResult, type QuestionArmRow, type QuestionData,
+    renderQuestionTable, renderTable, repoIdFor, withEval3Fields, inRepeats, ttrcRows, resultsFile, scannerOnlySteps, scoreAnswer, scoreRun, scoreSession, sumTokens, toGateRun, toGateSession, type Adjudicated, type FamilyArmRow, type SessionResult, type QuestionArmRow, type QuestionData,
     type RunResult, type ScoreContext,
 } from "./score";
 import type { SessionSummary, SessionTurn } from "./session";
@@ -962,5 +962,83 @@ describe("a steps.json 'out' on an edge an approved truth rests on (sweep B fix 
             "",
             `- r: ${C} → ${D}: recheck the truth (cl1, cn1)`,
         ].join("\n"));
+    });
+});
+
+describe("scoreAnswer: Eval #3's call kinds and tasks", () => {
+    const callersQ: QuestionData = {
+        id: "vc1", family: "grepHard", kind: "callers",
+        truth: { id: "vc1", kind: "callers", type: "IFoo", file: X, member: "save", within: null, files: [A, B], verified: true, notes: [] },
+    };
+    const taskQ: QuestionData = {
+        id: "vt1", family: "grepHard", kind: "task",
+        truth: { id: "vt1", kind: "task", type: "IFoo", file: X, member: "save", within: null, change: [A, B, X], tests: [C], verified: true, notes: [] },
+    };
+
+    it("scores a callers answer by F1 over files, with recall and precision beside it; a non-file counts as a wrong file", () => {
+        const s = scoreAnswer(answer(A, C, "src/vs/gone.ts"), callersQ, ctx);
+        // a, c and a non-file (3) against a and b: precision 1/3, recall 1/2, F1 = 2·(1/3)·(1/2) / (1/3 + 1/2) = 0.4
+        expect(s.score).toBeCloseTo(0.4, 10);
+        expect([s.recall, s.precision, s.hits, s.missed, s.flags]).toEqual([0.5, 1 / 3, 1, [B], ["names non-files"]]);
+    });
+
+    it("doesn't mark a callers answer down for naming its type's own file, as an entries answer may name its target", () => {
+        expect(scoreAnswer(answer(`IFoo is declared in ${X}; its callers:`, A, B), callersQ, ctx).score).toBe(1);
+    });
+
+    it("scores a task as the mean of its two blocks' F1, each block reported", () => {
+        const s = scoreAnswer(`Plan.\nANSWER CHANGE:\n${A}\n${B}\n${X}\nANSWER TESTS:\n${C}\n${D}`, taskQ, ctx);
+        // CHANGE 3 of 3: F1 1; TESTS c and d against c: precision 1/2, recall 1, F1 2/3; the task 5/6
+        expect(s.score).toBeCloseTo(5 / 6, 10);
+        expect(s.parts).toEqual({
+            change: { score: 1, recall: 1, precision: 1, missed: [], extra: [] },
+            tests: { score: expect.closeTo(2 / 3, 10), recall: 1, precision: 0.5, missed: [], extra: [D] },
+        });
+        expect(s.flags).toEqual([]);
+    });
+
+    it("scores a missing block 0 and flags it; with neither block the task scores 0", () => {
+        const s = scoreAnswer(`ANSWER CHANGE:\n${A}\n${B}\n${X}`, taskQ, ctx);
+        expect([s.score, s.flags]).toEqual([0.5, ["no ANSWER TESTS: line"]]);
+        expect(scoreAnswer("I'd change a few files.", taskQ, ctx).score).toBe(0);
+    });
+
+    it("puts the new kinds in the grep-hard family, each with its own row label", () => {
+        for (const kind of ["callers", "breaks", "adopt", "injects", "task"] as const) expect(familyOfKind(kind)).toBe("grepHard");
+    });
+});
+
+describe("Eval #3's fields on a run", () => {
+    const at = (s: number): string => `2026-10-20T10:00:${String(s).padStart(2, "0")}.000Z`;
+    const raw = [
+        { type: "assistant", timestamp: at(2), message: { id: "m1", usage: {}, content: [{ type: "tool_use", id: "t1", name: "Grep", input: { pattern: "save" } }] } },
+        { type: "user", timestamp: at(5), message: { content: [{ type: "tool_result", tool_use_id: "t1", is_error: false, content: `${A}:3:x.save()\n${B}:9:y.save()` }] } },
+        { type: "result", subtype: "success", duration_ms: 6_000, permission_denials: [] },
+    ].map((e) => JSON.stringify(e)).join("\n");
+    const base = { name: "r", question: "vc1" } as RunResult;
+
+    it("adds the question's set, the refused calls and the time to relevant context", () => {
+        const r = withEval3Fields(base, { set: "new", raw, startedAt: at(0), repoId: "vscode", needed: { kind: "files", files: [A, B] }, tracked: new Set([A, B, C]) });
+        expect([r.set, r.refusals, r.context?.ttrcMs, r.context?.coverage]).toEqual(["new", 0, 5_000, 1]);
+        expect(withEval3Fields(base, { set: "bigPicture", raw, startedAt: at(0), repoId: "vscode", needed: undefined, tracked: new Set() }).context).toBeNull();
+        expect(() => withEval3Fields(base, { set: "new", raw, startedAt: null, repoId: "vscode", needed: { kind: "files", files: [A] }, tracked: new Set() }))
+            .toThrow("r has no startedAt in the index, so its time to relevant context can't be measured");
+    });
+
+    it("takes the gate's runs from repeats 1..repeats only (B-9)", () => {
+        expect(inRepeats([{ repeat: 1 }, { repeat: 3 }, { repeat: 4 }, { repeat: 0 }], 3)).toEqual([{ repeat: 1 }, { repeat: 3 }]);
+    });
+
+    it("tabulates time to relevant context per repo: reached shares, medians, the matched ratio and its interval, tokens", () => {
+        const ctxOf = (ttrcMs: number | null, tokens: number | null) => ({ reached: ttrcMs !== null, ttrcMs, ttrcQueryMs: ttrcMs, tokens, coverage: ttrcMs === null ? 0.5 : 1, mostlyRelevant: { reached: ttrcMs !== null, ttrcMs, ttrcQueryMs: ttrcMs } });
+        const rows = ttrcRows([
+            { question: "q1", repo: "r1", arm: "baseline", context: ctxOf(100, 1_000) },
+            { question: "q1", repo: "r1", arm: "nebulosity", context: ctxOf(20, 300) },
+            { question: "q2", repo: "r1", arm: "baseline", context: ctxOf(null, null) },
+            { question: "q2", repo: "r1", arm: "nebulosity", context: ctxOf(50, 200) },
+        ] as RunResult[]);
+        // ratios q1 20 / 100 = 0.2, q2 0 (A never): median 0.1, interval [0, 0.2]; A reached 1 of 2, N 2 of 2;
+        // the medians over runs: A's of 100 and never is never, N's 35; tokens over the reached runs: A 1,000, N 250
+        expect(rows).toEqual([{ repo: "r1", questions: 2, reachedA: 0.5, reachedN: 1, medianA: Infinity, medianN: 35, ratio: 0.1, low: 0, high: 0.2, mostlyRatio: 0.1, tokensA: 1_000, tokensN: 250 }]);
     });
 });

@@ -1,0 +1,31 @@
+{
+  "id": "affine-s1-impact",
+  "kind": "impact",
+  "target": "blocksuite/affine/blocks/database/src/database-block.ts",
+  "counts": [
+    [
+      "blocksuite/affine",
+      52
+    ],
+    [
+      "blocksuite/integration-test",
+      20
+    ],
+    [
+      "packages/frontend/core",
+      1277
+    ],
+    [
+      "packages/frontend/apps",
+      58
+    ],
+    [
+      "tests",
+      112
+    ]
+  ],
+  "elsewhere": 27,
+  "total": 1546,
+  "verified": true,
+  "notes": []
+}

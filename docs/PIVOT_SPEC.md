@@ -5,10 +5,13 @@
 **Supersedes:** `VISUALIZATION_DESIGN.md` §1–4 (radial layout, tier plan, and the "Tier XL is a product boundary" decision), ADR-014/015 (native scanner), and roadmap Phases 6 and S. Every other doc stays valid except where its banner points here (§16).
 **Scope:** v1 in full detail; extras E1–E5 at design level. Each extra gets its own implementation plan when it starts.
 **Amended 2026-10-13 (ADR-043):** other people should be able to use Nebulosity on their own repos. v1 gains a slice, V1.6 "Works on your repo", with a free mode that needs no API key (§2, §12), and the extras run E4 → E5 → E1, with E3 smaller and optional and E2 waiting on a measurement (§10).
+**Amended 2026-10-22 (ADR-061):** the positioning in §0–1 is narrowed to what Eval #1–#3 measured. Nebulosity is described as the dependency-structure layer for Claude Code: it answers in one call the questions that take many steps over the imports. The design and every feature are unchanged.
 
 ---
 
 ## 0. In one paragraph
+
+> **Positioning since 2026-10-22 (ADR-061):** this section and §1 are the pitch as written on 2026-10-11. Three evals found no clear gain on big-picture questions or on lists of direct importers. They found Nebulosity faster, and usually cheaper, on questions that take many steps over the import graph, so that is what it is now pitched on. The engine below is unchanged.
 
 Claude Code understands a repository by searching it on demand (grep, read, reason) and forgets everything when the session ends. That works for small repos and local questions. On massive repos it struggles with three kinds of question: **big-picture** ("what are the subsystems and how do they talk?"), **complete-list** ("every file that depends on X") and **repeated** (every session pays for the same exploration again). Nebulosity does the expensive understanding **once**, keeps it **fresh incrementally**, and serves it two ways: to AI agents through an **MCP server**, and to people through a zoomable **Map**.
 
@@ -17,6 +20,8 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 ---
 
 ## 1. Positioning and evidence
+
+> **Positioning since 2026-10-22:** see the note at the top of §0 (ADR-061).
 
 - **Companion, not competitor.** Nebulosity does not replace any agent's loop. It gives every MCP client (Claude Code, Claude Desktop, Cursor, VS Code's agent mode) a precomputed map. Its own agent, the Guide (E1), exists for guided onboarding inside the Map.
 - **Why not "better RAG".** Claude Code's team tried a local vector index early on and found agentic search better, largely because indexes go stale. Nebulosity answers staleness with incremental re-indexing (§5.6). Its value is answers that exist in no single file: summaries of whole areas, exact dependency sets, connection paths.
@@ -43,7 +48,7 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 
 **Non-goals.** Editing code. Replacing Claude Code. Multi-user, SaaS or paid tiers (CLAUDE.md's non-goals stand). Non-TS/JS languages before E4. The native C++ scanner (dropped, ADR-025).
 
-**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names, S12 on VS Code and AFFiNE:
+**Success criteria.** v1 is done when every row holds: S1–S8 measured on VS Code at `cc3fec88`, S9–S11 on the repos V1.6's plan names, S12 on VS Code and AFFiNE, S13 on VS Code, AFFiNE and Theia, and S14 on VS Code with AFFiNE reported (V1.7, 2026-10-16: S14 met, S13 failed):
 
 | # | Criterion | Threshold |
 |---|---|---|
@@ -59,6 +64,8 @@ Claude Code understands a repository by searching it on demand (grep, read, reas
 | S10 | Repo variety (V1.6): a set of real repos of different shapes, picked in V1.6's plan (for example a small app, a monorepo, plain JavaScript, path aliases) | each indexes without a crash; the share of imports resolved is reported per repo *(V1.6: met on express, vite, excalidraw, AFFiNE and VS Code; each indexes without a crash and resolves 99% or more of its relative imports of code, with imports of style sheets, images and other files the index doesn't read counted apart: Variety Benchmark #1)* |
 | S11 | Free mode (V1.6): no API key | the Map, structure and stats, `imports`/`architecture`, keyword search and `show_on_map` work; where a summary would go, it says what a key adds; nothing is charged until a cost estimate is confirmed *(V1.6: met; the estimate and the yes, ADR-035 and ADR-038 amended, the Map's on-open summary included since the pre-freeze sweep; the Map checked with no key)* |
 | S12 | Eval #2 passes the ship gate (ADR-057) | all seven of D1's conditions hold *(V1.6: **failed**, 2026-10-15: conditions 1, 2, 3a and 5a failed; 3b, 4 and 5b passed. docs/EVAL_RESULTS.md, Eval #2)* |
+| S13 | Eval #3 passes its gate (ADR-060) *(V1.7 plan, 2026-10-15)* | V and conditions 1–6 hold (the gate approved by the owner 2026-10-15, fixed before the first run) *(V1.7: **failed**, 2026-10-16: conditions 1, 2, 3 and 5 failed; V, 4 and 6 passed. 378 runs; refused commands in 9 and 8 of each arm's 189. The median TTRC ratio on the new file-set questions was 0.98, 1.01 and 1.04 on VS Code, AFFiNE and Theia against 0.25; the call and task questions took 0.88–0.98 of the time and 0.98–1.01 of the cost against 0.5; N's mean error was 1.36 times A's against 0.5; tools were used in 80 of 138 runs against 0.90. docs/EVAL_RESULTS.md, Eval #3)* |
+| S14 | Calls index (ADR-059) *(V1.7 plan, 2026-10-15)* | file-level recall ≥ 0.98 and precision ≥ 0.99 against the type checker, pooled over its benchmark methods, each reported; first `calls` answer ≤ 1.5 s *(V1.7 Task 5, 2026-10-15: recall and precision **met** on VS Code's five methods pooled, after two rounds of rules (adapter version 7): interface calls 0.999 / 1.000, interface + implementation 0.987 / 0.999. `IStorageService.store` alone is at 0.977 recall on the second set. AFFiNE scores 1.000 / 1.000 against its adjudicated L3 sets. docs/BENCHMARKS.md, Calls Benchmark #1. The first-answer half, V1.7 Task 6, 2026-10-15: **met**. The first `calls` answer on a fresh server took 869–902 ms over five servers, worst 902 ms against 1.5 s, so index-time resolution is not needed; warm calls peak at 99 ms. S1 with the call facts: 56.7 s worst of three, median 50.2 s. docs/BENCHMARKS.md, Index Benchmark #7 and MCP Benchmark #5.)* *(V1.7: **met**, both halves: Calls Benchmark #1 PASS, the first answer's time PASS. S14 measures the benchmark methods only. On Eval #3's drawn targets the index missed 105 files the checker found, 81 of them on AFFiNE, where five of seven call truths held 1–2 of 10–25 files: docs/EVAL_RESULTS.md, Eval #3, "Where the index misses these callers".)* |
 
 ---
 
@@ -229,7 +236,8 @@ The call graph (E2), git history (E3) and clusters (E5) plug into the same stage
 - **`dependents(path, { transitive, limit })` and `dependencies(…)`**: BFS over an in-memory adjacency list built from `imports` and cached per index version. VS Code's graph is a few MB. The result has an exact total, then the top entries by distance. *(V1.4, ADR-045: a file or a folder, whose own files are never listed; every answer counts all reached files and the direct ones; entries go nearest first, then most imported, then by path; `limit` and `offset` page them.)*
 - **`path(from, to)`**: the shortest import chain by BFS, in either direction, or "no path". *(V1.4, ADR-045: from every file of `from` at once, neighbours in path order so the same chain comes back each time; the answer says which way it runs; overlapping places are refused.)*
 - **`impact(path, { direction, group_by, within })` and `architecture(path, report)`** *(V1.6, ADR-055)*: facts computed from the whole import graph, with no model. `impact` counts a change's dependents by area, with the tests among them and the files nothing imports that load it (a package.json's entry points first, ADR-053). `architecture` reports a folder's layers by import direction and the imports against them, the recurring folder names and what each one's files import, the import cycles (Tarjan, iterative; the shortest cycle through a file) and the files nothing imports.
-- **E2** `callers`, `callees`, `callFlow`. **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
+- **`calls(symbol, { path, groupBy, within })`** *(V1.7, built 2026-10-15, accepted 2026-10-16, ADR-059; Calls Benchmark #1 PASS)*: a method's callers through declared types (on the type, a subtype or an implementation), its implementations, and what a change to its signature touches; or a type's injection sites. Resolved at query time through the stored import edges, cached per index version.
+- **E2** `callees`, `callFlow` (later). **E3** `history`, `hotspots`, `coupling`. **E5** `clusters`.
 
 ### 6.2 Registry
 Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zod input schema, handler }`. Descriptions are written for an LLM: when to use the tool and what it returns. Adapters wrap the entries: MCP registers them in v1, and LangGraph wraps the same entries in E1. Output is compact plain text with repo-relative paths, exact totals, truncation markers ("… 4,231 more") and a freshness note last. *(V1.4, ADR-047: a handler returns `{ text, paths, action? }`; the format's rules are API_CONTRACTS.md §17.)*
@@ -241,9 +249,10 @@ Each tool is defined once in `lib/tools/registry.ts` as `{ name, description, zo
 | `search` | Find code or concepts by keyword or meaning |
 | `imports` | What imports X, or what X imports, directly or transitively, with complete counts; `group_by` counts what a change reaches by area; `within` keeps one folder; `to` gives the shortest chain from X to Y *(V1.6, ADR-056: replaces `dependents`, `dependencies` and `path`)* |
 | `architecture` | A folder's layers, folder conventions, import cycles and files nothing imports, from its imports *(V1.6, ADR-055, ADR-056)* |
+| `calls` | Who calls a method through declared types (injected services, fields, parameters, base classes), its implementations, and what a change to its signature touches; or where a type is injected *(V1.7, ADR-059)* |
 | `show_on_map` | Highlight paths on the open Map. Does nothing if the Map isn't open |
 
-*(V1.6, ADR-056: six tools. The five that answer questions are always loaded into Claude Code's prompt through `_meta["anthropic/alwaysLoad"]`; `show_on_map` is deferred with a search hint.)* Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
+*(V1.6, ADR-056: six tools. The five that answer questions are always loaded into Claude Code's prompt through `_meta["anthropic/alwaysLoad"]`; `show_on_map` is deferred with a search hint.)* *(V1.7, ADR-056 amended: seven tools, the six that answer questions always loaded, their definitions and the instructions under 6,650 characters.)* Claude Code shows these as `mcp__nebulosity__<name>`. Nebulosity does not duplicate file reading; agents keep using their own Read/Grep for source text.
 
 **Safety.** Every tool is read-only. Paths are validated against the repo root (today's `safePath`, generalized). The MCP server listens on nothing (stdio), and the live endpoint accepts only localhost.
 
@@ -332,6 +341,10 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 *(Eval #2, V1.6, ADR-057: 270 runs on VS Code and AFFiNE in two arms, three repeats each, Claude Code 2.1.300, scripts allowed in both arms. With Nebulosity, Claude Code was faster and cheaper on the questions that walk the import graph and in task sessions, at an equal or higher score. Part of the cost difference came from the alone arm's refused shell commands. It was lower on VS Code's big-picture questions. The ship gate failed on conditions 1, 2, 3a and 5a (S12). docs/EVAL_RESULTS.md.)*
 
+*(Eval #3, V1.7, 2026-10-16, ADR-060: 378 runs on VS Code, AFFiNE and a held-out Theia, in two arms, three repeats each, with the rules sentence in both arms (384 were planned; AFFiNE drew no adopt question, R-X, and 2 tasks instead of 3, R-AF). It adds time to relevant context, calls and task questions drawn from real issues, and a gate fixed before the first run.)*
+
+*(Eval #3, V1.7, run 2026-10-16 on Claude Code 2.1.301: the gate failed on conditions 1, 2, 3 and 5 (S13), with refused commands under 5% in both arms. With Nebulosity, Claude Code reached the files the new call and task questions need no sooner than alone and took about as long and cost about as much on them, with slightly more errors; on Eval #2's graph questions it was faster (0.63 and 0.38 of the time) and on AFFiNE cheaper (0.56 of the cost), scoring 1.00 against 0.98. docs/EVAL_RESULTS.md.)*
+
 ---
 
 ## 10. Extras, in order (design level; each gets its own plan)
@@ -349,6 +362,7 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - The TypeScript type checker (`ts.createProgram` per tsconfig project) resolves call expressions to declarations. That includes dependency-injected services, resolved from interface types to their `implements` classes, labeled `typed`. A name-based heuristic is the fallback, labeled `heuristic`.
 - **Measure first:** type-checking all of VS Code may take several GB. The fallbacks are per-project programs or heuristic only. *(Since ADR-043, E2 is deferred: half a day measuring memory and time comes first, then the owner decides whether to build it.)*
 - Tools: `callers`, `callees`, `call_flow`. UI: a call-flow view (callers ← function → callees, one hop at a time, expandable, ≤ 50 boxes).
+- *(V1.7, built 2026-10-15, accepted 2026-10-16: built as declared types, not the type checker (ADR-059), and measured against the checker. `callees` and the call-flow view wait.)*
 
 **E3 — Git-history overlays.** *(Optional and smaller since ADR-043: the panel gains "often changes with…" and the first commit, from the repo's own history; the History lens and the dashed coupling lines wait. Users' repos usually have full history, so the unshallow fetch is needed only to show it on VS Code.)*
 - Needs full history (`git fetch --unshallow`, about 1.5 GB). The owner approves that at kickoff.
@@ -403,6 +417,7 @@ Each v1 slice ends demoable:
 | V1.4 MCP | tool registry, `mcp/server.ts`, `claude mcp add` instructions, smoke test |
 | V1.5 Ship | static export + hosted demo, eval, README, demo-video script |
 | V1.6 Works on your repo (ADR-043) — DONE 2026-10-15 | an installable package (index, Map and Claude Code setup, one command each); five real repos of different shapes; Windows, macOS and Linux (CI); free mode with no API key; the cost confirmed before any paid run; a README that says who it's for and that summaries send code to Anthropic. As built, also: more imports resolved (ADR-053), docs pointers (ADR-054), impact and architecture facts (ADR-055), six tools with five always loaded (ADR-056), and Eval #2 against a gate fixed before its first run (ADR-057), which **failed**: the hold of ADR-051 stays |
+| V1.7 Calls and context, measured *(DONE 2026-10-16; S14 met, S13 failed: Eval #3's gate failed on conditions 1, 2, 3 and 5)* | calls through declared types and the `calls` tool (ADR-059); S6's first cut; Eval #3's harness (the rules sentence, time to relevant context, the call truth, the new kinds) and Eval #3 on VS Code, AFFiNE and a held-out Theia under a gate fixed before its first run (ADR-060). Plan: `docs/plans/2026-10-15-v1-7-calls-and-context.md` |
 
 **Target:** V1.1–V1.5 by **2026-10-18** (end of reading week), with a slip budget of 2–4 days; V1.6 adds about 3–4 days. The extras follow in the order of ADR-043, E4 → E5 → E1 at about 2–4 days each, then E3 (small, optional) and E2 (after its measurement); each one updates the live demo and README. Context: Shopify applications open around late October or early November 2026. *(Until 2026-10-13 the extras ran E1 → E5 in about 1–2 weeks.)*
 
@@ -478,6 +493,9 @@ Each v1 slice ends demoable:
 | ADR-056 | Six tools, five always loaded, instructions as the setup-free guide, a size budget (amends ADR-047, §6.2) |
 | ADR-057 | Eval #2's method and the ship gate (amends ADR-050, ADR-051) |
 | ADR-058 | Installable: one `nebulosity` command, the data in the user's folder, and the cost confirmed before any spend (implements ADR-043's V1.6; amends ADR-048) |
+| ADR-059 | Calls through declared types: a calls index and the `calls` tool (amends ADR-043, ADR-056, §6.1, §6.2) |
+| ADR-060 | Eval #3's method: the rules sentence, time to relevant context, the call kinds, and the gate (amends ADR-057) |
+| ADR-061 | Positioned as the dependency-structure layer for Claude Code: the pitch narrowed to what Eval #1–#3 measured, every feature kept (amends ADR-024, §0–1) |
 
 ## 16. Doc migration
 

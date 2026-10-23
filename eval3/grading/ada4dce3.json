@@ -1,0 +1,13 @@
+{
+  "id": "ada4dce3",
+  "points": [
+    {"id": "BP6.1", "score": 0.5, "quote": "They sit next to the source in `src/vs/**/test/` folders (`common`, `browser`, `node` and `electron-*` variants)."},
+    {"id": "BP6.2", "score": 0.5, "quote": "Use `scripts/test.sh` or `scripts\\test.bat`, which run in Electron. Add `--grep` or `--run <file>` to target specific tests."},
+    {"id": "BP6.3", "score": 1, "quote": "`npm run test-browser` runs the browser-targeted tests with Playwright. `npm run test-node` runs the Node tests with mocha."},
+    {"id": "BP6.4", "score": 0.5, "quote": "Use `scripts/test-integration.sh` or `scripts\\test-integration.bat`."},
+    {"id": "BP6.5", "score": 1, "quote": "Many extensions also have integration suites. These include `extensions/vscode-api-tests`, which exercises the extension API."},
+    {"id": "BP6.6", "score": 1, "quote": "`test/smoke/`. They drive a real VS Code UI. ... `npm run smoketest`, which compiles and then runs."},
+    {"id": "BP6.7", "score": 1, "quote": "The runner infrastructure is in `test/unit/` ... `test/integration/` ... `test/smoke/` ... `test/sanity/` ... release and install checks of built products."},
+    {"id": "BP6.8", "score": 0.5, "quote": "Compile or transpile first (for example `npm run build-fast -- --client-only`) when the tests need fresh output."}
+  ]
+}

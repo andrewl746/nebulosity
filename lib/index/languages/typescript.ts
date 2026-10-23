@@ -1,7 +1,8 @@
 import ts from "typescript";
 import { extractChunksFromSourceFile, parseSourceFile } from "../../chunks";
 import type { CodeChunk } from "../../contracts";
-import type { SymbolKind, SymbolRow } from "../../db/schema";
+import type { CallFacts, SymbolKind, SymbolRow } from "../../db/schema";
+import { collectCallFacts, emptyCallFacts } from "./typescript-calls";
 
 /** Every extension this adapter claims (TypeScript parses JavaScript too). */
 export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
@@ -12,8 +13,12 @@ export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", 
  * adapter stored for every file whose bytes haven't changed (ADR-053). 1: V1.1–V1.5. 2: computed import() (ADR-053).
  * 3: import type expressions, `typeof import("x")` (ADR-053, amended). 4: files of 1–5 MB parsed in full for their
  * imports, not token-scanned (ADR-053, amended).
+ * 5: call facts, a fourth product of the parse (ADR-059).
+ * 6: super.m(), and this or new on a nested or nameless class (Calls Benchmark #1's first round, ADR-059 amended).
+ * 7: a member of a declared type (x.files.m(), const { files } = x, an interface's property types) and a same-file
+ * function's declared return type (Calls Benchmark #1's second round, ADR-059 amended).
  */
-export const ADAPTER_VERSION = 4;
+export const ADAPTER_VERSION = 7;
 
 /** files.language for a path this adapter claims. TypeScript's parser reads both languages. */
 export function languageOf(filePath: string): "typescript" | "javascript" {
@@ -25,10 +30,12 @@ export type ParsedFile = {
     symbols: SymbolRow[];
     /** Raw specifiers in source order, each once: "./a", "@core/log", "react". */
     imports: string[];
+    /** Call facts (ADR-059): declarations, bindings, typed calls and injection sites. */
+    calls: CallFacts;
     lineCount: number;
 };
 
-/** One parse, three products. This is the adapter seam tree-sitter adapters plug into later (E4). */
+/** One parse, four products. This is the adapter seam tree-sitter adapters plug into later (E4). */
 export function parseTypeScriptFile(filePath: string, text: string): ParsedFile {
     const sourceFile = parseSourceFile(filePath, text);
 
@@ -36,6 +43,7 @@ export function parseTypeScriptFile(filePath: string, text: string): ParsedFile 
         chunks: extractChunksFromSourceFile(filePath, sourceFile),
         symbols: collectSymbols(sourceFile),
         imports: collectImports(sourceFile),
+        calls: collectCallFacts(sourceFile),
         lineCount: countLines(text),
     };
 }
@@ -43,10 +51,12 @@ export function parseTypeScriptFile(filePath: string, text: string): ParsedFile 
 /**
  * A file over the 1 MB cap, up to 5 MB (ADR-053, amended): parsed in full, but only its imports are kept, so they
  * follow exactly the rule every other file's do. Its declarations and chunks are dropped: no code search, no summary.
+ * Its call facts are kept (R-P): the syntax tree is there anyway.
  * The full parse of VS Code's 1.0–1.6 MB agent-host tests takes 90–150 ms.
  */
 export function parseTypeScriptImportsOnly(filePath: string, text: string): ParsedFile {
-    return { chunks: [], symbols: [], imports: collectImports(parseSourceFile(filePath, text)), lineCount: countLines(text) };
+    const sourceFile = parseSourceFile(filePath, text);
+    return { chunks: [], symbols: [], imports: collectImports(sourceFile), calls: collectCallFacts(sourceFile), lineCount: countLines(text) };
 }
 
 /** What comes just before a module augmentation's name. No import statement ends this way. */
@@ -70,7 +80,7 @@ export function scanTypeScriptImports(filePath: string, text: string): ParsedFil
         .filter((ref) => !AUGMENTATION.test(text.slice(Math.max(0, ref.pos - 64), ref.pos)))   // ref.pos is the quote's
         .map((ref) => ref.fileName);
 
-    return { chunks: [], symbols: [], imports: [...new Set(imports)], lineCount: countLines(text) };
+    return { chunks: [], symbols: [], imports: [...new Set(imports)], calls: emptyCallFacts(), lineCount: countLines(text) };
 }
 
 /** Lines as an editor numbers them: a trailing newline does not start an extra line. */

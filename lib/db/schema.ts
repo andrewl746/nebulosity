@@ -233,3 +233,106 @@ export type SymbolRow = Omit<typeof symbols.$inferSelect, "id" | "fileId">;
 export type FolderRow = Omit<typeof folders.$inferSelect, "id" | "repoId">;
 /** A level edge as the aggregator builds it and the store writes it. */
 export type LevelEdgeRow = Omit<typeof levelEdges.$inferSelect, "id" | "repoId">;
+
+/** How a call's receiver got its type, or (member null) what kind of injection site a fact is (ADR-059). */
+export const CALL_RULES = [
+    "param", "local", "destructure", "constraint", "cast", "provider", "new", "alias", "field", "this", "ctor-param", "inject-field",
+    "super", "return", "member",
+] as const;
+export type CallRule = (typeof CALL_RULES)[number];
+
+/**
+ * A class or interface as the TypeScript adapter reads it (ADR-059). A TypeRef is a type as written: "IFoo", or "ns.IFoo"
+ * through a namespace import; type arguments are dropped.
+ */
+export type TypeDeclFact = {
+    /** null for a class expression with no name. */
+    name: string | null;
+    kind: "class" | "interface";
+    /** 1-based: its name's line, or its `class` keyword's when it has no name. */
+    line: number;
+    exported: boolean;
+    /** Inside a function, a namespace or an expression (R-O): an implementation all the same, but no import can name it. */
+    nested: boolean;
+    extendsRefs: string[];
+    implementsRefs: string[];
+    /** `class X extends mock<IFoo>()`: a test double of IFoo. */
+    testDoubleOf: string | null;
+    /** Its methods, accessors and properties (a class's constructor parameter properties too), sorted, each once. */
+    members: string[];
+    /** A class's field, or an interface's property → the type it is declared with, or sure to hold (`= new C()`, `= this._register(new C())`). */
+    fields: Record<string, string>;
+};
+
+/** An import, a re-export or a local export, as call resolution follows them (ADR-059). */
+export type BindingFact = {
+    kind: "import" | "reexport" | "export";
+    /** The name in this file: an import's local name; a re-export's or an export's exported name ("*" for `export * from`). */
+    local: string;
+    /** The name in the other module: "default", "*" (a namespace) or a name; for a local export, the local name it exports. */
+    imported: string;
+    /** null for a local export. */
+    specifier: string | null;
+};
+
+/** A call on a value whose type a rule can read; with `member` null, a place a type is injected (ADR-059). */
+export type TypedCallFact = {
+    /** 1-based: a call's member name's line; an injection site's TypeRef node's line. */
+    line: number;
+    member: string | null;
+    receiver: "type" | "field" | "this";
+    /** "type": the TypeRef ("@<line>" for a nested or nameless class of this file, R-O); "field": the field's name; "this": null. */
+    ref: string | null;
+    /** "field" and "this": the type they resolve through, a TypeRef ("@<line>" for a nested or nameless class); otherwise the top-level class the call sits in, or null. */
+    inClass: string | null;
+    how: CallRule;
+};
+
+/** The adapter's fourth product of its one parse (ADR-059). */
+export type CallFacts = { types: TypeDeclFact[]; bindings: BindingFact[]; calls: TypedCallFact[] };
+
+/** Classes and interfaces, per file (ADR-059). Lists and maps are JSON text, read back by lib/db/store/calls.ts. */
+export const typeDecls = sqliteTable("type_decls", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    name: text("name"),
+    kind: text("kind", { enum: ["class", "interface"] }).notNull(),
+    line: integer("line").notNull(),
+    exported: integer("exported", { mode: "boolean" }).notNull().default(false),
+    nested: integer("nested", { mode: "boolean" }).notNull().default(false),
+    extendsRefs: text("extends_refs").notNull().default("[]"),
+    implementsRefs: text("implements_refs").notNull().default("[]"),
+    testDoubleOf: text("test_double_of"),
+    members: text("members").notNull().default("[]"),
+    fields: text("fields").notNull().default("{}"),
+}, (t) => [
+    index("type_decls_file_idx").on(t.fileId),
+    index("type_decls_name_idx").on(t.name),
+]);
+
+/** Imports the call facts name, and every re-export and local export, per file (ADR-059). */
+export const callBindings = sqliteTable("call_bindings", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["import", "reexport", "export"] }).notNull(),
+    local: text("local").notNull(),
+    imported: text("imported").notNull(),
+    specifier: text("specifier"),
+}, (t) => [
+    index("call_bindings_file_idx").on(t.fileId),
+]);
+
+/** Typed calls and injection sites (member null), per file (ADR-059); looked up by member. */
+export const typedCalls = sqliteTable("typed_calls", {
+    id: integer().primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id").notNull().references(() => files.id, { onDelete: "cascade" }),
+    line: integer("line").notNull(),
+    member: text("member"),
+    receiver: text("receiver", { enum: ["type", "field", "this"] }).notNull(),
+    ref: text("ref"),
+    inClass: text("in_class"),
+    how: text("how", { enum: CALL_RULES }).notNull(),
+}, (t) => [
+    index("typed_calls_file_idx").on(t.fileId),
+    index("typed_calls_member_idx").on(t.member),
+]);

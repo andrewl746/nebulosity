@@ -1,0 +1,13 @@
+{
+  "id": "8a49f7ef",
+  "points": [
+    {"id": "BP1.1", "score": 1, "quote": "`base/` holds the foundational primitives: utilities, data structures, events, lifecycle and disposables, and generic DOM widgets."},
+    {"id": "BP1.2", "score": 1, "quote": "`platform/` holds the core services and their contracts: files, configuration, storage, instantiation and dependency injection, and the agent host."},
+    {"id": "BP1.3", "score": 1, "quote": "`editor/` is the Monaco editor core: text model, language features, and the editor widget."},
+    {"id": "BP1.4", "score": 0.5, "quote": "`workbench/` is the VS Code application: parts, layout, and features under `contrib/` such as chat, SCM, and debug."},
+    {"id": "BP1.5", "score": 1, "quote": "`code/` is startup and hosting for desktop, CLI and web."},
+    {"id": "BP1.6", "score": 1, "quote": "`server/` is the remote server runtime."},
+    {"id": "BP1.7", "score": 1, "quote": "The order is `base` → `platform` → `editor` → `workbench` → `code`/`server`/`sessions`."},
+    {"id": "BP1.8", "score": 0, "quote": "none"}
+  ]
+}

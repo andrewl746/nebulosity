@@ -1,0 +1,10 @@
+{ "id": "e386fa4c", "points": [
+  { "id": "AFFINE-BP6.1", "score": 1, "quote": "**Workbench** (`packages/frontend/core/src/modules/workbench`, see its README) is AFFiNE's window manager. It covers the main area and the right sidebar." },
+  { "id": "AFFINE-BP6.2", "score": 1, "quote": "**View** (`entities/view.ts`) is one managed window, like a tab or split pane." },
+  { "id": "AFFINE-BP6.3", "score": 1, "quote": "its own history, built on an in-memory navigable history (`utils/navigable-history.ts`); a `location$` LiveData that mirrors that history's listener;" },
+  { "id": "AFFINE-BP6.4", "score": 1, "quote": "It creates a per-view `createMemoryRouter(routes)`, using the routes from `router.tsx`, and calls `viewRouter.navigate(location)` in a layout effect. ... The matched route component renders the page." },
+  { "id": "AFFINE-BP6.5", "score": 1, "quote": "It renders `<ViewHeader>`, `<ViewBody>` and `<ViewSidebarTab tabId icon>`. ... That is how a route's header ends up in the pane's header slot, and its sidebar tabs in the right sidebar." },
+  { "id": "AFFINE-BP6.6", "score": 1, "quote": "The active view's URL counts as the URL of the whole app." },
+  { "id": "AFFINE-BP6.7", "score": 1, "quote": "Only the active view's sidebar is shown. `ViewSidebarTab` calls `view.addSidebarTab` and `removeSidebarTab` on mount and unmount. If a view has several tabs, a header switcher appears." },
+  { "id": "AFFINE-BP6.8", "score": 1, "quote": "**Browser** (`browser-adapter.ts`): ... A browser location change is pushed into the view history as `fromBrowser`. If the change was a back/forward to a known view entry, it calls `history.go(delta)` instead of pushing." }
+] }

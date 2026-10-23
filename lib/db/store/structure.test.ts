@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../client";
 import { chunks, folders, imports, levelEdges, symbols } from "../schema";
+import { loadCallBindings, loadCallsOf, loadInjectionSites, loadTypeDecls } from "./calls";
 import {
     deleteFilesNotIn, loadStoredFiles, replaceAggregates, replaceImports, upsertRepository, writeFileRecords,
     type FileRecord,
@@ -12,10 +13,38 @@ const record = (p: string, overrides: Partial<FileRecord> = {}): FileRecord => (
     importSpecifiers: [],
     chunks: [{ id: `${p}#a#0`, filePath: p, kind: "function", name: "a", nameSplit: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: `hash-${p}` }],
     symbols: [{ name: "a", qualifiedName: "a", kind: "function", startLine: 1, endLine: 1, exported: true, parentQualifiedName: null }],
+    calls: { types: [], bindings: [], calls: [] },
     ...overrides,
 });
 
 describe("structure store", () => {
+    it("writes a file's call facts and a rewrite replaces them (ADR-059)", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/store/calls");
+        const facts = {
+            types: [{ name: "A", kind: "class" as const, line: 1, exported: true, nested: false, extendsRefs: ["B"], implementsRefs: [], testDoubleOf: null, members: ["run"], fields: { f: "IF" } }],
+            bindings: [{ kind: "import" as const, local: "B", imported: "B", specifier: "./b" }],
+            calls: [{ line: 2, member: "go", receiver: "field" as const, ref: "f", inClass: "A", how: "field" as const }],
+        };
+        writeFileRecords(db, repoId, [record("a.ts", { calls: facts })]);
+        expect(loadTypeDecls(db, repoId)).toEqual([{ ...facts.types[0], path: "a.ts", isTest: false }]);
+        expect(loadCallBindings(db, repoId)).toEqual([{ ...facts.bindings[0], path: "a.ts" }]);
+        expect(loadCallsOf(db, repoId, "go")).toEqual([{ ...facts.calls[0], path: "a.ts", isTest: false }]);
+
+        writeFileRecords(db, repoId, [record("a.ts", { contentHash: "new", calls: { types: [], bindings: [], calls: [] } })]);
+        expect(loadTypeDecls(db, repoId)).toEqual([]);
+        expect(loadCallBindings(db, repoId)).toEqual([]);
+        expect(loadCallsOf(db, repoId, "go")).toEqual([]);
+    });
+
+    it("finds injection sites by a type's name, bare or through a namespace", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/store/sites");
+        const site = (line: number, ref: string) => ({ line, member: null, receiver: "type" as const, ref, inClass: null, how: "provider" as const });
+        writeFileRecords(db, repoId, [record("s.ts", { calls: { types: [], bindings: [], calls: [site(1, "IFoo"), site(2, "ns.IFoo"), site(3, "IFooBar"), site(4, "x.IFoo2")] } })]);
+        expect(loadInjectionSites(db, repoId, "IFoo").map((s) => s.line)).toEqual([1, 2]);
+    });
+
     it("upsertRepository returns the same id for the same root", () => {
         const db = getDb();
         expect(upsertRepository(db, "/store/a")).toBe(upsertRepository(db, "/store/a"));

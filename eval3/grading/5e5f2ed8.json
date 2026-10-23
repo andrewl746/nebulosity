@@ -1,0 +1,11 @@
+{
+  "id": "5e5f2ed8",
+  "points": [
+    {"id": "BP5.1", "score": 1, "quote": "`workbench.desktop.main.ts` imports `workbench.common.main.js` (line 15). It then adds the Electron pieces: `./electron-browser/desktop.main.js` and `desktop.contribution.js`, native services such as `nativeTextFileService`"},
+    {"id": "BP5.2", "score": 1, "quote": "`workbench.web.main.ts` also imports `workbench.common.main.js` (line 16). It then adds `./browser/web.main.js` and browser-only services such as `browserTextFileService`"},
+    {"id": "BP5.3", "score": 1, "quote": "`src/vs/workbench/workbench.common.main.ts` holds everything shared. ... `workbench.desktop.main.ts` imports `workbench.common.main.js` (line 15) ... `workbench.web.main.ts` also imports `workbench.common.main.js` (line 16)."},
+    {"id": "BP5.4", "score": 0.5, "quote": "Each platform registers its own implementation of the same service interface, for example the browser versus native text file service ... Shared code depends only on the interface."},
+    {"id": "BP5.5", "score": 1, "quote": "a feature's code is loaded only if one of them imports it."},
+    {"id": "BP5.6", "score": 1, "quote": "If no entry point imports a `*.contribution.ts` file, it is never bundled or run."}
+  ]
+}

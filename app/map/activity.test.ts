@@ -26,6 +26,8 @@ describe("activityLabel", () => {
         expect(activityLabel(event("imports", ["a.ts", "b.ts"]))).toBe("Tracing a.ts → b.ts");
         expect(activityLabel(event("architecture", ["src"]))).toBe("Reading how src is organized");
         expect(activityLabel(event("architecture", [""]))).toBe("Reading how the repo is organized");
+        expect(activityLabel(event("calls", ["src/a.ts", "b.ts"]))).toBe("Following the calls into src/a.ts +1");
+        expect(activityLabel(event("calls", []))).toBe("Following calls");
         expect(activityLabel(event("show_on_map", ["src/vs", "src/main.ts"]))).toBe("Showing src/vs +1 on the map");
     });
 

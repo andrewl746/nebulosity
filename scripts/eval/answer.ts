@@ -183,3 +183,23 @@ export function checkCycle(paths: readonly string[] | "none", truth: CycleTruth,
 }
 
 export const scoreCycle = (paths: readonly string[] | "none", truth: CycleTruth, imports: (a: string, b: string) => boolean | null): number | null => checkCycle(paths, truth, imports).score;
+
+/** A task answer's label line (ANSWER CHANGE: or ANSWER TESTS:), with the markdown answerSection ignores. */
+const label = (word: string): RegExp => new RegExp(`^[\\s>*_#\`-]*answer[*_\`]*\\s+${word}[*_\`]*\\s*:[*_\`]*\\s*(.*)$`, "i");
+
+/**
+ * A task answer's two blocks (V1.7 plan, R-U): the text after the last ANSWER CHANGE: line and after the last ANSWER
+ * TESTS: line, each running up to the other's line when that comes later. A block whose line is missing is null.
+ */
+export function taskSections(text: string): { change: string | null; tests: string | null } {
+    const lines = text.split(/\r?\n/);
+    const last = (re: RegExp): number => {
+        for (let i = lines.length - 1; i >= 0; i--) if (re.test(lines[i])) return i;
+        return -1;
+    };
+    const [changeRe, testsRe] = [label("change"), label("tests")];
+    const [c, t] = [last(changeRe), last(testsRe)];
+    const block = (at: number, other: number, re: RegExp): string | null =>
+        at < 0 ? null : [re.exec(lines[at])![1], ...lines.slice(at + 1, other > at ? other : lines.length)].join("\n").trim();
+    return { change: block(c, t, changeRe), tests: block(t, c, testsRe) };
+}

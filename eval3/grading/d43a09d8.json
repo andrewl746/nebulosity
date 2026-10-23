@@ -1,0 +1,10 @@
+{ "id": "d43a09d8", "points": [
+{ "id": "AFFINE-BP1.1", "score": 0.5, "quote": "`packages/frontend/` is the client side. ... `packages/backend/` has `server` (NestJS) ... `packages/common/` has code shared by the client and the server" },
+{ "id": "AFFINE-BP1.2", "score": 1, "quote": "**`tools/`** has the `affine` CLI (build, bundle, dev), commit and changelog helpers, and CI utilities. ... **`tests/`** has the end-to-end and integration tests." },
+{ "id": "AFFINE-BP1.3", "score": 0.5, "quote": "**`blocksuite/`** holds the editor AFFiNE is built on." },
+{ "id": "AFFINE-BP1.4", "score": 1, "quote": "**web** (browser app) ... **mobile** (mobile web, with `mobile-shared`) ... **electron** and **electron-renderer** (desktop) ... **ios** ... **android** ... The `admin` dashboard is a separate frontend build." },
+{ "id": "AFFINE-BP1.5", "score": 0.5, "quote": "`native` (Rust, exposed to Node as `@affine/server-native`)" },
+{ "id": "AFFINE-BP1.6", "score": 0.5, "quote": "`@affine/server` is the self-hostable backend. It provides: accounts and authentication ... workspace and document storage and sync ... AI/copilot features" },
+{ "id": "AFFINE-BP1.7", "score": 0.5, "quote": "**PostgreSQL**, configured through `DATABASE_URL`. ... a GraphQL API (Apollo) used by the clients ... **Redis**, which the dependencies suggest is used through `ioredis` ... I haven't confirmed whether it's required or optional." },
+{ "id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared UI library." }
+] }

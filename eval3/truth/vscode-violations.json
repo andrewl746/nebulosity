@@ -1,0 +1,15 @@
+{
+  "id": "vscode-violations",
+  "kind": "violations",
+  "from": "src/vs/workbench/services",
+  "to": "src/vs/workbench/contrib",
+  "files": [
+    "src/vs/workbench/services/configuration/test/browser/configurationService.test.ts",
+    "src/vs/workbench/services/editor/test/browser/editorService.test.ts",
+    "src/vs/workbench/services/extensionManagement/test/browser/extensionEnablementService.test.ts",
+    "src/vs/workbench/services/policies/test/browser/accountPolicyService.test.ts",
+    "src/vs/workbench/services/textfile/test/browser/textEditorService.test.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

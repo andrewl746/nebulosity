@@ -1,0 +1,39 @@
+{
+  "id": "0eaa170a",
+  "question": "How is `src/vs/workbench` organized, and what rules govern the feature code in `src/vs/workbench/contrib`?",
+  "points": [
+    {
+      "id": "BP4.1",
+      "text": "a minimal core in `common`/`browser`/`electron-browser`"
+    },
+    {
+      "id": "BP4.2",
+      "text": "`api` implements `vscode.d.ts` for the extension host and the workbench"
+    },
+    {
+      "id": "BP4.3",
+      "text": "`services` holds core workbench services, not ones only a contribution uses"
+    },
+    {
+      "id": "BP4.4",
+      "text": "`contrib` holds most of the code"
+    },
+    {
+      "id": "BP4.5",
+      "text": "nothing outside `contrib` depends on it"
+    },
+    {
+      "id": "BP4.6",
+      "text": "each contribution has one `.contribution.ts` entry file"
+    },
+    {
+      "id": "BP4.7",
+      "text": "a contribution exposes its API through one common file (`contrib/search/common/search.ts`)"
+    },
+    {
+      "id": "BP4.8",
+      "text": "contributions may use each other's exposed API but never reach into another's internals"
+    }
+  ],
+  "answer": "**How `src/vs/workbench` is organized**\n\n`src/vs/workbench` is the full VS Code workbench: about 4,600 files. It sits in the fourth of the repo's ordered layers: `base`, `platform`, `editor`, `workbench`. After it come `code`, `server` and `sessions`. Each layer may import only from layers below it. `sessions` may import from `workbench`, but `workbench` must never import from `sessions`.\n\nThe import graph shows these sub-layers, bottom to top:\n\n1. `common/` holds shared contracts and models that don't depend on the UI.\n2. `services/` holds the core service implementations (about 660 files).\n3. `browser/` holds the shell and layout.\n4. `contrib/` (about 3,270 files) and `electron-browser/`, the desktop startup layer.\n5. `test/`.\n6. `api/`, the bridge to the extension host and the `vscode.d.ts` provider.\n7. The entry points: `workbench.common.main.ts`, then `workbench.desktop.main.ts` and `workbench.web.main.ts`, then `workbench.web.main.internal.ts`.\n\nThe entry points wire everything together through side-effect imports and singleton registrations. Only code reachable from them gets loaded.\n\nInside each area, code is split by runtime environment:\n- `common` is plain JavaScript only.\n- `browser` may use DOM APIs plus `common`.\n- `node` may use Node.js APIs plus `common`.\n- `electron-browser` may use `common` and `browser`.\n\nServices are consumed through constructor injection with decorators. They are registered with `registerSingleton(...)`.\n\nThe layering has exceptions, and they are mostly test code. `contrib` imports `workbench/test` helpers 299 times, and `services` does so 93 times. There are also about 40 `services → browser` imports, 19 `common → services` imports and 8 `services → contrib` imports. Some of those 8 are in tests. This means the layering is a convention with exceptions, not a strict rule.\n\n**Rules for `contrib/`**\n\n`contrib/` has no code of its own at the top level. Each of its roughly 100 subfolders is one feature, for example `chat`, `notebook`, `terminal`, `debug`, `mcp`, `scm` or `search`. The rules come from `.github/instructions/source-code-organization.instructions.md`:\n\n- Nothing outside `contrib/` may depend on `contrib/`. The exceptions are the entry-point files, `api/` (356 imports) and tests.\n- Each contribution has a single `.contribution.ts` entry point, which registers it.\n- A contribution exposes its internal API from a single `common` file.\n- Other contributions may depend only on that common API and must not reach into a feature's internals.\n- Features are usually split into `common/`, `browser/`, and `electron-browser/` or `node/`, with `test/` alongside.\n\nOther docs apply to this code too: `best-practices`, `coding-guidelines`, `design-philosophy` (for `browser/**` code) and `design-tokens` (for CSS). All of them are in `.github/instructions/`."
+}

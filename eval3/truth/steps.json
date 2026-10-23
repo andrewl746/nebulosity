@@ -1,0 +1,30 @@
+[
+  {
+    "repo": "affine",
+    "from": "blocksuite/affine/all/src/std/index.ts",
+    "to": "blocksuite/framework/std/src/gfx/index.ts",
+    "decision": "out",
+    "why": "The file is one line, `export * from '@blocksuite/std';`, and @blocksuite/std's \".\" export is ./src/index.ts (blocksuite/framework/std/package.json); the gfx entry (\"./gfx\": \"./src/gfx/index.ts\") is imported by the sibling std/gfx.ts, not by std/index.ts."
+  },
+  {
+    "repo": "affine",
+    "from": "packages/frontend/core/src/desktop/pages/workspace/detail-page/detail-page.tsx",
+    "to": "packages/frontend/core/src/components/affine/ai-onboarding/index.tsx",
+    "decision": "out",
+    "why": "Line 7 is a comment: `// import { PageAIOnboarding } from '@affine/core/components/affine/ai-onboarding';`; no live import of the ai-onboarding folder in the file."
+  },
+  {
+    "repo": "affine",
+    "from": "packages/frontend/core/src/modules/workspace-engine/impls/local.ts",
+    "to": "packages/common/nbstore/src/impls/idb/index.ts",
+    "decision": "in",
+    "why": "L14–18 `import { … } from '@affine/nbstore/idb';` and @affine/nbstore's \"./idb\" export is ./src/impls/idb/index.ts (packages/common/nbstore/package.json L11). Read for Eval #3 (affine-cn1-baseline-1, -3)."
+  },
+  {
+    "repo": "affine",
+    "from": "packages/frontend/core/src/modules/workspace-engine/index.ts",
+    "to": "packages/frontend/core/src/modules/workspace-engine/impls/local.ts",
+    "decision": "in",
+    "why": "L7–10 `import { … } from './impls/local';` Read for Eval #3 (affine-cn1-baseline-1, -3)."
+  }
+]

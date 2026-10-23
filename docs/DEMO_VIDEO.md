@@ -4,7 +4,7 @@ The owner's script to record from (D9). Not a spec: change the wording freely, b
 
 ## Goal and length
 
-About 2 minutes, at most 2:30. It is for someone who has never heard of Nebulosity: what it is, that it works on a repo as big as VS Code, and that it makes Claude Code's dependency answers cheaper and faster on that repo.
+About 2 minutes, at most 2:30. It is for someone who has never heard of Nebulosity: what it is (the dependency-structure layer for Claude Code, ADR-061), that it works on a repo as big as VS Code, and that it answers the dependency questions that take many steps several times as fast.
 
 ## Setup checklist
 
@@ -20,10 +20,10 @@ About 2 minutes, at most 2:30. It is for someone who has never heard of Nebulosi
 
 | Time | On screen | Narration | Action |
 |---|---|---|---|
-| 0:00–0:10 | VS Code's top level on the Map | "VS Code is 20,000 files. Claude Code searches it on demand; Nebulosity has already mapped it." | Hold on the top level, then start to zoom in. |
+| 0:00–0:10 | VS Code's top level on the Map | "VS Code is 20,000 files and 140,000 imports. To answer what a change would break, Claude Code has to follow them file by file, or write a script to. Nebulosity has every one indexed, and answers in one call." | Hold on the top level, then start to zoom in. |
 | 0:10–0:45 | The Map | Say what each step shows: folders as boxes, lines for imports, pages and doorways for big folders, the panel's summary and "Used by", search by meaning. | Open `src`, then `src/vs/platform` (pages and doorways). Click `src/vs/base/common/lifecycle.ts` (panel: summary, Used by). Press Ctrl K and type "terminal". |
 | 0:45–1:35 | Claude Code beside the Map | Say that Claude Code now asks the Map's engine instead of grepping, and the Map follows along. | Type prompt 1, then prompt 2 (below). |
-| 1:35–1:50 | The eval's headline table from `docs/EVAL_RESULTS.md`: arm B (Nebulosity at Claude Code's default, tools deferred) against arm A (baseline) | State the headline result in one sentence, then: "On big-picture questions it scored lower, 0.82 against 0.91, and it raised accuracy on none of the three kinds of question." | Show the table, then the loss. |
+| 1:35–1:50 | The README's Eval #3 table by kind: the five multi-step rows, then the one-step rows | "On questions that take many steps over the imports, Claude Code with Nebulosity was two to four times as fast on VS Code and AFFiNE, and one and a half to three times on a repo held out from tuning. On everything else it made little or no difference." | Show the multi-step rows, then the one-step rows. |
 | 1:50–2:00 | The demo link and the repo URL on screen | "Try it on VS Code in your browser, or point it at your own repo." | Hold. |
 
 ### Prompts (type these verbatim)

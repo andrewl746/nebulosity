@@ -1,0 +1,13 @@
+{
+  "id": "30cefbee",
+  "points": [
+    {"id": "AFFINE-BP5.1", "score": 1, "quote": "a doc has one block tree, and page mode and edgeless mode are two views of it. Edgeless mode doesn't have a separate copy."},
+    {"id": "AFFINE-BP5.2", "score": 1, "quote": "They are \"elements\" stored in the `affine:surface` block's `elements` prop."},
+    {"id": "AFFINE-BP5.3", "score": 1, "quote": "Shapes, brush strokes, connectors, groups, mind maps and text are not blocks. They are \"elements\" stored in the `affine:surface` block's `elements` prop."},
+    {"id": "AFFINE-BP5.4", "score": 1, "quote": "Page mode renders the notes as a linear document. ... Edgeless mode shows the same notes as movable cards on the canvas."},
+    {"id": "AFFINE-BP5.5", "score": 0.5, "quote": "Some canvas items are real blocks that sit under `affine:surface`. These include frames, edgeless text, and bookmark and attachment cards. Notes can also sit under it."},
+    {"id": "AFFINE-BP5.6", "score": 1, "quote": "every item has an `xywh` prop holding a serialized string such as `\"[x,y,w,h]\"`"},
+    {"id": "AFFINE-BP5.7", "score": 1, "quote": "every item has an `index` prop, a fractional-index string (default `'a0'`). Items are sorted by it, so inserting between two items only generates a new key"},
+    {"id": "AFFINE-BP5.8", "score": 0.5, "quote": "A `group` element ... keeps a `children` `Y.Map<boolean>` that maps child id → `true`. A `frame` block ... Frames also contain items by geometry."}
+  ]
+}

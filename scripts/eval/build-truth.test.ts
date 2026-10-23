@@ -3,8 +3,9 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import {
-    TRUTH_TABLE, applyAdjudications, buildRepoGraphs, buildTruth, checkVerdicts, edgeDifferences, importLines, loadTruthAdjudications, parseAdjudications, parseArgs,
-    parseTruthSpecs, restingEdges, sampleEdges, specsFor, successors, type Adjudication,
+    TRUTH_TABLE, applyAdjudications, applyCallVerdicts, buildRepoGraphs, buildTruth, callsEvidence, checkVerdicts, confirmingVerdicts, edgeDifferences, importLines, loadTruthAdjudications,
+    parseAdjudications, parseArgs, parseCallAdjudications, parseTruthSpecs, restingEdges, sampleEdges, specsFor, successors, taskTests, type Adjudication,
+    type CallTruthFile, type TaskTruthFile,
 } from "./build-truth";
 import { loadDefinition } from "./definition";
 import type { Graph } from "./truth";
@@ -372,5 +373,109 @@ describe("grading-time step verdicts stay out of the truths (sweep B, item 9)", 
         } finally{
             fs.rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe("the call and task specs (Task 10)", () => {
+    const repos = ["vscode"];
+    it("takes callers, breaks, adopt, injects and task specs with their fields", () => {
+        const specs = [
+            { id: "a", repo: "vscode", kind: "breaks", type: "IFoo", file: "src/foo.ts", member: "save", within: "src" },
+            { id: "b", repo: "vscode", kind: "injects", type: "IFoo", file: "src/foo.ts" },
+            { id: "c", repo: "vscode", kind: "task", type: "IFoo", file: "src/foo.ts", member: "save" },
+            { id: "d", repo: "vscode", kind: "adopt", type: "IFoo", file: "src/foo.ts", member: "save" },
+            { id: "e", repo: "vscode", kind: "callers", type: "IFoo", file: "src/foo.ts", member: "save" },
+        ];
+        expect(parseTruthSpecs(specs, repos)).toEqual(specs);
+    });
+
+    it("refuses a call kind without type or file, a member kind without member, and a within that isn't a string, each in a sentence", () => {
+        const base = { id: "q", repo: "vscode", kind: "callers", type: "IFoo", file: "src/foo.ts", member: "save" };
+        expect(() => parseTruthSpecs([{ ...base, type: undefined }], repos)).toThrow(/q \(callers\) needs type, the name of a class or interface/);
+        expect(() => parseTruthSpecs([{ ...base, file: undefined }], repos)).toThrow(/q \(callers\) needs file, a repo path/);
+        expect(() => parseTruthSpecs([{ ...base, member: undefined }], repos)).toThrow(/q \(callers\) needs member/);
+        expect(() => parseTruthSpecs([{ ...base, kind: "task", member: undefined }], repos)).toThrow(/q \(task\) needs member/);
+        expect(() => parseTruthSpecs([{ ...base, kind: "injects", member: undefined }], repos)).not.toThrow();
+        expect(() => parseTruthSpecs([{ ...base, within: 3 }], repos)).toThrow(/within/);
+    });
+
+    it("takes a task's tests: the test files among the files to change, and those that directly import one of them", () => {
+        const g = {
+            files: ["lib/x.spec.ts", "src/a.ts", "src/b.ts", "src/test/a.test.ts", "src/test/b.test.ts", "src/test/c.test.ts"],
+            edges: [["src/test/a.test.ts", "src/a.ts"], ["src/test/c.test.ts", "src/test/b.test.ts"], ["lib/x.spec.ts", "src/b.ts"]] as [string, string][],
+        };
+        const change = ["src/a.ts", "src/b.ts", "src/test/b.test.ts"];
+        // b.test is among the files to change (a test double's file); a.test imports a; c.test imports b.test; x.spec imports b
+        expect(taskTests(change, g)).toEqual(["lib/x.spec.ts", "src/test/a.test.ts", "src/test/b.test.ts", "src/test/c.test.ts"]);
+        expect(taskTests(change, g, "src")).toEqual(["src/test/a.test.ts", "src/test/b.test.ts", "src/test/c.test.ts"]);
+    });
+
+    it("refuses a call truth without the checker's program", () => {
+        expect(() => buildTruth({ files: [], edges: [] }, { id: "q", repo: "vscode", kind: "callers", type: "IFoo", file: "src/foo.ts", member: "save" }))
+            .toThrow("q: a callers truth needs the repo's checker program");
+        expect(() => buildTruth({ files: [], edges: [] }, { id: "t", repo: "vscode", kind: "task", type: "IFoo", file: "src/foo.ts", member: "save" }))
+            .toThrow("t: a task truth needs the repo's checker program");
+    });
+
+    const checked = { verified: false, notes: [] };
+    const callFile: CallTruthFile = { id: "q", kind: "callers", type: "IFoo", file: "src/foo.ts", member: "save", within: null, files: ["src/a.ts", "src/b.ts"], ...checked };
+    const g = { files: ["src/a.ts", "src/b.ts", "src/c.ts", "src/c.test.ts"], edges: [["src/c.test.ts", "src/c.ts"]] as [string, string][] };
+    const known = new Set(g.files);
+
+    it("reads calls-adjudicated.json: a list of { id, file, decision, line, why }, one verdict a file", () => {
+        const verdict = { id: "q", file: "src/c.ts", decision: "in", line: 4, why: "calls it through a cast" };
+        expect(parseCallAdjudications([verdict], ["q"])).toEqual([verdict]);
+        expect(() => parseCallAdjudications({}, ["q"])).toThrow(/list of verdicts/);
+        expect(() => parseCallAdjudications([{ ...verdict, line: undefined }], ["q"])).toThrow(/needs id, file/);
+        expect(() => parseCallAdjudications([{ ...verdict, id: "z" }], ["q"])).toThrow(/none of the call truths/);
+        expect(() => parseCallAdjudications([verdict, verdict], ["q"])).toThrow(/two verdicts on src\/c\.ts/);
+    });
+
+    it("adds a file by an 'in' and takes one out by an 'out'", () => {
+        const verdicts = parseCallAdjudications([
+            { id: "q", file: "src/c.ts", decision: "in", line: 4, why: "w" }, { id: "q", file: "src/a.ts", decision: "out", line: 2, why: "w" },
+        ]);
+        expect(applyCallVerdicts(callFile, verdicts, g, known).files).toEqual(["src/b.ts", "src/c.ts"]);
+        expect(applyCallVerdicts(callFile, [], g, known)).toBe(callFile);
+    });
+
+    it("stops, naming the verdict, when it names a file the repo lacks", () => {
+        expect(() => applyCallVerdicts(callFile, [{ id: "q", file: "src/zzz.ts", decision: "in", line: 1, why: "w" }], g, known)).toThrow(/q's verdict "in" on src\/zzz\.ts can't take effect: .* isn't a code file of the repo/);
+    });
+
+    it("takes a verdict that agrees with the checker as a confirmation: the truth is unchanged, and the evidence lists it", () => {
+        const verdicts = parseCallAdjudications([
+            { id: "q", file: "src/a.ts", decision: "in", line: 3, why: "the index missed a real call" },
+            { id: "q", file: "src/c.ts", decision: "out", line: 8, why: "the index's line is a comment" },
+            { id: "q", file: "src/b.ts", decision: "out", line: 5, why: "a string, not a call" },
+        ]);
+        const applied = applyCallVerdicts(callFile, verdicts, g, known);
+        expect(applied.files).toEqual(["src/a.ts"]);                       // b.ts taken out; a.ts and c.ts changed nothing
+        const confirmed = confirmingVerdicts(callFile, verdicts);
+        expect(confirmed.map((v) => [v.file, v.decision])).toEqual([["src/a.ts", "in"], ["src/c.ts", "out"]]);
+        const sheet = callsEvidence(["# top"], [{ truth: applied, sites: [{ file: "src/a.ts", line: 3, why: "call" }], confirmed }], verdicts).join("\n");
+        expect(sheet).toContain("   - read: checker right, L3: the index missed a real call");
+        expect(sheet).toContain("- read: checker right, `src/c.ts` is not one (L8): the index's line is a comment");
+        expect(sheet).toContain("- taken out by reading: `src/b.ts` (L5): a string, not a call");
+    });
+
+    it("applies a task's verdict to its CHANGE and recomputes its TESTS", () => {
+        const task: TaskTruthFile = { id: "t", kind: "task", type: "IFoo", file: "src/foo.ts", member: "save", within: null, change: ["src/a.ts"], tests: [], ...checked };
+        const done = applyCallVerdicts(task, [{ id: "t", file: "src/c.ts", decision: "in", line: 3, why: "w" }], g, known);
+        expect([done.change, done.tests]).toEqual([["src/a.ts", "src/c.ts"], ["src/c.test.ts"]]);
+    });
+
+    it("writes the evidence sheet: the sites and why, and the verdicts that decided", () => {
+        const verdicts = [{ id: "q", file: "src/c.ts", decision: "in" as const, line: 4, why: "a cast" }];
+        const truth = { ...callFile, files: ["src/a.ts", "src/c.ts"] };
+        const sheet = callsEvidence(["# top"], [{ truth, sites: [{ file: "src/a.ts", line: 9, why: "call" }] }], verdicts).join("\n");
+        expect(sheet).toContain("1. `src/a.ts`\n   - L9: call");
+        expect(sheet).toContain("2. `src/c.ts`\n   - decided by reading (calls-adjudicated.json, L4): a cast");
+    });
+
+    it("rests a task's tests on their edges into the files to change, and other call truths on none", () => {
+        const task: TaskTruthFile = { id: "t", kind: "task", type: "IFoo", file: "src/foo.ts", member: "save", within: null, change: ["src/c.ts"], tests: ["src/c.test.ts"], ...checked };
+        expect(restingEdges(g, task)).toEqual([["src/c.test.ts", "src/c.ts"]]);
+        expect(restingEdges(g, callFile)).toEqual([]);
     });
 });

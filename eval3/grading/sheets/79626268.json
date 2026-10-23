@@ -1,0 +1,27 @@
+{
+  "id": "79626268",
+  "question": "How does VS Code define a service, make an implementation available, and get it into the classes that use it? Name the functions and conventions involved.",
+  "points": [
+    {
+      "id": "BP3.2",
+      "text": "a service is an interface plus a service identifier, a decorator with the interface's name (needed because TypeScript's types are structural; an answer naming `createDecorator` earns it too, though the page doesn't name it)"
+    },
+    {
+      "id": "BP3.3",
+      "text": "consumers declare a dependency as a decorated constructor parameter (`@IModelService modelService: IModelService`)"
+    },
+    {
+      "id": "BP3.4",
+      "text": "objects get their services through the instantiation service (`instantiationService.createInstance`), which contributions get done for them"
+    },
+    {
+      "id": "BP3.5",
+      "text": "implementations are registered with `registerSingleton(identifier, implementation, InstantiationType)`"
+    },
+    {
+      "id": "BP3.6",
+      "text": "that call runs at module scope, so it happens at startup"
+    }
+  ],
+  "answer": "VS Code does this with a decorator-based dependency injection system in `src/vs/platform/instantiation`.\n\n**1. Define the service**\n- Declare an interface and give it a `_serviceBrand: undefined` marker. This brand is what makes service types distinguishable.\n- Create the identifier with `createDecorator<IFoo>('fooService')` (`instantiation.ts:109`). By convention the const and the interface share the name, as in `export const IFooService = createDecorator<IFooService>(...)`.\n- The returned `ServiceIdentifier` is also a parameter decorator. `refineServiceDecorator` (line 128) derives a narrower identifier from an existing one.\n\n**2. Make an implementation available**\n- **Contribution to the shared registry.** Call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`). `InstantiationType.Eager` builds the service at startup. `Delayed` returns a proxy and builds the real service on first use. You can also pass a `SyncDescriptor` (`descriptors.ts`), which wraps a constructor and any static arguments.\n- **Explicit registration at startup.** The entry points (`desktop.main.ts:175`, `web.main.ts:273`) create a `ServiceCollection` and call `.set(IFooService, instanceOrSyncDescriptor)`. This is how services that need bootstrap-time arguments are registered.\n- **Container.** `new InstantiationService(serviceCollection, true)` (`workbench.ts:192`) is the container. It creates services lazily from `SyncDescriptor`s and detects cycles. `createChild(...)` makes scoped child containers.\n\n**3. Get it into consumers**\n- Use constructor injection. Put the service parameters last, after any non-service arguments, and decorate each one: `constructor(arg: string, @IFooService private readonly fooService: IFooService)`.\n- The decorator records the parameter index and service id on the class. Its `DI_DEPENDENCIES` metadata is stored by `storeServiceDependency`.\n- When a class is created with `instantiationService.createInstance(MyClass, 'arg')`, the container reads that metadata and supplies the services, with your static arguments first.\n- Inside a callback, `instantiationService.invokeFunction(accessor => accessor.get(IFooService))` fetches a service through a `ServicesAccessor`. Actions and commands use this.\n- Classes can also be built from a descriptor (`new SyncDescriptor(Ctor, [args])`). Editor panes, view containers and contributions are registered this way and instantiated by the framework.\n\n**Conventions**\n- Interface names start with `I`. The id string is camelCase.\n- Services live in `common/` (the interface) and in `browser/`, `electron-browser/` or `node/` (the implementations), depending on the environment.\n- Services in `workbench/services/**` are registered through `registerSingleton` in `*.contribution.ts` or `workbench.common.main.ts`.\n- Lower layers (`base`, `platform`) must not import from higher ones.\n\nI only grepped for the function signatures and entry-point call sites. I did not open the files, so the `DI_DEPENDENCIES` and `storeServiceDependency` names and the claim that `createChild` makes scoped containers come from memory."
+}

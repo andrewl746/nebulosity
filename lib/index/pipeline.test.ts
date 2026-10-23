@@ -7,6 +7,7 @@ import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { loadAllDocLinks, loadDocs } from "../db/store/docs";
+import { loadCallBindings, loadCallsOf, loadInjectionSites, loadTypeDecls } from "../db/store/calls";
 import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/search";
@@ -293,7 +294,7 @@ describe("indexRepository — code search deferred for a bulk run (ADR-031, amen
         deferCodeSearch(db);   // a bulk run began…
         writeFileRecords(db, crashed, [{
             path: "crashed.ts", kind: "module", contentHash: "h", language: "typescript", sizeBytes: 10, lineCount: 1, isTest: false,
-            importSpecifiers: [], symbols: [],
+            importSpecifiers: [], symbols: [], calls: { types: [], bindings: [], calls: [] },
             chunks: [{ id: "crashed.ts#a#0", filePath: "crashed.ts", kind: "function", name: "a", nameSplit: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: "h" }],
         }]);                  // …wrote its chunks, and died before filling
         expect(searchCode(db, crashed, '"crashed"', 10)).toEqual([]);
@@ -414,5 +415,21 @@ describe("indexRepository on the architecture fixture", () => {
         // the next full run parses loader.ts alone, with this adapter, and edge #5 is back
         expect(indexRepository(copy)).toMatchObject({ files: 21, changed: 1, unchanged: 20, edges: 31, errors: [] });
         expect(readAdapterVersion(db, repoId)).toBe(ADAPTER_VERSION);
+    });
+});
+
+describe("indexRepository on the calls fixture (ADR-059)", () => {
+    const root = path.join(__dirname, "..", "..", "test", "fixtures", "di-repo");
+
+    it("indexes 31 files, two of them tests, with 38 edges, and stores editorPane.ts's call facts", () => {
+        const result = indexRepository(root);
+        expect(result.files).toBe(31);
+        expect(result.edges).toBe(38);
+        const db = getDb();
+        const ofFile = <T extends { path: string }>(rows: T[]): T[] => rows.filter((r) => r.path === "src/workbench/editor/editorPane.ts");
+        expect(ofFile(loadTypeDecls(db, result.repoId)).map((t) => t.name)).toEqual(["EditorPane"]);
+        expect(ofFile(loadCallBindings(db, result.repoId)).map((b) => b.local)).toEqual(["IFileService", "IWatchingFileService", "Disposable"]);
+        expect(ofFile(loadCallsOf(db, result.repoId, "readFile")).map((c) => c.line)).toEqual([15, 15]);
+        expect(ofFile(loadInjectionSites(db, result.repoId, "IFileService")).map((c) => c.line)).toEqual([6]);
     });
 });

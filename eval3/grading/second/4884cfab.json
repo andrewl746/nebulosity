@@ -1,0 +1,10 @@
+{ "id": "4884cfab", "points": [
+  { "id": "BP4.1", "score": 1, "quote": "**`common/`, `browser/`, `electron-browser/`** hold the minimal workbench core: parts, layout and actions." },
+  { "id": "BP4.2", "score": 1, "quote": "**`api/`** provides the `vscode.d.ts` extension API and the extension host." },
+  { "id": "BP4.3", "score": 1, "quote": "**`services/`** holds core service implementations that aren't specific to one feature." },
+  { "id": "BP4.4", "score": 0.5, "quote": "**`contrib/`** holds the feature contributions, such as `debug`, `search`, `terminal`, `scm`, `chat`, `notebook` and `extensions`." },
+  { "id": "BP4.5", "score": 1, "quote": "**No imports into `contrib` from outside it.** Nothing outside `contrib/` may depend on it." },
+  { "id": "BP4.6", "score": 1, "quote": "**One entry point per contribution.** Each has a single `.contribution.ts` file, which registers it with the workbench's registries and extension points." },
+  { "id": "BP4.7", "score": 1, "quote": "**One common API file.** A contribution exposes its internal API from a single common file." },
+  { "id": "BP4.8", "score": 1, "quote": "**No reaching into internals.** Other contributions that depend on it must use that common API, never its internals." }
+] }

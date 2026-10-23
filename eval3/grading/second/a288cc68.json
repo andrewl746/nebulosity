@@ -1,0 +1,10 @@
+{ "id": "a288cc68", "points": [
+  { "id": "AFFINE-BP6.1", "score": 1, "quote": "The workbench is the window manager for the app. It owns the main area (one or more side-by-side views) and the right sidebar. The code is in `packages/frontend/core/src/modules/workbench`." },
+  { "id": "AFFINE-BP6.2", "score": 1, "quote": "`Workbench` (`entities/workbench.ts`) holds `views$`, `activeViewIndex$` and `activeView$`. ... Its methods include `open`, `newTab`, `openDoc`, `close`, `moveView` and `resize`. ... `View` (`entities/view.ts`) is one managed window." },
+  { "id": "AFFINE-BP6.3", "score": 1, "quote": "It has its own history (`createNavigableHistory`), plus `location$`, `entries$`, `title$` and `icon$`. It also has `push`, `replace`, `go` and query-string helpers" },
+  { "id": "AFFINE-BP6.4", "score": 1, "quote": "`ViewRoot` creates a private `createMemoryRouter(routes)` for each view. A layout effect calls `viewRouter.navigate(location)` whenever the view's `location$` changes. So the view's own history, not the browser URL, decides which route renders." },
+  { "id": "AFFINE-BP6.5", "score": 1, "quote": "A route component declares `<ViewHeader>`, `<ViewBody>` and `<ViewSidebarTab>`. These are the Provider halves of the \"islands\" in `view-islands.tsx`. They portal their content into the matching Targets." },
+  { "id": "AFFINE-BP6.6", "score": 1, "quote": "Exactly one view is active. The active view's URL is treated as the URL of the whole app." },
+  { "id": "AFFINE-BP6.7", "score": 1, "quote": "Sidebar tabs go into the view's `sidebarTabs$`. `WorkbenchSidebar` shows only the active view's sidebar, with a switcher when the view has several tabs." },
+  { "id": "AFFINE-BP6.8", "score": 1, "quote": "Each view keeps its own history stack. `browser-adapter.ts` binds the active view to the browser router: ... If its state points at a key already in the view's entries, the view calls `history.go(delta)`. That is how browser back/forward moves the view." }
+] }

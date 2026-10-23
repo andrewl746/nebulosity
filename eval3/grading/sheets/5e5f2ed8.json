@@ -1,0 +1,31 @@
+{
+  "id": "5e5f2ed8",
+  "question": "How do the desktop and web builds of the workbench share code, and what decides whether a feature's code gets loaded at all?",
+  "points": [
+    {
+      "id": "BP5.1",
+      "text": "`workbench.desktop.main.ts` holds desktop-only dependencies"
+    },
+    {
+      "id": "BP5.2",
+      "text": "`workbench.web.main.ts` web-only ones"
+    },
+    {
+      "id": "BP5.3",
+      "text": "`workbench.common.main.ts` the shared ones, and both import it"
+    },
+    {
+      "id": "BP5.4",
+      "text": "a desktop-only service needs a web counterpart, or web code that uses it fails"
+    },
+    {
+      "id": "BP5.5",
+      "text": "only code reachable from the main entry files is loaded"
+    },
+    {
+      "id": "BP5.6",
+      "text": "a new file is loaded by importing it from a `.contribution.ts` file"
+    }
+  ],
+  "answer": "The two builds share code through three entry-point files, and a feature's code is loaded only if one of them imports it.\n\n**Entry points**\n- `src/vs/workbench/workbench.common.main.ts` holds everything shared. It imports browser-layer actions, extension points, services and contributions, for example `./contrib/chat/browser/chat.contribution.js` (line 227) and `./contrib/terminal/terminal.all.js` (line 334).\n- `workbench.desktop.main.ts` imports `workbench.common.main.js` (line 15). It then adds the Electron pieces: `./electron-browser/desktop.main.js` and `desktop.contribution.js`, native services such as `nativeTextFileService`, and `contrib/terminal/electron-browser/terminal.contribution.js` (line 153).\n- `workbench.web.main.ts` also imports `workbench.common.main.js` (line 16). It then adds `./browser/web.main.js` and browser-only services such as `browserTextFileService`, `contrib/terminal/browser/terminal.web.contribution.js` (line 165) and `terminalInstanceService`.\n- `workbench.web.main.internal.ts` wraps the web entry point (it imports `workbench.web.main.js`).\n\n**What decides whether code loads**\n1. **Imports are the switch.** Contributions register themselves as side effects, such as service registration, actions and extension points, when their module is imported. If no entry point imports a `*.contribution.ts` file, it is never bundled or run. To ship a feature on both platforms, import it from `workbench.common.main.ts`. For one platform, import it from that platform's `main` file.\n2. **Layer folders restrict what a file can import.** The convention is `common`, `browser`, `electron-browser`, `node`, `worker` and so on. `.eslint-plugin-local/code-import-patterns.ts` enforces it: `common` may only import `common`, and `browser` may import `common` and `browser`. Desktop-only `electron-browser` code therefore can't leak into the shared files. The repo's instructions say to run `npm run valid-layers-check` when a change might affect layering.\n3. **Platform-specific implementations sit behind a shared interface.** Each platform registers its own implementation of the same service interface, for example the browser versus native text file service, or the web versus electron terminal instance service. Shared code depends only on the interface.\n\nI did not check how the bundler configuration handles these entry points. Parts of this, such as the layer rules, I read only in the first lines of the lint plugin."
+}

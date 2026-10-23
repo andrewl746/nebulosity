@@ -1,0 +1,10 @@
+{
+  "id": "4da53a92",
+  "points": [
+    {"id": "BP3.2", "score": 1, "quote": "Next to it, create the identifier with `createDecorator<IFooService>('fooService')` ... The convention is to export a `const` with the same name as the interface"},
+    {"id": "BP3.3", "score": 1, "quote": "constructor(@IBarService private readonly barService: IBarService)"},
+    {"id": "BP3.4", "score": 1, "quote": "use `instantiationService.createInstance(MyClass, ...nonServiceArgs)`. A class created this way gets its decorated parameters filled in automatically."},
+    {"id": "BP3.5", "score": 1, "quote": "call `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)"},
+    {"id": "BP3.6", "score": 0.5, "quote": "These calls usually sit in a `*.main.ts` or `*.contribution.ts` file. For example, `src/vs/workbench/workbench.common.main.ts:181` registers `IContextViewService`."}
+  ]
+}

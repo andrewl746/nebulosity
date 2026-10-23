@@ -1,0 +1,16 @@
+{
+  "id": "theia-cn1",
+  "kind": "chain",
+  "from": "packages/scm/src/browser/decorations/scm-navigator-decorator.ts",
+  "to": "packages/core/src/browser/shell/current-widget-command-adapter.ts",
+  "connected": true,
+  "shortest": 3,
+  "example": [
+    "packages/scm/src/browser/decorations/scm-navigator-decorator.ts",
+    "packages/core/src/browser/index.ts",
+    "packages/core/src/browser/common-frontend-contribution.ts",
+    "packages/core/src/browser/shell/current-widget-command-adapter.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

@@ -1,0 +1,62 @@
+{
+  "id": "theia-bp2",
+  "source": "Theia's own docs at 81ea5f93: packages/core/README.md, dev-packages/cli/README.md, doc/code-organization.md",
+  "points": [
+    {
+      "id": "THEIA-BP2.1",
+      "text": "a Theia application is a node package that lists Theia extensions as its dependencies and is managed with the Theia CLI (the `theia` command from `@theia/cli`)",
+      "check": "Doc: packages/core/README.md L50-52 ('A Theia application is a node package listing Theia extensions as dependencies and managed with Theia CLI'); dev-packages/cli/README.md L45-48 ('The contributed `theia`, is a command line tool to manage Theia-based applications'). Code (author's pointers, for the re-checker): examples/browser/package.json (dependencies on @theia/* packages; scripts theia build, theia start, theia test) and examples/electron/package.json.",
+      "holds": true,
+      "note": "Doc: packages/core/README.md L52 ('A Theia application is a node package listing Theia extensions as dependencies and managed with Theia CLI'); dev-packages/cli/README.md L47-48 (`theia`, a command line tool to manage Theia-based applications). Code: examples/browser/package.json L24ff (dependencies on @theia/* packages) and examples/electron/package.json L109-111 (scripts run `theia build`); dev-packages/cli/src/theia.ts L121 (start), L160 (build). In scope."
+    },
+    {
+      "id": "THEIA-BP2.2",
+      "text": "a Theia extension is a node package whose `package.json` declares `theiaExtensions`, a list of entries naming the modules it contributes",
+      "check": "Doc: packages/core/README.md L23-39 ('A Theia extension is a node package declaring `theiaExtensions` property in `package.json`', with an example). Code (author's pointers, for the re-checker): packages/core/package.json and packages/terminal/package.json (theiaExtensions); dev-packages/application-package/src/extension-package.ts L27.",
+      "holds": true,
+      "note": "Doc: packages/core/README.md L25-39 ('A Theia extension is a node package declaring `theiaExtensions` property in `package.json`', with an example of entries naming modules). Code: packages/core/package.json L144ff (theiaExtensions entries); dev-packages/application-package/src/extension-package.ts L22-33 (the Extension interface of module keys); application-package.ts L185-202 (computeModules reads each entry). In scope."
+    },
+    {
+      "id": "THEIA-BP2.3",
+      "text": "an entry's `frontend` module runs in the browser (and in Electron unless a `frontendElectron` module is given), and its `backend` module runs in Node.js (and in Electron unless a `backendElectron` module is given)",
+      "check": "Doc: packages/core/README.md L41-46 ('`frontend` is used in the browser env and as well in the electron if `frontendElectron` is not provided'; '`backend` is used in the node env and as well in the electron env if `backendElectron` is not provided'). Code (author's pointers, for the re-checker): dev-packages/application-package/src/application-package.ts L161-162 (frontendElectronModules = computeModules('frontendElectron', 'frontend')) and L277; the code also knows keys the README doesn't list (frontendOnly, frontendPreload, preload, secondaryWindow in packages/core and packages/terminal).",
+      "holds": true,
+      "note": "Doc: packages/core/README.md L41-46 (frontend in the browser and in Electron unless frontendElectron is given; backend in node and in Electron unless backendElectron is given). Code: dev-packages/application-package/src/application-package.ts L161-162 (computeModules('frontendElectron', 'frontend')), L173-174 (computeModules('backendElectron', 'backend')), L192 (the fallback is per entry), L270-277 (target modules picked by target). The code knows more keys than the README (frontendOnly, frontendPreload, preload, secondaryWindow, electronMain; extension-package.ts L22-33); immaterial. In scope."
+    },
+    {
+      "id": "THEIA-BP2.4",
+      "text": "each such module default-exports an inversify `ContainerModule`, which binds the extension's services and contributions into the dependency-injection container (inversify is re-exported as `@theia/core/shared/inversify`)",
+      "check": "Doc: packages/core/README.md L48 ('An extension module should have a default export of `ContainerModule | Promise<ContainerModule>` type') and L54-69 (re-exports; 'import { injectable } from '@theia/core/shared/inversify''), L96 (inversify among the re-exports). Code (author's pointers, for the re-checker): dev-packages/application-manager/src/generator/frontend-generator.ts L100 (container.load(containerModule.default)) and L228; packages/terminal/src/browser/terminal-frontend-module.ts (export default new ContainerModule(...)).",
+      "holds": true,
+      "note": "Doc: packages/core/README.md L48 (default export of `ContainerModule | Promise<ContainerModule>`), L54-69 (re-exports; `import { injectable } from '@theia/core/shared/inversify'`), L96 (inversify re-exported). Code: dev-packages/application-manager/src/generator/frontend-generator.ts L100 and L228 (container.load(module.default)); backend-generator.ts L86-87; packages/terminal/src/browser/terminal-frontend-module.ts L53 (`export default new ContainerModule(bind => ...)`); packages/core/shared/inversify. The Promise variant is omitted; immaterial. In scope."
+    },
+    {
+      "id": "THEIA-BP2.5",
+      "text": "`@theia/core` is the main extension every application builds on, providing the application and shell APIs, base widgets, and contribution points such as commands, menu items and keybindings",
+      "check": "Doc: packages/core/README.md L13-21 ('The `@theia/core` extension is the main extension for all Theia-based applications'; 'Application APIs, Shell APIs, Base Widgets, Contribution Points (ex: commands, menu items, keybindings)'). Code (author's pointers, for the re-checker): packages/core/src/common/command.ts L147 (CommandContribution); packages/core/src/common/menu/menu-model-registry.ts L53 (MenuContribution); packages/core/src/browser/keybinding.ts L76 (KeybindingContribution); packages/core/src/browser/shell/application-shell.ts.",
+      "holds": true,
+      "note": "Doc: packages/core/README.md L15-21 (main extension for all Theia-based applications; Application APIs, Shell APIs, Base Widgets, Contribution Points such as commands, menu items, keybindings). Code: packages/core/src/common/command.ts L143-147 (CommandContribution); common/menu/menu-model-registry.ts L25 and L53 (MenuContribution); browser/keybinding.ts L72-76 (KeybindingContribution); browser/shell/application-shell.ts L195 (ApplicationShell). In scope."
+    },
+    {
+      "id": "THEIA-BP2.6",
+      "text": "inside a package, code is split into platform folders that limit what it may use: `common` (runs everywhere), `browser` and `browser-only` (DOM), `node` (Node.js), and `electron-browser`, `electron-node` and `electron-main` for Electron; `browser` and `node` may use only `common`",
+      "check": "Doc: doc/code-organization.md L3-17 (common, browser, browser-only, node, electron-node, electron-browser and electron-main, each with the folders it 'May use code from'). Code (author's pointers, for the re-checker): packages/core/src holds browser, browser-only, common, electron-browser, electron-common, electron-main, electron-node and node (electron-common isn't in the doc); theiaExtensions paths follow the folders (lib/browser/..., lib/node/..., lib/electron-browser/...); dev-packages/private-eslint-plugin/rules/runtime-import-check.js.",
+      "holds": true,
+      "note": "Doc: doc/code-organization.md L3-17 (common; browser, browser-only and node may use common only; electron-node, electron-browser, electron-main with their allowances). Code: packages/core/src holds browser, browser-only, common, electron-browser, electron-common, electron-main, electron-node, node; dev-packages/private-eslint-plugin/rules/runtime-import-check.js L57-63 (browser -> [common], node -> [common]). The code also has electron-common, which the doc and the point don't list, and the lint rule lets electron-main import electron-common/node/common rather than the doc's electron-node; neither touches the point's claims. In scope, though peripheral (it is how a package keeps frontend and backend code apart)."
+    },
+    {
+      "id": "THEIA-BP2.7",
+      "text": "an application is configured under `theia` in its `package.json`: its target, `browser` (the default) or `electron`, and frontend and backend settings such as the application name and default preferences",
+      "check": "Doc: dev-packages/cli/README.md L66-134 ('A Theia-based application can be configured via the `theia` property as described in the application's `package.json`'; applicationName, default preferences, default theme; 'The following targets are supported: `browser` and `electron`. By default `browser` target is used'). Code (author's pointers, for the re-checker): examples/browser/package.json theia (frontend.config.applicationName and preferences, backend.config; no target) and examples/electron/package.json theia.target 'electron'.",
+      "holds": true,
+      "note": "Doc: dev-packages/cli/README.md L68 (configured via the `theia` property in package.json), L72-101 (applicationName, default preferences), L120 ('The following targets are supported: `browser` and `electron`. By default `browser` target is used'). Code: examples/browser/package.json L6-22 (theia.frontend.config.applicationName and preferences, theia.backend.config; no target) and examples/electron/package.json L8-12 (theia.target 'electron'). The code also accepts a 'browser-only' target (dev-packages/application-package/src/application-props.ts L318-322), which the README doesn't list; immaterial. In scope."
+    },
+    {
+      "id": "THEIA-BP2.8",
+      "text": "the CLI generates the application's frontend and backend code and its esbuild configuration; `theia build` bundles it and `theia start` runs the backend server (on localhost:3000 for the browser target), and in Electron the generated `electron-main` script forks the backend into a Node.js subprocess",
+      "check": "Doc: dev-packages/cli/README.md L179-207 (theia build, --watch, theia clean; the generated esbuild configuration), L217-226 (theia start; 'For the browser target a server is started on http://localhost:3000 by default'), L341-345 ('This package can auto-generate application code for both the backend and frontend, as well as the esbuild configuration files. When targeting Electron, the `electron-main.js` script will spawn the backend process in a Node.js sub-process'). Code (author's pointers, for the re-checker): dev-packages/application-manager/src/generator/frontend-generator.ts, backend-generator.ts and bundler-generator.ts; packages/core/src/node/backend-application.ts L52 (DEFAULT_PORT 3000, 0 in Electron); packages/core/src/electron-main/electron-main-application.ts L828-842 (fork of the backend unless --no-cluster).",
+      "holds": true,
+      "note": "Doc: dev-packages/cli/README.md L179-207 (theia build; the generated esbuild configuration), L217-224 (theia start; localhost:3000 for the browser target), L343-345 (auto-generated backend and frontend code and esbuild config; Electron's electron-main.js spawns the backend in a Node.js sub-process unless --no-cluster). Code: dev-packages/application-manager/src/application-package-manager.ts L97-111 (generate: Bundler, Backend and Frontend generators), L128-134 (build: generate, then run esbuild.mjs), L136-143 (start); packages/core/src/node/backend-application.ts L52 (DEFAULT_PORT 3000, 0 in Electron); packages/core/src/electron-main/electron-main-application.ts L825-842 (fork of the backend unless --no-cluster). In scope."
+    }
+  ]
+}

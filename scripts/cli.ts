@@ -106,9 +106,9 @@ export function parseRegistration(stdout: string): Registration | null {
 /** An optional note for a repo's CLAUDE.md (R5): never written by setup. */
 export const SNIPPET = [
     "## Nebulosity",
-    "This repo is indexed by Nebulosity. For questions about what imports what, what a change would affect, how the code is layered,",
-    "import cycles or files nothing imports, call its tools (mcp__nebulosity__imports, mcp__nebulosity__architecture, mcp__nebulosity__describe)",
-    "before grep: they answer from the whole repo in one call.",
+    "This repo is indexed by Nebulosity. For questions about what imports what, who calls a method (even through injected services),",
+    "what a change would affect, how the code is layered, import cycles or files nothing imports, call its tools (mcp__nebulosity__imports,",
+    "mcp__nebulosity__calls, mcp__nebulosity__architecture, mcp__nebulosity__describe) before grep: they answer from the whole repo in one call.",
     "",
     "(Add this only to a CLAUDE.md you already have. Creating a CLAUDE.md in a repo that has an AGENTS.md makes Claude Code stop reading the AGENTS.md.)",
 ].join("\n");

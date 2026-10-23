@@ -52,3 +52,5 @@ CLAUDE.md
 eval/runs/*.tmp
 eval2/runs/*.tmp
 eval2/dev/runs/*.tmp
+eval3/runs/*.tmp
+eval3/dev/runs/*.tmp

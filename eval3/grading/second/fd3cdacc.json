@@ -1,0 +1,7 @@
+{ "id": "fd3cdacc", "points": [
+  { "id": "BP3.2", "score": 1, "quote": "Create the identifier with `createDecorator<IFooService>('fooService')` (`instantiation.ts:109`). The same name is used for the `const` and the type: `export const IFooService = createDecorator<IFooService>('fooService');`" },
+  { "id": "BP3.3", "score": 1, "quote": "A consumer declares the dependency as a constructor parameter decorator: `constructor(@IFooService private readonly fooService: IFooService) {}`" },
+  { "id": "BP3.4", "score": 1, "quote": "`createInstance(Ctor, ...staticArgs)` looks up the class's dependencies and fetches each one with `_getOrCreateServiceInstance`." },
+  { "id": "BP3.5", "score": 1, "quote": "**Global registration:** `registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)." },
+  { "id": "BP3.6", "score": 1, "quote": "Registration happens as a side effect of importing the module, for example from `workbench.common.main.ts` and the other `*.main.ts` files." }
+] }

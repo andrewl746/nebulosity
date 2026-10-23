@@ -1,0 +1,13 @@
+{
+  "id": "1dea04a6",
+  "points": [
+    {"id": "BP7.1", "score": 1, "quote": "`IDisposable` is the base interface. Subscribing to an `Event` returns an `IDisposable`, and disposing it removes the listener."},
+    {"id": "BP7.2", "score": 1, "quote": "A subclass calls `this._register(x)` on anything it creates, and everything registered is disposed when the owner is. ... `Disposable` uses one internally."},
+    {"id": "BP7.3", "score": 1, "quote": "`DisposableStore` is a bag of disposables that you `add` to and `dispose` together. ... `toDisposable(fn)` wraps a cleanup callback"},
+    {"id": "BP7.4", "score": 0.5, "quote": "`MutableDisposable` holds a single value. Assigning a new value disposes the old one."},
+    {"id": "BP7.5", "score": 0, "quote": "none"},
+    {"id": "BP7.6", "score": 0, "quote": "none"},
+    {"id": "BP7.7", "score": 0, "quote": "none"},
+    {"id": "BP7.8", "score": 1, "quote": "`ensureNoDisposablesAreLeakedInTestSuite()` in `src/vs/base/test/common/utils.ts` is called inside a test suite. ... it fails the suite if any tracked disposable is left undisposed."}
+  ]
+}

@@ -1,0 +1,10 @@
+{ "id": "d6917147", "points": [
+  { "id": "AFFINE-BP6.1", "score": 1, "quote": "`Workbench` (`entities/workbench.ts`) is the window manager. ... It also holds the right-sidebar state: open/closed and width" },
+  { "id": "AFFINE-BP6.2", "score": 1, "quote": "A `View` (`entities/view.ts`) is one pane in a split view. ... It exposes `open(to, {at, replaceHistory})` and `createView(at, location)`." },
+  { "id": "AFFINE-BP6.3", "score": 1, "quote": "Each view owns a `createNavigableHistory` stack, seeded from `defaultLocation` (default `/all`). `location$` and `entries$` are observables over that history." },
+  { "id": "AFFINE-BP6.4", "score": 1, "quote": "A layout effect calls `viewRouter.navigate(location)` whenever `view.location$` changes. The matched route component then renders." },
+  { "id": "AFFINE-BP6.5", "score": 1, "quote": "A route component renders `<ViewHeader>`, `<ViewBody>` and `<ViewSidebarTab>` (`view/view-islands.tsx`). Each is the provider half of an island. Its content is portaled to the matching target." },
+  { "id": "AFFINE-BP6.6", "score": 1, "quote": "Its `location$` is the active view's location. The README says the active view's URL counts as the URL of the whole app." },
+  { "id": "AFFINE-BP6.7", "score": 1, "quote": "Only the active view's sidebar tabs appear in the right sidebar. A switcher appears when a view has several tabs." },
+  { "id": "AFFINE-BP6.8", "score": 1, "quote": "In the browser, `useBindWorkbenchToBrowserRouter` (`view/browser-adapter.ts`) syncs the active view with the browser URL. ... If the tag points at an existing entry in the view history, it calls `history.go(delta)` instead." }
+] }

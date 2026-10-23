@@ -17,7 +17,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Nebulosity",
-  description: "A code-intelligence companion for massive codebases",
+  description: "The dependency-structure layer for Claude Code",
 };
 
 export default function RootLayout({

@@ -1,0 +1,13 @@
+{
+  "id": "ac5af630",
+  "points": [
+    {"id": "AFFINE-BP1.1", "score": 0.5, "quote": "`packages/frontend/` holds the client side. ... `packages/backend/` ... `packages/common/` holds libraries shared by client and server."},
+    {"id": "AFFINE-BP1.2", "score": 1, "quote": "`tools/` holds the CLI (`affine`), changelog, commitlint and similar dev tooling. ... `tests/` holds end-to-end tests."},
+    {"id": "AFFINE-BP1.3", "score": 0.5, "quote": "`blocksuite/` is the editor engine."},
+    {"id": "AFFINE-BP1.4", "score": 1, "quote": "`web` (`@affine/web`) is the browser app. `electron` plus `electron-renderer` make the desktop app. `ios` and `android` are the mobile apps. `mobile` and `mobile-shared` are the mobile web UI they use. ... `admin` is a web admin panel for that server."},
+    {"id": "AFFINE-BP1.5", "score": 1, "quote": "`native` and `mobile-native` hold the native bindings. ... `native` is the Rust binding the server uses (`@affine/server-native`)."},
+    {"id": "AFFINE-BP1.6", "score": 0.5, "quote": "It's the cloud and self-host backend. It provides: ... accounts and auth; workspace and document sync and storage; ... copilot/AI features"},
+    {"id": "AFFINE-BP1.7", "score": 1, "quote": "**Postgres.** The dev compose file uses the `pgvector/pgvector:pg16` image ... **Redis.** ... serves GraphQL at `http://localhost:3000/graphql`."},
+    {"id": "AFFINE-BP1.8", "score": 1, "quote": "`component` is the shared UI library."}
+  ]
+}

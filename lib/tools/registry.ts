@@ -5,11 +5,12 @@ import { describe } from "../engine/describe";
 import { BadInputError } from "../engine/errors";
 import { overview } from "../engine/overview";
 import { architecture } from "../engine/architecture";
+import { calls } from "../engine/calls";
 import { impact } from "../engine/impact";
 import { importChain, reach, targetKinds } from "../engine/reach";
 import { search } from "../engine/search";
 import { plural } from "../index/summarize/prompts";
-import { architectureAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
+import { architectureAnswer, callsAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import type { ToolContext } from "./context";
 import { repoPathFrom } from "./repo";
 import { answerText, shownPath, type AnswerParts } from "./text";
@@ -38,19 +39,19 @@ export type ToolEntry<S extends z.ZodObject = z.ZodObject> = {
 /** Sent once per session (MCP's `instructions`; Claude Code keeps 4,096 characters since 2.1.296, 2,048 before). */
 export const SERVER_INSTRUCTIONS = [
     "Nebulosity has indexed this repository: its folder tree, every import between its files, its docs and which folders they describe, and, when summaries are on, a short summary of every file and folder.",
-    "Call these tools before grep or reading many files when a question is about how the code is organized or connected. They answer from the whole repo, exactly, in one call:",
+    "Call these tools first, before grep, a script of your own or reading many files, for any question about how the code is organized or connected: who calls or injects something, what a change touches and which tests to run, imports against the layers, cycles, files nothing imports. They answer from the whole repo, exactly, in one call:",
     "- imports: what imports a file or folder, or what it imports, directly or through other files; group_by counts what a change would affect, by area; to gives the import chain between two places;",
+    "- calls: who calls a method, even through injected services, where a type is injected, and what changing it touches (give the type's file as path);",
     "- architecture: a folder's layers and the imports against them, its folder conventions, import cycles, and files nothing imports;",
     "- describe: what a folder or file is, what it uses and what uses it, and the docs that describe it;",
     "- overview: an unfamiliar repo's areas and the docs to read first;",
     "- search: where a feature or concept lives.",
-    // ADR-054, amended 2026-10-15: in Eval #2 the docs line alone didn't get the repo's own rules opened
-    "The docs these answers name are the maintainers' own account of the code: open them before answering how it is organized or why, since the tools' counts and summaries don't replace them.",
-    'Paths are relative to the repo root ("" is the root) or absolute inside it.',
+    // ADR-054, amended 2026-10-15: in Eval #2 the docs line alone didn't get the repo's own rules opened; shortened the same day in V1.7's tool-use round 3 (R-AA) to hold the first-call budget
+    "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account.",
 ].join("\n");
 
 const repoPath = z.string().max(1024)
-    .describe('A path inside the repo: relative to its root ("src/vs/base", "src/index.ts"; "" is the root), or absolute.');
+    .describe('Relative to the repo root ("" is the root), or absolute inside it.');
 
 /** A path from the model (repo-relative, or absolute inside the repo) in the spelling stored paths use; refused when it could leave the repo. */
 function repoPathOf(raw: string, context: ToolContext): string {
@@ -77,7 +78,7 @@ const describeInput = z.object({ path: repoPath });
 const describeTool: ToolEntry<typeof describeInput> = {
     name: "describe",
     alwaysLoad: true,
-    description: "What a folder or file is: its summary, size, what's inside (or a file's declarations), the areas it imports from and is imported by with exact counts, and the docs that describe it. Read those docs for the area's rules.",
+    description: "What a folder or file is: its summary, size, contents or declarations, the areas it imports and is imported by, with exact counts, and the docs about it. Read those docs for its rules.",
     inputSchema: describeInput,
     async handler({ path: raw }, context){
         const target = repoPathOf(raw, context);
@@ -93,7 +94,7 @@ const searchInput = z.object({
 const searchTool: ToolEntry<typeof searchInput> = {
     name: "search",
     alwaysLoad: true,
-    description: "Find where a feature or concept lives, by keywords or meaning, across code, summaries, file and folder names, and declarations: the best files and folders with their best-matching code. Use Grep for an exact string.",
+    description: "Find where a feature or concept lives: the best files and folders, with their best-matching code.",
     inputSchema: searchInput,
     async handler({ query, limit }, context){
         const result = await search(context.repoRoot, query, { limit, summariesOff: context.summariesOff });
@@ -105,8 +106,8 @@ const importsInput = z.object({
     path: repoPath,
     direction: z.enum(["dependents", "dependencies"]).default("dependents").describe("dependents: the files that import it; dependencies: the files it imports."),
     transitive: z.boolean().default(false).describe("Also count files reached through other files."),
-    to: repoPath.optional().describe("Instead: the shortest chain of imports between path and this file or folder, either way."),
-    group_by: z.string().max(1024).optional().describe('Count everything reached by area instead of listing it: a folder whose children are the areas ("" the top level), or "auto".'),
+    to: repoPath.optional().describe("Instead: the shortest import chain between path and this place, either way."),
+    group_by: z.string().max(1024).optional().describe('Count by area instead: a folder ("" the top level) or "auto".'),
     within: z.string().max(1024).optional().describe("Only files inside this folder."),
     limit: z.number().int().min(1).max(500).default(50).describe("How many files to list, 1 to 500."),
     offset: z.number().int().min(0).default(0).describe("Where the next page starts."),
@@ -145,9 +146,8 @@ const importsTool: ToolEntry<typeof importsInput> = {
 
 const architectureInput = z.object({
     path: repoPath.default(""),
-    report: z.enum(["summary", "layers", "conventions", "cycles", "unused"]).default("summary")
-        .describe("summary: all four in brief; layers, conventions, cycles or unused: one in full."),
-    through: z.string().max(1024).optional().describe("With cycles: the shortest import cycle through this file."),
+    report: z.enum(["summary", "layers", "conventions", "cycles", "unused"]).default("summary"),
+    through: z.string().max(1024).optional(),
     limit: z.number().int().min(1).max(500).default(20).describe("How many cycles or files to list."),
     offset: z.number().int().min(0).default(0).describe("Where the next page starts."),
 });
@@ -160,6 +160,31 @@ const architectureTool: ToolEntry<typeof architectureInput> = {
         const target = repoPathOf(raw, context);
         const answer = architecture(context.repoRoot, target, report, through === undefined ? {} : { through: repoPathOf(through, context) });
         return { text: finish(architectureAnswer(answer, { limit, offset }), context), paths: [target] };
+    },
+};
+
+const callsInput = z.object({
+    symbol: z.string().trim().min(1).max(200).describe('"IFooService", or a method: "IFooService.save".'),
+    path: z.string().max(1024).optional().describe("Its file, if two types share the name."),
+    group_by: z.string().max(1024).optional().describe('Count by area: a folder ("" the top level) or "auto".'),
+    within: z.string().max(1024).optional(),
+    limit: z.number().int().min(1).max(500).default(50).describe("Files to list, 1 to 500."),
+    offset: z.number().int().min(0).default(0),
+});
+const callsTool: ToolEntry<typeof callsInput> = {
+    name: "calls",
+    alwaysLoad: true,
+    description: "Who calls a method of a class or interface, through declared types: injected services, fields, parameters, locals and base classes. With a method: its callers, its implementations and what changing it touches; with a type: where it is injected. Prefer it to grep.",
+    inputSchema: callsInput,
+    async handler(input, context){
+        const declaredIn = input.path === undefined ? undefined : repoPathOf(input.path, context);
+        const within = input.within === undefined ? undefined : repoPathOf(input.within, context);
+        const groupBy = input.group_by === undefined || input.group_by === "auto" ? null : repoPathOf(input.group_by, context);
+        const answer = calls(context.repoRoot, { symbol: input.symbol, ...(declaredIn !== undefined ? { path: declaredIn } : {}) }, { groupBy, ...(within !== undefined ? { within } : {}) });
+        const page = { limit: input.limit, offset: input.offset };
+        // the live event: the declaring file, then the files this page lists; the Map's /api/live takes at most 50 paths
+        const listed = answer.kind === "ambiguous" ? [] : [answer.type.path, ...answer.files.slice(page.offset, page.offset + page.limit).map((f) => f.path)];
+        return { text: finish(callsAnswer(answer, page), context), paths: listed.slice(0, 50) };
     },
 };
 
@@ -202,4 +227,4 @@ const showOnMapTool: ToolEntry<typeof showInput> = {
 };
 
 /** Every tool (PIVOT_SPEC.md §6.2, ADR-056), in the order clients list them. */
-export const TOOLS: readonly ToolEntry[] = [overviewTool, describeTool, searchTool, importsTool, architectureTool, showOnMapTool];
+export const TOOLS: readonly ToolEntry[] = [overviewTool, describeTool, searchTool, importsTool, architectureTool, callsTool, showOnMapTool];

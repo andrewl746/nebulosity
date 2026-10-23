@@ -1,0 +1,13 @@
+{
+  "id": "290400e7",
+  "points": [
+    {"id": "BP1.1", "score": 1, "quote": "**`base/`** holds foundational, dependency-free primitives such as utilities, events, lifecycle and DOM helpers."},
+    {"id": "BP1.2", "score": 1, "quote": "**`platform/`** holds the core services and their contracts. These are dependency-injected services such as files, configuration, storage and quick input."},
+    {"id": "BP1.3", "score": 1, "quote": "**`editor/`** is the Monaco code editor core."},
+    {"id": "BP1.4", "score": 0.5, "quote": "**`workbench/`** holds the VS Code application and its features. It has about 4,600 files, most of them under `contrib/`."},
+    {"id": "BP1.5", "score": 1, "quote": "**`code/`** is the startup code for desktop, CLI and web."},
+    {"id": "BP1.6", "score": 1, "quote": "**`server/`** is the remote server runtime."},
+    {"id": "BP1.7", "score": 1, "quote": "Each layer may import only from the layers below it. For example, `workbench` may use `editor`, `platform` and `base`, but `base` may not use `platform`."},
+    {"id": "BP1.8", "score": 0, "quote": "none"}
+  ]
+}

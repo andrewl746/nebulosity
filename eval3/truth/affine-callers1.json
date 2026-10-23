@@ -1,0 +1,32 @@
+{
+  "id": "affine-callers1",
+  "kind": "callers",
+  "type": "ViewExtensionManager",
+  "file": "blocksuite/affine/ext-loader/src/view-manager.ts",
+  "member": "get",
+  "within": null,
+  "files": [
+    "blocksuite/affine/blocks/embed-doc/src/common/render-linked-doc.ts",
+    "blocksuite/affine/blocks/embed-doc/src/embed-synced-doc-block/embed-synced-doc-block.ts",
+    "blocksuite/affine/blocks/surface-ref/src/portal/note.ts",
+    "blocksuite/affine/blocks/surface-ref/src/surface-ref-block.ts",
+    "blocksuite/affine/ext-loader/src/__tests__/ext-loader.unit.spec.ts",
+    "blocksuite/affine/fragments/frame-panel/src/card/frame-preview.ts",
+    "blocksuite/affine/widgets/drag-handle/src/helpers/preview-helper.ts",
+    "blocksuite/integration-test/src/__tests__/utils/setup.ts",
+    "blocksuite/playground/apps/starter/utils/extensions.ts",
+    "packages/frontend/core/src/blocksuite/ai/blocks/ai-chat-block/ai-chat-block.ts",
+    "packages/frontend/core/src/blocksuite/ai/components/page-editor-block-specs.ts",
+    "packages/frontend/core/src/blocksuite/ai/messages/slides-renderer.ts",
+    "packages/frontend/core/src/blocksuite/ai/peek-view/chat-block-peek-view.ts",
+    "packages/frontend/core/src/blocksuite/block-suite-editor/bi-directional-link-panel.tsx",
+    "packages/frontend/core/src/blocksuite/block-suite-editor/lit-adaper.tsx",
+    "packages/frontend/core/src/blocksuite/manager/view.ts",
+    "packages/frontend/core/src/components/comment/comment-editor/index.tsx",
+    "packages/frontend/core/src/components/hooks/affine/use-ai-specs.ts",
+    "packages/frontend/core/src/desktop/dialogs/setting/general-setting/editor/edgeless/snapshot.tsx",
+    "packages/frontend/core/src/desktop/pages/workspace/chat/index.tsx"
+  ],
+  "verified": true,
+  "notes": []
+}

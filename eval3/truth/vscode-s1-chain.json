@@ -1,0 +1,17 @@
+{
+  "id": "vscode-s1-chain",
+  "kind": "chain",
+  "from": "src/vs/workbench/api/node/extensionHostProcess.ts",
+  "to": "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts",
+  "connected": true,
+  "shortest": 4,
+  "example": [
+    "src/vs/workbench/api/node/extensionHostProcess.ts",
+    "src/vs/workbench/api/common/extHostExtensionService.ts",
+    "src/vs/workbench/api/common/extHost.protocol.ts",
+    "src/vs/workbench/contrib/notebook/common/notebookExecutionService.ts",
+    "src/vs/workbench/contrib/notebook/common/model/notebookCellTextModel.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

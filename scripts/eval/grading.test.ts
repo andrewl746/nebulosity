@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GRADING_USAGE, applyReview, buildSheet, mergeGrades, parseGradingArgs, validateReply, type Review, type Sheet } from "./grading";
+import { GRADING_USAGE, applyReview, buildSheet, mergeGrades, parseGradingArgs, sheetAnswer, validateReply, type Review, type Sheet } from "./grading";
 import type { Rubric } from "./score";
 
 const rubric: Rubric = {
@@ -109,5 +109,12 @@ describe("parseGradingArgs (sweep B, item 13)", () => {
             expect(parseGradingArgs(argv)).toEqual({ error: GRADING_USAGE });
         }
         expect(GRADING_USAGE).toBe("usage: npm run eval:grading -- sheets | merge [--eval <dir> (default eval)]");
+    });
+});
+
+describe("sheetAnswer (R-M, R-AD)", () => {
+    it("redacts an Eval #3 sheet's answer and keeps Eval #1's and Eval #2's as they were", () => {
+        expect(sheetAnswer("Nebulosity's map says so.", true)).toEqual({ answer: "The map says so.", redactions: [{ from: "Nebulosity's", to: "the", count: 1 }] });
+        expect(sheetAnswer("Nebulosity's map says so.", false)).toEqual({ answer: "Nebulosity's map says so.", redactions: [] });
     });
 });

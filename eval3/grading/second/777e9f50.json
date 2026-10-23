@@ -1,0 +1,10 @@
+{ "id": "777e9f50", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "Each document is a `Y.Doc`. BlockSuite's block tree lives inside it, and a workspace has a root doc plus one subdoc per page." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "Remote changes take the same route: they reach local storage first, then get applied to the open `Y.Doc`." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "The unit that gets stored and sent is a binary Yjs update (`Uint8Array`)." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 1, "quote": "Presence and cursors go through a separate awareness sync, not through the document store." },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "**Browser (`impls/idb`):** IndexedDB, with object stores `snapshots`, `updates`, `clocks`, `peerClocks`, `blobs`, `blobData`, `blobSync` and the indexer stores (`schema.ts`). **Desktop and mobile (`impls/sqlite`):** a native SQLite database (`SqliteDocStorage`)." },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "Remote changes take the same route: they reach local storage first, then get applied to the open `Y.Doc`. ... It compares clocks between the local and remote storage, then pushes and pulls updates in both directions" },
+  { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+] }

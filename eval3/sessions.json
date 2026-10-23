@@ -1,0 +1,26 @@
+{
+  "sessions": [
+    {
+      "id": "vscode-s1",
+      "repo": "vscode",
+      "title": "I'm about to change the notebook cell model",
+      "questions": [
+        "vscode-s1-impact",
+        "vscode-s1-chain",
+        "vscode-s1-cycle",
+        "vscode-s1-unused"
+      ]
+    },
+    {
+      "id": "affine-s1",
+      "repo": "affine",
+      "title": "I'm about to change the database block",
+      "questions": [
+        "affine-s1-impact",
+        "affine-s1-chain",
+        "affine-s1-cycle",
+        "affine-s1-unused"
+      ]
+    }
+  ]
+}

@@ -187,6 +187,23 @@ function moduleSpecifiers(source: string): string[] {
     return found.sort((a, b) => a.at - b.at).map((f) => f.specifier);
 }
 
+// The files a file reaches through relative imports beside it (`./x` read as x.ts), itself first, each once, in discovery order.
+function reachableFrom(start: string): string[] {
+    const seen: string[] = [];
+    const queue = [path.resolve(start)];
+    while (queue.length > 0){
+        const file = queue.shift()!;
+        if (seen.includes(file)) continue;
+        seen.push(file);
+        for (const specifier of moduleSpecifiers(fs.readFileSync(file, "utf8"))){
+            if (!specifier.startsWith("./")) continue;
+            const next = path.resolve(path.dirname(file), `${specifier.slice(2)}.ts`);
+            if (fs.existsSync(next)) queue.push(next);
+        }
+    }
+    return seen;
+}
+
 // A specifier reaches lib/ when it is relative and climbs into a lib folder, or goes through the @/ alias, or names lib/ itself.
 const reachesLib = (specifier: string): boolean => /(^|\/)lib(\/|$)/.test(specifier) || specifier.startsWith("@/");
 
@@ -210,13 +227,32 @@ describe("the scanner's independence (R3)", () => {
         expect(moduleSpecifiers('import { execFileSync } from "child_process";').filter(reachesLib)).toEqual([]);
     });
 
-    it("imports nothing from lib/: the scanner, the truths, the truth's resolver and the second extractor (R2)", () => {
-        for (const file of ["scripts/eval/scan.ts", "scripts/eval/truth.ts", "scripts/eval/resolve-truth.ts", "scripts/eval/ts-graph.ts"]){
-            const specifiers = moduleSpecifiers(fs.readFileSync(file, "utf8"));
-            expect({ file, fromLib: specifiers.filter(reachesLib) }).toEqual({ file, fromLib: [] });
+    it("follows a pinned file's relative imports, so one can't reach lib/ through another", () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nebulosity-pin-"));
+        try {
+            fs.writeFileSync(path.join(dir, "a.ts"), 'import { b } from "./b";\nimport fs from "fs";\n');
+            fs.writeFileSync(path.join(dir, "b.ts"), 'import { c } from "./c";\nexport const b = 1;\n');
+            fs.writeFileSync(path.join(dir, "c.ts"), 'import { x } from "../../lib/x";\nexport const c = 1;\n');
+            const reached = reachableFrom(path.join(dir, "a.ts"));
+            expect(reached.map((f) => path.basename(f))).toEqual(["a.ts", "b.ts", "c.ts"]);
+            expect(reached.filter((f) => moduleSpecifiers(fs.readFileSync(f, "utf8")).some(reachesLib)).map((f) => path.basename(f))).toEqual(["c.ts"]);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("imports nothing from lib/: the scanner, the truths, the truth's resolver, both extractors, the truth builder, the definition and the rest (R2, B-8)", () => {
+        const pinned = ["scan", "truth", "resolve-truth", "ts-graph", "ts-calls", "build-truth", "definition", "context", "stats", "needed", "prompts", "draw"].map((name) => `scripts/eval/${name}.ts`);
+        for (const file of pinned){
+            // every file this one reaches through its relative imports, itself included
+            for (const reached of reachableFrom(file)){
+                const specifiers = moduleSpecifiers(fs.readFileSync(reached, "utf8"));
+                expect({ file, reached, fromLib: specifiers.filter(reachesLib) }).toEqual({ file, reached, fromLib: [] });
+            }
             // A reader that stopped matching would pass the check above for any file, so the files that import must be seen
-            // importing (truth.ts imports nothing).
-            if (!file.endsWith("truth.ts") || file.endsWith("resolve-truth.ts")) expect({ file, found: specifiers.length > 0 }).toEqual({ file, found: true });
+            // importing (truth.ts, stats.ts and prompts.ts import nothing; prompts.ts only names import() in a sentence).
+            const own = moduleSpecifiers(fs.readFileSync(file, "utf8"));
+            if ((!file.endsWith("/truth.ts") || file.endsWith("resolve-truth.ts")) && !file.endsWith("stats.ts") && !file.endsWith("prompts.ts")) expect({ file, found: own.length > 0 }).toEqual({ file, found: true });
         }
     });
 });

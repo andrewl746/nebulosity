@@ -1,0 +1,31 @@
+{
+  "id": "056c6fce",
+  "question": "Inside each layer of `src/vs`, code is split into folders by the environment it runs in. What are those environments, and what may code in each one import?",
+  "points": [
+    {
+      "id": "BP2.1",
+      "text": "`common` (basic JavaScript, runs everywhere)"
+    },
+    {
+      "id": "BP2.2",
+      "text": "`browser` (web APIs such as the DOM; may use `common`)"
+    },
+    {
+      "id": "BP2.3",
+      "text": "`node` (Node.js APIs; may use `common`)"
+    },
+    {
+      "id": "BP2.4",
+      "text": "`electron-browser` (browser APIs plus a small IPC subset to the Electron main process; may use `common` and `browser`)"
+    },
+    {
+      "id": "BP2.5",
+      "text": "`electron-utility` (Electron's utility-process APIs; may use `common` and `node`)"
+    },
+    {
+      "id": "BP2.6",
+      "text": "`electron-main` (Electron's main-process APIs; may use `common`, `node` and `electron-utility`)"
+    }
+  ],
+  "answer": "Inside each layer of `src/vs`, code is split into seven environment folders. The import rules come from `.eslint-plugin-local/code-import-patterns.ts:97-105`.\n\n| Folder | Runs in | May import from |\n|---|---|---|\n| `common` | Any JS environment, with no DOM or Node APIs | `common` only |\n| `worker` | Web Workers | `common`, `worker` |\n| `browser` | The browser or renderer, with DOM APIs | `common`, `browser` |\n| `electron-browser` | The Electron renderer (the window, with sandboxed access to Electron APIs) | `common`, `browser`, `electron-browser` |\n| `node` | Node.js, for example the server or extension host | `common`, `node` |\n| `electron-utility` | Electron utility processes (shared process, pty host and so on) | `common`, `node`, `electron-utility` |\n| `electron-main` | The Electron main process | `common`, `node`, `electron-utility`, `electron-main` |\n\n- **Direction:** `common` sits at the bottom and everything can import it. The dependencies only go downward in this table, never sideways.\n- **No cross-imports:** Code in `browser` can't import `node`, and `node` can't import `browser`. `worker` is separate from `browser` too.\n- **Renderer side:** `electron-browser` is a superset of `browser`. It can use browser code but can't import any Node code.\n- **Main-process side:** `electron-main` is the widest. It can use everything on the Node side, including `electron-utility`. `electron-utility` can't import `electron-main`.\n- **Naming:** `electron-browser` was formerly called `electron-sandbox`. No `electron-sandbox` folders are left in the repo.\n- **Layers:** These environment rules apply inside each layer, for example `base`, `platform`, `editor` and `workbench`. A separate set of rules controls which layer may import which.\n- **Test folders:** A `test` folder with the same environment names inside it follows the same rules. For example, `src/vs/base/test/electron-browser`.\n- **Exceptions:** `eslint.config.js` lists specific files that are allowed to break these rules."
+}

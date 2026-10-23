@@ -1,0 +1,39 @@
+{
+  "id": "8a49f7ef",
+  "question": "What are the main layers of VS Code's core code under `src/vs`, what is each one for, and which layers may depend on which?",
+  "points": [
+    {
+      "id": "BP1.1",
+      "text": "`base` (utilities and UI building blocks, usable by every layer)"
+    },
+    {
+      "id": "BP1.2",
+      "text": "`platform` (service injection and the base services, with no editor or workbench code)"
+    },
+    {
+      "id": "BP1.3",
+      "text": "`editor` (the Monaco editor core)"
+    },
+    {
+      "id": "BP1.4",
+      "text": "`workbench` (hosts the editor, notebooks and custom editors, plus panels like the Explorer and status bar)"
+    },
+    {
+      "id": "BP1.5",
+      "text": "`code` (the desktop entry: Electron main, shared process, CLI)"
+    },
+    {
+      "id": "BP1.6",
+      "text": "`server` (the remote-development server's entry)"
+    },
+    {
+      "id": "BP1.7",
+      "text": "the order `base` → `platform` → `editor` → `workbench`, a layer not using the ones above it (the page's layer diagram; its text says `base` serves every layer and `platform` holds no `editor` or `workbench` code)"
+    },
+    {
+      "id": "BP1.8",
+      "text": "extensions run in a separate extension host process, and the built-in ones live in `extensions/`"
+    }
+  ],
+  "answer": "**Layers under `src/vs`, bottom to top**\n\n1. **`base/`** holds the foundational primitives: utilities, data structures, events, lifecycle and disposables, and generic DOM widgets. It has no VS Code-specific knowledge.\n2. **`platform/`** holds the core services and their contracts: files, configuration, storage, instantiation and dependency injection, and the agent host. Each service is defined as an interface plus a service identifier.\n3. **`editor/`** is the Monaco editor core: text model, language features, and the editor widget. It must not depend on `node` or `electron-*` code.\n4. **`workbench/`** is the VS Code application: parts, layout, and features under `contrib/` such as chat, SCM, and debug. It also holds the services that make up the workbench.\n5. **Top-level applications**, which sit above `workbench/`:\n   - `code/` is startup and hosting for desktop, CLI and web.\n   - `server/` is the remote server runtime.\n   - `sessions/` is the separate Agents window application, built on the workbench.\n\nTwo top-level files sit near the bottom of the stack:\n- `nls.ts` handles localization.\n- `amdX.ts` loads AMD modules.\n\n`monaco.d.ts` is only the public Monaco type declarations and has no dependencies.\n\n**Dependency rule:** a layer may import only from the layers below it. The order is `base` → `platform` → `editor` → `workbench` → `code`/`server`/`sessions`.\n- `base/` imports nothing above it.\n- `platform/` imports `base/`.\n- `editor/` imports `base/` and `platform/`.\n- `workbench/` imports `base/`, `platform/` and `editor/`.\n- `code/`, `server/` and `sessions/` may import any of those.\n- Nothing under `src/vs` imports from outside it.\n\n**Exceptions to the order.** The import graph shows 94 imports that go against it:\n- 89 are `workbench/` importing `sessions/`, mostly agent-host customization and test fixtures.\n- 3 are `platform/agentHost/node/diffWorkerMain.ts` importing editor diff code.\n- 1 is a `base/` test importing `amdX.ts`.\n- 1 is a `base/` test importing `platform/`.\n\n**Second axis: target environments.** Within each layer, folders are named by the runtime they target (from `.github/instructions/source-code-organization.instructions.md`):\n\n| Folder | May use | May import |\n|---|---|---|\n| `common` | Basic JavaScript only | — |\n| `browser` | Web/DOM APIs | `common` |\n| `node` | Node.js APIs | `common` |\n| `electron-browser` | Browser plus limited Electron IPC | `common`, `browser` |\n| `electron-utility` | Electron utility process | `common`, `node` |\n| `electron-main` | Electron main process | `common`, `node`, `electron-utility` |\n\nFeatures under `workbench/contrib` should expose their internal API from a single `common` file. Other contributions use that file and never reach into a contribution's internals."
+}

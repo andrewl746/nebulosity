@@ -1,0 +1,10 @@
+{
+  "id": "d1790b01",
+  "points": [
+    {"id": "BP3.2", "score": 1, "quote": "Declare the identifier with the same name as the interface: `export const IFooService = createDecorator<IFooService>('fooService')`."},
+    {"id": "BP3.3", "score": 1, "quote": "constructor(@IFooService private readonly fooService: IFooService) { super(); }"},
+    {"id": "BP3.4", "score": 1, "quote": "The class must be created through the instantiation service, not with a bare `new`: `instantiationService.createInstance(MyClass, ...nonServiceArgs)`"},
+    {"id": "BP3.5", "score": 1, "quote": "`registerSingleton(IFooService, FooService, InstantiationType.Delayed)` (`extensions.ts:25`)."},
+    {"id": "BP3.6", "score": 0, "quote": "none"}
+  ]
+}

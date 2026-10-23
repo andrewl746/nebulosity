@@ -1,0 +1,10 @@
+{
+  "id": "vscode-s1-unused",
+  "kind": "unused",
+  "folder": "src/vs/workbench/contrib/notebook/common",
+  "files": [
+    "src/vs/workbench/contrib/notebook/common/services/notebookWebWorkerMain.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

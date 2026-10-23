@@ -1,0 +1,14 @@
+{
+  "id": "affine-s1-cycle",
+  "kind": "cycle",
+  "file": "blocksuite/affine/blocks/database/src/database-block.ts",
+  "shortest": 3,
+  "example": [
+    "blocksuite/affine/blocks/database/src/database-block.ts",
+    "blocksuite/affine/blocks/database/src/view.ts",
+    "blocksuite/affine/blocks/database/src/effects.ts",
+    "blocksuite/affine/blocks/database/src/database-block.ts"
+  ],
+  "verified": true,
+  "notes": []
+}

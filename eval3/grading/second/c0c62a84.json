@@ -1,0 +1,8 @@
+{ "id": "c0c62a84", "points": [
+  { "id": "BP2.1", "score": 1, "quote": "**`common`**: Plain JavaScript and TypeScript that runs anywhere. It can't use DOM APIs or Node APIs." },
+  { "id": "BP2.2", "score": 1, "quote": "**`browser`**: Code that needs the DOM and browser APIs ... **`browser`** may import `common` and `browser`." },
+  { "id": "BP2.3", "score": 1, "quote": "**`node`**: Code that needs Node.js APIs, such as `fs`, `child_process` and `net`. ... **`node`** may import `common` and `node`." },
+  { "id": "BP2.4", "score": 1, "quote": "**`electron-browser`**: The Electron renderer process. It has the DOM plus Electron and Node access through preload and IPC. ... **`electron-browser`** may import `common`, `browser` and `electron-browser`." },
+  { "id": "BP2.5", "score": 0, "quote": "none" },
+  { "id": "BP2.6", "score": 0.5, "quote": "**`electron-main`** may import `common`, `node` and `electron-main`. It must not import `browser` or `electron-browser`." }
+] }

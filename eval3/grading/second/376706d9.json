@@ -1,0 +1,10 @@
+{ "id": "376706d9", "points": [
+  { "id": "AFFINE-BP4.1", "score": 1, "quote": "A document is a Yjs CRDT (`Y.Doc`). The editor is BlockSuite, and each block is a `Y.Map` inside it." },
+  { "id": "AFFINE-BP4.2", "score": 0.5, "quote": "The user edits and BlockSuite changes the `Y.Doc`. ... The frontend calls `applyUpdate` on the live `Y.Doc`, and the editor re-renders." },
+  { "id": "AFFINE-BP4.3", "score": 1, "quote": "Persistence and sync deal in binary Yjs updates (Uint8Array diffs) and merged snapshots. They never deal in JSON." },
+  { "id": "AFFINE-BP4.4", "score": 0, "quote": "none" },
+  { "id": "AFFINE-BP4.5", "score": 1, "quote": "Awareness (cursors and presence) travels over a separate, non-persisted channel." },
+  { "id": "AFFINE-BP4.6", "score": 1, "quote": "`packages/common/nbstore` is the local-first storage and sync library. ... **Web:** `impls/idb` uses IndexedDB. ... **Desktop and mobile:** `impls/sqlite` uses a native SQLite database (`SqliteDocStorage`)." },
+  { "id": "AFFINE-BP4.7", "score": 1, "quote": "**Cloud workspace:** the same local copy, kept in sync with the server. The local copy is the primary store, so the app works offline and syncs when it reconnects." },
+  { "id": "AFFINE-BP4.8", "score": 0, "quote": "none" }
+] }

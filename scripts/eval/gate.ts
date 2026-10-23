@@ -18,7 +18,7 @@
  * on complete data, so both arms have the same number of sessions. Values are rounded to 4 decimal places.
  */
 
-export type QuestionKind = "bigPicture" | "list-direct" | "list-transitive" | "chain" | "impact" | "cycle" | "unused" | "violations" | "entries" | "pairs";
+export type QuestionKind = "bigPicture" | "list-direct" | "list-transitive" | "chain" | "impact" | "cycle" | "unused" | "violations" | "entries" | "pairs" | "callers" | "breaks" | "adopt" | "injects" | "task";
 export const GREP_HARD: readonly QuestionKind[] = ["impact", "cycle", "unused", "violations", "entries", "pairs"];
 export const GRAPH: readonly QuestionKind[] = ["chain", "list-transitive", ...GREP_HARD];
 export const OTHER: readonly QuestionKind[] = ["bigPicture", "list-direct"];

@@ -6,7 +6,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { findLeak, leakNeedles } from "../../lib/demo/privacy";
 import {
-    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, repeatProblem, runName, schedule, scratchFolder, singleQuestionIds,
+    QUESTION_ORDER, attemptsSoFar, childEnv, claudeArgs, devMismatch, devSchedule, formatLine, isStripped, parseArms, parsePorcelain, promptFor, rawFileName, repeatProblem, rulesSentence, runName, schedule, scratchFolder, singleQuestionIds,
     scratchRule, scrub, sessionArgs, statusArgs, statusDifference, utilizationCheck,
 } from "./run-config";
 
@@ -456,5 +456,21 @@ describe("the checkout's status snapshot (sweep B, item 4)", () => {
         } finally{
             fs.rmSync(root, { recursive: true, force: true });
         }
+    });
+});
+
+describe("Eval #3's rules sentence", () => {
+    const RULES = "You're at the repository root, C:/Users/Ann/vscode, and every command runs from there: never use cd, not even into a subfolder or the scratch folder, and name paths from the root instead (git grep -n foo -- src/a src/b). Allowed: grep, rg, git grep, git ls-files, git log, git show, ls, cat, head, tail, wc, sort, uniq, find and node, alone or piped into one another. Refused: cd, shell loops (for, while), echo, sed, awk, cut, xargs, redirects, heredocs, tee, mkdir and any path with .. in it. To check many files or compute anything, write a Node.js script into C:/Users/Ann/AppData/Local/Temp/eval-scratch/0123456789abcdef with the Write tool (the folder exists) and run it with node and its full path, or use node -e. Don't change any file in the repository.";
+
+    it("writes Eval #3's rules sentence, D2's, with both paths in drive-letter form", () => {
+        expect(rulesSentence("C:/Users/Ann/vscode", "C:/Users/Ann/AppData/Local/Temp/eval-scratch/0123456789abcdef")).toBe(RULES);
+    });
+
+    it("ends a prompt with the rules sentence in place of the scripts sentence, when asked", () => {
+        const scratch = "C:/Users/Ann/AppData/Local/Temp/eval-scratch/0123456789abcdef";
+        expect(promptFor({ prompt: "Q?", family: "chain" }, { chain: "End with ANSWER." }, scratch, { repoRoot: "C:/Users/Ann/vscode" }))
+            .toBe(`Q?\n\nEnd with ANSWER.\n\n${RULES}`);
+        expect(promptFor({ prompt: "Q?", family: "chain" }, { chain: "End with ANSWER." }, scratch)).toBe(
+            `Q?\n\nEnd with ANSWER.\n\nYou may write Node.js scripts in ${scratch} with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`);
     });
 });

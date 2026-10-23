@@ -3,11 +3,12 @@ import { execFileSync } from "child_process";
 import { and, eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
-import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
+import { ARCH_FIXTURE, copyFixture, DI_FIXTURE } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, symbols } from "../db/schema";
+import { loadCallsOf } from "../db/store/calls";
 import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
 import { loadImportEdges } from "../db/store/structure";
@@ -57,6 +58,16 @@ function folderCounts(repoId: number, paths: string[]): number[][] {
 }
 
 describe("applyFileChanges", () => {
+    it("replaces a changed file's call facts on an update (ADR-059)", () => {
+        const root = copyFixture(DI_FIXTURE);
+        const { repoId } = indexRepository(root);
+        const file = "src/workbench/history/history.ts";
+        fs.appendFileSync(path.join(root, file), "\nexport function late(f: IFileService): string { return f.readFile(\"z\"); }\n");
+        applyFileChanges(root, [file]);
+        const lines = loadCallsOf(getDb(), repoId, "readFile").filter((c) => c.path === file).map((c) => c.line);
+        expect(lines).toEqual([4, 8, 11]);
+    });
+
     it("an edit that adds an import re-resolves only that file and moves one level-edge count", () => {
         const root = copyFixture();
         const { repoId } = indexRepository(root);
@@ -280,5 +291,42 @@ describe("what re-resolves every file, and the workspace on every update (ADR-05
 
         expect(applyFileChanges(root, ["package.json"])).toMatchObject({ resolvedAll: true, edgesAdded: 0, edgesRemoved: 0, indexVersion: version });
         expect([...loadEntryPoints(getDb(), repoId)].sort()).toEqual(["packages/core/src/index.ts", "packages/ui/src/index.ts", "src/app/loader.ts"]);
+    });
+});
+
+describe("the workspace kept between updates (ADR-053, amended)", () => {
+    const FILE = "src/platform/node/storageFile.ts";
+
+    it("reuses the workspace it is given when nothing re-resolves", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        const { repoId } = indexRepository(root);
+        fs.appendFileSync(path.join(root, FILE), "// one\n");
+        const first = applyFileChanges(root, [FILE]);
+        fs.appendFileSync(path.join(root, FILE), "// two\n");
+        const second = applyFileChanges(root, [FILE], { workspace: first.workspace });
+
+        expect(second.changed).toEqual([FILE]);
+        expect(second.workspace).toBe(first.workspace);
+        expect(tables(repoId).imports).toContain(`${FILE} -> packages/core/src/index.ts (@arch/core)`);
+    });
+
+    it("reads the workspace again when a package.json changes", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        indexRepository(root);
+        fs.appendFileSync(path.join(root, FILE), "// one\n");
+        const first = applyFileChanges(root, [FILE]);
+        const second = applyFileChanges(root, ["packages/core/package.json"], { workspace: first.workspace });
+        expect(second.resolvedAll).toBe(true);
+        expect(second.workspace).not.toBe(first.workspace);
+    });
+
+    it("reads it again when the file set changes", () => {
+        const root = copyFixture(ARCH_FIXTURE);
+        indexRepository(root);
+        fs.appendFileSync(path.join(root, FILE), "// one\n");
+        const first = applyFileChanges(root, [FILE]);
+        write(root, "src/base/common/extra.ts", "export const extra = 1;\n");
+        const second = applyFileChanges(root, ["src/base/common/extra.ts"], { workspace: first.workspace });
+        expect(second.workspace).not.toBe(first.workspace);
     });
 });

@@ -117,6 +117,7 @@ describe("parseRegistration (sweep B, item 14)", () => {
 describe("SNIPPET (R5)", () => {
     it("names the tools and warns that a CLAUDE.md hides an AGENTS.md", () => {
         expect(SNIPPET).toContain("mcp__nebulosity__imports");
+        expect(SNIPPET).toContain("mcp__nebulosity__calls");
         expect(SNIPPET).toContain("AGENTS.md");
     });
 });

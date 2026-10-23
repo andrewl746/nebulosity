@@ -3,7 +3,9 @@
  *
  * R1's check (V1.6's plan): tuning never sees the eval, so no question of the eval may ask about what a dev-set question
  * asked about. A question's targets are the file or folder it asks about, a chain's two ends and a violation's two folders;
- * the folders an impact question counts by and a pairs question's names are not targets. It also checks Task 14's rule for
+ * the folders an impact question counts by and a pairs question's names are not targets. A calls question's (callers,
+ * breaks, adopt, injects, task) are its type's file and the method or type it names, so another method of a type the dev
+ * set asked about overlaps through the file. It also checks Task 14's rule for
  * task sessions: a session question's targets differ from every single question's.
  *
  * The eval's questions come from <dir>/questions.json, or from <dir>/truth-specs.json while there is no questions.json
@@ -39,6 +41,10 @@ function targetsOfFields(fields: Record<string, unknown>): string[] {
         case "chain": case "violations": return unique([...s("from"), ...s("to")]);
         case "cycle": return unique(s("file"));
         case "unused": case "pairs": return unique(s("folder"));
+        case "callers": case "breaks": case "adopt": case "injects": case "task": {
+            const named = typeof fields.type !== "string" ? [] : [typeof fields.member === "string" ? `${fields.type}.${fields.member}` : fields.type];
+            return unique([...s("file"), ...named]);
+        }
         default: return [];
     }
 }

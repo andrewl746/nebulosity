@@ -1,0 +1,10 @@
+{ "id": "acef88ef", "points": [
+  { "id": "THEIA-BP2.1", "score": 1, "quote": "An application such as `examples/browser` lists the extensions it wants as plain npm dependencies. ... `theia build`, from `@theia/cli` and `dev-packages/application-manager`, then bundles the frontend." },
+  { "id": "THEIA-BP2.2", "score": 1, "quote": "A Theia extension is an ordinary npm package that declares a `theiaExtensions` array in its `package.json`. Each entry names a module for each side" },
+  { "id": "THEIA-BP2.3", "score": 0.5, "quote": "Each entry names a module for each side, for example `\"frontend\": \"lib/browser/editor-frontend-module\"` and `\"backend\": \"lib/node/editor-backend-module\"`. ... `src/browser` is the frontend. `src/node` is the backend." },
+  { "id": "THEIA-BP2.4", "score": 1, "quote": "Those modules are InversifyJS `ContainerModule`s. They bind services and contributions such as `CommandContribution`, `MenuContribution` and `FrontendApplicationContribution`." },
+  { "id": "THEIA-BP2.5", "score": 0.5, "quote": "`@theia/core` is one of them, at 1.76.0." },
+  { "id": "THEIA-BP2.6", "score": 0.5, "quote": "`src/browser` is the frontend. `src/node` is the backend. `src/common` is shared code. `src/electron-browser` and `src/electron-main` are the Electron renderer and main processes." },
+  { "id": "THEIA-BP2.7", "score": 1, "quote": "It also has a `theia` section in its `package.json` for application properties such as the target (browser or Electron)." },
+  { "id": "THEIA-BP2.8", "score": 1, "quote": "`frontend-generator.ts` writes a frontend entry ... `backend-generator.ts` does the same for the backend modules. `bundler-generator.ts` writes the esbuild configuration (`esbuild.mjs`). ... `theia start` runs the generated backend, which loads the backend modules and serves the bundled frontend. In this repo, `npm run start:browser` does this and serves on localhost:3000." }
+] }

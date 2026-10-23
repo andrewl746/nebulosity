@@ -1,4 +1,5 @@
 /** How each eval run is started (D3 in docs/plans/2026-10-13-v1-5-ship.md), as pure functions so they're tested. */
+import { SHELL_PRESETS, type ShellPreset } from "./definition";
 import { slug, spellings } from "../../lib/demo/privacy";
 
 export type Arm = "baseline" | "nebulosity";
@@ -15,15 +16,7 @@ export const ALLOWED_TOOLS = [
 /** Nothing may change the repo, read the web (the rubric's source is a web page), load a skill, or use another shell. */
 export const DENIED_TOOLS = ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "PowerShell", "Monitor"];
 
-/**
- * An eval's optional `shell` preset (eval.json; ADR-057, amended 2026-10-15): more Bash commands allowed, the same in
- * both arms. "compound" adds the read-only commands of Eval #2's refused compound commands that the list above lacks:
- * cd and echo. Left out: sed (-i and its w command write files), awk (writes files, runs commands), xargs (runs any
- * command), tee (writes), python3 (runs any code), and mkdir (it writes, and the after-run check can't see an empty
- * folder). Loops (for, while) are shell syntax, which no rule names. Unset, the arguments are Eval #2's.
- */
-export const SHELL_PRESETS = { compound: ["Bash(cd:*)", "Bash(echo:*)"] } as const;
-export type ShellPreset = keyof typeof SHELL_PRESETS;
+export { SHELL_PRESETS, type ShellPreset };
 
 /** What an eval turns on beyond the read-only list: scripts in a scratch folder (R6), and a shell preset. */
 export type RunOptions = { scratch?: string; shell?: ShellPreset };
@@ -90,11 +83,18 @@ export function formatLine(question: { family: string; file?: string }, formats:
  * works under the permission rules, Write into the scratch folder then node, or node -e, because in the dev set (Task 13)
  * every script tried as a Bash heredoc was refused and no run wrote one with Write.
  */
-export function promptFor(question: { prompt: string; family: string; file?: string }, formats: Record<string, string>, scratch?: string): string {
+export function promptFor(question: { prompt: string; family: string; file?: string }, formats: Record<string, string>, scratch?: string, rules?: { repoRoot: string }): string {
     const base = `${question.prompt}\n\n${formatLine(question, formats)}`;
-    return scratch === undefined
-        ? base
-        : `${base}\n\nYou may write Node.js scripts in ${scratch} with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`;
+    if (scratch === undefined) return base;
+    const sentence = rules === undefined
+        ? `You may write Node.js scripts in ${scratch} with the Write tool and run them with node (or run node -e); nowhere else, and don't change any file in the repository.`
+        : rulesSentence(rules.repoRoot, scratch);
+    return `${base}\n\n${sentence}`;
+}
+
+/** Eval #3's rules sentence (D2 of V1.7's plan, R-L), the same in both arms: the repo root and the scratch folder, forward-slashed. Reworded once after the shell check (R-L): round 1 refused loops, cd into a subfolder, a pipe into sed and a redirect. */
+export function rulesSentence(repoRoot: string, scratch: string): string {
+    return `You're at the repository root, ${repoRoot}, and every command runs from there: never use cd, not even into a subfolder or the scratch folder, and name paths from the root instead (git grep -n foo -- src/a src/b). Allowed: grep, rg, git grep, git ls-files, git log, git show, ls, cat, head, tail, wc, sort, uniq, find and node, alone or piped into one another. Refused: cd, shell loops (for, while), echo, sed, awk, cut, xargs, redirects, heredocs, tee, mkdir and any path with .. in it. To check many files or compute anything, write a Node.js script into ${scratch} with the Write tool (the folder exists) and run it with node and its full path, or use node -e. Don't change any file in the repository.`;
 }
 
 /** Names that would bill an API key instead of the subscription, or override a pin. Windows ignores their case. */
