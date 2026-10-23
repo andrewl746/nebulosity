@@ -422,12 +422,43 @@ function implementationLines(impls: readonly ImplementationLine[], type: string,
     return cappedList(header, impls.map((i) => `${i.name ?? "(anonymous class)"}  ${i.path}:${i.line}  ${label(i)}`));
 }
 
+/** A file's row in the files block: its path, the lines it calls or injects on, and what follows them. */
+type FileRow = { path: string; lines: readonly number[]; after: string };
+
+const rowText = (r: FileRow): string => `${r.path}  ${r.lines.join(", ")}${r.after}`;
+
+/**
+ * A row too long for a whole page (generated code, with thousands of calls in one file) keeps the first line numbers
+ * that fit and counts the rest. Only the line numbers are cut: what follows them is short (receivers are type names,
+ * and the ways a type is injected are a few fixed words).
+ */
+function cutRow(r: FileRow, budget: number): string {
+    const start = `  ${r.path}  `;
+    // the room left for line numbers, keeping space for the widest "… N more lines" this row could need
+    const room = budget - 1 - start.length - `, ${moreLine(r.lines.length)} lines`.length - r.after.length;
+    const shown: number[] = [];
+    let used = 0;
+    for (const line of r.lines){
+        const width = String(line).length + 2;   // the number and the ", " after it
+        if (used + width > room) break;
+        shown.push(line);
+        used += width;
+    }
+    return `${start}${shown.length > 0 ? `${shown.join(", ")}, ` : ""}${moreLine(r.lines.length - shown.length)} lines${r.after}`;
+}
+
 /** The files block, paged within what the answer's other lines leave of MAX_ANSWER_CHARS. */
-function pagedFiles(header: string, rows: readonly string[], page: { limit: number; offset: number }, used: number): string[] {
+function pagedFiles(header: string, rows: readonly FileRow[], page: { limit: number; offset: number }, used: number): string[] {
     if (rows.length === 0) return [];
     if (page.offset >= rows.length) return [header, `Nothing at offset ${page.offset}: the list has ${formatCount(rows.length)}.`];
-    const rest = rows.slice(page.offset).map((r) => `  ${r}`);
-    const shown = fitting(rest, page.limit, MAX_ANSWER_CHARS - REACH_HEADROOM - used);
+    const budget = MAX_ANSWER_CHARS - REACH_HEADROOM - used;
+    const rest = rows.slice(page.offset).map((r) => `  ${rowText(r)}`);
+    let shown = fitting(rest, page.limit, budget);
+    // a first row longer than the whole budget would show nothing and send the next page to this same offset, forever
+    if (shown === 0){
+        rest[0] = cutRow(rows[page.offset], budget);
+        shown = 1;
+    }
     const lines = [header];
     if (page.offset > 0) lines.push(`Showing ${formatCount(page.offset + 1)}–${formatCount(page.offset + shown)} of ${formatCount(rows.length)}.`);
     lines.push(...rest.slice(0, shown));
@@ -456,7 +487,7 @@ export function callsAnswer(a: CallsAnswer, page: { limit: number; offset: numbe
             ? [`${a.type.name} (${a.type.kind}, ${where}): injected nowhere the declared types show.${scope}`]
             : [`${a.type.name} (${a.type.kind}, ${where}): injected in ${plural(a.files.length, "file")}, ${plural(a.places, "place")} in all.${tests}${scope}`, ...callsAreaLines(a)];
         const tail = first ? implementationLines(a.implementations, a.type.name, null) : [];
-        const rows = a.files.map((f) => `${f.path}  ${f.lines.join(", ")}  (${f.hows.join(", ")})`);
+        const rows = a.files.map((f) => ({ path: f.path, lines: f.lines, after: `  (${f.hows.join(", ")})` }));
         return { body: [...head, ...pagedFiles("Files, most places first (lines):", rows, page, size(head) + size(tail)), ...tail], notes: [CALLS_NOTE] };
     }
     const { type, member } = a;
@@ -480,6 +511,6 @@ export function callsAnswer(a: CallsAnswer, page: { limit: number; offset: numbe
         : a.files.length === 0 ? cappedList(`If ${member}'s signature changes, ${plural(total, "file")} change, each declaring it:`, a.declaring)
         : cappedList(`If ${member}'s signature changes, ${plural(total, "file")} change: these ${formatCount(a.files.length)}, and ${formatCount(a.declaring.length)} that declare it:`, a.declaring);
     const tail = [...changes, ...(first ? implementationLines(a.implementations, type.name, member) : [])];
-    const rows = a.files.map((f) => `${f.path}  ${f.lines.join(", ")}${f.receivers.length > 0 ? `  (on ${f.receivers.join(", ")})` : ""}`);
+    const rows = a.files.map((f) => ({ path: f.path, lines: f.lines, after: f.receivers.length > 0 ? `  (on ${f.receivers.join(", ")})` : "" }));
     return { body: [...head, ...pagedFiles("Files, most calls first (lines):", rows, page, size(head) + size(tail)), ...tail], notes: [CALLS_NOTE] };
 }

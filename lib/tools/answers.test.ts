@@ -6,7 +6,7 @@ import { layersOf } from "../engine/architecture";
 import { indexRepository } from "../index/pipeline";
 import type { Overview } from "../engine/overview";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
-import type { MemberAnswer } from "../engine/calls";
+import type { MemberAnswer, TypeAnswer } from "../engine/calls";
 import { architectureAnswer, callsAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import { answerText, MAX_ANSWER_CHARS, SUMMARIES_OFF_LINE as S } from "./text";
 
@@ -663,5 +663,61 @@ describe("callsAnswer on a huge answer (Review Focus 3)", () => {
         const text = answerText(callsAnswer(a, { limit: 500, offset: 1_500 }));
         expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
         expect(text.split("\n").some((l) => l.startsWith("Showing 1,501–"))).toBe(true);
+    });
+});
+
+describe("callsAnswer with one file whose row is longer than a whole page (V1.7 Final Review #1's pager edge case)", () => {
+    // generated code: 20,000 calls in one file, lines 10000 to 29999, so its row alone is about 140,000 characters
+    const many = Array.from({ length: 20_000 }, (_, i) => 10_000 + i);
+    const type = { name: "IThing", kind: "interface" as const, path: "src/thing.ts", line: 1 };
+    const areas = { groupBy: null, areas: [], elsewhere: 0 };
+
+    /** The row's shown line numbers and its "… N more lines" count; null when the row isn't cut that way. */
+    function cut(row: string | undefined, after: string): { shown: number[]; hidden: number } | null {
+        const tail = row?.match(new RegExp(`^ {2}src/generated\\.ts {2}((?:\\d+, )+)… ([\\d,]+) more lines${after.replace(/[()]/g, "\\$&")}$`));
+        if (!tail) return null;
+        return { shown: tail[1].split(", ").filter((n) => n !== "").map(Number), hidden: Number(tail[2].replace(/,/g, "")) };
+    }
+
+    it("cuts a caller's row to the line numbers that fit, and the next page starts after it", () => {
+        const a: MemberAnswer = {
+            kind: "member", ...areas, type, member: "run",
+            files: [
+                { path: "src/generated.ts", lines: many, receivers: ["IThing", "Thing"], isTest: false, sites: [] },
+                { path: "src/user.ts", lines: [3], receivers: [], isTest: false, sites: [] },
+            ],
+            calls: 20_001, tests: 0, categories: { type: 2, subtype: 0, implementation: 1 }, subtypeWord: "sub-interface",
+            declaring: [], implementations: [],
+        };
+        const text = answerText(callsAnswer(a, { limit: 50, offset: 0 }));
+        expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        const lines = text.split("\n");
+        const row = cut(lines.find((l) => l.startsWith("  src/generated.ts  ")), "  (on IThing, Thing)");
+        expect(row).not.toBeNull();
+        // the first line numbers, in order, and the count of the rest: together all 20,000
+        expect(row!.shown.length).toBeGreaterThan(0);
+        expect(row!.shown).toEqual(many.slice(0, row!.shown.length));
+        expect(row!.shown.length + row!.hidden).toBe(20_000);
+        // the pager moves on: before the fix it said "next page: offset 0" and showed no row at all
+        expect(lines).toContain("… 1 more (next page: offset 1)");
+        expect(lines).not.toContain("  src/user.ts  3");
+    });
+
+    it("cuts an injection row the same way, keeping how it is injected", () => {
+        const a: TypeAnswer = {
+            kind: "type", ...areas, type,
+            files: [
+                { path: "src/generated.ts", lines: many, hows: ["constructor"], isTest: false },
+                { path: "src/user.ts", lines: [3], hows: ["constructor"], isTest: false },
+            ],
+            places: 20_001, tests: 0, implementations: [],
+        };
+        const text = answerText(callsAnswer(a, { limit: 50, offset: 0 }));
+        expect(text.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
+        const lines = text.split("\n");
+        const row = cut(lines.find((l) => l.startsWith("  src/generated.ts  ")), "  (constructor)");
+        expect(row).not.toBeNull();
+        expect(row!.shown.length + row!.hidden).toBe(20_000);
+        expect(lines).toContain("… 1 more (next page: offset 1)");
     });
 });

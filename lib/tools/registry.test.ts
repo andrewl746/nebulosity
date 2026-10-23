@@ -144,6 +144,14 @@ describe("calls", () => {
         expect(second.text).toBe([...READ_FILE_HEAD, "Showing 4–6 of 8.", ...READ_FILE_ROWS.slice(3, 6), "… 2 more (next page: offset 6)", NOTE].join("\n"));
     });
 
+    it("refuses a path, group_by or within longer than 1,024 characters, as the other tools' path inputs do", () => {
+        const schema = TOOLS.find((t) => t.name === "calls")!.inputSchema;
+        for (const key of ["path", "group_by", "within"]){
+            expect(schema.safeParse({ symbol: "IFileService", [key]: "a".repeat(1_024) }).success).toBe(true);
+            expect(schema.safeParse({ symbol: "IFileService", [key]: "a".repeat(1_025) }).success).toBe(false);
+        }
+    });
+
     it("refuses a member the type doesn't have, listing the ones it has", async () => {
         const failure = call("calls", { symbol: "IFileService.save" }, diFixture());
         await expect(failure).rejects.toThrow(BadInputError);

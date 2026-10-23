@@ -327,6 +327,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
   - `within`: no description (trimmed in V1.7 to hold the first-call budget, R-AA);
   - `limit` 1–500 (50): `Files to list, 1 to 500.`;
   - `offset` ≥ 0 (0): no description (trimmed likewise).
+  - `path`, `group_by` and `within` take at most 1,024 characters each, as the other tools' path inputs do (since 2026-10-22).
 - **The instructions' bullet,** after `imports`': `- calls: who calls a method, even through injected services, where a type is injected, and what changing it touches (give the type's file as path);` The instructions' opening line reads "Call these tools first, before grep, a script of your own or reading many files, for any question about how the code is organized or connected: …" and names the questions (who calls or injects something, what a change touches and which tests to run, imports against the layers, cycles, files nothing imports); `search`'s description is "Find where a feature or concept lives: the best files and folders, with their best-matching code." (V1.7 tool-use round 3, R-AA).
 - **The answer, for a method** (a fictional example):
 ```
@@ -348,11 +349,11 @@ Implementations of IFooService (2; 2 declare save):
 Note: found through declared types: fields, constructor parameters, parameters, locals, X.get(T), useService(T), new C(), base classes and aliases. A call on a value whose type is only inferred isn't seen.
 ```
 - **For a type alone,** the header says where it is injected (`injected in N files, M places in all`), the files list each place's line and how (constructor, `@inject` field, accessor or hook), and the implementations follow without the "declares" column.
-- **Paging:** the totals always cover everything. The signature-change list and the implementations come on the first page only, and a cut list ends with `… N more (next page: offset K)`.
+- **Paging:** the totals always cover everything. The signature-change list and the implementations come on the first page only, and a cut list ends with `… N more (next page: offset K)`. A file whose row alone is longer than a page (thousands of calls in one generated file) keeps the first line numbers that fit and ends them with `… N more lines`, and the next page starts after it (since 2026-10-22; before, the page listed nothing and named its own offset as the next).
 - **Ambiguous names** list the candidates, one per line with the kind, path and line, and ask for `path`.
 - **Live event:** the declaring file, then up to 49 of the page's files (the Map takes 50 paths at most).
 
-**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports`, `architecture` and `calls` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The six definitions and the instructions together stay under 6,650 characters (a test; they measure 6,548, ADR-056 amended).
+**Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports`, `architecture` and `calls` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The six definitions and the instructions together stay under 6,650 characters (a test; they measure 6,599 since `calls`' path inputs gained their 1,024-character limit on 2026-10-22, 6,548 before, ADR-056 amended).
 
 **Paths.** Inputs are repo-relative, or absolute inside the repo, which is how Claude Code's own tools write them (Windows ignores case; ADR-046, amended). Backslashes, a leading `./` and a trailing `/` are accepted (`parseRepoPath`); `..`, and absolute paths outside the repo, are refused, and the refusal names the repo's root. Answers always write paths from the repo root, and a session started in a subfolder of the repo is told so on its answers' first line. `""` is the repo root; `imports` refuses it, since the whole repo has no outside.
 

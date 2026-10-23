@@ -165,9 +165,9 @@ const architectureTool: ToolEntry<typeof architectureInput> = {
 
 const callsInput = z.object({
     symbol: z.string().trim().min(1).max(200).describe('"IFooService", or a method: "IFooService.save".'),
-    path: z.string().optional().describe("Its file, if two types share the name."),
-    group_by: z.string().optional().describe('Count by area: a folder ("" the top level) or "auto".'),
-    within: z.string().optional(),
+    path: z.string().max(1024).optional().describe("Its file, if two types share the name."),
+    group_by: z.string().max(1024).optional().describe('Count by area: a folder ("" the top level) or "auto".'),
+    within: z.string().max(1024).optional(),
     limit: z.number().int().min(1).max(500).default(50).describe("Files to list, 1 to 500."),
     offset: z.number().int().min(0).default(0),
 });

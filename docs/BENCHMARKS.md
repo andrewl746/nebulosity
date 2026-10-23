@@ -1138,8 +1138,9 @@ The budget is the six always-loaded definitions plus the instructions, in charac
 | Round 2 (5a0ce52): the rules sentence reworded; the instructions' second line "before grep or reading many files" became "before grep, a script of your own or reading many files" (four misses wrote their own scripts), and the `calls` bullet gained "even through injected services, where a type is injected"; `calls`' `within` and `offset` descriptions dropped to pay for it | 6,602 |
 | Round 3 (1259bc7): the instructions' second line names the question kinds (who calls or injects something, what a change touches and which tests to run, imports against the layers, cycles, files nothing imports); the docs sentence shortened to "Open the docs these answers name before saying how the code is organized or why: they are the maintainers' own account."; `search`'s description cut to "Find where a feature or concept lives: the best files and folders, with their best-matching code." | 6,624 |
 | This task: the instructions' closing sentence "Paths are relative to the repo root ("" is the root) or absolute inside it." dropped, because every path input's description says it | **6,548** (instructions 1,339, was 1,415; the definitions 5,209) |
+| 2026-10-22, after Eval #3: `calls`' `path`, `group_by` and `within` gain their 1,024-character limit (`"maxLength":1024,` in the schema, 17 characters each; ADR-056 amended) | 6,599 (calls 1,058, was 1,007) |
 
-About 6,548 characters is about 2,380 tokens, so the README's "about 2,400 tokens" stands.
+About 6,548 characters is about 2,380 tokens, so the README's "about 2,400 tokens" stands; 6,599 is about 2,400.
 
 ### Runs and cost
 
