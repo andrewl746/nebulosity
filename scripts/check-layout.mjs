@@ -5,15 +5,17 @@
 //
 //   npm run check-layout -- http://127.0.0.1:3002 [--shots <dir>] [--all-shots] [--sizes 1440x900,200x260] [--states top,file]
 //
-// It never touches port 3000 (the owner's Map), and it posts its three live events only to the server it was given.
+// It never touches port 3000 (the owner's Map), and it posts its live events only to the server it was given. The Map
+// must be showing the VS Code demo repo: the states are VS Code's own folders and files.
 // Each size gets a fresh tab, and the states inside it are reached in-app (pushState + popstate), as the Map's own
-// navigation does: many full page loads in one tab used to stall the Map's live channel.
+// navigation does: many full page loads in one tab used to stall the Map's live channel. A last walk resizes one tab
+// live, the way VS Code's panel is dragged (skipped when --sizes or --states narrows the run, unless --resize asks).
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const USAGE = "usage: npm run check-layout -- <base-url> [--shots <dir>] [--all-shots] [--sizes WxH,...] [--states name,...]";
+const USAGE = "usage: npm run check-layout -- <base-url> [--shots <dir>] [--all-shots] [--sizes WxH,...] [--states name,...] [--resize]";
 
 /** Normal sizes, in between, the floor and around it, below it, and short windows; 200 × 260 is the smallest asked for. */
 const SIZES = [
@@ -54,26 +56,45 @@ const STATES = [
     { name: "activity", place: "src/vs", act: "activity" },
     // a failed jump's banner over a paged level with the panel open: it must clear the pill and the panel
     { name: "banner", place: "src/vs/base/common", select: FILE, act: "banner" },
+    // the same banner with nothing selected, in the pill's band, and with the legend open, which must leave it room
+    { name: "banner-plain", place: "src/vs/base/common", act: "banner" },
+    { name: "banner-legend", place: "src/vs/base/common", act: ["legend", "banner"] },
 ];
+/** What a state does after reaching its place, as a list (most states do one thing). */
+const actsOf = (state) => state.act === undefined ? [] : [state.act].flat();
+
+/**
+ * One tab resized while it shows a file's panel and the open repo list, the way VS Code's panel is dragged: the panel
+ * must cover and uncover the canvas, the pill and the zoom controls follow it, and the list stay inside the Map.
+ */
+const RESIZE_WALK = ["1440x900", "900x700", "760x800", "759x800", "400x400", "360x320", "240x600", "200x260", "640x700", "1100x800", "1440x900"];
 
 // ─── arguments ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 function parseArgs(argv){
-    const options = { base: null, shots: null, allShots: false, sizes: SIZES, states: STATES };
+    const options = { base: null, shots: null, allShots: false, sizes: SIZES, states: STATES, resize: null };
     for (let i = 0; i < argv.length; i++){
         const arg = argv[i];
         if (arg === "--shots") options.shots = path.resolve(argv[++i] ?? "");
         else if (arg === "--all-shots") options.allShots = true;
-        else if (arg === "--sizes") options.sizes = (argv[++i] ?? "").split(",").filter(Boolean);
-        else if (arg === "--states"){
+        else if (arg === "--resize") options.resize = true;
+        else if (arg === "--sizes"){
+            options.sizes = (argv[++i] ?? "").split(",").filter(Boolean);
+            options.resize ??= false;
+        } else if (arg === "--states"){
             const names = (argv[++i] ?? "").split(",").filter(Boolean);
             const unknown = names.filter((n) => !STATES.some((s) => s.name === n));
             if (unknown.length > 0) fail(`unknown state(s): ${unknown.join(", ")}. Known: ${STATES.map((s) => s.name).join(", ")}`);
             options.states = STATES.filter((s) => names.includes(s.name));
+            options.resize ??= false;
         } else if (arg.startsWith("--")) fail(`unknown option ${arg}\n${USAGE}`);
         else options.base = arg;
     }
     if (options.base === null) fail(USAGE);
+    // an empty list would check nothing and still say "0 failures"
+    if (options.sizes.length === 0) fail(`--sizes names no size\n${USAGE}`);
+    if (options.states.length === 0) fail(`--states names no state\n${USAGE}`);
+    options.resize ??= true;
     let url;
     try{
         url = new URL(options.base);
@@ -190,7 +211,11 @@ async function openTab(cdp, width, height){
         if (msg.sessionId !== sessionId) return;
         if (msg.method === "Runtime.exceptionThrown"){
             const d = msg.params.exceptionDetails;
-            errors.push(d.exception?.description?.split("\n")[0] ?? d.text);
+            errors.push(`uncaught: ${d.exception?.description?.split("\n")[0] ?? d.text}`);
+        }
+        // React reports its own errors (hydration, keys) through console.error rather than throwing
+        if (msg.method === "Runtime.consoleAPICalled" && msg.params.type === "error"){
+            errors.push(`console.error: ${msg.params.args.map((a) => a.value ?? a.description ?? "").join(" ").split("\n")[0].slice(0, 200)}`);
         }
     });
     await send("Page.enable");
@@ -254,19 +279,22 @@ async function reset(tab){
     await tab.evaluate(`window.scrollTo(0, 0); document.activeElement?.blur?.(); true`);
 }
 
+/** The level of `folder` is drawn: every box belongs to it (a doorway's path is "<folder>//page-2"). */
+const atLevel = (folder) => `(() => {
+    const params = new URLSearchParams(location.search);
+    if ((params.get("path") ?? "") !== ${JSON.stringify(folder)}) return false;
+    const boxes = [...document.querySelectorAll(".react-flow__node")];
+    if (boxes.length === 0 || document.body.innerText.includes("Loading the map")) return false;
+    const folderOf = (id) => id.includes("//") ? id.slice(0, id.indexOf("//")) : id.includes("/") ? id.slice(0, id.lastIndexOf("/")) : "";
+    return boxes.every((b) => folderOf(b.dataset.id) === ${JSON.stringify(folder)});
+})()`;
+
 async function goTo(tab, folder, page){
     const target = mapUrl(folder, page);
     const here = await tab.evaluate(`location.pathname + location.search`);
     if (here !== target) await tab.evaluate(`history.pushState(null, "", ${JSON.stringify(target)}); window.dispatchEvent(new PopStateEvent("popstate")); true`);
-    // drawn: every box belongs to this folder (a doorway's path is "<folder>//page-2"), and the fit a frame later has happened
-    await tab.waitFor(`(() => {
-        const params = new URLSearchParams(location.search);
-        if ((params.get("path") ?? "") !== ${JSON.stringify(folder)}) return false;
-        const boxes = [...document.querySelectorAll(".react-flow__node")];
-        if (boxes.length === 0 || document.body.innerText.includes("Loading the map")) return false;
-        const folderOf = (id) => id.includes("//") ? id.slice(0, id.indexOf("//")) : id.includes("/") ? id.slice(0, id.lastIndexOf("/")) : "";
-        return boxes.every((b) => folderOf(b.dataset.id) === ${JSON.stringify(folder)});
-    })()`, `the level ${folder || "(top)"}`);
+    // drawn, and the fit a frame later has happened
+    await tab.waitFor(atLevel(folder), `the level ${folder || "(top)"}`);
     await tab.evaluate(QUIET);
 }
 
@@ -305,7 +333,11 @@ async function postLive(base, events){
 }
 
 async function act(tab, state, base){
-    switch (state.act){
+    for (const step of actsOf(state)) await actStep(tab, step, base);
+}
+
+async function actStep(tab, step, base){
+    switch (step){
         case "source":
             await tab.evaluate(`(() => {
                 const button = [...document.querySelectorAll("[data-panel] button")].find((b) => b.textContent.trim() === "View source");
@@ -355,8 +387,30 @@ async function act(tab, state, base){
 
 /** Undoes what a state left that Escape doesn't: the legend remembers being open. */
 async function undo(tab, state){
-    if (state.act === "legend") await tab.evaluate(`(() => { const b = document.querySelector('[data-testid="legend-toggle"]'); if (b?.getAttribute("aria-expanded") === "true") b.click(); return true; })()`);
+    if (actsOf(state).includes("legend")) await tab.evaluate(`(() => { const b = document.querySelector('[data-testid="legend-toggle"]'); if (b?.getAttribute("aria-expanded") === "true") b.click(); return true; })()`);
 }
+
+/** What shows that each step is still on screen. */
+const STEP_MARKERS = {
+    source: `!!document.querySelector("[data-source-viewer]")`,
+    search: `document.querySelectorAll("[data-hit]").length > 0`,
+    help: `!!document.querySelector('[data-testid="help"]')`,
+    "repo-menu": `!!document.querySelector('[data-testid="repo-list"]')`,
+    "status-menu": `!!document.querySelector('[data-testid="status-menu"]')`,
+    legend: `document.querySelector('[data-testid="legend-toggle"]')?.getAttribute("aria-expanded") === "true"`,
+    banner: `!!document.querySelector('main [role="alert"]')`,
+    activity: `document.querySelectorAll('[data-testid="activity-bar"] ol li').length === 3`,
+};
+
+/**
+ * True while the state is still on screen: its level, its selection and what it opened. Checked right before the
+ * inspection, since some states go by themselves (the banner's 6 s) and a timed-out state must not pass as a plain Map.
+ */
+const stateShown = (state) => [
+    atLevel(state.place),
+    ...(state.select ? [`(() => { const p = document.querySelector('[data-panel=${JSON.stringify(state.select)}]'); return !!p && !p.innerText.includes("Loading…"); })()`] : []),
+    ...actsOf(state).map((step) => STEP_MARKERS[step] ?? "true"),
+].join(" && ");
 
 // ─── the checks, run in the page ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -364,11 +418,14 @@ async function undo(tab, state){
  * Runs inside the page (serialized with toString, so it may use nothing from outside). Returns one line per failure:
  *   (a) every visible element lies inside the area its clipping boxes let you scroll to (the document, an overlay, a
  *       panel); a box that only scrolls down must not hold anything sticking out sideways;
- *   (b) every visible control, scrolled into view, is the topmost element at its centre (an open popover may cover
- *       what's under it, and a dialog's backdrop covers the Map by design: then only the dialog's controls count);
- *   (c) text wider than its box has an ellipsis and a title or aria-label holding the whole text;
+ *   (b) every visible control, scrolled into view the way a person can scroll, is the topmost element at its centre
+ *       and at the middle of each edge (an open popover may cover what's under it, and a dialog's backdrop covers the
+ *       Map by design: then only the dialog's controls count);
+ *   (c) text wider than its box is cut by the box, with an ellipsis, a title or aria-label holding the whole text, and
+ *       room for a couple of characters, not a lone "…";
  *   (d) at a normal size the page doesn't scroll, and nowhere does it scroll past the floor (the Map root's min size);
- *   (e) no two pieces of visible text sit on each other.
+ *   (e) no two pieces of visible text sit on each other;
+ *   (f) no text sits on a control it isn't part of (a message over the canvas lets clicks through, so (b) can't see it).
  * The canvas's boxes, lines and the divider pan with the Map, so they're left out.
  */
 function inspectLayout({ normal }){
@@ -469,22 +526,49 @@ function inspectLayout({ normal }){
     const modal = dialogs.at(-1) ?? null;
     const controls = elements.filter((el) => el.matches('button, a[href], input, [role="button"]')
         && !el.closest(".react-flow__nodes") && getComputedStyle(el).pointerEvents !== "none" && (!modal || modal.contains(el)));
+    const hides = (overflow) => overflow === "hidden" || overflow === "clip";
     for (const el of controls){
         let ancestorFailed = false;
         for (let p = el; p; p = p.parentElement) if (failedA.has(p)){ ancestorFailed = true; break; }
         if (ancestorFailed) continue;
+        // scrollIntoView scrolls every box that can scroll, overflow: hidden ones too. React Flow's pane is one (its
+        // boxes overflow it), and moving the zoom controls with it would slide them out from under whatever covers
+        // them. A person can't scroll such a box, so its scroll goes back before the hit test.
+        const pinned = [];
+        for (let p = el.parentElement; p; p = p.parentElement){
+            const cs = getComputedStyle(p);
+            if (hides(cs.overflowX) || hides(cs.overflowY)) pinned.push([p, hides(cs.overflowX) ? p.scrollLeft : null, hides(cs.overflowY) ? p.scrollTop : null]);
+        }
         el.scrollIntoView({ block: "center", inline: "center" });
+        for (const [p, left, top] of pinned){
+            if (left !== null) p.scrollLeft = left;
+            if (top !== null) p.scrollTop = top;
+        }
+        // the hidden boxes may have done the page's share of the scrolling: the page then brings the control to the
+        // middle of the window, as a person scrolling it would (where it scrolls at all: an open dialog locks it)
+        if (!pinned.some(([p]) => p === document.documentElement)){
+            const s = el.getBoundingClientRect();
+            window.scrollBy(s.left + s.width / 2 - vw / 2, s.top + s.height / 2 - vh / 2);
+        }
         const r = el.getBoundingClientRect();
         const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
         if (cx < 0 || cy < 0 || cx >= vw || cy >= vh){
             failures.push(`(b) ${describe(el)} can't be scrolled into view (its centre is at ${Math.round(cx)}, ${Math.round(cy)})`);
             continue;
         }
-        const hit = document.elementFromPoint(cx, cy);
-        if (hit === null || el === hit || el.contains(hit)) continue;
-        const cover = hit.closest(COVERS);
-        if (cover && !cover.contains(el)) continue;   // an open popover over the Map, by design
-        failures.push(`(b) ${describe(el)} is covered by ${describe(hit)}`);
+        // its centre, then the middle of each edge, 2 px in: a control half under something is covered too
+        const points = [["its centre", cx, cy]];
+        if (r.height > 6) points.push(["its top edge", cx, r.top + 2], ["its bottom edge", cx, r.bottom - 2]);
+        if (r.width > 6) points.push(["its left edge", r.left + 2, cy], ["its right edge", r.right - 2, cy]);
+        for (const [where, x, y] of points){
+            if (x < 0 || y < 0 || x >= vw || y >= vh) continue;
+            const hit = document.elementFromPoint(x, y);
+            if (hit === null || el === hit || el.contains(hit)) continue;
+            const cover = hit.closest(COVERS);
+            if (cover && !cover.contains(el)) continue;   // an open popover over the Map, by design
+            failures.push(`(b) ${describe(el)} is covered by ${describe(hit)} at ${where}`);
+            break;
+        }
     }
     for (const [el, left, top] of saved){
         if (el.scrollLeft !== left) el.scrollLeft = left;
@@ -492,18 +576,24 @@ function inspectLayout({ normal }){
     }
     window.scrollTo(savedWindow[0], savedWindow[1]);
 
-    // (c)
+    // (c): a box with text of its own, or a truncating box (its text may sit in an inline child)
     for (const el of elements){
         if (el.matches("input, textarea, select")) continue;
-        if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== "")) continue;
         const cs = getComputedStyle(el);
         if (cs.display === "inline" || el.scrollWidth <= el.clientWidth + TOL) continue;
+        const ownText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== "");
+        if (!ownText && !(cs.textOverflow === "ellipsis" && norm(el.textContent) !== "")) continue;
         const full = norm(el.textContent).replace(/…/g, "");
         const label = [];
         for (let p = el, i = 0; p && i < 4; p = p.parentElement, i++) label.push(p.getAttribute("title"), p.getAttribute("aria-label"));
         const carried = label.some((t) => t && norm(t).includes(full));
-        if (cs.textOverflow !== "ellipsis") failures.push(`(c) ${describe(el)} is ${el.scrollWidth - el.clientWidth} px wider than its box, with no ellipsis`);
+        const over = el.scrollWidth - el.clientWidth;
+        // an ellipsis is only drawn where the box cuts its text off; with overflow visible the text runs out of it
+        if (cs.overflowX === "visible") failures.push(`(c) ${describe(el)} runs ${over} px out of its box`);
+        else if (cs.textOverflow !== "ellipsis") failures.push(`(c) ${describe(el)} is ${over} px wider than its box, with no ellipsis`);
         else if (!carried) failures.push(`(c) ${describe(el)} is cut off with no title or aria-label holding its whole text`);
+        // a lone "…" (or a letter and one) says nothing, title or not
+        else if (el.clientWidth < 2 * parseFloat(cs.fontSize)) failures.push(`(c) ${describe(el)} is cut to ${el.clientWidth} px, too narrow to read`);
     }
 
     // (d)
@@ -514,14 +604,11 @@ function inspectLayout({ normal }){
     if (normal && (sw > vw + TOL || sh > vh + TOL)) failures.push(`(d) the page scrolls at a normal size: ${sw} × ${sh} in a ${vw} × ${vh} window`);
     else if (sw > Math.max(vw, floorW) + TOL || sh > Math.max(vh, floorH) + TOL) failures.push(`(d) the page scrolls past the floor: ${sw} × ${sh}, where ${Math.max(vw, floorW)} × ${Math.max(vh, floorH)} is the most it needs`);
 
-    // (e): each text run's line boxes, clipped by the boxes that clip it
-    const runs = [];
-    for (const el of elements){
-        const layer = el.closest(COVERS);
+    // what of an element shows: the rect its clipping boxes leave (with `self`, its own overflow clips too)
+    const clipOf = (el, self) => {
         const { chain, fixed } = clipChain(el);
-        // a truncated line clips its own text too
         const own = getComputedStyle(el);
-        if (own.overflowX !== "visible" || own.overflowY !== "visible") chain.unshift({ box: el, cs: own });
+        if (self && (own.overflowX !== "visible" || own.overflowY !== "visible")) chain.unshift({ box: el, cs: own });
         let clip = { left: -Infinity, top: -Infinity, right: Infinity, bottom: Infinity };
         for (const { box } of chain){
             const b = box.getBoundingClientRect();
@@ -529,6 +616,14 @@ function inspectLayout({ normal }){
             clip = { left: Math.max(clip.left, left), top: Math.max(clip.top, top), right: Math.min(clip.right, left + box.clientWidth), bottom: Math.min(clip.bottom, top + box.clientHeight) };
         }
         if (fixed) clip = { left: Math.max(clip.left, 0), top: Math.max(clip.top, 0), right: Math.min(clip.right, vw), bottom: Math.min(clip.bottom, vh) };
+        return clip;
+    };
+
+    // (e): each text run's line boxes, clipped by the boxes that clip it (a truncated line clips its own text too)
+    const runs = [];
+    for (const el of elements){
+        const layer = el.closest(COVERS);
+        const clip = clipOf(el, true);
         for (const node of el.childNodes){
             if (node.nodeType !== 3 || node.textContent.trim() === "") continue;
             const range = document.createRange();
@@ -553,10 +648,88 @@ function inspectLayout({ normal }){
             failures.push(`(e) ${describe(a.el)} and ${describe(b.el)} overlap (${Math.round(ox)} × ${Math.round(oy)} px)`);
         }
     }
+
+    // (f): text and the controls it isn't part of (its own button, or the button beside it in a line, is fine)
+    const controlRects = controls.map((el) => {
+        const b = el.getBoundingClientRect(), clip = clipOf(el, false);
+        return { el, layer: el.closest(COVERS), r: { left: Math.max(b.left, clip.left), top: Math.max(b.top, clip.top), right: Math.min(b.right, clip.right), bottom: Math.min(b.bottom, clip.bottom) } };
+    });
+    for (const run of runs){
+        for (const { el, layer, r } of controlRects){
+            if (run.layer !== layer || el.contains(run.el) || run.el.contains(el)) continue;
+            const ox = Math.min(run.box.right, r.right) - Math.max(run.box.left, r.left);
+            const oy = Math.min(run.box.bottom, r.bottom) - Math.max(run.box.top, r.top);
+            if (ox <= 2 || oy <= 2) continue;
+            const key = `f|${describe(run.el)}|${describe(el)}`;
+            if (reported.has(key)) continue;
+            reported.add(key);
+            failures.push(`(f) the text of ${describe(run.el)} sits on ${describe(el)} (${Math.round(ox)} × ${Math.round(oy)} px)`);
+        }
+    }
     return failures;
 }
 
 // ─── the run ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Inspects the tab as it is, in one evaluation with the check that the state is still on screen (nothing can change between the two). */
+const inspect = (tab, state, width, height) => tab.evaluate(`(() => {
+    if (!(${stateShown(state)})) return ["(setup) the state went away before it was inspected"];
+    return (${inspectLayout.toString()})(${JSON.stringify({ normal: width >= NORMAL.width && height >= NORMAL.height })});
+})()`);
+
+/** Saves the tab as `<name>.png`, and the far corner as `<name>-scrolled.png` where the page scrolls (below the floor). */
+async function shoot(tab, dir, name){
+    const { data } = await tab.send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(path.join(dir, `${name}.png`), Buffer.from(data, "base64"));
+    const scrolled = await tab.evaluate(`(() => { const se = document.scrollingElement; if (se.scrollWidth <= innerWidth && se.scrollHeight <= innerHeight) return false; scrollTo(se.scrollWidth, se.scrollHeight); return true; })()`);
+    if (!scrolled) return;
+    await tab.evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
+    const far = await tab.send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(path.join(dir, `${name}-scrolled.png`), Buffer.from(far.data, "base64"));
+    await tab.evaluate(`scrollTo(0, 0); true`);
+}
+
+/** Opens the Map in the tab and waits for its fonts, then hides what would make two screenshots differ. */
+async function openMap(tab, base, state){
+    await tab.send("Page.navigate", { url: `${base}${mapUrl(state.place, state.page ?? 0)}` });
+    await tab.waitFor(`document.readyState === "complete" && !!document.querySelector(".react-flow")`, "the Map", 60_000);
+    await tab.evaluate(`document.fonts.ready.then(() => { const s = document.createElement("style"); s.textContent = ${JSON.stringify(SHOT_CSS)}; document.head.appendChild(s); return true; })`);
+}
+
+/** The live-resize walk (RESIZE_WALK): one tab, the file's panel and the repo list open, resized step by step. */
+async function resizeWalk(cdp, options, failures){
+    const state = { name: "resize", place: "src/vs/base/common", select: FILE, act: "repo-menu" };
+    const [w0, h0] = RESIZE_WALK[0].split("x").map(Number);
+    const tab = await openTab(cdp, w0, h0);
+    const row = [];
+    try{
+        await openMap(tab, options.base, state);
+        await goTo(tab, state.place, 0);
+        await selectBox(tab, state.select);
+        await act(tab, state, options.base);
+        for (const size of RESIZE_WALK){
+            const [width, height] = size.split("x").map(Number);
+            let lines;
+            try{
+                await tab.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+                await tab.evaluate(QUIET);
+                if (options.shots && options.allShots) await shoot(tab, options.shots, `resize-${row.length + 1}-${size}`);
+                lines = await inspect(tab, state, width, height);
+            } catch (err){
+                lines = [`(setup) ${err instanceof Error ? err.message : String(err)}`];
+            }
+            for (const error of tab.errors.splice(0)) lines.push(`(js) ${error}`);
+            for (const line of lines) failures.push(`resize to ${size} ${line}`);
+            row.push(lines.length === 0 ? "ok" : String(lines.length));
+            console.log(`resize to ${size}: ${lines.length === 0 ? "ok" : `${lines.length} failure${lines.length === 1 ? "" : "s"}`}`);
+        }
+    } catch (err){
+        failures.push(`resize (setup) ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+        await tab.close();
+    }
+    return row;
+}
 
 async function main(){
     const options = parseArgs(process.argv.slice(2));
@@ -564,12 +737,16 @@ async function main(){
     if (exe === null) fail("No Chrome found. Install Google Chrome or Chromium, or set CHROME_PATH to its executable.");
     const status = await fetch(`${options.base}/api/repos`).then((r) => r.json()).catch(() => null);
     if (status === null || !Array.isArray(status.repos)) fail(`No Nebulosity Map answers at ${options.base} (GET /api/repos).`);
+    // the states are VS Code's own folders and files: on any other repo every one of them would time out
+    const demo = await fetch(`${options.base}/api/level?path=src/vs/base/common`).then((r) => r.ok).catch(() => false);
+    if (!demo) fail(`The Map at ${options.base} isn't showing the VS Code repo (no src/vs/base/common), and the check's states are VS Code's folders and files. Index ../vscode and make it the active repo.`);
     if (options.shots) mkdirSync(options.shots, { recursive: true });
 
     const chrome = await launchChrome(exe);
     const cdp = await connect(chrome.url);
     const failures = [];
     const table = [];
+    let resized = null;
     const started = Date.now();
     try{
         // first visit settings, once for the origin: the help doesn't open by itself, and the legend starts closed
@@ -585,10 +762,7 @@ async function main(){
             const tab = await openTab(cdp, width, height);
             const row = [];
             try{
-                const first = options.states[0];
-                await tab.send("Page.navigate", { url: `${options.base}${mapUrl(first.place, first.page ?? 0)}` });
-                await tab.waitFor(`document.readyState === "complete" && !!document.querySelector(".react-flow")`, "the Map", 60_000);
-                await tab.evaluate(`document.fonts.ready.then(() => { const s = document.createElement("style"); s.textContent = ${JSON.stringify(SHOT_CSS)}; document.head.appendChild(s); return true; })`);
+                await openMap(tab, options.base, options.states[0]);
                 for (const state of options.states){
                     const label = `${size} ${state.name}`;
                     let lines;
@@ -598,24 +772,13 @@ async function main(){
                         if (state.select) await selectBox(tab, state.select);
                         await act(tab, state, options.base);
                         await tab.evaluate(QUIET);
-                        if (options.shots && (options.allShots || SHOT_SIZES.has(size))){
-                            const { data } = await tab.send("Page.captureScreenshot", { format: "png" });
-                            writeFileSync(path.join(options.shots, `${state.name}-${size}.png`), Buffer.from(data, "base64"));
-                            // below the floor the page scrolls: the far corner too
-                            const scrolled = await tab.evaluate(`(() => { const se = document.scrollingElement; if (se.scrollWidth <= innerWidth && se.scrollHeight <= innerHeight) return false; scrollTo(se.scrollWidth, se.scrollHeight); return true; })()`);
-                            if (scrolled){
-                                await tab.evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
-                                const far = await tab.send("Page.captureScreenshot", { format: "png" });
-                                writeFileSync(path.join(options.shots, `${state.name}-${size}-scrolled.png`), Buffer.from(far.data, "base64"));
-                                await tab.evaluate(`scrollTo(0, 0); true`);
-                            }
-                        }
-                        lines = await tab.evaluate(`(${inspectLayout.toString()})(${JSON.stringify({ normal: width >= NORMAL.width && height >= NORMAL.height })})`);
+                        if (options.shots && (options.allShots || SHOT_SIZES.has(size))) await shoot(tab, options.shots, `${state.name}-${size}`);
+                        lines = await inspect(tab, state, width, height);
                         await undo(tab, state);
                     } catch (err){
                         lines = [`(setup) ${err instanceof Error ? err.message : String(err)}`];
                     }
-                    for (const error of tab.errors.splice(0)) lines.push(`(js) uncaught: ${error}`);
+                    for (const error of tab.errors.splice(0)) lines.push(`(js) ${error}`);
                     for (const line of lines) failures.push(`${label} ${line}`);
                     row.push(lines.length === 0 ? "ok" : String(lines.length));
                     console.log(`${label}: ${lines.length === 0 ? "ok" : `${lines.length} failure${lines.length === 1 ? "" : "s"}`}`);
@@ -625,6 +788,7 @@ async function main(){
             }
             table.push([size, row]);
         }
+        if (options.resize) resized = await resizeWalk(cdp, options, failures);
     } finally {
         cdp.close();
         await chrome.close();
@@ -636,7 +800,12 @@ async function main(){
     console.log(`\n${"size".padEnd(10)} ${options.states.map((s) => s.name.padEnd(Math.max(4, s.name.length))).join(" ")}`);
     for (const [size, row] of table) console.log(`${size.padEnd(10)} ${row.map((cell, i) => cell.padEnd(Math.max(4, options.states[i].name.length))).join(" ")}`);
     const combos = table.length * options.states.length;
-    console.log(`\n${combos} size × state combinations, ${failures.length} failure${failures.length === 1 ? "" : "s"}, ${((Date.now() - started) / 1000).toFixed(0)} s.`);
+    let summary = `${combos} size × state combinations`;
+    if (resized !== null){
+        console.log(`\nlive resize, the file's panel and the repo list open: ${RESIZE_WALK.map((size, i) => `${size} ${resized[i] ?? "-"}`).join(" → ")}`);
+        summary += ` and ${RESIZE_WALK.length} live-resize steps`;
+    }
+    console.log(`\n${summary}, ${failures.length} failure${failures.length === 1 ? "" : "s"}, ${((Date.now() - started) / 1000).toFixed(0)} s.`);
     process.exit(failures.length === 0 ? 0 : 1);
 }
 
