@@ -47,11 +47,28 @@ export function parseImportsQuery(params: URLSearchParams): ImportsQuery | { err
     return { path: target, direction: rawDirection ?? "dependents", transitive: params.get("transitive") === "true", limit, offset };
 }
 
-/** Answers kept per repo for one index version at a time; a new version empties them (as describe's are, ADR-036). */
-type CachedAnswers = { version: number; answers: Map<string, ReachAnswer> };
+/**
+ * Answers kept per repo for one index version at a time; a new version empties them (as describe's are, ADR-036).
+ * `entries` counts the files they list.
+ */
+type CachedAnswers = { version: number; answers: Map<string, ReachAnswer>; entries: number };
 const answerCache = new Map<string, CachedAnswers>();
-/** A bound on one version's answers, not an LRU: past it the map starts over (as describe's does). */
+/**
+ * Two bounds on one version's answers, not an LRU: past either the map starts over (as describe's does). Counting the
+ * answers alone isn't enough, since each holds its whole transitive list, and a busy file of VS Code's reaches
+ * thousands: 2,000 such answers would hold millions of entries. So the files listed are bounded too, and an answer that
+ * alone lists more than that bound is answered but never kept.
+ */
 const MAX_CACHED_ANSWERS = 2_000;
+const MAX_CACHED_ENTRIES = 200_000;
+let limits = { answers: MAX_CACHED_ANSWERS, entries: MAX_CACHED_ENTRIES };
+
+/** For the tests only: lowers the cache's bounds; the function it gives puts the real ones back. */
+export function setCacheLimitsForTests(next: Partial<typeof limits>): () => void {
+    const before = limits;
+    limits = { ...limits, ...next };
+    return () => { limits = before; };
+}
 
 /**
  * reach() with its answers kept per index version, like describe (API_CONTRACTS.md §19): the extension asks the same
@@ -70,7 +87,7 @@ export function cachedReach(repoRoot: string, targetPath: string, direction: Dir
         const cacheKey = `${repoId}\0${repo}`;
         let cached = answerCache.get(cacheKey);
         if (!cached || cached.version !== version){
-            cached = { version, answers: new Map() };
+            cached = { version, answers: new Map(), entries: 0 };
             answerCache.set(cacheKey, cached);
         }
         const key = `${direction}\0${targetPath}`;
@@ -78,8 +95,15 @@ export function cachedReach(repoRoot: string, targetPath: string, direction: Dir
         if (hit) return hit;
 
         const answer = reach(repoRoot, targetPath, direction);
-        if (cached.answers.size >= MAX_CACHED_ANSWERS) cached.answers.clear();
+        const size = answer.reached.length;
+        // emptying the cache wouldn't make room for it, so what's kept stays
+        if (size > limits.entries) return answer;
+        if (cached.answers.size >= limits.answers || cached.entries + size > limits.entries){
+            cached.answers.clear();
+            cached.entries = 0;
+        }
         cached.answers.set(key, answer);
+        cached.entries += size;
         return answer;
     });
 }

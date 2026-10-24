@@ -5,7 +5,7 @@ import { copyFixture } from "../../test/helpers/fixture";
 import { indexRepository } from "../index/pipeline";
 import { applyFileChanges } from "../index/update";
 import { BadInputError } from "./errors";
-import { cachedReach, importsPage, parseImportsQuery, type ImportsQuery } from "./imports-page";
+import { cachedReach, importsPage, parseImportsQuery, setCacheLimitsForTests, type ImportsQuery } from "./imports-page";
 import { PathNotFoundError } from "./level";
 import { reach } from "./reach";
 
@@ -141,6 +141,61 @@ describe("cachedReach", () => {
         expect(after).not.toBe(before);
         expect(after.direct).toBe(3);
         expect(after.indexVersion).toBeGreaterThan(before.indexVersion);
+    });
+
+    // The bounds are lowered through the test seam; the fixture's answers are the plan's ground truth: log.ts has 7
+    // dependents and no dependencies, and main.ts has 4 dependencies (above).
+    it("starts over once one version holds as many answers as its bound (Task 2's deferred minor)", () => {
+        const restore = setCacheLimitsForTests({ answers: 2 });
+        try{
+            const root = copyFixture();
+            indexRepository(root);
+            const logDependents = cachedReach(root, "src/core/log.ts", "dependents");
+            const logDependencies = cachedReach(root, "src/core/log.ts", "dependencies");
+            // two kept: the bound
+            expect(cachedReach(root, "src/core/log.ts", "dependents")).toBe(logDependents);
+            expect(cachedReach(root, "src/core/log.ts", "dependencies")).toBe(logDependencies);
+            // a third empties the cache, and is kept alone
+            const main = cachedReach(root, "src/app/main.ts", "dependencies");
+            expect(cachedReach(root, "src/app/main.ts", "dependencies")).toBe(main);
+            expect(cachedReach(root, "src/core/log.ts", "dependents")).not.toBe(logDependents);
+        } finally{
+            restore();
+        }
+    });
+
+    it("bounds the files one version's answers list too, and starts over when an answer would pass it (PR #10 review, 7)", () => {
+        const restore = setCacheLimitsForTests({ entries: 10 });
+        try{
+            const root = copyFixture();
+            indexRepository(root);
+            const log = cachedReach(root, "src/core/log.ts", "dependents");          // 7 files kept
+            expect(cachedReach(root, "src/core/log.ts", "dependents")).toBe(log);
+            const main = cachedReach(root, "src/app/main.ts", "dependencies");       // 7 + 4 > 10: the cache starts over with main's 4
+            expect(cachedReach(root, "src/app/main.ts", "dependencies")).toBe(main);
+            const again = cachedReach(root, "src/core/log.ts", "dependents");        // dropped, so asked again: 4 + 7 > 10, over again
+            expect(again).not.toBe(log);
+            expect(again.reached).toEqual(LOG_DEPENDENTS);
+            expect(cachedReach(root, "src/app/main.ts", "dependencies")).not.toBe(main);
+        } finally{
+            restore();
+        }
+    });
+
+    it("never keeps an answer that alone lists more files than the bound, and keeps what's there", () => {
+        const restore = setCacheLimitsForTests({ entries: 6 });
+        try{
+            const root = copyFixture();
+            indexRepository(root);
+            const main = cachedReach(root, "src/app/main.ts", "dependencies");       // 4 files kept
+            const log = cachedReach(root, "src/core/log.ts", "dependents");          // 7 > 6: answered, not kept
+            const again = cachedReach(root, "src/core/log.ts", "dependents");
+            expect(again).not.toBe(log);
+            expect(again).toEqual(log);
+            expect(cachedReach(root, "src/app/main.ts", "dependencies")).toBe(main);
+        } finally{
+            restore();
+        }
     });
 
     it("throws for the repo and for a path nothing is indexed at, every time", () => {
