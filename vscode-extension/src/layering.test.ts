@@ -1,4 +1,5 @@
 import fs from "fs";
+import { builtinModules } from "module";
 import path from "path";
 import { fileURLToPath } from "url";
 import ts from "typescript";
@@ -6,15 +7,21 @@ import { describe, expect, it } from "vitest";
 
 /**
  * The extension's layering (V1.8 plan P3 and P11). It talks to the Map only over HTTP and the editor bridge, so its one
- * import from lib/ is `import type` from lib/contracts.ts, which the compiler erases from the bundle, and nothing comes
- * through the root's "@/" alias. The pure modules, which the root vitest runs, never import `vscode`: that module exists
- * only inside VS Code's extension host.
+ * import from the rest of the repo is `import type` from lib/contracts.ts, which the compiler erases from the bundle.
+ * Everything else it imports is inside vscode-extension/, Node's own modules, or `vscode`; nothing comes through the
+ * root's "@/" alias. It has no runtime dependencies (`dependencies: {}`), and a package name would still resolve by
+ * walking up into the root's node_modules, where esbuild would bundle it unseen, so only a test may name one (vitest,
+ * which runs it, and typescript, which this file parses with). The pure modules, which the root vitest runs, never
+ * import `vscode`: that module exists only inside VS Code's extension host.
  */
 const SRC = path.dirname(fileURLToPath(import.meta.url));
-const LIB = path.resolve(SRC, "..", "..", "lib");
-const CONTRACTS = path.join(LIB, "contracts");
+const EXTENSION = path.resolve(SRC, "..");
+const EXTENSION_MODULES = path.join(EXTENSION, "node_modules");
+const CONTRACTS = path.resolve(EXTENSION, "..", "lib", "contracts");
 /** The files that run in the extension host and use VS Code's API. Every other file under src/ is pure. */
 const HOST = ["extension.ts", "http.ts", "mapServer.ts", "panel.ts", "sync.ts"];
+/** Packages a test file may import. */
+const TEST_PACKAGES = ["vitest", "typescript"];
 const PURE_MODULES = ["ports.ts", "command.ts", "serverCheck.ts", "repoMatch.ts", "followGate.ts", "dependents.ts"];
 
 type ModuleRef = { specifier: string; typeOnly: boolean };
@@ -47,9 +54,12 @@ function moduleRefs(source: string): ModuleRef[] {
     return refs;
 }
 
+const isUnder = (target: string, dir: string): boolean => target === dir || target.startsWith(dir + path.sep);
+
 /** What breaks the layering in one file under src/ (its path from src/, forward slashes), each with the reason. */
 function violations(file: string, source: string): string[] {
     const pure = !HOST.includes(file);
+    const test = file.endsWith(".test.ts");
     const found: string[] = [];
     for (const { specifier, typeOnly } of moduleRefs(source)){
         if (specifier === "<dynamic>"){
@@ -58,10 +68,15 @@ function violations(file: string, source: string): string[] {
             found.push(`${specifier}: the root's "@/" alias`);
         } else if (specifier.startsWith(".") || path.isAbsolute(specifier)){
             const target = path.resolve(SRC, path.dirname(file), specifier);
-            const inLib = target === LIB || target.startsWith(LIB + path.sep);
-            if (inLib && !(typeOnly && target === CONTRACTS)) found.push(`${specifier}: from lib/, only \`import type\` from lib/contracts`);
-        } else if (pure && specifier === "vscode"){
-            found.push("vscode, in a pure file");
+            // a path into node_modules is a package by another name
+            const inside = isUnder(target, EXTENSION) && !isUnder(target, EXTENSION_MODULES);
+            if (!inside && !(typeOnly && target === CONTRACTS)){
+                found.push(`${specifier}: outside vscode-extension/, only \`import type\` from lib/contracts`);
+            }
+        } else if (specifier === "vscode"){
+            if (pure) found.push("vscode, in a pure file");
+        } else if (!specifier.startsWith("node:") && !builtinModules.includes(specifier) && !(test && TEST_PACKAGES.includes(specifier))){
+            found.push(`${specifier}: a package, and the extension has no runtime dependencies`);
         }
     }
     return found;
@@ -76,7 +91,7 @@ function sourceFiles(): string[] {
 }
 
 describe("the extension's layering (V1.8 plan P3, P11)", () => {
-    it("imports from lib/ only types from lib/contracts, nothing through @/, and vscode only in the host files", () => {
+    it("imports from outside vscode-extension/ only types from lib/contracts, no package, and vscode only in the host files", () => {
         const files = sourceFiles();
         // a scan that found nothing would pass everything below
         for (const pure of PURE_MODULES) expect(files).toContain(pure);
@@ -121,6 +136,15 @@ describe("the extension's layering (V1.8 plan P3, P11)", () => {
         expect(violations("ports.ts", 'import type { RepoList } from "../../lib/contracts";')).toEqual([]);
         expect(violations("webview/relay.ts", 'import type { BridgeToMap } from "../../../lib/contracts";')).toEqual([]);
         expect(violations("panel.ts", 'import * as vscode from "vscode";')).toEqual([]);
+        expect(violations("webview/relay.ts", 'import { DEFAULT_PORT } from "../ports";')).toEqual([]);
+        expect(violations("mapServer.ts", 'import { spawn } from "child_process";\nimport fs from "node:fs";\nimport { readFile } from "fs/promises";')).toEqual([]);
+        expect(violations("ports.test.ts", 'import { it } from "vitest";\nimport ts from "typescript";')).toEqual([]);
+        expect(violations("panel.ts", 'import { x } from "../../app/map/embed";')).toHaveLength(1);
+        expect(violations("ports.ts", 'import type { X } from "../../app/map/embed";')).toHaveLength(1);
+        expect(violations("ports.ts", 'import { y } from "../../scripts/cli";')).toHaveLength(1);
+        expect(violations("ports.ts", 'import z from "zod";')).toHaveLength(1);
+        expect(violations("ports.ts", 'import z from "../node_modules/zod";')).toHaveLength(1);
+        expect(violations("ports.ts", 'import { it } from "vitest";')).toHaveLength(1);
         expect(violations("ports.ts", 'import { type RepoList } from "../../lib/contracts";')).toHaveLength(1);
         expect(violations("ports.ts", 'import { BRIDGE_VERSION } from "../../lib/contracts";')).toHaveLength(1);
         expect(violations("ports.ts", 'import type { ReachAnswer } from "../../lib/engine/reach";')).toHaveLength(1);
