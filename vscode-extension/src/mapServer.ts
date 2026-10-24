@@ -5,14 +5,15 @@ import * as vscode from "vscode";
 import { findOnPath, nebulosityLaunch, withArgs, type Launch } from "./command";
 import { getJson, mapUrl, RefusedError, TimeoutError } from "./http";
 import { choosePort, parsePrintedPort } from "./ports";
-import { classifyRepos, type ServerCheck } from "./serverCheck";
+import { afterProbe, classifyRepos, type Probe, type ServerCheck } from "./serverCheck";
 
 /**
  * Finding or starting the Map (design §4.2, V1.8 plan P2, P14). The port comes from the `nebulosity.port` setting, else
  * from `nebulosity map --print-port` (the port the Map was last started on), else 3000. One `GET /api/repos` tells
  * whether a Map runs there, which version, or another app. When nothing listens, the extension starts
  * `nebulosity map --port <port>` itself, and it's the only Map this window ever stops: on Stop Map, and when the window
- * closes (deactivate). A Map started anywhere else is never stopped from here.
+ * closes (deactivate). A Map started anywhere else is never stopped from here. With no `nebulosity` command found, a Map
+ * already running on the port is still used; "not installed" is only for when one would have to be started.
  */
 
 /** How long one probe of `/api/repos` may take (design §4.2 step 2). */
@@ -73,7 +74,7 @@ function lastLineOf(text: string): string {
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Who answers on the port: a ServerCheck, or "refused" (nothing listens) or "timeout" (something listens and doesn't answer yet). */
-async function probe(port: number): Promise<ServerCheck | "refused" | "timeout"> {
+async function probe(port: number): Promise<Probe> {
     try{
         const answer = await getJson(mapUrl(port, "/api/repos"), PROBE_TIMEOUT_MS);
         return classifyRepos(answer.status, answer.body);
@@ -140,31 +141,46 @@ export class MapServer {
 
     private async find(onStart?: () => void): Promise<Found> {
         const launch = this.launch();
-        if (launch === null) return { notInstalled: true };
         const port = await this.portFor(launch);
-
         const first = await probe(port);
-        if (first !== "refused" && first !== "timeout"){
-            this.log(`Port ${port} answers: ${first.kind === "current" ? "a Map" : first.kind === "foreign" ? "another app" : `a Map this extension can't use (${first.kind})`}.`);
-            return { port, check: first };
+        const ownChild = this.childPort === port ? this.child : null;
+
+        switch (afterProbe(first, launch !== null, ownChild !== null).kind){
+            case "use": {
+                const check = first as ServerCheck;
+                this.log(`Port ${port} answers: ${check.kind === "current" ? "a Map" : check.kind === "foreign" ? "another app" : `a Map this extension can't use (${check.kind})`}.`);
+                return { port, check };
+            }
+            case "notInstalled":
+                return { notInstalled: true };
+            case "waitOwn":
+                // our own Map on this port, still coming up: wait for it rather than start a second one
+                onStart?.();
+                return { port, check: await this.waitFor(port, ownChild) };
+            case "wait":
+                // something holds the port and doesn't answer yet (a Map another window just started, say): wait for it
+                onStart?.();
+                return { port, check: await this.waitFor(port, null) };
+            case "start":
+                if (launch === null) return { notInstalled: true };   // afterProbe starts only with a launch
+                onStart?.();
+                // the port setting moved since this window started a Map: that one goes, so nothing is left running unowned
+                if (this.child !== null) await this.release();
+                return { port, check: await this.waitFor(port, this.start(launch, port)) };
         }
-        onStart?.();
-        // our own Map on this port, still coming up: wait for it rather than start a second one
-        if (this.child !== null && this.childPort === port) return { port, check: await this.waitFor(port, this.child) };
-        // something holds the port and doesn't answer yet (a Map another window just started, say): wait for it
-        if (first === "timeout") return { port, check: await this.waitFor(port, null) };
-        // the port setting moved since this window started a Map: that one goes, so nothing is left running unowned
-        if (this.child !== null) await this.release();
-        return { port, check: await this.waitFor(port, this.start(launch, port)) };
     }
 
-    /** The port setting when it's a port, else the printed one (asked once), else 3000. */
-    private async portFor(launch: Launch): Promise<number> {
+    /**
+     * The port setting when it's a port, else the printed one (asked once), else 3000. With no launch there's nothing to
+     * ask, so it's the setting or 3000.
+     */
+    private async portFor(launch: Launch | null): Promise<number> {
         const raw = vscode.workspace.getConfiguration("nebulosity").get<unknown>("port");
         // a hand-edited setting can hold anything: only a whole number from 1 to 65535 is a port
         const setting = typeof raw === "number" ? parsePrintedPort(String(raw)) : null;
         if (raw !== null && raw !== undefined && setting === null) this.log(`The nebulosity.port setting (${JSON.stringify(raw)}) isn't a port from 1 to 65535, so it's left out.`);
         if (setting !== null) return setting;
+        if (launch === null) return choosePort(null, null);
         // undefined until asked: a null answer is kept too, so a Nebulosity without the flag isn't asked again
         if (this.printed === undefined) this.printed = await this.printPort(launch);
         return choosePort(null, this.printed);

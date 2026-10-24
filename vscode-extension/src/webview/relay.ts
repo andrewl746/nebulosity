@@ -23,11 +23,15 @@ export type RelayCommand = "start" | "showLog" | "indexRepo";
 /** The commands as a record, so adding one to RelayCommand and not here (or the reverse) doesn't compile. */
 const COMMANDS: Record<RelayCommand, true> = { start: true, showLog: true, indexRepo: true };
 
-/** The parts of the page the relay uses. `frame` and `mapOrigin` are null outside the `map` state. */
+/**
+ * The parts of the page the relay uses. `frame` and `mapOrigin` are null outside the `map` state. `host` is the window
+ * of VS Code's own frame around this page (pre/index.html), which delivers the extension's messages.
+ */
 export type RelayEnv = {
     frame: { contentWindow: { postMessage(m: unknown, origin: string): void } | null; addEventListener(t: "load", f: () => void): void } | null;
     document: { addEventListener(t: "click", f: (e: { target: unknown }) => void): void };
     window: { addEventListener(t: "message", f: (e: { source: unknown; origin: string; data: unknown }) => void): void };
+    host: unknown;
     vscode: { postMessage(m: unknown): void };
     mapOrigin: string | null;
     setInterval: typeof setInterval;
@@ -51,7 +55,7 @@ const isBridgeMessage = (data: unknown): data is { type: string } => isObject(da
 export function startRelay(env: RelayEnv): void {
     // the timers are taken out of env and called on their own: called as env.setInterval(…), the window's own timer
     // throws "Illegal invocation" in Chromium (its receiver must be the window), which stopped every hello
-    const { frame, mapOrigin, vscode, setInterval: every, clearInterval: stopEvery } = env;
+    const { frame, mapOrigin, host, vscode, setInterval: every, clearInterval: stopEvery } = env;
 
     env.document.addEventListener("click", (e) => {
         const command = commandOf(e.target);
@@ -73,11 +77,10 @@ export function startRelay(env: RelayEnv): void {
         hello = giveUp = null;
     };
 
-    // Every load is a new page (the first one, a reload in the panel, a Map restarted under it), so the handshake starts
-    // again, and the extension's messages wait for it. The timers are intervals, and the timeout is one too, set before
-    // the hellos so that at 60 s it runs first: a hidden webview runs its timers about once a second, so the time is
-    // kept by the timer, never by counting hellos.
-    frame.addEventListener("load", () => {
+    // The handshake (re)starts the hellos and the 60 s give-up. The timers are intervals, and the give-up is one too, set
+    // before the hellos so that at 60 s it runs first: a hidden webview runs its timers about once a second, so the time
+    // is kept by the timer, never by counting hellos.
+    const startHello = (): void => {
         stopHello();
         ready = false;
         giveUp = every(() => {
@@ -86,7 +89,14 @@ export function startRelay(env: RelayEnv): void {
         }, HELLO_TIMEOUT_MS);
         hello = every(() => toMap({ type: "nebulosity.hello", version: 1 }), HELLO_INTERVAL_MS);
         toMap({ type: "nebulosity.hello", version: 1 });
-    });
+    };
+
+    // Every load is a new page (the first one, a reload in the panel, a Map restarted under it), so the handshake starts
+    // again, and the extension's messages wait for it. It also starts now: the script comes after the iframe, and a warm
+    // Map can finish loading before the script has run, a load nobody heard. Until the Map's page is there, those hellos
+    // go to the frame's blank page, whose origin doesn't match, and the browser drops them (with a console line).
+    frame.addEventListener("load", startHello);
+    startHello();
 
     env.window.addEventListener("message", (e) => {
         if (e.source === frame.contentWindow && e.source !== null){
@@ -104,7 +114,9 @@ export function startRelay(env: RelayEnv): void {
             vscode.postMessage(e.data);
             return;
         }
-        // anything else is the extension, through the webview's host: { to: "map", message }
+        // the extension's messages, { to: "map", message }, come only from the webview's host. Any other frame in VS Code's
+        // window can reach this one (top[i][0]) and post here too, and must not drive the Map as if it were the editor.
+        if (e.source !== host || host === null || host === undefined) return;
         const data = e.data;
         if (!isObject(data) || data.to !== "map" || !isObject(data.message)) return;
         if (ready){
@@ -126,8 +138,19 @@ type WebviewGlobals = {
         querySelector(selector: "iframe"): RelayEnv["frame"];
         querySelector(selector: "script[data-map-origin]"): { getAttribute(name: string): string | null } | null;
     };
-    window: RelayEnv["window"];
+    window: RelayEnv["window"] & { parent: unknown; frameElement: { ownerDocument: { defaultView: unknown } | null } | null };
 };
+
+/**
+ * The window that holds this page's frame: the extension's messages come from it. Not `window.parent`: VS Code writes
+ * this page into its frame with document.write, and in VS Code 1.143.1 the host's messages came from the frame
+ * element's owner window, which wasn't `window.parent` as this page saw it (measured over CDP: a `source ===
+ * window.parent` check dropped every message from the extension). `window.parent` stays the fallback for a host
+ * that's cross-origin, where frameElement is null.
+ */
+function hostWindow(win: WebviewGlobals["window"]): unknown {
+    return win.frameElement?.ownerDocument?.defaultView ?? win.parent;
+}
 
 const page = globalThis as unknown as WebviewGlobals;
 if (typeof page.acquireVsCodeApi === "function"){
@@ -136,6 +159,7 @@ if (typeof page.acquireVsCodeApi === "function"){
         frame: page.document.querySelector("iframe"),
         document: page.document,
         window: page.window,
+        host: hostWindow(page.window),
         vscode: page.acquireVsCodeApi(),
         // the relay's own tag names the Map's origin; only the map state's tag carries the attribute
         mapOrigin: page.document.querySelector("script[data-map-origin]")?.getAttribute("data-map-origin") ?? null,

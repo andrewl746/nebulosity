@@ -228,7 +228,7 @@ function onIndexEnd(event: vscode.TaskProcessEndEvent, mapServer: MapServer): vo
 /** Nebulosity: Stop Map: only a Map this window started (design §4.2 step 5). */
 async function stopMap(mapServer: MapServer): Promise<void> {
     if (!mapServer.startedByUs){
-        void vscode.window.showInformationMessage("This Map wasn't started by VS Code; stop it where it runs.");
+        void vscode.window.showInformationMessage("This Map wasn't started by this window; stop it where it was started.");
         return;
     }
     generation++;   // a Show Map still waiting on this Map's start gives way to the stop

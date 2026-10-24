@@ -36,3 +36,22 @@ export function classifyRepos(status: number, body: unknown): ServerCheck {
     if (!isObject(server) || typeof server.version !== "string" || typeof server.bridge !== "number") return { kind: "foreign" };
     return server.bridge === BRIDGE ? { kind: "current", list: body } : { kind: "mismatch", bridge: server.bridge };
 }
+
+/** One probe of the port: who answered, or "refused" (nothing listens) or "timeout" (something listens, no answer yet). */
+export type Probe = ServerCheck | "refused" | "timeout";
+
+/** What to do next: use the answer, wait (for this window's own Map, or for whatever holds the port), start one, or say it can't. */
+export type NextStep = { kind: "use"; check: ServerCheck } | { kind: "waitOwn" } | { kind: "wait" } | { kind: "notInstalled" } | { kind: "start" };
+
+/**
+ * After the probe (design §4.2). Whoever answers is used, with or without a `nebulosity` command, so a Map started some
+ * other way (npx, a checkout) works without an install. A Map this window started on the port is waited on, never
+ * started twice; a port that's held but not answering yet is waited on too. Only a free port needs the command: then
+ * it's started, or, with none found, "not installed".
+ */
+export function afterProbe(probe: Probe, installed: boolean, ownChildOnPort: boolean): NextStep {
+    if (probe !== "refused" && probe !== "timeout") return { kind: "use", check: probe };
+    if (ownChildOnPort) return { kind: "waitOwn" };
+    if (probe === "timeout") return { kind: "wait" };
+    return installed ? { kind: "start" } : { kind: "notInstalled" };
+}
