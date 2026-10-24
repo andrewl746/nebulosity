@@ -48,8 +48,11 @@ export function activityLabel(event: LiveEvent): string {
 
 /**
  * The boxes Claude Code is touching right now (VISUAL_REFRESH.md §4, Claude's focus): the boxes on this level that
- * hold what the recent tool calls touched in the last AGENT_ACTIVE_MS, plus show_on_map's highlights. A path on
- * another page lands on that page's portal; a path outside the level outlines nothing.
+ * hold what the recent tool calls touched in the last AGENT_ACTIVE_MS, plus show_on_map's highlights. Inside VS Code's
+ * panel the editor's highlights (What depends' importers, through the bridge) are ringed alike, as the V1.8 design
+ * draws them; they are kept apart from Claude's because they aren't its activity (ADR-062): the activity bar's count,
+ * its Clear and Esc go by Claude's alone. A path on another page lands on that page's portal; a path outside the level
+ * outlines nothing.
  */
 export function agentFocus(
     level: Pick<LevelResponse, "path" | "nodes">,
@@ -58,6 +61,8 @@ export function agentFocus(
     now: number,
     /** When the user last pressed Clear (or Esc): the calls made before it no longer count. */
     clearedAt: number = -Infinity,
+    /** The editor's highlights: Clear leaves them, and the What depends pick's closing lets go of them. */
+    editorHighlights: readonly string[] = [],
 ): Set<string> {
     const touched = recent
         .filter((e) => {
@@ -65,5 +70,5 @@ export function agentFocus(
             return now - at < AGENT_ACTIVE_MS && at > clearedAt;
         })
         .flatMap((e) => e.paths);
-    return new Set([...touched, ...highlights].flatMap((p) => boxFor(level, p) ?? []));
+    return new Set([...touched, ...highlights, ...editorHighlights].flatMap((p) => boxFor(level, p) ?? []));
 }

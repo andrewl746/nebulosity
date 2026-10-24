@@ -67,6 +67,16 @@ describe("agentFocus", () => {
     it("ignores what's outside the level", () => {
         expect(agentFocus(level, [event("describe", ["build/x.js"], 1)], [], NOW)).toEqual(new Set());
     });
+
+    it("rings the editor's highlights (What depends, through the bridge) as it rings show_on_map's (PR #10 review, 3)", () => {
+        expect(agentFocus(level, [], [], NOW, -Infinity, ["src/main.ts", "src/typings/a.d.ts"])).toEqual(new Set(["src/main.ts", "src//page-2"]));
+        // beside Claude's own, each kept apart by the caller
+        expect(agentFocus(level, [], ["src/vs/base/x.ts"], NOW, -Infinity, ["src/main.ts"])).toEqual(new Set(["src/vs", "src/main.ts"]));
+    });
+
+    it("keeps the editor's highlights through Clear, which lets go only of Claude's calls", () => {
+        expect(agentFocus(level, [], [], NOW, NOW, ["src/main.ts"])).toEqual(new Set(["src/main.ts"]));
+    });
 });
 
 describe("highlightedNote", () => {

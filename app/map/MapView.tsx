@@ -86,7 +86,11 @@ function MapScreen(){
     const [focusing, setFocusing] = useState<Focusing | null>(null);
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
+    // Claude Code's highlights (show_on_map), which the activity bar counts and Clear and Esc let go of
     const [highlights, setHighlights] = useState<readonly string[]>([]);
+    // the editor's (What depends, through the bridge), ringed alike but never shown as Claude's activity (ADR-062): only
+    // the bridge's highlight and clear, and a repo switch, change them
+    const [editorHighlights, setEditorHighlights] = useState<readonly string[]>([]);
     // Clear lets go of show_on_map's highlights and of the boxes the calls so far are still outlining
     const [clearedAt, setClearedAt] = useState(-Infinity);
     const clearHighlights = useCallback(() => {
@@ -255,8 +259,8 @@ function MapScreen(){
     const onEditorMessage = useCallback((message: BridgeToMap) => {
         if (message.type === "nebulosity.follow") focus(message.path, { history: "replace", quiet: true });
         else if (message.type === "nebulosity.show") focus(message.path, { quiet: true });
-        else if (message.type === "nebulosity.highlight") setHighlights(message.paths);
-        else if (message.type === "nebulosity.clear") setHighlights([]);
+        else if (message.type === "nebulosity.highlight") setEditorHighlights(message.paths);
+        else if (message.type === "nebulosity.clear") setEditorHighlights([]);
     }, [focus]);
 
     /**
@@ -316,16 +320,19 @@ function MapScreen(){
         return () => clearInterval(timer);
     }, [newest]);
 
-    // Claude's focus (VISUAL_REFRESH.md §4): the boxes its recent tool calls touched, and show_on_map's highlights. Kept
-    // by content, so the canvas only redraws when the set itself changes, not on every tick.
-    const agentKey = level === null ? "" : [...agentFocus(level, live.recent, highlights, now, clearedAt)].sort().join("\0");
+    // Claude's focus (VISUAL_REFRESH.md §4): the boxes its recent tool calls touched, and show_on_map's highlights, with
+    // the editor's ringed alike. Kept by content, so the canvas only redraws when the set itself changes, not on every
+    // tick.
+    const agentKey = level === null ? "" : [...agentFocus(level, live.recent, highlights, now, clearedAt, editorHighlights)].sort().join("\0");
     const agent = useMemo(() => new Set(agentKey === "" ? [] : agentKey.split("\0")), [agentKey]);
 
     const onSwitched = useCallback(() => {
         setPlace({ path: "", page: 0 });
         setSelected(null);
         setFocusing(null);
+        // both sets name the old repo's files
         setHighlights([]);
+        setEditorHighlights([]);
         refresh();
     }, [refresh]);
 
@@ -379,6 +386,7 @@ function MapScreen(){
     const shownSelected = selectionShown(level, selected);
     // Esc goes by what is drawn: a selection that vanished with its doorway mustn't take a press before the highlights
     const hasSelection = shownSelected !== null;
+    // Claude's alone: the editor's go when What depends' pick closes
     const hasHighlights = highlights.length > 0;
     useEffect(() => {
         const onKey = (event: KeyboardEvent): void => {
