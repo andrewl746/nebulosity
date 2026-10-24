@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { mapShortcut, type ShortcutState } from "./shortcuts";
 
-// a paged folder, page 2 of 3, nothing open and nothing being typed
-const STATE: ShortcutState = { typing: false, dialogOpen: false, levelPath: "src/vs/platform", page: 1, pageCount: 3 };
+// a paged folder, page 2 of 3, a box selected, nothing highlighted, nothing open and nothing being typed
+const STATE: ShortcutState = { typing: false, dialogOpen: false, levelPath: "src/vs/platform", page: 1, pageCount: 3, selected: true, highlighted: false };
 const press = (key: string, extra: Partial<{ ctrlKey: boolean; metaKey: boolean }> = {}) => ({ key, ctrlKey: false, metaKey: false, ...extra });
 
 describe("mapShortcut", () => {
@@ -28,6 +28,12 @@ describe("mapShortcut", () => {
     it("leaves keys alone while the user is typing", () => {
         const typing = { ...STATE, typing: true };
         for (const key of ["?", "Backspace", "ArrowLeft", "ArrowRight"]) expect(mapShortcut(press(key), typing)).toBeNull();
+    });
+
+    it("lets go of the selection first, then clears Claude Code's highlights, on Esc", () => {
+        expect(mapShortcut(press("Escape"), { ...STATE, highlighted: true })).toEqual({ type: "deselect" });
+        expect(mapShortcut(press("Escape"), { ...STATE, selected: false, highlighted: true })).toEqual({ type: "clear-highlights" });
+        expect(mapShortcut(press("Escape"), { ...STATE, selected: false, highlighted: false })).toBeNull();
     });
 
     it("doesn't go up from the root or turn past the first and last pages", () => {

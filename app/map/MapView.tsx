@@ -87,6 +87,12 @@ function MapScreen(){
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
     const [highlights, setHighlights] = useState<readonly string[]>([]);
+    // Clear lets go of show_on_map's highlights and of the boxes the calls so far are still outlining
+    const [clearedAt, setClearedAt] = useState(-Infinity);
+    const clearHighlights = useCallback(() => {
+        setHighlights([]);
+        setClearedAt(Date.now());
+    }, []);
     // a busy level draws only the hovered or selected box's lines, unless the user asks for all of them; the choice
     // holds across levels until it's turned off (owner, 2026-10-12)
     const [showAllLines, setShowAllLines] = useState(false);
@@ -308,7 +314,7 @@ function MapScreen(){
 
     // Claude's focus (VISUAL_REFRESH.md §4): the boxes its recent tool calls touched, and show_on_map's highlights. Kept
     // by content, so the canvas only redraws when the set itself changes, not on every tick.
-    const agentKey = level === null ? "" : [...agentFocus(level, live.recent, highlights, now)].sort().join("\0");
+    const agentKey = level === null ? "" : [...agentFocus(level, live.recent, highlights, now, clearedAt)].sort().join("\0");
     const agent = useMemo(() => new Set(agentKey === "" ? [] : agentKey.split("\0")), [agentKey]);
 
     const onSwitched = useCallback(() => {
@@ -361,7 +367,7 @@ function MapScreen(){
     }, []);
     const closePanel = useCallback(() => setSelected(null), []);
 
-    // Escape lets go of the selection, Backspace goes up a level, the arrow keys turn the page, unless the user is typing
+    // Escape lets go of the selection, then of Claude Code's highlights; Backspace goes up a level, the arrow keys turn the page, unless the user is typing
     // or a dialog is open over the Map (shortcuts.ts)
     const page = level?.page ?? 0;
     const pageCount = level?.pageCount ?? 1;
@@ -374,6 +380,8 @@ function MapScreen(){
                 levelPath,
                 page,
                 pageCount,
+                selected: selected !== null,
+                highlighted: highlights.length > 0,
             });
             if (shortcut === null) return;
             if (shortcut.type === "search"){
@@ -381,12 +389,13 @@ function MapScreen(){
                 setPaletteOpen(true);
             } else if (shortcut.type === "help") setHelpOpen(true);
             else if (shortcut.type === "deselect") setSelected(null);
+            else if (shortcut.type === "clear-highlights") clearHighlights();
             else if (shortcut.type === "up") open(parentOf(levelPath));
             else turnPage(shortcut.page);
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [levelPath, open, page, pageCount, turnPage]);
+    }, [levelPath, open, page, pageCount, turnPage, selected, highlights.length, clearHighlights]);
 
     // a doorway selected before an index update re-paged the folder may be gone (portals.ts)
     const shownSelected = selectionShown(level, selected);
@@ -457,7 +466,7 @@ function MapScreen(){
                     />
                 )}
             </main>
-            <ActivityBar recent={live.recent} connected={live.connected} />
+            <ActivityBar recent={live.recent} connected={live.connected} highlighted={highlights.length} onClear={clearHighlights} />
             {helpOpen && <HelpDialog onClose={closeHelp} />}
             {paletteOpen && (
                 <SearchPalette

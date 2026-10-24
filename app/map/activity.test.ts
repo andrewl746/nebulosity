@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LiveEvent, MapNode } from "@/lib/contracts";
-import { activityLabel, agentFocus, pushActivity } from "./activity";
+import { activityLabel, agentFocus, highlightedNote, pushActivity } from "./activity";
 
 const NOW = Date.parse("2026-10-12T20:00:00.000Z");
 const event = (tool: string, paths: string[], secondsAgo = 0): LiveEvent =>
@@ -57,7 +57,22 @@ describe("agentFocus", () => {
         expect(agentFocus(level, [], ["src/typings/a.d.ts"], NOW)).toEqual(new Set(["src//page-2"]));
     });
 
+    it("lets go of the calls made before Clear, and still outlines a call made after it", () => {
+        const before = event("show_on_map", ["src/vs/base"], 10);
+        const after = event("describe", ["src/main.ts"], 2);
+        // cleared 5 s before NOW: the call 10 s ago no longer counts, the one 2 s ago still does
+        expect(agentFocus(level, [after, before], [], NOW, NOW - 5_000)).toEqual(new Set(["src/main.ts"]));
+    });
+
     it("ignores what's outside the level", () => {
         expect(agentFocus(level, [event("describe", ["build/x.js"], 1)], [], NOW)).toEqual(new Set());
+    });
+});
+
+describe("highlightedNote", () => {
+    it("counts show_on_map's highlights for the activity bar, and is null with none", () => {
+        expect(highlightedNote(0)).toBeNull();
+        expect(highlightedNote(1)).toBe("1 highlighted");
+        expect(highlightedNote(1_234)).toBe("1,234 highlighted");
     });
 });

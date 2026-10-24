@@ -3,6 +3,7 @@ export type MapShortcut =
     | { type: "search" }
     | { type: "help" }
     | { type: "deselect" }
+    | { type: "clear-highlights" }
     | { type: "up" }
     | { type: "page"; page: number }
     | null;
@@ -15,6 +16,10 @@ export type ShortcutState = {
     levelPath: string;
     page: number;
     pageCount: number;
+    /** A box is selected. */
+    selected: boolean;
+    /** Claude Code has highlighted something with show_on_map. */
+    highlighted: boolean;
 };
 
 /**
@@ -28,7 +33,8 @@ export function mapShortcut(event: { key: string; ctrlKey: boolean; metaKey: boo
     if (state.typing || state.dialogOpen) return null;
     switch (event.key){
         case "?": return { type: "help" };
-        case "Escape": return { type: "deselect" };
+        // Esc lets go of one thing at a time: the selection first, then Claude Code's highlights
+        case "Escape": return state.selected ? { type: "deselect" } : state.highlighted ? { type: "clear-highlights" } : null;
         case "Backspace": return state.levelPath !== "" ? { type: "up" } : null;
         case "ArrowLeft": return state.page > 0 ? { type: "page", page: state.page - 1 } : null;
         case "ArrowRight": return state.page < state.pageCount - 1 ? { type: "page", page: state.page + 1 } : null;

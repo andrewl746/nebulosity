@@ -11,6 +11,11 @@ export function pushActivity(recent: readonly LiveEvent[], event: LiveEvent, siz
     return [event, ...recent].slice(0, size);
 }
 
+/** The activity bar's note on show_on_map's highlights, beside its Clear button: "3 highlighted"; null when there are none. */
+export function highlightedNote(count: number): string | null {
+    return count === 0 ? null : `${count.toLocaleString("en-US")} highlighted`;
+}
+
 /** The prefix Claude Code puts on an MCP server's tools (PIVOT_SPEC.md §6.2: mcp__nebulosity__<name>). */
 const MCP_PREFIX = "mcp__nebulosity__";
 
@@ -51,7 +56,11 @@ export function agentFocus(
     recent: readonly LiveEvent[],
     highlights: readonly string[],
     now: number,
+    /** When the user last pressed Clear (or Esc): the calls made before it no longer count. */
+    clearedAt: number = -Infinity,
 ): Set<string> {
-    const touched = recent.filter((e) => now - Date.parse(e.at) < AGENT_ACTIVE_MS).flatMap((e) => e.paths);
+    const touched = recent
+        .filter((e) => now - Date.parse(e.at) < AGENT_ACTIVE_MS && Date.parse(e.at) > clearedAt)
+        .flatMap((e) => e.paths);
     return new Set([...touched, ...highlights].flatMap((p) => boxFor(level, p) ?? []));
 }

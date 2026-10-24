@@ -99,7 +99,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                 <h3 className="mt-6 text-[13px] font-medium text-title">Keyboard</h3>
                 <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px] text-text-2">
                     <dt><Key>Ctrl K</Key></dt><dd>Search files and concepts</dd>
-                    <dt><Key>Esc</Key></dt><dd>Close what&apos;s open, or let go of the selection</dd>
+                    <dt><Key>Esc</Key></dt><dd>Close what&apos;s open, let go of the selection, then clear Claude Code&apos;s highlights</dd>
                     <dt><Key>Backspace</Key></dt><dd>Up one folder</dd>
                     <dt><Key>←</Key> <Key>→</Key></dt><dd>Previous or next page of a big folder</dd>
                     <dt><Key>?</Key></dt><dd>This help</dd>

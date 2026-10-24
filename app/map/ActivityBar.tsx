@@ -2,16 +2,23 @@
 
 import { useEffect, useState } from "react";
 import type { LiveEvent } from "@/lib/contracts";
-import { activityLabel } from "./activity";
+import { activityLabel, highlightedNote } from "./activity";
 import { ago } from "./format";
 import { DEMO } from "./mode";
 
 /**
  * The activity bar (VISUAL_REFRESH.md §6): a slim strip along the bottom, always there, with Claude Code's last 3
  * actions, newest first, each with an orange dot. Live activity is the demo's differentiator, so it's never hidden;
- * it stays slim so the Map remains the focus. E1 adds the Guide's input beside it.
+ * it stays slim so the Map remains the focus. E1 adds the Guide's input beside it. While show_on_map has highlighted
+ * something, its right end says how many and offers Clear (Esc does the same once nothing is selected).
  */
-export default function ActivityBar({ recent, connected }: { recent: readonly LiveEvent[]; connected: boolean }){
+export default function ActivityBar({ recent, connected, highlighted, onClear }: {
+    recent: readonly LiveEvent[];
+    connected: boolean;
+    /** How many places show_on_map has highlighted. */
+    highlighted: number;
+    onClear: () => void;
+}){
     // the clock lives in state, ticking every second: reading Date.now() during render isn't allowed
     const [now, setNow] = useState(0);
     useEffect(() => {
@@ -43,6 +50,12 @@ export default function ActivityBar({ recent, connected }: { recent: readonly Li
                         ))}
                     </ol>
                 )}
+            {highlightedNote(highlighted) !== null && (
+                <span className="ml-auto flex shrink-0 items-center gap-3 text-text-2">
+                    {highlightedNote(highlighted)}
+                    <button type="button" onClick={onClear} className="text-control hover:underline" title="Clear Claude Code's highlights (Esc)">Clear</button>
+                </span>
+            )}
         </footer>
     );
 }
