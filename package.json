@@ -52,6 +52,7 @@
     "bench-update": "tsx scripts/bench-update.ts",
     "bench-search": "tsx scripts/bench-search.ts",
     "bench-calls": "tsx scripts/bench-calls.ts",
+    "check-layout": "node scripts/check-layout.mjs",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
     "eval:run": "tsx scripts/eval/run.ts",
     "eval:probe": "tsx scripts/eval/probe.ts",
