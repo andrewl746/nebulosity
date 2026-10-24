@@ -11,6 +11,12 @@ import { BRIDGE_VERSION, type BridgeFromMap, type BridgeToMap } from "@/lib/cont
 const ORIGIN_PREFIX = "vscode-webview://";
 const MAX_PATH_LENGTH = 1024;
 const MAX_HIGHLIGHT = 50;
+/**
+ * A `highlight`'s entries read at most. Stopping at 50 kept isn't enough on its own: a sparse array of length 2^32 - 1
+ * survives structured clone, and with fewer than 50 strings in it a scan to its end held the main thread for over two
+ * minutes (measured in Node). The editor sends at most 50 (design §4.5), so a thousand leaves room to spare.
+ */
+const MAX_SCAN = 1000;
 
 /** True only for `?embed=vscode`; the flag is what turns the bridge on. */
 export function isEmbedded(search: string): boolean {
@@ -22,8 +28,8 @@ const isPath = (value: unknown): value is string => typeof value === "string" &&
 /**
  * Reads a message the editor sent, checking every field's type: anything that is not exactly one of §20's messages is
  * null, and a result carries only the fields checked. A `highlight` keeps its first 50 paths and drops entries that are
- * not paths (not strings, or over 1,024 characters) rather than refusing the message. A hello of another bridge
- * version is null: a Map that gets another version ignores the hello.
+ * not paths (not strings, or over 1,024 characters) rather than refusing the message; it reads no further than its
+ * first 1,000 entries. A hello of another bridge version is null: a Map that gets another version ignores the hello.
  */
 export function parseToMap(data: unknown): BridgeToMap | null {
     if (typeof data !== "object" || data === null) return null;
@@ -37,10 +43,12 @@ export function parseToMap(data: unknown): BridgeToMap | null {
             return isPath(message.path) ? { type: "nebulosity.show", path: message.path } : null;
         case "nebulosity.highlight": {
             if (!Array.isArray(message.paths)) return null;
+            const entries: unknown[] = message.paths;
             const paths: string[] = [];
-            for (const entry of message.paths){
+            // the loop ends at 50 kept or 1,000 read, whichever comes first, whatever the array's length claims
+            for (let i = 0; i < Math.min(entries.length, MAX_SCAN) && paths.length < MAX_HIGHLIGHT; i++){
+                const entry = entries[i];
                 if (isPath(entry)) paths.push(entry);
-                if (paths.length === MAX_HIGHLIGHT) break;
             }
             return { type: "nebulosity.highlight", paths };
         }
@@ -82,11 +90,11 @@ export function createBridge(win: BridgeWindow, onMessage: (message: BridgeToMap
     };
 
     const onWindowMessage = (event: MessageEvent): void => {
-        if (event.source !== win.parent) return;
+        // who sent it is checked before what it says, so nothing from another window or a non-webview origin is read
+        if (event.source !== win.parent || !event.origin.startsWith(ORIGIN_PREFIX)) return;
         const message = parseToMap(event.data);
         if (message === null) return;
         if (message.type === "nebulosity.hello"){
-            if (!event.origin.startsWith(ORIGIN_PREFIX)) return;
             origin = event.origin;
             post({ type: "nebulosity.ready", version: BRIDGE_VERSION });
             const drawn = onReady?.() ?? null;

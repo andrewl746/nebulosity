@@ -81,6 +81,36 @@ describe("parseToMap (API_CONTRACTS §20: every field's type is checked)", () =>
             .toEqual({ type: "nebulosity.highlight", paths: sixty.slice(0, 50) });
     });
 
+    it("a highlight in a huge sparse array keeps its first 50 paths, quickly (the loop stops at 50 kept)", () => {
+        // length 2^32 - 1 survives structured clone, and only the entries set are real (Task 4 review, Minor 2)
+        const huge: unknown[] = new Array(2 ** 32 - 1);
+        const sixty = Array.from({ length: 60 }, (_, i) => `f${i}.ts`);
+        sixty.forEach((p, i) => { huge[i] = p; });
+        const started = performance.now();
+        const parsed = parseToMap({ type: "nebulosity.highlight", paths: huge });
+        const elapsed = performance.now() - started;
+        expect(parsed).toEqual({ type: "nebulosity.highlight", paths: sixty.slice(0, 50) });
+        expect(elapsed).toBeLessThan(50);
+    });
+
+    it("a highlight in a huge sparse array with fewer than 50 paths is read only so far, quickly", () => {
+        // the stall Task 4's review measured: with fewer than 50 strings, nothing kept would ever end the loop
+        const huge: unknown[] = new Array(2 ** 32 - 1);
+        const ten = Array.from({ length: 10 }, (_, i) => `f${i}.ts`);
+        ten.forEach((p, i) => { huge[i] = p; });
+        huge[5_000] = "late.ts";      // past the 1,000 entries read: never seen
+        const started = performance.now();
+        const parsed = parseToMap({ type: "nebulosity.highlight", paths: huge });
+        const elapsed = performance.now() - started;
+        expect(parsed).toEqual({ type: "nebulosity.highlight", paths: ten });
+        expect(elapsed).toBeLessThan(50);
+    });
+
+    it("a highlight reads its first 1,000 entries and no further", () => {
+        const entries: unknown[] = [...Array.from({ length: 999 }, () => 0), "last-read.ts", "not-read.ts"];
+        expect(parseToMap({ type: "nebulosity.highlight", paths: entries })).toEqual({ type: "nebulosity.highlight", paths: ["last-read.ts"] });
+    });
+
     it("passes on nothing it didn't check", () => {
         expect(parseToMap({ type: "nebulosity.follow", path: "a.ts", extra: "x" })).toEqual({ type: "nebulosity.follow", path: "a.ts" });
         expect(parseToMap({ type: "nebulosity.clear", paths: ["a.ts"] })).toEqual({ type: "nebulosity.clear" });
@@ -170,6 +200,36 @@ describe("createBridge (API_CONTRACTS §20: the handshake and its guards)", () =
         fire(parent, WEBVIEW, { type: "nebulosity.follow", path: "src/a.ts" });
         fire(parent, WEBVIEW, { type: "nebulosity.clear" });
         expect(heard).toEqual([]);
+    });
+
+    it("reads nothing of a message from another source or origin: who sent it is checked before what it says", () => {
+        // a message whose `type` records being read: parsing it would read `type` first
+        const watched = () => {
+            const reads = { count: 0 };
+            const data = { get type(){ reads.count++; return "nebulosity.clear"; } };
+            return { reads, data };
+        };
+        const { parent, heard, fire } = setup();
+        const unread: [unknown, string][] = [
+            [{}, WEBVIEW],                          // another source
+            [null, WEBVIEW],                        // no source
+            ["parent", "http://localhost:3000"],    // the parent at an origin that isn't a webview's
+            ["parent", "https://vscode-webview.evil.com"],
+        ];
+        for (const when of ["before the handshake", "after the handshake"]){
+            if (when === "after the handshake") fire(parent, WEBVIEW, HELLO);
+            for (const [source, origin] of unread){
+                const { reads, data } = watched();
+                fire(source === "parent" ? parent : source, origin, data);
+                expect(reads.count, `${when}: ${origin}`).toBe(0);
+            }
+        }
+        expect(heard).toEqual([]);
+        // the pinned source and origin are read, and heard
+        const { reads, data } = watched();
+        fire(parent, WEBVIEW, data);
+        expect(reads.count).toBeGreaterThan(0);
+        expect(heard).toEqual([{ type: "nebulosity.clear" }]);
     });
 
     it("drops a malformed message from the right origin", () => {

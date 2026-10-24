@@ -442,6 +442,6 @@ type BridgeFromMap =
 ```
 
 - **The handshake.** The Map accepts a `hello` only when `event.source === window.parent` and `event.origin` starts with `vscode-webview://`. It keeps that origin, answers `ready`, and from then on posts only to it (`targetOrigin`) and drops every message from any other source or origin. Before the handshake it posts nothing.
-- **Paths** are repo-relative, as everywhere (§1). A `follow` or `show` for a path the index doesn't hold is ignored; `highlight` takes at most 50 paths, like §14.
+- **Paths** are repo-relative, as everywhere (§1). A `follow` or `show` for a path the index doesn't hold is ignored; `highlight` takes at most 50 paths, like §14, and the Map reads no further than its first 1,000 entries (a sparse array's length can claim 2^32 - 1).
 - **`version`** is the bridge's, 1; `GET /api/repos`' `server.bridge` (§15) names the one a server speaks. A Map that gets another version ignores the hello.
 - **`drawn`** is posted when a new level is drawn, when the selection changes on the level drawn, and once after each `ready` while a level is on screen; the extension's test and benchmarks read it (V1.8 plan P1). `path` and `page` name the level on screen (page 0 is the first) and `selected` the selected path, or `null`. Like every message from the Map, it comes only after the handshake.
