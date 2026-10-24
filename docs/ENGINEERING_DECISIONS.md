@@ -1278,6 +1278,44 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 
 **Amended (2026-10-23, V1.8 Task 6): the extension's one import from `lib/`.** The extension may `import type` from `lib/contracts.ts`, and nothing else from `lib/` (V1.8 plan P3): a type import is erased from the bundle, and `vscode-extension/src/layering.test.ts` enforces it. So the shapes it reads (`RepoList`, `ImportsResponse`, the bridge's messages) come from the one source of shared types, and can't drift from API_CONTRACTS §15, §19 and §20 unseen. The same test refuses every other import from outside `vscode-extension/` (`app/`, `scripts/`, `lib/` beyond the contracts' types) and the root's `@/` alias, and every package but Node's own modules and `vscode` (a test may also import `vitest` and `typescript`): the extension has no runtime dependencies, and a package name would still resolve into the root's node_modules, where esbuild would bundle it unseen. It keeps `vscode` out of the pure modules, which the root vitest runs (P11). Code it needs from `lib/` is written again on its side: `checkRepoPath` is `parseRepoPath`'s rule.
 
+**Amended (2026-10-24, V1.8 built, Tasks 1–11 of `docs/plans/2026-10-23-v1-8-in-your-editor.md`): what the spike found, the calls as built, and the bars.** The ledger, kept, is `.superpowers/sdd/2026-10-23-vscode-extension/progress.md`; the calls made while the owner was away are in `overnight-decisions.md` beside it.
+- **The spike (Task 1, 2026-10-23, a throwaway extension and a probe page in the sandbox's Map).**
+  - **Passed:** desktop VS Code 1.140.0 on Windows, locally (the must-have); Cursor 2.6.19, whose VS Code version is 1.105.1; and VS Code 1.140.0 over WSL (Ubuntu, WSL2), with `asExternalUri` and a stand-in for the Map, since WSL has no Node. In each, the frame loaded, its live stream was open at 2 s, its `POST /api/repos` got 200, and every hello's origin started with `vscode-webview://`.
+  - **Failed:** `portMapping` over WSL: it doesn't move an iframe's navigation, so the frame reached the Windows app on that port. So the frame URL comes from `asExternalUri`.
+  - **Not run:** Remote SSH, left to the owner.
+  - **The fallback rule** (design §8 step 1) wasn't needed: local VS Code passed, and nothing was dropped.
+  - **Caveats:** on WSL2 `asExternalUri` returned the URL unchanged, and WSL's own localhost forwarding reached the remote. So a Windows app holding the same port takes the frame, and a remote where only VS Code forwards (Remote SSH, Dev Containers) is still unseen. The owner's VS Code holds a pending update that blocks any new `code` window, so every check ran on an identical-binaries copy or on `@vscode/test-electron`'s own download.
+- **`frame-ancestors 'self' vscode-webview: vscode-file:`** (`next.config.ts`, the app build only; the static export can't send headers). Every passing frame's ancestors were two `vscode-webview://<id>` and `vscode-file://vscode-app`. Served through a proxy on VS Code and on Cursor, the header let the Map draw; without `vscode-file:` the panel was blocked, since the workbench is an ancestor too; and with `'self'` alone it was blocked as well, so the header is enforced.
+- **`engines.vscode` is `^1.105.0`** (P12): the lower of VS Code 1.140.0 and Cursor's 1.105.1.
+- **The remote modes: none checked with the built extension yet.** Task 11 Step 3 (the `.vsix` and the V1.8 package in WSL) waits for the owner, because WSL has no Node and installing Node 24 there changes their distro. Remote SSH and Dev Containers wait too. So the listing names no remote mode and says they aren't checked yet; the owner's look (Task 12) carries them.
+- **The plan's calls, as built** (P3 is the amendment above):
+  - P1: `drawn`, posted when a level is drawn, when the selection changes on it, and once after each `ready` (§20).
+  - P2: the port is the `nebulosity.port` setting, else `nebulosity map --print-port`, asked once per window, else 3000.
+  - P4: the title bar's Follow editor toggle is per window and never writes settings.
+  - P5: a `follow` or `show` for a path the index doesn't hold changes nothing on the Map; "Show this file" on one says so in VS Code.
+  - P6: closing the What depends pick, however it closes, posts `clear`.
+  - P7: after the extension switches the active repo, the panel reloads and follows the active editor.
+  - P8: the Map's address keeps `embed=vscode`, so a reload in the panel stays embedded.
+  - P9: the relay says hello every 250 ms for up to 60 s, from its own start and again on every frame `load` (Task 7's ruling: a `load` that fires before `relay.js` runs can't leave a panel unsynced), and holds the newest 20 messages until `ready`.
+  - P10: only a file box click and a declaration row open the editor.
+  - P11: the root vitest runs the extension's pure modules; the root `tsc` and lint skip `vscode-extension/`, which has its own strict `tsc`; the integration tests are mocha in VS Code.
+  - P13: the webview's `frame-src` is `localhost` and `127.0.0.1` at the frame URL's port (and the frame URL's own origin when it's neither), only while it shows the Map, and `script-src` the nonce alone.
+  - P14: one `GET /api/repos` (1 s) tells a current Map, an older one, a newer bridge and another app apart. The probe comes before the install check (Task 7's ruling), so a running Map is used even with no `nebulosity` installed, and "Nebulosity isn't installed" shows only when one has to be started.
+  - P15: nested repos, the longest root wins; roots a drive-letter case apart resolve to one; the root offered for indexing has an upper-case drive letter.
+  - P16: the follow gate keeps what the Map last drew and, for 2 s after each follow or show, the path asked (`ASKED_MS`), so a late `drawn` can't cancel or stand in for a newer follow; a pick on the Map isn't echoed back for 2 s; a `show` holds off the follow after `ready` for the rest of its page (Task 8's rulings).
+  - P17: an `open` is checked (repo-relative, no `..`, at most 1,024 characters, the file present in the workspace) before anything opens.
+  - P18: "The Map stopped" comes from a refused request in the `map` state, or a frame `load` with no `ready` within 60 s.
+- **Also ruled while building:**
+  - The relay takes the extension's messages only from VS Code's host window, `window.frameElement.ownerDocument.defaultView`, falling back to `window.parent`: in VS Code 1.143.1 `window.parent`, as the page sees it, isn't the window that posts (measured), so the planned check dropped every message.
+  - Only `file:` documents are followed, shown or asked about (not `git:`, untitled or output documents).
+  - With nothing open, Show Map makes a second column and opens the panel there, because VS Code puts a new panel into a lone empty column whatever column is asked for, and the next file opened would cover the Map. A file from the Map opens in a real column on the code's side, never the panel's.
+  - "Show this file" and "What depends" run Show Map first, then ask `/api/imports`: the port and the repo are known only then. The What depends pick stays open after a file is picked.
+  - Stop Map on a Map this window didn't start says "This Map wasn't started by this window; stop it where it was started."
+  - The extension returns its test API only in VS Code's test mode.
+- **The bars** (Editor Benchmark #1, 2026-10-24, VS Code 1.143.1 on `../vscode` at `cc3fec88`, 5 runs): **E1 PASS**, Show Map to the first `drawn` with the Map running, worst of 5 at most 202.2 ms (bar 2,000 ms); **E2 PASS**, an editor switch to the Map showing that file, p95 of 20 at most 259.7 ms (bar 500 ms). Informative: a cold Show Map that starts the Map, 2.0–2.2 s.
+- **Tests:** 13 integration tests in VS Code against a real Map on the mini-repo, passing locally on VS Code 1.143.1 and on the 1.105.0 floor, and in CI run 40066070810 on Linux, macOS and Windows (with `nebulosity` found on PATH, the Windows `.cmd` shim included, and no Map left running after VS Code exits).
+- **The package is 0.3.0,** and the extension's `.vsix` (`nebulosity-vscode-0.3.0.vsix`) is built and not published. Publishing waits for the owner's look and the ship (after E4), as the decision says.
+
 ## ADR-063 — Summaries through the user's own Claude Code, for what they open on the Map (2026-10-23) — rejected
 
 **Status:** rejected 2026-10-23 by the owner, after the design and its evidence (`.superpowers/sdd/2026-10-23-summaries-via-claude-code/`, kept in the ledger): not worth the build before the ship. It would land after V1.8 and E4 and delay the ship, it doesn't move what's pitched (the measured speed-up comes from the import graph, with no summaries), and the terms are a grey area. Nothing was built; the API key path and free mode stay as they are. Kept as a record of what was measured, in case it comes back after the ship.

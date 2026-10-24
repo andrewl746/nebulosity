@@ -29,7 +29,8 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
                │ HTTP (app/map/api.ts)                  │ SSE /api/live/stream
 ┌──────────────▼──────────── NEXT.JS SERVER (adapters, a reader) ─────────┴┐
 │  app/api/{level, describe, search, status, summarize, index, repos,      │
-│           live, live/stream}         instrumentation.ts → supervisor     │
+│           imports, source, live, live/stream}                            │
+│                                      instrumentation.ts → supervisor     │
 └──────────────┬──────────────────────────────┬────────────────────────────┘
                │ plain function calls          │ fork + IPC (ADR-038)
 ┌──────────────▼────────────── CORE (lib/) ────▼────────────────────────────┐
@@ -48,6 +49,12 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
 The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout or package>/mcp/launch.mjs` (ADR-048; `nebulosity setup` registers it, ADR-058) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
 
 The VS Code extension (`vscode-extension/`, ADR-062, slice V1.8) is another client of the server, like the browser. Its panel frames the running Map (`?embed=vscode`). The extension host talks to the server only over the HTTP contract (`GET` and `POST /api/repos`, `GET /api/imports`), and to the framed Map only over the editor bridge (`window.postMessage`, API_CONTRACTS §20). It starts the Map and indexes a repo by running the `nebulosity` command. It's a package of its own, and its one import from the rest of the repo is `import type` from `lib/contracts.ts`, which is erased from its bundle (ADR-062 amended; `vscode-extension/src/layering.test.ts` enforces it). Nothing in `lib/` or `app/` imports from it.
+
+As built (2026-10-24, ADR-062 amended):
+- **The extension's two halves.** Its decisions are pure modules with no `vscode` import, which the root vitest runs: the port, the command line, the server check, repo matching, the follow gate, the panel's HTML, the What depends list, the checks on what the webview posts, and the sync's rules. The host files use VS Code's API and are tested in VS Code (`vscode-extension/test/`): `extension.ts`, `http.ts`, `mapServer.ts`, `panel.ts`, `sync.ts`.
+- **The relay** (`src/webview/relay.ts`, bundled as `dist/relay.js`) is the webview's one script. It passes messages between the extension and the framed Map, and takes the extension's only from VS Code's host window and the Map's only from the frame, at its origin.
+- **The Map's side of the bridge** is `app/map/embed.ts` (pure: the handshake, the guards, the message checks) and `app/map/useEditorBridge.ts` (the hook MapView uses). Both are inert without `?embed=vscode`, so the browser Map is unchanged.
+- **The server side** gained `GET /api/imports` (§19, over `lib/engine/imports-page.ts`), `server` on `GET /api/repos` (§15, `app/api/_lib/server.ts`), `nebulosity map --print-port`, and a `frame-ancestors` header on the Map's pages (`next.config.ts`), so only the Map itself and VS Code's webviews can frame it.
 
 The static demo (ADR-049) is two more adapters, and runs no server. `scripts/export-demo.ts` reads the database without writing and writes the Map's answers for every folder to files, with the repo named instead of rooted, then scans them for any path of this machine. `app/map/staticApi.ts` is the Map's transport in the demo build: it answers the same calls from those files (refusing the ones that need a server), searches in the browser with `lib/engine/staticSearch.ts`, and is chosen in place of `app/map/api.ts`'s HTTP calls when `npm run build-demo` builds the site.
 
@@ -101,11 +108,13 @@ Rules an implementer MUST follow:
 ```
 nebulosity/
 ├── app/
-│   ├── api/                 # adapters: level, describe, search, status, summarize, index, repos, live, live/stream; _lib/respond.ts
+│   ├── api/                 # adapters: level, describe, search, status, summarize, index, repos, imports, source, live,
+│   │                        #   live/stream; _lib/respond.ts, _lib/server.ts (the server's version, for the extension)
 │   ├── map/                 # the Map: MapView, MapCanvas, MapBox, Legend, DetailPanel, SearchPalette, StatusPill,
 │   │                        #   ActivityBar, TopBar, Breadcrumb, RepoMenu, the api.ts client (staticApi.ts in the demo
 │   │                        #   build, ADR-049), and pure helpers
-│   │                        #   (levelLayout, emphasis, activity, text, paths, format, pulses, summaries)
+│   │                        #   (levelLayout, emphasis, activity, text, paths, format, pulses, summaries), and the editor
+│   │                        #   bridge for VS Code's panel (embed, useEditorBridge; inert in a browser tab)
 │   └── layout.tsx · page.tsx · globals.css (the color tokens, VISUAL_REFRESH.md §2)
 ├── instrumentation.ts       # starts the background worker with the server
 ├── proxy.ts                 # every /api route: 403 unless the Host is this machine (ADR-039)
@@ -121,7 +130,8 @@ nebulosity/
 ├── bin/                     # nebulosity.mjs, the one command (ADR-058); boot.mjs, what both launchers do first
 ├── mcp/                     # launch.mjs and server.ts: the MCP server over stdio (ADR-048)
 ├── vscode-extension/        # the VS Code extension, its own package (ADR-062): src/ (pure modules, tested by the root
-│                            #   vitest, and the host files that use VS Code's API), test/ (integration, mocha in VS Code)
+│                            #   vitest, and the host files that use VS Code's API; webview/relay.ts, the panel's script),
+│                            #   test/ (suite/: integration tests, mocha in VS Code; bench/: Editor Benchmark #1), media/
 ├── scripts/                 # cli.ts and commands/ (the nebulosity command), index, summarize, search, live,
 │                            #   background (the worker), mcp-smoke and prepare-package (the package), bench-map, bench-update,
 │                            #   export-demo, build-demo, serve-demo (the static demo), …

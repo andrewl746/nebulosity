@@ -5,7 +5,7 @@
  *   nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000); the port is saved
  *                                             in config.json, where the MCP server sends live updates and show_on_map
  *   nebulosity map --print-port               print the port the Map was last started on (the VS Code extension reads it)
- *   nebulosity mcp                          the MCP server Claude Code starts (stdio)
+ *   nebulosity mcp                            the MCP server Claude Code starts (stdio)
  *   nebulosity setup [--print]                register the server with Claude Code for the repo in this folder
  *   nebulosity doctor                         check Node, the data folder, the database, git and claude
  */
@@ -26,7 +26,7 @@ const USAGE = [
     "  nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000); the port is saved,",
     "                                            so Claude Code's live updates and show_on_map reach this Map",
     "  nebulosity map --print-port               print the port the Map was last started on",
-    "  nebulosity mcp                          the MCP server Claude Code starts (stdio)",
+    "  nebulosity mcp                            the MCP server Claude Code starts (stdio)",
     "  nebulosity setup [--print]                register the server with Claude Code for the repo in this folder",
     "  nebulosity doctor                         check Node, the data folder, the database, git and claude",
     "  nebulosity --version",

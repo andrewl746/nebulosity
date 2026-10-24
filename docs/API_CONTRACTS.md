@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools. §18 holds V1.5's static demo files.
+> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools. §18 holds V1.5's static demo files. §19 and §20 hold V1.8's route and editor bridge for the VS Code extension, and §15 its `server` field.
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -273,7 +273,7 @@ type RepoList = { active: string | null; repos: RepoSummary[] };
 - **`GET`** lists the repos the structure stage has indexed, by root, and the active one.
 - **`remote`** (added in V1.3.1; optional, so `CONTRACTS_VERSION` stays 2) is the origin remote's owner and name, read from `<root>/.git/config` (`lib/engine/git-remote.ts`), so the top bar can say `microsoft / vscode` (VISUAL_REFRESH.md §6). The owner is everything before the last path segment, so a nested GitLab group stays whole; Azure DevOps's `_git` and `v3` markers are left out (`dev.azure.com/org/project/_git/repo` is `org/project` / `repo`), and scp-style urls may omit the user (`github.com:owner/repo`). A worktree's or submodule's `.git` pointer file is followed to the config that holds its remotes (since 2026-10-13). It's left out when there's no origin, when the url is a local path, or when the pointer leads nowhere, and the top bar then shows `name`.
 - **`POST { root }`** makes an indexed repo the active one (`activeRepo` in `.nebulosity/config.json`) and points the background worker at it. It answers with the new `RepoList`. Localhost only. A root that was never indexed gets `404 NOT_FOUND`.
-- **`server`** (designed for V1.8, ADR-062, not built; optional, so `CONTRACTS_VERSION` stays 3): `RepoList` gains `server?: { version: string; bridge: number }`, the package's version and the editor bridge's (§20, 1). The VS Code extension reads it to tell a current server from an older one (no `server`) and from another app on the port (no `RepoList` at all). It's on this route because `GET /api/repos` answers with nothing indexed, where `/api/status` gives `404 INDEX_EMPTY`.
+- **`server`** (slice V1.8, ADR-062; optional, so `CONTRACTS_VERSION` stays 3; on `GET` only, POST's answer is unchanged): `RepoList` gains `server?: { version: string; bridge: number }`, the package's version and the editor bridge's (§20, 1). The VS Code extension reads it to tell a current server from an older one (no `server`) and from another app on the port (no `RepoList` at all). It's on this route because `GET /api/repos` answers with nothing indexed, where `/api/status` gives `404 INDEX_EMPTY`.
 
 ## 16. GET /api/source?path= (slice V1.3.1)
 
@@ -409,7 +409,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
   - a valid-JSON file of the wrong shape isn't checked. A `null` or malformed manifest or describe bundle makes the call reject with a plain `TypeError` (`index()` and `describe()` in `staticApi.ts`), and a `null` level file resolves and then throws inside the Map's own handler (`app/map/MapView.tsx`). Either way no `ApiError` reaches the Map's handlers, which show an error only for an `ApiError` (`MapView.tsx`, `DetailPanel.tsx`, `SourceViewer.tsx`, `SearchPalette.tsx`), so the Map stays on "Loading the map…".
 - **What isn't here.** No source text (the demo links to GitHub at `commit`), no live events, no summarize or re-index, no code search index and no vectors: search ranks summaries and names only, and says so (`staticSearch.ts`).
 
-## 19. GET /api/imports?path=&direction=&transitive=&limit=&offset= (designed for V1.8, ADR-062; not built)
+## 19. GET /api/imports?path=&direction=&transitive=&limit=&offset= (slice V1.8, ADR-062)
 
 The files that import a file or folder, or that it imports, for the VS Code extension's "What depends on this file?" (`lib/engine/reach.ts`'s `reach()`, the engine behind the MCP `imports` tool's plain list, §17).
 
@@ -424,7 +424,7 @@ type ImportsResponse = { path: string; kind: "folder" | "file"; direction: "depe
 - A read route: `proxy.ts`'s Host check covers it, with no Origin check (§14's rule is for routes that change things). Answers are cached by index version like `describe`.
 - **Errors:** `400 BAD_REQUEST` for a missing `path`, a path that could leave the repo, more than 1,024 characters, or a bad `direction`, `limit` or `offset`; `404 NOT_FOUND`; `404 INDEX_EMPTY`.
 
-## 20. The editor bridge (designed for V1.8, ADR-062; not built)
+## 20. The editor bridge (slice V1.8, ADR-062)
 
 Messages between the Map, framed in a VS Code webview with `?embed=vscode`, and that webview, which relays them to and from the extension. They travel by `window.postMessage`; nothing here is HTTP. Without `?embed=vscode` the Map never listens or posts.
 
@@ -441,7 +441,8 @@ type BridgeFromMap =
   | { type: "nebulosity.drawn"; path: string; page: number; selected: string | null };   // a level is on screen (below)
 ```
 
-- **The handshake.** The Map accepts a `hello` only when `event.source === window.parent` and `event.origin` starts with `vscode-webview://`. It keeps that origin, answers `ready`, and from then on posts only to it (`targetOrigin`) and drops every message from any other source or origin. Before the handshake it posts nothing.
+- **The handshake.** The Map accepts a `hello` only when `event.source === window.parent` and `event.origin` starts with `vscode-webview://` (every hello in V1.8's spike carried that prefix, in VS Code, in Cursor and over WSL; the id after it differs per window). It keeps that origin, answers `ready`, and from then on posts only to it (`targetOrigin`) and drops every message from any other source or origin. Before the handshake it posts nothing.
 - **Paths** are repo-relative, as everywhere (§1). A `follow` or `show` for a path the index doesn't hold is ignored; `highlight` takes at most 50 paths, like §14, and the Map reads no further than its first 1,000 entries (a sparse array's length can claim 2^32 - 1).
+- **`open`** is posted for a file box clicked on the Map and for a declaration row in its panel, and for nothing else (not a search pick, a panel link, `focus_node` or a `follow`). Its `line`, when present, is **1-based**: the declaration's first line as the panel shows it ("line 272"), which the extension opens with the cursor at that line's start. A file box sends no `line`.
 - **`version`** is the bridge's, 1; `GET /api/repos`' `server.bridge` (§15) names the one a server speaks. A Map that gets another version ignores the hello.
 - **`drawn`** is posted when a new level is drawn, when the selection changes on the level drawn, and once after each `ready` while a level is on screen; the extension's test and benchmarks read it (V1.8 plan P1). `path` and `page` name the level on screen (page 0 is the first) and `selected` the selected path, or `null`. Like every message from the Map, it comes only after the handshake.

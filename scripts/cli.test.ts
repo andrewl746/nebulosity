@@ -129,7 +129,7 @@ describe("main", () => {
         expect(await main(["serve"])).toBe(1);
         expect(printed(errors)).toBe('nebulosity has no command "serve". Commands: index, summarize, map, mcp, setup, doctor.');
         expect(await main(["--version"])).toBe(0);
-        expect(printed(logs)).toBe("0.2.0");
+        expect(printed(logs)).toBe("0.3.0");
     });
 });
 
