@@ -230,10 +230,11 @@ export class EditorSync implements vscode.Disposable {
 
     /**
      * A file the Map picked (a file box or a declaration, P10), or What depends' pick, opens in the editor: in the most
-     * recent text editor's column, or beside the panel when that's the panel's own, as a preview, the focus left where
-     * it is. Only a repo-relative path is taken, and only a file this workspace has (P17): the Map may show another
-     * repo, switched from its own menu or by another window (Review Focus 4). `shows` is what the Map shows afterwards
-     * when that isn't the file opened: What depends' target.
+     * recent text editor's column, or beside the panel when that's the panel's own (never in the panel's column, which
+     * it would cover: syncRules' openColumn), as a preview, the focus left where it is. Only a repo-relative path is
+     * taken, and only a file this workspace has (P17): the Map may show another repo, switched from its own menu or by
+     * another window (Review Focus 4). `shows` is what the Map shows afterwards when that isn't the file opened: What
+     * depends' target.
      */
     private async openFile(raw: string, line?: number, shows?: string): Promise<void> {
         const path = checkRepoPath(raw);
@@ -252,7 +253,7 @@ export class EditorSync implements vscode.Disposable {
         }
         // its editor change is an echo, never followed back
         this.gate.opened(path, shows ?? path);
-        const viewColumn = openColumn(this.lastColumn, MapPanel.open?.viewColumn, vscode.ViewColumn.Beside) as vscode.ViewColumn;
+        const viewColumn = openColumn(this.lastColumn, MapPanel.open?.viewColumn) as vscode.ViewColumn;
         const selection = line !== undefined && line >= 1 ? new vscode.Range(line - 1, 0, line - 1, 0) : undefined;
         try{
             await vscode.window.showTextDocument(uri, { viewColumn, preview: true, preserveFocus: true, selection });

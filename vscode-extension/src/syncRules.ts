@@ -90,12 +90,27 @@ export function showAllOffered(r: ImportsResponse): boolean {
 }
 
 /**
- * The column a file from the Map opens in (design §4.4): the most recent text editor's, so it lands among the code,
- * unless that column is the panel's own (or there was none), and then the one beside the panel. `beside` is
+ * Where a new panel opens (Task 9 review, ruling 4): beside the active editor, so it never takes the code's column. With
+ * nothing open, the editor area is one empty column, and VS Code puts a new panel into it whatever column is asked for
+ * (mainThreadWebviewPanels' getTargetGroupFromShowOptions), where the next file opened would cover the Map. Then a
+ * second column is made first (`split`) and the panel goes to column 2, leaving column 1 for the code. `beside` is
  * vscode.ViewColumn.Beside, passed in because this module doesn't import vscode.
  */
-export function openColumn(last: number | undefined, panel: number | undefined, beside: number): number {
-    return last === undefined || last === panel ? beside : last;
+export function panelColumn(oneEmptyColumn: boolean, beside: number): { column: number; split: boolean } {
+    return oneEmptyColumn ? { column: 2, split: true } : { column: beside, split: false };
+}
+
+/**
+ * The column a file from the Map opens in (design §4.4): the most recent text editor's, so it lands among the code,
+ * unless that column is the panel's own (or there was none). Then a column beside the panel, on the code's side: the
+ * one to its left (the panel opens to the right of the code, or in column 2), or column 2 for a panel in column 1.
+ * Never the panel's own, which the file would cover. A real column, not ViewColumn.Beside, which counts from the active
+ * column and gives the panel's when the active one is to its left.
+ */
+export function openColumn(last: number | undefined, panel: number | undefined): number {
+    if (last !== undefined && last !== panel) return last;
+    if (panel === undefined) return 1;
+    return panel === 1 ? 2 : panel - 1;
 }
 
 /** Show this file and What depends for a file the index doesn't hold (P5). */

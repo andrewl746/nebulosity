@@ -11,8 +11,9 @@ import type { NebulosityApi } from "../../src/sync";
  * The extension against a real Map (V1.8 plan Task 9), on a copy of test/fixtures/mini-repo indexed with --no-activate,
  * so Show Map's repo step has to switch the Map to it. The tests run in order and each starts where the one before
  * left the editor and the Map. Every wait for a message starts before the action it waits on, since `waitFor` and
- * `waitForSent` hear only what comes after the call. The files open in a column the panel isn't in, so the panel stays
- * visible: a hidden webview draws nothing and sends no `drawn`.
+ * `waitForSent` hear only what comes after the call. Files open where a user's would (the active column, or where the
+ * extension puts a file picked on the Map), and the panel has to stay visible on its own: a hidden webview draws
+ * nothing and sends no `drawn`.
  * The expected values are the plan's ground truth for the fixture ("## Ground truth for this slice").
  */
 
@@ -44,22 +45,17 @@ function folder(): vscode.WorkspaceFolder {
 
 const fileUri = (path: string): vscode.Uri => vscode.Uri.joinPath(folder().uri, ...path.split("/"));
 
-/** The column the panel is in, read from the tabs. */
-function panelColumn(): vscode.ViewColumn | undefined {
+/** The panel's tab and its column, read from the tabs; undefined while no panel is open. */
+function panelTab(): { tab: vscode.Tab; column: vscode.ViewColumn } | undefined {
     for (const group of vscode.window.tabGroups.all){
-        if (group.tabs.some((tab) => tab.input instanceof vscode.TabInputWebview && tab.input.viewType.endsWith("nebulosity.map"))) return group.viewColumn;
+        const tab = group.tabs.find((t) => t.input instanceof vscode.TabInputWebview && t.input.viewType.endsWith("nebulosity.map"));
+        if (tab !== undefined) return { tab, column: group.viewColumn };
     }
     return undefined;
 }
 
-/**
- * Opens a file as switching to it does (focused), in a column the panel isn't in, since a file opened over the panel
- * would hide the Map. With no file open, Show Map's panel takes column 1, so the code goes to column 2 then.
- */
-function openFile(path: string): Thenable<vscode.TextEditor> {
-    const column = panelColumn() === vscode.ViewColumn.One ? vscode.ViewColumn.Two : vscode.ViewColumn.One;
-    return vscode.window.showTextDocument(fileUri(path), { viewColumn: column });
-}
+/** Opens a file as switching to it does: focused, in the active column, where VS Code opens a file the user picks. */
+const openFile = (path: string): Thenable<vscode.TextEditor> => vscode.window.showTextDocument(fileUri(path));
 
 function assertActive(path: string): void {
     const active = vscode.window.activeTextEditor?.document.uri;
@@ -141,6 +137,18 @@ suite("The extension against a real Map, on the mini-repo", () => {
         assert.ok(active !== null && samePath(active, folder().uri.fsPath, process.platform), `The Map's active repo is ${active}, not ${folder().uri.fsPath}.`);
     });
 
+    test("with nothing open, a file picked on the Map opens beside the panel, which stays in view", async () => {
+        // no text editor was visible, so the panel took column 2 and left column 1 for the code (Task 9 review, ruling 4)
+        const before = panelTab();
+        assert.strictEqual(before?.column, vscode.ViewColumn.Two, `The panel isn't in column 2: ${tabs()}`);
+        await api.simulateFromMap({ type: "nebulosity.open", path: "src/index.ts" });
+        const opened = vscode.window.visibleTextEditors.find((e) => samePath(e.document.uri.fsPath, fileUri("src/index.ts").fsPath, process.platform));
+        assert.ok(opened !== undefined, `src/index.ts isn't open: ${tabs()}`);
+        const after = panelTab();
+        assert.ok(after !== undefined && opened.viewColumn !== after.column, `The file opened in the panel's column: ${tabs()}`);
+        assert.ok(after.tab.isActive, `The panel is hidden behind another tab: ${tabs()}`);
+    });
+
     test("the Map follows the editor", async () => {
         const drawn = api.waitFor(drawnOf("src/core/log.ts"), 10_000);
         await openFile("src/core/log.ts");
@@ -165,9 +173,13 @@ suite("The extension against a real Map, on the mini-repo", () => {
 
     test("an open for a file not in this workspace opens nothing", async () => {
         const before = tabs();
-        // a file this copy doesn't have (the Map showing another repo), and a path outside any repo (Review Focus 4, P17)
+        // a file this copy doesn't have (the Map showing another repo, Review Focus 4)
         await api.simulateFromMap({ type: "nebulosity.open", path: "src/nope.ts" });
-        await api.simulateFromMap({ type: "nebulosity.open", path: "../outside.ts" });
+        // paths with a ".." segment, refused before any lookup (P17): each resolves to a real file, src/app/main.ts, so only
+        // the refusal keeps it from opening. One leaves the copy and comes back in by its folder name
+        const copyName = folder().uri.path.split("/").filter((segment) => segment !== "").pop() ?? "";
+        await api.simulateFromMap({ type: "nebulosity.open", path: `../${copyName}/src/app/main.ts` });
+        await api.simulateFromMap({ type: "nebulosity.open", path: "src/../src/app/main.ts" });
         assertActive("src/core/log.ts");
         assert.strictEqual(tabs(), before);
     });
@@ -190,9 +202,15 @@ suite("The extension against a real Map, on the mini-repo", () => {
         // the worker is off, so the index never learns of this file
         const fresh = fileUri("src/new.ts");
         await vscode.workspace.fs.writeFile(fresh, Buffer.from("export const fresh = 1;\n", "utf8"));
+        // the premise: the index doesn't hold it, so the command's own /api/imports question gets a 404
+        const premise = await fetch(`${MAP}/api/imports?path=src/new.ts&limit=1`);
+        assert.strictEqual(premise.status, 404);
+        const from = api.sent.length;
         const shown = api.waitForSent((m) => m.type === "nebulosity.show", 2_000).then(() => true, () => false);
-        // /api/imports answers 404 and the command's message isn't awaited, so it resolves
+        // the command's message isn't awaited, so it resolves
         await vscode.commands.executeCommand("nebulosity.showFile", fresh);
+        // a show would be posted before the command resolves, however long it took; the timed wait covers a late one
+        assert.deepStrictEqual(api.sent.slice(from).filter((m) => m.type === "nebulosity.show"), []);
         assert.strictEqual(await shown, false, `A show was posted for a file the index doesn't hold: ${JSON.stringify(api.sent.slice(-3))}`);
     });
 

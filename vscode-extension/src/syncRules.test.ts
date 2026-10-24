@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ImportsResponse } from "../../lib/contracts";
 import {
-    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openColumn, otherRepoText, readImports, repoPathOfUri, SHOW_ALL_LABEL, ShowHold,
-    showAllOffered,
+    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openColumn, otherRepoText, panelColumn, readImports, repoPathOfUri, SHOW_ALL_LABEL,
+    ShowHold, showAllOffered,
 } from "./syncRules";
 
 /** A dependents answer, from the plan's "Ground truth" (test/fixtures/mini-repo). */
@@ -110,17 +110,35 @@ describe("which documents are files of the repo (Task 8 Review I1)", () => {
     });
 });
 
-describe("the column a file from the Map opens in (design §4.4)", () => {
+describe("the column the panel opens in (Task 9 review, ruling 4)", () => {
     const BESIDE = -2;   // vscode.ViewColumn.Beside
-    it("is the most recent text editor's", () => {
-        expect(openColumn(1, 2, BESIDE)).toBe(1);
-        expect(openColumn(3, undefined, BESIDE)).toBe(3);
+    it("is beside the active editor when the editor area holds anything", () => {
+        expect(panelColumn(false, BESIDE)).toEqual({ column: BESIDE, split: false });
     });
 
-    it("is the one beside the panel when that editor shares the panel's column, or there's none", () => {
-        expect(openColumn(2, 2, BESIDE)).toBe(BESIDE);
-        expect(openColumn(undefined, 2, BESIDE)).toBe(BESIDE);
-        expect(openColumn(undefined, undefined, BESIDE)).toBe(BESIDE);
+    it("is column 2, made first, when the editor area is one empty column, so column 1 stays free for the code", () => {
+        expect(panelColumn(true, BESIDE)).toEqual({ column: 2, split: true });
+    });
+});
+
+describe("the column a file from the Map opens in (design §4.4)", () => {
+    it("is the most recent text editor's", () => {
+        expect(openColumn(1, 2)).toBe(1);
+        expect(openColumn(3, 2)).toBe(3);
+        expect(openColumn(3, undefined)).toBe(3);
+    });
+
+    it("is never the panel's own: beside it, on the code's side, when that editor shares the panel's column or there's none", () => {
+        // the panel in column 2 (Show Map with nothing open, or beside a file in column 1): column 1
+        expect(openColumn(undefined, 2)).toBe(1);
+        expect(openColumn(2, 2)).toBe(1);
+        // the panel in column 1: column 2
+        expect(openColumn(undefined, 1)).toBe(2);
+        expect(openColumn(1, 1)).toBe(2);
+        // the panel in column 3: column 2
+        expect(openColumn(3, 3)).toBe(2);
+        // no panel column known: column 1
+        expect(openColumn(undefined, undefined)).toBe(1);
     });
 });
 

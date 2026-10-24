@@ -4,6 +4,7 @@ import type { BridgeFromMap, BridgeToMap } from "../../lib/contracts";
 import { readFromWebview } from "./fromWebview";
 import type { MapServer } from "./mapServer";
 import { panelHtml, type PanelState } from "./panelHtml";
+import { panelColumn } from "./syncRules";
 import type { RelayCommand } from "./webview/relay";
 
 /**
@@ -33,16 +34,29 @@ export class MapPanel {
         this.render();
     }
 
-    /** The open panel, revealed, or a new one beside the active editor, which says "Starting the Map…" until told more. */
+    /**
+     * The open panel, revealed, or a new one beside the active editor (in a column 2 of its own when nothing is open, so
+     * the next file opened doesn't cover it: syncRules' panelColumn), which says "Starting the Map…" until told more.
+     */
     static async show(context: vscode.ExtensionContext, server: MapServer): Promise<MapPanel> {
         if (MapPanel.current !== null){
             MapPanel.current.reveal();
             return MapPanel.current;
         }
+        const groups = vscode.window.tabGroups.all;
+        const place = panelColumn(groups.length === 1 && groups[0].tabs.length === 0, vscode.ViewColumn.Beside);
+        if (place.split) await vscode.commands.executeCommand("vscode.setEditorLayout", { orientation: 0, groups: [{}, {}] });
+        // a second Show Map may have made the panel while the layout changed: that panel is the one
+        const made = MapPanel.open;
+        if (made !== null){
+            made.reveal();
+            return made;
+        }
         const panel = vscode.window.createWebviewPanel(
             MapPanel.viewType,
             "Nebulosity Map",
-            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+            // preserveFocus also leaves the active column where it was (column 1 with nothing open), so files open there
+            { viewColumn: place.column as vscode.ViewColumn, preserveFocus: true },
             // the context stays while the panel is hidden, so the live stream and the Map's place survive a tab switch
             { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "dist")] },
         );
