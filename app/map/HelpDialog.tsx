@@ -21,8 +21,10 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
         return () => window.removeEventListener("keydown", onKey, true);
     }, [onClose]);
 
+    // flex, not grid, centers it: a grid's column grows to the dialog's 760 px, so max-w-full never shrank it, and a
+    // narrow window (VS Code's panel) cut its text off at the right. In a flex row the dialog narrows and its text wraps.
     return createPortal(
-        <div data-testid="help" className="fixed inset-0 z-50 grid place-items-center bg-canvas/70 p-4" onClick={onClose}>
+        <div data-testid="help" className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 p-4" onClick={onClose}>
             <div
                 role="dialog"
                 aria-label="How to use the Map"
