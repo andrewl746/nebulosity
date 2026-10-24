@@ -135,7 +135,7 @@
   "scripts": {
     "build": "node esbuild.mjs",
     "build:test": "node esbuild.mjs --tests",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc -p test --noEmit",
     "test:integration": "npm run build && npm run build:test && node ./out/test/runTest.js",
     "package": "vsce package"
   },
