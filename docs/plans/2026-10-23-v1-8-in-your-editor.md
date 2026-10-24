@@ -613,19 +613,20 @@ The rules (design §4.4–§4.5, P4–P6, P10, P16, P17):
 **Files:**
 - Create: `vscode-extension/test/bench/bench.test.ts` (run only when `NEB_BENCH=1`; `runTest.ts` picks the bench suite then)
 - Modify: `docs/BENCHMARKS.md`
+- Modify: `vscode-extension/test/runTest.ts` and `vscode-extension/test/suite/index.ts`, for the pick: runTest names the folder in `NEB_TESTS_DIR`, and the runner loads that folder's test files. *(Amended by Task 10, 2026-10-24.)*
 
 - [ ] **Step 1: Write the bench suite.** It reuses `NebulosityApi`, and every timed wait is started before its action (`waitFor` sees only messages received after the call, so a file already followed in the first pass can't pass at once). In this order:
   - **Cold, informative:** no server on 3126, then Show Map → the first `drawn`. The extension starts the Map, and that server stays up for the rest of the run.
   - **E1** (5 runs): `api.closePanel()`, then time `executeCommand("nebulosity.showMap")` → the first `drawn` (P1's on-ready case). The server is already running and warm.
-  - **E2:** pick 20 files of `../vscode`, read from `GET /api/imports`'s dependents of `src/vs/base/common/event.ts` (transitive, the first 10 inside `src/vs/base/common/` and the first 10 elsewhere, all repo-relative). Time `showTextDocument` resolved → `drawn` with `selected` that file. Run the 20 twice and report the second pass: p50, p95, max.
+  - **E2:** pick 20 files of `../vscode`, read from `GET /api/imports`'s dependents of `src/vs/base/common/event.ts` (transitive, the first 10 inside `src/vs/base/common/` and the first 10 elsewhere, all repo-relative). Time `showTextDocument` resolved → `drawn` with `selected` that file. Run the 20 twice and report the second pass: p50, p95, max. *(Amended by Task 10, 2026-10-24: "inside" reads as directly in `src/vs/base/common`, the folder the Map draws, and "elsewhere" as any other folder. Each pass starts with an untimed switch to `event.ts`, so the ten switches inside its folder start on it.)*
   - It prints one JSON line per bar.
 - [ ] **Step 2: Run it**, under Global Constraints' "The machine" (C1). This run never touches 3000, so it needs no ask (ledger, pre-flight ruling T10).
-  - The env: `NEB_BENCH=1`, `NEB_TEST_WORKSPACE=../vscode`, `NEB_TEST_COMMAND=<sandbox>/bin/nebulosity.mjs`, `NEB_TEST_PORT=3126`, `NEBULOSITY_DATA=<scratch>` (holding Task 7 Step 5's free index of `../vscode`), `NEBULOSITY_WORKER=off`, and `NEBULOSITY_HOME` unset. The sandbox is checked out at HEAD and built.
+  - The env: `NEB_BENCH=1`, `NEB_TEST_WORKSPACE=../vscode`, `NEB_TEST_COMMAND=<sandbox>/bin/nebulosity.mjs`, `NEB_TEST_PORT=3126`, `NEBULOSITY_DATA=<scratch>` (holding Task 7 Step 5's free index of `../vscode`), `NEBULOSITY_WORKER=off`, and `NEBULOSITY_HOME` unset. The sandbox is checked out at HEAD and built. *(Amended by Task 10, 2026-10-24: the index is a fresh free one in a new scratch folder, and `NEB_TEST_VSCODE=1.143.1` keeps test-electron from downloading anything. `runTest.ts` refuses a git repo as the integration tests' workspace, since their test 6 writes a file.)*
   - The workspace is `../vscode` itself, opened read-only. `runTest.ts` writes the settings only into its temp user data dir, so nothing is written into `../vscode`.
   - Keep the VS Code window in front for the whole run (a hidden webview gets no frames).
   - Afterwards: nothing listens on 3126, and the `cmp` of Task 7 Step 5's check 7 prints nothing.
 - [ ] **Step 3: Record it.** Add "## 2026 10 2x Editor Benchmark #1 — the Map in VS Code: Show Map and follow (V1.8, E1–E2)" to `docs/BENCHMARKS.md`: the machine, the VS Code version, the repo at `cc3fec88`, each bar with its numbers and PASS or FAIL, and the cold numbers labelled "no bar". **If a bar fails:** profile once (the Map's `__nebulosityPerf` through the probe isn't available, so time the `level` fetch with `curl` on the same path). Fix it if the cause is in this slice's code. Otherwise record it as measured and stop for the owner.
-- [ ] **Step 4: Commit and push.** `git add vscode-extension/test/bench docs/BENCHMARKS.md`, then `git commit -m "bench: Editor Benchmark #1, Show Map and follow in VS Code on VS Code's repo (V1.8)"` and `git push`.
+- [ ] **Step 4: Commit and push.** `git add vscode-extension/test/bench docs/BENCHMARKS.md` (and, as amended, `vscode-extension/test/runTest.ts`, `vscode-extension/test/suite/index.ts` and this plan), then `git commit -m "bench: Editor Benchmark #1, Show Map and follow in VS Code on VS Code's repo (V1.8)"` and `git push`.
 
 ### Task 11: Docs, version, the `.vsix`, the final review
 
