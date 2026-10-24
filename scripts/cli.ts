@@ -4,7 +4,8 @@
  *   nebulosity summarize <repo> [--yes] …     write summaries: shows the estimate and asks first (S11)
  *   nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000); the port is saved
  *                                             in config.json, where the MCP server sends live updates and show_on_map
- *   nebulosity mcp                            the MCP server Claude Code starts (stdio)
+ *   nebulosity map --print-port               print the port the Map was last started on (the VS Code extension reads it)
+ *   nebulosity mcp                          the MCP server Claude Code starts (stdio)
  *   nebulosity setup [--print]                register the server with Claude Code for the repo in this folder
  *   nebulosity doctor                         check Node, the data folder, the database, git and claude
  */
@@ -24,7 +25,8 @@ const USAGE = [
     "  nebulosity summarize <repo> [--yes] …     write summaries: shows the estimate and asks first",
     "  nebulosity map [--port <n>]               open the Map (http://localhost:<n>, default 3000); the port is saved,",
     "                                            so Claude Code's live updates and show_on_map reach this Map",
-    "  nebulosity mcp                            the MCP server Claude Code starts (stdio)",
+    "  nebulosity map --print-port               print the port the Map was last started on",
+    "  nebulosity mcp                          the MCP server Claude Code starts (stdio)",
     "  nebulosity setup [--print]                register the server with Claude Code for the repo in this folder",
     "  nebulosity doctor                         check Node, the data folder, the database, git and claude",
     "  nebulosity --version",
@@ -161,12 +163,16 @@ function packageVersion(): string {
     return (JSON.parse(fs.readFileSync(nebulosityPath("package.json"), "utf8")) as { version: string }).version;
 }
 
-/** The Map's port: --port <n> (1 to 65535), else the default; null when the arguments can't be read. */
-function mapPort(args: readonly string[]): number | null {
-    if (args.length === 0) return DEFAULT_PORT;
+/**
+ * What `nebulosity map`'s arguments ask for: to start the Map on --port <n> (1 to 65535, else the default), or with
+ * --print-port alone to print the port it was last started on; null when the arguments can't be read.
+ */
+export function parseMapArgs(args: readonly string[]): { kind: "start"; port: number } | { kind: "print-port" } | null {
+    if (args.length === 0) return { kind: "start", port: DEFAULT_PORT };
+    if (args.length === 1 && args[0] === "--print-port") return { kind: "print-port" };
     if (args.length !== 2 || args[0] !== "--port" || !/^\d+$/.test(args[1])) return null;
     const port = Number(args[1]);
-    return port > 0 && port < 65_536 ? port : null;
+    return port > 0 && port < 65_536 ? { kind: "start", port } : null;
 }
 
 /**
@@ -174,13 +180,20 @@ function mapPort(args: readonly string[]): number | null {
  * The background worker starts with it (instrumentation.ts) unless NEBULOSITY_WORKER=off. Its port is saved in the
  * config first, because the MCP server posts live events and show_on_map to the config's port (lib/live/client.ts):
  * a Map on --port <n> gets them, and they never go to a port the user didn't start the Map on.
+ * `--print-port` starts nothing and writes nothing: it prints that saved port, for the VS Code extension (and a script)
+ * to find the Map this copy last started.
  */
 async function runMap(args: readonly string[]): Promise<number> {
-    const port = mapPort(args);
-    if (port === null){
-        console.error("usage: nebulosity map [--port <n>]");
+    const parsed = parseMapArgs(args);
+    if (parsed === null){
+        console.error("usage: nebulosity map [--port <n> | --print-port]");
         return 1;
     }
+    if (parsed.kind === "print-port"){
+        console.log(readConfig().port);
+        return 0;
+    }
+    const { port } = parsed;
     if (!fs.existsSync(nebulosityPath(".next", "BUILD_ID"))){
         console.error("This copy of Nebulosity has no built Map. In a checkout, run npm run build first.");
         return 1;
