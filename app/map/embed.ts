@@ -24,12 +24,15 @@ export function isEmbedded(search: string): boolean {
 }
 
 const isPath = (value: unknown): value is string => typeof value === "string" && value.length <= MAX_PATH_LENGTH;
+/** A path to jump to, never "": the repo is no editor's file, and focus("") would push the top level onto the history. */
+const isTarget = (value: unknown): value is string => isPath(value) && value !== "";
 
 /**
  * Reads a message the editor sent, checking every field's type: anything that is not exactly one of §20's messages is
- * null, and a result carries only the fields checked. A `highlight` keeps its first 50 paths and drops entries that are
- * not paths (not strings, or over 1,024 characters) rather than refusing the message; it reads no further than its
- * first 1,000 entries. A hello of another bridge version is null: a Map that gets another version ignores the hello.
+ * null, and a result carries only the fields checked. A `follow` or `show` with an empty path is null. A `highlight`
+ * keeps its first 50 paths and drops entries that are not paths (not strings, or over 1,024 characters) rather than
+ * refusing the message; it reads no further than its first 1,000 entries. A hello of another bridge version is null: a
+ * Map that gets another version ignores the hello.
  */
 export function parseToMap(data: unknown): BridgeToMap | null {
     if (typeof data !== "object" || data === null) return null;
@@ -38,9 +41,9 @@ export function parseToMap(data: unknown): BridgeToMap | null {
         case "nebulosity.hello":
             return message.version === BRIDGE_VERSION ? { type: "nebulosity.hello", version: BRIDGE_VERSION } : null;
         case "nebulosity.follow":
-            return isPath(message.path) ? { type: "nebulosity.follow", path: message.path } : null;
+            return isTarget(message.path) ? { type: "nebulosity.follow", path: message.path } : null;
         case "nebulosity.show":
-            return isPath(message.path) ? { type: "nebulosity.show", path: message.path } : null;
+            return isTarget(message.path) ? { type: "nebulosity.show", path: message.path } : null;
         case "nebulosity.highlight": {
             if (!Array.isArray(message.paths)) return null;
             const entries: unknown[] = message.paths;

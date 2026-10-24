@@ -70,6 +70,14 @@ describe("parseToMap (API_CONTRACTS §20: every field's type is checked)", () =>
         expect(parseToMap({ type: "nebulosity.highlight", paths: ["a.ts", "a".repeat(1025), "b.ts"] })).toEqual({ type: "nebulosity.highlight", paths: ["a.ts", "b.ts"] });
     });
 
+    it("refuses an empty path for follow and show: the repo isn't a file, and a jump to it would push a history entry (PR #10 review, 10)", () => {
+        expect(parseToMap({ type: "nebulosity.follow", path: "" })).toBeNull();
+        expect(parseToMap({ type: "nebulosity.show", path: "" })).toBeNull();
+        // one character is a path
+        expect(parseToMap({ type: "nebulosity.follow", path: "a" })).toEqual({ type: "nebulosity.follow", path: "a" });
+        expect(parseToMap({ type: "nebulosity.show", path: "a" })).toEqual({ type: "nebulosity.show", path: "a" });
+    });
+
     it("highlight keeps at most 50 paths, the first ones, and drops what isn't a string", () => {
         const sixty = Array.from({ length: 60 }, (_, i) => `f${i}.ts`);
         const parsed = parseToMap({ type: "nebulosity.highlight", paths: sixty });

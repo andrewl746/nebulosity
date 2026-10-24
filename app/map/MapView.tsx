@@ -15,7 +15,7 @@ import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
 import { followStep, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { boxFor, parentOf } from "./paths";
-import { markStart, measureAfterPaint } from "./perf";
+import { clearStart, markStart, measureAfterPaint } from "./perf";
 import { pageNote, selectionShown } from "./portals";
 import { mapShortcut } from "./shortcuts";
 import { nextPulses, type Pulse } from "./pulses";
@@ -153,6 +153,8 @@ function MapScreen(){
                 // the server ignores a focus that isn't on the level (API_CONTRACTS §11), so a file the index doesn't
                 // hold (new, ignored) still gets its folder: the editor's jumps leave the Map where it is then
                 if (focusing.quiet && !next.nodes.some((n) => n.path === focusing.target)){
+                    // no level change comes of it, so its timing mark would be read at the next one
+                    clearStart("map:level");
                     setFocusing(null);
                     return;
                 }
@@ -166,6 +168,8 @@ function MapScreen(){
             },
             (err: unknown) => {
                 if (!(err instanceof ApiError)) return;
+                // the Map stays where it was, quiet or not, so nothing will measure the jump's mark
+                clearStart("map:level");
                 // the Map on screen is still good: say so where the user is, not as a level error over it. The editor's
                 // jumps say nothing (P5): a follow names whatever file is open, indexed or not
                 if (!focusing.quiet) setFocusError({ error: err, place: cacheKey(placeRef.current), selected: selectedRef.current });

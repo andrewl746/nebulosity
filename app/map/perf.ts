@@ -10,6 +10,15 @@ export function markStart(name: string): void {
     performance.mark(`${name}:start`);
 }
 
+/**
+ * Drops a start mark nothing will measure: a jump that ended without a new level (the editor's quiet jump to a path the
+ * index doesn't hold, or a failed one). Left down, the next level drawn without a mark of its own (an index update's
+ * redraw) would be timed from it, as one long change.
+ */
+export function clearStart(name: string): void {
+    performance.clearMarks(`${name}:start`);
+}
+
 export function measureAfterPaint(name: string): void {
     // the first frame callback runs before the paint that shows the change; the second runs after it
     requestAnimationFrame(() => requestAnimationFrame(() => {
