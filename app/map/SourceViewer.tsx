@@ -9,6 +9,7 @@ import { formatCount } from "./format";
 import { editorLink } from "./links";
 import { nameOf } from "./paths";
 import { tooLargeToColor } from "./text";
+import { useScrollLock } from "./useScrollLock";
 
 /** Each line's height in px: the gutter, the code and the highlighted range all use it, so they line up. */
 const LINE_HEIGHT = 20;
@@ -31,6 +32,7 @@ type SourceViewerProps = {
  * Rendered into the page's body, so the panel it opens from can't clip it. Escape closes it and nothing else.
  */
 export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: SourceViewerProps){
+    useScrollLock();
     const [source, setSource] = useState<SourceResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const scroller = useRef<HTMLDivElement>(null);
@@ -81,7 +83,7 @@ export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: S
                 aria-label={`Source of ${path}`}
                 onClick={(event) => event.stopPropagation()}
                 // a narrow window (under 600 px) gives it the whole width: 80% of it would leave too little code
-                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-hairline bg-panel max-[599px]:w-full"
+                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-hairline bg-panel max-[600px]:w-full"
             >
                 <header className="flex items-start justify-between gap-3 border-b border-hairline px-4 py-3">
                     <div className="min-w-0">

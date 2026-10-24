@@ -8,6 +8,7 @@ import { formatCompact, formatCount } from "./format";
 import { noDeclarationsText } from "./labels";
 import { editorLink, githubLink } from "./links";
 import { DEMO } from "./mode";
+import { PANEL_WIDTH } from "./narrow";
 import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
 import { linkedFrom, portalCaption, portalLinks } from "./portals";
@@ -33,13 +34,20 @@ type DetailPanelProps = {
      */
     onOpenInEditor?: (path: string, line?: number) => void;
     /**
-     * Its width (narrow.ts's panelLayout): 400 px beside the canvas, the Map's whole width when that leaves too little
-     * canvas beside it. The canvas's controls move left by the same width, so it never covers them.
+     * Covering the whole canvas (narrow.ts's panelLayout): then it fills the Map's width, whatever that is as the window
+     * resizes. Beside the canvas it's PANEL_WIDTH wide, and the canvas's controls move left by as much.
      */
-    width: number;
-    /** Covering the whole canvas: then it fills the Map's width, whatever that is as the window resizes. */
     covers: boolean;
+    /** The Map's error line, shown as the panel's last row while the panel covers the canvas it would sit on. */
+    alert?: string;
 };
+
+/**
+ * In a short window (under 480 px tall) the whole panel scrolls, its header too, so the body isn't left a few lines
+ * under a header that never moves; the error row stays pinned to the bottom.
+ */
+const SHORT_FRAME = "[@media(height<480px)]:overflow-y-auto";
+const SHORT_BODY = "[@media(height<480px)]:flex-none [@media(height<480px)]:overflow-visible";
 
 /** Chips and rows shown before "+N more" or "View all": enough to act on without scrolling. */
 const PREVIEW = 8;
@@ -63,8 +71,8 @@ export default memo(DetailPanel);
 
 type PanelFrameProps = {
     path: string;
-    width: number;
     covers: boolean;
+    alert?: string;
     kindLabel: string;
     name: string;
     title: string;
@@ -75,10 +83,13 @@ type PanelFrameProps = {
     children: ReactNode;
 };
 
-/** The panel's frame: the kind, the name, the path under it, a close button, then the header's extras and the body. */
-function PanelFrame({ path, width, covers, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
+/**
+ * The panel's frame: the kind, the name, the path under it, a close button, then the header's extras and the body, and
+ * the Map's error line as its last row while it covers the canvas (so the row never hides the end of the body).
+ */
+function PanelFrame({ path, covers, alert, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
     return (
-        <aside data-panel={path} style={{ width: covers ? "100%" : width }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
+        <aside data-panel={path} style={{ width: covers ? "100%" : PANEL_WIDTH }} className={`pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel ${SHORT_FRAME}`}>
             <header className="border-b border-hairline px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -93,12 +104,14 @@ function PanelFrame({ path, width, covers, kindLabel, name, title, subtitle, hea
                 {header}
             </header>
             {children}
+            {/* in a short window, where the whole panel scrolls, it stays pinned over the rows scrolling under it */}
+            {alert && <p role="alert" data-covers className="pointer-events-none sticky bottom-0 shrink-0 border-t border-hairline bg-panel px-4 py-2 text-center text-[13px] text-danger [overflow-wrap:anywhere]">{alert}</p>}
         </aside>
     );
 }
 
 /** A file, a folder or the repo: described by the server (GET /api/describe). */
-function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOpenInEditor, width, covers }: DetailPanelProps){
+function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOpenInEditor, covers, alert }: DetailPanelProps){
     const target = path;
     const [data, setData] = useState<DescribeResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
@@ -168,7 +181,7 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
     return (
         <PanelFrame
             path={path}
-            width={width}
+            alert={alert}
             covers={covers}
             kindLabel={kindLabel}
             name={name}
@@ -185,7 +198,7 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
             )}
             onClose={onClose}
         >
-            <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
+            <div className={`flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text ${SHORT_BODY}`}>
                 {error && <p className="text-danger">{error.message}</p>}
                 {!data && !error && <p className="text-text-2">Loading…</p>}
                 {data && (
@@ -224,7 +237,7 @@ type Linked = { path: string; count: number };
  * A portal selected: the page (or pages) behind it, a way to go there, and which boxes on this page have lines to it,
  * each a link that selects that box. Everything comes from the level on screen; there's nothing to fetch.
  */
-function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, width, covers }: DetailPanelProps & { portal: MapNode }){
+function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, covers, alert }: DetailPanelProps & { portal: MapNode }){
     const links = portalLinks(level.edges, portal.path);
     const linked = linkedFrom(level, portal.path);
     const pages = portal.page !== undefined ? [portal.page] : portal.pages ?? [];
@@ -237,7 +250,7 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, width,
     return (
         <PanelFrame
             path={path}
-            width={width}
+            alert={alert}
             covers={covers}
             kindLabel={pages.length === 1 ? "Page" : "Pages"}
             name={portal.name}
@@ -246,7 +259,7 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, width,
             header={<p className="mt-3 text-[13px] text-text-2">{portalCaption(portal, links)} with this page</p>}
             onClose={onClose}
         >
-            <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
+            <div className={`flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text ${SHORT_BODY}`}>
                 <section aria-label="Go to">
                     {pages.length > 1 && <SectionTitle title="Pages behind this doorway" count={pages.length} />}
                     <ul className="flex flex-wrap gap-2">
@@ -396,7 +409,9 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
     const failure = failureFor(shown.summaryError, summaryError);
 
     return (
-        <section aria-label="Summary">
+        // a long identifier or path (inline code is one unbroken word) breaks anywhere rather than run past the panel's
+        // edge; wherever a line has a space to break at, it still breaks there
+        <section aria-label="Summary" className="[overflow-wrap:anywhere]">
             {shown.tagline
                 ? <p className="text-[15px] font-medium leading-snug text-title"><Rich text={shown.tagline} /></p>
                 : <p className="text-text-2">{summaryLine(shown.summaryStatus, summaryError)}</p>}
@@ -432,12 +447,13 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
 /**
  * Prose with its `identifiers` as inline code (VISUAL_REFRESH.md §5): the code font and lavender on a chip. The chips
  * were dropped once for an outside critique ("noisy"), and the owner asked for them back: they make names easy to spot.
+ * A chip broken across two lines (Summary breaks a long one anywhere) keeps its rounded padding on both.
  */
 function Rich({ text }: { text: string }){
     return (
         <>
             {inlineCode(text).map((part, i) => part.code
-                ? <code key={i} className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">{part.text}</code>
+                ? <code key={i} className="rounded-md bg-code-bg box-decoration-clone px-1 font-mono text-[13px] text-code">{part.text}</code>
                 : <span key={i}>{part.text}</span>)}
         </>
     );

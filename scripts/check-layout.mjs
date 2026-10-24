@@ -46,6 +46,8 @@ const STATES = [
     { name: "folder", place: "src/vs", select: "src/vs/workbench" },
     // the source root's panel, the one the owner saw cut off in VS Code's panel
     { name: "root", place: "", select: "src" },
+    // a summary whose lead holds a 51-character setting name in inline code, wider than the panel at any size
+    { name: "long-token", place: "extensions/copilot/src/extension/configuration/vscode-node", select: "extensions/copilot/src/extension/configuration/vscode-node/configurationMigration.ts" },
     { name: "source", place: "src/vs/base/common", select: FILE, act: "source" },
     { name: "search", place: "", act: "search" },
     { name: "help", place: "", act: "help" },

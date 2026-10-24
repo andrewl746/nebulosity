@@ -14,7 +14,7 @@ import { isBusyLevel } from "./emphasis";
 import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
 import { followStep, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
-import { panelLayout, pillForm, type PillForm } from "./narrow";
+import { BANNER_TOP, bandClear, bannerForm, CARD_TOP, cardClear, PANEL_WIDTH, panelLayout, pillForm, type BannerForm, type PillForm } from "./narrow";
 import { boxFor, parentOf } from "./paths";
 import { clearStart, markStart, measureAfterPaint } from "./perf";
 import { pageNote, selectionShown } from "./portals";
@@ -27,7 +27,7 @@ import TopBar from "./TopBar";
 import { EMBEDDED, useEditorBridge } from "./useEditorBridge";
 import { useIndexStatus } from "./useIndexStatus";
 import { useLive } from "./useLive";
-import { useWidth } from "./useWidth";
+import { useSize } from "./useSize";
 
 /**
  * Levels fetched for one repo and index version (ADR-036), by folder and page: going back up a level is instant until
@@ -103,8 +103,13 @@ function MapScreen(){
     // holds across levels until it's turned off (owner, 2026-10-12)
     const [showAllLines, setShowAllLines] = useState(false);
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
-    // the Map area's width: the panel's width and the page pill's wording go by it (narrow.ts)
-    const [mainRef, mainWidth] = useWidth<HTMLElement>();
+    // the Map area's width: whether the panel covers the canvas and the page pill's wording go by it (narrow.ts); the
+    // pill's width and the banner's height decide where the banner goes
+    const [mainRef, mainSize] = useSize<HTMLElement>();
+    const mainWidth = mainSize?.width ?? null;
+    const [pillRef, pillSize] = useSize<HTMLDivElement>();
+    const [bandRef, bandSize] = useSize<HTMLDivElement>();
+    const [cardRef, cardSize] = useSize<HTMLDivElement>();
 
     // the focus effect's failure handler reads where the Map is when the answer comes back, not when it was asked, and
     // the editor's `drawn` reads it when it is posted
@@ -424,9 +429,15 @@ function MapScreen(){
     // the panel: 400 px beside the canvas, or over all of it when too little canvas would be left (narrow.ts)
     const panelOpen = shownSelected !== null && level !== null;
     const panel = panelLayout(mainWidth);
-    const panelWidth = panelOpen ? panel.width : 0;
     const covered = panelOpen && panel.covers;
+    const panelWidth = panelOpen && !covered ? PANEL_WIDTH : 0;
     const pill = level !== null && pageCount > 1 && !covered;
+    // the error banner over the canvas: a line in the pill's band, or a card where that can't hold it; over a covering
+    // panel it's the panel's last row instead (narrow.ts)
+    const pillWidth = pill ? pillSize?.width ?? null : null;
+    const bannerOnCanvas = banner !== null && !covered;
+    const bannerAs = bannerForm(bandSize?.height ?? null);
+    const bannerBottom = !bannerOnCanvas ? 0 : bannerAs === "band" ? BANNER_TOP + (bandSize?.height ?? 0) : CARD_TOP + (cardSize?.height ?? 0);
 
     if (statusError?.code === "INDEX_EMPTY") return <EmptyState />;
 
@@ -444,7 +455,7 @@ function MapScreen(){
                     {level && isBusyLevel(level.edges.length) && (
                         <span data-testid="lines-note">
                             {/* a narrow window keeps the toggle alone (its title says the rest), so the path keeps its room */}
-                            <span className="max-[767px]:hidden">
+                            <span className="max-[768px]:hidden">
                                 {showAllLines ? `All ${formatCount(level.edges.length)} lines shown` : "Busy folder: lines show on hover"}
                                 {" · "}
                             </span>
@@ -475,22 +486,16 @@ function MapScreen(){
                         quietLines={!showAllLines && isBusyLevel(level.edges.length)}
                         panelWidth={panelWidth}
                         covered={covered}
+                        bannerBottom={bannerBottom}
                     />
                 )}
                 {level && pill && (
-                    <PagePill level={level} onTurn={turnPage} panelWidth={panelWidth} form={pillForm(mainWidth === null ? null : mainWidth - panelWidth)} />
+                    <PagePill sizeRef={pillRef} level={level} onTurn={turnPage} panelWidth={panelWidth} form={pillForm(mainWidth === null ? null : mainWidth - panelWidth)} />
                 )}
                 {!level && !levelError && <p className="absolute inset-0 grid place-items-center px-4 text-center text-[13px] text-text-2">Loading the map…</p>}
-                {/* over the canvas beside the panel, below the page pill if there is one, wrapping in a narrow window. A
-                    panel over the whole canvas would hide it, so then it's a solid strip along the bottom, clear of the
-                    panel's header and its × */}
-                {banner && (covered
-                    ? <p role="alert" data-covers className="absolute inset-x-0 bottom-0 z-20 border-t border-hairline bg-panel px-4 py-2 text-center text-[13px] text-danger">{banner.message}</p>
-                    : (
-                        <p role="alert" style={{ right: panelWidth }} className={`absolute left-0 ${pill ? "top-16" : "top-6"} px-4 text-center text-[13px] text-danger`}>
-                            {banner.message}
-                        </p>
-                    ))}
+                {banner && bannerOnCanvas && (
+                    <ErrorBanner message={banner.message} form={bannerAs} panelWidth={panelWidth} pillWidth={pillWidth} bandRef={bandRef} cardRef={cardRef} />
+                )}
                 {shownSelected !== null && level && (
                     <DetailPanel
                         key={shownSelected}
@@ -502,8 +507,8 @@ function MapScreen(){
                         onTurnPage={turnPage}
                         onClose={closePanel}
                         onOpenInEditor={editor === null ? undefined : openInEditor}
-                        width={panel.width}
                         covers={panel.covers}
+                        alert={covered ? banner?.message : undefined}
                     />
                 )}
             </main>
@@ -531,7 +536,14 @@ function MapScreen(){
  * a box nor a line, its buttons cyan; it moves left of the panel when the panel opens, by the panel's own width. On a
  * narrow canvas it says less (narrow.ts's pillForm): "Page 2 of 5", then "2 / 5", with the whole note as its title.
  */
-function PagePill({ level, onTurn, panelWidth, form }: { level: LevelResponse; onTurn: (page: number) => void; panelWidth: number; form: PillForm }){
+function PagePill({ sizeRef, level, onTurn, panelWidth, form }: {
+    /** Measures the pill, which the error banner keeps clear of. */
+    sizeRef: (element: HTMLDivElement | null) => void;
+    level: LevelResponse;
+    onTurn: (page: number) => void;
+    panelWidth: number;
+    form: PillForm;
+}){
     const step = (side: "left" | "right") => {
         const next = side === "left" ? level.page - 1 : level.page + 1;
         const Icon = side === "left" ? IconChevronLeft : IconChevronRight;
@@ -555,6 +567,7 @@ function PagePill({ level, onTurn, panelWidth, form }: { level: LevelResponse; o
     const [pagePart, ...rest] = note.split(" · ");
     return (
         <div
+            ref={sizeRef}
             style={{ right: panelWidth + 16 }}
             className="absolute top-4 z-[7] flex items-center gap-1.5 rounded-lg bg-overlay p-1"
         >
@@ -565,6 +578,53 @@ function PagePill({ level, onTurn, panelWidth, form }: { level: LevelResponse; o
             </span>
             {step("right")}
         </div>
+    );
+}
+
+/**
+ * The Map's error line over the canvas (a failed jump, a level that wouldn't load: VISUAL_REFRESH.md §10). It takes no
+ * clicks, so it never stands between the pointer and the boxes or controls under it.
+ * - **band** (its place at normal sizes): 24 px down in the page pill's band, centred over the canvas beside the panel.
+ *   It keeps the pill's width clear on its right, and as much on its left so it stays centred; with less room the left
+ *   side gives way first, so the line moves left, then wraps.
+ * - **card**, where the band would need more than its two lines: a solid card in the canvas's top-left corner that reads
+ *   over the boxes, its right edge clear of the pill and of the zoom controls.
+ * The band is always laid out, unseen while the card shows, so its height (which picks the form) is always known.
+ */
+function ErrorBanner({ message, form, panelWidth, pillWidth, bandRef, cardRef }: {
+    message: string;
+    form: BannerForm;
+    panelWidth: number;
+    pillWidth: number | null;
+    bandRef: (element: HTMLDivElement | null) => void;
+    cardRef: (element: HTMLDivElement | null) => void;
+}){
+    const clear = bandClear(pillWidth);
+    return (
+        <>
+            <div
+                ref={bandRef}
+                role={form === "band" ? "alert" : undefined}
+                aria-hidden={form === "band" ? undefined : true}
+                style={{ right: panelWidth }}
+                className={`pointer-events-none absolute left-0 top-6 flex justify-center px-4 text-[13px] text-danger ${form === "band" ? "" : "invisible"}`}
+            >
+                {/* the left side gives way before the line does; the right side never does */}
+                <span aria-hidden style={{ flex: `0 1 ${clear}px` }} />
+                <p style={{ maxWidth: `calc(100% - ${clear}px)` }} className="shrink-0 text-center [overflow-wrap:anywhere]">{message}</p>
+                <span aria-hidden style={{ width: clear }} className="shrink-0" />
+            </div>
+            {form === "card" && (
+                <div
+                    ref={cardRef}
+                    role="alert"
+                    style={{ maxWidth: `calc(100% - ${CARD_TOP + panelWidth + cardClear(pillWidth)}px)` }}
+                    className="pointer-events-none absolute left-4 top-4 z-[7] rounded-lg border border-hairline bg-panel px-3 py-2 text-[13px] text-danger [overflow-wrap:anywhere]"
+                >
+                    {message}
+                </div>
+            )}
+        </>
     );
 }
 

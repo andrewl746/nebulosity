@@ -14,6 +14,7 @@ import { lineLabel } from "./labels";
 import Legend from "./Legend";
 import { FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider } from "./levelLayout";
 import MapBox, { type BoxData, type BoxNode } from "./MapBox";
+import { legendMaxHeight } from "./narrow";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
@@ -44,8 +45,6 @@ const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: 
 };
 /** The arrowhead's size in px, whatever the line's width (26 since the three-task test: 18 was too small to read). */
 const ARROW_SIZE = 26;
-/** The legend's distance from the canvas's bottom and left edges (Legend.tsx's bottom-4 left-4). */
-const LEGEND_INSET = 16;
 
 type MapCanvasProps = {
     level: LevelResponse;
@@ -63,8 +62,13 @@ type MapCanvasProps = {
     quietLines: boolean;
     /** The open panel's width over the canvas's right edge, 0 with none (narrow.ts's panelLayout). */
     panelWidth: number;
-    /** The panel covers the whole canvas (a narrow window): the legend and the zoom controls would sit under it. */
+    /**
+     * The panel covers the whole canvas (a narrow window): the legend and the zoom controls would sit under it, and the
+     * boxes can't be reached by Tab either, until its × brings the canvas back.
+     */
     covered: boolean;
+    /** How far down the Map's error banner reaches on the canvas, 0 with none: the open legend stops short of it. */
+    bannerBottom: number;
 };
 
 /**
@@ -73,7 +77,7 @@ type MapCanvasProps = {
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered, bannerBottom }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
@@ -215,6 +219,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             maxZoom={2}
             colorMode="dark"
             proOptions={{ hideAttribution: true }}
+            inert={covered}
         >
             {/* a faint dot grid: texture, so a busy level isn't a void with rectangles in it (VISUAL_REFRESH.md §3) */}
             <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid)" />
@@ -228,9 +233,9 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 <Legend
                     quietLines={quietLines}
                     doorways={level.nodes.some((n) => n.kind === "portal")}
-                    // a short canvas: the open legend stays below a paged level's pill (16 px from the bottom, the pill's
-                    // band at the top) and scrolls inside if it must; unmeasured (0), it's left alone
-                    maxHeight={canvasHeight > 0 ? canvasHeight - LEGEND_INSET - (pillBand > 0 ? pillBand : LEGEND_INSET) : undefined}
+                    // a short canvas: the open legend stays below a paged level's pill and the error banner, and
+                    // scrolls inside if it must (narrow.ts)
+                    maxHeight={legendMaxHeight(canvasHeight, pillBand, bannerBottom)}
                 />
             )}
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}

@@ -7,6 +7,8 @@ import { api, ApiError } from "./api";
 import { formatCount } from "./format";
 import { languageFor } from "./paths";
 import { codeLabel, groupHits } from "./searchHits";
+import { useScrollLock } from "./useScrollLock";
+import { useSize } from "./useSize";
 
 type SearchPaletteProps = { onPick: (hit: SearchHit) => void; onClose: () => void };
 
@@ -15,12 +17,24 @@ const LIMIT = 40;
 const DEBOUNCE_MS = 150;
 
 /**
+ * The list's greatest height: 52% of the window, and never more than the window leaves under the dialog's 12vh margin,
+ * the field and a note or error above it (`above` px), its 2 px of border and 8 px of room. In a short window a note
+ * (free mode, the demo) or an error then shortens the list instead of pushing its last results below the window.
+ * (A flex column would do it in CSS alone, but it costs the list's text its subpixel smoothing in Chrome.)
+ */
+const listMaxHeight = (above: number | null): string | undefined =>
+    above === null ? undefined : `min(52vh, calc(88vh - 10px - ${above}px))`;
+
+/**
  * ⌘K (PIVOT_SPEC.md §7): hybrid search over files, symbols, summaries, folder names and file names (GET /api/search).
  * Folders come first, then files, each under a heading with its count (searchHits.ts). Arrow keys move through both,
  * Enter picks, Escape closes. Picking moves the Map to the result's level and selects it. MapView mounts it only while
  * open, so each opening starts empty.
  */
 export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
+    useScrollLock();
+    // the field and the note or error above the list: the list never runs below the window (listMaxHeight)
+    const [aboveRef, above] = useSize<HTMLDivElement>();
     const [query, setQuery] = useState("");
     const [result, setResult] = useState<SearchResult | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
@@ -80,22 +94,24 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
         <div className="pointer-events-auto fixed inset-0 z-30 bg-canvas/70" onClick={onClose}>
             <div role="dialog" aria-label="Search" onClick={(event) => event.stopPropagation()}
                 className="mx-auto mt-[12vh] w-[640px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-panel">
-                <div className="flex items-center gap-3 border-b border-hairline px-4">
-                    <IconSearch aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
-                    <input
-                        ref={input}
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                        onKeyDown={onKeyDown}
-                        placeholder="Search files and concepts"
-                        spellCheck={false}
-                        aria-label="Search"
-                        className="w-full bg-transparent py-3 text-[15px] text-text placeholder:text-text-2 focus:outline-none"
-                    />
+                <div ref={aboveRef}>
+                    <div className="flex items-center gap-3 border-b border-hairline px-4">
+                        <IconSearch aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
+                        <input
+                            ref={input}
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            onKeyDown={onKeyDown}
+                            placeholder="Search files and concepts"
+                            spellCheck={false}
+                            aria-label="Search"
+                            className="w-full bg-transparent py-3 text-[15px] text-text placeholder:text-text-2 focus:outline-none"
+                        />
+                    </div>
+                    {error && <p className="px-4 py-3 text-[13px] text-danger">{error.message}</p>}
+                    {result?.note && hits.length > 0 && <p className="px-4 pt-2 text-[12px] text-text-2">{result.note}</p>}
                 </div>
-                {error && <p className="px-4 py-3 text-[13px] text-danger">{error.message}</p>}
-                {result?.note && hits.length > 0 && <p className="px-4 pt-2 text-[12px] text-text-2">{result.note}</p>}
-                <ul ref={list} role="listbox" className="max-h-[52vh] overflow-y-auto py-1">
+                <ul ref={list} role="listbox" style={{ maxHeight: listMaxHeight(above?.height ?? null) }} className="max-h-[52vh] overflow-y-auto py-1">
                     {hits.map((hit, i) => (
                         <Fragment key={hit.path}>
                             {(i === 0 || i === groups.folders.length) && (
