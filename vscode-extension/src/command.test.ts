@@ -72,6 +72,15 @@ describe("withArgs (quoting for cmd.exe, only when the launch goes through the s
             .toEqual(['"a&b"', '"(x)"', '"^"', '"C:\\Users\\Ann Lee\\data\\\\"', '""']);
     });
 
+    it("quotes cmd.exe's pipe and redirections, which would otherwise start another command or a file (PR #10 review, 9)", () => {
+        expect(withArgs({ command: "node", args: [], shell: true }, ["a|b", "<in", "out>", "2>&1"]).args)
+            .toEqual(['"a|b"', '"<in"', '"out>"', '"2>&1"']);
+    });
+
+    it("leaves % as it is: cmd.exe expands %NAME% even inside quotes, and no escape holds on a cmd /c line", () => {
+        expect(withArgs({ command: "node", args: [], shell: true }, ["100%"]).args).toEqual(["100%"]);
+    });
+
     it("leaves the space unquoted without the shell", () => {
         expect(withArgs({ command: "C:\\Users\\Ann Lee\\AppData\\Roaming\\npm\\nebulosity.CMD", args: [], shell: false }, ["map"]).command)
             .toBe("C:\\Users\\Ann Lee\\AppData\\Roaming\\npm\\nebulosity.CMD");

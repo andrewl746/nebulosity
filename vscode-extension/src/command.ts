@@ -10,8 +10,13 @@ export type Launch = { command: string; args: string[]; shell: boolean };
 /** Windows' default when PATHEXT isn't set. */
 const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
 
-/** cmd.exe gives these a meaning of their own outside double quotes (a space splits the argument). */
-const CMD_SPECIAL = /[ &()^"]/;
+/**
+ * cmd.exe gives these a meaning of their own outside double quotes: a space splits the argument, `&` and `|` start
+ * another command, `<` and `>` redirect. Not `%`: cmd.exe expands `%NAME%` inside double quotes too, and on a `cmd /c`
+ * line no escape holds (`^%` is taken inside quotes, `%%` only in a batch file), so an argument holding one may still
+ * be expanded. The arguments passed here (a checkout's path, `map`, `--port` and a number) don't hold one.
+ */
+const CMD_SPECIAL = /[ &()^"|<>]/;
 
 /**
  * An environment variable by name. Windows' names are case-insensitive: Node's own process.env reads them that way,
@@ -81,10 +86,10 @@ export function nebulosityLaunch(setting: string, onPath: string | null, platfor
 }
 
 /**
- * One argument as cmd.exe and then the program read it. Inside double quotes cmd.exe takes `&()^` and spaces as text.
- * The program (Node, through the .cmd shim) then splits its command line by the C runtime's rules, where backslashes
- * before a quote escape it, so the trailing ones are doubled and `"C:\dir\"` still ends at its closing quote. A `"` of
- * its own (never in a Windows path) is doubled, which keeps cmd.exe inside the quotes.
+ * One argument as cmd.exe and then the program read it. Inside double quotes cmd.exe takes `&()^|<>` and spaces as
+ * text. The program (Node, through the .cmd shim) then splits its command line by the C runtime's rules, where
+ * backslashes before a quote escape it, so the trailing ones are doubled and `"C:\dir\"` still ends at its closing
+ * quote. A `"` of its own (never in a Windows path) is doubled, which keeps cmd.exe inside the quotes.
  */
 function quoteForCmd(arg: string): string {
     if (arg === "") return '""';                    // unquoted, an empty argument would vanish from the line
@@ -94,8 +99,8 @@ function quoteForCmd(arg: string): string {
 
 /**
  * The launch with `args` added after its own. With `shell` true, the command and every argument holding a space or one
- * of `&()^"` are double-quoted, because Node's spawn with `shell: true` joins them into one cmd.exe command line as they
- * are. Only for child_process.spawn with `shell: true`: a VS Code ShellExecution quotes for the user's own shell, so it
+ * of `&()^"|<>` are double-quoted, because Node's spawn with `shell: true` joins them into one cmd.exe command line as
+ * they are. Only for child_process.spawn with `shell: true`: a VS Code ShellExecution quotes for the user's own shell, so it
  * gets the unquoted Launch. Call it once per spawn: the Launch it gives is quoted already, and a second call quotes again.
  */
 export function withArgs(launch: Launch, args: string[]): Launch {
