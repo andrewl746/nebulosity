@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { BridgeFromMap, BridgeToMap, ImportsResponse } from "../../lib/contracts";
-import { pickItems, pickTitle } from "./dependents";
+import { pickItems, pickNote, pickTitle } from "./dependents";
 import { FOLLOW_DEBOUNCE_MS, FollowGate } from "./followGate";
 import { errorText, getJson, mapUrl, RefusedError, type HttpAnswer } from "./http";
 import { PROBE_TIMEOUT_MS } from "./mapServer";
@@ -9,8 +9,8 @@ import { MapPanel } from "./panel";
 import { checkRepoPath, uriPathOf } from "./repoMatch";
 import { classifyRepos, type ServerCheck } from "./serverCheck";
 import {
-    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openCheck, openColumn, otherRepoText, readImports, repoPathOfUri,
-    SHOW_ALL_LABEL, ShowHold, showAllOffered, TRANSITIVE_LIMIT,
+    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openCheck, openColumn, otherRepoText, PICK_LIMIT, readImports,
+    repoPathOfUri, SHOW_ALL_LABEL, ShowHold, showAllOffered,
 } from "./syncRules";
 
 /**
@@ -55,18 +55,26 @@ export type NebulosityApi = {
     port(): number | null;
 };
 
-/** A row of What depends' pick: a file, or (with no path) "Show all, including indirect" and the line above it. */
+/**
+ * A row of What depends' pick: a file, or with no path the line under the files, the note on a list cut short (which
+ * does nothing when picked) and "Show all, including indirect".
+ */
 type DependentItem = vscode.QuickPickItem & { path: string | null };
 
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
-/** The pick's rows for an answer: its files, nearest first, then "Show all" when there are indirect importers to ask for. */
-function itemsOf(r: ImportsResponse): DependentItem[] {
+/**
+ * The pick's rows for an answer: its files, nearest first, then the note when the page cut them short, then "Show all"
+ * when there are indirect importers to ask for (`oneIndirect`, the transitive page of one entry; null after Show all).
+ */
+function itemsOf(r: ImportsResponse, oneIndirect: ImportsResponse | null): DependentItem[] {
     const items: DependentItem[] = pickItems(r);
-    if (showAllOffered(r)){
-        // alwaysShow: typing to filter the files still leaves the way to the rest
-        items.push({ label: "", kind: vscode.QuickPickItemKind.Separator, path: null }, { label: SHOW_ALL_LABEL, alwaysShow: true, path: null });
-    }
+    const note = pickNote(r);
+    const showAll = showAllOffered(r, oneIndirect);
+    if (note !== null || showAll) items.push({ label: "", kind: vscode.QuickPickItemKind.Separator, path: null });
+    if (note !== null) items.push(note);
+    // alwaysShow: typing to filter the files still leaves the way to the rest
+    if (showAll) items.push({ label: SHOW_ALL_LABEL, alwaysShow: true, path: null });
     return items;
 }
 
@@ -129,9 +137,10 @@ export class EditorSync implements vscode.Disposable {
     }
 
     /**
-     * Nebulosity: What depends on this file? (design §4.5, P6): its direct importers in a QuickPick, which can re-ask
-     * with the indirect ones too. The Map shows the file with the listed importers lit, until the pick hides. Picking a
-     * file opens it as a pick on the Map would, and the pick stays open for the next one. Resolves when the pick hides.
+     * Nebulosity: What depends on this file? (design §4.5, P6): its direct importers in a QuickPick, up to 500, which
+     * can re-ask with the indirect ones too when there are any. The Map shows the file with the listed importers lit,
+     * until the pick hides. Picking a file opens it as a pick on the Map would, and the pick stays open for the next one.
+     * Resolves when the pick hides.
      */
     async whatDepends(arg?: unknown): Promise<void> {
         const target = this.targetOf(arg);
@@ -143,7 +152,11 @@ export class EditorSync implements vscode.Disposable {
         if (map === null) return;
         const path = this.repoPathOf(map.root, target);
         if (path === null) return;
-        const direct = await this.askImports(map.port, path, {});
+        // the direct page, and beside it one transitive entry, whose total says whether "Show all" would add anything
+        const [direct, oneIndirect] = await Promise.all([
+            this.askImports(map.port, path, { limit: PICK_LIMIT }),
+            this.peekImports(map.port, path, { transitive: true, limit: 1 }),
+        ]);
         if (direct === null) return;
 
         const pick = vscode.window.createQuickPick<DependentItem>();
@@ -152,7 +165,7 @@ export class EditorSync implements vscode.Disposable {
         this.pick = pick;
         previous?.hide();
         pick.title = pickTitle(direct);
-        pick.items = itemsOf(direct);
+        pick.items = itemsOf(direct, oneIndirect);
         pick.matchOnDescription = true;
         this.show(path);
         this.post({ type: "nebulosity.highlight", paths: highlightOf(direct) });
@@ -163,7 +176,8 @@ export class EditorSync implements vscode.Disposable {
                 if (item === undefined) return;
                 // the Map stays on the file asked about, with its importers lit: the gate keeps that (Task 8 Review M1)
                 if (item.path !== null) void this.openFile(item.path, undefined, path);
-                else void this.showAll(pick, map.port, path);
+                // the note on a list cut short has no path either, and does nothing
+                else if (item.label === SHOW_ALL_LABEL) void this.showAll(pick, map.port, path);
             });
             pick.onDidHide(() => {
                 // however it closes (P6)
@@ -404,10 +418,23 @@ export class EditorSync implements vscode.Disposable {
         return imports;
     }
 
+    /**
+     * One page of the path's dependents, or null on any failure, with nothing said: the transitive entry beside What
+     * depends' direct page, which only decides whether "Show all" is offered (askImports speaks for both).
+     */
+    private async peekImports(port: number, path: string, options: { transitive: boolean; limit: number }): Promise<ImportsResponse | null> {
+        try{
+            const answer = await getJson(mapUrl(port, importsPath({ path, ...options })), IMPORTS_TIMEOUT_MS);
+            return answer.status === 200 ? readImports(answer.body) : null;
+        } catch{
+            return null;
+        }
+    }
+
     /** "Show all, including indirect": the same pick, re-asked with the indirect importers, and those lit instead. */
     private async showAll(pick: vscode.QuickPick<DependentItem>, port: number, path: string): Promise<void> {
         pick.busy = true;
-        const all = await this.askImports(port, path, { transitive: true, limit: TRANSITIVE_LIMIT });
+        const all = await this.askImports(port, path, { transitive: true, limit: PICK_LIMIT });
         // the pick may have closed while the answer came
         if (this.pick !== pick) return;
         pick.busy = false;
@@ -415,7 +442,7 @@ export class EditorSync implements vscode.Disposable {
         pick.title = pickTitle(all);
         // the text typed to reach "Show all" would hide every file of the new list
         pick.value = "";
-        pick.items = itemsOf(all);
+        pick.items = itemsOf(all, null);
         this.post({ type: "nebulosity.highlight", paths: highlightOf(all) });
     }
 

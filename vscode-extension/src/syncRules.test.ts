@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ImportsResponse } from "../../lib/contracts";
 import type { ServerCheck } from "./serverCheck";
 import {
-    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openCheck, openColumn, otherRepoText, panelColumn, readImports, repoPathOfUri,
-    SHOW_ALL_LABEL, ShowHold, showAllOffered,
+    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openCheck, openColumn, otherRepoText, panelColumn, PICK_LIMIT, readImports,
+    repoPathOfUri, SHOW_ALL_LABEL, ShowHold, showAllOffered,
 } from "./syncRules";
 
 /** A dependents answer, from the plan's "Ground truth" (test/fixtures/mini-repo). */
@@ -27,12 +27,20 @@ const LOG_ALL = dependents("src/core/log.ts", true, [
     ["src/util/strings.ts", 2], ["src/app/view.tsx", 2], ["scripts/build.js", 2], ["src/util/strings.test.ts", 3],
 ], 3);
 const BUILD_DIRECT = dependents("scripts/build.js", false, [], 0);
+const INDEX_DIRECT = dependents("src/index.ts", false, [["scripts/build.js", 1]], 1);
+/** The one-entry transitive pages (`limit=1`) that count the indirect importers: the first file, and the totals. */
+const LOG_ONE_INDIRECT = { ...dependents("src/core/log.ts", true, [["src/app/main.ts", 1]], 3), total: 7 };
+const INDEX_ONE_INDIRECT = dependents("src/index.ts", true, [["scripts/build.js", 1]], 1);
+const BUILD_ONE_INDIRECT = dependents("scripts/build.js", true, [], 0);
 
 describe("the /api/imports request (API_CONTRACTS §19)", () => {
-    it("asks one file for Show this file, the direct page for What depends, and 500 with indirect ones", () => {
+    it("asks one file for Show this file, 500 for What depends, direct or with indirect ones, and one indirect to count them", () => {
+        expect(PICK_LIMIT).toBe(500);
         expect(importsPath({ path: "src/core/log.ts", limit: 1 })).toBe("/api/imports?path=src%2Fcore%2Flog.ts&limit=1");
         expect(importsPath({ path: "src/core/log.ts" })).toBe("/api/imports?path=src%2Fcore%2Flog.ts");
-        expect(importsPath({ path: "src/core/log.ts", transitive: true, limit: 500 })).toBe("/api/imports?path=src%2Fcore%2Flog.ts&transitive=true&limit=500");
+        expect(importsPath({ path: "src/core/log.ts", limit: PICK_LIMIT })).toBe("/api/imports?path=src%2Fcore%2Flog.ts&limit=500");
+        expect(importsPath({ path: "src/core/log.ts", transitive: true, limit: PICK_LIMIT })).toBe("/api/imports?path=src%2Fcore%2Flog.ts&transitive=true&limit=500");
+        expect(importsPath({ path: "src/core/log.ts", transitive: true, limit: 1 })).toBe("/api/imports?path=src%2Fcore%2Flog.ts&transitive=true&limit=1");
     });
 
     it("encodes a path's spaces, & # + and non-ASCII characters as a query value", () => {
@@ -81,12 +89,24 @@ describe("What depends' highlight and its Show all item (P6)", () => {
         expect(highlightOf(many)).toEqual(Array.from({ length: 50 }, (_, i) => `src/f${i}.ts`));
     });
 
-    it("offers the indirect importers only on a direct answer that has importers", () => {
+    it("offers the indirect importers only when the one-entry transitive page counts more than the direct ones", () => {
         expect(SHOW_ALL_LABEL).toBe("Show all, including indirect");
-        expect(showAllOffered(LOG_DIRECT)).toBe(true);
-        expect(showAllOffered(LOG_ALL)).toBe(false);
-        // nothing imports it directly, so nothing imports it at all
-        expect(showAllOffered(BUILD_DIRECT)).toBe(false);
+        // log.ts: 3 direct, 7 in all
+        expect(showAllOffered(LOG_DIRECT, LOG_ONE_INDIRECT)).toBe(true);
+        // index.ts: its one importer, scripts/build.js, is imported by no one, so "Show all" would list the same file
+        expect(showAllOffered(INDEX_DIRECT, INDEX_ONE_INDIRECT)).toBe(false);
+        // nothing imports build.js
+        expect(showAllOffered(BUILD_DIRECT, BUILD_ONE_INDIRECT)).toBe(false);
+    });
+
+    it("never offers it on an answer that has the indirect ones already", () => {
+        expect(showAllOffered(LOG_ALL, LOG_ONE_INDIRECT)).toBe(false);
+        expect(showAllOffered(LOG_ALL, null)).toBe(false);
+    });
+
+    it("offers it whenever something imports the file when the count couldn't be asked (Show all then says why if it fails too)", () => {
+        expect(showAllOffered(LOG_DIRECT, null)).toBe(true);
+        expect(showAllOffered(BUILD_DIRECT, null)).toBe(false);
     });
 });
 

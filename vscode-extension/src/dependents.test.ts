@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImportsResponse } from "../../lib/contracts";
-import { pickItems, pickTitle } from "./dependents";
+import { pickItems, pickNote, pickTitle } from "./dependents";
 
 /** A dependents answer, from the plan's "Ground truth" (test/fixtures/mini-repo). */
 function dependents(path: string, transitive: boolean, files: [string, number][], direct: number): ImportsResponse {
@@ -55,5 +55,30 @@ describe("the What depends QuickPick (the plan's Ground truth)", () => {
 
     it("gives a file at the repo root no folder", () => {
         expect(pickItems(dependents("src/index.ts", false, [["build.js", 1]], 1))).toEqual([{ label: "build.js", description: "", path: "build.js" }]);
+    });
+
+    it("writes a count past 999 with its thousands comma", () => {
+        const event = { ...dependents("src/vs/base/common/event.ts", false, [["src/vs/a.ts", 1]], 2631), total: 2631 };
+        expect(pickTitle(event)).toBe("2,631 files import event.ts");
+    });
+});
+
+describe("the note on a list cut at its page (pickNote)", () => {
+    /** An answer of `listed` files out of `total`: what a page of 500 gives for a busy file. */
+    const cut = (transitive: boolean, listed: number, total: number, direct: number): ImportsResponse => ({
+        ...dependents("src/vs/base/common/event.ts", transitive, Array.from({ length: listed }, (_, i): [string, number] => [`src/vs/f${i}.ts`, 1]), direct),
+        total,
+    });
+
+    it("is a row with no path that says how many of how many are listed, nearest first, when the page holds fewer than the total", () => {
+        expect(pickNote(cut(false, 500, 2631, 2631))).toEqual({ label: "Showing the first 500 of 2,631, nearest first", alwaysShow: true, path: null });
+        expect(pickNote(cut(true, 500, 4012, 2631))).toEqual({ label: "Showing the first 500 of 4,012, nearest first", alwaysShow: true, path: null });
+    });
+
+    it("says nothing when the list is whole", () => {
+        expect(pickNote(LOG_DIRECT)).toBeNull();
+        expect(pickNote(LOG_ALL)).toBeNull();
+        expect(pickNote(dependents("scripts/build.js", false, [], 0))).toBeNull();
+        expect(pickNote(cut(false, 500, 500, 500))).toBeNull();
     });
 });

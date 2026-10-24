@@ -16,8 +16,11 @@ export const MAX_HIGHLIGHT = 50;
 /** The item that re-asks What depends with the indirect importers too (design §4.5). */
 export const SHOW_ALL_LABEL = "Show all, including indirect";
 
-/** The page "Show all" asks for: §19's largest. */
-export const TRANSITIVE_LIMIT = 500;
+/**
+ * The page What depends asks for, direct and with "Show all": §19's largest, so typing can reach the importers the title
+ * counts (up to 500; pickNote says so past it).
+ */
+export const PICK_LIMIT = 500;
 
 /**
  * The request for one page of a path's dependents (API_CONTRACTS §19). `direction` is left out (dependents is its
@@ -85,10 +88,15 @@ export function highlightOf(r: ImportsResponse): string[] {
     return r.files.slice(0, MAX_HIGHLIGHT).map((file) => file.path);
 }
 
-/** Whether the pick offers "Show all": only on a direct answer, and only when something imports the file at all. */
-export function showAllOffered(r: ImportsResponse): boolean {
+/**
+ * Whether the pick offers "Show all": only on a direct answer, and only when some importer is indirect, which the
+ * transitive page of one entry asked beside it (`limit=1`) tells by its total against its direct count. When that page
+ * couldn't be asked (null), whenever something imports the file at all: Show all asks again, and says why if it fails.
+ */
+export function showAllOffered(direct: ImportsResponse, oneIndirect: ImportsResponse | null): boolean {
+    if (direct.transitive) return false;
     // an indirect importer imports a direct one, so with no direct importer there's none of either
-    return !r.transitive && r.total > 0;
+    return oneIndirect === null ? direct.total > 0 : oneIndirect.total > oneIndirect.direct;
 }
 
 /**

@@ -18,7 +18,7 @@ The extension uses a Map that's already running, on the port `nebulosity map` la
 |---|---|---|
 | Nebulosity: Show Map | Command Palette, editor title bar | Opens the Map beside the editor, starting it if needed, on this workspace's repo |
 | Nebulosity: Show this file on the Map | Command Palette, editor and Explorer context menus | Moves the Map to the file and selects it |
-| Nebulosity: What depends on this file? | Command Palette, editor and Explorer context menus | Lists the files that import it, lights them on the Map, and opens the one you pick; "Show all, including indirect" adds the files that import it through others |
+| Nebulosity: What depends on this file? | Command Palette, editor and Explorer context menus | Lists the files that import it (up to 500), lights them on the Map, and opens the one you pick; when some files import it through others, "Show all, including indirect" adds them |
 | Nebulosity: Follow editor | The Map panel's title bar | Turns following the active editor off or on, for this window |
 | Nebulosity: Index this repo | Command Palette, the not-indexed panel | Indexes the workspace's repo, free |
 | Nebulosity: Stop Map | Command Palette | Stops the Map this window started |
