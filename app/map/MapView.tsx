@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
-import type { LevelResponse, LiveEvent } from "@/lib/contracts";
+import type { BridgeFromMap, BridgeToMap, LevelResponse, LiveEvent } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import Breadcrumb from "./Breadcrumb";
 import DetailPanel, { PANEL_WIDTH } from "./DetailPanel";
@@ -13,7 +13,7 @@ import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
 import { isBusyLevel } from "./emphasis";
 import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
-import { historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
+import { followStep, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { boxFor, parentOf } from "./paths";
 import { markStart, measureAfterPaint } from "./perf";
 import { pageNote, selectionShown } from "./portals";
@@ -23,6 +23,7 @@ import RepoMenu from "./RepoMenu";
 import SearchPalette from "./SearchPalette";
 import StatusPill from "./StatusPill";
 import TopBar from "./TopBar";
+import { EMBEDDED, useEditorBridge } from "./useEditorBridge";
 import { useIndexStatus } from "./useIndexStatus";
 import { useLive } from "./useLive";
 
@@ -37,6 +38,23 @@ const HELP_SEEN = "nebulosity.helpSeen";
 const cacheKey = (place: MapPlace): string => `${place.path}\0${place.page}`;
 /** How long a failed jump's message stays up when nothing else moves the Map. */
 const FOCUS_ERROR_MS = 6_000;
+
+/**
+ * A jump to a path (focus(), below), and how it was asked for. The editor's `follow` rewrites the history entry rather
+ * than pushing one, and the editor's jumps are `quiet`: a path the index doesn't hold changes nothing and says nothing
+ * (API_CONTRACTS §20, V1.8 plan P5). Every other jump pushes and says when it fails.
+ */
+type Focusing = { target: string; history: "push" | "replace"; quiet: boolean };
+type FocusOptions = { history?: "push" | "replace"; quiet?: boolean };
+
+/** The level a `drawn` names: a repo's folder and page (the layout's row width doesn't make it another level). */
+const drawnKey = (level: Pick<LevelResponse, "repo" | "path" | "page">): string => `${level.repo}\0${level.path}\0${level.page}`;
+
+/** Runs `fn` after the frame that paints what was just committed (perf.ts's double frame); gives back a cancel. */
+function afterPaint(fn: () => void): () => void {
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(fn); });
+    return () => cancelAnimationFrame(frame);
+}
 
 /** The cache with one more level in it: the same repo and version keep what's there, anything newer starts over. */
 const cacheWith = (cache: LevelCache | null, place: MapPlace, level: LevelResponse): LevelCache => ({
@@ -65,7 +83,7 @@ function MapScreen(){
     const [focusError, setFocusError] = useState<{ error: ApiError; place: string; selected: string | null } | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
     // a path to show that may be on another page: the server says which page holds it (focus(), below)
-    const [focusing, setFocusing] = useState<string | null>(null);
+    const [focusing, setFocusing] = useState<Focusing | null>(null);
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
     const [highlights, setHighlights] = useState<readonly string[]>([]);
@@ -74,19 +92,30 @@ function MapScreen(){
     const [showAllLines, setShowAllLines] = useState(false);
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
 
-    // the focus effect's failure handler reads where the Map is when the answer comes back, not when it was asked
+    // the focus effect's failure handler reads where the Map is when the answer comes back, not when it was asked, and
+    // the editor's `drawn` reads it when it is posted
     const placeRef = useRef(place);
     const selectedRef = useRef(selected);
     useEffect(() => {
         placeRef.current = place;
         selectedRef.current = selected;
     }, [place, selected]);
+    // How the next place change goes into the history: "replace" only for the one an editor's follow made. The focus
+    // effect sets it just before that move, and the history effect resets it, so it is used once and never later.
+    const historyMode = useRef<"push" | "replace">("push");
 
     const repo = status?.repo ?? null;
     const version = status?.indexVersion ?? null;
     // the level on screen: the one asked for, from this repo. While a newer version loads, the older copy stays up.
     const level = cache !== null && cache.repo === repo ? cache.levels.get(cacheKey(place)) ?? null : null;
     const current = cache !== null && cache.repo === repo && cache.version === version && cache.levels.has(cacheKey(place));
+    // the level on screen, for the bridge's callbacks, which run outside a render
+    const levelRef = useRef(level);
+    useEffect(() => {
+        levelRef.current = level;
+    }, [level]);
+    // the level the canvas last reported placed (onDrawn): a `drawn` names a level only once it is painted (V1.8 plan P1)
+    const reportedLevel = useRef<string | null>(null);
 
     useEffect(() => {
         if (repo === null || version === null || current) return;
@@ -98,7 +127,7 @@ function MapScreen(){
                 const at = { path: place.path, page: next.page };
                 setCache((c) => cacheWith(c, at, next));
                 if (next.page !== place.page){
-                    window.history.replaceState(null, "", mapUrl(at.path, at.page));
+                    window.history.replaceState(null, "", mapUrl(at.path, at.page, EMBEDDED));
                     setPlace(at);
                 }
                 setLevelError(null);
@@ -113,19 +142,27 @@ function MapScreen(){
     useEffect(() => {
         if (focusing === null || repo === null) return;
         const controller = new AbortController();
-        api.level(parentOf(focusing), 0, controller.signal, focusing).then(
+        api.level(parentOf(focusing.target), 0, controller.signal, focusing.target).then(
             (next) => {
+                // the server ignores a focus that isn't on the level (API_CONTRACTS §11), so a file the index doesn't
+                // hold (new, ignored) still gets its folder: the editor's jumps leave the Map where it is then
+                if (focusing.quiet && !next.nodes.some((n) => n.path === focusing.target)){
+                    setFocusing(null);
+                    return;
+                }
                 const at = { path: next.path, page: next.page };
                 setCache((c) => cacheWith(c, at, next));
+                historyMode.current = focusing.history;
                 setPlace(at);
-                setSelected(focusing);
+                setSelected(focusing.target);
                 setFocusing(null);
                 setLevelError(null);
             },
             (err: unknown) => {
                 if (!(err instanceof ApiError)) return;
-                // the Map on screen is still good: say so where the user is, not as a level error over it
-                setFocusError({ error: err, place: cacheKey(placeRef.current), selected: selectedRef.current });
+                // the Map on screen is still good: say so where the user is, not as a level error over it. The editor's
+                // jumps say nothing (P5): a follow names whatever file is open, indexed or not
+                if (!focusing.quiet) setFocusError({ error: err, place: cacheKey(placeRef.current), selected: selectedRef.current });
                 setFocusing(null);
             },
         );
@@ -141,11 +178,13 @@ function MapScreen(){
     // Every move to another folder or page goes into the browser's history, so Back returns to the previous one
     // (owner review). Back itself only reads the address bar: the place it sets already matches, so nothing is pushed.
     // A link that names the same place another way (?path=src%2Fvs, ?page=1) is rewritten instead, so Back needs one
-    // press (history.ts).
+    // press (history.ts). Inside VS Code's panel the address keeps `embed=vscode` (P8), and a move an editor's follow
+    // made rewrites the entry instead of pushing one, so switching tabs doesn't fill Back (followStep).
     useEffect(() => {
-        const step = historyStep(window.location.pathname + window.location.search, place);
-        if (step === "push") window.history.pushState(null, "", mapUrl(place.path, place.page));
-        else if (step === "replace") window.history.replaceState(null, "", mapUrl(place.path, place.page));
+        const step = followStep(historyStep(window.location.pathname + window.location.search, place, EMBEDDED), historyMode.current);
+        historyMode.current = "push";
+        if (step === "push") window.history.pushState(null, "", mapUrl(place.path, place.page, EMBEDDED));
+        else if (step === "replace") window.history.replaceState(null, "", mapUrl(place.path, place.page, EMBEDDED));
     }, [place]);
     useEffect(() => {
         const onPop = (): void => {
@@ -177,17 +216,13 @@ function MapScreen(){
         setFocusing(null);
     }, [levelPath]);
 
-    const select = useCallback((target: string | null) => {
-        if (target !== null) markStart("map:select");
-        setSelected(target);
-    }, []);
-
     /**
-     * Goes to the level and page that hold a path and selects it there: search results, the panel's links, focus_node.
-     * A box already drawn is just selected; anything else may sit on another page of a big folder, so the server finds
-     * the page (the effect above).
+     * Goes to the level and page that hold a path and selects it there: search results, the panel's links, focus_node,
+     * and the editor's follow and show (with their options; everything else pushes and says when it fails). A box
+     * already drawn is just selected; anything else may sit on another page of a big folder, so the server finds the
+     * page (the effect above).
      */
-    const focus = useCallback((target: string) => {
+    const focus = useCallback((target: string, options: FocusOptions = {}) => {
         if (target === ""){
             open("");
             return;
@@ -196,11 +231,51 @@ function MapScreen(){
         if (parentOf(target) === levelPath && level?.nodes.some((n) => n.path === target)){
             markStart("map:select");
             setSelected(target);
+            setFocusing(null);   // a jump still on its way would land after this one and undo it
             return;
         }
         markStart("map:level");
-        setFocusing(target);
+        setFocusing({ target, history: options.history ?? "push", quiet: options.quiet ?? false });
     }, [open, levelPath, level]);
+
+    /**
+     * What the editor asks for (API_CONTRACTS §20): `follow` when its active file changed, a deliberate `show`, and the
+     * files to light. Only the Map's own clicks open files in the editor, so nothing here echoes back (V1.8 plan P10).
+     */
+    const onEditorMessage = useCallback((message: BridgeToMap) => {
+        if (message.type === "nebulosity.follow") focus(message.path, { history: "replace", quiet: true });
+        else if (message.type === "nebulosity.show") focus(message.path, { quiet: true });
+        else if (message.type === "nebulosity.highlight") setHighlights(message.paths);
+        else if (message.type === "nebulosity.clear") setHighlights([]);
+    }, [focus]);
+
+    /**
+     * The `drawn` for the level on screen (API_CONTRACTS §20), or null while the level there isn't the one the canvas
+     * last reported painted: then that level's own report is still to come, and a `drawn` now would run ahead of it.
+     */
+    const drawnNow = useCallback((): BridgeFromMap | null => {
+        const shown = levelRef.current;
+        if (shown === null || drawnKey(shown) !== reportedLevel.current) return null;
+        return { type: "nebulosity.drawn", path: placeRef.current.path, page: placeRef.current.page, selected: selectedRef.current };
+    }, []);
+
+    // embedded in VS Code (V1.8): the editor bridge; null in a browser tab, where nothing listens or posts. Right after
+    // each `ready` it posts drawnNow(), for a hello that lands after the level was drawn.
+    const editor = useEditorBridge(onEditorMessage, drawnNow);
+
+    /** A box clicked on the canvas. Inside VS Code's panel a file box also opens in the editor (design §4.4). */
+    const select = useCallback((target: string | null) => {
+        if (target !== null) markStart("map:select");
+        setSelected(target);
+        if (editor !== null && target !== null && level?.nodes.some((n) => n.path === target && n.kind === "file")){
+            editor.post({ type: "nebulosity.open", path: target });
+        }
+    }, [editor, level]);
+
+    /** A declaration picked in the panel, inside VS Code's panel: it opens at its line in the editor (design §4.4). */
+    const openInEditor = useCallback((path: string, line?: number) => {
+        editor?.post({ type: "nebulosity.open", path, ...(line === undefined ? {} : { line }) });
+    }, [editor]);
 
 
     /** A tool call from Claude Code (PIVOT_SPEC.md §8): pulse the boxes it touched, and run its UI action. */
@@ -244,7 +319,28 @@ function MapScreen(){
         refresh();
     }, [refresh]);
 
-    const onDrawn = useCallback(() => measureAfterPaint("map:level"), []);
+    /**
+     * The canvas placed a new level. Inside VS Code's panel the editor hears it after the frame that paints it, with
+     * what is selected then (`drawn`, V1.8 plan P1 case a): the extension's test and benchmarks wait for it.
+     */
+    const onDrawn = useCallback(() => {
+        measureAfterPaint("map:level");
+        if (editor === null) return;
+        reportedLevel.current = levelRef.current === null ? null : drawnKey(levelRef.current);
+        afterPaint(() => {
+            const drawn = drawnNow();
+            if (drawn !== null) editor.post(drawn);
+        });
+    }, [editor, drawnNow]);
+    // P1 case b: a new selection on the level already painted is reported after the frame that paints it. A selection
+    // that came with a new level waits for that level's onDrawn, so a `drawn` never runs ahead of the paint.
+    useEffect(() => {
+        if (editor === null || drawnNow() === null) return;
+        return afterPaint(() => {
+            const drawn = drawnNow();
+            if (drawn !== null) editor.post(drawn);
+        });
+    }, [selected, editor, drawnNow]);
     /** The repo's name in the top bar goes back to the top level, like a site's name goes home (three-task test). */
     const goHome = useCallback(() => open(""), [open]);
     const closeHelp = useCallback(() => setHelpOpen(false), []);
@@ -357,6 +453,7 @@ function MapScreen(){
                         onOpen={open}
                         onTurnPage={turnPage}
                         onClose={closePanel}
+                        onOpenInEditor={editor === null ? undefined : openInEditor}
                     />
                 )}
             </main>

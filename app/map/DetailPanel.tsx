@@ -27,6 +27,11 @@ type DetailPanelProps = {
     /** Turn to another page of the level on screen. */
     onTurnPage: (page: number) => void;
     onClose: () => void;
+    /**
+     * Inside VS Code's panel only: a declaration opens at its line in the editor instead of the source viewer, which
+     * "View source" still opens (design §4.4).
+     */
+    onOpenInEditor?: (path: string, line?: number) => void;
 };
 
 /** The panel's width: the canvas's controls move left by this much while it's open, so it never covers them. */
@@ -87,7 +92,7 @@ function PanelFrame({ path, kindLabel, name, title, subtitle, header, onClose, c
 }
 
 /** A file, a folder or the repo: described by the server (GET /api/describe). */
-function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
+function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOpenInEditor }: DetailPanelProps){
     const target = path;
     const [data, setData] = useState<DescribeResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
@@ -178,7 +183,10 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
                         onOpen={onOpen}
                         onViewLines={DEMO
                             ? (start, end) => { if (github) window.open(githubLink(github, data.path, { start, end }), "_blank", "noreferrer"); }
-                            : (start, end) => setViewing({ lines: { start, end } })}
+                            : onOpenInEditor
+                                // the real editor is right there (design §4.4)
+                                ? (start) => onOpenInEditor(data.path, start)
+                                : (start, end) => setViewing({ lines: { start, end } })}
                     />
                 )}
             </div>
