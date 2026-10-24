@@ -93,6 +93,19 @@ async function refused(): Promise<boolean> {
     }
 }
 
+/**
+ * The built-in git extension's own word on whether it runs. `enabled` is its API's (git.d.ts' GitExtension): false while
+ * `git.enabled` is off, when it opens no repository. `activate` activates it first (it starts on "*" anyway; with the
+ * setting off, activating it opens nothing).
+ */
+async function gitState(activate: boolean): Promise<{ present: boolean; active: boolean; enabled: boolean | null; setting: unknown }> {
+    const git = vscode.extensions.getExtension<{ enabled: boolean }>("vscode.git");
+    const setting = vscode.workspace.getConfiguration("git", folder().uri).get("enabled");
+    if (git === undefined) return { present: false, active: false, enabled: null, setting };
+    if (activate && !git.isActive) await git.activate();
+    return { present: true, active: git.isActive, enabled: git.isActive ? git.exports.enabled : null, setting };
+}
+
 async function activeRepo(): Promise<string | null> {
     const response = await fetch(`${MAP}/api/repos`);
     assert.strictEqual(response.status, 200);
@@ -198,13 +211,17 @@ suite("Editor Benchmark #1: the Map in VS Code on VS Code's repo (E1, E2)", func
         assert.ok(exported !== undefined, "activate returned no NebulosityApi: the extension isn't running in ExtensionMode.Test.");
         api = exported;
         console.log(`The workspace: ${folder().uri.fsPath}.`);
+        // runTest's settings turn git off, so it opens no repository and writes nothing into the workspace's .git
+        const git = await gitState(true);
+        console.log(`The built-in git extension at the start: ${JSON.stringify(git)}.`);
+        assert.ok(git.setting === false && git.enabled !== true, `The built-in git extension is on (${JSON.stringify(git)}): it would write into the workspace's .git/config.`);
     });
 
     suiteTeardown(async () => {
-        // for the record: the built-in TypeScript extension stays on (--disable-extensions leaves it), as in a user's
-        // window, while runTest turns the git ones off (launchArgs.ts), so they should read "not active"
-        const builtIn = ["vscode.typescript-language-features", "vscode.git"].map((id) => `${id} ${vscode.extensions.getExtension(id)?.isActive === true ? "active" : "not active"}`);
-        console.log(`Built-in extensions at the end: ${builtIn.join(", ")}.`);
+        // for the record: the built-in TypeScript extension stays on (--disable-extensions leaves built-ins on), as in a
+        // user's window; git is active but disabled by its settings (launch.ts), so its own API says enabled: false
+        const typescript = vscode.extensions.getExtension("vscode.typescript-language-features")?.isActive === true ? "active" : "not active";
+        console.log(`Built-in extensions at the end: vscode.typescript-language-features ${typescript}, vscode.git ${JSON.stringify(await gitState(false))}.`);
         // the Map this run started; VS Code's exit would stop it too (deactivate)
         await vscode.commands.executeCommand("nebulosity.stopMap");
     });

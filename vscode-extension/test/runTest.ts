@@ -2,7 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { downloadAndUnzipVSCode, makeConsoleReporter, ProgressReportStage, runTests, type ProgressReport, type ProgressReporter } from "@vscode/test-electron";
-import { BENCH_DISABLED_EXTENSIONS, launchArgs } from "./launchArgs";
+import { GIT_OFF, launchArgs, userSettings } from "./launch";
 
 /**
  * Runs the extension's integration tests (V1.8 plan Task 9) in a VS Code that @vscode/test-electron downloads, against a
@@ -15,7 +15,7 @@ import { BENCH_DISABLED_EXTENSIONS, launchArgs } from "./launchArgs";
  *                       `nebulosity` on PATH, the way a user's install is found;
  *   NEB_TEST_VSCODE     optional, the VS Code version to run ("stable" when unset);
  *   NEB_BENCH           optional, "1" runs the benchmark rather than the integration tests, with the built-in git
- *                       extensions off (launchArgs.ts), so nothing writes into the repo's .git;
+ *                       extension turned off by its settings (launch.ts), so nothing writes into the repo's .git;
  *   NEBULOSITY_DATA     the data folder the Map reads and writes. Required: the tests switch its active repo and the Map
  *                       saves its port there, which must never be someone's own data folder.
  * The settings go into a fresh user data dir, never into the workspace.
@@ -67,8 +67,7 @@ async function main(): Promise<void> {
     const testsDir = path.resolve(__dirname, bench ? "bench" : "suite");
 
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "nebulosity-vscode-test-"));
-    const settings: Record<string, unknown> = { "nebulosity.port": port };
-    if (command !== undefined && command.trim() !== "") settings["nebulosity.command"] = command;
+    const settings = userSettings(port, command, bench);
     fs.mkdirSync(path.join(userDataDir, "User"), { recursive: true });
     fs.writeFileSync(path.join(userDataDir, "User", "settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
 
@@ -76,13 +75,13 @@ async function main(): Promise<void> {
     const vscodeExecutablePath = await downloadAndUnzipVSCode({ version, reporter, extensionDevelopmentPath });
     const ran = `VS Code ${resolved() ?? version} (${vscodeExecutablePath})`;
     console.log(`Running ${what} in ${ran}, on ${workspace}, with the Map on port ${port}.`);
-    if (bench) console.log(`Built-in extensions off for the benchmark: ${BENCH_DISABLED_EXTENSIONS.join(", ")}.`);
+    if (bench) console.log(`The benchmark's user settings turn the built-in git extension off: ${JSON.stringify(GIT_OFF)}.`);
     try{
         await runTests({
             vscodeExecutablePath,
             extensionDevelopmentPath,
             extensionTestsPath,
-            launchArgs: launchArgs(workspace, userDataDir, bench),
+            launchArgs: launchArgs(workspace, userDataDir),
             // the Map's background worker stays off, so a file the tests create is never indexed (test 6); NEB_TESTS_DIR
             // names the folder whose test files the runner loads
             extensionTestsEnv: { NEBULOSITY_WORKER: "off", NEB_TESTS_DIR: testsDir },
