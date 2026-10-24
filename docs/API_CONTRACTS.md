@@ -267,7 +267,7 @@ The repo picker (PIVOT_SPEC.md §7.1).
 ```ts
 type RepoRemote = { owner: string; name: string };
 type RepoSummary = { root: string; name: string; indexedAt: string | null; remote?: RepoRemote };
-type RepoList = { active: string | null; repos: RepoSummary[] };
+type RepoList = { active: string | null; repos: RepoSummary[]; server?: { version: string; bridge: number } };
 ```
 
 - **`GET`** lists the repos the structure stage has indexed, by root, and the active one.

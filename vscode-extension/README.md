@@ -31,6 +31,8 @@ The extension uses a Map that's already running, on the port `nebulosity map` la
 | `nebulosity.port` | empty | The Map's port. Empty uses the port the Map was last started on (`nebulosity map --print-port`), else 3000. |
 | `nebulosity.followEditor` | `true` | Whether the Map follows the active editor when a window opens. The title-bar button changes it for one window and never edits your settings. |
 
+**`nebulosity.command` and `nebulosity.port` are read only from your user settings (or a remote machine's settings).** A folder's `.vscode/settings.json` can't set them: `nebulosity.command` names a program the extension runs, and a repository you've just cloned shouldn't get to choose it. Set them in your own settings (Preferences: Open User Settings).
+
 ## Good to know
 
 - **One Map, one repo at a time.** Two windows on two repos share the Map, and the window you last focused shows its repo.

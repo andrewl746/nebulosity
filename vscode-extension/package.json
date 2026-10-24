@@ -112,7 +112,8 @@
         "nebulosity.command": {
           "type": "string",
           "default": "",
-          "markdownDescription": "The `nebulosity` command to run: the installed command's path, or a checkout's `bin/nebulosity.mjs` (run with `node`). Empty finds `nebulosity` on PATH."
+          "scope": "machine",
+          "markdownDescription": "The `nebulosity` command to run: the installed command's path, or a checkout's `bin/nebulosity.mjs` (run with `node`). Empty finds `nebulosity` on PATH. Read only from your user settings (or a remote machine's), never from a folder's `.vscode/settings.json`."
         },
         "nebulosity.port": {
           "type": [
@@ -122,7 +123,8 @@
           "default": null,
           "minimum": 1,
           "maximum": 65535,
-          "markdownDescription": "The Map's port. Empty uses the port the Map was last started on (`nebulosity map --print-port`), else 3000."
+          "scope": "machine",
+          "markdownDescription": "The Map's port. Empty uses the port the Map was last started on (`nebulosity map --print-port`), else 3000. Read only from your user settings (or a remote machine's), never from a folder's `.vscode/settings.json`."
         },
         "nebulosity.followEditor": {
           "type": "boolean",
