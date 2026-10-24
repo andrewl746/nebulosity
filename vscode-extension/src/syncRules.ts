@@ -1,11 +1,13 @@
 import type { ImportsResponse } from "../../lib/contracts";
 import { isObject } from "./guards";
-import { relativeIn } from "./repoMatch";
+import { relativeIn, samePath } from "./repoMatch";
+import type { ServerCheck } from "./serverCheck";
 
 /**
  * The pure rules of the editor sync (sync.ts; design §4.4–§4.5, V1.8 plan P5, P6, P16, P17): the `/api/imports` request
- * and how its answer is read, What depends' highlight, the column a file from the Map opens in, the messages, and when a
- * `show` keeps the follow after `ready` off the Map. They take no part of VS Code's API, so the root vitest runs them.
+ * and how its answer is read, What depends' highlight, whether a file from the Map opens and in which column, the
+ * messages, and when a `show` keeps the follow after `ready` off the Map. They take no part of VS Code's API, so the root
+ * vitest runs them.
  */
 
 /** A `highlight` carries at most this many paths (API_CONTRACTS §20, design §4.5). */
@@ -111,6 +113,18 @@ export function openColumn(last: number | undefined, panel: number | undefined):
     if (last !== undefined && last !== panel) return last;
     if (panel === undefined) return 1;
     return panel === 1 ? 2 : panel - 1;
+}
+
+/**
+ * Whether a file picked on the Map opens (P17, Review Focus 4), from `GET /api/repos`' answer as classifyRepos reads it:
+ * only while the Map's active repo is the root the panel was shown for. The Map's own repo menu, or another window on
+ * focus, can switch it, and then a path both repos have (README.md, package.json) would open this workspace's file for
+ * the other repo's box without a word. "unknown" for an answer that isn't a current Map's.
+ */
+export function openCheck(check: ServerCheck, shownRoot: string, platform: NodeJS.Platform): "open" | "otherRepo" | "unknown" {
+    if (check.kind !== "current") return "unknown";
+    const active = check.list.active;
+    return active !== null && samePath(active, shownRoot, platform) ? "open" : "otherRepo";
 }
 
 /** Show this file and What depends for a file the index doesn't hold (P5). */

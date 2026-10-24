@@ -3,12 +3,14 @@ import type { BridgeFromMap, BridgeToMap, ImportsResponse } from "../../lib/cont
 import { pickItems, pickTitle } from "./dependents";
 import { FOLLOW_DEBOUNCE_MS, FollowGate } from "./followGate";
 import { errorText, getJson, mapUrl, RefusedError, type HttpAnswer } from "./http";
+import { PROBE_TIMEOUT_MS } from "./mapServer";
 import { MessageLog } from "./messageLog";
 import { MapPanel } from "./panel";
 import { checkRepoPath, uriPathOf } from "./repoMatch";
+import { classifyRepos, type ServerCheck } from "./serverCheck";
 import {
-    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openColumn, otherRepoText, readImports, repoPathOfUri, SHOW_ALL_LABEL,
-    ShowHold, showAllOffered, TRANSITIVE_LIMIT,
+    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openCheck, openColumn, otherRepoText, readImports, repoPathOfUri,
+    SHOW_ALL_LABEL, ShowHold, showAllOffered, TRANSITIVE_LIMIT,
 } from "./syncRules";
 
 /**
@@ -232,14 +234,16 @@ export class EditorSync implements vscode.Disposable {
      * A file the Map picked (a file box or a declaration, P10), or What depends' pick, opens in the editor: in the most
      * recent text editor's column, or beside the panel when that's the panel's own (never in the panel's column, which
      * it would cover: syncRules' openColumn), as a preview, the focus left where it is. Only a repo-relative path is
-     * taken, and only a file this workspace has (P17): the Map may show another repo, switched from its own menu or by
-     * another window (Review Focus 4). `shows` is what the Map shows afterwards when that isn't the file opened: What
-     * depends' target.
+     * taken, only while the Map still shows the repo the panel was shown for, and only a file this workspace has (P17):
+     * the Map may show another repo, switched from its own menu or by another window (Review Focus 4). `shows` is what
+     * the Map shows afterwards when that isn't the file opened: What depends' target.
      */
     private async openFile(raw: string, line?: number, shows?: string): Promise<void> {
         const path = checkRepoPath(raw);
         const shown = this.host.shown();
         if (path === null || shown === null || shown.root === null) return;
+        // a path both repos have (README.md, package.json) passes the stat below, so the Map's repo is asked first
+        if (!await this.mapStillShows(shown.port, shown.root, path)) return;
         const uri = this.fileUri(shown.root, path);
         let stat: vscode.FileStat | null = null;
         try{
@@ -259,6 +263,36 @@ export class EditorSync implements vscode.Disposable {
             await vscode.window.showTextDocument(uri, { viewColumn, preview: true, preserveFocus: true, selection });
         } catch (err){
             void vscode.window.showErrorMessage(`Nebulosity couldn't open ${path}: ${messageOf(err)}`);
+        }
+    }
+
+    /**
+     * Whether the Map's active repo is still `root` (`GET /api/repos`, syncRules' openCheck), or false once the user has
+     * been told why the file didn't open: another repo on the Map, a Map that stopped (P18), or an answer that can't say.
+     */
+    private async mapStillShows(port: number, root: string, path: string): Promise<boolean> {
+        const unchecked = (reason: string): void => {
+            void vscode.window.showErrorMessage(`Nebulosity couldn't check which repo the Map shows, so ${path} didn't open: ${reason}`);
+        };
+        let check: ServerCheck;
+        try{
+            const answer = await getJson(mapUrl(port, "/api/repos"), PROBE_TIMEOUT_MS);
+            check = classifyRepos(answer.status, answer.body);
+        } catch (err){
+            const panel = MapPanel.open;
+            if (err instanceof RefusedError && panel !== null && panel.state.kind === "map") panel.setState({ kind: "stopped" });
+            else unchecked(messageOf(err));
+            return false;
+        }
+        switch (openCheck(check, root, process.platform)){
+            case "open":
+                return true;
+            case "otherRepo":
+                void vscode.window.showInformationMessage(otherRepoText(path));
+                return false;
+            case "unknown":
+                unchecked(`port ${port} doesn't answer as this Map.`);
+                return false;
         }
     }
 

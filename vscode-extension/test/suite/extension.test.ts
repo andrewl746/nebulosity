@@ -67,10 +67,18 @@ function tabs(): string {
     return vscode.window.tabGroups.all.map((group) => `column ${group.viewColumn}: ${group.tabs.map((tab) => tab.label).join(", ")}`).join("; ");
 }
 
-async function activeRepo(): Promise<string | null> {
+async function repoList(): Promise<RepoList> {
     const response = await fetch(`${MAP}/api/repos`);
     assert.strictEqual(response.status, 200);
-    return ((await response.json()) as RepoList).active;
+    return (await response.json()) as RepoList;
+}
+
+const activeRepo = async (): Promise<string | null> => (await repoList()).active;
+
+/** Switches the Map's active repo, as its own repo menu or another window does. */
+async function switchRepo(root: string): Promise<void> {
+    const response = await fetch(`${MAP}/api/repos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ root }) });
+    assert.strictEqual(response.status, 200, `The Map didn't switch to ${root}.`);
 }
 
 /** Whether the Map's port refuses a connection: nothing listens on it any more. */
@@ -182,6 +190,23 @@ suite("The extension against a real Map, on the mini-repo", () => {
         await api.simulateFromMap({ type: "nebulosity.open", path: "src/../src/app/main.ts" });
         assertActive("src/core/log.ts");
         assert.strictEqual(tabs(), before);
+    });
+
+    test("an open while the Map shows another repo opens nothing, even for a file this workspace has", async () => {
+        const list = await repoList();
+        const home = list.active;
+        const other = list.repos.find((repo) => !samePath(repo.root, folder().uri.fsPath, process.platform));
+        assert.ok(home !== null && other !== undefined, `No other repo to switch the Map to: ${JSON.stringify(list.repos.map((repo) => repo.root))}`);
+        await switchRepo(other.root);
+        try{
+            const before = tabs();
+            // src/app/main.ts is this copy's: only the check of the Map's repo keeps it from opening for the other repo's box
+            await api.simulateFromMap({ type: "nebulosity.open", path: "src/app/main.ts" });
+            assertActive("src/core/log.ts");
+            assert.strictEqual(tabs(), before);
+        } finally{
+            await switchRepo(home);
+        }
     });
 
     test("What depends asks /api/imports", async () => {

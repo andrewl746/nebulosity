@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ImportsResponse } from "../../lib/contracts";
+import type { ServerCheck } from "./serverCheck";
 import {
-    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openColumn, otherRepoText, panelColumn, readImports, repoPathOfUri, SHOW_ALL_LABEL,
-    ShowHold, showAllOffered,
+    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openCheck, openColumn, otherRepoText, panelColumn, readImports, repoPathOfUri,
+    SHOW_ALL_LABEL, ShowHold, showAllOffered,
 } from "./syncRules";
 
 /** A dependents answer, from the plan's "Ground truth" (test/fixtures/mini-repo). */
@@ -139,6 +140,34 @@ describe("the column a file from the Map opens in (design §4.4)", () => {
         expect(openColumn(3, 3)).toBe(2);
         // no panel column known: column 1
         expect(openColumn(undefined, undefined)).toBe(1);
+    });
+});
+
+describe("openCheck: a pick on the Map opens only while the Map shows the panel's repo (P17, Review Focus 4)", () => {
+    const VSCODE = "C:/Users/Andrew/Programming/vscode";
+    const AFFINE = "C:/Users/Andrew/Programming/AFFiNE";
+    const server = { version: "0.3.0", bridge: 1 };
+    const map = (active: string | null): ServerCheck => ({
+        kind: "current",
+        list: { active, repos: [{ root: VSCODE, name: "vscode", indexedAt: null }, { root: AFFINE, name: "AFFiNE", indexedAt: null }], server },
+    });
+
+    it("opens while the Map's active repo is the one shown, in either spelling of it on Windows", () => {
+        expect(openCheck(map(VSCODE), VSCODE, "win32")).toBe("open");
+        expect(openCheck(map("c:/users/andrew/programming/vscode"), VSCODE, "win32")).toBe("open");
+        expect(openCheck(map("/home/a/repo"), "/home/a/repo/", "linux")).toBe("open");
+    });
+
+    it("refuses once the Map shows another repo (its own menu, or another window on focus), or none", () => {
+        expect(openCheck(map(AFFINE), VSCODE, "win32")).toBe("otherRepo");
+        expect(openCheck(map("/home/a/Repo"), "/home/a/repo", "linux")).toBe("otherRepo");
+        expect(openCheck(map(null), VSCODE, "win32")).toBe("otherRepo");
+    });
+
+    it("can't tell from an answer that isn't a current Map's", () => {
+        expect(openCheck({ kind: "old" }, VSCODE, "win32")).toBe("unknown");
+        expect(openCheck({ kind: "mismatch", bridge: 2 }, VSCODE, "win32")).toBe("unknown");
+        expect(openCheck({ kind: "foreign" }, VSCODE, "win32")).toBe("unknown");
     });
 });
 
