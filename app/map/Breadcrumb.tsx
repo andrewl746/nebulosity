@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { trailStart } from "./narrow";
 import { nameOf } from "./paths";
 
@@ -24,18 +24,23 @@ export default function Breadcrumb({ repo, trail, onOpen }: BreadcrumbProps){
     const [fold, setFold] = useState<{ trail: readonly string[]; count: number }>({ trail, count: 0 });
     const folded = fold.trail === trail ? fold.count : 0;
 
-    useEffect(() => {
+    // measured before the browser paints the new trail, so a deep folder's whole trail never shows for a frame over its
+    // neighbours; then again whenever the room or a step's width changes (the window resized, the font arrived)
+    useLayoutEffect(() => {
         const navEl = nav.current, rulerEl = ruler.current;
         if (!navEl || !rulerEl) return;
         const measure = (): void => {
             const widths = [...rulerEl.children].map((step) => step.getBoundingClientRect().width);
             const ellipsis = widths.pop() ?? 0;   // the ruler ends with the "…" step
-            setFold({ trail, count: trailStart(widths, navEl.clientWidth, ellipsis, STEP_GAP) });
+            // the steps' widths are fractional, so the room is too: a whole-pixel clientWidth could fold a step that fits
+            const count = trailStart(widths, navEl.getBoundingClientRect().width, ellipsis, STEP_GAP);
+            setFold((last) => last.trail === trail && last.count === count ? last : { trail, count });
         };
-        // a ResizeObserver reports once as soon as it observes, then on every change of the room or of the trail's text
+        measure();
         const observer = new ResizeObserver(measure);
         observer.observe(navEl);
-        observer.observe(rulerEl);
+        // each step, not the ruler itself: the ruler is the nav's width whatever its text, so only the steps change size
+        for (const step of rulerEl.children) observer.observe(step);
         return () => observer.disconnect();
     }, [trail]);
 

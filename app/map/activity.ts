@@ -1,4 +1,5 @@
 import type { LevelResponse, LiveEvent } from "@/lib/contracts";
+import { ago } from "./format";
 import { boxFor } from "./paths";
 
 /** The activity bar lists this many of Claude Code's tool calls (VISUAL_REFRESH.md §6). */
@@ -53,6 +54,22 @@ export function activityLabel(event: LiveEvent): string {
 export function activityTitle(event: LiveEvent): string {
     const label = activityLabel(event);
     return event.paths.length > 1 ? [label, ...event.paths].join("\n") : label;
+}
+
+/**
+ * The newest tool call's hover title: its label and time (with its paths, as activityTitle), then each older call's
+ * label and time. A narrow bar drops the older calls and the times while their boxes may still be outlined in orange,
+ * so this is where they can still be read. `now` is the bar's clock; 0, before its first tick, leaves the times out.
+ */
+export function newestTitle(recent: readonly LiveEvent[], now: number): string {
+    const when = (event: LiveEvent): string => now > 0 ? ` · ${ago(Math.max(0, now - Date.parse(event.at)))}` : "";
+    const [newest, ...older] = recent;
+    if (newest === undefined) return "";
+    return [
+        `${activityLabel(newest)}${when(newest)}`,
+        ...(newest.paths.length > 1 ? newest.paths : []),
+        ...older.map((event) => `Earlier: ${activityLabel(event)}${when(event)}`),
+    ].join("\n");
 }
 
 /**

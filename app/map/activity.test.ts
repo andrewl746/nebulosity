@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LiveEvent, MapNode } from "@/lib/contracts";
-import { activityLabel, activityTitle, agentFocus, highlightedNote, pushActivity } from "./activity";
+import { activityLabel, activityTitle, agentFocus, highlightedNote, newestTitle, pushActivity } from "./activity";
 
 const NOW = Date.parse("2026-10-12T20:00:00.000Z");
 const event = (tool: string, paths: string[], secondsAgo = 0): LiveEvent =>
@@ -46,6 +46,25 @@ describe("activityTitle", () => {
     it("adds every path, one per line, when the label shortens them", () => {
         expect(activityTitle(event("show_on_map", ["src/vs", "src/main.ts"]))).toBe("Showing src/vs +1 on the map\nsrc/vs\nsrc/main.ts");
         expect(activityTitle(event("imports", ["a.ts", "b.ts"]))).toBe("Tracing a.ts → b.ts\na.ts\nb.ts");
+    });
+});
+
+describe("newestTitle", () => {
+    it("is the newest action's label and time, then each older one's, which a narrow bar drops", () => {
+        const recent = [event("describe", ["src/vs/base/common/event.ts"]), event("imports", ["a.ts", "b.ts"], 12), event("overview", [], 90)];
+        expect(newestTitle(recent, NOW)).toBe([
+            "Reading src/vs/base/common/event.ts · just now",
+            "Earlier: Tracing a.ts → b.ts · 12 s ago",
+            "Earlier: Reading the repo overview · 1 min ago",
+        ].join("\n"));
+    });
+
+    it("keeps every path of a label that shortens them, under its first line", () => {
+        expect(newestTitle([event("show_on_map", ["src/vs", "src/main.ts"])], NOW)).toBe("Showing src/vs +1 on the map · just now\nsrc/vs\nsrc/main.ts");
+    });
+
+    it("has no times before the bar's clock has ticked", () => {
+        expect(newestTitle([event("overview", []), event("describe", ["a.ts"], 30)], 0)).toBe("Reading the repo overview\nEarlier: Reading a.ts");
     });
 });
 

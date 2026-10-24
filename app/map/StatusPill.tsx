@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
 import type { IndexStatus, StageName } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount, headline, stageLabel, type Tone } from "./format";
 import { DEMO } from "./mode";
-import { placePopover } from "./popover";
+import { placePopover, usePlaceOnResize } from "./popover";
 import { useDismiss } from "./useDismiss";
 
 /** The status menu's width, at normal sizes (narrower only when the Map is). */
@@ -30,13 +30,18 @@ const STAGES: readonly StageName[] = ["structure", "summaries", "embeddings"];
 export default function StatusPill({ status }: { status: IndexStatus | null }){
     const [open, setOpen] = useState(false);
     const [reindex, setReindex] = useState<string | null>(null);
-    // where the menu opens, worked out as it opens: right under the pill, kept inside a narrow Map (popover.ts)
+    // where the menu opens, worked out as it opens and as the window resizes: right under the pill, kept inside a narrow
+    // Map (popover.ts)
     const [menuPlace, setMenuPlace] = useState<CSSProperties>({ right: 0, width: MENU_WIDTH });
     const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
+    const place = useCallback(() => {
+        if (ref.current) setMenuPlace(placePopover(ref.current, MENU_WIDTH, "end"));
+    }, [ref]);
+    usePlaceOnResize(open, place);
     if (status === null) return null;
     const head = headline(status);
     const toggle = (): void => {
-        if (!open && ref.current) setMenuPlace(placePopover(ref.current, MENU_WIDTH, "end"));
+        if (!open) place();
         setOpen((o) => !o);
     };
 
@@ -60,7 +65,7 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                 className="flex max-w-full items-center gap-2 rounded-md border border-border px-2.5 py-1 text-[12px] text-text-2 hover:border-text-2 hover:text-text"
             >
                 <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${DOTS[head.tone]}`} />
-                <span className="truncate max-[519px]:hidden">{head.text}</span>
+                <span className="truncate max-[520px]:hidden">{head.text}</span>
                 <IconChevronDown aria-hidden size={14} stroke={1.75} className={`shrink-0 ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
