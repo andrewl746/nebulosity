@@ -105,12 +105,23 @@ function messageOf(state: Exclude<PanelState, { kind: "map" }>): string {
 /**
  * The Map's own colors (app/globals.css: the canvas, its text, the code chips, cyan for what you click), so the panel
  * reads as the Map's from its first message to the Map itself, with no flash of another color between them.
+ *
+ * It also holds up when the panel is squeezed (the owner's "no matter how much I compress it"). Nothing here is cut off:
+ * long words and paths wrap (`overflow-wrap:anywhere` on `main`, whose children inherit it); the side padding shrinks
+ * in two steps below 480 px and 240 px wide, so the text keeps its room; below a floor of `main`'s own width
+ * (`min-width:7rem` plus its padding) wrapping can't help, so the page scrolls sideways instead; and whatever scrolls
+ * does so in the Map's thin scrollbar rather than the browser's default (the same `scrollbar-width` and `scrollbar-color`
+ * as app/globals.css). The floor is on `main` and not on `body`, so the `map` state's frame still fills the panel at any
+ * size and the Map inside keeps its own floor and scrolling. Wider than 480 px the page is as it was.
  */
 const STYLE = [
+    "*{scrollbar-width:thin;scrollbar-color:#4B3B85 transparent}",
     "html,body{margin:0;padding:0;height:100%;background:#0E0A1C;color:#F1EEF8}",
     "body{font-family:var(--vscode-font-family),system-ui,sans-serif;font-size:13px;line-height:1.5}",
     "iframe{display:block;width:100%;height:100vh;border:0}",
-    "main{max-width:34rem;padding:2.5rem 2rem;color:#D3C7EE}",
+    "main{max-width:34rem;min-width:7rem;padding:2.5rem 2rem;color:#D3C7EE;overflow-wrap:anywhere}",
+    "@media (max-width:480px){main{padding:1.5rem 1rem}}",
+    "@media (max-width:240px){main{padding:1rem .75rem}}",
     "h1{margin:0 0 .75rem;font-size:15px;font-weight:600;color:#F1EEF8}",
     "p{margin:0 0 .75rem}",
     "code{padding:.1rem .35rem;border-radius:4px;background:#2A1B52;color:#D8CAFF;font-family:var(--vscode-editor-font-family),monospace;word-break:break-all}",

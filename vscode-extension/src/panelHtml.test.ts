@@ -118,6 +118,56 @@ describe("panelHtml: escaping", () => {
     });
 });
 
+/** The page's one style element's CSS, read from the raw HTML. */
+function styleOf(html: string): string {
+    const match = /<style nonce="[^"]*">([^<]*)<\/style>/.exec(html);
+    if (match === null) throw new Error("no style element");
+    return match[1];
+}
+
+describe("panelHtml: narrow widths (the owner's 'no matter how much I compress it', checked in headless Chrome)", () => {
+    const longRoot = "C:/Users/Andrew/Programming/some-very-long-repository-name-for-testing/packages/frontend";
+    const longMessage = `Error: listen EADDRINUSE\n    at ${"A1b2C3d4E5".repeat(30)}\nsee the log`;
+
+    it("wraps long words and paths anywhere, so nothing runs past the panel", () => {
+        const css = styleOf(panelHtml({ kind: "notIndexed", root: longRoot }, opts));
+        // on `main`, so the headings, paragraphs, links and buttons inherit it
+        expect(css).toMatch(/main\{[^}]*overflow-wrap:anywhere[^}]*\}/);
+        // the two long-value elements keep their own break rules
+        expect(css).toMatch(/code\{[^}]*word-break:break-all[^}]*\}/);
+        expect(css).toMatch(/\.detail\{[^}]*white-space:pre-wrap;word-break:break-word\}/);
+        expect(panelHtml({ kind: "failed", message: longMessage }, opts)).toContain('<p class="detail">');
+    });
+
+    it("shrinks the side padding in two steps below 480 px and 240 px, and leaves it alone above", () => {
+        const css = styleOf(panelHtml({ kind: "stopped" }, opts));
+        expect(css).toContain("main{max-width:34rem;min-width:7rem;padding:2.5rem 2rem;");
+        expect(css).toContain("@media (max-width:480px){main{padding:1.5rem 1rem}}");
+        expect(css).toContain("@media (max-width:240px){main{padding:1rem .75rem}}");
+        // every query is a ceiling, so no rule changes the look of a panel wider than 480 px
+        const queries = css.match(/@media[^{]*/g) ?? [];
+        expect(queries).toEqual(["@media (max-width:480px)", "@media (max-width:240px)"]);
+    });
+
+    it("scrolls sideways below a floor on `main`, not on the page, so the Map's frame still fills the panel at any size", () => {
+        const css = styleOf(panelHtml({ kind: "map", frameUrl: "http://localhost:3125/?embed=vscode" }, opts));
+        expect(css.match(/min-width/g)).toHaveLength(1);
+        expect(css).toMatch(/main\{[^}]*min-width:7rem[^}]*\}/);
+        expect(css).toContain("iframe{display:block;width:100%;height:100vh;border:0}");
+        expect(css).not.toMatch(/overflow\s*:\s*hidden/);
+    });
+
+    it("themes whatever scrolls in the Map's thin scrollbar, with no browser default", () => {
+        // the same two properties, and the --border color, as app/globals.css
+        expect(styleOf(panelHtml({ kind: "failed", message: longMessage }, opts))).toContain("*{scrollbar-width:thin;scrollbar-color:#4B3B85 transparent}");
+    });
+
+    it("gives every state the same style, so each narrow rule reaches all of them", () => {
+        const first = styleOf(panelHtml(EVERY_STATE[0], opts));
+        for (const state of EVERY_STATE) expect({ kind: state.kind, css: styleOf(panelHtml(state, opts)) }).toEqual({ kind: state.kind, css: first });
+    });
+});
+
 describe("mapFrameUrl and frameOrigin", () => {
     it("puts one slash, then ?embed=vscode, after the external URL", () => {
         expect(mapFrameUrl("http://localhost:3125/")).toBe("http://localhost:3125/?embed=vscode");
