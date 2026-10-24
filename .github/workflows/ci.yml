@@ -294,6 +294,7 @@ jobs:
           "$BIN/nebulosity" index "$SCRATCH/ext-repo" --no-activate
           echo "EXT_COPY=$SCRATCH/ext-repo" >> "$GITHUB_ENV"
       - name: The extension's integration tests, against the installed Map on port 3125
+        id: extint
         if: ${{ !cancelled() && steps.index.outcome == 'success' && steps.extdeps.outcome == 'success' && steps.extcopy.outcome == 'success' }}
         timeout-minutes: 15
         working-directory: vscode-extension
@@ -309,9 +310,10 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then export PATH="$(cygpath -u "$BIN"):$PATH"; else export PATH="$BIN:$PATH"; fi
           if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a npm run test:integration; else npm run test:integration; fi
       # The last test leaves the Map running: closing VS Code has to stop it (the extension's deactivate), checked here
-      # before the cleanup below could hide it
+      # before the cleanup below could hide it. Only after the tests passed: skipped or failed, they may never have
+      # started that Map, and the check would pass on nothing
       - name: The Map the extension started stopped with VS Code
-        if: ${{ !cancelled() && steps.index.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.extint.outcome == 'success' }}
         timeout-minutes: 15
         run: |
           sleep 10
