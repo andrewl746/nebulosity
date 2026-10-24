@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
 import type { RepoList, RepoSummary } from "@/lib/contracts";
 import { api, ApiError } from "./api";
+import { placePopover } from "./popover";
 import { useDismiss } from "./useDismiss";
+
+/** The repo list's width, at normal sizes (narrower only when the Map is). */
+const LIST_WIDTH = 320;
 
 type RepoMenuProps = { repo: string; onSwitched: () => void; /** Go to the repo's top level. */ onHome: () => void };
 
@@ -29,6 +33,8 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
     const [list, setList] = useState<RepoList | null>(null);
     const [open, setOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // where the list opens, worked out as it opens: under the name, kept inside a narrow Map (popover.ts)
+    const [listPlace, setListPlace] = useState<CSSProperties>({ left: 0, width: LIST_WIDTH });
     const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
 
     useEffect(() => {
@@ -57,7 +63,10 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                 <button
                     type="button"
                     data-testid="repo-menu"
-                    onClick={() => setOpen((o) => !o)}
+                    onClick={() => {
+                        if (!open && ref.current) setListPlace(placePopover(ref.current, LIST_WIDTH, "start"));
+                        setOpen((o) => !o);
+                    }}
                     aria-label="Switch repository"
                     title="Switch repository"
                     className="grid h-7 w-6 shrink-0 place-items-center rounded-md text-text-2 hover:bg-surface hover:text-text"
@@ -66,7 +75,7 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                 </button>
             </div>
             {open && (
-                <ul className="absolute left-0 top-9 z-30 w-[320px] rounded-lg border border-border bg-surface py-1 text-[13px]">
+                <ul data-testid="repo-list" data-covers style={listPlace} className="absolute top-9 z-30 overflow-y-auto rounded-lg border border-border bg-surface py-1 text-[13px]">
                     {list.repos.map((r) => (
                         <li key={r.root}>
                             <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-border">
@@ -77,7 +86,7 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                     ))}
                 </ul>
             )}
-            {error && <span className="ml-2 text-[12px] text-danger">{error}</span>}
+            {error && <span title={error} className="ml-2 block truncate text-[12px] text-danger">{error}</span>}
         </div>
     );
 }

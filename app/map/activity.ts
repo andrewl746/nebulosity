@@ -47,6 +47,15 @@ export function activityLabel(event: LiveEvent): string {
 }
 
 /**
+ * A tool call's hover title in the activity bar: its label, which a narrow bar cuts short, and every path when the
+ * label names only the first ("src/vs +2"). A label with one path already holds it whole.
+ */
+export function activityTitle(event: LiveEvent): string {
+    const label = activityLabel(event);
+    return event.paths.length > 1 ? [label, ...event.paths].join("\n") : label;
+}
+
+/**
  * The boxes Claude Code is touching right now (VISUAL_REFRESH.md §4, Claude's focus): the boxes on this level that
  * hold what the recent tool calls touched in the last AGENT_ACTIVE_MS, plus show_on_map's highlights. Inside VS Code's
  * panel the editor's highlights (What depends' importers, through the bridge) are ringed alike, as the V1.8 design

@@ -32,10 +32,14 @@ type DetailPanelProps = {
      * "View source" still opens (design §4.4).
      */
     onOpenInEditor?: (path: string, line?: number) => void;
+    /**
+     * Its width (narrow.ts's panelLayout): 400 px beside the canvas, the Map's whole width when that leaves too little
+     * canvas beside it. The canvas's controls move left by the same width, so it never covers them.
+     */
+    width: number;
+    /** Covering the whole canvas: then it fills the Map's width, whatever that is as the window resizes. */
+    covers: boolean;
 };
-
-/** The panel's width: the canvas's controls move left by this much while it's open, so it never covers them. */
-export const PANEL_WIDTH = 400;
 
 /** Chips and rows shown before "+N more" or "View all": enough to act on without scrolling. */
 const PREVIEW = 8;
@@ -59,6 +63,8 @@ export default memo(DetailPanel);
 
 type PanelFrameProps = {
     path: string;
+    width: number;
+    covers: boolean;
     kindLabel: string;
     name: string;
     title: string;
@@ -70,9 +76,9 @@ type PanelFrameProps = {
 };
 
 /** The panel's frame: the kind, the name, the path under it, a close button, then the header's extras and the body. */
-function PanelFrame({ path, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
+function PanelFrame({ path, width, covers, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
     return (
-        <aside data-panel={path} style={{ width: PANEL_WIDTH }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
+        <aside data-panel={path} style={{ width: covers ? "100%" : width }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
             <header className="border-b border-hairline px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -92,7 +98,7 @@ function PanelFrame({ path, kindLabel, name, title, subtitle, header, onClose, c
 }
 
 /** A file, a folder or the repo: described by the server (GET /api/describe). */
-function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOpenInEditor }: DetailPanelProps){
+function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOpenInEditor, width, covers }: DetailPanelProps){
     const target = path;
     const [data, setData] = useState<DescribeResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
@@ -162,6 +168,8 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
     return (
         <PanelFrame
             path={path}
+            width={width}
+            covers={covers}
             kindLabel={kindLabel}
             name={name}
             title={target || name}
@@ -216,7 +224,7 @@ type Linked = { path: string; count: number };
  * A portal selected: the page (or pages) behind it, a way to go there, and which boxes on this page have lines to it,
  * each a link that selects that box. Everything comes from the level on screen; there's nothing to fetch.
  */
-function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose }: DetailPanelProps & { portal: MapNode }){
+function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, width, covers }: DetailPanelProps & { portal: MapNode }){
     const links = portalLinks(level.edges, portal.path);
     const linked = linkedFrom(level, portal.path);
     const pages = portal.page !== undefined ? [portal.page] : portal.pages ?? [];
@@ -229,6 +237,8 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose }: Deta
     return (
         <PanelFrame
             path={path}
+            width={width}
+            covers={covers}
             kindLabel={pages.length === 1 ? "Page" : "Pages"}
             name={portal.name}
             title={portal.name}
@@ -446,7 +456,10 @@ function SectionTitle({ title, count, note, large = false }: { title: string; co
 
 type ChipsProps = { title: string; note: string; items: readonly AreaCount[]; empty: string; onFocus: (targetPath: string) => void };
 
-/** "Depends on" / "Used by" as chips (§5): each focuses that area on the Map. The first 8, "+N more", then "Show fewer". */
+/**
+ * "Depends on" / "Used by" as chips (§5): each focuses that area on the Map. The first 8, "+N more", then "Show fewer".
+ * A chip is at most 360 px wide, or the panel's width in a narrow window, and its name truncates (the title has it).
+ */
 function Chips({ title, note, items, empty, onFocus }: ChipsProps){
     const [all, setAll] = useState(false);
     const shown = all ? items : items.slice(0, PREVIEW);
@@ -464,7 +477,7 @@ function Chips({ title, note, items, empty, onFocus }: ChipsProps){
                                     data-chip={area.path}
                                     title={`${area.path}: ${formatCount(area.count)} import${area.count === 1 ? "" : "s"}`}
                                     onClick={() => onFocus(area.path)}
-                                    className="flex max-w-[360px] items-center gap-2 rounded-md border border-border bg-surface px-2 py-1 text-[13px] text-text hover:border-text-2"
+                                    className="flex max-w-[min(360px,100%)] items-center gap-2 rounded-md border border-border bg-surface px-2 py-1 text-[13px] text-text hover:border-text-2"
                                 >
                                     <span className="truncate">{shortPath(area.path)}</span>
                                     <span className="shrink-0 text-text-2">{formatCount(area.count)}</span>

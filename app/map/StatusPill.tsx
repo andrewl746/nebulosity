@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
 import type { IndexStatus, StageName } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { formatCount, headline, stageLabel, type Tone } from "./format";
 import { DEMO } from "./mode";
+import { placePopover } from "./popover";
 import { useDismiss } from "./useDismiss";
+
+/** The status menu's width, at normal sizes (narrower only when the Map is). */
+const MENU_WIDTH = 340;
 
 /** Green means indexed and nothing else (VISUAL_REFRESH.md §2); a failure, or nothing indexed, is the error color. No motion. */
 const DOTS: Record<Tone, string> = {
@@ -26,9 +30,15 @@ const STAGES: readonly StageName[] = ["structure", "summaries", "embeddings"];
 export default function StatusPill({ status }: { status: IndexStatus | null }){
     const [open, setOpen] = useState(false);
     const [reindex, setReindex] = useState<string | null>(null);
+    // where the menu opens, worked out as it opens: right under the pill, kept inside a narrow Map (popover.ts)
+    const [menuPlace, setMenuPlace] = useState<CSSProperties>({ right: 0, width: MENU_WIDTH });
     const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
     if (status === null) return null;
     const head = headline(status);
+    const toggle = (): void => {
+        if (!open && ref.current) setMenuPlace(placePopover(ref.current, MENU_WIDTH, "end"));
+        setOpen((o) => !o);
+    };
 
     const runReindex = (): void => {
         setReindex("starting…");
@@ -38,22 +48,23 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
         );
     };
 
+    // a narrow window keeps the dot alone (TopBar's steps), and a squeezed pill truncates its words: the title has them
     return (
-        <div ref={ref} className="relative">
+        <div ref={ref} className="relative min-w-0">
             <button
                 type="button"
                 data-testid="status-pill"
-                onClick={() => setOpen((o) => !o)}
+                onClick={toggle}
                 aria-expanded={open}
-                title={DEMO ? "Index status: what's indexed" : "Index status: what's indexed, and re-index"}
-                className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-[12px] text-text-2 hover:border-text-2 hover:text-text"
+                title={`${head.text} · ${DEMO ? "Index status: what's indexed" : "Index status: what's indexed, and re-index"}`}
+                className="flex max-w-full items-center gap-2 rounded-md border border-border px-2.5 py-1 text-[12px] text-text-2 hover:border-text-2 hover:text-text"
             >
-                <span aria-hidden className={`h-2 w-2 rounded-full ${DOTS[head.tone]}`} />
-                {head.text}
-                <IconChevronDown aria-hidden size={14} stroke={1.75} className={open ? "rotate-180" : ""} />
+                <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${DOTS[head.tone]}`} />
+                <span className="truncate max-[519px]:hidden">{head.text}</span>
+                <IconChevronDown aria-hidden size={14} stroke={1.75} className={`shrink-0 ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
-                <div data-testid="status-menu" className="absolute right-0 top-9 z-30 w-[340px] space-y-3 rounded-lg border border-border bg-surface p-3 text-[12px] text-text-2">
+                <div data-testid="status-menu" data-covers style={menuPlace} className="absolute top-9 z-30 space-y-3 overflow-y-auto rounded-lg border border-border bg-surface p-3 text-[12px] text-text-2">
                     {STAGES.map((name) => (
                         <div key={name}>
                             <div className="text-[13px] text-text">{stageLabel(name, status.stages[name])}</div>
@@ -65,7 +76,7 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                             ? <span>A static demo: the index is frozen at export.</span>
                             : (
                                 <>
-                                    <span className="truncate">{reindex ?? `index version ${status.indexVersion}`}</span>
+                                    <span className="truncate" title={reindex ?? `index version ${status.indexVersion}`}>{reindex ?? `index version ${status.indexVersion}`}</span>
                                     <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-control underline underline-offset-2 hover:text-text">Re-index</button>
                                 </>
                             )}

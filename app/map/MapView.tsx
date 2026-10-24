@@ -6,7 +6,7 @@ import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import type { BridgeFromMap, BridgeToMap, LevelResponse, LiveEvent } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import Breadcrumb from "./Breadcrumb";
-import DetailPanel, { PANEL_WIDTH } from "./DetailPanel";
+import DetailPanel from "./DetailPanel";
 import HelpDialog from "./HelpDialog";
 import ActivityBar from "./ActivityBar";
 import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
@@ -14,6 +14,7 @@ import { isBusyLevel } from "./emphasis";
 import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
 import { followStep, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
+import { panelLayout, pillForm, type PillForm } from "./narrow";
 import { boxFor, parentOf } from "./paths";
 import { clearStart, markStart, measureAfterPaint } from "./perf";
 import { pageNote, selectionShown } from "./portals";
@@ -26,6 +27,7 @@ import TopBar from "./TopBar";
 import { EMBEDDED, useEditorBridge } from "./useEditorBridge";
 import { useIndexStatus } from "./useIndexStatus";
 import { useLive } from "./useLive";
+import { useWidth } from "./useWidth";
 
 /**
  * Levels fetched for one repo and index version (ADR-036), by folder and page: going back up a level is instant until
@@ -101,6 +103,8 @@ function MapScreen(){
     // holds across levels until it's turned off (owner, 2026-10-12)
     const [showAllLines, setShowAllLines] = useState(false);
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
+    // the Map area's width: the panel's width and the page pill's wording go by it (narrow.ts)
+    const [mainRef, mainWidth] = useWidth<HTMLElement>();
 
     // the focus effect's failure handler reads where the Map is when the answer comes back, not when it was asked, and
     // the editor's `drawn` reads it when it is posted
@@ -417,6 +421,13 @@ function MapScreen(){
     const jumpError = focusError !== null && focusError.place === cacheKey(place) && focusError.selected === selected ? focusError.error : null;
     const banner = levelError ?? jumpError;
 
+    // the panel: 400 px beside the canvas, or over all of it when too little canvas would be left (narrow.ts)
+    const panelOpen = shownSelected !== null && level !== null;
+    const panel = panelLayout(mainWidth);
+    const panelWidth = panelOpen ? panel.width : 0;
+    const covered = panelOpen && panel.covers;
+    const pill = level !== null && pageCount > 1 && !covered;
+
     if (statusError?.code === "INDEX_EMPTY") return <EmptyState />;
 
     return (
@@ -432,12 +443,16 @@ function MapScreen(){
                 <div className="flex shrink-0 items-center gap-4 text-[12px] text-text-2">
                     {level && isBusyLevel(level.edges.length) && (
                         <span data-testid="lines-note">
-                            {showAllLines ? `All ${formatCount(level.edges.length)} lines shown` : "Busy folder: lines show on hover"}
-                            {" · "}
+                            {/* a narrow window keeps the toggle alone (its title says the rest), so the path keeps its room */}
+                            <span className="max-[767px]:hidden">
+                                {showAllLines ? `All ${formatCount(level.edges.length)} lines shown` : "Busy folder: lines show on hover"}
+                                {" · "}
+                            </span>
                             <button
                                 type="button"
                                 data-testid="lines-toggle"
                                 onClick={() => setShowAllLines((all) => !all)}
+                                title={showAllLines ? `All ${formatCount(level.edges.length)} lines are shown` : "A busy folder: a box's lines show when you hover or select it"}
                                 className="text-control underline underline-offset-2 hover:text-text"
                             >
                                 {showAllLines ? "Show on hover only" : "Show all lines"}
@@ -446,7 +461,7 @@ function MapScreen(){
                     )}
                 </div>
             </div>
-            <main className="relative flex-1">
+            <main ref={mainRef} className="relative flex-1">
                 {level && (
                     <MapCanvas
                         level={level}
@@ -458,15 +473,24 @@ function MapScreen(){
                         onTurnPage={turnPage}
                         onDrawn={onDrawn}
                         quietLines={!showAllLines && isBusyLevel(level.edges.length)}
+                        panelWidth={panelWidth}
+                        covered={covered}
                     />
                 )}
-                {level && pageCount > 1 && (
-                    <>
-                        <PagePill level={level} onTurn={turnPage} panelOpen={shownSelected !== null} />
-                    </>
+                {level && pill && (
+                    <PagePill level={level} onTurn={turnPage} panelWidth={panelWidth} form={pillForm(mainWidth === null ? null : mainWidth - panelWidth)} />
                 )}
-                {!level && !levelError && <p className="absolute inset-0 grid place-items-center text-[13px] text-text-2">Loading the map…</p>}
-                {banner && <p className="absolute inset-x-0 top-6 text-center text-[13px] text-danger">{banner.message}</p>}
+                {!level && !levelError && <p className="absolute inset-0 grid place-items-center px-4 text-center text-[13px] text-text-2">Loading the map…</p>}
+                {/* over the canvas beside the panel, below the page pill if there is one, wrapping in a narrow window. A
+                    panel over the whole canvas would hide it, so then it's a solid strip along the bottom, clear of the
+                    panel's header and its × */}
+                {banner && (covered
+                    ? <p role="alert" data-covers className="absolute inset-x-0 bottom-0 z-20 border-t border-hairline bg-panel px-4 py-2 text-center text-[13px] text-danger">{banner.message}</p>
+                    : (
+                        <p role="alert" style={{ right: panelWidth }} className={`absolute left-0 ${pill ? "top-16" : "top-6"} px-4 text-center text-[13px] text-danger`}>
+                            {banner.message}
+                        </p>
+                    ))}
                 {shownSelected !== null && level && (
                     <DetailPanel
                         key={shownSelected}
@@ -478,6 +502,8 @@ function MapScreen(){
                         onTurnPage={turnPage}
                         onClose={closePanel}
                         onOpenInEditor={editor === null ? undefined : openInEditor}
+                        width={panel.width}
+                        covers={panel.covers}
                     />
                 )}
             </main>
@@ -502,9 +528,10 @@ function MapScreen(){
  * the bottom of the canvas then read as loud and, in the boxes' colour, blended in (owner review). Big arrows at the
  * canvas's sides went too, after a second critique: two ways to do one thing, and the right one sat on a box when the
  * panel was open. Like the other overlays it's a solid card in the logo's violet with no outline, so it reads as neither
- * a box nor a line, its buttons cyan; it moves left of the panel when the panel opens.
+ * a box nor a line, its buttons cyan; it moves left of the panel when the panel opens, by the panel's own width. On a
+ * narrow canvas it says less (narrow.ts's pillForm): "Page 2 of 5", then "2 / 5", with the whole note as its title.
  */
-function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: (page: number) => void; panelOpen: boolean }){
+function PagePill({ level, onTurn, panelWidth, form }: { level: LevelResponse; onTurn: (page: number) => void; panelWidth: number; form: PillForm }){
     const step = (side: "left" | "right") => {
         const next = side === "left" ? level.page - 1 : level.page + 1;
         const Icon = side === "left" ? IconChevronLeft : IconChevronRight;
@@ -524,16 +551,17 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
         );
     };
     // "Page 2 of 5 · 44 of 182 folders and files": the page in the text color, the count quieter
-    const [pagePart, ...rest] = pageNote(level).split(" · ");
+    const note = pageNote(level);
+    const [pagePart, ...rest] = note.split(" · ");
     return (
         <div
-            style={{ right: (panelOpen ? PANEL_WIDTH : 0) + 16 }}
+            style={{ right: panelWidth + 16 }}
             className="absolute top-4 z-[7] flex items-center gap-1.5 rounded-lg bg-overlay p-1"
         >
             {step("left")}
-            <span data-testid="page-note" className="px-1 text-[14px] text-text">
-                {pagePart}
-                {rest.length > 0 && <span className="text-overlay-text-2"> · {rest.join(" · ")}</span>}
+            <span data-testid="page-note" title={form === "full" ? undefined : note} className="whitespace-nowrap px-1 text-[14px] text-text">
+                {form === "numbers" ? `${level.page + 1} / ${level.pageCount}` : pagePart}
+                {form === "full" && rest.length > 0 && <span className="text-overlay-text-2"> · {rest.join(" · ")}</span>}
             </span>
             {step("right")}
         </div>
@@ -542,7 +570,7 @@ function PagePill({ level, onTurn, panelOpen }: { level: LevelResponse; onTurn: 
 
 function EmptyState(){
     return (
-        <div className="absolute inset-0 grid place-items-center">
+        <div className="absolute inset-0 grid place-items-center px-4">
             <div className="max-w-md space-y-2 text-center text-[14px] text-text-2">
                 <p className="text-[15px] font-medium text-text">No repository indexed yet.</p>
                 <p>Index one from a terminal, then reload: <code className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">nebulosity index &lt;path-to-repo&gt;</code></p>

@@ -10,7 +10,6 @@ import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
-import { PANEL_WIDTH } from "./DetailPanel";
 import { lineLabel } from "./labels";
 import Legend from "./Legend";
 import { FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider } from "./levelLayout";
@@ -45,6 +44,8 @@ const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: 
 };
 /** The arrowhead's size in px, whatever the line's width (26 since the three-task test: 18 was too small to read). */
 const ARROW_SIZE = 26;
+/** The legend's distance from the canvas's bottom and left edges (Legend.tsx's bottom-4 left-4). */
+const LEGEND_INSET = 16;
 
 type MapCanvasProps = {
     level: LevelResponse;
@@ -60,6 +61,10 @@ type MapCanvasProps = {
     onDrawn: () => void;
     /** A busy level: only the hovered or selected box's lines are drawn (emphasis.ts). */
     quietLines: boolean;
+    /** The open panel's width over the canvas's right edge, 0 with none (narrow.ts's panelLayout). */
+    panelWidth: number;
+    /** The panel covers the whole canvas (a narrow window): the legend and the zoom controls would sit under it. */
+    covered: boolean;
 };
 
 /**
@@ -68,7 +73,7 @@ type MapCanvasProps = {
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
@@ -218,19 +223,30 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     <LooseDivider divider={divider} />
                 </ViewportPortal>
             )}
-            <Legend quietLines={quietLines} doorways={level.nodes.some((n) => n.kind === "portal")} />
+            {/* a panel over the whole canvas hides what's under it; its × brings the canvas back */}
+            {!covered && (
+                <Legend
+                    quietLines={quietLines}
+                    doorways={level.nodes.some((n) => n.kind === "portal")}
+                    // a short canvas: the open legend stays below a paged level's pill (16 px from the bottom, the pill's
+                    // band at the top) and scrolls inside if it must; unmeasured (0), it's left alone
+                    maxHeight={canvasHeight > 0 ? canvasHeight - LEGEND_INSET - (pillBand > 0 ? pillBand : LEGEND_INSET) : undefined}
+                />
+            )}
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
-            <Controls
-                position="bottom-right"
-                showInteractive={false}
-                fitViewOptions={FIT}
-                style={selected !== null ? { right: PANEL_WIDTH } : undefined}
-                className="overflow-hidden rounded-lg"
-            >
-                <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
-                    <IconFocusCentered aria-hidden size={16} stroke={1.75} />
-                </ControlButton>
-            </Controls>
+            {!covered && (
+                <Controls
+                    position="bottom-right"
+                    showInteractive={false}
+                    fitViewOptions={FIT}
+                    style={panelWidth > 0 ? { right: panelWidth } : undefined}
+                    className="overflow-hidden rounded-lg"
+                >
+                    <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
+                        <IconFocusCentered aria-hidden size={16} stroke={1.75} />
+                    </ControlButton>
+                </Controls>
+            )}
         </ReactFlow>
     );
 }

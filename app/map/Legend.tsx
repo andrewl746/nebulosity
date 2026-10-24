@@ -20,9 +20,10 @@ function readOpen(): boolean {
  * block ran into the boxes). Like the other overlays it's a solid card in the logo's violet with no outline: lines are
  * never filled, so it can't be mistaken for one (a light outline was), and no box is that colour. Its button is cyan, the
  * color of everything you click.
- * The canvas only renders in the browser, so reading storage on the first render is safe.
+ * The canvas only renders in the browser, so reading storage on the first render is safe. On a short canvas (a narrow
+ * window's floor), it's at most `maxHeight` tall, its rows scrolling inside, so it never reaches the page pill.
  */
-export default function Legend({ quietLines, doorways }: { quietLines: boolean; doorways: boolean }){
+export default function Legend({ quietLines, doorways, maxHeight }: { quietLines: boolean; doorways: boolean; maxHeight?: number }){
     const [open, setOpen] = useState(readOpen);
     const toggle = (): void => {
         const next = !open;
@@ -36,9 +37,9 @@ export default function Legend({ quietLines, doorways }: { quietLines: boolean; 
     const Chevron = open ? IconChevronDown : IconChevronUp;
 
     return (
-        <div aria-label="Legend" className={`nopan nodrag nowheel absolute bottom-4 left-4 z-[5] ${open ? "w-[252px]" : ""} rounded-lg bg-overlay text-[12px] text-overlay-text-2`}>
+        <div aria-label="Legend" style={{ maxHeight }} className={`nopan nodrag nowheel absolute bottom-4 left-4 z-[5] flex flex-col ${open ? "w-[252px]" : ""} rounded-lg bg-overlay text-[12px] text-overlay-text-2`}>
             {open && (
-                <div className="space-y-1.5 border-b border-overlay-line px-3 py-2">
+                <div className="min-h-0 space-y-1.5 overflow-y-auto border-b border-overlay-line px-3 py-2">
                     {/* one sentence for direction: "arrows out / arrows in" rows read as abstract, even to the owner */}
                     <Row glyph={<Arrow color="var(--text-2)" />}>A → B: A uses B. The arrow points at what&apos;s being used.</Row>
                     <Row glyph={<Arrow color="var(--select)" />}>Selected box and its lines</Row>
@@ -53,7 +54,7 @@ export default function Legend({ quietLines, doorways }: { quietLines: boolean; 
                 data-testid="legend-toggle"
                 onClick={toggle}
                 aria-expanded={open}
-                className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-1.5 text-[12px] font-medium text-control hover:bg-overlay-line"
+                className="flex w-full shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-1.5 text-[12px] font-medium text-control hover:bg-overlay-line"
             >
                 Legend
                 <Chevron aria-hidden size={16} stroke={1.75} />

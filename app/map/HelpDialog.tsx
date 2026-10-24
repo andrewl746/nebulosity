@@ -23,13 +23,15 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
 
     // flex, not grid, centers it: a grid's column grows to the dialog's 760 px, so max-w-full never shrank it, and a
     // narrow window (VS Code's panel) cut its text off at the right. In a flex row the dialog narrows and its text wraps.
+    // It's fixed to the window, outside the Map's floor (narrow.ts), so a window narrower than the floor gets a tighter
+    // dialog: less padding, and the keyboard list's keys above what they do.
     return createPortal(
         <div data-testid="help" className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 p-4" onClick={onClose}>
             <div
                 role="dialog"
                 aria-label="How to use the Map"
                 onClick={(event) => event.stopPropagation()}
-                className="max-h-[85vh] w-[760px] max-w-full overflow-y-auto rounded-lg border border-border bg-panel p-6"
+                className="max-h-[85vh] w-[760px] max-w-full overflow-y-auto rounded-lg border border-border bg-panel p-6 max-[359px]:p-4"
             >
                 <div className="flex items-start justify-between gap-4">
                     <div>
@@ -99,7 +101,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                 </div>
 
                 <h3 className="mt-6 text-[13px] font-medium text-title">Keyboard</h3>
-                <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px] text-text-2">
+                <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px] text-text-2 max-[359px]:grid-cols-1 max-[359px]:[&_dd]:mb-1.5">
                     <dt><Key>Ctrl K</Key></dt><dd>Search files and concepts</dd>
                     <dt><Key>Esc</Key></dt><dd>Close what&apos;s open, let go of the selection, then clear Claude Code&apos;s highlights</dd>
                     <dt><Key>Backspace</Key></dt><dd>Up one folder</dd>

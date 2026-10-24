@@ -80,13 +80,14 @@ export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: S
                 role="dialog"
                 aria-label={`Source of ${path}`}
                 onClick={(event) => event.stopPropagation()}
-                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-hairline bg-panel"
+                // a narrow window (under 600 px) gives it the whole width: 80% of it would leave too little code
+                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-hairline bg-panel max-[599px]:w-full"
             >
                 <header className="flex items-start justify-between gap-3 border-b border-hairline px-4 py-3">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
                             <IconFile aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
-                            <h2 className="truncate text-[15px] font-medium text-text">{nameOf(path, "")}</h2>
+                            <h2 title={path} className="truncate text-[15px] font-medium text-text">{nameOf(path, "")}</h2>
                         </div>
                         <div className="truncate font-mono text-[12px] text-text-2" title={path}>{path}</div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[12px] text-text-2">
@@ -111,7 +112,8 @@ export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: S
                         <IconX aria-hidden size={16} stroke={1.75} />
                     </button>
                 </header>
-                <div ref={scroller} className="flex-1 overflow-auto">
+                {/* long lines scroll sideways here, as in an editor (data-scroll-x: the layout check expects it) */}
+                <div ref={scroller} data-scroll-x className="flex-1 overflow-auto">
                     {error && <p className="px-4 py-3 text-[13px] text-danger">{error.message}</p>}
                     {!source && !error && <p className="px-4 py-3 text-[13px] text-text-2">Loading…</p>}
                     {source && (

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LiveEvent, MapNode } from "@/lib/contracts";
-import { activityLabel, agentFocus, highlightedNote, pushActivity } from "./activity";
+import { activityLabel, activityTitle, agentFocus, highlightedNote, pushActivity } from "./activity";
 
 const NOW = Date.parse("2026-10-12T20:00:00.000Z");
 const event = (tool: string, paths: string[], secondsAgo = 0): LiveEvent =>
@@ -34,6 +34,18 @@ describe("activityLabel", () => {
     it("names a tool it doesn't know, with what it touched", () => {
         expect(activityLabel(event("grep_files", ["x"]))).toBe("grep_files · x");
         expect(activityLabel(event("grep_files", []))).toBe("grep_files");
+    });
+});
+
+describe("activityTitle", () => {
+    it("is the label itself when that already names the one path", () => {
+        expect(activityTitle(event("describe", ["src/vs/base/common/event.ts"]))).toBe("Reading src/vs/base/common/event.ts");
+        expect(activityTitle(event("overview", []))).toBe("Reading the repo overview");
+    });
+
+    it("adds every path, one per line, when the label shortens them", () => {
+        expect(activityTitle(event("show_on_map", ["src/vs", "src/main.ts"]))).toBe("Showing src/vs +1 on the map\nsrc/vs\nsrc/main.ts");
+        expect(activityTitle(event("imports", ["a.ts", "b.ts"]))).toBe("Tracing a.ts → b.ts\na.ts\nb.ts");
     });
 });
 

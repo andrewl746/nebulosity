@@ -119,7 +119,7 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                                         <span title={hit.path} className="block truncate font-mono text-[13px] text-text">{hit.path}</span>
                                         {hit.tagline && <span title={hit.tagline} className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
                                         {hit.code && (
-                                            <span className="block truncate font-mono text-[12px] text-text-2">
+                                            <span title={`${codeLabel(hit.code)}: ${hit.code.snippet}`} className="block truncate font-mono text-[12px] text-text-2">
                                                 {codeLabel(hit.code)}:{" "}
                                                 {highlight
                                                     // highlightCode escapes the snippet, so this HTML is only its spans (syntax.ts)

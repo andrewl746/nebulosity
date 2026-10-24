@@ -23,6 +23,7 @@
 - **A readable opening size (§4), 2026-10-13:** every level opens at 75% or larger (names at least 11 px); a busy one opens from its top, and the fit button still shows it whole. Measured: every VS Code level checked opens at 0.75–1.0 on 1907 × 998 and 1440 × 900 screens. The owner chose to leave the details panel covering the Map's right edge as it is: moving the Map when the panel opens would be more confusing.
 - **A second outside critique (§4), 2026-10-13:** the owner ran the Map past another critique and picked from options rendered on the real Map. A level too big to fit now opens as wide as the canvas allows instead of at the 75% floor. The big page arrows at the canvas's sides are gone: the page pill's buttons, now 36 px, are the one way to turn the page with the mouse. Doorways read "Lines to page 2", unfilled, instead of "Page 2". The boxes with no line on the page sit under a divider, "Not linked to anything on this page" (§4).
 - **Signed off** by the owner, 2026-10-13.
+- **Narrow windows (§10), 2026-10-24:** the Map works at any window size, down to 200 × 260, for VS Code's panel. Below a floor of 360 × 320 it stops shrinking and the page scrolls; between the floor and normal sizes each surface drops secondary text first. At 1100 × 700 and up it looks exactly as before (screenshots compared byte for byte). ADR-064.
 
 ## 1. Principle
 
@@ -190,3 +191,34 @@ Opening the panel for a large folder (`src`) took about 5 s in V1.3. Profile `de
 
   **Not changed:** knowing to start in `src` takes programming knowledge; the hover summaries are the in-scope help. Folder names already count in search since the owner's own try at task 1 the same day (ADR-027, amended).
 - The owner signs off visually before merging.
+
+## 10. Narrow windows (2026-10-24)
+
+The owner, on the Map in VS Code's panel at about 415 px wide: "FIX ALL compression issues in the entire project so no matter how miuch i compress it u can still see the stuff. this can include adding a horizontal scroll bar, etc. etc. make sure no ui breaks either". The panel was cut off on its left (a fixed 400 px pinned to the right of a narrower area), and the top bar's search, help and status sat on each other. ADR-064 records the decision.
+
+**The rule.** At any window size, down to 200 × 260, everything the Map shows stays reachable and readable: nothing is cut off out of reach, no control sits on another, and no text is clipped without a way to read it (an ellipsis and the whole text in a hover title). Surfaces adapt first; sideways and downward scrolling is the floor.
+
+**Normal sizes are unchanged.** At 1100 × 700 and up nothing below applies. Every state the layout check walks, at 1440 × 900 and 1100 × 800, gives a screenshot byte-identical to the one taken before the change.
+
+**The floor: 360 × 320** (`MIN_WIDTH`, `MIN_HEIGHT` in `app/map/narrow.ts`). Below it the Map keeps that size and the page scrolls, with the theme's thin scrollbars (§7). 360 px holds the top bar's essentials and a canvas as wide as the floor; 320 px leaves a 200 px canvas under the three bars (48 + 40 + 32 px), the least that stacks a paged level's pill over the zoom controls without them touching. The Map fills the body's column rather than `100dvh`, so a sideways scrollbar doesn't add a downward scroll of its own height. VS Code's bottom panel is often shorter than 320 px; there the page scrolls down.
+
+**What gives way, in order, as the window narrows:**
+
+| Surface | Under 900 px | Under 768 | Under 640 | Under 520 | Under 440 |
+|---|---|---|---|---|---|
+| Top bar | "Dependency map" goes | the search's Ctrl K hint goes | the search becomes an icon beside the help | the status pill keeps its dot (title and menu say the rest) | the "Nebulosity" name goes, the mark stays |
+| Breadcrumb row | | the busy folder's note keeps only its toggle ("Show all lines"; its title says the rest) | | | |
+| Activity bar | the oldest of the 3 actions goes | | the second goes | the time and the "Claude Code" word go (the dot's title keeps it) | |
+
+Throughout: the repo's name truncates ("micro… / vsc…"), whole in its title; a squeezed status pill truncates its words; the highlights' count and Clear always stay.
+
+**Measured, not by breakpoint:**
+- **The details panel** is 400 px beside the canvas while that leaves 360 px of canvas. With less, it covers the whole canvas (its × brings the canvas back), and the legend and zoom controls under it are hidden. The page pill and the zoom controls move left by the panel's real width, never a fixed 400. Chips are at most 360 px or the panel's width; every row truncates with its title.
+- **The breadcrumb** truncates from its start: the first steps fold into one "…", which goes up to the last of them and names them all in its title, so the current folder always shows.
+- **The page pill** says "Page 2 of 5 · 44 of 182 folders and files" on a canvas 440 px or wider, "Page 2 of 5" from 240 px, "2 / 5" below, with the whole note as its title when shortened.
+- **The legend** is at most as tall as the canvas allows (below the pill's band on a paged level); its rows scroll inside.
+- **The repo list and the status menu** open where they always did, moved in only as far as it takes to keep 16 px from the Map's sides, narrowed only when the Map is narrower than they are, and no taller than the Map below them.
+
+**Overlays in the page's body** are fixed to the window, outside the floor's scroll, so each fits the window itself: the help narrows and scrolls (under 360 px its padding tightens and its keyboard list puts each key above what it does); search is at most 92% of the window, its results truncating with titles and scrolling; the source viewer takes the whole width under 600 px, its header wraps, and long lines scroll inside the code. The loading note, the empty state and the error banner wrap with side padding; the banner sits over the canvas beside the panel, below the page pill when there is one (at normal sizes too: it used to run under the pill and the panel), and as a solid strip along the bottom when the panel covers the canvas.
+
+**The check.** `npm run check-layout -- http://127.0.0.1:<port>` (`scripts/check-layout.mjs`, plain Node and headless Chrome; it refuses port 3000) walks 15 states (the top level, a deep folder, a paged level, a busy folder, a file, a folder and the source root selected, the source viewer, search, help, both popovers, the legend, the activity bar with three tool calls and highlights, and a failed jump's banner) at 20 sizes from 1440 × 900 to 200 × 260, and fails on anything cut off out of reach, a control covered at its centre, clipped text without an ellipsis and a title, text on text, or a page that scrolls at a normal size or past the floor. `--shots <dir>` saves screenshots.
