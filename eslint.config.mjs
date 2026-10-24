@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     ".superpowers/**",
     // The local data folder (gitignored): indexes, eval transcripts and the scripts eval runs wrote in their scratch folders
     ".nebulosity/**",
+    // The VS Code extension, its own package: its strict `tsc --noEmit` is its check (V1.8 plan P11)
+    "vscode-extension/**",
   ]),
 ]);
 

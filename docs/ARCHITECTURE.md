@@ -47,6 +47,8 @@ It is a **local, single-user tool**. There is no auth, no multi-tenancy, no clou
 
 The background worker is `scripts/background.ts`, forked by the server at start-up (`instrumentation.ts`, ADR-038). It runs `lib/background/service.ts`: the file watcher, incremental updates (ADR-037), summary refreshes and embeddings. The MCP server is a third process, one per Claude Code session: `node <checkout or package>/mcp/launch.mjs` (ADR-048; `nebulosity setup` registers it, ADR-058) serves `lib/tools/registry.ts` over stdio. It's read-only on the database (ADR-044), picks its repo from Claude Code's project folder (ADR-046), and posts live events to the Map's server.
 
+The VS Code extension (`vscode-extension/`, ADR-062, slice V1.8) is another client of the server, like the browser. Its panel frames the running Map (`?embed=vscode`). The extension host talks to the server only over the HTTP contract (`GET` and `POST /api/repos`, `GET /api/imports`), and to the framed Map only over the editor bridge (`window.postMessage`, API_CONTRACTS §20). It starts the Map and indexes a repo by running the `nebulosity` command. It's a package of its own, and its one import from the rest of the repo is `import type` from `lib/contracts.ts`, which is erased from its bundle (ADR-062 amended; `vscode-extension/src/layering.test.ts` enforces it). Nothing in `lib/` or `app/` imports from it.
+
 The static demo (ADR-049) is two more adapters, and runs no server. `scripts/export-demo.ts` reads the database without writing and writes the Map's answers for every folder to files, with the repo named instead of rooted, then scans them for any path of this machine. `app/map/staticApi.ts` is the Map's transport in the demo build: it answers the same calls from those files (refusing the ones that need a server), searches in the browser with `lib/engine/staticSearch.ts`, and is chosen in place of `app/map/api.ts`'s HTTP calls when `npm run build-demo` builds the site.
 
 ---
@@ -118,6 +120,8 @@ nebulosity/
 │   └── agent/               # E1: tools.ts (ported in V1.3), state.ts
 ├── bin/                     # nebulosity.mjs, the one command (ADR-058); boot.mjs, what both launchers do first
 ├── mcp/                     # launch.mjs and server.ts: the MCP server over stdio (ADR-048)
+├── vscode-extension/        # the VS Code extension, its own package (ADR-062): src/ (pure modules, tested by the root
+│                            #   vitest, and the host files that use VS Code's API), test/ (integration, mocha in VS Code)
 ├── scripts/                 # cli.ts and commands/ (the nebulosity command), index, summarize, search, live,
 │                            #   background (the worker), mcp-smoke and prepare-package (the package), bench-map, bench-update,
 │                            #   export-demo, build-demo, serve-demo (the static demo), …
