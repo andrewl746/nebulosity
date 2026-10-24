@@ -371,6 +371,11 @@ function MapScreen(){
     // or a dialog is open over the Map (shortcuts.ts)
     const page = level?.page ?? 0;
     const pageCount = level?.pageCount ?? 1;
+    // a doorway selected before an index update re-paged the folder may be gone (portals.ts)
+    const shownSelected = selectionShown(level, selected);
+    // Esc goes by what is drawn: a selection that vanished with its doorway mustn't take a press before the highlights
+    const hasSelection = shownSelected !== null;
+    const hasHighlights = highlights.length > 0;
     useEffect(() => {
         const onKey = (event: KeyboardEvent): void => {
             const shortcut = mapShortcut(event, {
@@ -380,8 +385,8 @@ function MapScreen(){
                 levelPath,
                 page,
                 pageCount,
-                selected: selected !== null,
-                highlighted: highlights.length > 0,
+                selected: hasSelection,
+                highlighted: hasHighlights,
             });
             if (shortcut === null) return;
             if (shortcut.type === "search"){
@@ -395,10 +400,8 @@ function MapScreen(){
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [levelPath, open, page, pageCount, turnPage, selected, highlights.length, clearHighlights]);
+    }, [levelPath, open, page, pageCount, turnPage, hasSelection, hasHighlights, clearHighlights]);
 
-    // a doorway selected before an index update re-paged the folder may be gone (portals.ts)
-    const shownSelected = selectionShown(level, selected);
     const jumpError = focusError !== null && focusError.place === cacheKey(place) && focusError.selected === selected ? focusError.error : null;
     const banner = levelError ?? jumpError;
 
@@ -466,7 +469,7 @@ function MapScreen(){
                     />
                 )}
             </main>
-            <ActivityBar recent={live.recent} connected={live.connected} highlighted={highlights.length} onClear={clearHighlights} />
+            <ActivityBar recent={live.recent} connected={live.connected} highlightCount={highlights.length} onClear={clearHighlights} />
             {helpOpen && <HelpDialog onClose={closeHelp} />}
             {paletteOpen && (
                 <SearchPalette

@@ -60,7 +60,10 @@ export function agentFocus(
     clearedAt: number = -Infinity,
 ): Set<string> {
     const touched = recent
-        .filter((e) => now - Date.parse(e.at) < AGENT_ACTIVE_MS && Date.parse(e.at) > clearedAt)
+        .filter((e) => {
+            const at = Date.parse(e.at);
+            return now - at < AGENT_ACTIVE_MS && at > clearedAt;
+        })
         .flatMap((e) => e.paths);
     return new Set([...touched, ...highlights].flatMap((p) => boxFor(level, p) ?? []));
 }

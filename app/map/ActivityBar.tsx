@@ -12,11 +12,11 @@ import { DEMO } from "./mode";
  * it stays slim so the Map remains the focus. E1 adds the Guide's input beside it. While show_on_map has highlighted
  * something, its right end says how many and offers Clear (Esc does the same once nothing is selected).
  */
-export default function ActivityBar({ recent, connected, highlighted, onClear }: {
+export default function ActivityBar({ recent, connected, highlightCount, onClear }: {
     recent: readonly LiveEvent[];
     connected: boolean;
     /** How many places show_on_map has highlighted. */
-    highlighted: number;
+    highlightCount: number;
     onClear: () => void;
 }){
     // the clock lives in state, ticking every second: reading Date.now() during render isn't allowed
@@ -25,6 +25,8 @@ export default function ActivityBar({ recent, connected, highlighted, onClear }:
         const timer = setInterval(() => setNow(Date.now()), 1_000);
         return () => clearInterval(timer);
     }, []);
+
+    const highlightNote = highlightedNote(highlightCount);
 
     // the static demo never connects: say why the bar is empty, instead of "Not connected" (ADR-049)
     const empty = DEMO
@@ -50,9 +52,9 @@ export default function ActivityBar({ recent, connected, highlighted, onClear }:
                         ))}
                     </ol>
                 )}
-            {highlightedNote(highlighted) !== null && (
+            {highlightNote !== null && (
                 <span className="ml-auto flex shrink-0 items-center gap-3 text-text-2">
-                    {highlightedNote(highlighted)}
+                    {highlightNote}
                     <button type="button" onClick={onClear} className="text-control hover:underline" title="Clear Claude Code's highlights (Esc)">Clear</button>
                 </span>
             )}
