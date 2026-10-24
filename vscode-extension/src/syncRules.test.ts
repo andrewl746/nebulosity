@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ImportsResponse } from "../../lib/contracts";
-import { highlightOf, importsPath, isNotFound, notIndexedText, openColumn, otherRepoText, readImports, SHOW_ALL_LABEL, ShowHold, showAllOffered } from "./syncRules";
+import {
+    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openColumn, otherRepoText, readImports, repoPathOfUri, SHOW_ALL_LABEL, ShowHold,
+    showAllOffered,
+} from "./syncRules";
 
 /** A dependents answer, from the plan's "Ground truth" (test/fixtures/mini-repo). */
 function dependents(path: string, transitive: boolean, files: [string, number][], direct: number): ImportsResponse {
@@ -83,6 +86,27 @@ describe("What depends' highlight and its Show all item (P6)", () => {
         expect(showAllOffered(LOG_ALL)).toBe(false);
         // nothing imports it directly, so nothing imports it at all
         expect(showAllOffered(BUILD_DIRECT)).toBe(false);
+    });
+});
+
+describe("which documents are files of the repo (Task 8 Review I1)", () => {
+    const ROOT = "C:/Users/Andrew/Programming/vscode";
+    const EVENT = "c:\\Users\\Andrew\\Programming\\vscode\\src\\vs\\base\\common\\event.ts";
+
+    it("takes a file on disk inside the root, as its repo-relative path", () => {
+        expect(isFileUri({ scheme: "file" })).toBe(true);
+        expect(repoPathOfUri(ROOT, { scheme: "file", fsPath: EVENT }, "win32")).toBe("src/vs/base/common/event.ts");
+        expect(repoPathOfUri(ROOT, { scheme: "file", fsPath: "c:\\Users\\Andrew\\Programming\\other\\a.ts" }, "win32")).toBeNull();
+    });
+
+    it("refuses every other scheme, even one that keeps the file's own path", () => {
+        // the HEAD side of a diff or Timeline, a notebook cell, a pull request's review copy: each keeps event.ts' path
+        for (const scheme of ["git", "vscode-notebook-cell", "review", "gitlens"]){
+            expect(isFileUri({ scheme })).toBe(false);
+            expect(repoPathOfUri(ROOT, { scheme, fsPath: EVENT }, "win32")).toBeNull();
+        }
+        expect(repoPathOfUri(ROOT, { scheme: "untitled", fsPath: "Untitled-1" }, "win32")).toBeNull();
+        expect(repoPathOfUri(ROOT, { scheme: "output", fsPath: "extension-output-andrewl746.nebulosity-vscode-#1-Nebulosity" }, "win32")).toBeNull();
     });
 });
 

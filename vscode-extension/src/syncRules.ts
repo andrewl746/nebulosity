@@ -1,4 +1,5 @@
 import type { ImportsResponse } from "../../lib/contracts";
+import { relativeIn } from "./repoMatch";
 
 /**
  * The pure rules of the editor sync (sync.ts; design §4.4–§4.5, V1.8 plan P5, P6, P16, P17): the `/api/imports` request
@@ -61,6 +62,20 @@ export function readImports(body: unknown): ImportsResponse | null {
         offset: body.offset,
         indexVersion: body.indexVersion,
     };
+}
+
+/** A file on disk: the one scheme the Map's files have (a remote extension host sees its workspace's files as `file` too). */
+export function isFileUri(uri: { scheme: string }): boolean {
+    return uri.scheme === "file";
+}
+
+/**
+ * A document's path in the repo, or null outside it. Only a file on disk counts: a `git:` document (the HEAD side of a
+ * diff, Timeline), a notebook cell or a pull request's review copy keeps the file's own path, and would otherwise be
+ * followed or shown as if it were the file (Task 8 Review I1). The same rule as the extension's for workspace folders.
+ */
+export function repoPathOfUri(root: string, uri: { scheme: string; fsPath: string }, platform: NodeJS.Platform): string | null {
+    return isFileUri(uri) ? relativeIn(root, uri.fsPath, platform) : null;
 }
 
 /** The files What depends lights on the Map: the ones listed, at most the first 50, nearest first. */

@@ -5,10 +5,10 @@ import { FOLLOW_DEBOUNCE_MS, FollowGate } from "./followGate";
 import { errorText, getJson, mapUrl, RefusedError, type HttpAnswer } from "./http";
 import { MessageLog } from "./messageLog";
 import { MapPanel } from "./panel";
-import { checkRepoPath, relativeIn, uriPathOf } from "./repoMatch";
+import { checkRepoPath, uriPathOf } from "./repoMatch";
 import {
-    highlightOf, importsPath, isNotFound, notIndexedText, openColumn, otherRepoText, readImports, SHOW_ALL_LABEL, ShowHold,
-    showAllOffered, TRANSITIVE_LIMIT,
+    highlightOf, importsPath, isFileUri, isNotFound, notIndexedText, openColumn, otherRepoText, readImports, repoPathOfUri, SHOW_ALL_LABEL,
+    ShowHold, showAllOffered, TRANSITIVE_LIMIT,
 } from "./syncRules";
 
 /**
@@ -159,7 +159,8 @@ export class EditorSync implements vscode.Disposable {
             pick.onDidAccept(() => {
                 const item = pick.selectedItems[0] ?? pick.activeItems[0];
                 if (item === undefined) return;
-                if (item.path !== null) void this.openFile(item.path);
+                // the Map stays on the file asked about, with its importers lit: the gate keeps that (Task 8 Review M1)
+                if (item.path !== null) void this.openFile(item.path, undefined, path);
                 else void this.showAll(pick, map.port, path);
             });
             pick.onDidHide(() => {
@@ -231,9 +232,10 @@ export class EditorSync implements vscode.Disposable {
      * A file the Map picked (a file box or a declaration, P10), or What depends' pick, opens in the editor: in the most
      * recent text editor's column, or beside the panel when that's the panel's own, as a preview, the focus left where
      * it is. Only a repo-relative path is taken, and only a file this workspace has (P17): the Map may show another
-     * repo, switched from its own menu or by another window (Review Focus 4).
+     * repo, switched from its own menu or by another window (Review Focus 4). `shows` is what the Map shows afterwards
+     * when that isn't the file opened: What depends' target.
      */
-    private async openFile(raw: string, line?: number): Promise<void> {
+    private async openFile(raw: string, line?: number, shows?: string): Promise<void> {
         const path = checkRepoPath(raw);
         const shown = this.host.shown();
         if (path === null || shown === null || shown.root === null) return;
@@ -249,7 +251,7 @@ export class EditorSync implements vscode.Disposable {
             return;
         }
         // its editor change is an echo, never followed back
-        this.gate.opened(path);
+        this.gate.opened(path, shows ?? path);
         const viewColumn = openColumn(this.lastColumn, MapPanel.open?.viewColumn, vscode.ViewColumn.Beside) as vscode.ViewColumn;
         const selection = line !== undefined && line >= 1 ? new vscode.Range(line - 1, 0, line - 1, 0) : undefined;
         try{
@@ -296,13 +298,16 @@ export class EditorSync implements vscode.Disposable {
         if (path !== null && this.gate.shouldFollow(path)) this.follow(path);
     }
 
-    /** The active editor (else the last one) as a path in the shown repo, while the panel is on the Map; else null. */
+    /**
+     * The active editor (else the last one) as a path in the shown repo, while the panel is on the Map; else null. Only a
+     * file on disk: a `git:` diff side or a notebook cell keeps the file's path but isn't the file (syncRules' repoPathOfUri).
+     */
     private editorPath(): string | null {
         const panel = MapPanel.open;
         const shown = this.host.shown();
         if (panel === null || panel.state.kind !== "map" || shown === null || shown.root === null) return null;
         const editor = this.currentEditor();
-        return editor === undefined ? null : relativeIn(shown.root, editor.document.uri.fsPath, process.platform);
+        return editor === undefined ? null : repoPathOfUri(shown.root, editor.document.uri, process.platform);
     }
 
     private currentEditor(): vscode.TextEditor | undefined {
@@ -310,9 +315,13 @@ export class EditorSync implements vscode.Disposable {
         return editor === undefined || editor.document.isClosed ? undefined : editor;
     }
 
-    /** The file a command is for: the resource its menu was opened on, else the active editor's. */
+    /**
+     * The file a command is for: the resource its menu was opened on, else the active editor's. Only a file on disk (the
+     * menus already ask for `resourceScheme == file`; the palette doesn't), so a `git:` document is "no file".
+     */
     private targetOf(arg: unknown): vscode.Uri | undefined {
-        return arg instanceof vscode.Uri ? arg : this.currentEditor()?.document.uri;
+        const uri = arg instanceof vscode.Uri ? arg : this.currentEditor()?.document.uri;
+        return uri !== undefined && isFileUri(uri) ? uri : undefined;
     }
 
     // ─── Talking to the Map ───
@@ -332,7 +341,7 @@ export class EditorSync implements vscode.Disposable {
 
     /** The file's path in the repo, or null (and P5's message) when it's outside it. */
     private repoPathOf(root: string, target: vscode.Uri): string | null {
-        const path = relativeIn(root, target.fsPath, process.platform);
+        const path = repoPathOfUri(root, target, process.platform);
         if (path === null) void vscode.window.showInformationMessage(notIndexedText(vscode.workspace.asRelativePath(target, false)));
         return path;
     }
@@ -380,11 +389,14 @@ export class EditorSync implements vscode.Disposable {
         if (this.post({ type: "nebulosity.follow", path }) !== null) this.hold.followPosted();
     }
 
-    /** A deliberate jump (Show this file, What depends): the Map shows it (P16), and its page's next ready won't follow. */
+    /**
+     * A deliberate jump (Show this file, What depends): the Map shows it (P16), as an ask, so a late `drawn` from before
+     * can't stand for what it shows (Task 8 Review M2); and its page's next ready won't follow.
+     */
     private show(path: string): void {
         const panel = this.post({ type: "nebulosity.show", path });
         if (panel === null) return;
-        this.gate.mapShows(path);
+        this.gate.posted(path);
         this.hold.showPosted(panel.page);
     }
 
