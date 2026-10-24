@@ -2,6 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { downloadAndUnzipVSCode, makeConsoleReporter, ProgressReportStage, runTests, type ProgressReport, type ProgressReporter } from "@vscode/test-electron";
+import { BENCH_DISABLED_EXTENSIONS, launchArgs } from "./launchArgs";
 
 /**
  * Runs the extension's integration tests (V1.8 plan Task 9) in a VS Code that @vscode/test-electron downloads, against a
@@ -13,7 +14,8 @@ import { downloadAndUnzipVSCode, makeConsoleReporter, ProgressReportStage, runTe
  *   NEB_TEST_COMMAND    optional, a checkout's bin/nebulosity.mjs (nebulosity.command). Unset, the extension finds
  *                       `nebulosity` on PATH, the way a user's install is found;
  *   NEB_TEST_VSCODE     optional, the VS Code version to run ("stable" when unset);
- *   NEB_BENCH           optional, "1" runs the benchmark rather than the integration tests;
+ *   NEB_BENCH           optional, "1" runs the benchmark rather than the integration tests, with the built-in git
+ *                       extensions off (launchArgs.ts), so nothing writes into the repo's .git;
  *   NEBULOSITY_DATA     the data folder the Map reads and writes. Required: the tests switch its active repo and the Map
  *                       saves its port there, which must never be someone's own data folder.
  * The settings go into a fresh user data dir, never into the workspace.
@@ -74,17 +76,13 @@ async function main(): Promise<void> {
     const vscodeExecutablePath = await downloadAndUnzipVSCode({ version, reporter, extensionDevelopmentPath });
     const ran = `VS Code ${resolved() ?? version} (${vscodeExecutablePath})`;
     console.log(`Running ${what} in ${ran}, on ${workspace}, with the Map on port ${port}.`);
+    if (bench) console.log(`Built-in extensions off for the benchmark: ${BENCH_DISABLED_EXTENSIONS.join(", ")}.`);
     try{
         await runTests({
             vscodeExecutablePath,
             extensionDevelopmentPath,
             extensionTestsPath,
-            launchArgs: [
-                workspace, "--disable-extensions", "--disable-workspace-trust", "--user-data-dir", userDataDir,
-                // a window behind others, or a hidden webview, draws no frames, so the Map would never send `drawn`
-                "--disable-features=CalculateNativeWinOcclusion", "--disable-renderer-backgrounding",
-                "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows",
-            ],
+            launchArgs: launchArgs(workspace, userDataDir, bench),
             // the Map's background worker stays off, so a file the tests create is never indexed (test 6); NEB_TESTS_DIR
             // names the folder whose test files the runner loads
             extensionTestsEnv: { NEBULOSITY_WORKER: "off", NEB_TESTS_DIR: testsDir },

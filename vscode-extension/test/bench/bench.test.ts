@@ -150,13 +150,24 @@ suite("Editor Benchmark #1: the Map in VS Code on VS Code's repo (E1, E2)", func
         return wait.then((m) => ({ drawn: m as Drawn, at }));
     }
 
+    /**
+     * `wait`, unless `action` fails first: then the run fails with the action's own error, not with the wait's timeout
+     * later on. Whichever loses, its later rejection is handled, so none goes unhandled.
+     */
+    function unlessFails<T>(wait: Promise<T>, action: Promise<unknown>, what: string): Promise<T> {
+        const failed = action.then(() => new Promise<never>(() => undefined), (err: unknown) => Promise.reject(new Error(`${what}: ${messageOf(err)}`)));
+        wait.catch(() => undefined);
+        failed.catch(() => undefined);
+        return Promise.race([wait, failed]);
+    }
+
     /** Show Map, timed from the command's execution to the first `drawn`. */
     async function showMap(timeoutMs: number, what: string): Promise<{ ms: number; drawn: Drawn }> {
         const first = arrival(() => true, timeoutMs);
         const start = performance.now();
         // not awaited first: the command resolves once the panel has its page, before the Map has drawn
         const command = Promise.resolve(vscode.commands.executeCommand("nebulosity.showMap"));
-        const { drawn, at } = await expectWait(first, what);
+        const { drawn, at } = await unlessFails(expectWait(first, what), command, "nebulosity.showMap failed");
         await command;
         return { ms: at - start, drawn };
     }
@@ -168,7 +179,13 @@ suite("Editor Benchmark #1: the Map in VS Code on VS Code's repo (E1, E2)", func
     async function switchTo(path: string): Promise<Switch> {
         const shown = arrival((m) => m.selected === path, DRAW_TIMEOUT_MS);
         const called = performance.now();
-        await vscode.window.showTextDocument(fileUri(path));
+        try{
+            await vscode.window.showTextDocument(fileUri(path));
+        } catch (err){
+            // the wait is left behind: its timeout must not surface later as an unhandled rejection
+            shown.catch(() => undefined);
+            throw new Error(`showTextDocument(${path}) failed: ${messageOf(err)}`);
+        }
         const resolved = performance.now();
         const { drawn, at } = await expectWait(shown, `The Map didn't draw ${path} selected`);
         return { path, ms: round(at - resolved), fromCallMs: round(at - called), level: drawn.path, page: drawn.page };
@@ -184,7 +201,8 @@ suite("Editor Benchmark #1: the Map in VS Code on VS Code's repo (E1, E2)", func
     });
 
     suiteTeardown(async () => {
-        // for the record: the built-in extensions stay on (--disable-extensions leaves them), as in a user's window
+        // for the record: the built-in TypeScript extension stays on (--disable-extensions leaves it), as in a user's
+        // window, while runTest turns the git ones off (launchArgs.ts), so they should read "not active"
         const builtIn = ["vscode.typescript-language-features", "vscode.git"].map((id) => `${id} ${vscode.extensions.getExtension(id)?.isActive === true ? "active" : "not active"}`);
         console.log(`Built-in extensions at the end: ${builtIn.join(", ")}.`);
         // the Map this run started; VS Code's exit would stop it too (deactivate)

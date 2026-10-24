@@ -1174,21 +1174,25 @@ The eval V1.7 was measured by (ADR-060). The method, the gate, every run's score
 ## 2026 10 24 Editor Benchmark #1 — the Map in VS Code: Show Map and follow (V1.8, E1–E2)
 
 - **Why:** V1.8's two bars for the VS Code extension (the V1.8 plan's "The benchmark bars", design §8 step 6). E1 is Show Map, from the command to the first drawn Map. E2 is an editor switch, until the Map shows that file selected.
-- **Target and machine:** VS Code @ `cc3fec88`, opened as the workspace; nothing was written into it. The owner's laptop: AMD Ryzen 7 260 (8 cores, 16 threads), 31.3 GB, Windows 11 Home 10.0.26200, on mains power, a 1920 × 1200 display at 144 Hz, Node 24.14.0. The machine was otherwise quiet (13% CPU load before the runs). The owner's VS Code and the servers on ports 3000 and 3200 were running, and none of them was touched.
+- **Target and machine:** VS Code @ `cc3fec88`, opened as the workspace. Its working tree, index and HEAD were not changed, but VS Code's built-in git extension wrote one key into `.git/config` (see "The VS Code" below). The owner's laptop: AMD Ryzen 7 260 (8 cores, 16 threads), 31.3 GB, Windows 11 Home 10.0.26200, on mains power, a 1920 × 1200 display at 144 Hz, Node 24.14.0. The machine was otherwise quiet (13% CPU load before the runs). The owner's VS Code and the servers on ports 3000 and 3200 were running, and none of them was touched.
 - **The VS Code:** 1.143.1, with Electron 43.7.7 and Node 24.21.0 in its extension host.
   - It's the stable version `@vscode/test-electron` downloaded for Task 9, pinned with `NEB_TEST_VSCODE=1.143.1`, so nothing new was downloaded.
   - It ran with a fresh user data dir, `--disable-extensions` and the harness's four Chromium flags against throttling. The built-in TypeScript and git extensions still ran (both were active by the end), as they do in anyone's window.
+  - **The git extension wrote into `../vscode/.git/config`.** It added `vscode-merge-base = origin/main` to `[branch "main"]` at 01:49:54 −04:00, 3.5 s after the first run's VS Code started, as it does when it opens a repo. The working tree, `.git/index` and `.git/HEAD` are unchanged. The key was left in place for the owner to keep or remove.
+  - **Since then, the bench launches VS Code with `--disable-extension vscode.git`, `vscode.git-base` and `vscode.github`** (github depends on git-base; `vscode-extension/test/launchArgs.ts`), so a future run can't write there. The runs above had git on, and its teardown line names each extension's state. The integration tests keep them, since they open a copy with no `.git`.
   - Its window stayed in front throughout.
 - **The Map:** the V1.8 sandbox at `76c949c`, a production build (`next build`). The extension started it itself, as `node <sandbox>/bin/nebulosity.mjs map --port 3126` with `NEBULOSITY_WORKER=off`.
   - Its data folder was a scratch folder under `%TEMP%` (`NEBULOSITY_DATA`).
   - That folder held a fresh index of `../vscode` made for this benchmark in free mode (no API key, nothing spent): 14,849 files, 87.3 s.
 - **Command** (in `vscode-extension/`, with `NEBULOSITY_HOME` unset): `NEB_BENCH=1 NEB_TEST_WORKSPACE=<…>/vscode NEB_TEST_COMMAND=<sandbox>/bin/nebulosity.mjs NEB_TEST_PORT=3126 NEB_TEST_VSCODE=1.143.1 NEBULOSITY_DATA=<scratch> NEBULOSITY_WORKER=off NEBULOSITY_LIVE=off npm run test:integration`.
+  - `NEB_TEST_WORKSPACE` has to be an absolute path (here `C:/Users/Andrew/Programming/vscode`). `runTest.ts` resolves it against `vscode-extension/`, where `../vscode` names no folder.
   - With `NEB_BENCH=1`, `runTest.ts` runs `test/bench/bench.test.ts` instead of the integration tests. It refuses a git repo as the integration tests' workspace, since those tests write a file.
   - There were three runs, one after another, about 24 s each.
 - **How it's timed:** in the extension host, with `performance.now()`. Every wait for a `nebulosity.drawn` starts before its action, and a message's time is taken as it arrives. In order:
   - **Cold (no bar):** nothing on 3126, then Show Map → the first `drawn`. The extension starts the Map, and that server stays up for the rest of the run.
   - **E1, 5 times:** the panel is closed (`api.closePanel()`, then 1 s), then `nebulosity.showMap` is executed and timed to the first `drawn`.
     - Nothing was open in the editor, so each Show Map split the editor area and opened the panel in column 2 (Task 9's fix), and each first `drawn` was the one sent after `ready` (P1's case c) for the top level.
+    - So E1 times the top-level draw only. With a file open, the Map then follows it and draws that file's level with a second `drawn`, which E1 doesn't count; that follow is E2's kind of step. "Show Map in 130 ms" means the Map is on screen, not that it shows your file yet.
   - **E2, the files:** 20 of `src/vs/base/common/event.ts`' 8,586 dependents, from `GET /api/imports?path=src/vs/base/common/event.ts&transitive=true`, in its order (nearest first). The 10 inside the folder the Map draws come first (in `src/vs/base/common`: `async`, `cancellation`, `actions`, `scrollable`, `paging`, `history`, `sequence`, `ime`, `arrays`, `errorMessage`). Then the first 10 in other folders: `platform/log/common/log`, `platform/configuration/common/configuration`, `base/browser/dom`, `platform/contextkey/common/contextkey`, `platform/files/common/files`, `platform/storage/common/storage`, `platform/actions/common/actions`, `platform/commands/common/commands`, `editor/common/model` and `workbench/services/editor/common/editorService`, all under `src/vs/`.
   - **E2, the timing:** each switch is timed from `showTextDocument(file)` resolved (focused, in the active column, which is column 1) to the `drawn` whose `selected` is that file.
     - Each pass starts with a switch to `event.ts` that isn't timed, so the 10 switches inside its folder start on that folder.
@@ -1214,6 +1218,19 @@ The eval V1.7 was measured by (ADR-060). The method, the gate, every run's score
 
 **E2 (p95 of 20 switches ≤ 500 ms, the second pass): PASS** in every run. The p95 was 216.5 ms at worst.
 
+The same switches counted from the `showTextDocument` call, which is the wait a person sees (no bar; the bar counts from resolved):
+
+| Run | Pass | p50 | p95 | max |
+|---|---|---|---|---|
+| 1 | second | 201.1 ms | 241.5 ms | 247.2 ms |
+| 2 | second | 203.4 ms | 237.9 ms | 242.0 ms |
+| 3 | second | 203.1 ms | 239.0 ms | 241.9 ms |
+| 1 | first, cold | 235.2 ms | 692.6 ms | 698.5 ms |
+| 2 | first, cold | 244.7 ms | 682.4 ms | 704.4 ms |
+| 3 | first, cold | 236.6 ms | 584.1 ms | 658.3 ms |
+
+From the call, the cold pass goes over 500 ms (p95 584–693 ms), because `showTextDocument` itself took up to 372 ms on a file's first open.
+
 To read this with:
 - **Most of E2 is the debounce.** Every warm switch took 159–228 ms, and 150 ms of that is the follow debounce (`FOLLOW_DEBOUNCE_MS`). The debounce starts at VS Code's editor change, no later than `showTextDocument` resolves, so the rest takes at least 9–78 ms: the follow is posted, the Map draws the level or page and sends `drawn`. Counted from the `showTextDocument` call, the warm passes' slowest switch was 247.2 ms (the call itself took at most 32 ms).
 - **What each switch drew:** 14 of the 20 drew a new level or page, and 6 only moved the selection, the same in every pass of every run. `src/vs/base/common` is paged (pages 0–2), so 4 of the 10 switches inside it turned a page. All 10 others drew another folder.
@@ -1225,4 +1242,4 @@ To read this with:
 - **Afterwards:**
   - After every run, nothing listened on 3126: the bench stops the Map in its teardown, and VS Code's exit would stop it too.
   - The checkout's `.nebulosity/config.json` was byte-identical to the copy taken before V1.8's runs (`cmp`).
-  - `git --no-optional-locks status` in `../vscode` was unchanged, still at `cc3fec88`, and no data folder was written there.
+  - `git --no-optional-locks status` in `../vscode` was unchanged, still at `cc3fec88`, and no data folder was written there. The one write into `../vscode` was the git extension's `.git/config` key, above. `git status` doesn't show it, and the review found it from the file's modified time.
