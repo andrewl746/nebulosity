@@ -18,6 +18,11 @@ type SourceViewerProps = {
     /** The lines to highlight and scroll to: a declaration picked in the panel. */
     lines?: { start: number; end: number };
     onClose: () => void;
+    /**
+     * Inside VS Code's panel only: "Open in VS Code" asks the editor over the bridge (at the highlighted line), since the
+     * panel can't follow a vscode:// link.
+     */
+    onOpenInEditor?: (line?: number) => void;
 };
 
 /**
@@ -25,7 +30,7 @@ type SourceViewerProps = {
  * drawer over the canvas, from the file's panel or one of its declarations, which it scrolls to and highlights.
  * Rendered into the page's body, so the panel it opens from can't clip it. Escape closes it and nothing else.
  */
-export default function SourceViewer({ path, lines, onClose }: SourceViewerProps){
+export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: SourceViewerProps){
     const [source, setSource] = useState<SourceResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const scroller = useRef<HTMLDivElement>(null);
@@ -89,11 +94,17 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
                             {source?.truncated && <span>Only the first 1 MB is shown.</span>}
                             {source && tooLargeToColor(text) && <span data-testid="source-plain">Shown without colors: too large to color quickly.</span>}
                             {lines && <span>Lines {lines.start}–{lines.end} highlighted</span>}
-                            {editorHref && (
-                                <a href={editorHref} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
-                                    Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
-                                </a>
-                            )}
+                            {editorHref && (onOpenInEditor
+                                ? (
+                                    <button type="button" onClick={() => onOpenInEditor(lines?.start)} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                                        Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
+                                    </button>
+                                )
+                                : (
+                                    <a href={editorHref} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                                        Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
+                                    </a>
+                                ))}
                         </div>
                     </div>
                     <button type="button" onClick={onClose} aria-label="Close the source" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">

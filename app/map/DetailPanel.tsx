@@ -166,7 +166,15 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
             name={name}
             title={target || name}
             subtitle={target || "(repo root)"}
-            header={data && <Stats data={data} github={github} onOpen={onOpen} onViewSource={() => setViewing({})} />}
+            header={data && (
+                <Stats
+                    data={data}
+                    github={github}
+                    onOpen={onOpen}
+                    onViewSource={() => setViewing({})}
+                    onOpenInEditor={onOpenInEditor && (() => onOpenInEditor(data.path))}
+                />
+            )}
             onClose={onClose}
         >
             <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
@@ -190,7 +198,14 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
                     />
                 )}
             </div>
-            {viewing && data?.kind === "file" && <SourceViewer path={data.path} lines={viewing.lines} onClose={closeViewer} />}
+            {viewing && data?.kind === "file" && (
+                <SourceViewer
+                    path={data.path}
+                    lines={viewing.lines}
+                    onClose={closeViewer}
+                    onOpenInEditor={onOpenInEditor && ((line) => onOpenInEditor(data.path, line))}
+                />
+            )}
         </PanelFrame>
     );
 }
@@ -269,13 +284,20 @@ function BoxIcon({ box }: { box: MapNode | undefined }){
     return <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-folder" : "text-text-2"}`} />;
 }
 
-type StatsProps = { data: DescribeResponse; github: GitHubSource | null; onOpen: (folder: string) => void; onViewSource: () => void };
+type StatsProps = {
+    data: DescribeResponse;
+    github: GitHubSource | null;
+    onOpen: (folder: string) => void;
+    onViewSource: () => void;
+    /** Inside VS Code's panel only: "Open in VS Code" asks the editor over the bridge, since the panel can't follow a vscode:// link. */
+    onOpenInEditor?: () => void;
+};
 
 /**
  * "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. For a
  * file, the app offers its source and the editor; the demo has neither, so it links to GitHub at the indexed commit.
  */
-function Stats({ data, github, onOpen, onViewSource }: StatsProps){
+function Stats({ data, github, onOpen, onViewSource, onOpenInEditor }: StatsProps){
     const lines = `${formatCompact(data.stats.lineCount)} ${data.stats.lineCount === 1 ? "line" : "lines"}`;
     const size = data.kind === "file" ? lines : `${formatCount(data.stats.fileCount)} ${data.stats.fileCount === 1 ? "file" : "files"} · ${lines}`;
     return (
@@ -295,7 +317,10 @@ function Stats({ data, github, onOpen, onViewSource }: StatsProps){
                     <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
                         <IconCode aria-hidden size={14} stroke={1.75} />View source
                     </button>
-                    <a href={editorLink(data)} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</a>
+                    {onOpenInEditor
+                        // the webview's sandbox stops a vscode:// link inside the panel, so the editor is asked instead
+                        ? <button type="button" onClick={onOpenInEditor} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</button>
+                        : <a href={editorLink(data)} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</a>}
                 </>
             )}
         </div>
