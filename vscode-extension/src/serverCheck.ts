@@ -1,4 +1,5 @@
 import type { BRIDGE_VERSION, RepoList } from "../../lib/contracts";
+import { isObject } from "./guards";
 
 /**
  * Who answered `GET /api/repos` on the Map's port (V1.8 plan P14, Review Focus 5). One request tells all four apart:
@@ -14,8 +15,6 @@ export type ServerCheck = { kind: "current"; list: RepoList } | { kind: "old" } 
  * is the literal 1, so this line stops compiling the day contracts.ts moves the version.
  */
 const BRIDGE: typeof BRIDGE_VERSION = 1;
-
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** A RepoList's shape (API_CONTRACTS §15), with `server` left to the caller: the fields the extension reads, checked. */
 function isRepoList(body: unknown): body is RepoList {

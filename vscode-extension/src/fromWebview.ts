@@ -1,4 +1,5 @@
 import type { BRIDGE_VERSION, BridgeFromMap } from "../../lib/contracts";
+import { isObject, MAX_PATH_LENGTH } from "./guards";
 import type { RelayCommand } from "./webview/relay";
 
 /**
@@ -15,10 +16,6 @@ const COMMANDS: Record<RelayCommand, true> = { start: true, showLog: true, index
 /** The bridge this extension speaks: BRIDGE_VERSION's literal type, which a type import can bring (serverCheck.ts does the same). */
 const BRIDGE: typeof BRIDGE_VERSION = 1;
 
-/** A stored repo-relative path's longest spelling (API_CONTRACTS §20). */
-const MAX_PATH_LENGTH = 1_024;
-
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const isPath = (value: unknown): value is string => typeof value === "string" && value.length <= MAX_PATH_LENGTH;
 const isWhole = (value: unknown, least: number): value is number => typeof value === "number" && Number.isInteger(value) && value >= least;
 

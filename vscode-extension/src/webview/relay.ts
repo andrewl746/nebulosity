@@ -1,3 +1,5 @@
+import { isObjectLike } from "../guards";
+
 /**
  * The webview's own script (design §4.4, V1.8 plan P9, P18). The panel's page loads it in every state:
  * - in the `map` state it carries the editor bridge (API_CONTRACTS §20) between the extension and the Map's iframe, which
@@ -38,19 +40,17 @@ export type RelayEnv = {
     clearInterval: typeof clearInterval;
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
-
 /** The `data-command` of the clicked element's nearest `[data-command]` ancestor (or itself), when it's one of the three. */
 export function commandOf(target: unknown): RelayCommand | null {
-    if (!isObject(target) || typeof target.closest !== "function") return null;
+    if (!isObjectLike(target) || typeof target.closest !== "function") return null;
     const element: unknown = target.closest("[data-command]");
-    if (!isObject(element) || typeof element.getAttribute !== "function") return null;
+    if (!isObjectLike(element) || typeof element.getAttribute !== "function") return null;
     const command: unknown = element.getAttribute("data-command");
     return typeof command === "string" && Object.hasOwn(COMMANDS, command) ? (command as RelayCommand) : null;
 }
 
 /** A message from the Map's page that the relay passes on: one of the bridge's (API_CONTRACTS §20), by its type's prefix. */
-const isBridgeMessage = (data: unknown): data is { type: string } => isObject(data) && typeof data.type === "string" && data.type.startsWith("nebulosity.");
+const isBridgeMessage = (data: unknown): data is { type: string } => isObjectLike(data) && typeof data.type === "string" && data.type.startsWith("nebulosity.");
 
 export function startRelay(env: RelayEnv): void {
     // the timers are taken out of env and called on their own: called as env.setInterval(…), the window's own timer
@@ -118,7 +118,7 @@ export function startRelay(env: RelayEnv): void {
         // window can reach this one (top[i][0]) and post here too, and must not drive the Map as if it were the editor.
         if (e.source !== host || host === null || host === undefined) return;
         const data = e.data;
-        if (!isObject(data) || data.to !== "map" || !isObject(data.message)) return;
+        if (!isObjectLike(data) || data.to !== "map" || !isObjectLike(data.message)) return;
         if (ready){
             toMap(data.message);
             return;

@@ -1,4 +1,5 @@
 import type { RepoList, RepoSummary } from "../../lib/contracts";
+import { MAX_PATH_LENGTH } from "./guards";
 
 /**
  * Matching VS Code's paths to the index's (Review Focus 1, P15). VS Code gives native paths with its own drive-letter
@@ -6,9 +7,6 @@ import type { RepoList, RepoSummary } from "../../lib/contracts";
  * the Map speaks repo-relative paths (`src/a.ts`). Paths compare a segment at a time, ignoring case on Windows (its file
  * system does) and only there, so `/home/a/Repo` and `/home/a/repo` stay two folders on Linux.
  */
-
-/** A stored repo-relative path's longest spelling (API_CONTRACTS §19 and §20). */
-const MAX_PATH_LENGTH = 1_024;
 
 /** A path's segments: backslashes read as slashes, trailing slashes dropped. `/a/b` gives `["", "a", "b"]`. */
 function segmentsOf(p: string): string[] {

@@ -1,4 +1,5 @@
 import type { ImportsResponse } from "../../lib/contracts";
+import { isObject } from "./guards";
 import { relativeIn } from "./repoMatch";
 
 /**
@@ -33,7 +34,6 @@ export function isNotFound(status: number, body: unknown): boolean {
     return status === 404 && code === "NOT_FOUND";
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const isCount = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
 
 /**
