@@ -1,18 +1,20 @@
 import { execFile } from "child_process";
 import * as vscode from "vscode";
 import type { RepoList } from "../../lib/contracts";
-import { getJson, mapUrl, postJson, RefusedError } from "./http";
+import { errorText, getJson, mapUrl, postJson, RefusedError } from "./http";
 import { MapServer, PROBE_TIMEOUT_MS, StoppedError } from "./mapServer";
 import { MapPanel } from "./panel";
 import { mapFrameUrl, type PanelState } from "./panelHtml";
 import { repoFor, upperCaseDrive } from "./repoMatch";
 import { classifyRepos, type ServerCheck } from "./serverCheck";
+import { EditorSync, type NebulosityApi, type ShownMap } from "./sync";
 
 /**
  * The extension (design §4, ADR-062): "Nebulosity: Show Map" finds or starts the Map, puts the workspace's repo on it and
  * shows it in a panel; "Index this repo" indexes a repo the Map doesn't have, for free, in a terminal; "Stop Map" stops a
- * Map this window started. Everything it asks the Map goes over HTTP (http.ts), and everything it tells the Map goes over
- * the editor bridge (panel.ts).
+ * Map this window started. The editor and the Map follow each other, and "Show this file on the Map" and "What depends
+ * on this file?" ask the Map about a file (sync.ts). Everything it asks the Map goes over HTTP (http.ts), and everything
+ * it tells the Map goes over the editor bridge (panel.ts).
  */
 
 /** How long switching the Map's repo may take: the server opens the repo and points its worker at it. */
@@ -24,9 +26,10 @@ const INDEX_TASK = "nebulosity.index";
 
 let context: vscode.ExtensionContext;
 let server: MapServer | null = null;
+let sync: EditorSync | null = null;
 
 /** The Map the panel shows: its port and the repo root (the workspace's, or with no folder open the Map's active one). */
-let shown: { port: number; root: string | null } | null = null;
+let shown: ShownMap | null = null;
 
 /** The workspace folder of the last text editor that was active: a click in the panel leaves no active text editor. */
 let lastFolder: vscode.WorkspaceFolder | undefined;
@@ -67,12 +70,6 @@ function stateOf(check: Exclude<ServerCheck, { kind: "current" }>, port: number)
         case "old": return { kind: "old" };
         case "mismatch": return { kind: "mismatch", bridge: check.bridge };
     }
-}
-
-/** The error envelope's message (API_CONTRACTS §1), or the status when the body isn't one. */
-function errorText(status: number, body: unknown): string {
-    const message = (body as { error?: { message?: unknown } } | null)?.error?.message;
-    return typeof message === "string" ? message : `HTTP ${status}`;
 }
 
 type RepoStep = { kind: "repo"; root: string | null; switched: boolean } | { kind: "notIndexed"; root: string };
@@ -139,9 +136,16 @@ async function openMap(panel: MapPanel, mapServer: MapServer, reloadAnyway: bool
     }
 }
 
+/** The open panel, revealed, or a new one, whose messages the sync hears from the start. */
+async function showPanel(mapServer: MapServer): Promise<MapPanel> {
+    const panel = await MapPanel.show(context, mapServer);
+    sync?.attach(panel);
+    return panel;
+}
+
 /** Nebulosity: Show Map. */
 async function showMap(mapServer: MapServer): Promise<void> {
-    const panel = await MapPanel.show(context, mapServer);
+    const panel = await showPanel(mapServer);
     await openMap(panel, mapServer, false);
 }
 
@@ -206,7 +210,7 @@ async function indexRepo(mapServer: MapServer): Promise<void> {
     }
     const launch = mapServer.launch();
     if (launch === null){
-        (panel ?? await MapPanel.show(context, mapServer)).setState({ kind: "notInstalled" });
+        (panel ?? await showPanel(mapServer)).setState({ kind: "notInstalled" });
         return;
     }
     const args = [...launch.args, "index", root].map((value) => ({ value, quoting: vscode.ShellQuoting.Strong }));
@@ -236,17 +240,30 @@ async function stopMap(mapServer: MapServer): Promise<void> {
     MapPanel.open?.setState({ kind: "stopped" });
 }
 
-export function activate(extensionContext: vscode.ExtensionContext): void {
+/**
+ * Starts the extension. In ExtensionMode.Test (the integration tests and benchmarks, run by @vscode/test-electron) it
+ * returns NebulosityApi, the bridge's messages as the tests read them; otherwise nothing, and no message is kept.
+ */
+export function activate(extensionContext: vscode.ExtensionContext): NebulosityApi | undefined {
     context = extensionContext;
     const output = vscode.window.createOutputChannel("Nebulosity");
     const mapServer = new MapServer(output);
     server = mapServer;
     const editor = vscode.window.activeTextEditor;
     lastFolder = editor === undefined ? undefined : vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    const testing = context.extensionMode === vscode.ExtensionMode.Test;
+    const editorSync = new EditorSync({ shown: () => shown, folder: workspaceFolder, showMap: () => showMap(mapServer) }, testing);
+    sync = editorSync;
 
     context.subscriptions.push(
         output,
+        editorSync,
         vscode.commands.registerCommand("nebulosity.showMap", () => showMap(mapServer)),
+        // from a menu, the first argument is the file it was opened on; from the palette there's none (the active editor)
+        vscode.commands.registerCommand("nebulosity.showFile", (resource?: unknown) => editorSync.showFile(resource)),
+        vscode.commands.registerCommand("nebulosity.whatDepends", (resource?: unknown) => editorSync.whatDepends(resource)),
+        vscode.commands.registerCommand("nebulosity.followOn", () => editorSync.setFollowing(true)),
+        vscode.commands.registerCommand("nebulosity.followOff", () => editorSync.setFollowing(false)),
         vscode.commands.registerCommand("nebulosity.indexRepo", () => indexRepo(mapServer)),
         vscode.commands.registerCommand("nebulosity.stopMap", () => stopMap(mapServer)),
         vscode.window.onDidChangeActiveTextEditor((active) => {
@@ -258,6 +275,7 @@ export function activate(extensionContext: vscode.ExtensionContext): void {
         }),
         vscode.tasks.onDidEndTaskProcess((event) => onIndexEnd(event, mapServer)),
     );
+    return testing ? editorSync.api() : undefined;
 }
 
 /** The window is closing: a Map it started stops with it, and VS Code waits for the process tree to go. */

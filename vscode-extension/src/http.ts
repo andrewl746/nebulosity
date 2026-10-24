@@ -24,6 +24,12 @@ export class TimeoutError extends Error {
 /** A status and the body read as JSON, or the body's text when it isn't JSON (another app's HTML page, say). */
 export type HttpAnswer = { status: number; body: unknown };
 
+/** The error envelope's message (API_CONTRACTS §1), or the status when the body isn't one. */
+export function errorText(status: number, body: unknown): string {
+    const message = (body as { error?: { message?: unknown } } | null)?.error?.message;
+    return typeof message === "string" ? message : `HTTP ${status}`;
+}
+
 /** The Map's address for a path (`/api/repos`), at the loopback address its server listens on. */
 export function mapUrl(port: number, path: string): string {
     return `http://127.0.0.1:${port}${path}`;

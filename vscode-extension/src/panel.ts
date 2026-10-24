@@ -14,8 +14,11 @@ import type { RelayCommand } from "./webview/relay";
 export class MapPanel {
     static readonly viewType = "nebulosity.map";
     private static current: MapPanel | null = null;
+    /** Pages rendered in this window, by every panel: each page's number is new, whichever panel it's in. */
+    private static rendered = 0;
 
     private now: PanelState = { kind: "starting" };
+    private pageNumber = 0;
     private readonly fromMap = new vscode.EventEmitter<BridgeFromMap>();
     private readonly disposables: vscode.Disposable[] = [];
     private disposed = false;
@@ -56,6 +59,19 @@ export class MapPanel {
         return this.now;
     }
 
+    /**
+     * The page the panel shows, as a number no other page in this window has: a new one for every setState and reload.
+     * The sync tells by it whether a `ready` comes from the page a `show` was posted to (syncRules' ShowHold).
+     */
+    get page(): number {
+        return this.pageNumber;
+    }
+
+    /** The editor column the panel is in (undefined while it isn't shown in one). */
+    get viewColumn(): vscode.ViewColumn | undefined {
+        return this.panel.viewColumn;
+    }
+
     /** Shows a state. Each state is a new page, so a Map shown again loads afresh. */
     setState(state: PanelState): void {
         this.now = state;
@@ -87,6 +103,7 @@ export class MapPanel {
 
     private render(): void {
         if (this.disposed) return;
+        this.pageNumber = ++MapPanel.rendered;
         const relay = this.panel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "relay.js"));
         // a new nonce for every page, which also makes the page new when the state is the same one (a reload)
         this.panel.webview.html = panelHtml(this.now, { nonce: randomBytes(16).toString("hex"), relayUri: relay.toString() });

@@ -22,7 +22,7 @@ const CONTRACTS = path.resolve(EXTENSION, "..", "lib", "contracts");
 const HOST = ["extension.ts", "http.ts", "mapServer.ts", "panel.ts", "sync.ts"];
 /** Packages a test file may import. */
 const TEST_PACKAGES = ["vitest", "typescript"];
-const PURE_MODULES = ["ports.ts", "command.ts", "serverCheck.ts", "repoMatch.ts", "followGate.ts", "dependents.ts"];
+const PURE_MODULES = ["ports.ts", "command.ts", "serverCheck.ts", "repoMatch.ts", "followGate.ts", "dependents.ts", "syncRules.ts", "messageLog.ts"];
 
 type ModuleRef = { specifier: string; typeOnly: boolean };
 
