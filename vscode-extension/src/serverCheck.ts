@@ -54,3 +54,20 @@ export function afterProbe(probe: Probe, installed: boolean, ownChildOnPort: boo
     if (probe === "timeout") return { kind: "wait" };
     return installed ? { kind: "start" } : { kind: "notInstalled" };
 }
+
+/** What the start poll does after one probe: use the answer, poll again, or fail with the end of this window's Map. */
+export type PollStep = { kind: "use"; check: ServerCheck } | { kind: "poll" } | { kind: "fail" };
+
+/**
+ * After a probe of the start poll (design §4.2 step 3). Whoever answers is used: the Map this window started, or, once
+ * that one has ended, a Map started elsewhere. Two windows can both find the port free and both start a Map: the
+ * loser's ends with EADDRINUSE just as the winner's comes up, and the loser then uses the winner's, which it doesn't
+ * own. Once this window's Map has ended, a refused port is asked once more after a poll (`refusedSinceEnd` counts the
+ * refusals since the end, this one included), and the second refusal fails the wait with that Map's last line. A port
+ * that's held but silent ("timeout") is waited on, as afterProbe waits on one: the winner's Map still coming up.
+ */
+export function afterPoll(probe: Probe, ownEnded: boolean, refusedSinceEnd: number): PollStep {
+    if (probe !== "refused" && probe !== "timeout") return { kind: "use", check: probe };
+    if (!ownEnded || probe === "timeout") return { kind: "poll" };
+    return refusedSinceEnd >= 2 ? { kind: "fail" } : { kind: "poll" };
+}

@@ -19,10 +19,10 @@ const EXTENSION = path.resolve(SRC, "..");
 const EXTENSION_MODULES = path.join(EXTENSION, "node_modules");
 const CONTRACTS = path.resolve(EXTENSION, "..", "lib", "contracts");
 /** The files that run in the extension host and use VS Code's API. Every other file under src/ is pure. */
-const HOST = ["extension.ts", "http.ts", "mapServer.ts", "panel.ts", "sync.ts"];
+const HOST = ["extension.ts", "mapServer.ts", "panel.ts", "sync.ts"];
 /** Packages a test file may import. */
 const TEST_PACKAGES = ["vitest", "typescript"];
-const PURE_MODULES = ["ports.ts", "command.ts", "serverCheck.ts", "repoMatch.ts", "followGate.ts", "dependents.ts", "syncRules.ts", "messageLog.ts", "guards.ts"];
+const PURE_MODULES = ["ports.ts", "command.ts", "serverCheck.ts", "repoMatch.ts", "followGate.ts", "dependents.ts", "syncRules.ts", "messageLog.ts", "guards.ts", "http.ts"];
 
 type ModuleRef = { specifier: string; typeOnly: boolean };
 

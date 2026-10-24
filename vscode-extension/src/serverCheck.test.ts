@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterProbe, classifyRepos, type ServerCheck } from "./serverCheck";
+import { afterPoll, afterProbe, classifyRepos, type ServerCheck } from "./serverCheck";
 
 describe("classifyRepos (who answers GET /api/repos on the port, Review Focus 5)", () => {
     it("knows a current Nebulosity, an older one and one on another bridge", () => {
@@ -40,5 +40,31 @@ describe("afterProbe (what Show Map does once the port has answered, or not)", (
         expect(afterProbe("refused", true, true)).toEqual({ kind: "waitOwn" });
         expect(afterProbe("timeout", true, true)).toEqual({ kind: "waitOwn" });
         expect(afterProbe("refused", false, true)).toEqual({ kind: "waitOwn" });
+    });
+});
+
+describe("afterPoll (the start poll, after each probe, PR #10 review 5)", () => {
+    const current: ServerCheck = { kind: "current", list: { active: null, repos: [], server: { version: "0.3.0", bridge: 1 } } };
+
+    it("uses whoever answers, and polls on while nothing does and this window's Map is still running", () => {
+        expect(afterPoll(current, false, 0)).toEqual({ kind: "use", check: current });
+        expect(afterPoll({ kind: "foreign" }, false, 0)).toEqual({ kind: "use", check: { kind: "foreign" } });
+        expect(afterPoll("refused", false, 0)).toEqual({ kind: "poll" });
+        expect(afterPoll("timeout", false, 0)).toEqual({ kind: "poll" });
+    });
+
+    it("uses a Map that answers after this window's own ended: another window started it first (EADDRINUSE here)", () => {
+        expect(afterPoll(current, true, 0)).toEqual({ kind: "use", check: current });
+        expect(afterPoll(current, true, 1)).toEqual({ kind: "use", check: current });
+    });
+
+    it("once this window's Map ended, asks a refused port once more after a poll, and fails on the second refusal", () => {
+        expect(afterPoll("refused", true, 1)).toEqual({ kind: "poll" });
+        expect(afterPoll("refused", true, 2)).toEqual({ kind: "fail" });
+    });
+
+    it("waits on a port that's held but silent after this window's Map ended: the winner's Map still coming up", () => {
+        expect(afterPoll("timeout", true, 0)).toEqual({ kind: "poll" });
+        expect(afterPoll("timeout", true, 1)).toEqual({ kind: "poll" });
     });
 });

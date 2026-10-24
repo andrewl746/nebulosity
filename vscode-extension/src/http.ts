@@ -35,10 +35,28 @@ export function mapUrl(port: number, path: string): string {
     return `http://127.0.0.1:${port}${path}`;
 }
 
-/** Whether a fetch failed because the connection was refused: undici puts the socket's code on the error's cause. */
-function isRefused(err: unknown): boolean {
+/** The socket's code that undici puts on a failed fetch's cause, or undefined. */
+function causeCode(err: unknown): unknown {
     const cause: unknown = err instanceof Error ? err.cause : undefined;
-    return typeof cause === "object" && cause !== null && (cause as { code?: unknown }).code === "ECONNREFUSED";
+    return typeof cause === "object" && cause !== null ? (cause as { code?: unknown }).code : undefined;
+}
+
+/** Whether a fetch failed because the connection was refused. */
+function isRefused(err: unknown): boolean {
+    return causeCode(err) === "ECONNREFUSED";
+}
+
+/**
+ * Whether a fetch failed because the connection dropped once it was made: a reset (ECONNRESET), a write to a closed
+ * socket (EPIPE), or one of undici's own socket errors (UND_ERR_…, "other side closed" among them). fetch rejects with
+ * a TypeError whose cause carries the code, and request() passes it on as it is. A Next server coming up can drop a
+ * connection it took, so the start poll reads these as "not answering yet" (mapServer.ts); anywhere else they stay
+ * failures.
+ */
+export function isDroppedConnection(err: unknown): boolean {
+    if (!(err instanceof TypeError)) return false;
+    const code = causeCode(err);
+    return typeof code === "string" && (code === "ECONNRESET" || code === "EPIPE" || code.startsWith("UND_ERR"));
 }
 
 async function request(url: string, init: RequestInit, timeoutMs: number): Promise<HttpAnswer> {

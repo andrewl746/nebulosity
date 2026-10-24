@@ -3,9 +3,9 @@ import fs from "fs";
 import os from "os";
 import * as vscode from "vscode";
 import { findOnPath, nebulosityLaunch, withArgs, type Launch } from "./command";
-import { getJson, mapUrl, RefusedError, TimeoutError } from "./http";
+import { getJson, isDroppedConnection, mapUrl, RefusedError, TimeoutError } from "./http";
 import { choosePort, parsePrintedPort } from "./ports";
-import { afterProbe, classifyRepos, type Probe, type ServerCheck } from "./serverCheck";
+import { afterPoll, afterProbe, classifyRepos, type Probe, type ServerCheck } from "./serverCheck";
 
 /**
  * Finding or starting the Map (design §4.2, V1.8 plan P2, P14). The port comes from the `nebulosity.port` setting, else
@@ -81,6 +81,19 @@ async function probe(port: number): Promise<Probe> {
     } catch (err){
         if (err instanceof RefusedError) return "refused";
         if (err instanceof TimeoutError) return "timeout";
+        throw err;
+    }
+}
+
+/**
+ * probe() for the start poll: a server coming up can drop a connection it took (a reset, a broken pipe, an undici
+ * socket error: http.ts' isDroppedConnection), which is "not answering yet" there, not a failure that ends the wait.
+ */
+async function pollProbe(port: number): Promise<Probe> {
+    try{
+        return await probe(port);
+    } catch (err){
+        if (isDroppedConnection(err)) return "timeout";
         throw err;
     }
 }
@@ -265,10 +278,13 @@ export class MapServer {
 
     /**
      * Polls `/api/repos` every 500 ms for up to 60 s until the port answers. With `child` (a Map started here), its
-     * early end fails the wait with its output's last line. A Map started here that never answers is stopped.
+     * early end fails the wait with its output's last line, unless a Map answers on the port after all: another window
+     * may have started one first, and this one's then ended with EADDRINUSE (serverCheck's afterPoll). That Map is used,
+     * and this window doesn't own it. A Map started here that never answers is stopped.
      */
     private async waitFor(port: number, child: ChildProcess | null): Promise<ServerCheck> {
-        let ended: Error | null = null;
+        // set by the listeners below, which the compiler's narrowing can't see: the cast keeps it Error | null in the loop
+        let ended = null as Error | null;
         const onEnd = (code: number | null): void => {
             ended = child !== null && this.stopping.has(child)
                 ? new StoppedError()
@@ -282,10 +298,18 @@ export class MapServer {
         child?.on("error", onError);
         try{
             const deadline = Date.now() + START_TIMEOUT_MS;
+            let refusedSinceEnd = 0;
             while (Date.now() < deadline){
-                if (ended !== null) throw ended;
-                const answer = await probe(port);
-                if (answer !== "refused" && answer !== "timeout") return answer;
+                // Stop came first: nothing else is asked
+                if (ended instanceof StoppedError) throw ended;
+                const answer = await pollProbe(port);
+                if (ended !== null && answer === "refused") refusedSinceEnd++;
+                const step = afterPoll(answer, ended !== null, refusedSinceEnd);
+                if (step.kind === "use"){
+                    if (ended !== null) this.log(`The Map this window started ended, and port ${port} answers: a Map started elsewhere, which this window uses and won't stop.`);
+                    return step.check;
+                }
+                if (step.kind === "fail" && ended !== null) throw ended;
                 await delay(START_POLL_MS);
             }
             if (ended !== null) throw ended;
