@@ -229,7 +229,7 @@ The extension uses a Map that's already running, or starts one, and stops the on
 
 Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. It also runs `nebulosity setup` against a real Claude Code, checks that the installed Map's background worker picks up a saved file, and checks that `summarize` refuses to spend without a key or a yes.
 
-The Map works at any window size, down to a narrow VS Code panel ([docs/VISUAL_REFRESH.md](docs/VISUAL_REFRESH.md) §10). From a checkout, `npm run check-layout -- http://127.0.0.1:<port>` checks a running Map in headless Chrome at 20 window sizes, from 1440 × 900 to 200 × 260.
+The Map works at any window size, down to a narrow VS Code panel ([docs/VISUAL_REFRESH.md](docs/VISUAL_REFRESH.md) §10). From a checkout, `npm run check-layout -- http://127.0.0.1:<port>` checks a running Map in headless Chrome at 20 window sizes, from 1440 × 900 to 200 × 260 (the Map must be showing the VS Code demo repo, whose folders its states visit).
 
 ### Tested on
 
