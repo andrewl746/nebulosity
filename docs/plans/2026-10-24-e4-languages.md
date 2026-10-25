@@ -491,7 +491,7 @@ export type FixtureTruth = {
 - **Absolute `a.b.c` from file F:**
   - first the roots that contain F, deepest first (`""` contains every file, so it's last of them): the first hit wins;
   - else among all other roots: exactly one hit resolves, and two or more resolve to nothing.
-- **`X:name`** tries the submodule `X.name` first, then the module `X`. `X:*` and plain `X` are the module `X`.
+- **`X:name`** tries the submodule `X.name` first, then the module `X`. `X:*` and plain `X` are the module `X`. *(Amended 2026-10-25, as built in Task P's fix round 1, `390a89f`, the review's I1: the order is per root. In each root that contains F, deepest first, `X.name` and then `X` are tried, and the first hit wins. Only after every containing root come the other roots: a unique hit for `X.name`, else a unique hit for `X`. So F's own package `X`, which may define `name` as an attribute, beats another root's `X/name.py`, as Python binds the `X` on F's own path. The first reading, the whole procedure for `X.name` before any for `X`, sent `services/alpha/app/views.py`'s `from app import db` to `services/beta/src/app/db.py`.)*
 - **Relative:** the base is F's folder, up one folder per dot after the first (past the repo root resolves to nothing); then `.:c` is `base/c` as a module, else the package `base/__init__`, and `.m:c` is `base/m/c`, else `base/m`. No edge goes to the `__init__.py` files above the named module.
 - **`kindOf`:**
   - relative → internal;
