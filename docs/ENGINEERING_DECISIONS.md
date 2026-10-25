@@ -680,6 +680,8 @@ The owner also asked why anyone wouldn't just use Claude Code. The answer record
 
 *Amended (2026-10-25, E4 built; ADR-065, after ADR-062): E4 is no longer "Python first and Go if there's time". ADR-062 widened it to Python, Go, Java, C# and Rust, and put V1.8 before it. The owner then asked for all five at once, one task per language in parallel, and all five were built and merged on `pivot/e4` behind one adapter seam, each meeting its bars (PIVOT_SPEC S15; BENCHMARKS.md, Language Benchmark #1). The order after E4 is unchanged: the ship, then E5 → E1, with E3 optional and E2 only as V1.7 built it.*
 
+*Amended (2026-10-25, by ADR-067): there is no order after E4. The pre-ship pass is the last work before the ship list, and E5, E1, E3, E2's remaining parts and Eval #4 aren't built; the project is complete at ship and not maintained.*
+
 ## ADR-044 — The MCP server opens the database read-only (2026-10-13) — amends ADR-023 and ADR-030
 
 **Context:** ADR-030 and PIVOT_SPEC.md §3 (rule 5) said the MCP server reads the database and never migrates, without saying how. Claude Code starts the server once per session, and it may outlive many writes by the Map's background worker (ADR-038) or the CLI. ADR-023 migrates on every open, which a reader must not do: two processes owning one schema is the revisit trigger ADR-023 named.
@@ -1309,6 +1311,8 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 **Revisit when:** browser-hosted VS Code matters (then a token or the webview proxy, ADR-039's revisit), or two-repo use is common (a server per repo).
 
 > *(Amended 2026-10-25 by ADR-065, built: E4's five languages are built on `pivot/e4`, in parallel rather than in waves (one task per language, all merged). The extension needed no change: it works by path, and the Map it shows now colors the new languages' source. The ship list still waits on the owner's check of the extension, as this decision's order says.)*
+
+> *(Amended 2026-10-25 by ADR-067: the order ends at the ship. The pre-ship pass is the last work before the ship list, and "E5 → E1 follow as before" no longer holds: E5, E1, E3 and E2's remaining parts aren't built.)*
 
 **Amended (2026-10-23, V1.8 Task 6): the extension's one import from `lib/`.** The extension may `import type` from `lib/contracts.ts`, and nothing else from `lib/` (V1.8 plan P3): a type import is erased from the bundle, and `vscode-extension/src/layering.test.ts` enforces it. So the shapes it reads (`RepoList`, `ImportsResponse`, the bridge's messages) come from the one source of shared types, and can't drift from API_CONTRACTS §15, §19 and §20 unseen. The same test refuses every other import from outside `vscode-extension/` (`app/`, `scripts/`, `lib/` beyond the contracts' types) and the root's `@/` alias, and every package but Node's own modules and `vscode` (a test may also import `vitest` and `typescript`): the extension has no runtime dependencies, and a package name would still resolve into the root's node_modules, where esbuild would bundle it unseen. It keeps `vscode` out of the pure modules, which the root vitest runs (P11). Code it needs from `lib/` is written again on its side: `checkRepoPath` is `parseRepoPath`'s rule.
 

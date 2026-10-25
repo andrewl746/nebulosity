@@ -364,10 +364,9 @@ Measured on VS Code (20,342 files, 14,849 of them indexed before E4, 15,040 sinc
   - free mode with no API key, and summaries as the paid upgrade;
   - TypeScript and JavaScript, plus Python, Go, Java, C# and Rust ([Languages](#languages)).
 - **What was measured:** three evals against Claude Code on its own, given above along with what didn't improve ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)).
-- **Tested with:**
-  - Node 24.14 and Claude Code 2.1.310 (it needs 2.1.300 or later);
-  - VS Code 1.143.1, and 1.105.0, the extension's oldest supported version;
-  - Windows 11 locally, and Windows, macOS and Linux in CI.
+- **Tested with** (Claude Code 2.1.300 or later is needed):
+  - locally, on Windows 11: Node 24.14, Claude Code 2.1.310, and VS Code 1.143.1 and 1.105.0, the extension's oldest supported version;
+  - in CI, on Windows, macOS and Linux: Node 24.21 and 24.22 (the newest 24 each runner had), Claude Code 2.1.300, and the extension's tests in VS Code's stable release of the day.
 
   If a later version breaks something, these are the ones that worked.
 - **If something it depends on changes:**
