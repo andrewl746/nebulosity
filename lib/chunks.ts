@@ -267,7 +267,7 @@ function isReactComponent(name: string, filePath: string): boolean {
  * the whole file. The display `name` is left alone — only the id segment gains
  * a `~n` marker — so nothing user-facing changes.
  */
-function disambiguateIds(chunks: CodeChunk[]): CodeChunk[] {
+export function disambiguateIds(chunks: CodeChunk[]): CodeChunk[] {
     const occurrences = new Map<string, number>();
 
     return chunks.map((chunk) => {
@@ -392,7 +392,7 @@ function declarationKind(node: ts.Node): string {
  * (`ceil(lines / MAX)`) assumes non-overlapping windows and silently drops the
  * tail of anything long enough to need splitting.
  */
-function splitOversizedChunks(chunks: CodeChunk[]): CodeChunk[] {
+export function splitOversizedChunks(chunks: CodeChunk[]): CodeChunk[] {
     const result: CodeChunk[] = [];
 
     for (const chunk of chunks){
