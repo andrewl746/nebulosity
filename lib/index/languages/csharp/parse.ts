@@ -99,6 +99,16 @@ function flattened(nodes: readonly Node[]): Node[] {
 const join = (outer: string, name: string): string => (outer === "" ? name : `${outer}.${name}`);
 
 /**
+ * A comment attached above a declaration: one that doesn't share its first line with code before it. `} // end of A`
+ * trails A, so it never starts B's chunk on A's last line (B-M3), as Python, Go and Java read it.
+ */
+function isAttachedComment(previous: Node): boolean {
+    if (previous.type !== "comment") return false;
+    const before = previous.previousSibling;
+    return before === null || before.type === "comment" || endLineOf(before) < startLineOf(previous);
+}
+
+/**
  * Exported, for a member or a nested type (ADR-065's one rule for every language): only when its owner is exported and
  * it is `public` itself; an interface's members have no visibility of their own to read, so they take the interface's.
  */
@@ -178,7 +188,7 @@ function readStructure(root: Node, facts: FileFacts): void {
             });
         }
         if (depth === 0){
-            const span = leadingSpan(node, (previous) => previous.type === "comment");
+            const span = leadingSpan(node, isAttachedComment);
             facts.declarations.push({ kind: CHUNK_KIND[kind], name, startLine: span.startLine, endLine: span.endLine, exported });
             if (exported) facts.exports.push(`${name} (${CHUNK_KIND[kind]})`);
         }

@@ -149,3 +149,16 @@ describe("C#'s file summary on a CRLF checkout (B-M2)", () => {
         expect(chunksOf(crlf)).toEqual(chunksOf(lf));
     });
 });
+
+describe("C#'s chunk spans (B-M3)", () => {
+    beforeAll(async () => {
+        await loadGrammars([{ id: "csharp", grammar: "tree-sitter-c_sharp.wasm" }]);
+    });
+
+    it("attaches a comment on its own line above a type, never one trailing the code before it", () => {
+        const text = ["namespace N;", "", "public class A", "{", "} // end of A", "[Audited]", "public class B", "{", "}", "", "// C's own comment", "public class C { }", ""].join("\n");
+        expect(parseCsharp("x.cs", text, "full").chunks.map((c) => [c.name, c.startLine, c.endLine])).toEqual([
+            ["A", 3, 5], ["B", 6, 9], ["C", 11, 12], ["(file)", 1, 12],
+        ]);
+    });
+});

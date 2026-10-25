@@ -46,11 +46,11 @@ function stringContent(literal: Node | null): string | null {
 }
 
 /** A node's named children of one type. */
-const childrenOfType = (node: Node, type: string): Node[] => node.namedChildren.filter((c) => c !== null && c.type === type) as Node[];
+const childrenOfType = (node: Node, type: string): Node[] => node.namedChildren.filter((c) => c.type === type);
 
 /** The identifiers a field holds, `_` included (callers decide), MISSING ones left out. */
 function identifiersOf(node: Node, field: string): string[] {
-    return node.childrenForFieldName(field).filter((c): c is Node => c !== null && c.type === "identifier" && !c.isMissing).map((c) => c.text);
+    return node.childrenForFieldName(field).filter((c) => c.type === "identifier" && !c.isMissing).map((c) => c.text);
 }
 
 /** The identifiers directly in an expression list (`a, b :=`), each a plain name. */
@@ -62,7 +62,7 @@ function listIdentifiers(list: Node | null): string[] {
 
 /** Whether a node has an anonymous `:=` token among its children (a range clause or receive that declares). */
 function declaresWithColon(node: Node): boolean {
-    return node.children.some((c) => c !== null && !c.isNamed && c.type === ":=");
+    return node.children.some((c) => !c.isNamed && c.type === ":=");
 }
 
 /**
@@ -115,7 +115,7 @@ function bindingsOf(fn: Node): Set<string> {
     if (fn.type === "method_declaration"){
         const receiverType = receiverTypeNode(fn);
         const args = receiverType?.type === "generic_type" ? receiverType.childForFieldName("type_arguments") : null;
-        if (args !== null) for (const id of args.descendantsOfType("type_identifier")) if (id !== null) bound.add(id.text);
+        if (args !== null) for (const id of args.descendantsOfType("type_identifier")) bound.add(id.text);
     }
     return bound;
 }
@@ -123,7 +123,7 @@ function bindingsOf(fn: Node): Set<string> {
 /** A method's receiver type, without `*` or parentheses (a type_identifier, or a generic_type for `Box[T]`). */
 function receiverTypeNode(method: Node): Node | null {
     const receiver = method.childForFieldName("receiver");
-    const param = receiver?.namedChildren.find((c) => c !== null && (c.type === "parameter_declaration" || c.type === "variadic_parameter_declaration")) ?? null;
+    const param = receiver?.namedChildren.find((c) => c.type === "parameter_declaration" || c.type === "variadic_parameter_declaration") ?? null;
     let type = param?.childForFieldName("type") ?? null;
     while (type !== null && (type.type === "pointer_type" || type.type === "parenthesized_type")) type = type.namedChildren[0] ?? null;
     return type;
@@ -151,10 +151,10 @@ function embeddedName(type: Node | null): string | null {
 
 /** The type specs of a type declaration, and the const/var specs of a const or var declaration, in order. */
 function specsOf(declaration: Node): Node[] {
-    if (declaration.type === "type_declaration") return declaration.namedChildren.filter((c): c is Node => c !== null && (c.type === "type_spec" || c.type === "type_alias"));
+    if (declaration.type === "type_declaration") return declaration.namedChildren.filter((c) => c.type === "type_spec" || c.type === "type_alias");
     if (declaration.type === "const_declaration") return childrenOfType(declaration, "const_spec");
     // a var declaration holds its specs directly, or in a var_spec_list when parenthesized
-    return declaration.namedChildren.flatMap((c) => (c === null ? [] : c.type === "var_spec" ? [c] : c.type === "var_spec_list" ? childrenOfType(c, "var_spec") : []));
+    return declaration.namedChildren.flatMap((c) => (c.type === "var_spec" ? [c] : c.type === "var_spec_list" ? childrenOfType(c, "var_spec") : []));
 }
 
 const specName = (spec: Node): string | null => spec.childForFieldName("name")?.text ?? null;
@@ -173,7 +173,6 @@ const isExported = (name: string): boolean => /^\p{Lu}/u.test(name);
 function topLevelNames(root: Node): string[] {
     const names: string[] = [];
     for (const node of root.namedChildren){
-        if (node === null) continue;
         if (node.type === "function_declaration"){
             const name = node.childForFieldName("name")?.text;
             if (name !== undefined) names.push(name);
@@ -341,7 +340,7 @@ function readDeclarations(root: Node): GoSymbols {
     const receiverAllows = (parent: string | null): boolean => parent === null || !declaredTypes.has(parent) || isExported(parent);
 
     for (const node of root.namedChildren){
-        if (node === null || !TOP_LEVEL_DECLARATIONS.has(node.type)) continue;
+        if (!TOP_LEVEL_DECLARATIONS.has(node.type)) continue;
         const names: string[] = [];
         let exported = false;
         let chunkKind: Declaration["kind"] = "const";
@@ -371,7 +370,7 @@ function readDeclarations(root: Node): GoSymbols {
                 if (kind === "struct" && type !== null){
                     for (const fields of childrenOfType(type, "field_declaration_list")){
                         for (const member of childrenOfType(fields, "field_declaration")){
-                            const memberNames = member.childrenForFieldName("name").filter((c): c is Node => c !== null).map((c) => c.text);
+                            const memberNames = member.childrenForFieldName("name").map((c) => c.text);
                             const embedded = memberNames.length === 0 ? embeddedName(member.childForFieldName("type")) : null;
                             for (const memberName of embedded === null ? memberNames : [embedded]) add(memberName, "property", member, name, isExported(name));
                         }
@@ -479,7 +478,7 @@ export function parseGo(path: string, text: string, reading: Reading): ParsedFil
         const topLevel = new Set(names);
         const { specifiers, importLines } = readSpecifiers(root, topLevel);
 
-        const packageName = childrenOfType(root, "package_clause")[0]?.namedChildren.find((c) => c !== null && c.type === "package_identifier")?.text ?? null;
+        const packageName = childrenOfType(root, "package_clause")[0]?.namedChildren.find((c) => c.type === "package_identifier")?.text ?? null;
         const declares = [...new Set([...(packageName === null ? [] : [`package:${packageName}`]), ...names.filter((n) => n !== "init")])].sort();
 
         let chunks: CodeChunk[] = [];
