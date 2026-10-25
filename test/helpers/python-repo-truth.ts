@@ -18,8 +18,11 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *
  * A module a.b.c under a root r is the first indexed of r/a/b/c.py, r/a/b/c/__init__.py, r/a/b/c.pyi,
  * r/a/b/c/__init__.pyi. An absolute import from F tries the roots that contain F, deepest first ("" last), the first hit
- * winning; else it counts the hits among all the other roots, and exactly one resolves. `X:name` is that whole
- * procedure for X.name, then (no hit) for X. A relative import counts from F's folder, one folder up per extra dot.
+ * winning; else it counts the hits among all the other roots, and exactly one resolves. `X:name` tries, in each root
+ * that contains F (deepest first), the submodule X.name and then the module X, the first hit winning; only then the
+ * other roots, a unique hit for X.name, else a unique hit for X. So F's own package X, which may define name as an
+ * attribute, beats another root's X/name.py (Task P review #1, I1: services/alpha/app/views.py). A relative import
+ * counts from F's folder, one folder up per extra dot.
  *
  * Readings of points the plan leaves open, used below (each is in progress-python.md):
  * - "module-level" and "top-level" mean the module's own statements: an assignment inside a top-level try or if
@@ -42,7 +45,7 @@ const member = (parent: string, name: string, kind: Kind, startLine: number, end
 });
 const edge = (source: string, target: string): TruthEdge => ({ source, target });
 
-/** The 33 edges of a full run, sorted by source then target, each with the specifier and the rule that makes it. */
+/** The 34 edges of a full run, sorted by source then target, each with the specifier and the rule that makes it. */
 const EDGES: TruthEdge[] = [
     // shop.models:Product: no submodule shop.models.Product anywhere; shop.models in no root holding conftest.py
     // (only ""), and in exactly one other root (src)
@@ -51,6 +54,10 @@ const EDGES: TruthEdge[] = [
     edge("scripts/deploy.py", "scripts/helpers.py"),
     // app:config: the root services/alpha contains the importer, and services/alpha/app/config.py is the submodule
     edge("services/alpha/app/__init__.py", "services/alpha/app/config.py"),
+    // app:db: in the root services/alpha, which contains the importer, there's no submodule app.db but there is the
+    // module app, services/alpha/app/__init__.py (which defines db): it wins before any other root is tried, so
+    // services/beta/src/app/db.py, the other app's submodule, is never reached
+    edge("services/alpha/app/views.py", "services/alpha/app/__init__.py"),
     // app.config:SETTINGS: no submodule app.config.SETTINGS; app.config in the deepest root holding the importer,
     // services/beta/src
     edge("services/beta/src/app/__init__.py", "services/beta/src/app/config.py"),
@@ -174,10 +181,12 @@ export const pythonRepoTruth: FixtureTruth = {
         { path: "extras/promo.py", language: "python", isTest: false, lineCount: 1 },
         { path: "scripts/deploy.py", language: "python", isTest: false, lineCount: 20 },
         { path: "scripts/helpers.py", language: "python", isTest: false, lineCount: 2 },
-        { path: "services/alpha/app/__init__.py", language: "python", isTest: false, lineCount: 3 },
+        { path: "services/alpha/app/__init__.py", language: "python", isTest: false, lineCount: 4 },
         { path: "services/alpha/app/config.py", language: "python", isTest: false, lineCount: 1 },
+        { path: "services/alpha/app/views.py", language: "python", isTest: false, lineCount: 5 },
         { path: "services/beta/src/app/__init__.py", language: "python", isTest: false, lineCount: 5 },
         { path: "services/beta/src/app/config.py", language: "python", isTest: false, lineCount: 1 },
+        { path: "services/beta/src/app/db.py", language: "python", isTest: false, lineCount: 1 },
         { path: "setup.py", language: "python", isTest: false, lineCount: 3 },                // a manifest and a code file
         { path: "src/shop/__init__.py", language: "python", isTest: false, lineCount: 12 },
         { path: "src/shop/__main__.py", language: "python", isTest: false, lineCount: 4 },
@@ -212,8 +221,10 @@ export const pythonRepoTruth: FixtureTruth = {
         "scripts/helpers.py": [],
         "services/alpha/app/__init__.py": ["app:config"],
         "services/alpha/app/config.py": [],
+        "services/alpha/app/views.py": ["app:db"],
         "services/beta/src/app/__init__.py": ["app.config:SETTINGS"],
         "services/beta/src/app/config.py": [],
+        "services/beta/src/app/db.py": [],
         "setup.py": ["setuptools:setup"],
         "src/shop/__init__.py": [".models:Product"],
         "src/shop/__main__.py": ["shop.cli:main"],                       // the alias run_cli is not part of it
@@ -254,8 +265,10 @@ export const pythonRepoTruth: FixtureTruth = {
         "scripts/helpers.py": [],
         "services/alpha/app/__init__.py": [],
         "services/alpha/app/config.py": [],
+        "services/alpha/app/views.py": [],
         "services/beta/src/app/__init__.py": [],
         "services/beta/src/app/config.py": [],
+        "services/beta/src/app/db.py": [],
         "setup.py": [],
         "src/shop/__init__.py": [],
         "src/shop/__main__.py": ["__main__"],                 // if __name__ == "__main__":
@@ -287,10 +300,12 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": [top("DISCOUNT", "const", 1, 1, true)],
         "scripts/deploy.py": [top("import_module", "function", 9, 11, true), top("main", "function", 14, 16, true)],
         "scripts/helpers.py": [top("banner", "function", 1, 2, true)],
-        "services/alpha/app/__init__.py": [top("NAME", "const", 3, 3, true)],
+        "services/alpha/app/__init__.py": [top("NAME", "const", 3, 3, true), top("db", "const", 4, 4, true)],
         "services/alpha/app/config.py": [top("DEBUG", "const", 1, 1, true)],
+        "services/alpha/app/views.py": [top("index", "function", 4, 5, true)],
         "services/beta/src/app/__init__.py": [top("run", "function", 4, 5, true)],
         "services/beta/src/app/config.py": [top("SETTINGS", "const", 1, 1, true)],
+        "services/beta/src/app/db.py": [top("ENGINE", "const", 1, 1, true)],
         "setup.py": [],
         // __all__ lists Product and VERSION: exactly those are exported, so not __all__ itself, _registry or configure
         "src/shop/__init__.py": [
@@ -371,8 +386,10 @@ export const pythonRepoTruth: FixtureTruth = {
         "scripts/helpers.py": {},
         "services/alpha/app/__init__.py": { "app:config": "internal" },
         "services/alpha/app/config.py": {},
+        "services/alpha/app/views.py": { "app:db": "internal" },
         "services/beta/src/app/__init__.py": { "app.config:SETTINGS": "internal" },
         "services/beta/src/app/config.py": {},
+        "services/beta/src/app/db.py": {},
         "setup.py": { "setuptools:setup": "external" },
         "src/shop/__init__.py": { ".models:Product": "internal" },
         "src/shop/__main__.py": { "shop.cli:main": "internal" },
