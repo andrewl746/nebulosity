@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { k13Texts } from "../../../../test/helpers/adapter-conformance";
 import { rustRepoTruth as truth } from "../../../../test/helpers/rust-repo-truth";
 import { prepareLanguages } from "../registry";
 import { rustAdapter } from "./index";
@@ -167,5 +168,21 @@ describe("a valid Rust file nested deeper than the call stack goes (B-I1)", () =
         const parsed = parseRust("deep.rs", deep, reading);
         expect(parsed.imports).toEqual(["use:|crate::a::Thing", "path:|crate::deep::value"]);
         expect(parsed.lineCount).toBe(5);
+    });
+});
+
+describe("Rust's file summary (B-M2)", () => {
+    it("leaves a malformed use out of the summary, as it gives no specifier", () => {
+        const parsed = parseRust("x.rs", "use crate::a::{b c};\nuse crate::c;\n", "full");
+        expect(parsed.imports).toEqual(["use:|crate::c"]);
+        expect(parsed.chunks.at(-1)!.text).toBe("File: x.rs\n\nImports:\nuse crate::c;\n\nExports:\n  (none)");
+    });
+
+    // K13 compares the specifiers, declares and symbols; this compares every chunk, text included (fileHash hashes the
+    // text as given, so it differs by design)
+    it.each(truth.files.map((f) => f.path))("%s: the CRLF twin's chunks are the LF text's", (rel) => {
+        const { lf, crlf } = k13Texts(read(rel));
+        const chunksOf = (text: string) => parseRust(rel, text, "full").chunks.map((c) => ({ ...c, fileHash: "" }));
+        expect(chunksOf(crlf)).toEqual(chunksOf(lf));
     });
 });

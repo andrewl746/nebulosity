@@ -130,6 +130,8 @@ type FileFacts = {
 
 /** The using directive's specifier, or null for a malformed one. */
 export function usingSpecifier(node: Node): string | null {
+    // tree-sitter repairs `using X = ;` into a using of X: a malformed construct gives no specifier rather than a guess
+    if (node.hasError) return null;
     let isGlobal = false;
     let isStatic = false;
     for (let i = 0; i < node.childCount; i++){
@@ -237,8 +239,10 @@ function readStructure(root: Node, facts: FileFacts): void {
                     if (specifier !== null){
                         emit(child.startIndex, specifier);
                         if (/^(global|gstatic|galias):/.test(specifier)) facts.declares.add(specifier);
+                        // the summary's line, as written, with no "\r" from a multi-line using: a CRLF checkout's summary
+                        // is an LF one's (B-M2); a malformed using is left out, as the other languages leave theirs
+                        facts.usingTexts.push(child.text.replace(/\r/g, "").trim());
                     }
-                    facts.usingTexts.push(child.text.trim());
                     break;
                 }
                 case "file_scoped_namespace_declaration": {

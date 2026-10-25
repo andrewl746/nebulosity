@@ -312,7 +312,8 @@ function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declara
 
     for (const item of root.namedChildren){
         if (item.type === "use_declaration" || item.type === "extern_crate_declaration" || (item.type === "mod_item" && item.childForFieldName("body") === null)){
-            summaryImports.push(item.text.replace(/\r\n/g, "\n").trim());
+            // a malformed use gives no specifier, so no summary line either, as the other languages do (B-M2)
+            if (!(item.type === "use_declaration" && item.hasError)) summaryImports.push(item.text.replace(/\r\n/g, "\n").trim());
             continue;
         }
         if (item.type === "impl_item"){

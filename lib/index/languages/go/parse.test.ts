@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { k13Texts } from "../../../../test/helpers/adapter-conformance";
 import { goRepoTruth as truth } from "../../../../test/helpers/go-repo-truth";
 import { prepareLanguages } from "../registry";
 import { goAdapter } from "./index";
@@ -66,6 +67,23 @@ describe("the Go parse against the go-repo truth", () => {
             "Exports:",
             "Version (const)",
             "Open (function)",
+        ].join("\n"));
+    });
+
+    it("names a struct in the summary's exports by its chunk kind, class (B-M1), and leaves methods out", () => {
+        const summary = parseGo("internal/store/store.go", read("internal/store/store.go"), "full").chunks.at(-1)!;
+        expect(summary.text).toBe([
+            "File: internal/store/store.go",
+            "",
+            "Imports:",
+            "  (none)",
+            "",
+            "Exports:",
+            "MaxItems (const)",
+            "Key (type)",
+            "Store (class)",
+            "Getter (interface)",
+            "New (function)",
         ].join("\n"));
     });
 });
@@ -219,5 +237,15 @@ describe("a valid Go file nested deeper than the call stack goes (B-I1)", () => 
         expect(parsed.imports).toEqual(["import:example.com/pkg", "use:pkg.Deep"]);
         expect(parsed.declares).toEqual(["f", "package:p"]);
         expect(parsed.lineCount).toBe(7);
+    });
+});
+
+describe("Go's chunks on a CRLF checkout (B-M2)", () => {
+    // K13 compares the specifiers, declares and symbols; this compares every chunk, text included (fileHash hashes the
+    // text as given, so it differs by design)
+    it.each(truth.files.map((f) => f.path))("%s: the CRLF twin's chunks are the LF text's", (rel) => {
+        const { lf, crlf } = k13Texts(read(rel));
+        const chunksOf = (text: string) => parseGo(rel, text, "full").chunks.map((c) => ({ ...c, fileHash: "" }));
+        expect(chunksOf(crlf)).toEqual(chunksOf(lf));
     });
 });

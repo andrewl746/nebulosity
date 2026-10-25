@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { k13Texts } from "../../../../test/helpers/adapter-conformance";
 import { pythonRepoTruth as truth } from "../../../../test/helpers/python-repo-truth";
 import { prepareLanguages } from "../registry";
 import { pythonAdapter } from "./index";
@@ -169,5 +170,15 @@ describe("python scan", () => {
             "from x import y z",   // malformed: nothing
         ].join("\r\n");
         expect(scanPythonImports(`${String.fromCharCode(0xfeff)}${text}`)).toEqual(["os", "sys", ".m:x", ".:a", ".:b", "x:*", "a.b", "c"]);
+    });
+});
+
+describe("Python's chunks on a CRLF checkout (B-M2)", () => {
+    // K13 compares the specifiers, declares and symbols; this compares every chunk, text included (fileHash hashes the
+    // text as given, so it differs by design)
+    it.each(truth.files.map((f) => f.path))("%s: the CRLF twin's chunks are the LF text's", (rel) => {
+        const { lf, crlf } = k13Texts(fixture(rel));
+        const chunksOf = (text: string) => parse(rel, text).chunks.map((c) => ({ ...c, fileHash: "" }));
+        expect(chunksOf(crlf)).toEqual(chunksOf(lf));
     });
 });

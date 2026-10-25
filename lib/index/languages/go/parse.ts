@@ -487,7 +487,9 @@ export function parseGo(path: string, text: string, reading: Reading): ParsedFil
         if (reading === "full"){
             const read = readDeclarations(root);
             symbols = read.symbols;
-            const exports = symbols.filter((s) => s.parentQualifiedName === null && s.exported).map((s) => `${s.name} (${s.kind})`);
+            // the summary names kinds as chunks do (the plan's chunk-kind mapping, B-M1): a struct is a class, as in C# and Rust
+            const exports = symbols.filter((s) => s.parentQualifiedName === null && s.exported)
+                .map((s) => `${s.name} (${s.kind === "struct" ? "class" : s.kind})`);
             chunks = assembleChunks(path, text, read.declarations, { imports: importLines, exports });
         }
         return { chunks, symbols, imports: specifiers, declares, calls: emptyCallFacts(), lineCount };

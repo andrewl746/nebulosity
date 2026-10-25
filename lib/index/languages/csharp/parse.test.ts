@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { k13Texts } from "../../../../test/helpers/adapter-conformance";
 import { csharpRepoTruth as truth } from "../../../../test/helpers/csharp-repo-truth";
 import { loadGrammars } from "../treesitter";
 import { parseCsharp } from "./parse";
@@ -119,5 +120,32 @@ describe("C#'s one export rule (ADR-065, the final review's B-I2)", () => {
             ["IThing", true], ["IThing.Do", true],
             ["IHidden", false], ["IHidden.Do", false],
         ]);
+    });
+});
+
+describe("C#'s file summary on a CRLF checkout (B-M2)", () => {
+    beforeAll(async () => {
+        await loadGrammars([{ id: "csharp", grammar: "tree-sitter-c_sharp.wasm" }]);
+    });
+    const summaryOf = (text: string): string => parseCsharp("x.cs", text, "full").chunks.at(-1)!.text;
+
+    it("keeps no carriage return from a multi-line using: the CRLF twin (K13's) gives the LF summary", () => {
+        const { lf, crlf } = k13Texts("using Map =\n    System.Text;\nusing static\n    System.Math;\n\nnamespace N;\n\npublic class C { }\n");
+        expect(summaryOf(crlf)).toBe(summaryOf(lf));
+        expect(summaryOf(crlf)).toBe("File: x.cs\n\nImports:\nusing Map =\n    System.Text;\nusing static\n    System.Math;\n\nExports:\nC (class)");
+    });
+
+    it("leaves a malformed using out of the specifiers and the summary, as the other languages do", () => {
+        const parsed = parseCsharp("x.cs", "using ;\nusing X = ;\nusing global::;\nusing A.B;\nclass C {}\n", "full");
+        expect(parsed.imports).toEqual(["using:A.B"]);
+        expect(parsed.chunks.at(-1)!.text).toBe("File: x.cs\n\nImports:\nusing A.B;\n\nExports:\n  (none)");
+    });
+
+    // K13 compares the specifiers, declares and symbols; this compares every chunk, text included (fileHash hashes the
+    // text as given, so it differs by design)
+    it.each(truth.files.map((f) => f.path))("%s: the CRLF twin's chunks are the LF text's", (rel) => {
+        const { lf, crlf } = k13Texts(read(rel));
+        const chunksOf = (text: string) => parseCsharp(rel, text, "full").chunks.map((c) => ({ ...c, fileHash: "" }));
+        expect(chunksOf(crlf)).toEqual(chunksOf(lf));
     });
 });
