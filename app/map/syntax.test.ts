@@ -47,10 +47,11 @@ describe("highlightCode (owner review: code colored like in VS Code)", () => {
 describe("highlightCode for the other languages the index reads (E4, C10)", () => {
     it("marks a keyword of each", () => {
         // each grammar's own keyword list (highlight.js 11.11.1): python's def (its function match), go's and java's
-        // package, rust's let
+        // package, csharp's using, rust's let
         expect(highlightCode("def greet():\n    pass", "python")).toContain('<span class="hljs-keyword">def</span>');
         expect(highlightCode("package main", "go")).toContain('<span class="hljs-keyword">package</span>');
         expect(highlightCode("package shop;", "java")).toContain('<span class="hljs-keyword">package</span>');
+        expect(highlightCode("using System;", "csharp")).toContain('<span class="hljs-keyword">using</span>');
         expect(highlightCode("let x = 1;", "rust")).toContain('<span class="hljs-keyword">let</span>');
     });
 
@@ -77,8 +78,9 @@ describe("languageFor", () => {
         expect(languageFor("cmd/server/main.go")).toBe("go");
         expect(languageFor("src/main/java/shop/Order.java")).toBe("java");
         expect(languageFor("crates/core/src/lib.rs")).toBe("rust");
-        expect(languageFor("src/Shop/Program.cs")).toBe("text");      // C# isn't merged
+        expect(languageFor("src/Shop/Program.cs")).toBe("csharp");
         expect(languageFor("setup.cfg")).toBe("text");
+        expect(languageFor("src/Shop/Shop.csproj")).toBe("text");
     });
 
     it("mirrors the index's rules for every extension they claim (the UI can't import them, ARCHITECTURE.md §3 rule 3)", () => {

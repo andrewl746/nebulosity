@@ -155,15 +155,16 @@ describe("calls: names and errors", () => {
         expect(() => calls(root, { symbol: "Store.Get", path: "internal/store/store.go" })).toThrow(refusal("internal/store/store.go", "Go"));
         expect(() => calls(root, { symbol: "OrderRepository", path: "src/main/java/shop/OrderRepository.java" }))
             .toThrow(refusal("src/main/java/shop/OrderRepository.java", "Java"));
+        expect(() => calls(root, { symbol: "IOrderService.Place", path: "src/Shop/Logger.cs" })).toThrow(refusal("src/Shop/Logger.cs", "C#"));
         expect(() => calls(root, { symbol: "a.b.c", path: "crates/core/src/lib.rs" })).toThrow(refusal("crates/core/src/lib.rs", "Rust"));
-        // TypeScript and JavaScript paths, and a language that isn't merged (C#), keep the answers they had
+        // TypeScript and JavaScript paths, and a path no language claims, keep the answers they had
         expect(() => calls(root, { symbol: "Logger", path: "src/app/dialogs/index.js" })).toThrow("src/app/dialogs/index.js declares no class or interface named Logger.");
-        expect(() => calls(root, { symbol: "Logger", path: "src/Shop/Logger.cs" })).toThrow("src/Shop/Logger.cs declares no class or interface named Logger.");
+        expect(() => calls(root, { symbol: "Logger", path: "docs/logger.md" })).toThrow("docs/logger.md declares no class or interface named Logger.");
     });
 
     it("names every language the index's rules claim, other than TypeScript's, for that refusal", () => {
         const others = RULES.filter((r) => r.id !== "typescript" && r.extensions.length > 0);
-        expect(others.map((r) => r.id)).toEqual(["python", "go", "java", "rust"]);
+        expect(others.map((r) => r.id)).toEqual(["python", "go", "java", "csharp", "rust"]);
         for (const r of others) expect(CALLS_LANGUAGE_NAMES[r.languageOf(`a${r.extensions[0]}`)], r.id).toBeDefined();
     });
 });

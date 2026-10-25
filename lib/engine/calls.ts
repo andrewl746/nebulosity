@@ -279,6 +279,7 @@ export const CALLS_LANGUAGE_NAMES: Readonly<Record<string, string>> = {
     python: "Python",
     go: "Go",
     java: "Java",
+    csharp: "C#",
     rust: "Rust",
 };
 
@@ -289,6 +290,7 @@ function otherLanguage(filePath: string): string | null {
     const language = rules.languageOf(filePath);
     return `Calls are indexed for TypeScript and JavaScript only; ${filePath} is ${CALLS_LANGUAGE_NAMES[language] ?? language}.`;
 }
+
 const HOW_WORDS: Partial<Record<CallRule, string>> = { "ctor-param": "constructor", "inject-field": "@inject field", provider: "accessor or hook" };
 
 /** Who calls a type's member, or where a type is injected, with its implementations (ADR-059). */

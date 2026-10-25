@@ -176,7 +176,7 @@ export type SourceResponse = {
   lineCount: number;
   /** The file was longer than the limit (1 MB) and `content` stops there. */
   truncated: boolean;
-  /** "typescript", "javascript", "python", "go", "java", "rust" (E4, ADR-065), or "text". */
+  /** "typescript", "javascript", "python", "go", "java", "csharp", "rust" (E4, ADR-065), or "text". */
   language: string;
 };
 

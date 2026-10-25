@@ -1,4 +1,5 @@
 import hljs from "highlight.js/lib/core";
+import csharp from "highlight.js/lib/languages/csharp";
 import go from "highlight.js/lib/languages/go";
 import java from "highlight.js/lib/languages/java";
 import javascript from "highlight.js/lib/languages/javascript";
@@ -9,7 +10,7 @@ import { tooLargeToColor } from "./text";
 
 // only the languages the index reads (E4, C10: the names paths.ts's languageFor gives), so the rest of highlight.js
 // stays out of the bundle
-const GRAMMARS = { typescript, javascript, python, go, java, rust };
+const GRAMMARS = { typescript, javascript, python, go, java, csharp, rust };
 for (const [name, grammar] of Object.entries(GRAMMARS)) hljs.registerLanguage(name, grammar);
 
 /**

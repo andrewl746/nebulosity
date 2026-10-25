@@ -2,7 +2,7 @@
  * C#'s scan reading (ADR-053's third reading, the E4 plan's Task C): a file from 5 MB to 20 MB is read line by line for
  * its `using …;` and `namespace …` lines, with no syntax tree, so a giant generated file can't grow WebAssembly memory.
  *
- * Known differences from the full reading: no type, qtype or ext specifier (they need the tree); a nested block
+ * Known differences from the full reading: no type or qtype specifier (they need the tree); a nested block
  * namespace reads as written (`namespace Pricing` inside `namespace Shop.Core` gives ns:Pricing, not ns:Shop.Core.Pricing);
  * a using line inside a block comment is read.
  */

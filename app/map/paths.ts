@@ -31,6 +31,7 @@ const LANGUAGES: readonly (readonly [extension: RegExp, language: string])[] = [
     [/\.pyi?$/, "python"],
     [/\.go$/, "go"],
     [/\.java$/, "java"],
+    [/\.cs$/, "csharp"],
     [/\.rs$/, "rust"],
 ];
 

@@ -192,6 +192,9 @@ describe("testFileSummary", () => {
         expect(subject("src/test/java/shop/OrderTest.java")).toBe("Tests for Order");
         expect(subject("src/test/java/shop/OrderIT.java")).toBe("Tests for Order");
         expect(subject("src/test/java/shop/OrderTestCase.java")).toBe("Tests for Order");
+        expect(subject("tests/Shop.Core.Tests/OrderTests.cs")).toBe("Tests for Order");
+        expect(subject("tests/Shop.Core.Tests/OrderTest.cs")).toBe("Tests for Order");
+        expect(subject("tests/Shop.Core.Tests/Fixtures.cs")).toBe("Tests for Fixtures");
         expect(subject("crates/hir/src/db_tests.rs")).toBe("Tests for db");
         expect(subject("crates/hir/src/db_test.rs")).toBe("Tests for db");
         // a file in a test folder with no marker keeps its name, as TypeScript's do

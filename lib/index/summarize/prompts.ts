@@ -184,7 +184,7 @@ export function truncateSource(source: string, maxChars: number = MAX_SOURCE_CHA
 /**
  * The other languages' test-file names (E4, C9), one row per merged language, matching its rules' isTest: the
  * extension, the marker the name's stem loses (`test_views.py` → views, `server_test.go` → server, `OrderIT.java` →
- * Order), and the stems that stand for their folder: a file that is only a marker (`tests.py`, `tests.rs`), pytest's
+ * Order, `OrderTests.cs` → Order), and the stems that stand for their folder: a file that is only a marker (`tests.py`, `tests.rs`), pytest's
  * per-folder `conftest.py`, and a module's own file (`__init__.py`, `mod.rs`), so `tests/admin_views/tests.py` tests
  * admin_views. A `src` folder names nothing: `crates/hir-ty/src/tests.rs` tests hir-ty. TypeScript's and JavaScript's
  * names keep their own rule, unchanged.
@@ -193,6 +193,7 @@ const TEST_NAMES: readonly { extension: RegExp; marker: RegExp; folder?: RegExp 
     { extension: /\.pyi?$/, marker: /^test_|_test$/, folder: /^(tests|conftest|__init__)$/ },
     { extension: /\.go$/, marker: /_test$/ },
     { extension: /\.java$/, marker: /(Test|Tests|IT|TestCase)$/ },
+    { extension: /\.cs$/, marker: /Tests?$/ },
     { extension: /\.rs$/, marker: /_tests?$/, folder: /^(tests|mod)$/ },
 ];
 
