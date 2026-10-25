@@ -374,6 +374,7 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 - `web-tree-sitter` (WASM, which avoids the Windows native-build pain cited in ADR-004) plugs in behind the language adapter interface.
 - Python first, then Go if there's time (ADR-043), with per-language query files for definitions, imports and calls, and per-language import resolution.
 - TypeScript stays on the compiler API for precision.
+- *(2026-10-24, ADR-065, proposed: widened to Python, Go, Java, C# and Rust by ADR-062, and planned for a parallel build in `docs/plans/2026-10-24-e4-languages.md`. Each language gets its imports, declarations, code search, test files and entry points by its own rules; calls stay TypeScript and JavaScript.)*
 
 **E5 — Clustering.**
 - Louvain (`graphology-communities-louvain`) runs on the undirected, weighted file graph, adding co-change weights when E3 exists.
