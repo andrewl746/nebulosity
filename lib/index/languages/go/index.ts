@@ -1,15 +1,14 @@
 import type { LanguageAdapter } from "../adapter";
+import { parseGo } from "./parse";
 import { goRules } from "./rules";
 
-/** A stub (Task F of the E4 plan): its grammar loads, but it claims no file until this language's task builds it. */
+/** The Go adapter (Task G of the E4 plan, ADR-065): tree-sitter-go's parse (parse.ts), name-based resolution. */
 export const goAdapter: LanguageAdapter = {
     ...goRules,
-    version: 0,
+    version: 1,
     grammar: "tree-sitter-go.wasm",
-    parse(){
-        throw new Error("go adapter not built yet");
-    },
+    parse: parseGo,
     createResolver(){
-        throw new Error("go adapter not built yet");
+        throw new Error("go resolver not built yet");
     },
 };
