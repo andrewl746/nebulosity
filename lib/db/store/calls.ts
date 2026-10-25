@@ -1,7 +1,7 @@
-import { and, eq, isNull, like, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, or } from "drizzle-orm";
 import type { Db } from "../client";
 import { columnCount, forEachBatch } from "../batch";
-import { callBindings, files, typeDecls, typedCalls, type BindingFact, type CallFacts, type TypeDeclFact, type TypedCallFact } from "../schema";
+import { callBindings, files, symbols, typeDecls, typedCalls, type BindingFact, type CallFacts, type TypeDeclFact, type TypedCallFact } from "../schema";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -58,4 +58,16 @@ export function loadInjectionSites(db: Db, repoId: number, name: string): Stored
         .orderBy(files.path, typedCalls.line, typedCalls.id).all()
         // LIKE's "_" matches any character: keep only a true ".name" ending
         .filter((c) => c.ref === name || c.ref!.endsWith(`.${name}`));
+}
+
+/**
+ * The files whose symbols declare a type named `name` (a class, interface, struct or trait, at any depth), each once, by
+ * path. The symbols are every language's, where the calls index is TypeScript's and JavaScript's only, so calls can
+ * tell "not indexed" from "indexed in a language calls doesn't read" (the E4 final review's A-I3).
+ */
+export function loadTypeSymbolPaths(db: Db, repoId: number, name: string): string[] {
+    return db.selectDistinct({ path: files.path }).from(symbols).innerJoin(files, eq(files.id, symbols.fileId))
+        .where(and(eq(files.repoId, repoId), eq(symbols.name, name), inArray(symbols.kind, ["class", "interface", "struct", "trait"])))
+        .orderBy(files.path).all()
+        .map((row) => row.path);
 }

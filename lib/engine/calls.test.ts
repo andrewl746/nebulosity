@@ -1,5 +1,8 @@
+import fs from "fs";
 import path from "path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { copyFixture } from "../../test/helpers/fixture";
+import { prepareLanguages } from "../index/languages/registry";
 import { RULES } from "../index/languages/rules";
 import { indexRepository } from "../index/pipeline";
 import { buildCallIndex, calls, CALLS_LANGUAGE_NAMES, hierarchyOf } from "./calls";
@@ -166,6 +169,45 @@ describe("calls: names and errors", () => {
         const others = RULES.filter((r) => r.id !== "typescript" && r.extensions.length > 0);
         expect(others.map((r) => r.id)).toEqual(["python", "go", "java", "csharp", "rust"]);
         for (const r of others) expect(CALLS_LANGUAGE_NAMES[r.languageOf(`a${r.extensions[0]}`)], r.id).toBeDefined();
+    });
+});
+
+describe("calls without a path names another language's type, never \"not indexed\" (the E4 final review's A-I3)", () => {
+    const refusal = (...files: string[]) => `Calls are indexed for TypeScript and JavaScript only; ${files.join(", ")}.`;
+    const fixture = (id: string) => path.resolve("test", "fixtures", `${id}-repo`);
+    beforeAll(async () => {
+        await prepareLanguages();
+    });
+
+    it("names each file declaring the type, by path, with its language", () => {
+        // the declarations are the truths' symbols (test/helpers/<id>-repo-truth.ts)
+        const py = copyFixture(fixture("python"));
+        indexRepository(py);
+        // Product: a class in models.py and in its stub models.pyi; Meta: a class nested in models.py's Product
+        expect(() => calls(py, { symbol: "Product" })).toThrow(refusal("src/shop/models.py is Python", "src/shop/models.pyi is Python"));
+        expect(() => calls(py, { symbol: "Product.label" })).toThrow(refusal("src/shop/models.py is Python", "src/shop/models.pyi is Python"));
+        expect(() => calls(py, { symbol: "Meta" })).toThrow(refusal("src/shop/models.py is Python"));
+        // a name nothing declares as a type keeps the old answer: checkout is a function, Nope is nothing
+        expect(() => calls(py, { symbol: "checkout" })).toThrow("No class or interface named checkout is indexed.");
+        expect(() => calls(py, { symbol: "Nope" })).toThrow("No class or interface named Nope is indexed.");
+
+        const java = copyFixture(fixture("java"));
+        indexRepository(java);
+        expect(() => calls(java, { symbol: "Greeter" })).toThrow(refusal("lib/src/main/java/com/example/lib/Greeter.java is Java"));   // an interface
+
+        const go = copyFixture(fixture("go"));
+        indexRepository(go);
+        // a struct; handler.go's Store is a field (a property), not a type
+        expect(() => calls(go, { symbol: "Store.Get" })).toThrow(refusal("internal/store/store.go is Go"));
+    });
+
+    it("on a TypeScript repo, answers its own types as before and names another language's, at most five files", () => {
+        const root = copyFixture();
+        fs.mkdirSync(path.join(root, "extra"));
+        for (let i = 1; i <= 7; i++) fs.writeFileSync(path.join(root, "extra", `t${i}.py`), "class Thing:\n    pass\n");
+        indexRepository(root);
+        expect(calls(root, { symbol: "Logger" })).toMatchObject({ kind: "type", type: { name: "Logger", kind: "class", path: "src/core/log.ts" } });
+        expect(() => calls(root, { symbol: "Thing" })).toThrow(`${refusal(...[1, 2, 3, 4, 5].map((i) => `extra/t${i}.py is Python`)).slice(0, -1)}, and 2 more.`);
     });
 });
 
