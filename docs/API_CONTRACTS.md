@@ -329,7 +329,7 @@ Claude Code and any MCP client reach the engine through `mcp/server.ts` over std
   - Python: `a.b` → `import a.b`; `a.b:c` → `from a.b import c`; `.m:c` → `from .m import c` (an alias isn't kept; a dynamic `import_module("a.b")` reads `import a.b`).
   - Go: `import:p` → `import "p"`; `import:p as x` → `import x "p"`; `use:api.Open` → `api.Open`; `name:N` → `N`.
   - Java: `import:a.b.C` → `import a.b.C`; `static:a.b.C` → `import static a.b.C` (the class, not the member); `type:C` → `C`; `qualified:a.b.C` → `a.b.C`.
-  - C#: `using:A.B` → `using A.B`; `global:A.B` → `global using A.B`; `static:` and `gstatic:` → `using static A.B.C` and `global using static A.B.C`; `alias:` and `galias:X=A.B` → `using X = A.B` and `global using X = A.B`; `ns:A.B` → `namespace A.B`; `type:N` → `N`; `qtype:A.B.N` → `A.B.N`.
+  - C#: `using:A.B` → `using A.B`; `global:A.B` → `global using A.B`; `static:` and `gstatic:` → `using static A.B.C` and `global using static A.B.C`; `alias:` and `galias:X=A.B` → `using X = A.B` and `global using X = A.B`; `ns:A.B` → `namespace A.B`; `type:N` → `N`; `qtype:A.B.N` → `A.B.N`. A generic name carries its arity in the CLR's backtick form, which the display drops: `` type:Box`1 `` → `Box`, `` alias:M=A.Box`2 `` → `using M = A.Box` (the pre-ship pass; ADR-065 amended).
   - Rust: `use:|p as a` → `use p as a` (the inline module a reference sits in isn't written, so it's dropped); `mod:|x` → `mod x`; `mod:|x@y.rs` → `#[path = "y.rs"] mod x`; `extern:a` → `extern crate a`; `path:|crate::f` → `crate::f`.
 
   For example: `→ crates/core/src/model.rs  (use shop_core::model::Order)`, `→ internal/api/api.go  (api.Open)`, `→ src/shop/__init__.py  (from . import VERSION)`. A string a language didn't write comes back unchanged.
