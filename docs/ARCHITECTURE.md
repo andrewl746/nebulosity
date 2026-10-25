@@ -82,7 +82,7 @@ Rules an implementer MUST follow:
 
 1. **Core files never import from `app/` or `next`.** `lib/scan.ts` previously imported the `server-only` package as a defensive guard; it was removed 2026-07-13 while setting up F1's test harness, which surfaced the exact problem `ENGINEERING_DECISIONS.md`'s inherited-debt note predicted — the package throws when imported from any non-Next.js Node context, which includes a Vitest run. The original plan was to relocate the guard to the adapter layer instead of deleting it, but that turned out to be the wrong fix: this project's core is meant to be reusable from *multiple* future adapters (a web route handler, a CLI, an Electron main process), and none of those are "a real Next.js server" as far as `server-only` is concerned — it would have broken the CLI/Electron targets identically. The guard added no protection the architecture doesn't already provide (rule 3 below already forbids the UI from calling core directly), so it was deleted outright rather than moved.
 2. **Route handlers contain no business logic.** They validate input, call one core function, and shape the response. If a route handler grows past ~50 lines, logic is leaking into the adapter.
-3. **The UI never calls core directly.** Today `app/page.tsx` (a server component) calls `scanProject()` directly — that was expedient for the MVP and is scheduled to move behind `GET /api/graph` in Phase 1. After that, the UI's only knowledge of the backend is the contract types. *(Amended 2026-10-14, V1.5, ADR-052 and ADR-049: the UI may also import `lib/` modules that are pure and browser-safe, meaning they never touch a database, a disk or the network. Today that is three modules. `lib/engine/rank.ts` is the ranking core: the search palette uses it to name a hit's code, and the static demo's search ranks with it. `lib/engine/staticSearch.ts` is the static demo's search, which its transport `app/map/staticApi.ts` calls. `lib/index/identifiers.ts` splits identifiers into words, and the UI bundles it through the other two. The import-line test in `lib/engine/rank.test.ts` pins what each may import. Everything else under `lib/` stays behind the API.)*
+3. **The UI never calls core directly.** Today `app/page.tsx` (a server component) calls `scanProject()` directly — that was expedient for the MVP and is scheduled to move behind `GET /api/graph` in Phase 1. After that, the UI's only knowledge of the backend is the contract types. *(Amended 2026-10-14, V1.5, ADR-052 and ADR-049: the UI may also import `lib/` modules that are pure and browser-safe, meaning they never touch a database, a disk or the network. Today that is three modules. `lib/engine/rank.ts` is the ranking core: the search palette uses it to name a hit's code, and the static demo's search ranks with it. `lib/engine/staticSearch.ts` is the static demo's search, which its transport `app/map/staticApi.ts` calls. `lib/index/identifiers.ts` splits identifiers into words, and the UI bundles it through the other two. The import-line test in `lib/engine/rank.test.ts` pins what each may import. Everything else under `lib/` stays behind the API.)* *(Noted 2026-10-24, E4, ADR-065: `lib/index/languages/rules.ts` and each language's `rules.ts` are pure too, no parser, disk or network, so discovery, the watcher, `isTestPath` and the engine can read them without loading a grammar; the UI doesn't import them, so they are not on rule 3's list.)*
 4. **Shared request/response types live in `lib/contracts.ts`** — one file, imported by both UI and adapters, so the two sides cannot drift apart silently. Persistence shapes are the one exception: they live in `lib/db/schema.ts` (ADR-013), because the database schema is its own compiler-enforced contract.
 5. **Only `lib/db/*` touches the database; only `lib/scanner-bridge.ts` chooses a scan engine.** The native C++ scanner (ADR-014) is an optional accelerator behind the same `ScannedFile[]` contract as the Node scanner — nothing above the bridge knows or cares which engine ran. Where the files live: `NEBULOSITY_HOME` is the code root (migrations, scripts), and `NEBULOSITY_DATA` is the data folder (database, config, demo export; `lib/home.ts` `dataDir()`), by default `<code root>/.nebulosity` and, for an installed copy, the user's own data folder (ADR-044, amended).
 
@@ -123,7 +123,16 @@ nebulosity/
 │   ├── db/                  # schema, client, batch, store/{structure, summaries, summary-vectors, search, stages, lock, map, version}
 │   ├── engine/              # level, describe, graph, freshness, search, rank, staticSearch, status, repos, git-remote, errors, reach, impact, architecture, docs, calls
 │   ├── demo/                # export (the static demo's files), privacy (the scanner for paths of this machine)
-│   ├── index/               # discover, languages/, resolve, aggregate, pipeline, update, watch, embed, summarize/
+│   ├── index/               # discover, languages/ (below), resolve, aggregate, pipeline, update, watch, embed, summarize/
+│   │   └── languages/       # E4 (ADR-065), two layers behind one seam:
+│   │                        #   the pure rules (adapter.ts's LanguageRules): rules.ts (RULES, rulesFor, claimedExtensions,
+│   │                        #     isManifestPath, exclusionFor), typescript-rules.ts, <lang>/rules.ts; read by discovery,
+│   │                        #     the watcher and the engine;
+│   │                        #   the adapters (LanguageAdapter: one parse, five products; one resolver per run): registry.ts
+│   │                        #     (ADAPTERS, adapterFor, prepareLanguages), typescript-adapter.ts over typescript.ts,
+│   │                        #     <lang>/index.ts, and their shared parts treesitter.ts (web-tree-sitter, loaded only by
+│   │                        #     prepareLanguages), chunking.ts, resolution.ts; grammars/ (the five committed .wasm);
+│   │                        #     read by the full run and the incremental update
 │   ├── background/          # service, supervisor, protocol, child, start
 │   ├── live/                # hub, event, sse, local, client
 │   └── agent/               # E1: tools.ts (ported in V1.3), state.ts
@@ -135,7 +144,7 @@ nebulosity/
 ├── scripts/                 # cli.ts and commands/ (the nebulosity command), index, summarize, search, live,
 │                            #   background (the worker), mcp-smoke and prepare-package (the package), bench-map, bench-update,
 │                            #   export-demo, build-demo, serve-demo (the static demo), …
-├── test/                    # fixtures/{mini-repo,arch-repo}, helpers
+├── test/                    # fixtures/{mini-repo,arch-repo,di-repo,toy-repo,<lang>-repo}, helpers (the adapter conformance kit)
 └── docs/
 ```
 
