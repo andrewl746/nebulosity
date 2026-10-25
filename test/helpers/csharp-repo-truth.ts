@@ -46,6 +46,12 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *     resolves through `using static Shop.Web.Extensions.CollectionExtensions` (its static: names the same file).
  * 12. An attribute's two lookup names (N and NAttribute): the one that doesn't resolve is context when the other one
  *     resolves, since C# binds the attribute to the one that exists. ReceiptPage.cs's qtype:Core.Auditing.Audited.
+ *
+ * The controller's ruling of 2026-10-25 (round 2, for the owner; the plan's ext: kind amended, evidence in
+ * progress-csharp.md):
+ * 13. ext:M is internal only when a same-named repo extension method is in scope for the file, by C#'s scoping (its
+ *     namespace enclosing or imported, project-wide included, or its class named by a using static); otherwise it is
+ *     external: the call binds to something else. PriceCalculatorTests.cs's ext:AddShop is external now.
  */
 
 const P = {
@@ -508,13 +514,12 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.tests]: kinds({
             context: ["using:Shop.Core.Carts", "using:Shop.Core.Pricing", "using:Shop.Core.Tests.Fakes", "using:Xunit", "ns:Shop.Core.Tests"],
             internal: [
-                "type:FakeServices",
-                "ext:AddShop",                                                          // a repo extension's name, not visible here: unresolved
-                "type:PriceCalculator", "type:Cart", "qtype:Catalog.Item",
+                "type:FakeServices", "type:PriceCalculator", "type:Cart", "qtype:Catalog.Item",
                 "type:ProductCode",                                                     // a repo type's name, not visible here: unresolved
                 "type:Money",
             ],
-            external: ["type:Fact", "type:FactAttribute", "ext:Total", "type:Assert", "ext:Equal"],
+            // ext:AddShop: the repo's extension AddShop isn't in scope here (choice 13), so FakeServices.AddShop binds
+            external: ["type:Fact", "type:FactAttribute", "ext:AddShop", "ext:Total", "type:Assert", "ext:Equal"],
         }),
         [P.seed]: kinds({
             context: ["using:System", "using:Shop.Core.Models", "ns:Shop.Tools"],
