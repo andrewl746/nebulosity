@@ -181,6 +181,51 @@ describe("testFileSummary", () => {
         });
         expect(testFileSummary("src/vs/base/test/common/utils.ts", 1).tagline).toBe("Tests for utils");
     });
+
+    it("drops each merged language's test marker and extension (E4, C9)", () => {
+        const subject = (p: string) => testFileSummary(p, 1).tagline;
+        expect(subject("polls/test_views.py")).toBe("Tests for views");
+        expect(subject("polls/views_test.py")).toBe("Tests for views");
+        expect(subject("stubs/test_shapes.pyi")).toBe("Tests for shapes");
+        expect(subject("tsdb/head/server_test.go")).toBe("Tests for server");
+        expect(subject("src/test/java/shop/OrderTests.java")).toBe("Tests for Order");
+        expect(subject("src/test/java/shop/OrderTest.java")).toBe("Tests for Order");
+        expect(subject("src/test/java/shop/OrderIT.java")).toBe("Tests for Order");
+        expect(subject("src/test/java/shop/OrderTestCase.java")).toBe("Tests for Order");
+        expect(subject("crates/hir/src/db_tests.rs")).toBe("Tests for db");
+        expect(subject("crates/hir/src/db_test.rs")).toBe("Tests for db");
+        // a file in a test folder with no marker keeps its name, as TypeScript's do
+        expect(subject("tests/integration.rs")).toBe("Tests for integration");
+        expect(subject("src/test/java/shop/Fixtures.java")).toBe("Tests for Fixtures");
+        expect(testFileSummary("polls/test_views.py", 12)).toEqual({
+            tagline: "Tests for views",
+            summary: "Test code (12 lines) for views. Test files get this template instead of a model-written summary.",
+        });
+    });
+
+    it("names the folder for a file that is only a marker or stands for its folder", () => {
+        const subject = (p: string) => testFileSummary(p, 1).tagline;
+        expect(subject("tests/admin_views/tests.py")).toBe("Tests for admin_views");
+        expect(subject("polls/conftest.py")).toBe("Tests for polls");
+        expect(subject("tests/forms/__init__.py")).toBe("Tests for forms");
+        expect(subject("crates/hir-ty/src/tests.rs")).toBe("Tests for hir-ty");     // a src folder names nothing
+        expect(subject("crates/hir-ty/src/infer/tests.rs")).toBe("Tests for infer");
+        expect(subject("src/tests.rs")).toBe("Tests for tests");
+        expect(subject("tests/common/mod.rs")).toBe("Tests for common");
+        expect(subject("shop/Test.java")).toBe("Tests for shop");
+        expect(subject("store/_test.go")).toBe("Tests for store");
+        // at the root there's no folder to name: the file's own stem
+        expect(subject("tests.py")).toBe("Tests for tests");
+        expect(subject("conftest.py")).toBe("Tests for conftest");
+    });
+
+    it("keeps TypeScript's and JavaScript's subjects as they were", () => {
+        const subject = (p: string) => testFileSummary(p, 1).tagline;
+        expect(subject("src/a.spec.tsx")).toBe("Tests for a");
+        expect(subject("build/b.test.mjs")).toBe("Tests for b");
+        expect(subject("src/test/index.ts")).toBe("Tests for index");
+        expect(subject("src/c.test.d.ts")).toBe("Tests for c.test.d");
+    });
 });
 
 describe("testFolderSummary", () => {

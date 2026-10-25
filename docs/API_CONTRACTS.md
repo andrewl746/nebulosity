@@ -360,6 +360,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - **For a type alone,** the header says where it is injected (`injected in N files, M places in all`), the files list each place's line and how (constructor, `@inject` field, accessor or hook), and the implementations follow without the "declares" column.
 - **Paging:** the totals always cover everything. The signature-change list and the implementations come on the first page only, and a cut list ends with `… N more (next page: offset K)`. A file whose row alone is longer than a page (thousands of calls in one generated file) keeps the first line numbers that fit and ends them with `… N more lines`, and the next page starts after it (since 2026-10-22; before, the page listed nothing and named its own offset as the next).
 - **Ambiguous names** list the candidates, one per line with the kind, path and line, and ask for `path`.
+- **Another language's file** *(E4, ADR-065, design C4: calls stays TypeScript and JavaScript)*. A `path` the index's rules give to Python, Go, Java or Rust is refused before the symbol is read, with `Calls are indexed for TypeScript and JavaScript only; <path> is <Language>.` (`Python`, `Go`, `Java`, `Rust`). A language joins the list when its adapter is merged; until then its paths get the answers they had. Without `path`, a name declared only in another language's file is not found, as before.
 - **Live event:** the declaring file, then up to 49 of the page's files (the Map takes 50 paths at most).
 
 **Always loaded.** Each tool's MCP `_meta` says how Claude Code loads it (ADR-056): `overview`, `describe`, `search`, `imports`, `architecture` and `calls` carry `"anthropic/alwaysLoad": true`, so their definitions are in every session's prompt; `show_on_map` carries `"anthropic/searchHint": "map highlight focus show point visualize"` and stays deferred behind Claude Code's tool search. A registration carries no `alwaysLoad` of its own. The six definitions and the instructions together stay under 6,650 characters (a test; they measure 6,599 since `calls`' path inputs gained their 1,024-character limit on 2026-10-22, 6,548 before, ADR-056 amended).
@@ -381,7 +382,7 @@ Note: found through declared types: fields, constructor parameters, parameters, 
 - nothing indexed at a path;
 - a path outside the repo;
 - overlapping places for `imports` with `to`, and a `within` that cannot match;
-- `calls`' refusals: a `symbol` that is not a class or interface name or one of its members; no class or interface by that name in the index (with `path`: none declared in that file); `X has no member m` (with the type's members listed, up to 30); a `within` that is not a folder in the index, or is a file; a `group_by` that is not a folder;
+- `calls`' refusals: a `path` of a file in another language (below); a `symbol` that is not a class or interface name or one of its members; no class or interface by that name in the index (with `path`: none declared in that file); `X has no member m` (with the type's members listed, up to 30); a `within` that is not a folder in the index, or is a file; a `group_by` that is not a folder;
 - `architecture`'s `through` with `layers`, `conventions` or `unused`;
 - bad `show_on_map` input;
 - the MCP SDK's "Input validation error" for input outside a schema.

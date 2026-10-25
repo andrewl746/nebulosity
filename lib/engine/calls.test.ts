@@ -1,7 +1,8 @@
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { RULES } from "../index/languages/rules";
 import { indexRepository } from "../index/pipeline";
-import { buildCallIndex, calls, hierarchyOf } from "./calls";
+import { buildCallIndex, calls, CALLS_LANGUAGE_NAMES, hierarchyOf } from "./calls";
 
 const root = path.join(__dirname, "..", "..", "test", "fixtures", "di-repo");
 indexRepository(root);
@@ -145,6 +146,25 @@ describe("calls: names and errors", () => {
         expect(() => calls(root, { symbol: "Logger", path: "src/app/dialogs/index.ts" })).toThrow("src/app/dialogs/index.ts declares no class or interface named Logger.");
         expect(() => calls(root, { symbol: "a.b.c" })).toThrow('symbol takes a class or interface ("IFooService") or one of its members ("IFooService.save").');
         expect(() => calls(root, { symbol: "IFileService" }, { groupBy: null, within: "src/workbench/editor/textEditor.ts" })).toThrow("within takes a folder.");
+    });
+
+    it("says a file of another language the index reads isn't in the calls index (E4, C4), whatever the symbol", () => {
+        const refusal = (p: string, language: string) => `Calls are indexed for TypeScript and JavaScript only; ${p} is ${language}.`;
+        expect(() => calls(root, { symbol: "OrderService.save", path: "shop/services.py" })).toThrow(refusal("shop/services.py", "Python"));
+        expect(() => calls(root, { symbol: "Order", path: "typings/shop.pyi" })).toThrow(refusal("typings/shop.pyi", "Python"));
+        expect(() => calls(root, { symbol: "Store.Get", path: "internal/store/store.go" })).toThrow(refusal("internal/store/store.go", "Go"));
+        expect(() => calls(root, { symbol: "OrderRepository", path: "src/main/java/shop/OrderRepository.java" }))
+            .toThrow(refusal("src/main/java/shop/OrderRepository.java", "Java"));
+        expect(() => calls(root, { symbol: "a.b.c", path: "crates/core/src/lib.rs" })).toThrow(refusal("crates/core/src/lib.rs", "Rust"));
+        // TypeScript and JavaScript paths, and a language that isn't merged (C#), keep the answers they had
+        expect(() => calls(root, { symbol: "Logger", path: "src/app/dialogs/index.js" })).toThrow("src/app/dialogs/index.js declares no class or interface named Logger.");
+        expect(() => calls(root, { symbol: "Logger", path: "src/Shop/Logger.cs" })).toThrow("src/Shop/Logger.cs declares no class or interface named Logger.");
+    });
+
+    it("names every language the index's rules claim, other than TypeScript's, for that refusal", () => {
+        const others = RULES.filter((r) => r.id !== "typescript" && r.extensions.length > 0);
+        expect(others.map((r) => r.id)).toEqual(["python", "go", "java", "rust"]);
+        for (const r of others) expect(CALLS_LANGUAGE_NAMES[r.languageOf(`a${r.extensions[0]}`)], r.id).toBeDefined();
     });
 });
 
