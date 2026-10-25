@@ -1513,17 +1513,21 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
     - **Left as is:**
       - The resolver tries `X.py` before `X/__init__.py`, while CPython checks the package folder first. That matters only for a folder that holds both.
       - The first half of M6, where two roots' own packages shadow each other.
-  - **C#, version 3: generic arity picks the right twin** (Task C; ruling R5, which closes the C# review's M2).
+  - **C#, version 3: generic arity picks the right twin** (Task C; ruling R5, which closes the C# review's M2; amended by R23 after the pass's final review, which found R5's fallback linking an outside generic, B-I3).
     - **The rule:**
       - A name carries its arity in the CLR's backtick form (`` type:Box`1 ``), in the declares and in the specifiers. The display drops it (`Box`).
       - A reference with n generic arguments resolves, through C#'s whole lookup, to the declarations of that name with arity n.
-      - When no file declares that arity, it resolves by name at any arity, as before.
+      - When no file declares that arity, the form the name is written in decides (R23):
+        - written without type arguments, it resolves by name at any arity, as before. The parser can drop type arguments (a named tuple's, below), but it never invents them;
+        - written with them, or reached through an alias's or a using static's target written with them, it resolves to nothing, since C# can't bind `X<T>` to a type of another arity (CS0308). So an outside `ILogger<T>` or `Response<T>` no longer links to a repo's own non-generic `ILogger` or `Response`, and counts as external: a `` type:N`n `` is a repo name only when a repo type is N with arity n (Review C's M1, paired with R23).
     - **On jellyfin:**
-      - edges went 11,544 → 11,487 (62 removed, 5 added). All 67 were read in the source, and all are correct. They all belong to the six names declared at two arities in separate files, and L4's #24 now reaches `BasePluginOfT.cs` only;
-      - L3: type 11,338/11,431 → 11,371/11,466 (99.2% both: a name with its arity counts separately), qtype 72/72, static 9/9;
-      - misses went 93 → 95. The two new ones are the external `Channel<T>`, now counted at two arities;
+      - edges went 11,544 → 11,487 (62 removed, 5 added). All 67 were read in the source, and all are correct. They all belong to the six names declared at two arities in separate files, and L4's #24 now reaches `BasePluginOfT.cs` only. R23 moved no edge (the dump is byte-identical before and after it): no reference written with type arguments resolved through the fallback there;
+      - L3: type 11,338/11,431 → 11,371/11,466 (99.2% both: a name with its arity counts separately) → 11,371/11,461 with R23 (99.2%), qtype 72/72, static 9/9;
+      - misses went 93 → 95 → 90 with R23. The five that left are external generics sharing a non-generic repo type's name, now counted external: `Collection<T>` ×3 (System.Collections.ObjectModel) and `Channel<T>` ×2 (System.Threading.Channels);
       - symbols, chunks and entry points are byte-identical.
-    - **Left as is:** a file that names its own type at an arity declared nowhere visible gets a specifier that falls back by name. That's rare, and none of the 67 is one.
+    - **Left as is:**
+      - A file that names its own type without type arguments where only another arity is declared gets a specifier that falls back by name; written with type arguments, since R23 it links to nothing. That's rare, and none of the 67 is one.
+      - tree-sitter-c-sharp reads some named-tuple type arguments as none (`new X<(A a, B b)>(…)` and `new X<(A a, B b)> { … }`): with no `X` of arity 0, the fallback still reaches `X<T>`'s file (jellyfin's one case, `QueryResult`); with twins `X` and `X<T>`, only the non-generic one's (B-m1).
 
 ## ADR-066 — The summary models are a setting, with their prices (2026-10-25) — amends ADR-028
 

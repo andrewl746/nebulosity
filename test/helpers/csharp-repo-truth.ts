@@ -54,15 +54,24 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *
  * Added in the pre-ship pass (docs/plans/2026-10-25-pre-ship-pass.md, Task C; the controller's ruling R5: exact arity
  * first, else by name as today), with the arity twins src/Shop.Core/Boxes/ (Box, Box<T>, Box<TFirst, TSecond>, and Pair,
- * which has no twin) and their readers in src/Shop.Core/Shipping/:
+ * which has no twin) and their readers in src/Shop.Core/Shipping/; then, for R23, src/Shop.Core/Logging/ILogger.cs (the
+ * repo's own non-generic ILogger) and src/Shop.Core/Shipping/Dispatcher.cs (Microsoft.Extensions.Logging's ILogger<T>):
  * 15. Generic arity, in the CLR's backtick form. A type declared with n type parameters declares type:<ns>.N`n (a generic
  *     outer type carries its own: O`1.In); a name written with n type arguments is type:N`n, or qtype:A.N`n, each generic
  *     segment with its own; typeof(Box<>) counts 1 and typeof(Box<,>) 2; with none, no suffix, so every non-generic name
  *     reads as before. A using static's or an alias's target carries it too. A file's own names are left out by name and
  *     arity, so BoxOfT.cs's base type Box is a reference (to Box.cs) and BoxOfTwo.cs's Box<TFirst> one (to BoxOfT.cs).
- * 16. A reference resolves to the files declaring its name with its arity when C#'s lookup (choice 7's steps) finds any;
- *     when it finds none, it resolves by name at any arity, as before the pass (edit (e)). Partial types (one name, one
- *     arity, several files) still reach every part. Kinds are by name, as before.
+ * 16. A reference resolves to the files declaring its name with its arity when C#'s lookup (choice 7's steps) finds any.
+ *     When it finds none, the name's form decides (the controller's ruling R23, amending R5, after the pass's final
+ *     review, B-I3):
+ *     - written without type arguments, it resolves by name at any arity, as before the pass (edit (f)): the parser can
+ *       drop type arguments (a named tuple's, on jellyfin), but it never invents them;
+ *     - written with n type arguments, or through an alias's or a using static's target written with them, it resolves
+ *       to nothing, since C# can't bind X<T> to a type of another arity (CS0308): edit (e), and Dispatcher.cs's
+ *       ILogger<Dispatcher> beside the repo's non-generic Shop.Core.Logging.ILogger.
+ *     Partial types (one name, one arity, several files) still reach every part. Kinds: a type: name written with n type
+ *     arguments is a repo name only when a repo type has that name with arity n (Review C's M1, paired with R23); without
+ *     any, at any arity, as before. qtype:'s kind is choice 8's, unchanged.
  */
 
 const P = {
@@ -75,6 +84,7 @@ const P = {
     cart: "src/Shop.Core/Carts/Cart.cs",
     catalogItem: "src/Shop.Core/Catalog/Item.cs",
     productCode: "src/Shop.Core/Catalog/ProductCode.cs",
+    logger: "src/Shop.Core/Logging/ILogger.cs",
     modelItem: "src/Shop.Core/Models/Item.cs",
     order: "src/Shop.Core/Models/Order.cs",
     orderStatus: "src/Shop.Core/Models/OrderStatus.cs",
@@ -83,6 +93,7 @@ const P = {
     priceMath: "src/Shop.Core/Pricing/PriceMath.cs",
     coreGuard: "src/Shop.Core/Shared/Guard.cs",
     crate: "src/Shop.Core/Shipping/Crate.cs",
+    dispatcher: "src/Shop.Core/Shipping/Dispatcher.cs",
     pallet: "src/Shop.Core/Shipping/Pallet.cs",
     parcel: "src/Shop.Core/Shipping/Parcel.cs",
     iclock: "src/Shop.Core/Time/IClock.cs",
@@ -187,7 +198,11 @@ const EDGES: TruthEdge[] = [
     //   ReceiptPage.cs's qtype:Core.Auditing.Audited likewise (context: its twin resolves);
     // - every external name (System, Microsoft.Extensions.DependencyInjection, Xunit, ASP.NET Core's WebApplication);
     // - from Parcel.cs, Crate.cs or Pallet.cs to another arity's Box file, and from BoxOfTwo.cs to Box.cs (choice 16: its
-    //   one Box reference is Box<TFirst>, arity 1); before the pass every Box reference reached all three files.
+    //   one Box reference is Box<TFirst>, arity 1); before the pass every Box reference reached all three files;
+    // - Dispatcher.cs's type:ILogger`1 (ILogger<Dispatcher>, Microsoft.Extensions.Logging's): no file declares ILogger`1,
+    //   and it is written with a type argument, so it doesn't fall back to Shop.Core.Logging's non-generic ILogger, which
+    //   C# can't bind it to (choice 16, R23); before R23 it reached ILogger.cs by name. Its own name Dispatcher, the
+    //   type argument, is left out (choice 5).
 ];
 
 const without = (...dropped: TruthEdge[]): TruthEdge[] =>
@@ -208,6 +223,7 @@ export const csharpRepoTruth: FixtureTruth = {
         { path: P.cart, language: "csharp", isTest: false, lineCount: 13 },
         { path: P.catalogItem, language: "csharp", isTest: false, lineCount: 15 },
         { path: P.productCode, language: "csharp", isTest: false, lineCount: 3 },
+        { path: P.logger, language: "csharp", isTest: false, lineCount: 6 },
         { path: P.modelItem, language: "csharp", isTest: false, lineCount: 7 },
         { path: P.order, language: "csharp", isTest: false, lineCount: 41 },
         { path: P.orderStatus, language: "csharp", isTest: false, lineCount: 8 },
@@ -216,6 +232,7 @@ export const csharpRepoTruth: FixtureTruth = {
         { path: P.priceMath, language: "csharp", isTest: false, lineCount: 21 },
         { path: P.coreGuard, language: "csharp", isTest: false, lineCount: 12 },
         { path: P.crate, language: "csharp", isTest: false, lineCount: 13 },
+        { path: P.dispatcher, language: "csharp", isTest: false, lineCount: 11 },
         { path: P.pallet, language: "csharp", isTest: false, lineCount: 13 },
         { path: P.parcel, language: "csharp", isTest: false, lineCount: 8 },
         { path: P.iclock, language: "csharp", isTest: false, lineCount: 8 },
@@ -250,6 +267,7 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts", "type:List`1", "type:Item", "type:IReadOnlyList`1"],
         [P.catalogItem]: ["ns:Shop.Core.Catalog", "type:ProductCode", "type:Money"],
         [P.productCode]: ["ns:Shop.Core.Catalog"],
+        [P.logger]: ["ns:Shop.Core.Logging"],                                          // string and void are keywords; message a parameter
         [P.modelItem]: ["ns:Shop.Core.Models", "type:Money"],
         [P.order]: [
             "using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models",
@@ -264,6 +282,8 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing", "type:MidpointRounding"],
         [P.coreGuard]: ["using:System", "ns:Shop.Shared", "type:ArgumentNullException"],
         [P.crate]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping", "type:Box`1", "qtype:Shop.Core.Boxes.Box`1", "type:Type"], // typeof(Box<>): Box`1 again
+        // ILogger<Dispatcher> twice (the parameter, the property): one specifier; Dispatcher is its own name, Log a property and log a parameter
+        [P.dispatcher]: ["using:Microsoft.Extensions.Logging", "using:Shop.Core.Logging", "ns:Shop.Core.Shipping", "type:ILogger`1"],
         [P.pallet]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping", "type:Box`2", "type:Type", "type:Pair`2"],         // typeof(Box<,>): Box`2 again
         [P.parcel]: ["using:Shop.Core.Boxes", "ns:Shop.Core.Shipping", "type:Box"],
         [P.iclock]: ["using:System", "ns:Shop.Core.Time", "type:DateTimeOffset"],
@@ -311,6 +331,7 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.cart]: ["type:Shop.Core.Carts.Cart"],
         [P.catalogItem]: ["type:Shop.Core.Catalog.Item"],
         [P.productCode]: ["type:Shop.Core.Catalog.ProductCode"],
+        [P.logger]: ["type:Shop.Core.Logging.ILogger"],                                 // no type parameters: no arity
         [P.modelItem]: ["type:Shop.Core.Models.Item"],
         [P.order]: ["type:Shop.Core.Models.Order", "type:Shop.Core.Models.OrderPlacedHandler"],
         [P.orderStatus]: ["type:Shop.Core.Models.OrderStatus"],
@@ -319,6 +340,7 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.priceMath]: ["type:Shop.Core.Pricing.PriceMath", "type:Shop.Core.Pricing.PriceMath.Rounding"],
         [P.coreGuard]: ["type:Shop.Shared.Guard"],
         [P.crate]: ["type:Shop.Core.Shipping.Crate"],
+        [P.dispatcher]: ["type:Shop.Core.Shipping.Dispatcher"],
         [P.pallet]: ["type:Shop.Core.Shipping.Pallet"],
         [P.parcel]: ["type:Shop.Core.Shipping.Parcel"],
         [P.iclock]: ["type:Shop.Core.Time.IClock"],
@@ -374,6 +396,10 @@ export const csharpRepoTruth: FixtureTruth = {
             sym("ListPrice", "property", 13, 13, true, "Item"),
         ],
         [P.productCode]: [sym("ProductCode", "struct", 3, 3, true)],                  // a record struct
+        [P.logger]: [
+            sym("ILogger", "interface", 3, 6, true),
+            sym("Write", "method", 5, 5, true, "ILogger"),                              // the interface's flag
+        ],
         [P.modelItem]: [
             sym("Item", "class", 4, 7, true),                                           // a record; Sku and Price are parameters, not members
             sym("IsFree", "property", 6, 6, true, "Item"),
@@ -420,6 +446,11 @@ export const csharpRepoTruth: FixtureTruth = {
             sym("_count", "property", 8, 8, false, "Crate"),
             sym("Spare", "property", 10, 10, true, "Crate"),
             sym("Kind", "property", 12, 12, true, "Crate"),
+        ],
+        [P.dispatcher]: [
+            sym("Dispatcher", "class", 6, 11, true),
+            sym("Dispatcher", "constructor", 8, 8, true, "Dispatcher"),                 // expression-bodied: one line
+            sym("Log", "property", 10, 10, true, "Dispatcher"),
         ],
         [P.pallet]: [
             sym("Pallet", "class", 6, 13, true),
@@ -519,6 +550,7 @@ export const csharpRepoTruth: FixtureTruth = {
         }),
         [P.catalogItem]: kinds({ context: ["ns:Shop.Core.Catalog"], internal: ["type:ProductCode", "type:Money"] }),
         [P.productCode]: kinds({ context: ["ns:Shop.Core.Catalog"] }),
+        [P.logger]: kinds({ context: ["ns:Shop.Core.Logging"] }),
         [P.modelItem]: kinds({ context: ["ns:Shop.Core.Models"], internal: ["type:Money"] }),
         [P.order]: kinds({
             context: ["using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models"],
@@ -537,6 +569,10 @@ export const csharpRepoTruth: FixtureTruth = {
             context: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
             internal: ["type:Box`1", "qtype:Shop.Core.Boxes.Box`1"],
             external: ["type:Type"],
+        }),
+        [P.dispatcher]: kinds({
+            context: ["using:Microsoft.Extensions.Logging", "using:Shop.Core.Logging", "ns:Shop.Core.Shipping"],
+            external: ["type:ILogger`1"],                                               // no repo type is ILogger with one type parameter (choice 16)
         }),
         [P.pallet]: kinds({
             context: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
@@ -634,6 +670,7 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing"],
         [P.coreGuard]: ["using:System", "ns:Shop.Shared"],
         [P.crate]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
+        [P.dispatcher]: ["using:Microsoft.Extensions.Logging", "using:Shop.Core.Logging", "ns:Shop.Core.Shipping"],
         [P.pallet]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
         [P.parcel]: ["using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
         [P.iclock]: ["using:System", "ns:Shop.Core.Time"],
@@ -761,15 +798,26 @@ export const csharpRepoTruth: FixtureTruth = {
             edgesAfter: withAdded(edge(P.checkout, P.calculator)),
         },
         {
-            // no file declares Box`1 any more, so the names written with one type argument (Crate.cs's Box<int>,
-            // typeof(Box<>) and Shop.Core.Boxes.Box<string>; BoxOfTwo.cs's base type Box<TFirst>) resolve by name, as before
-            // the pass (choice 16): to every Box file left, Box.cs and BoxOfTwo.cs (BoxOfTwo.cs's own is a self edge, dropped).
-            // Parcel.cs's Box and Pallet.cs's Box<string, int> still find their own arity's file
-            description: "(e) src/Shop.Core/Boxes/BoxOfT.cs, Box<T>, is deleted (the file set changes): its readers fall back to the name, at any arity",
+            // no file declares Box`1 any more, and the names that named it are written with one type argument (Crate.cs's
+            // Box<int>, typeof(Box<>) and Shop.Core.Boxes.Box<string>; BoxOfTwo.cs's base type Box<TFirst>), so they resolve
+            // to nothing (choice 16, R23): C# can't bind them to Box or to Box<TFirst, TSecond>. Before R23 they fell back to
+            // every Box file left. BoxOfT.cs's own edge goes with it; Parcel.cs's Box and Pallet.cs's Box<string, int> still
+            // find their own arity's file
+            description: "(e) src/Shop.Core/Boxes/BoxOfT.cs, Box<T>, is deleted (the file set changes): its readers, written with one type argument, lose their edges and gain none",
             writes: { [P.boxOfT]: null },
+            edgesAfter: without(edge(P.boxOfT, P.box), edge(P.boxOfTwo, P.boxOfT), edge(P.crate, P.boxOfT)),
+        },
+        {
+            // no file declares Box (arity 0) any more, and the two names that named it are written without type arguments
+            // (BoxOfT.cs's base type Box, Parcel.cs's new Box()), so they resolve by name at any arity, as before the pass
+            // (choice 16): BoxOfT.cs through its enclosing namespace, Parcel.cs through its using Shop.Core.Boxes, each to
+            // every Box file left, BoxOfT.cs and BoxOfTwo.cs (BoxOfT.cs's own is a self edge, dropped). Crate.cs's and
+            // BoxOfTwo.cs's Box<…> and Pallet.cs's Box<string, int> keep their own arity's file
+            description: "(f) src/Shop.Core/Boxes/Box.cs, Box, is deleted (the file set changes): its readers, written without type arguments, fall back to the name, at any arity",
+            writes: { [P.box]: null },
             edgesAfter: changed(
-                [edge(P.boxOfT, P.box), edge(P.boxOfTwo, P.boxOfT), edge(P.crate, P.boxOfT)],
-                [edge(P.boxOfTwo, P.box), edge(P.crate, P.box), edge(P.crate, P.boxOfTwo)],
+                [edge(P.boxOfT, P.box), edge(P.parcel, P.box)],
+                [edge(P.boxOfT, P.boxOfTwo), edge(P.parcel, P.boxOfT), edge(P.parcel, P.boxOfTwo)],
             ),
         },
     ],

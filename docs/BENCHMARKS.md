@@ -1314,6 +1314,7 @@ What each language's numbers mean, and don't:
     - L3: type 11,338/11,431 → 11,371/11,466 (99.2% both: a name with its arity counts separately, so the totals grow), qtype 72/72, static 9/9;
     - misses went 93 → 95. The two new ones are System.Threading.Channels' external `Channel<T>`, now counted at two arities;
     - symbols, chunks and entry points are byte-identical, and L1 is 6.7 s worst of three.
+    - After the final review's R23 (a name written with type arguments falls back by name no more): the whole C# dump is byte-identical (edge 11,487), so no edge moved. L3's type share is 11,371/11,461 (99.2%), and the misses went 95 → 90: `Collection<T>` ×3 and `Channel<T>` ×2, external generics sharing a non-generic repo type's name, now count as external (14,443 → 14,448).
   - L4 wasn't redrawn.
 
 ## 2026 10 25 Index Benchmark #8 — S1 and L5 with E4's five languages, and the package's size

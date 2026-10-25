@@ -176,7 +176,7 @@ describe("the C# resolver on hand-written files", () => {
         expect(reads).toEqual(["src/App/App.csproj"]);
     });
 
-    it("a name with n type arguments: the files declaring it with arity n first (partial parts all), else every file of the name, as before (R5)", () => {
+    it("a name with n type arguments: the files declaring it with arity n (partial parts all), else none (R23)", () => {
         const resolver = resolverOf({
             "Lib/Box.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Box"] },
             "Lib/BoxOfT.Part.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Box`1"] },
@@ -189,34 +189,79 @@ describe("the C# resolver on hand-written files", () => {
         expect(resolver.resolve("Use.cs", "type:Box`2")).toEqual(["Lib/BoxOfTwo.cs"]);
         expect(resolver.resolve("Use.cs", "qtype:Lib.Box`1")).toEqual(["Lib/BoxOfT.Part.cs", "Lib/BoxOfT.cs"]);
         expect(resolver.resolve("Lib/BoxOfT.cs", "type:Box")).toEqual(["Lib/Box.cs"]);
-        // no Box`3 anywhere: by name, at any arity, as before the pass; internal, as a resolved name is
-        const everyBox = ["Lib/Box.cs", "Lib/BoxOfT.Part.cs", "Lib/BoxOfT.cs", "Lib/BoxOfTwo.cs"];
-        expect(resolver.resolve("Use.cs", "type:Box`3")).toEqual(everyBox);
-        expect(resolver.resolve("Use.cs", "qtype:Lib.Box`3")).toEqual(everyBox);
-        expect(resolver.kindOf("Use.cs", "type:Box`3")).toBe("internal");
+        // no Box`3 anywhere: C# can't bind Box<A, B, C> to another arity (CS0308), so nothing, where R5 reached every Box
+        expect(resolver.resolve("Use.cs", "type:Box`3")).toEqual([]);
+        expect(resolver.resolve("Use.cs", "qtype:Lib.Box`3")).toEqual([]);
+        expect(edgesOf(resolver, "Use.cs", ["type:Box`3", "qtype:Lib.Box`3"])).toEqual([]);
+        // kinds: no repo type is Box with three type parameters, so type:Box`3 is outside the repo; qtype:'s kind is its
+        // qualifier's (Lib is a repo namespace), as before
+        expect(resolver.kindOf("Use.cs", "type:Box`3")).toBe("external");
+        expect(resolver.kindOf("Use.cs", "qtype:Lib.Box`3")).toBe("internal");
 
-        // the arity is looked for through every step before the name is: a using's Box<T> beats the enclosing namespace's Box
+        // the arity is looked for through every step: a using's Box<T> beats the enclosing namespace's Box, and a name of
+        // an arity declared nowhere doesn't stop at the enclosing namespace's Box either
         const nearer = resolverOf({
             "App/Box.cs": { specifiers: ["ns:App"], declares: ["type:App.Box"] },
             "Lib/BoxOfT.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Box`1"] },
             "App/Use.cs": { specifiers: ["using:Lib", "ns:App", "type:Box`1", "type:Box`2"] },
         });
         expect(nearer.resolve("App/Use.cs", "type:Box`1")).toEqual(["Lib/BoxOfT.cs"]);
-        expect(nearer.resolve("App/Use.cs", "type:Box`2")).toEqual(["App/Box.cs"]);   // by name, C#'s steps: the enclosing namespace first
+        expect(nearer.resolve("App/Use.cs", "type:Box`2")).toEqual([]);
+        expect(nearer.kindOf("App/Use.cs", "type:Box`2")).toBe("external");
     });
 
-    it("a using static's and an alias's target, and a type nested in a generic one: their arity first, else by name", () => {
+    it("an outside generic beside a repo type of its name with another arity: no edge, and outside the repo (R23, the final review's B-I3)", () => {
+        // Microsoft.Extensions.Logging's ILogger<T> and Azure's Response<T>, beside the repo's own non-generic ILogger and Response
         const resolver = resolverOf({
-            "Box.cs": { specifiers: ["ns:N"], declares: ["type:N.Box", "type:N.Box.Lid"] },
+            "src/App/Logging/ILogger.cs": { specifiers: ["ns:App.Logging"], declares: ["type:App.Logging.ILogger"] },
+            "src/App/Http/Response.cs": { specifiers: ["ns:App.Http"], declares: ["type:App.Http.Response"] },
+            "src/App/Service.cs": {
+                specifiers: ["using:Microsoft.Extensions.Logging", "using:Azure", "using:App.Logging", "using:App.Http", "ns:App", "type:ILogger`1", "type:Response`1"],
+            },
+            "src/App/Plain.cs": { specifiers: ["using:App.Logging", "using:App.Http", "ns:App", "type:ILogger", "type:Response"] },
+        });
+        const service = "src/App/Service.cs";
+        expect(resolver.resolve(service, "type:ILogger`1")).toEqual([]);
+        expect(resolver.resolve(service, "type:Response`1")).toEqual([]);
+        expect(edgesOf(resolver, service, ["type:ILogger`1", "type:Response`1"])).toEqual([]);
+        expect(resolver.kindOf(service, "type:ILogger`1")).toBe("external");
+        expect(resolver.kindOf(service, "type:Response`1")).toBe("external");
+        // the repo's own types, named as they're declared, still resolve
+        expect(resolver.resolve("src/App/Plain.cs", "type:ILogger")).toEqual(["src/App/Logging/ILogger.cs"]);
+        expect(resolver.resolve("src/App/Plain.cs", "type:Response")).toEqual(["src/App/Http/Response.cs"]);
+    });
+
+    it("a name written without type arguments that no file declares at arity 0: by name, at any arity, as before (R23 keeps R5's fallback there)", () => {
+        // what the parser makes of `new QueryResult<(BaseItem Item, ItemCounts ItemCounts)>(…)` on jellyfin: no type arguments
+        const resolver = resolverOf({
+            "Lib/QueryResult.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.QueryResult`1"] },
+            "Lib/Pair.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Pair`2"] },
+            "Use.cs": { specifiers: ["using:Lib", "ns:App", "type:QueryResult", "qtype:Lib.Pair", "type:Missing"] },
+        });
+        expect(resolver.resolve("Use.cs", "type:QueryResult")).toEqual(["Lib/QueryResult.cs"]);
+        expect(resolver.resolve("Use.cs", "qtype:Lib.Pair")).toEqual(["Lib/Pair.cs"]);
+        expect(resolver.kindOf("Use.cs", "type:QueryResult")).toBe("internal");
+        expect(resolver.kindOf("Use.cs", "type:Missing")).toBe("external");   // no repo type of that name at any arity
+    });
+
+    it("a using static's and an alias's target, and a type nested in a generic one: their arity, else by name only when written without type arguments", () => {
+        const resolver = resolverOf({
+            "Box.cs": { specifiers: ["ns:N"], declares: ["type:N.Box", "type:N.Box.Hinge", "type:N.Box.Lid"] },
             "BoxOfT.cs": { specifiers: ["ns:N"], declares: ["type:N.Box`1", "type:N.Box`1.Lid"] },
-            "Use.cs": { specifiers: ["static:N.Box`1", "static:N.Box`2", "alias:B=N.Box`1", "alias:C=N.Box`3", "ns:App", "type:Lid", "type:B", "type:C"] },
+            "Bag.cs": { specifiers: ["ns:N"], declares: ["type:N.Bag`1"] },
+            "Use.cs": {
+                specifiers: ["static:N.Box`1", "static:N.Box`2", "static:N.Bag", "alias:B=N.Box`1", "alias:C=N.Box`3", "alias:D=N.Bag", "ns:App", "type:Lid", "type:Hinge", "type:B", "type:C", "type:D"],
+            },
         });
         expect(resolver.resolve("Use.cs", "static:N.Box`1")).toEqual(["BoxOfT.cs"]);
-        expect(resolver.resolve("Use.cs", "static:N.Box`2")).toEqual(["Box.cs", "BoxOfT.cs"]);   // no Box`2: by name
+        expect(resolver.resolve("Use.cs", "static:N.Box`2")).toEqual([]);                       // no Box`2: nothing (R23)
+        expect(resolver.resolve("Use.cs", "static:N.Bag")).toEqual(["Bag.cs"]);                 // no arity written: by name
         expect(resolver.resolve("Use.cs", "type:Lid")).toEqual(["BoxOfT.cs"]);                  // nested in the static N.Box`1
+        expect(resolver.resolve("Use.cs", "type:Hinge")).toEqual([]);                           // only the non-generic Box has one: N.Box<T> imports none
         expect(resolver.resolve("Use.cs", "type:B")).toEqual(["BoxOfT.cs"]);
-        expect(resolver.resolve("Use.cs", "type:C")).toEqual(["Box.cs", "BoxOfT.cs"]);          // the alias's target by name
-        expect(resolver.kindOf("Use.cs", "static:N.Box`2")).toBe("internal");
+        expect(resolver.resolve("Use.cs", "type:C")).toEqual([]);                               // the alias's target has three type arguments: nothing
+        expect(resolver.resolve("Use.cs", "type:D")).toEqual(["Bag.cs"]);                       // the alias's target has none: by name
+        expect(resolver.kindOf("Use.cs", "static:N.Box`2")).toBe("external");
     });
 
     it("a generic attribute's two lookup names keep its arity: the one that doesn't resolve is context when its twin does", () => {
