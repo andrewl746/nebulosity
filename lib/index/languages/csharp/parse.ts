@@ -325,11 +325,14 @@ function childMode(parentMode: number, parentType: string, field: string | null,
     }
 }
 
-/** The member name an invocation calls on a receiver (`x.M(…)`, `x?.M(…)`), or null. */
+/**
+ * The member name an invocation calls on a receiver (`x.M(…)`, `x?.M(…)`), or null. A member invoked on a predefined
+ * type (`string.IsNullOrEmpty(…)`, `decimal.Round(…)`) is a static call, never an extension call: null.
+ */
 function invokedMember(invocation: Node): Node | null {
     const fn = invocation.childForFieldName("function");
     if (fn === null) return null;
-    if (fn.type === "member_access_expression") return fn.childForFieldName("name");
+    if (fn.type === "member_access_expression") return fn.childForFieldName("expression")?.type === "predefined_type" ? null : fn.childForFieldName("name");
     if (fn.type === "conditional_access_expression"){
         const binding = fn.lastNamedChild;
         if (binding !== null && (binding.type === "member_binding_expression" || binding.type === "member_access_expression")) return binding.childForFieldName("name");

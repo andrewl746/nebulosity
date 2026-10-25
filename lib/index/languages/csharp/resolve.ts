@@ -234,6 +234,26 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         return union(found);
     };
 
+    /** A using static's type as declared: as written, then under each enclosing namespace; null when the repo has none. */
+    const staticType = (view: FileView, name: string): string | null => {
+        for (const outer of ["", ...view.enclosing]){
+            const fullName = join(outer, name);
+            if (typeFiles.has(fullName)) return fullName;
+        }
+        return null;
+    };
+
+    /**
+     * An attribute [N] is looked up as N and as NAttribute (both specifiers are written); C# binds it to the one that
+     * exists, so the other one is only a lookup aid when its twin resolves.
+     */
+    const twinResolves = (importer: string, specifier: string): boolean => {
+        const cls = specifier.slice(0, specifier.indexOf(":") + 1);
+        const text = body(specifier);
+        const twin = text.endsWith("Attribute") ? `${cls}${text.slice(0, -"Attribute".length)}` : `${cls}${text}Attribute`;
+        return (ctx.files.get(importer)?.importSpecifiers.includes(twin) ?? false) && resolve(importer, twin).length > 0;
+    };
+
     const resolved = new Map<string, string[]>();
     const resolve = (importer: string, specifier: string): string[] => {
         const key = `${importer}\0${specifier}`;
@@ -244,17 +264,15 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         const text = body(specifier);
         if (specifier.startsWith("type:") || specifier.startsWith("qtype:")) files = lookUp(view, text);
         else if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")){
-            files = [];
-            for (const outer of ["", ...view.enclosing]){
-                const fullName = join(outer, text);
-                if (typeFiles.has(fullName)){
-                    files = filesFor(fullName, view.project);
-                    break;
-                }
-            }
+            const fullName = staticType(view, text);
+            files = fullName === null ? [] : filesFor(fullName, view.project);
         } else if (specifier.startsWith("ext:")){
+            // in scope: an extension class in an enclosing or imported namespace, or one a using static names (C#'s rule)
             const visible = new Set([...view.enclosing, ...view.namespaces]);
-            files = union((extensions.get(text) ?? []).filter((e) => visible.has(e.namespace)).map((e) => filesFor(e.fullName, view.project, e.files)));
+            const statics = new Set(view.statics.map((s) => staticType(view, s)));
+            files = union((extensions.get(text) ?? [])
+                .filter((e) => visible.has(e.namespace) || statics.has(e.fullName.slice(0, e.fullName.lastIndexOf("."))))
+                .map((e) => filesFor(e.fullName, view.project, e.files)));
         } else{
             files = [];
         }
@@ -268,10 +286,12 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         kindOf(importer, specifier): ReferenceKind {
             if (resolve(importer, specifier).length > 0) return "internal";
             const text = body(specifier);
-            if (specifier.startsWith("type:")) return simpleNames.has(text) ? "internal" : "external";
-            if (specifier.startsWith("qtype:")){
-                const qualifier = text.slice(0, text.lastIndexOf("."));
-                return viewOf(importer).enclosing.some((outer) => qualifiers.has(join(outer, qualifier))) ? "internal" : "external";
+            if (specifier.startsWith("type:") || specifier.startsWith("qtype:")){
+                const named = specifier.startsWith("type:")
+                    ? simpleNames.has(text)
+                    : viewOf(importer).enclosing.some((outer) => qualifiers.has(join(outer, text.slice(0, text.lastIndexOf(".")))));
+                if (!named) return "external";
+                return twinResolves(importer, specifier) ? "context" : "internal";
             }
             if (specifier.startsWith("ext:")) return extensions.has(text) ? "internal" : "external";
             if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")) return "external";

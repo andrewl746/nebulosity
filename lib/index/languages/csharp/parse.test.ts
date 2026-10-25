@@ -74,6 +74,10 @@ describe("parseCsharp", () => {
             .toEqual(["type:A", "type:B", "type:C2", "type:E", "type:D", "type:F2", "type:G", "type:H", "type:I", "type:J"]);
     });
 
+    it("gives no ext: for a member invoked on a predefined type (a static call, never an extension call)", () => {
+        expect(imports("class C { void F(string s) { string.IsNullOrEmpty(s); int.Parse(s); s.Trim(); object.Equals(s, s); } }")).toEqual(["ext:Trim"]);
+    });
+
     it("reads a qualified attribute and a generic method's type arguments, and leaves type parameters out", () => {
         expect(imports("[A.B.Marker] class C<T> { T F<U>(U u) => default; void G() { x.Run<Order, T>(); Make<Item>(); } }"))
             .toEqual(["qtype:A.B.Marker", "qtype:A.B.MarkerAttribute", "ext:Run", "type:Order", "type:Item"]);

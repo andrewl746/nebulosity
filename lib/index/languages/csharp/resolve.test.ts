@@ -44,6 +44,7 @@ const P = {
     orderStatus: "src/Shop.Core/Models/OrderStatus.cs", money: "src/Shop.Core/Money.cs", calculator: "src/Shop.Core/Pricing/PriceCalculator.cs",
     priceMath: "src/Shop.Core/Pricing/PriceMath.cs", coreGuard: "src/Shop.Core/Shared/Guard.cs", iclock: "src/Shop.Core/Time/IClock.cs",
     systemClock: "src/Shop.Core/Time/SystemClock.cs", scenarios: "src/Shop.Web.IntegrationTests/CheckoutScenarios.cs",
+    collectionExtensions: "src/Shop.Web/Extensions/CollectionExtensions.cs", audited: "src/Shop.Core/Auditing/AuditedAttribute.cs",
     hostExtensions: "src/Shop.Web/Extensions/HostExtensions.cs", serviceExtensions: "src/Shop.Web/Extensions/ServiceCollectionExtensions.cs",
     globalUsings: "src/Shop.Web/GlobalUsings.cs", cartPage: "src/Shop.Web/Pages/CartPage.cs", checkout: "src/Shop.Web/Pages/CheckoutPage.cs",
     pageBase: "src/Shop.Web/Pages/PageBase.cs", receipt: "src/Shop.Web/Pages/ReceiptPage.cs", program: "src/Shop.Web/Program.cs",
@@ -114,6 +115,18 @@ describe("the C# resolver on csharp-repo's truth", () => {
         expect(resolver.resolve(P.program, "ext:AddShop")).toEqual([P.serviceExtensions]);
         expect(resolver.resolve(P.hostExtensions, "ext:AddShop")).toEqual([P.serviceExtensions]);
         expect(resolver.resolve(P.tests, "ext:AddShop")).toEqual([]);
+        expect(resolver.resolve(P.hostExtensions, "ext:IsNullOrEmpty")).toEqual([P.collectionExtensions]);
+    });
+
+    it("ext:M: a using static of the extension's class brings it into scope", () => {
+        expect(resolver.resolve(P.checkout, "ext:IsNullOrEmpty")).toEqual([P.collectionExtensions]);
+        expect(resolver.resolve(P.order, "ext:IsNullOrEmpty")).toEqual([]);   // neither imported nor named by a using static there
+    });
+
+    it("an attribute's lookup name that doesn't resolve is context when its twin does", () => {
+        expect(resolver.resolve(P.receipt, "qtype:Core.Auditing.AuditedAttribute")).toEqual([P.audited]);
+        expect(resolver.kindOf(P.receipt, "qtype:Core.Auditing.Audited")).toBe("context");
+        expect(resolver.kindOf(P.checkout, "type:Audited")).toBe("external");   // no repo type is named Audited at all
     });
 
     it("no edge from using:, global:, alias:, galias: or ns:", () => {
