@@ -455,6 +455,17 @@ describe("the incremental update through the language adapters (ADR-065)", () =>
         expect(tables(repoId)).toEqual(tables(indexRepository(twin, { adapters: both }).repoId));
     });
 
+    it("adds no edge for a TypeScript file's import of itself, as a full run and the pre-E4 code (the E4 final review's m1)", () => {
+        const root = repo({ "a.ts": "export const a = 1;\n", "b.toy": "use b\n" });
+        const { repoId } = indexRepository(root, { adapters });
+        expect(tables(repoId).imports).toEqual([]);   // b.toy's use:b names itself: placed, no edge
+
+        write(root, "a.ts", "import * as self from \"./a\";\nexport const a = self;\n");
+        expect(applyFileChanges(root, ["a.ts"], { adapters })).toMatchObject({ changed: ["a.ts"], edgesAdded: 0, edgesRemoved: 0 });
+        expect(tables(repoId).imports).toEqual([]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+    });
+
     it("starts the resolution state again when a folder holding only a manifest is deleted (the E4 final review's m6)", () => {
         // sub/ holds a toy.json and no indexed file, so deleting it moves the manifest list but not the file set
         const root = repo({ "a.toy": "def a\n", "sub/toy.json": "{}\n" });

@@ -504,6 +504,17 @@ describe("indexRepository through the language adapters (ADR-065)", () => {
         expect(indexRepository(root, { adapters: [typescriptAdapter, bumped] })).toMatchObject({ changed: 0, unchanged: 6 });
     });
 
+    it("makes no edge of a TypeScript file's import of itself, as before E4 (the E4 final review's m1)", () => {
+        // TypeScript's resolver has refused a file importing itself since V1.1 (resolve.ts: "a file importing itself is
+        // no edge"), so edgesOf's self rule changes nothing for it: the pre-E4 code (75b4774) indexed this repo's self.ts
+        // with its one edge, to b.ts (checked 2026-10-25 by running it)
+        const { repoId } = indexRepository(repo({
+            "self.ts": "import * as self from \"./self\";\nimport \"./self.js\";\nimport { b } from \"./b\";\nexport const a = [self, b];\n",
+            "b.ts": "export const b = 1;\n",
+        }), { adapters });
+        expect(edgesOfRepo(repoId)).toEqual([{ source: "self.ts", target: "b.ts", specifier: "./b" }]);
+    });
+
     it("refuses to index a file whose grammar this process hasn't loaded", () => {
         const unprepared = { ...toyAdapter, grammar: "missing.wasm" };
         expect(() => indexRepository(repo(TOY_REPO), { adapters: [typescriptAdapter, unprepared] })).toThrow(GrammarNotLoadedError);
