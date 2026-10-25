@@ -1,6 +1,7 @@
 using System;
 using Shop.Core.Auditing;
 using Shop.Shared;
+using static Shop.Web.Extensions.CollectionExtensions;
 
 namespace Shop.Web.Pages;
 
@@ -20,6 +21,8 @@ public class CheckoutPage : PageBase<Order>
     public Type ModelType => typeof(Item);
 
     public PriceCalculator Calculator { get; } = new();
+
+    public bool CanPlace(Cart cart) => !cart.Lines.IsNullOrEmpty();
 
     public Order Place(Cart cart, string customer)
     {

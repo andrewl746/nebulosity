@@ -37,6 +37,15 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *    namespace the repo declares (a declared namespace or a prefix of one). qtype:System.ArgumentException: external.
  * 9. The scan reading reads `using …;` and `namespace …` lines as written, with no tree, so a nested block's
  *    `namespace Pricing` gives ns:Pricing, where the full reading gives ns:Shop.Core.Pricing.
+ *
+ * Added after jellyfin's first measurement (Step 6, round 1; these cases and their truth were written before the code):
+ * 10. A member invoked on a predefined type (`string.IsNullOrEmpty(…)`, `decimal.Round(…)`) gives no ext:: it is a static
+ *     call, never an extension call. Program.cs's `string.IsNullOrEmpty` would otherwise link to CollectionExtensions.cs
+ *     (Shop.Web.Extensions is imported there).
+ * 11. `using static T` brings T's extension methods into scope too (C#'s rule): CheckoutPage.cs's ext:IsNullOrEmpty
+ *     resolves through `using static Shop.Web.Extensions.CollectionExtensions` (its static: names the same file).
+ * 12. An attribute's two lookup names (N and NAttribute): the one that doesn't resolve is context when the other one
+ *     resolves, since C# binds the attribute to the one that exists. ReceiptPage.cs's qtype:Core.Auditing.Audited.
  */
 
 const P = {
@@ -55,6 +64,7 @@ const P = {
     iclock: "src/Shop.Core/Time/IClock.cs",
     systemClock: "src/Shop.Core/Time/SystemClock.cs",
     scenarios: "src/Shop.Web.IntegrationTests/CheckoutScenarios.cs",
+    collectionExtensions: "src/Shop.Web/Extensions/CollectionExtensions.cs",
     hostExtensions: "src/Shop.Web/Extensions/HostExtensions.cs",
     serviceExtensions: "src/Shop.Web/Extensions/ServiceCollectionExtensions.cs",
     globalUsings: "src/Shop.Web/GlobalUsings.cs",
@@ -86,7 +96,7 @@ function kinds(groups: { context?: string[]; internal?: string[]; external?: str
 }
 
 /**
- * The 45 edges of a full run, sorted by source then target, each with the rule that makes it. "type:N, step 1" is an
+ * The 48 edges of a full run, sorted by source then target, each with the rule that makes it. "type:N, step 1" is an
  * enclosing namespace (innermost out), "step 2" a visible using (the file's and the project's), "alias" an alias's
  * target, "static" a type nested in a static:/gstatic: type.
  */
@@ -108,6 +118,7 @@ const EDGES: TruthEdge[] = [
     edge(P.systemClock, P.iclock),                  // type:IClock (base list), step 1: Shop.Core.Time.IClock
     edge(P.scenarios, P.systemClock),               // qtype:Shop.Core.Time.SystemClock, as written
     edge(P.scenarios, P.checkout),                  // type:CheckoutPage, step 2: using Shop.Web.Pages
+    edge(P.hostExtensions, P.collectionExtensions), // ext:IsNullOrEmpty, its namespace Shop.Web.Extensions enclosing (no using)
     edge(P.hostExtensions, P.serviceExtensions),    // ext:AddShop, its namespace Shop.Web.Extensions enclosing (no using)
     edge(P.serviceExtensions, P.iclock),            // type:IClock (a generic argument), step 2: using Shop.Core.Time
     edge(P.serviceExtensions, P.systemClock),       // type:SystemClock (a generic argument), step 2: using Shop.Core.Time
@@ -123,8 +134,10 @@ const EDGES: TruthEdge[] = [
     edge(P.checkout, P.modelItem),                  // type:Item (typeof), step 2: the .csproj's <Using> Shop.Core.Models
     edge(P.checkout, P.order),                      // type:Order (generic base, return type), the <Using>; qtype:Shop.Core.Models.Order too
     edge(P.checkout, P.systemClock),                // type:Clock, alias: the project's galias Clock=Shop.Core.Time.SystemClock
+    edge(P.checkout, P.collectionExtensions),       // static:Shop.Web.Extensions.CollectionExtensions; ext:IsNullOrEmpty through it too
     edge(P.checkout, P.pageBase),                   // type:PageBase (base list), step 1: Shop.Web.Pages.PageBase
     edge(P.checkout, P.webGuard),                   // type:Guard (static access), step 2: Shop.Shared.Guard: Shop.Web's own wins
+    edge(P.receipt, P.audited),                     // [Core.Auditing.Audited] → qtype:Core.Auditing.AuditedAttribute, under the enclosing Shop
     edge(P.receipt, P.order),                       // type:Receipt, alias: using Receipt = Shop.Core.Models.Order
     edge(P.receipt, P.priceMath),                   // type:Rounding, static: nested in the project's gstatic PriceMath
     edge(P.receipt, P.pageBase),                    // type:PageBase, step 1
@@ -143,6 +156,8 @@ const EDGES: TruthEdge[] = [
     // - PriceCalculatorTests.cs's ext:AddShop: FakeServices.AddShop is an instance method, and the extension's namespace
     //   Shop.Web.Extensions is neither enclosing nor visible there;
     // - CheckoutPage.cs's type:Audited: no repo type is named Audited (AuditedAttribute is the attribute's class);
+    //   ReceiptPage.cs's qtype:Core.Auditing.Audited likewise (context: its twin resolves);
+    // - Program.cs's string.IsNullOrEmpty: a static call on a predefined type gives no ext: at all;
     // - every external name (System, Microsoft.Extensions.DependencyInjection, Xunit, ASP.NET Core's WebApplication).
 ];
 
@@ -168,14 +183,15 @@ export const csharpRepoTruth: FixtureTruth = {
         { path: P.iclock, language: "csharp", isTest: false, lineCount: 8 },
         { path: P.systemClock, language: "csharp", isTest: false, lineCount: 8 },
         { path: P.scenarios, language: "csharp", isTest: true, lineCount: 14 },          // a folder segment *.IntegrationTests (no test/ folder)
+        { path: P.collectionExtensions, language: "csharp", isTest: false, lineCount: 9 },
         { path: P.hostExtensions, language: "csharp", isTest: false, lineCount: 12 },
         { path: P.serviceExtensions, language: "csharp", isTest: false, lineCount: 13 },
         { path: P.globalUsings, language: "csharp", isTest: false, lineCount: 3 },
         { path: P.cartPage, language: "csharp", isTest: false, lineCount: 15 },
-        { path: P.checkout, language: "csharp", isTest: false, lineCount: 29 },
+        { path: P.checkout, language: "csharp", isTest: false, lineCount: 32 },
         { path: P.pageBase, language: "csharp", isTest: false, lineCount: 9 },
-        { path: P.receipt, language: "csharp", isTest: false, lineCount: 12 },
-        { path: P.program, language: "csharp", isTest: false, lineCount: 8 },
+        { path: P.receipt, language: "csharp", isTest: false, lineCount: 13 },
+        { path: P.program, language: "csharp", isTest: false, lineCount: 9 },
         { path: P.webGuard, language: "csharp", isTest: false, lineCount: 9 },
         { path: P.fakes, language: "csharp", isTest: true, lineCount: 13 },              // the folder rule (tests/, Shop.Core.Tests)
         { path: P.tests, language: "csharp", isTest: true, lineCount: 18 },              // the folder rule and the name *Tests.cs
@@ -203,7 +219,7 @@ export const csharpRepoTruth: FixtureTruth = {
             "using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "static:Shop.Core.Pricing.PriceMath",
             "ns:Shop.Core", "ns:Shop.Core.Pricing", "type:Money", "type:Cart", "type:Item", "type:Guard", "ext:NotNull", "type:Rounding",
         ],
-        [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing", "ext:Round", "type:MidpointRounding"],
+        [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing", "type:MidpointRounding"],         // decimal.Round: no ext: (choice 10)
         [P.coreGuard]: ["using:System", "ns:Shop.Shared", "type:ArgumentNullException"],
         [P.iclock]: ["using:System", "ns:Shop.Core.Time", "type:DateTimeOffset"],
         [P.systemClock]: ["using:System", "ns:Shop.Core.Time", "type:IClock", "type:DateTimeOffset"],
@@ -211,7 +227,8 @@ export const csharpRepoTruth: FixtureTruth = {
             "using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests", "type:Fact", "type:FactAttribute",
             "type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock", "type:Assert", "ext:Equal",
         ],
-        [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions", "type:IServiceCollection", "ext:AddShop"],
+        [P.collectionExtensions]: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions", "type:IEnumerable", "ext:Any"],
+        [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions", "type:IServiceCollection", "ext:IsNullOrEmpty", "ext:AddShop"],
         [P.serviceExtensions]: [
             "using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions",
             "type:IServiceCollection", "ext:AddSingleton", "type:IClock", "type:SystemClock",
@@ -219,15 +236,19 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.globalUsings]: ["global:Shop.Core.Carts", "gstatic:Shop.Core.Pricing.PriceMath", "galias:Clock=Shop.Core.Time.SystemClock"],
         [P.cartPage]: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase", "type:Cart", "type:IClock", "type:Order"],
         [P.checkout]: [
-            "using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "ns:Shop.Web.Pages",
+            "using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "static:Shop.Web.Extensions.CollectionExtensions", "ns:Shop.Web.Pages",
             "type:Audited", "type:AuditedAttribute", "type:PageBase", "type:Order", "type:Clock", "type:DateTimeOffset",
-            "type:Cart", "type:Type", "type:Item", "type:PriceCalculator", "type:Guard", "ext:NotBlank",
+            "type:Cart", "type:Type", "type:Item", "type:PriceCalculator", "ext:IsNullOrEmpty", "type:Guard", "ext:NotBlank",
             "qtype:Shop.Core.Models.Order", "type:Guid", "ext:NewGuid",
         ],
         [P.pageBase]: ["ns:Shop.Web.Pages"],
-        [P.receipt]: ["alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages", "type:PageBase", "type:Receipt", "type:Rounding", "ext:ToString"],
+        [P.receipt]: [
+            "alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages", "qtype:Core.Auditing.Audited", "qtype:Core.Auditing.AuditedAttribute",
+            "type:PageBase", "type:Receipt", "type:Rounding", "ext:ToString",
+        ],
+        // string.IsNullOrEmpty (line 4): no ext: (choice 10)
         [P.program]: ["using:Shop.Web.Extensions", "type:WebApplication", "ext:CreateBuilder", "ext:AddShop", "ext:Build", "ext:MapGet", "ext:Run"],
-        [P.webGuard]: ["ns:Shop.Shared", "ext:IsNullOrWhiteSpace", "qtype:System.ArgumentException"],
+        [P.webGuard]: ["ns:Shop.Shared", "qtype:System.ArgumentException"],                     // string.IsNullOrWhiteSpace: no ext:
         [P.fakes]: ["ns:Shop.Core.Tests.Fakes"],
         [P.tests]: [
             "using:Shop.Core.Carts", "using:Shop.Core.Pricing", "using:Shop.Core.Tests.Fakes", "using:Xunit", "ns:Shop.Core.Tests",
@@ -252,6 +273,7 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.iclock]: ["type:Shop.Core.Time.IClock"],
         [P.systemClock]: ["type:Shop.Core.Time.SystemClock"],
         [P.scenarios]: ["type:Shop.Web.IntegrationTests.CheckoutScenarios"],
+        [P.collectionExtensions]: ["ext:Shop.Web.Extensions.CollectionExtensions.IsNullOrEmpty", "type:Shop.Web.Extensions.CollectionExtensions"],
         [P.hostExtensions]: ["ext:Shop.Web.Extensions.HostExtensions.AddShopDefaults", "type:Shop.Web.Extensions.HostExtensions"],
         [P.serviceExtensions]: ["ext:Shop.Web.Extensions.ServiceCollectionExtensions.AddShop", "type:Shop.Web.Extensions.ServiceCollectionExtensions"],
         // the project-wide usings, exactly as the specifiers write them (C18), sorted
@@ -341,6 +363,10 @@ export const csharpRepoTruth: FixtureTruth = {
             sym("CheckoutScenarios", "class", 6, 14, true),
             sym("PageIsTitledForTheCart", "method", 8, 13, true, "CheckoutScenarios"), // from its [Fact] line
         ],
+        [P.collectionExtensions]: [
+            sym("CollectionExtensions", "class", 6, 9, true),
+            sym("IsNullOrEmpty", "method", 8, 8, true, "CollectionExtensions"),
+        ],
         [P.hostExtensions]: [
             sym("HostExtensions", "class", 5, 12, true),
             sym("AddShopDefaults", "method", 8, 11, true, "HostExtensions"),            // its comment out
@@ -357,13 +383,14 @@ export const csharpRepoTruth: FixtureTruth = {
             sym("Last", "property", 14, 14, true, "CartPage"),
         ],
         [P.checkout]: [
-            sym("CheckoutPage", "class", 8, 29, true),
-            sym("CheckoutPage", "constructor", 11, 14, true, "CheckoutPage"),
-            sym("StartedAt", "property", 16, 16, true, "CheckoutPage"),
-            sym("Title", "property", 18, 18, true, "CheckoutPage"),
-            sym("ModelType", "property", 20, 20, true, "CheckoutPage"),
-            sym("Calculator", "property", 22, 22, true, "CheckoutPage"),
-            sym("Place", "method", 24, 28, true, "CheckoutPage"),
+            sym("CheckoutPage", "class", 9, 32, true),
+            sym("CheckoutPage", "constructor", 12, 15, true, "CheckoutPage"),
+            sym("StartedAt", "property", 17, 17, true, "CheckoutPage"),
+            sym("Title", "property", 19, 19, true, "CheckoutPage"),
+            sym("ModelType", "property", 21, 21, true, "CheckoutPage"),
+            sym("Calculator", "property", 23, 23, true, "CheckoutPage"),
+            sym("CanPlace", "method", 25, 25, true, "CheckoutPage"),
+            sym("Place", "method", 27, 31, true, "CheckoutPage"),
         ],
         [P.pageBase]: [
             sym("PageBase", "class", 3, 9, true),
@@ -371,10 +398,10 @@ export const csharpRepoTruth: FixtureTruth = {
             sym("Model", "property", 8, 8, true, "PageBase"),
         ],
         [P.receipt]: [
-            sym("ReceiptPage", "class", 5, 12, true),
-            sym("Title", "property", 7, 7, true, "ReceiptPage"),
-            sym("Mode", "property", 9, 9, true, "ReceiptPage"),
-            sym("Describe", "method", 11, 11, true, "ReceiptPage"),
+            sym("ReceiptPage", "class", 5, 13, true),                                   // from its attribute's line
+            sym("Title", "property", 8, 8, true, "ReceiptPage"),
+            sym("Mode", "property", 10, 10, true, "ReceiptPage"),
+            sym("Describe", "method", 12, 12, true, "ReceiptPage"),
         ],
         [P.program]: [],                                                                // top-level statements only
         [P.webGuard]: [
@@ -421,7 +448,7 @@ export const csharpRepoTruth: FixtureTruth = {
             internal: ["static:Shop.Core.Pricing.PriceMath", "type:Money", "type:Cart", "type:Item", "type:Guard", "type:Rounding"],
             external: ["ext:NotNull"],                                                  // Guard.NotNull is not an extension method
         }),
-        [P.priceMath]: kinds({ context: ["using:System", "ns:Shop.Core.Pricing"], external: ["ext:Round", "type:MidpointRounding"] }),
+        [P.priceMath]: kinds({ context: ["using:System", "ns:Shop.Core.Pricing"], external: ["type:MidpointRounding"] }),
         [P.coreGuard]: kinds({ context: ["using:System", "ns:Shop.Shared"], external: ["type:ArgumentNullException"] }),
         [P.iclock]: kinds({ context: ["using:System", "ns:Shop.Core.Time"], external: ["type:DateTimeOffset"] }),
         [P.systemClock]: kinds({ context: ["using:System", "ns:Shop.Core.Time"], internal: ["type:IClock"], external: ["type:DateTimeOffset"] }),
@@ -430,9 +457,13 @@ export const csharpRepoTruth: FixtureTruth = {
             internal: ["type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock"],
             external: ["type:Fact", "type:FactAttribute", "type:Assert", "ext:Equal"],
         }),
+        [P.collectionExtensions]: kinds({
+            context: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions"],
+            external: ["type:IEnumerable", "ext:Any"],
+        }),
         [P.hostExtensions]: kinds({
             context: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions"],
-            internal: ["ext:AddShop"],
+            internal: ["ext:IsNullOrEmpty", "ext:AddShop"],
             external: ["type:IServiceCollection"],
         }),
         [P.serviceExtensions]: kinds({
@@ -448,18 +479,23 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.checkout]: kinds({
             context: ["using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "ns:Shop.Web.Pages"],
             internal: [
+                "static:Shop.Web.Extensions.CollectionExtensions",
                 "type:AuditedAttribute", "type:PageBase", "type:Order",
                 "type:Clock",                                                           // no repo type is named Clock, but it resolves (the alias)
                 "type:Cart", "type:Item",
                 "type:PriceCalculator",                                                 // a repo type's name, not visible here: unresolved
+                "ext:IsNullOrEmpty",                                                    // in scope through the using static (choice 11)
                 "type:Guard", "qtype:Shop.Core.Models.Order",
             ],
             external: ["type:Audited", "type:DateTimeOffset", "type:Type", "ext:NotBlank", "type:Guid", "ext:NewGuid"],
         }),
         [P.pageBase]: kinds({ context: ["ns:Shop.Web.Pages"] }),
         [P.receipt]: kinds({
-            context: ["alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages"],
-            internal: ["type:PageBase", "type:Receipt", "type:Rounding"],               // type:Receipt resolves through the alias
+            context: [
+                "alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages",
+                "qtype:Core.Auditing.Audited",                                          // the attribute's other lookup name: its twin resolves (choice 12)
+            ],
+            internal: ["qtype:Core.Auditing.AuditedAttribute", "type:PageBase", "type:Receipt", "type:Rounding"], // type:Receipt: the alias
             external: ["ext:ToString"],
         }),
         [P.program]: kinds({
@@ -467,7 +503,7 @@ export const csharpRepoTruth: FixtureTruth = {
             internal: ["ext:AddShop"],
             external: ["type:WebApplication", "ext:CreateBuilder", "ext:Build", "ext:MapGet", "ext:Run"],
         }),
-        [P.webGuard]: kinds({ context: ["ns:Shop.Shared"], external: ["ext:IsNullOrWhiteSpace", "qtype:System.ArgumentException"] }),
+        [P.webGuard]: kinds({ context: ["ns:Shop.Shared"], external: ["qtype:System.ArgumentException"] }),
         [P.fakes]: kinds({ context: ["ns:Shop.Core.Tests.Fakes"] }),
         [P.tests]: kinds({
             context: ["using:Shop.Core.Carts", "using:Shop.Core.Pricing", "using:Shop.Core.Tests.Fakes", "using:Xunit", "ns:Shop.Core.Tests"],
@@ -509,10 +545,11 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.iclock]: ["using:System", "ns:Shop.Core.Time"],
         [P.systemClock]: ["using:System", "ns:Shop.Core.Time"],
         [P.scenarios]: ["using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests"],
+        [P.collectionExtensions]: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions"],
         [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions"],
         [P.serviceExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions"],
         [P.cartPage]: ["using:Shop.Core.Time", "ns:Shop.Web.Pages"],
-        [P.checkout]: ["using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "ns:Shop.Web.Pages"],
+        [P.checkout]: ["using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "static:Shop.Web.Extensions.CollectionExtensions", "ns:Shop.Web.Pages"],
         [P.receipt]: ["alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages"],
         [P.program]: ["using:Shop.Web.Extensions"],
         [P.webGuard]: ["ns:Shop.Shared"],
@@ -561,10 +598,10 @@ export const csharpRepoTruth: FixtureTruth = {
         ],
         [P.globalUsings]: [{ kind: "file-summary", name: "(file)", startLine: 1, endLine: 3 }],
         [P.checkout]: [
-            { kind: "class", name: "CheckoutPage", startLine: 7, endLine: 29 },
-            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 29 },
+            { kind: "class", name: "CheckoutPage", startLine: 8, endLine: 32 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 32 },
         ],
-        [P.program]: [{ kind: "file-summary", name: "(file)", startLine: 1, endLine: 8 }],
+        [P.program]: [{ kind: "file-summary", name: "(file)", startLine: 1, endLine: 9 }],
         [P.tests]: [
             { kind: "class", name: "PriceCalculatorTests", startLine: 8, endLine: 18 },
             { kind: "file-summary", name: "(file)", startLine: 1, endLine: 18 },
