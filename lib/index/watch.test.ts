@@ -144,6 +144,20 @@ describe("createFolderFilter", () => {
     });
 });
 
+/**
+ * Writes, then waits for what the test expects, writing again every half second until the watcher has reported anything
+ * at all. On macOS, FSEvents can lose what's written in the moment after chokidar says it's ready: CI's macOS runs lost
+ * a whole first write, in a different test each time. So the first report, not a fixed wait, says the watcher is live.
+ * Writing a file again is harmless here, since every test checks which paths were reported, not how often.
+ */
+async function writeUntilReported(write: () => void, batches: string[][], expected: () => void): Promise<void> {
+    write();
+    await vi.waitFor(() => {
+        if (batches.length === 0) write();
+        expected();
+    }, { timeout: 10_000, interval: 500 });
+}
+
 describe("watchRepository", () => {
     it("reports a new source file, and nothing from node_modules or non-source files", { timeout: 20_000 }, async () => {
         const root = makeTempDir("neb-watch-");
@@ -154,10 +168,11 @@ describe("watchRepository", () => {
 
         try{
             await watcher.ready;
-            fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
-            fs.writeFileSync(path.join(root, "node_modules", "x", "b.ts"), "export const b = 1;\n");
-            fs.writeFileSync(path.join(root, "README.md"), "# hi\n");
-            await vi.waitFor(() => expect(batches.flat()).toContain("src/a.ts"), { timeout: 10_000, interval: 50 });
+            await writeUntilReported(() => {
+                fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
+                fs.writeFileSync(path.join(root, "node_modules", "x", "b.ts"), "export const b = 1;\n");
+                fs.writeFileSync(path.join(root, "README.md"), "# hi\n");
+            }, batches, () => expect(batches.flat()).toContain("src/a.ts"));
             expect(batches.flat().filter((p) => p !== "src/a.ts")).toEqual([]);
         } finally{
             await watcher.close();
@@ -178,8 +193,8 @@ describe("watchRepository", () => {
             expect(() => chokidarWatchers.at(-1)!.emit("error", failure)).not.toThrow();
             expect(errors).toEqual([failure]);
 
-            fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
-            await vi.waitFor(() => expect(batches.flat()).toContain("src/a.ts"), { timeout: 10_000, interval: 50 });
+            await writeUntilReported(() => fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n"), batches,
+                () => expect(batches.flat()).toContain("src/a.ts"));
         } finally{
             await watcher.close();
         }
@@ -193,11 +208,12 @@ describe("watchRepository", () => {
 
         try{
             await watcher.ready;
-            for (const rel of ["out/b.ts", ".build/c.ts", "packages/p/dist/e.ts", "build/d.ts", "src/a.ts"]){
-                fs.writeFileSync(path.join(root, rel), "export const x = 1;\n");
-            }
-            await vi.waitFor(() => expect(batches.flat()).toEqual(expect.arrayContaining(["build/d.ts", "src/a.ts"])), { timeout: 10_000, interval: 50 });
-            expect(batches.flat().sort()).toEqual(["build/d.ts", "src/a.ts"]);
+            await writeUntilReported(() => {
+                for (const rel of ["out/b.ts", ".build/c.ts", "packages/p/dist/e.ts", "build/d.ts", "src/a.ts"]){
+                    fs.writeFileSync(path.join(root, rel), "export const x = 1;\n");
+                }
+            }, batches, () => expect(batches.flat()).toEqual(expect.arrayContaining(["build/d.ts", "src/a.ts"])));
+            expect([...new Set(batches.flat())].sort()).toEqual(["build/d.ts", "src/a.ts"]);
         } finally{
             await watcher.close();
         }
