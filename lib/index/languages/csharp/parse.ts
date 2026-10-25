@@ -13,7 +13,7 @@
  *
  * Extension-method calls are not read (the controller's ruling of 2026-10-25, amending the plan's ext:): C# binds `x.M(…)`
  * to an applicable instance method or overload first, so linking one needs the receiver's and the arguments' types. By
- * name alone, 19 of 30 sampled links on jellyfin were right (progress-csharp.md, round 2).
+ * name alone, 19 of 30 sampled links on jellyfin were right (ADR-065, "C#: extension-method calls are not linked").
  */
 import type { Node, TreeCursor } from "web-tree-sitter";
 import type { ChunkKind } from "../../../contracts";

@@ -226,7 +226,7 @@ function symbolLines(node: Node): { startLine: number; endLine: number } {
 /** Exported means the item's own visibility is exactly `pub` (not `pub(crate)`, not none). */
 const isPub = (node: Node): boolean => node.namedChildren.some((c) => c.type === "visibility_modifier" && c.text === "pub");
 
-/** A type's base name: `Foo` for Foo, Foo<T>, a::Foo, &Foo, &mut a::Foo<T>; its text without spaces otherwise ([T], dyn Tr). */
+/** A type's base name: `Foo` for Foo, Foo<T>, a::Foo, &Foo, &mut a::Foo<T>; otherwise its text, each run of whitespace one space ([T], dyn Tr). */
 function baseName(node: Node | null): string {
     if (node === null) return "";
     switch (node.type){

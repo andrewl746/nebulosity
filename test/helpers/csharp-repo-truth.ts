@@ -44,7 +44,7 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * 12. An attribute's two lookup names (N and NAttribute): the one that doesn't resolve is context when the other one
  *     resolves, since C# binds the attribute to the one that exists. ReceiptPage.cs's qtype:Core.Auditing.Audited.
  *
- * The controller's rulings of 2026-10-25 (rounds 2 and 3, made for the owner; evidence in progress-csharp.md):
+ * The controller's rulings of 2026-10-25 (rounds 2 and 3, made for the owner; the evidence is in ADR-065):
  * 14. No ext: specifier and no extension method in declares: C# extension-method calls are not linked. Binding one
  *     needs the receiver's and the arguments' types (an applicable instance method or overload always wins), and by name
  *     alone 19 of 30 sampled links on jellyfin were right. Round 1's choices 10 (a predefined type's static call) and 11

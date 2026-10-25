@@ -25,7 +25,7 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *   that's the importer's own file.
  * - The crates a crate can name (Cargo's extern prelude): its dependencies of every kind, by library name or by their
  *   rename, plus, from a target that isn't the library (a bin, test, example, bench), its own package's library. The plan
- *   said every repo crate's library name; rust-analyzer's index contradicted it (91 wrong edges, progress-rust.md), so
+ *   said every repo crate's library name; rust-analyzer's index contradicted it (91 wrong edges, ADR-065), so
  *   shop-core's util.rs naming shop_store (no dependency) is external here.
  * - Kinds: mod: and extern: of a nameable crate are internal; use: and path: are internal when their start is crate,
  *   self, super, a child module, a binding to an internal path or a nameable repo crate, else external. A glob binds

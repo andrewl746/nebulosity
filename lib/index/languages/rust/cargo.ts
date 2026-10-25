@@ -32,7 +32,10 @@ export type CrateManifest = {
     auto: { bins: boolean; tests: boolean; examples: boolean; benches: boolean };
     /** A renamed dependency: the name its code uses (`store`) → the package it is (`shop-store`). */
     renames: Map<string, string>;
-    /** Every package it depends on (renamed or not), for telling apart two crates with one library name. */
+    /**
+     * Every package it depends on (renamed or not), of every kind pooled: the crates its code can name (Cargo's extern
+     * prelude, ADR-065), and so also what tells apart two crates with one library name.
+     */
     dependencies: Set<string>;
 };
 
