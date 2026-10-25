@@ -1307,7 +1307,7 @@ What each language's numbers mean, and don't:
     - the stored Python facts are byte-identical before and after (edge 9,081), so no edge moved;
     - L2 passes;
     - L3 is unchanged: absolute 12,440/12,443 (99.98%), relative 3,547/3,548 (99.97%), external 3,397;
-    - L1 is 9.8 s worst and 9.6 s median.
+    - L1 was 9.8 s worst and 9.6 s median on the task's first round (`fb94c4b`, before R13 changed the rule). On the final tip, the final review measured 10.7 s worst and 9.1 s median, on a shared machine.
   - **jellyfin:**
     - edges went 11,544 → 11,487 (62 removed, 5 added). The builder and then the reviewer read all 67 in the source, and all 67 are correct. All of them belong to the six names declared at two arities in separate files (BasePlugin, StartupLogger, WebSocketMessage, InboundWebSocketMessage, OutboundWebSocketMessage, IRemoteSearchProvider);
     - L4's #24 now reaches BasePluginOfT.cs only;
@@ -1397,9 +1397,16 @@ TypeScript's own edges, symbols and chunks are the F1 rows above; the new edges 
 - **Likely cause:** the five days of uptime with 24 of 31 GB in use, which leaves little file cache for VS Code's 15,000 files. This wasn't tested: the system's settings weren't touched, and the machine wasn't restarted.
 - **Owed:** a run after a restart, with nothing else open. From `../Nebulosity-e4`: `NEBULOSITY_DATA=<an empty folder> npx tsx scripts/index.ts ../vscode --no-activate`, three times; the "total" on its timing line is S1.
 
-### The package (`npm pack --dry-run --json`, against ADR-058's 6.6 MB packed and 25.0 MB unpacked): PASS
+### The package (`npm pack --dry-run --json`, against ADR-058's 6.6 MB packed and 25.0 MB unpacked): packed FAIL with a fresh build, then PASS once the server's source maps stopped shipping
 
-- 6,470,727 bytes packed and 23,300,433 unpacked, 650 files.
-- The pass added 25,702 bytes packed and 80,310 unpacked to #8's `035e00f` (the standard-library list, the models resolver, the setup printer).
-- The built Map in `.next` was #8's build; the pass's one change under it, an error message, doesn't move its size measurably.
-- `prepack`'s check passed: no links, no machine paths, no untracked files.
+| Build in `.next` | Packed | Unpacked | Files | Verdict |
+|---|---|---|---|---|
+| stale, from 02:54 (before E4's fix wave and the pass), with `ddd1110`'s code | 6,470,727 | 23,300,433 | 650 | not a valid measure (the final review's B-I1) |
+| fresh `npm run build:package` at `9d29c92` | **6,632,832** | 23,847,431 | 650 | **packed FAIL, 32,832 bytes over** |
+| the same build, with `.next/**/*.map` left out of the package (ruling R29) | **3,033,668** | **9,227,021** | 539 | **PASS, both** |
+
+- **The first row isn't a measurement of this code.** Its Map was built before E4's fix wave, so its server chunks lacked the fix wave's search change, and its delta credited the pass with the fix wave's 44 files. It's superseded.
+- **The fresh build missed the packed bar.** The tarball held 111 server source maps (`.next/server/**/*.js.map`), 14,620,434 bytes unpacked. They make the server's stack traces readable and nothing at run time reads them. Many are near-copies of one another, one per route chunk (about 758 KB each).
+- **R29 leaves them out** of `package.json`'s `files`, as `!.next/cache/` already did for the build cache. The package then drops to 3.03 MB packed and 9.23 MB unpacked, both bars met with room. An installed copy's server stack traces now point into the bundled code. The installed-copy checks in CI (the Map, its worker, the MCP server and the extension, all run from the tarball) are what prove nothing needed the maps.
+- `prepack`'s check passed every time: no links, no machine paths, no untracked files.
+- **For the ship:** run `npm run build:package` again right before `npm publish`. `prepack` checks the build but doesn't redo it, so a stale `.next` would ship.
