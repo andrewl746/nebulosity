@@ -31,7 +31,10 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * - Entry points: a file declaring both `package:main` and `main`, "package main, func main".
  * - Symbols: func → function; method → method, parent its receiver's type (no `*`); struct → struct with its fields
  *   (property); interface → interface with its methods (method); any other type spec or alias → type; each const or var
- *   spec → const. Exported: an upper-case first letter. Lines are the declaration's own, its comments left out.
+ *   spec → const. Exported: an upper-case first letter; a struct's field or an interface's method only when its type is
+ *   exported too, and a method only when its receiver's type is, if this file declares it (ADR-065's one rule, the final
+ *   review's B-I2: every type here is exported, so no flag below changes). Lines are the declaration's own, its comments
+ *   left out.
  * - Chunks: one per top-level declaration over its attached comments (leadingSpan): func → function `Name`, method →
  *   function `Type.Name`, a type declaration → class (struct), interface or type, a const/var declaration → const.
  *
