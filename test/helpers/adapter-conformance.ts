@@ -17,6 +17,7 @@ import { listManifests } from "../../lib/index/discover";
 import type { LanguageAdapter, ParsedFile, Reading } from "../../lib/index/languages/adapter";
 import { adapterFor, prepareLanguages } from "../../lib/index/languages/registry";
 import { createResolvers } from "../../lib/index/languages/resolution";
+import { withoutBom } from "../../lib/index/languages/treesitter";
 import { typescriptAdapter } from "../../lib/index/languages/typescript-adapter";
 import { indexRepository, repoTextReader } from "../../lib/index/pipeline";
 import { applyFileChanges } from "../../lib/index/update";
@@ -28,6 +29,16 @@ const byPath = (a: { path: string }, b: { path: string }): number => (a.path < b
 const byEdge = (a: TruthEdge, b: TruthEdge): number =>
     (a.source < b.source ? -1 : a.source > b.source ? 1 : a.target < b.target ? -1 : a.target > b.target ? 1 : 0);
 const BOM = String.fromCharCode(0xfeff);
+
+/**
+ * K13's three texts of a file as read: LF, its CRLF twin, and U+FEFF + LF. The file's own byte-order mark is dropped
+ * first, so a file saved with one (Visual Studio writes it on C# files) gets exactly one in the BOM copy, not two
+ * (Task I; progress-csharp.md: two made the products differ, since parsing drops only one).
+ */
+export function k13Texts(onDisk: string): { lf: string; crlf: string; bom: string } {
+    const lf = withoutBom(onDisk).replace(/\r\n/g, "\n");
+    return { lf, crlf: lf.replace(/\n/g, "\r\n"), bom: `${BOM}${lf}` };
+}
 
 /** A file's lines as chunk text holds them: each without its ending ("\r\n" or "\n"). */
 function linesOf(text: string): string[] {
@@ -193,14 +204,13 @@ export function describeAdapterConformance(adapter: LanguageAdapter, fixture: { 
 
         it("K13 a CRLF copy reads the same in every reading, and a byte-order mark changes no product", () => {
             for (const p of paths){
-                const lf = read(p).replace(/\r\n/g, "\n");
-                const crlf = lf.replace(/\n/g, "\r\n");
+                const { lf, crlf, bom } = k13Texts(read(p));
                 for (const reading of READINGS){
                     const a = parse(p, reading, lf);
                     const b = parse(p, reading, crlf);
                     expect({ imports: b.imports, declares: b.declares, symbols: b.symbols }, `${p} ${reading} CRLF`)
                         .toEqual({ imports: a.imports, declares: a.declares, symbols: a.symbols });
-                    expect(parse(p, reading, `${BOM}${lf}`), `${p} ${reading} BOM`).toEqual(a);
+                    expect(parse(p, reading, bom), `${p} ${reading} BOM`).toEqual(a);
                 }
             }
         });
