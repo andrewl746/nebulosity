@@ -1,15 +1,14 @@
 import type { LanguageAdapter } from "../adapter";
+import { parseCsharp } from "./parse";
 import { csharpRules } from "./rules";
 
-/** A stub (Task F of the E4 plan): its grammar loads, but it claims no file until this language's task builds it. */
+/** C#'s adapter (the E4 plan's Task C): parse.ts reads a file; the resolver comes in the next step. */
 export const csharpAdapter: LanguageAdapter = {
     ...csharpRules,
-    version: 0,
+    version: 1,
     grammar: "tree-sitter-c_sharp.wasm",
-    parse(){
-        throw new Error("csharp adapter not built yet");
-    },
+    parse: parseCsharp,
     createResolver(){
-        throw new Error("csharp adapter not built yet");
+        throw new Error("csharp resolver not built yet");
     },
 };
