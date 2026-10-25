@@ -85,7 +85,7 @@ function withFallback(request: SummaryRequest): boolean {
 export function unavailableModel(type: string | null | undefined, message: string, model?: string): string | null {
     if (type !== "not_found_error") return null;
     if (model !== undefined) return message.includes(model) ? model : null;
-    return /\bmodel: (\S+)/.exec(message)?.[1] ?? null;
+    return /\bmodel: ([\w.:@-]+)/.exec(message)?.[1] ?? null;   // a model id's characters, so trailing punctuation stays out
 }
 
 /** The API's own words in an SDK error (its body's error.message) and its error.type, which the SDK reads from that body too. */

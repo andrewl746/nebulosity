@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isolateDataFolder } from "../../test/helpers/data-folder";
 import { copyFixture } from "../../test/helpers/fixture";
 import { getDb } from "../../lib/db/client";
 import { readStages } from "../../lib/db/store/stages";
@@ -7,6 +8,9 @@ import { isPrepared } from "../../lib/index/languages/treesitter";
 import { typescriptAdapter } from "../../lib/index/languages/typescript-adapter";
 import { repoKey } from "../../lib/index/paths";
 import { runIndex } from "./index-command";
+
+// index re-derives the summaries stage with the summary models in config.json (ADR-066): only this test's own, never the developer's
+isolateDataFolder();
 
 describe("runIndex (nebulosity index)", () => {
     it("loads the grammars, then indexes the mini-repo and resolves to 0", async () => {

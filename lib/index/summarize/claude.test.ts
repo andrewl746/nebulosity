@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
 import { cleanTagline, createClaudeSummarizer, outcomeFromBatchItem, outcomeFromReply, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
+import { rejectionOf } from "../../../test/helpers/rejection";
 import { configPath } from "../../config";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT } from "./prompts";
 import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type SummaryRequest } from "./types";
@@ -18,10 +19,6 @@ const request = (model: string): SummaryRequest => ({ customId: "s7", model, sys
  */
 const notFound = (message: string) =>
     new Anthropic.NotFoundError(404, { type: "error", error: { type: "not_found_error", message }, request_id: null }, undefined, new Headers(), "not_found_error");
-
-/** What a promise was rejected with; a promise that resolves fails the test. */
-const rejectionOf = (promise: Promise<unknown>): Promise<Error> =>
-    promise.then(() => { throw new Error("expected a rejection"); }, (err: unknown) => err as Error);
 
 describe("requestParams", () => {
     it("asks for the {tagline, summary} JSON at low effort, leaving thinking at the model's default", () => {
@@ -339,6 +336,8 @@ describe("createClaudeSummarizer", () => {
             expect(error.message).toContain("claude-haiku-5-5");
             expect(error.message).toContain(configPath());
             expect(error.message).toContain("Summary models");
+            // the API answers this way for a model the key can't use too (M5)
+            expect(error.message).toContain("retired, or isn't open to this API key");
         });
 
         it("refusing a batch's creation for another reason is thrown as it came", async () => {

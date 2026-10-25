@@ -19,10 +19,10 @@ import { nextReviewNumber, reviewDate, SUMMARY_REVIEW_HEADER } from "../lib/inde
 import {
     previewRepoFolders, renderFolderPreview, SampleNotIndexedError, unfinished, type SampleFolder,
 } from "../lib/index/summarize/preview";
-import { configuredSummaryModels } from "../lib/index/summarize/models";
 import { SUMMARY_EFFORT } from "../lib/index/summarize/prompts";
 import { StructureNotReadyError } from "../lib/index/summarize/run";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
+import { summaryModelsOrExit } from "./summary-models";
 
 /** The sample, picked by the controller for variety (plan, Addendum 2): 128 non-test files and about 25 folders of VS Code. */
 const REVIEW_3_FOLDERS: SampleFolder[] = [
@@ -56,14 +56,7 @@ if (!hasAnthropicKey()){
     process.exit(1);
 }
 // the models a real run would use: the defaults, or summaryModels in config.json (ADR-066)
-const setting = (() => {
-    const resolved = configuredSummaryModels();
-    if (!resolved.ok){
-        console.error(`[preview] ${resolved.error}`);
-        process.exit(1);
-    }
-    return resolved;
-})();
+const setting = summaryModelsOrExit("preview");
 
 const root = path.resolve(args[0]);
 const out = nebulosityPath("docs", "SUMMARY_REVIEW.md");

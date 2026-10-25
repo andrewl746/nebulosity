@@ -1,5 +1,5 @@
 import { configPath, readConfig } from "../../config";
-import type { SummaryTargetKind } from "../../db/schema";
+import type { SummaryModelSetting, SummaryModelsSetting } from "../../contracts";
 import { pricePerMTok, type ModelPrice } from "./pricing";
 import { SUMMARY_MODELS } from "./prompts";
 
@@ -9,12 +9,18 @@ import { SUMMARY_MODELS } from "./prompts";
  * (SUMMARY_MODELS), a user moves to a newer model here, without a new release of Nebulosity.
  */
 
-/** The kinds a setting can name, in the order messages list them. */
-const KINDS = ["file", "folder", "repo"] as const satisfies readonly SummaryTargetKind[];
-type Kind = (typeof KINDS)[number];
+type Kind = keyof SummaryModelsSetting;
 
-/** The fields of one kind's entry (API_CONTRACTS.md §21). Anything else is refused: a misspelt price would otherwise be ignored. */
-const FIELDS = ["model", "inputPerMTok", "outputPerMTok"] as const;
+/**
+ * The kinds a setting can name, in the order messages list them, and the fields of one kind's entry: the contract's
+ * keys (lib/contracts.ts, API_CONTRACTS.md §21). Each is a Record over those keys, which has to list every one exactly
+ * once, so the validator can't drift from the contract. Any other field is refused: a misspelt price would otherwise
+ * be ignored.
+ */
+const KIND_NAMES: Record<Kind, true> = { file: true, folder: true, repo: true };
+const FIELD_NAMES: Record<keyof SummaryModelSetting, true> = { model: true, inputPerMTok: true, outputPerMTok: true };
+const KINDS = Object.keys(KIND_NAMES) as Kind[];
+const FIELDS: readonly string[] = Object.keys(FIELD_NAMES);
 
 /** A model id's longest accepted length. Anthropic's ids run to about 30 characters; this only stops a pasted paragraph. */
 export const MAX_MODEL_ID_LENGTH = 200;
@@ -54,7 +60,8 @@ export const DEFAULT_SUMMARY_MODELS: ResolvedSummaryModels = {
 /**
  * Reads the setting (summaryModels in config.json, as readConfig found it) into the models and prices every reader
  * uses, or one error that names each field that's wrong and the config file. No setting (or null) is the defaults.
- * - A kind left out keeps its default. A kind's model is a non-empty string of at most MAX_MODEL_ID_LENGTH characters.
+ * - A kind left out keeps its default. A kind's model is trimmed of surrounding whitespace, and the trimmed id, which
+ *   is what's sent and hashed, has 1 to MAX_MODEL_ID_LENGTH characters.
  * - Prices are US dollars per million tokens, finite and 0 or more. They're required for a model the table doesn't
  *   price (its prefix match, as pricePerMTok); for one it does, each given price wins over the table's.
  * - Spend is recorded per model, so one model given two different prices (by two kinds) is refused.
@@ -81,12 +88,13 @@ export function resolveSummaryModels(setting: unknown, configFile: string): Summ
             continue;
         }
         for (const field of Object.keys(entry)){
-            if (!(FIELDS as readonly string[]).includes(field)) problems.push(`${at}.${field} isn't a field (the fields are "model", "inputPerMTok" and "outputPerMTok")`);
+            if (!FIELDS.includes(field)) problems.push(`${at}.${field} isn't a field (the fields are "model", "inputPerMTok" and "outputPerMTok")`);
         }
 
-        const model = entry.model;
-        if (typeof model !== "string" || model.trim() === "" || model.length > MAX_MODEL_ID_LENGTH){
-            problems.push(`${at}.model must be a model id: a string of 1 to ${MAX_MODEL_ID_LENGTH} characters`);
+        // " claude-haiku-6" would be sent with its space, and answered with a 404
+        const model = typeof entry.model === "string" ? entry.model.trim() : undefined;
+        if (model === undefined || model === "" || model.length > MAX_MODEL_ID_LENGTH){
+            problems.push(`${at}.model must be a model id: a string of 1 to ${MAX_MODEL_ID_LENGTH} characters, not blank`);
             continue;
         }
         models[kind] = model;
@@ -163,5 +171,5 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isKind(kind: string): kind is Kind {
-    return (KINDS as readonly string[]).includes(kind);
+    return Object.hasOwn(KIND_NAMES, kind);
 }

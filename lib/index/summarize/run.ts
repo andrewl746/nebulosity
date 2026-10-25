@@ -686,17 +686,29 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
 
     // A request that errored because its model is gone (ADR-066) is failed like any other: its batch has ended, and a row
     // still claimed by it would bring every later run back to this batch, even after the setting is fixed. Its stored
-    // summary stays; its error says what to do. Then the run stops: nothing more is sent to a model that's gone.
+    // summary stays. What comes next depends on whether this run still uses that model:
+    // - it does: the error says what to do, and the run stops, since nothing more should go to a model that's gone;
+    // - it doesn't (the setting changed while the batch was out): the user has already acted, so its row is released
+    //   for the model now in use, planned again in this run (a full run sends it; the worker's jobs keep their own
+    //   rules), and it isn't a failure the circuit breaker counts.
     let gone: ModelUnavailableError | null = null;
-    for (const [i, outcome] of outcomes.entries()){
-        if (outcome.ok || !outcome.modelUnavailable) continue;
-        const error = new ModelUnavailableError(outcome.modelUnavailable.model, outcome.modelUnavailable.reason);
-        gone ??= error;
-        outcomes[i] = { ...outcome, error: error.message };
+    const answers: SummaryOutcome[] = [];
+    const resend: SummaryOutcome[] = [];
+    for (const outcome of outcomes){
+        if (outcome.ok || !outcome.modelUnavailable){
+            answers.push(outcome);
+        } else if (modelInUse(ctx, outcome.modelUnavailable.model)){
+            const error = new ModelUnavailableError(outcome.modelUnavailable.model, outcome.modelUnavailable.reason);
+            gone ??= error;
+            answers.push({ ...outcome, error: error.message });
+        } else{
+            resend.push({ ...outcome, error: `${outcome.modelUnavailable.model}, which this was sent to, isn't available, and the summary models no longer use it; its next summary goes to the model now in use` });
+        }
     }
 
     const destinations = new Map(loadBatchRows(ctx.db, batchId).map((r) => [`s${r.id}`, { ...r, batchId }]));
-    ingest(ctx, outcomes, "batch", (customId) => destinations.get(customId));
+    ingest(ctx, answers, "batch", (customId) => destinations.get(customId));
+    ingest(ctx, resend, "batch", (customId) => destinations.get(customId), { sendAgain: true });
 
     // a row the results never mention would otherwise stay "in flight" forever
     const answered = new Set(outcomes.map((o) => o.customId));
@@ -704,11 +716,17 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
     ingest(ctx, missing.map((customId) => ({ customId, ok: false, error: "missing from the batch's results", model: null, usage: null })),
         "batch", (customId) => destinations.get(customId));
 
-    const errors = [...errorsOf(outcomes), ...missing.map(() => "missing from the batch's results")];
-    ctx.say(`collected ${batchId}: ${outcomes.length + missing.length - errors.length} summarized, ${errors.length} failed`);
+    const errors = [...errorsOf(answers), ...missing.map(() => "missing from the batch's results")];
+    const again = resend.length > 0 ? `, ${resend.length} released for the model now in use (theirs isn't available, and is no longer in use)` : "";
+    ctx.say(`collected ${batchId}: ${answers.length + missing.length - errors.length} summarized, ${errors.length} failed${again}`);
     if (gone !== null) throw gone;
-    checkFailures(ctx, errors, outcomes.length + missing.length, "batch");
+    checkFailures(ctx, errors, answers.length + missing.length, "batch");
     return { kind: "collected" };
+}
+
+/** Whether this run's summary models still use `model` (ADR-066): a gone model stops a run only while it's one of them. */
+function modelInUse(ctx: RunContext, model: string): boolean {
+    return Object.values(ctx.models.models).includes(model);
 }
 
 
@@ -789,9 +807,14 @@ function errorsOf(outcomes: readonly SummaryOutcome[]): string[] {
 
 /**
  * Writes outcomes to their rows and adds their tokens to the repo's spend, per model: a
- * request a fallback model finished counts once for each model that ran.
+ * request a fallback model finished counts once for each model that ran. sendAgain: these
+ * failures are planned again in this run instead of waiting for the next (a request sent to a
+ * model the summary models no longer use, ADR-066), so they aren't counted as failed.
  */
-function ingest(ctx: RunContext, outcomes: readonly SummaryOutcome[], transport: "direct" | "batch", destinationOf: (customId: string) => Destination | undefined): void {
+function ingest(
+    ctx: RunContext, outcomes: readonly SummaryOutcome[], transport: "direct" | "batch", destinationOf: (customId: string) => Destination | undefined,
+    { sendAgain = false }: { sendAgain?: boolean } = {}
+): void {
     const results: SummaryResult[] = [];
     const usage = new Map<string, { requests: number; inputTokens: number; outputTokens: number }>();
 
@@ -817,7 +840,7 @@ function ingest(ctx: RunContext, outcomes: readonly SummaryOutcome[], transport:
 
         if (outcome.ok){
             ctx.tally.summarized++;
-        } else{
+        } else if (!sendAgain){
             ctx.tally.failed++;
             ctx.failedThisRun.add(targetKey(destination.kind, destination.path));
         }

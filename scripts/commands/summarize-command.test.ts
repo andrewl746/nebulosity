@@ -1,7 +1,7 @@
 import fs from "fs";
-import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { isolateDataFolder } from "../../test/helpers/data-folder";
 import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../../lib/db/client";
@@ -24,28 +24,22 @@ vi.mock("../../lib/index/embed", () => ({ embedSummaries: async () => ({ embedde
 const printed = (spy: { mock: { calls: unknown[][] } }): string => spy.mock.calls.map((call) => String(call[0])).join("\n");
 
 // Each test has a data folder of its own, so the config.json it reads (summaryModels) is only ever the one it writes
-const savedData = process.env.NEBULOSITY_DATA;
-let dataFolder = "";
+const dataFolder = isolateDataFolder();
 
 beforeEach(() => {
     summarizer = stub.summarizer;
     stub.requests.length = 0;
     Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });   // no terminal
-    dataFolder = fs.mkdtempSync(path.join(os.tmpdir(), "neb-summarize-data-"));
-    process.env.NEBULOSITY_DATA = dataFolder;
 });
 
 afterEach(() => {
     delete (process.stdin as { isTTY?: boolean }).isTTY;
     vi.restoreAllMocks();
-    if (savedData === undefined) delete process.env.NEBULOSITY_DATA;
-    else process.env.NEBULOSITY_DATA = savedData;
-    fs.rmSync(dataFolder, { recursive: true, force: true });
 });
 
 /** Writes this test's config.json with the given summaryModels. */
 function setSummaryModels(summaryModels: unknown): string {
-    const file = path.join(dataFolder, "config.json");
+    const file = path.join(dataFolder(), "config.json");
     fs.writeFileSync(file, JSON.stringify({ activeRepo: null, port: 3000, summaryModels }));
     return file;
 }
@@ -151,7 +145,7 @@ describe("nebulosity summarize: the models in summaryModels (ADR-066)", () => {
 
         const message = printed(error);
         expect(message).toContain("claude-haiku-5-5");
-        expect(message).toContain(path.join(dataFolder, "config.json"));
+        expect(message).toContain(path.join(dataFolder(), "config.json"));
         expect(message).toContain("Summary models");
         expect(error).toHaveBeenCalledTimes(1);
         expect(sent).toHaveLength(4);   // the four already on their way at once; the other three files never go

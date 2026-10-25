@@ -67,10 +67,11 @@ export class SummarizerAuthError extends Error {
  * Thrown when Anthropic no longer serves a summary model (ADR-066): a 404 not_found_error naming it, on a request, a
  * batch's creation or a batch's result. Every other request to that model would fail the same way, so a run stops at
  * the first one instead of failing thousands one by one (Review Focus 2). The message says where to choose another.
+ * The API answers the same way for a model the key's organization can't use, so the message names both causes.
  */
 export class ModelUnavailableError extends Error {
     constructor(readonly model: string, readonly reason: string, configFile: string = configPath()){
-        super(`${model} isn't available any more (the API said: ${reason}). Choose another model under "summaryModels" in ${configFile}; see the README's "Summary models".`);
+        super(`${model} isn't available: it was retired, or isn't open to this API key (the API said: ${reason}). Choose another model under "summaryModels" in ${configFile}; see the README's "Summary models".`);
         this.name = "ModelUnavailableError";
     }
 }

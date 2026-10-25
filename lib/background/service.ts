@@ -2,7 +2,7 @@ import path from "path";
 import { getDb } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { findRepository } from "../db/store/structure";
-import { countStaleFolders, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
+import { countStaleFolders, loadSummaries, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
 import { NoActiveRepoError, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "../engine/errors";
 import { commandHint } from "../hints";
 import { embedSummaries, type EmbedFn } from "../index/embed";
@@ -187,6 +187,23 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     }
 
     /**
+     * What an automatic job (a refresh after a save, the sweep) may send without asking (ADR-066, R17): a target whose
+     * stored text the model now in use for its kind wrote (so it's out of date only because its inputs changed), or one
+     * no model has written yet. Text another model wrote waits for `nebulosity summarize`'s estimate and yes, "Summarize
+     * now", or a panel being opened: redoing it is a model change, and only a yes pays for that. A dated id the API
+     * reported (`<model>-20261001`) counts as its model. Read once per job, from the rows as the job starts.
+     */
+    function sentUnasked(repo: string): (target: PlannedTarget) => boolean {
+        const db = getDb();
+        const repoId = findRepository(db, repoKey(repo));
+        const writtenBy = new Map(repoId === null ? [] : loadSummaries(db, repoId).map((s) => [targetKey(s.kind, s.path), s.model]));
+        return (target) => {
+            const model = writtenBy.get(targetKey(target.kind, target.path));
+            return !model || model === "template" || model === target.model || model.startsWith(`${target.model}-`);
+        };
+    }
+
+    /**
      * Starts the quiet wait (PIVOT_SPEC.md §5.6) for files that just changed together, on one timer, so they come due
      * as one refresh and MAX_AUTO_REFRESH_FILES bounds it. A timer per file wouldn't: timers due at the same moment fire
      * one by one with microtasks between them, so each would start its own refresh. A file saved again leaves its old
@@ -225,6 +242,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
      * MAX_AUTO_REFRESH_FILES per AUTO_REFRESH_WINDOW_MS, through the regular API, under a cap on this refresh's own spend
      * (INCREMENTAL_BUDGET_USD).
      * Their folders turn stale and wait to be opened or swept, so a pull can't set off hundreds of Sonnet calls.
+     * Only files the model now in use wrote, or that no model has written, go (sentUnasked).
      */
     async function runRefresh(): Promise<void> {
         const repo = root;
@@ -243,13 +261,14 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         }
 
         const wanted = new Set(paths.map((p) => targetKey("file", p)));
+        const unasked = sentUnasked(repo);
         // The content whose quiet minute is up: each file's input hash as this run first plans it. A file saved again
         // mid-refresh (structure updates don't wait for refreshes) plans with a new hash and isn't sent again here: its
         // update restarted its own minute. Otherwise every save during a wave would be paid for at once.
         const dueHash = new Map<string, string>();
         const isDue = (target: PlannedTarget): boolean => {
             const key = targetKey(target.kind, target.path);
-            if (!wanted.has(key)) return false;
+            if (!wanted.has(key) || !unasked(target)) return false;
             if (!dueHash.has(key)) dueHash.set(key, target.inputHash);
             return dueHash.get(key) === target.inputHash;
         };
@@ -280,7 +299,11 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         }
     }
 
-    /** Out-of-date folders whose children are settled, deepest first, at most SWEEP_MAX_FOLDERS (PIVOT_SPEC.md §5.6). */
+    /**
+     * Out-of-date folders whose children are settled, deepest first, at most SWEEP_MAX_FOLDERS (PIVOT_SPEC.md §5.6): only
+     * those the model now in use wrote, or that no model has written (sentUnasked). After a folder or repo model change
+     * the rest wait for a yes, instead of being redone 20 every 10 minutes with no estimate (R17).
+     */
     async function runSweep(): Promise<void> {
         const repo = root;
         if (repo === null || deps.summarizer === null || !mayRefresh(repo)) return;
@@ -293,6 +316,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             return;
         }
 
+        const unasked = sentUnasked(repo);
         try{
             const result = await runSummaries(repo, {
                 summarizer: deps.summarizer,
@@ -302,7 +326,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
-                select: (target) => target.kind !== "file",
+                select: (target) => target.kind !== "file" && unasked(target),
                 maxTargets: SWEEP_MAX_FOLDERS,
                 onProgress: (message) => log(`sweep: ${message}`),
             });

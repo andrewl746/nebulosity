@@ -79,6 +79,12 @@ describe("resolveSummaryModels", () => {
         }
     });
 
+    it("trims a model id, so what's sent and hashed has no stray spaces, and refuses one that's blank (M2)", () => {
+        const resolved = resolveSummaryModels({ file: { model: "  claude-haiku-6\t", inputPerMTok: 0.1, outputPerMTok: 0.5 } }, CONFIG);
+        expect(resolved).toMatchObject({ ok: true, models: { file: "claude-haiku-6" }, prices: { "claude-haiku-6": { input: 0.1, output: 0.5 } } });
+        expect(errorOf({ file: { model: "   " } })).toContain("summaryModels.file.model");
+    });
+
     it("refuses a model id over 200 characters, a price that isn't a number of dollars from 0 up, and a field it doesn't know", () => {
         expect(errorOf({ file: { model: "c".repeat(201), inputPerMTok: 1, outputPerMTok: 1 } })).toContain("summaryModels.file.model");
         expect(resolveSummaryModels({ file: { model: "c".repeat(200), inputPerMTok: 1, outputPerMTok: 1 } }, CONFIG).ok).toBe(true);

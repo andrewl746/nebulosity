@@ -17,12 +17,12 @@ import { repoKey } from "../lib/index/paths";
 import { createClaudeSummarizer } from "../lib/index/summarize/claude";
 import { nextReviewNumber, pickSample, renderComparison, reviewDate, SUMMARY_REVIEW_HEADER, type ComparisonRow } from "../lib/index/summarize/compare";
 import { mapLimit } from "../lib/index/summarize/concurrency";
-import { configuredSummaryModels } from "../lib/index/summarize/models";
 import { FILE_SYSTEM_PROMPT, SUMMARY_EFFORT } from "../lib/index/summarize/prompts";
 import { writtenByModel } from "../lib/index/summarize/plan";
 import { buildFilePrompt } from "../lib/index/summarize/run";
 import type { SummaryOutcome } from "../lib/index/summarize/types";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
+import { summaryModelsOrExit } from "./summary-models";
 
 loadLocalEnv();
 
@@ -39,14 +39,7 @@ if (!hasAnthropicKey()){
     process.exit(1);
 }
 // the file and folder models a real run would use: the defaults, or summaryModels in config.json (ADR-066)
-const setting = (() => {
-    const resolved = configuredSummaryModels();
-    if (!resolved.ok){
-        console.error(`[compare] ${resolved.error}`);
-        process.exit(1);
-    }
-    return resolved;
-})();
+const setting = summaryModelsOrExit("compare");
 
 const count = Number(flag("--count") ?? 20);
 const effort = (flag("--effort") ?? SUMMARY_EFFORT) as "low" | "medium" | "high";
