@@ -15,5 +15,9 @@ doesn't read.
 which has no twin. Each reader in `src/Shop.Core/Shipping/` writes one arity (`new Box()`; `Box<int>` and `typeof(Box<>)`;
 `Box<string, int>` and `typeof(Box<,>)`), so it reaches only that arity's file.
 
+`src/Shop.Core/Logging/ILogger.cs` is the repo's own non-generic `ILogger`. `src/Shop.Core/Shipping/Dispatcher.cs` sees it
+(`using Shop.Core.Logging;`) but writes `ILogger<Dispatcher>`, Microsoft.Extensions.Logging's generic one: C# can't bind a
+name written with a type argument to a type without one (CS0308), so it links to nothing.
+
 `src/Shop.Core/Money.cs` starts with a UTF-8 byte-order mark, as Visual Studio writes one. `src/Shop.Web/Pages/CartPage.cs`
 has a syntax error. The files under `bin/` and `obj/` beside a `.csproj` are left out of the index.
