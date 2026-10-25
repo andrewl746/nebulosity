@@ -1370,3 +1370,35 @@ TypeScript's own edges, symbols and chunks are the F1 rows above; the new edges 
 - **Against ADR-058's bars** (d8d2432's package, 6.6 and 25.0 MB, stated as bars by ADR-058's amendment of 2026-10-25): as first built, packed 6.50 MB was under 6.6 MB and **unpacked 30.16 MB was over 25.0 MB by 5.16 MB: a missed bar**, which this entry first gave without a verdict (the final review's A-I1). Against the base built the same way today, E4 added 0.83 MB packed (+15%) and 8.40 MB unpacked (+39%): the five grammars' 7.55 MB (C#'s 5.35 MB of it), the adapters' code, and 0.54 MB more in the built Map (`.next`), where E4's only changes are highlight.js's five more grammars and the source route reading the rules.
 - **After the fix** (`035e00f`, measured 2026-10-25 with the Map rebuilt by `npm run build:package` in `../Nebulosity-e4`): the grammars ship as `.wasm.gz` (320,696 + 118,602 + 68,790 + 52,670 + 40,511 = 601,269 bytes, from 7,542,834), so the package is 6,445,025 bytes packed and 23,220,123 unpacked, 647 files: **both bars met**, and E4 now adds 0.78 MB packed and 1.46 MB unpacked to the base. The packed size hardly moves, since npm's tarball was already gzipped. The cost is the loader's gunzip, once per process: the five grammars' load measured 17.6–20.7 ms against 11.0–13.1 ms read raw (6 alternated processes each, the runtime's own start about 10 ms either way), about 8 ms. An index run of the C# fixture (a copy, into a scratch `NEBULOSITY_DATA`) gave its truth's 45 edges.
 - `prepack`'s check passed in every built row: no links, no machine paths, no untracked files.
+
+## 2026 10 25 Index Benchmark #9 — S1 re-measured after the pre-ship pass, and the package's size
+
+- **Code:** `pivot/e4` at `ddd1110`, with the pre-ship pass's four tasks merged (ADR-066, ADR-067). The base is `../Nebulosity-e4-base` at `75b4774`, the code before E4, as in #8.
+- **Machine:** the owner's laptop, Node 24.14.0, on AC power at 100%, the Balanced power scheme.
+  - CPU was 8–15% of 16 cores before the runs, with no build agents running. The processor read 84–92% of its nominal performance at idle.
+  - Memory: 7.6 of 31.3 GB free.
+  - **Uptime 120.6 hours** (5 days since a reboot).
+  - Repo: VS Code `cc3fec88`.
+- **How:** per process (`NEBULOSITY_DATA=<fresh> npx tsx scripts/index.ts ../vscode --no-activate`), alternated base and `pivot/e4`, three runs each. Each run indexed into a fresh scratch folder, deleted afterwards.
+
+### S1 on VS Code (≤ 60 s at worst of three): FAIL on this machine today, for the code before E4 as much as after
+
+| Run | Base `75b4774` (structure stage) | `pivot/e4` `ddd1110` (structure stage) |
+|---|---|---|
+| 1 | 100.0 s (process 110.3 s) | 103.5 s (114.2 s) |
+| 2 | 105.5 s (115.1 s) | 91.0 s (100.1 s) |
+| 3 | 84.0 s (92.9 s) | 86.8 s (96.1 s) |
+| worst / median | 105.5 / 100.0 s | 103.5 / 91.0 s |
+
+- **The reading is the same as #8's:**
+  - the code before E4 misses by as much as `pivot/e4` (worst 105.5 s against 103.5 s, median 100.0 s against 91.0 s), so neither E4 nor the pass makes a difference this machine can see;
+  - both are slower than #8's A/B (75–77 s) and far slower than #6 and #7 (31.3–56.7 s for the same TypeScript code).
+- **Likely cause:** the five days of uptime with 24 of 31 GB in use, which leaves little file cache for VS Code's 15,000 files. This wasn't tested: the system's settings weren't touched, and the machine wasn't restarted.
+- **Owed:** a run after a restart, with nothing else open. From `../Nebulosity-e4`: `NEBULOSITY_DATA=<an empty folder> npx tsx scripts/index.ts ../vscode --no-activate`, three times; the "total" on its timing line is S1.
+
+### The package (`npm pack --dry-run --json`, against ADR-058's 6.6 MB packed and 25.0 MB unpacked): PASS
+
+- 6,470,727 bytes packed and 23,300,433 unpacked, 650 files.
+- The pass added 25,702 bytes packed and 80,310 unpacked to #8's `035e00f` (the standard-library list, the models resolver, the setup printer).
+- The built Map in `.next` was #8's build; the pass's one change under it, an error message, doesn't move its size measurably.
+- `prepack`'s check passed: no links, no machine paths, no untracked files.
