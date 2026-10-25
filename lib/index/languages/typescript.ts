@@ -4,8 +4,8 @@ import type { CodeChunk } from "../../contracts";
 import type { CallFacts, SymbolKind, SymbolRow } from "../../db/schema";
 import { collectCallFacts, emptyCallFacts } from "./typescript-calls";
 
-/** Every extension this adapter claims (TypeScript parses JavaScript too). */
-export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+// the pure rules live in typescript-rules.ts (ADR-065), so discovery and the watcher read them without the compiler
+export { languageOf, TYPESCRIPT_EXTENSIONS } from "./typescript-rules";
 
 /**
  * What this adapter reads from a file, versioned. Bump it whenever a change gives an unchanged file different imports,
@@ -19,11 +19,6 @@ export const TYPESCRIPT_EXTENSIONS: readonly string[] = [".ts", ".tsx", ".mts", 
  * function's declared return type (Calls Benchmark #1's second round, ADR-059 amended).
  */
 export const ADAPTER_VERSION = 7;
-
-/** files.language for a path this adapter claims. TypeScript's parser reads both languages. */
-export function languageOf(filePath: string): "typescript" | "javascript" {
-    return /\.(js|jsx|mjs|cjs)$/.test(filePath) ? "javascript" : "typescript";
-}
 
 export type ParsedFile = {
     chunks: CodeChunk[];

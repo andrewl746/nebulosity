@@ -1,6 +1,7 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { MANIFEST } from "./languages/typescript-rules";
 import { normalizeSlashes } from "./paths";
 
 export type DiscoveredFile = {
@@ -23,8 +24,8 @@ export type DiscoveryResult = {
     docs: DiscoveredFile[];
 };
 
-/** A package.json or a tsconfig*.json (tsconfig.json, tsconfig.base.json, …). */
-export const MANIFEST = /(^|\/)(package\.json|tsconfig[^/]*\.json)$/;
+/** A package.json or a tsconfig*.json (tsconfig.json, tsconfig.base.json, …): TypeScript's manifests, now in its rules (ADR-065). */
+export { MANIFEST };
 
 /** The docs' extensions: Markdown, MDX, and Cursor's rule files. */
 export const DOC_EXTENSIONS: readonly string[] = [".md", ".mdx", ".mdc"];
