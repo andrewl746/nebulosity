@@ -206,9 +206,10 @@ By default Haiku 5.5 (`claude-haiku-5-5`) summarizes files, and Sonnet 5.5 (`cla
 
 - **Prices** are the model's list prices in US dollars per million input and output tokens, for the estimate and the spend cap. Nebulosity knows the two defaults' prices; for any other model both are required, and `nebulosity summarize` refuses to estimate or send anything without them. Prices you give win over the ones it knows.
 - **The model has to accept the same requests:** structured output (a JSON schema for the answer) and the effort setting. A model you set goes on the plain Messages API, without the server-side fallback the default Sonnet gets.
-- **Changing a model re-summarizes** everything that model writes, since the model is part of what makes a summary current. The command shows the estimate and asks first, as always; while the Map runs, it still redoes only the files you edit.
+- **Changing a model re-summarizes** everything that model writes, since the model is part of what makes a summary current. `nebulosity summarize` shows the estimate and asks first, as always. The Map never pays for the change on its own: while it runs, it redoes by itself only summaries the new model has already written, when what they describe changes. The rest show as out of date until you run `nebulosity summarize`, or open them on the Map.
 - **It's read at each run,** so the Map picks up a change without a restart. Leave the file's other keys as they are: the Map keeps `activeRepo` and `port` there. `nebulosity doctor` shows the models in use, which are set, and what's wrong with a setting it can't use.
-- **When a model is retired,** the first answer that says so stops the run with one message naming the model and this file. Every summary already written is kept.
+- **A setting that can't be used stops summaries until it's fixed,** even without a key. `nebulosity summarize` refuses it, and writes no test templates, and the summaries' status isn't updated after `nebulosity index` or a save. The index, search, the Map and the tools work as usual.
+- **When a model is retired** (or your key can't use it), the first answer that says so stops the run with one message naming the model and this file. Every summary already written is kept. Choose another model, and the next run picks up where it stopped.
 
 ### The seven tools Claude Code gets
 
