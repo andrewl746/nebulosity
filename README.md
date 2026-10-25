@@ -1,6 +1,6 @@
 # Nebulosity
 
-**Nebulosity is the dependency-structure layer for Claude Code.** It indexes every import in a big TypeScript or JavaScript repo, keeps that index current as files change, and answers in one call the questions that take many steps over those imports. What would a change to this file affect, directly, through other files and in which areas? How does this entry point come to load that file? Which entry points load it? Where are the import cycles? In Eval #3, on those questions, Claude Code with Nebulosity answered 2.3–4.4 times as fast as Claude Code alone on VS Code and AFFiNE, and 1.5–3.2 times as fast on Theia, a repo held out from all tuning, at the same or a higher score. It cost 1.4–2.6 times less on VS Code and AFFiNE, and 1.0–1.3 times less on Theia.
+**Nebulosity is the dependency-structure layer for Claude Code.** It indexes every import in a big repo (TypeScript and JavaScript, and since E4 also Python, Go, Java, C# and Rust: [Languages](#languages)), keeps that index current as files change, and answers in one call the questions that take many steps over those imports. What would a change to this file affect, directly, through other files and in which areas? How does this entry point come to load that file? Which entry points load it? Where are the import cycles? In Eval #3, on those questions, Claude Code with Nebulosity answered 2.3–4.4 times as fast as Claude Code alone on VS Code and AFFiNE, and 1.5–3.2 times as fast on Theia, a repo held out from all tuning, at the same or a higher score. It cost 1.4–2.6 times less on VS Code and AFFiNE, and 1.0–1.3 times less on Theia. All three are TypeScript repos: for the five languages added since, only the index itself was measured.
 
 **Elsewhere the gains were small or none.** Listing a method's callers took 0.57–0.66 of the time on VS Code and Theia, where the `calls` tool found nearly all of them, and 0.88–0.93 on AFFiNE, where it missed most of them. What a signature change touches, lists of direct importers, planning a change and questions about how a repo is designed came out about even, and some cost more. Eval #3's ship gate was set before its first run and aimed at the call questions; it failed on four of seven conditions. The question kinds above were grouped after the runs. How they were grouped, and every loss: [How it compares with Claude Code alone](docs/EVAL_RESULTS.md).
 
@@ -16,6 +16,7 @@ Some questions about a big repo are walks over its import graph, many steps long
 
 - **The Map**: one folder at a time, at most 50 boxes, lines for imports between them; big folders split into pages of related boxes; a panel with each box's summary, contents, what it uses and what uses it; a read-only source viewer; search with Ctrl K.
 - **Seven MCP tools for Claude Code**: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports), `calls` (who calls a method, even through injected services, and what changing it touches) and `show_on_map`.
+- **Seven languages**: TypeScript and JavaScript through TypeScript's own compiler; Python, Go, Java, C# and Rust through tree-sitter, each resolved by its own language's rules ([Languages](#languages)). `calls` reads TypeScript and JavaScript only.
 - **Fresh**: while the Map runs, a background worker reflects a saved file in 1.5 s at worst once warm (Update Benchmark #3) and, with a key, refreshes its summary after a quiet minute.
 - **In VS Code**: an extension shows the Map in a panel beside the code, following the file you're in; a file picked on the Map opens in the editor ([below](#in-vs-code); not yet published).
 
@@ -131,7 +132,7 @@ Big-picture questions ask how the code is organized, complete-list questions ask
 
 ## Try it on your repo
 
-**Who it's for:** you're new to a big TypeScript or JavaScript codebase, and you use Claude Code. Nebulosity gives Claude Code the repo's whole import graph and a map of its parts, and gives you the Map to look at while it explains.
+**Who it's for:** you're new to a big codebase in one of the [languages](#languages) it reads, and you use Claude Code. Nebulosity gives Claude Code the repo's whole import graph and a map of its parts, and gives you the Map to look at while it explains.
 
 ### Install
 
@@ -174,7 +175,7 @@ nebulosity setup      # connect Claude Code to this repo
 
 ### Without an API key (free mode)
 
-Everything except summaries works without a key, and without one nothing is sent to Anthropic:
+Everything except summaries works without a key, in every language, and without one nothing is sent to Anthropic:
 - the index, and the Map with its folders, files, import lines, panels and source viewer;
 - search over code, declarations, file names and folder names;
 - all seven tools in Claude Code.
@@ -198,7 +199,7 @@ A big first run goes through Anthropic's Batch API at half price, so it can take
 - **`search`**: where a feature or concept lives, across code, summaries, file and folder names, and declarations.
 - **`imports`**: exact answers from the whole import graph in one call: what imports a file or folder, what it imports, what a change would affect, and the shortest import chain between two places.
 - **`architecture`**: how a folder's code is organized, computed from its imports: its layers and the imports that go against them, recurring folder conventions, import cycles, and files nothing imports.
-- **`calls`**: who calls a method of a class or interface through declared types (injected services, fields, parameters, base classes): its callers, its implementations, what a change to its signature touches, and where a type is injected.
+- **`calls`**: who calls a method of a class or interface through declared types (injected services, fields, parameters, base classes): its callers, its implementations, what a change to its signature touches, and where a type is injected. TypeScript and JavaScript only; asked about another language's file, it says so.
 - **`show_on_map`**: points at files or folders on the Map while Claude Code explains them.
 
 Good to know:
@@ -245,11 +246,29 @@ Five real repos of different shapes, each indexed from a fresh clone ([Variety B
 
 Imports of style sheets, images, fonts and JSON aren't counted: the index reads code. Imports of npm packages stay outside the graph on purpose. A monorepo's imports of its own packages by name are linked, with one known gap: a package whose entry file exists only after a build, like vite's own `vite`.
 
+### Languages
+
+Besides TypeScript and JavaScript, Nebulosity reads Python, Go, Java, C# and Rust, each through a tree-sitter grammar that ships with it (nothing to install, no build of your repo). Each was measured on one real repo, indexed cold, with 30 of its links drawn at random and read in the source by someone other than its builder ([Language Benchmark #1](docs/BENCHMARKS.md)):
+
+| Language | Repo | Its files indexed | The whole repo's index, worst of 3 | References to the repo's own code resolved | Sampled links right |
+|---|---|---|---|---|---|
+| Python | [django](https://github.com/django/django) | 2,937 | 9.2 s | 99.98% of absolute imports, 99.97% of relative ones | 30 of 30 |
+| Go | [prometheus](https://github.com/prometheus/prometheus) | 747 | 10.4 s | 100% of imports, 99.96% of same-package names, 99.7% of qualified uses | 30 of 30 |
+| Java | [spring-boot](https://github.com/spring-projects/spring-boot) | 8,705 | 21.8 s | 100% of imports, 99.7% of type names | 30 of 30 |
+| C# | [jellyfin](https://github.com/jellyfin/jellyfin) | 2,251 | 7.9 s | 99.2% of type names, 100% of qualified and static ones | 29 of 30 (30 by the rules' own reading) |
+| Rust | [rust-analyzer](https://github.com/rust-lang/rust-analyzer) | 1,498 | 7.8 s | 100%, which the rules make certain, so the 30 links read in the source and a check of every link across crates are the real test | 30 of 30 |
+
+- **Each language links files by its own rules,** read from the code and its manifests: Python's package roots (`__init__.py`, `src/` layouts, `pyproject.toml`), Go's `go.mod` and packages, Java's packages and type names, C#'s namespaces, usings and projects, Rust's `Cargo.toml` and `mod` tree. A link means the same everywhere: A → B when A's code names something B declares. Each leaves out its own dependency and build folders by the manifest beside them (a virtual environment, `vendor/` by a `go.mod`, `target/` by a `Cargo.toml` or `pom.xml`, `build/` by a Gradle file, `bin/` and `obj/` by a `.csproj`).
+- **What isn't read:** `calls` is TypeScript and JavaScript only. C# extension-method calls aren't linked, since binding one needs the receiver's and arguments' types. Member types inherited from a supertype aren't followed (Java, C#), Python paths added to `sys.path` at run time aren't read, and Rust's `use super::*` globs carry no links to their siblings. Test files, entry points (`[project.scripts]` and `__main__`, Go's `func main`, Java's `public static void main`, C#'s `static Main` and top-level statements, Cargo's targets) and the Map's source colors work in every language.
+- **TypeScript and JavaScript are unchanged:** their stored files, links, declarations and code chunks in VS Code's and AFFiNE's indexes are byte for byte what they were before ([Index Benchmark #8](docs/BENCHMARKS.md)). The new languages add 191 files to VS Code (85 of them its Rust `cli/`) and 355 to AFFiNE (353 Rust).
+- **Free mode** covers all of it. Summaries of the new languages use the same prompt, and haven't been reviewed yet.
+- **Not measured:** no eval has compared Claude Code with and without Nebulosity on these languages, so nothing here claims it's faster on them.
+
 ## How it works
 
 ```
 your repo
-   │  nebulosity index: discover → parse (TypeScript's compiler) → resolve imports → aggregate folders
+   │  nebulosity index: discover → parse (TypeScript's compiler; tree-sitter for the other five) → resolve imports → aggregate folders
    │  nebulosity summarize (optional): summaries of files and folders, then local embeddings of them
    ▼
 SQLite in WAL mode: files, imports, folders, summaries, full-text search, vectors
@@ -264,7 +283,7 @@ engine (lib/): level · describe · search · imports · architecture · calls
 
 Core logic in `lib/` never imports the UI framework. The MCP server, the Map's API routes and the static exporter are thin adapters over the same engine.
 
-Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index in under a minute (S1: 56.7 s at worst of three and 50.2 s median with the call facts, Index Benchmark #7), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 177 ms at worst, MCP Benchmark #5, and the first `calls` answer in a fresh process 902 ms at worst), and a saved file reflected in 1,501 ms at worst once warm, Update Benchmark #3, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Measured on VS Code (20,342 files, 14,849 of them indexed before E4, 15,040 since): the structure index in under a minute on 2026-10-15 (S1: 56.7 s at worst of three and 50.2 s median with the call facts, Index Benchmark #7; on 2026-10-25 the same laptop took 75–77 s, for the code before the five new languages as for the code after, Index Benchmark #8), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 177 ms at worst, MCP Benchmark #5, and the first `calls` answer in a fresh process 902 ms at worst), and a saved file reflected in 1,501 ms at worst once warm, Update Benchmark #3, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Decisions worth reading
 
@@ -280,10 +299,11 @@ Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index 
 - [ADR-060](docs/ENGINEERING_DECISIONS.md): Eval #3, with time to relevant context and a gate fixed before the first run.
 - [ADR-061](docs/ENGINEERING_DECISIONS.md): the pitch narrowed to what three evals measured, with every feature kept.
 - [ADR-062](docs/ENGINEERING_DECISIONS.md): the Map in a VS Code panel, as an iframe that passes the server's localhost guards unchanged, with a `postMessage` bridge for the editor sync.
+- [ADR-065](docs/ENGINEERING_DECISIONS.md): five more languages behind one seam, each resolved by its own rules with no build, a conformance kit that holds every adapter to a hand-derived truth, and what was left unlinked rather than guessed.
 
 ## Status
 
-V1.8 adds the VS Code extension ([In VS Code](#in-vs-code)), built and not yet published: the owner's check of it comes first. V1.7 is built: the `calls` tool, over calls read from declared types, on top of V1.6's single `nebulosity` command for Windows, macOS and Linux, its free mode with no API key and its five tested repos. It reads TypeScript and JavaScript only. Its eval, Eval #3, failed the ship gate set before it ran, on conditions 1, 2, 3 and 5 ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)), as Eval #2 failed its own. Going public was on hold until Eval #3's verdict. By the owner's call of 2026-10-15, the hold lifts after that verdict whatever it is, and the gate decides what this README claims: since it failed, the results above are stated as measured, with the failed conditions named, and nothing is claimed beyond them. Since 2026-10-22 it is described as the dependency-structure layer for Claude Code ([ADR-061](docs/ENGINEERING_DECISIONS.md)): the pitch is narrowed to what three evals measured, and every feature stays. Deploying the demo, making the repo public, publishing the package and recording the video are the owner's. What comes next is the owner's decision; the plan has Python support, clustering and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+E4 adds Python, Go, Java, C# and Rust ([Languages](#languages)), built on the `pivot/e4` branch and waiting on its final review and the owner's look. V1.8 adds the VS Code extension ([In VS Code](#in-vs-code)), built and not yet published: the owner's check of it comes first. V1.7 is built: the `calls` tool, over calls read from declared types, on top of V1.6's single `nebulosity` command for Windows, macOS and Linux, its free mode with no API key and its five tested repos. V1.7 read TypeScript and JavaScript only. Its eval, Eval #3, failed the ship gate set before it ran, on conditions 1, 2, 3 and 5 ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)), as Eval #2 failed its own. Going public was on hold until Eval #3's verdict. By the owner's call of 2026-10-15, the hold lifts after that verdict whatever it is, and the gate decides what this README claims: since it failed, the results above are stated as measured, with the failed conditions named, and nothing is claimed beyond them. Since 2026-10-22 it is described as the dependency-structure layer for Claude Code ([ADR-061](docs/ENGINEERING_DECISIONS.md)): the pitch is narrowed to what three evals measured, and every feature stays. Deploying the demo, making the repo public, publishing the package and recording the video are the owner's. What comes next is the owner's decision; the plan has clustering and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
 
 ## Why I built this
 

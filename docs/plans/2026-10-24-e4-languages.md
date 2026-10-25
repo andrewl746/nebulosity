@@ -560,6 +560,8 @@ Edits:
   - not a key in a keyed composite-literal element, not a label;
   - not one of Go's predeclared identifiers: `any bool byte comparable complex64 complex128 error float32 float64 int int8 int16 int32 int64 rune string uint uint8 uint16 uint32 uint64 uintptr true false iota nil append cap clear close complex copy delete imag len make max min new panic print println real recover`.
 
+*(Amended 2026-10-25, as built (Task G's G-1, G-7, G-8, which its review judged needed; ADR-065): `_` is never a name; a local `type` declaration binds its name in the function, as `var` and `const` do; a generic type's type parameters bind inside its own spec, and a method's receiver type parameters (`func (b Box[T])`) inside the method. Read literally, the list above gives a false edge on the fixture.)*
+
 **Declares** (sorted): `package:<name>`, then each package-level name the file declares: funcs (not methods), types, vars, consts. Leave out `_` and `init`.
 
 **Resolution.**
@@ -655,6 +657,8 @@ Edits:
 **Chunks:** top-level type declarations → class, interface, enum.
 
 **Scan:** `package …;` and `import …;` lines.
+
+*(Amended 2026-10-25, as built (Task J's review, M1 and M2; the controller's ruling; ADR-065): the scan reads only the `import …;` lines and declares nothing, as the kit's K7 requires of every scan reading, so the `package` line gives nothing there. And since the declares hold top-level types only, an on-demand import of a type (`import a.Outer.*;`) can't reach its nested types; spring-boot has no on-demand imports, so no measured number moves.)*
 
 **Fixture list** (`test/fixtures/java-repo/`):
 1. a root `pom.xml` and modules `app/` and `lib/` with `pom.xml`, `src/main/java/com/example/…` and `src/test/java/…`;
@@ -765,6 +769,8 @@ Edits:
 
 **Watch in L4:** `ext:` can over-link on common names (`Add`, `Get`) when a repo extension method shares one with an instance method. If the sample shows it, narrow `ext:` to the names that no repo type also declares as an instance method, with a fixture case and its truth first.
 
+*(Amended 2026-10-25, as built (the controller's rulings over Task C's three rounds; ADR-065): **no `ext:` specifiers and no extension-method declares.** C# extension-method calls are not linked: binding one needs the receiver's and arguments' types (an applicable instance method or overload always wins), and by name alone 19 of 30 sampled links were right. Under the kind above, ext read 77.6% on jellyfin with none of its misses in scope by C#'s rules; scoped, it was 100% by construction, and precision (the bar then set, ≥ 27 of 30) read 19/30. So the `ext:` lines above are retired, and the L3 bars are `type:`, `qtype:`, `static:` and `gstatic:`.)*
+
 ---
 
 ## Task R: Rust
@@ -799,6 +805,7 @@ Edits:
   - `mod:…|y` is `y.rs`, else `y/mod.rs`, there; `@path` is relative to the declaring file's folder (and its inline folders);
   - a file reached from no root is an **orphan**.
 - **Visible crate names:** every repo crate's library name, plus the importer's crate's dependency renames (`foo = { package = "bar", … }` → `foo`).
+  *(Amended 2026-10-25, as built (Task R, the controller's ruling; ADR-065): Cargo's extern prelude instead. A file names its package's dependencies of every kind, by library name or, renamed, only by its rename, plus its own package's library from any target but the library itself. The rule above made 91 of rust-analyzer's 6,945 edges wrong; this one left none to a non-dependency.)*
 - **A path from module m** (the file's module plus the inline part):
   - `crate::` starts at m's crate root; `self::` at m; `super::` at m's parent (repeatable); `::x` names a crate;
   - a leading identifier `x` is, in turn: a child module of m; a name the same file's `use` (at the same inline level) binds, substituted; a visible crate name; else external.
@@ -840,6 +847,8 @@ Edits:
 **`classOf`:** `orphan` for every reference from an orphan file; else `mod` for `mod:`, `relative` for a `use:` or `path:` starting with `crate`, `self` or `super`, and `other` for the rest.
 
 **L3 bars** (rust-analyzer `0c4d746`; the `orphan` class is reported, not barred): internal `mod` and `relative` ≥ 99%; internal `other` ≥ 95%.
+
+*(Noted 2026-10-25 (Task R's review, I1; ADR-065): by the `kindOf` rule above, `relative` and `other` can miss only through a `mod` with no file, so their shares are 100% by construction whenever `mod` is. They are no measure of quality; L4 and a cross-dependency check are.)*
 
 ---
 
