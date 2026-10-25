@@ -453,6 +453,18 @@ export type DemoSearchIndex = {
   declarations: [string, number][];
 };
 
+/* ──────────────────────── The settings file ──────────────────────── */
+
+/**
+ * One kind's entry under `summaryModels` in config.json — docs/API_CONTRACTS.md §21 (ADR-066): the model that writes
+ * that kind's summaries, and its list prices in US dollars per million tokens. The prices may be left out only for a
+ * model the built-in price table has; given prices win over the table's.
+ */
+export type SummaryModelSetting = { model: string; inputPerMTok?: number; outputPerMTok?: number };
+
+/** `summaryModels` in config.json — docs/API_CONTRACTS.md §21. A kind left out keeps its default model (ADR-028). */
+export type SummaryModelsSetting = Partial<Record<"file" | "folder" | "repo", SummaryModelSetting>>;
+
 /* ──────────────────────────── Persistence ────────────────────────── */
 
 /**

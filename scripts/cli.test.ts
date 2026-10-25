@@ -413,14 +413,17 @@ describe("runDoctor", () => {
 
     const levels = (spy: { mock: { calls: unknown[][] } }): string[] => spy.mock.calls.map((call) => String(call[0]).split(" ")[0]);
 
-    it("prints one line per check: Node, the data folder, the database, the Map, git, claude, the key; a WARN is no failure", async () => {
+    it("prints one line per check: Node, the data folder, the database, the Map, git, claude, the key, the summary models; a WARN is no failure", async () => {
         const home = freshInstall();
         stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
         const logs = vi.spyOn(console, "log").mockImplementation(() => {});
 
         expect(await runDoctor()).toBe(0);
-        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN"]);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "OK"]);
         expect(printed(logs)).toContain("git version 2.50.1");
+        // nothing set: the defaults (ADR-028), and where to change them
+        expect(printed(logs)).toContain("summary models: files claude-haiku-5-5, folders claude-sonnet-5-5, the repo claude-sonnet-5-5 (the defaults;");
+        expect(printed(logs)).toContain(path.join(home, "data", "config.json"));
         expect(fs.existsSync(path.join(home, "data", "nebulosity.db"))).toBe(true);   // it opened (and so migrated) a database there
     });
 
@@ -430,6 +433,30 @@ describe("runDoctor", () => {
         const logs = vi.spyOn(console, "log").mockImplementation(() => {});
 
         expect(await runDoctor()).toBe(1);
-        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "FAIL", "WARN", "WARN"]);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "FAIL", "WARN", "WARN", "OK"]);
+    });
+
+    it("says which summary models are set in config.json (ADR-066)", async () => {
+        const home = freshInstall();
+        fs.mkdirSync(path.join(home, "data"), { recursive: true });
+        fs.writeFileSync(path.join(home, "data", "config.json"), JSON.stringify({ summaryModels: { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } } }));
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(0);
+        expect(levels(logs).at(-1)).toBe("OK");
+        expect(printed(logs)).toContain(`summary models: files claude-haiku-6 (set in ${path.join(home, "data", "config.json")}), folders claude-sonnet-5-5, the repo claude-sonnet-5-5`);
+    });
+
+    it("fails on a summary-models setting it can't use, saying what's wrong", async () => {
+        const home = freshInstall();
+        fs.mkdirSync(path.join(home, "data"), { recursive: true });
+        fs.writeFileSync(path.join(home, "data", "config.json"), JSON.stringify({ summaryModels: { file: { model: "claude-zeta-1" } } }));
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(1);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "FAIL"]);
+        expect(printed(logs)).toContain("summaryModels.file.inputPerMTok");
     });
 });

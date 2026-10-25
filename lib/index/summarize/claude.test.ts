@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
 import { cleanTagline, createClaudeSummarizer, outcomeFromBatchItem, outcomeFromReply, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
-import { FILE_SYSTEM_PROMPT } from "./prompts";
-import { BatchGoneError, SummarizerAuthError, type SummaryRequest } from "./types";
+import { configPath } from "../../config";
+import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT } from "./prompts";
+import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type SummaryRequest } from "./types";
 
 const GOOD = JSON.stringify({ tagline: "Logging helpers", summary: "Writes log lines." });
 const reply = (text: string, overrides: Record<string, unknown> = {}) => ({
@@ -10,6 +11,17 @@ const reply = (text: string, overrides: Record<string, unknown> = {}) => ({
     usage: { input_tokens: 120, output_tokens: 30 }, ...overrides,
 });
 const request = (model: string): SummaryRequest => ({ customId: "s7", model, system: FILE_SYSTEM_PROMPT, prompt: "File: src/core/log.ts" });
+
+/**
+ * A 404 as the SDK builds it from the API's answer (APIError.generate: the body, then its error.type). The API names a
+ * model it doesn't serve as "model: <id>" (a not_found_error).
+ */
+const notFound = (message: string) =>
+    new Anthropic.NotFoundError(404, { type: "error", error: { type: "not_found_error", message }, request_id: null }, undefined, new Headers(), "not_found_error");
+
+/** What a promise was rejected with; a promise that resolves fails the test. */
+const rejectionOf = (promise: Promise<unknown>): Promise<Error> =>
+    promise.then(() => { throw new Error("expected a rejection"); }, (err: unknown) => err as Error);
 
 describe("requestParams", () => {
     it("asks for the {tagline, summary} JSON at low effort, leaving thinking at the model's default", () => {
@@ -138,6 +150,21 @@ describe("outcomeFromBatchItem", () => {
         expect(outcomeFromBatchItem(item({ type: "canceled" }))).toMatchObject({ ok: false, error: "the batch was canceled" });
     });
 
+    it("marks a request that errored because its model isn't served, and only that kind of error", () => {
+        const errored = (type: string, message: string) => item({ type: "errored", error: { type: "error", error: { type, message }, request_id: null } });
+
+        // the model is named by the request when this process sent it, else read from the API's "model: <id>"
+        expect(outcomeFromBatchItem(errored("not_found_error", "model: claude-haiku-5-5"), "claude-haiku-5-5")).toMatchObject({
+            ok: false, error: "batch request errored: model: claude-haiku-5-5", modelUnavailable: { model: "claude-haiku-5-5", reason: "model: claude-haiku-5-5" },
+        });
+        expect(outcomeFromBatchItem(errored("not_found_error", "model: claude-haiku-5-5"))).toMatchObject({
+            modelUnavailable: { model: "claude-haiku-5-5", reason: "model: claude-haiku-5-5" },
+        });
+        // a 404 about something else, and another error that names the model, are ordinary failures
+        expect(outcomeFromBatchItem(errored("not_found_error", "file not found"), "claude-haiku-5-5")).not.toHaveProperty("modelUnavailable");
+        expect(outcomeFromBatchItem(errored("invalid_request_error", "model: claude-haiku-5-5"), "claude-haiku-5-5")).not.toHaveProperty("modelUnavailable");
+    });
+
     it("keeps the token count of a reply it couldn't use, so spend stays honest", () => {
         expect(outcomeFromBatchItem(item({ type: "succeeded", message: reply("{not json") }))).toEqual({
             customId: "s1", ok: false, error: "the reply wasn't valid JSON", model: "claude-haiku-5-5",
@@ -177,6 +204,8 @@ describe("createClaudeSummarizer", () => {
         const calls: { endpoint: string; params: Record<string, unknown>; options?: Record<string, unknown> }[] = [];
         const state = {
             ended: false, fail: false, gone: false, denied: null as 401 | 403 | null, offline: false,
+            // what creating a batch throws, if anything
+            createError: null as Error | null,
             // what the regular endpoints hand out in order (a reply, or an Error they throw); once it runs out, every request gets GOOD
             replies: [] as unknown[],
             // the batch's results; null gives the default pair below
@@ -197,6 +226,7 @@ describe("createClaudeSummarizer", () => {
                 batches: {
                     create: async (params: Record<string, unknown>, options?: Record<string, unknown>) => {
                         calls.push({ endpoint: "batches", params, options });
+                        if (state.createError) throw state.createError;
                         return { id: "msgbatch_1" };
                     },
                     retrieve: async () => {
@@ -240,6 +270,84 @@ describe("createClaudeSummarizer", () => {
         const { client, calls } = fakeClient();
         await createClaudeSummarizer(client).summarize(request("claude-sonnet-5-5"));
         expect(calls).toEqual([{ endpoint: "beta", params: { ...requestParams(request("claude-sonnet-5-5")), betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } }]);
+    });
+
+    // ADR-066 (R3): the fallback beta goes only with a kind left at its default, so a newer model never gets a beta it doesn't know
+    describe("the Sonnet fallback beta, by whether the kind's model is set", () => {
+        const folder = (model: string, customModel?: boolean): SummaryRequest => ({
+            customId: "s9", model, system: FOLDER_SYSTEM_PROMPT, prompt: "Folder: src/core", ...(customModel === undefined ? {} : { customModel }),
+        });
+
+        it("goes with a folder request at the default model", async () => {
+            const { client, calls } = fakeClient();
+            await createClaudeSummarizer(client).summarize(folder("claude-sonnet-5-5", false));
+            expect(calls).toEqual([{ endpoint: "beta", params: { ...requestParams(folder("claude-sonnet-5-5")), betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } }]);
+        });
+
+        it("doesn't go with a folder request for a set model, even a Sonnet: the plain Messages API, without betas or fallbacks", async () => {
+            for (const model of ["claude-sonnet-6", "claude-sonnet-5-5"]){
+                const { client, calls } = fakeClient();
+                const outcome = await createClaudeSummarizer(client).summarize(folder(model, true));
+                expect(calls).toEqual([{ endpoint: "messages", params: requestParams(folder(model)) }]);
+                expect(calls[0].params).not.toHaveProperty("betas");
+                expect(calls[0].params).not.toHaveProperty("fallbacks");
+                expect(outcome).toMatchObject({ ok: true, model });
+            }
+        });
+    });
+
+    describe("a model the API no longer serves (a 404 not_found_error naming it)", () => {
+        it("is a failed outcome that says which model, on the regular API", async () => {
+            const { client, state } = fakeClient();
+            state.replies = [notFound("model: claude-haiku-5-5")];
+            const outcome = await createClaudeSummarizer(client).summarize(request("claude-haiku-5-5"));
+            expect(outcome).toMatchObject({ customId: "s7", ok: false, model: null, usage: null, modelUnavailable: { model: "claude-haiku-5-5", reason: "model: claude-haiku-5-5" } });
+        });
+
+        it("isn't a 404 about anything else, which stays an ordinary failure", async () => {
+            const { client, state } = fakeClient();
+            state.replies = [notFound("Not found")];
+            const outcome = await createClaudeSummarizer(client).summarize(request("claude-haiku-5-5"));
+            expect(outcome).toMatchObject({ ok: false });
+            expect(outcome).not.toHaveProperty("modelUnavailable");
+        });
+
+        it("in a batch's results is marked on that request's outcome, the batch's other answers kept", async () => {
+            const { client, state } = fakeClient();
+            const summarizer = createClaudeSummarizer(client);
+            await summarizer.submitBatch([{ ...request("claude-haiku-6"), customId: "s1" }, { ...request("claude-haiku-6"), customId: "s2" }]);
+            state.ended = true;
+            state.results = [
+                { custom_id: "s1", result: { type: "errored", error: { type: "error", error: { type: "not_found_error", message: "model: claude-haiku-6" }, request_id: null } } },
+                { custom_id: "s2", result: { type: "succeeded", message: reply(GOOD, { model: "claude-haiku-6" }) } },
+            ];
+
+            const outcomes = await summarizer.batchResults("msgbatch_1");
+
+            expect(outcomes).toHaveLength(2);
+            expect(outcomes![0]).toMatchObject({ customId: "s1", ok: false, modelUnavailable: { model: "claude-haiku-6", reason: "model: claude-haiku-6" } });
+            expect(outcomes![1]).toMatchObject({ customId: "s2", ok: true });
+        });
+
+        it("refusing a batch's creation throws ModelUnavailableError, naming the model, the config file and the README's section", async () => {
+            const { client, state } = fakeClient();
+            state.createError = notFound("model: claude-haiku-5-5");
+            const submitting = createClaudeSummarizer(client).submitBatch([request("claude-haiku-5-5")]);
+
+            await expect(submitting).rejects.toThrow(ModelUnavailableError);
+            const error = await rejectionOf(submitting);
+            expect(error.message).toContain("claude-haiku-5-5");
+            expect(error.message).toContain(configPath());
+            expect(error.message).toContain("Summary models");
+        });
+
+        it("refusing a batch's creation for another reason is thrown as it came", async () => {
+            const { client, state } = fakeClient();
+            state.createError = notFound("Not found");
+            const error = await createClaudeSummarizer(client).submitBatch([request("claude-haiku-5-5")]).catch((err: unknown) => err);
+            expect(error).toBeInstanceOf(Anthropic.NotFoundError);
+            expect(error).not.toBeInstanceOf(ModelUnavailableError);
+        });
     });
 
     it("turns a thrown error into a failed outcome instead of throwing", async () => {

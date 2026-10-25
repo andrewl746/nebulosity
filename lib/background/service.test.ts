@@ -14,6 +14,7 @@ import { errorResponseFor, RepoSwitchingError, SummariesNotConfirmedError, Summa
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
+import { resolveSummaryModels } from "../index/summarize/models";
 import { runSummaries } from "../index/summarize/run";
 import type { Summarizer } from "../index/summarize/types";
 import type { RepoWatcher } from "../index/watch";
@@ -330,6 +331,29 @@ describe("background service", () => {
         expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh" });
         await service.idle();
         expect(embedded(root)).toBe(13);
+        await service.stop();
+    });
+
+    it("reads the summary models at each job: a setting it can't use refuses summarize now with what's wrong, and a fixed one applies to the next job (ADR-066)", async () => {
+        const root = await summarizedFixture();
+        const stub = stubSummarizer();
+        let setting: unknown = { file: { model: "claude-zeta-1" } };
+        const service = createBackgroundService({
+            summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed,
+            summaryModels: () => resolveSummaryModels(setting, "C:/data/config.json"),
+        });
+        await service.setRepo(root);   // the startup check runs with the broken setting: the Map has to start anyway
+        await service.idle();
+
+        const refusal = service.summarizeNow("src/core/log.ts");
+        await expect(refusal).rejects.toThrow("summaryModels.file.inputPerMTok");
+        expect(errorResponseFor(await refusal.catch((err: unknown) => err)).error.code).toBe("SUMMARIES_OFF");
+        expect(stub.requests).toHaveLength(0);
+
+        // no restart: the next job reads the setting again. The model is in the inputHash, so log.ts is due for the new one.
+        setting = { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } };
+        expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh", model: "claude-haiku-6" });
+        expect(stub.requests.map((r) => [r.model, r.customModel])).toEqual([["claude-haiku-6", true]]);
         await service.stop();
     });
 

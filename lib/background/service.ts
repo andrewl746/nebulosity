@@ -8,6 +8,7 @@ import { commandHint } from "../hints";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository, type IndexOptions, type IndexResult } from "../index/pipeline";
+import { configuredSummaryModels, SummaryModelsError, type SummaryModelsResolution } from "../index/summarize/models";
 import { runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
 import type { PlannedTarget } from "../index/summarize/plan";
 import { refreshSummaryStatus } from "../index/summarize/status";
@@ -60,6 +61,11 @@ export type BackgroundDeps = {
     watch?: (repoRoot: string, onChanges: (paths: string[]) => void) => RepoWatcher;
     /** The embedding model; tests pass a fake. */
     embed?: EmbedFn;
+    /**
+     * The summary models setting (ADR-066), read at each job, so a changed setting applies to the next job without a
+     * restart. Default: summaryModels in config.json, through readConfig. Tests pass their own.
+     */
+    summaryModels?: () => SummaryModelsResolution;
     log?: (message: string) => void;
     timings?: Partial<ServiceTimings>;
 };
@@ -91,6 +97,9 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     const watchFn = deps.watch ?? ((repoRoot: string, onChanges: (paths: string[]) => void) =>
         watchRepository(repoRoot, onChanges, { onError: (err) => log(`the file watcher reported an error and goes on: ${err.message}`) }));
     const summarizerAvailable = deps.summarizer !== null;
+    const settingNow = deps.summaryModels ?? configuredSummaryModels;
+    /** The summaries stage after a change, planned with the setting as this job read it (a broken one leaves it as it was). */
+    const refreshStatus = (repo: string, models: SummaryModelsResolution = settingNow()) => refreshSummaryStatus(repo, { summarizerAvailable, models });
 
     let root: string | null = null;
     let watcher: RepoWatcher | null = null;
@@ -158,7 +167,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 if (deps.summarizer !== null && mayRefresh(repo)) armSummaryTimers(result.changed);
                 for (const p of result.deleted) cancelSummaryTimer(p);
             }
-            refreshSummaryStatus(repo, { summarizerAvailable });
+            refreshStatus(repo);
         } catch (err){
             if (!(err instanceof IndexLockedError)) throw err;
             log(`another index run holds the lock; trying again in ${timings.retryLockedMs / 1000} s`);
@@ -227,6 +236,11 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             log(`${paths.length} changed files keep their old summaries: ${MAX_AUTO_REFRESH_FILES} were refreshed in the last ${AUTO_REFRESH_WINDOW_MS / 60_000} minutes; they're redone when opened, or by ${commandHint("summarize", `"${repo}"`)}`);
             return;
         }
+        const models = settingNow();
+        if (!models.ok){
+            log(`summaries: ${paths.length} changed files keep their old summaries until the setting is fixed: ${models.error}`);
+            return;
+        }
 
         const wanted = new Set(paths.map((p) => targetKey("file", p)));
         // The content whose quiet minute is up: each file's input hash as this run first plans it. A file saved again
@@ -242,6 +256,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         try{
             const result = await runSummaries(repo, {
                 summarizer: deps.summarizer,
+                models,
                 transport: "direct",
                 refreshStaleFolders: false,
                 wait: false,
@@ -272,10 +287,16 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         const db = getDb();
         const repoId = findRepository(db, repoKey(repo));
         if (repoId === null || countStaleFolders(db, repoId) === 0) return;
+        const models = settingNow();
+        if (!models.ok){
+            log(`sweep: out-of-date folders wait until the setting is fixed: ${models.error}`);
+            return;
+        }
 
         try{
             const result = await runSummaries(repo, {
                 summarizer: deps.summarizer,
+                models,
                 transport: "direct",
                 refreshStaleFolders: true,
                 wait: false,
@@ -286,7 +307,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 onProgress: (message) => log(`sweep: ${message}`),
             });
             // the run planned with stale folders as work; between runs they read as lazy again (ADR-032)
-            refreshSummaryStatus(repo, { summarizerAvailable });
+            refreshStatus(repo, models);
             if (result.summarized > 0) queueEmbed();
         } catch (err){
             if (!(err instanceof IndexLockedError) && !(err instanceof StructureNotReadyError)) throw err;
@@ -366,7 +387,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 if (!(err instanceof IndexLockedError)) throw err;
                 log("another index run holds the lock; watching without the startup check");
             }
-            refreshSummaryStatus(repo, { summarizerAvailable });
+            refreshStatus(repo);
         });
         if (root !== repo) return;   // switched again meanwhile
 
@@ -399,7 +420,10 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             const repo = rootFor(expectedRoot);
             // the Map asks on opening a panel; on a repo nobody said yes for, that would spend unasked (S11)
             if (!mayRefresh(repo)) throw new SummariesNotConfirmedError(repo);
-            const row = await summarizeNow(repo, targetPath, deps.summarizer);
+            // read now, so a setting changed while the Map is open applies to this click (ADR-066)
+            const models = settingNow();
+            if (!models.ok) throw new SummaryModelsError(models.error);
+            const row = await summarizeNow(repo, targetPath, deps.summarizer, models);
             queueEmbed();
             return row;
         },
@@ -414,7 +438,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             return serial("structure", () => {
                 resolution = undefined;
                 const result = indexRepository(repo, { onProgress });
-                refreshSummaryStatus(repo, { summarizerAvailable });
+                refreshStatus(repo);
                 return result;
             });
         },

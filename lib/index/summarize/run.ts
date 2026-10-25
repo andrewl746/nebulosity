@@ -15,12 +15,13 @@ import { commandHint } from "../../hints";
 import { repoKey } from "../paths";
 import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
+import { DEFAULT_SUMMARY_MODELS, type ResolvedSummaryModels } from "./models";
 import type { PlannedTarget, TargetState } from "./plan";
 import { formatUsd } from "./pricing";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
 import { planSnapshot, type Snapshot } from "./snapshot";
 import { refreshSummaryStatus, stillAtAnthropic, summaryStageStatus } from "./status";
-import { BatchGoneError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
+import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
 
 /** auto: the Batch API for waves of BATCH_THRESHOLD requests or more, the regular API below that. */
 export type Transport = "auto" | "direct" | "batch";
@@ -28,6 +29,11 @@ export type Transport = "auto" | "direct" | "batch";
 export type SummaryRunOptions = {
     /** null without an API key: test-file templates are still written; everything else waits for a key. */
     summarizer: Summarizer | null;
+    /**
+     * The summary models and their prices, as resolved from the setting for this job (ADR-066): what the run plans,
+     * sends and prices with. Default: the built-in models at the table's prices. The CLI and the worker pass the setting.
+     */
+    models?: ResolvedSummaryModels;
     transport?: Transport;
     /**
      * false: never sleep. Batches that have already ended are collected (which may make a new wave ready, sent at
@@ -186,6 +192,8 @@ type RunContext = {
     db: Db;
     repoId: number;
     root: string;
+    /** What every pass plans, sends and prices with (SummaryRunOptions.models). */
+    models: ResolvedSummaryModels;
     failedThisRun: Set<string>;
     tally: Tally;
     /** Passes in a row in which no batch could be checked (MAX_MISSED_POLLS). */
@@ -203,20 +211,26 @@ type RunContext = {
      * is sent, but batches at Anthropic are still collected, and the run finishes with it when nothing more can happen.
      */
     overBudget: string | null;
+    /**
+     * Set by the first answer that says a model is gone (ADR-066). From then on nothing more is sent: every other request
+     * to that model would fail the same way. The run ends by throwing it, once what was already on its way is in.
+     */
+    unavailable: ModelUnavailableError | null;
     say: (message: string) => void;
 };
 
 function newContext(
-    db: Db, repoId: number, root: string, say: (message: string) => void, budget: Budget | null = null,
+    db: Db, repoId: number, root: string, models: ResolvedSummaryModels, say: (message: string) => void, budget: Budget | null = null,
     select: (target: PlannedTarget) => boolean = () => true, sendLeft: number = Infinity
 ): RunContext {
     return {
-        db, repoId, root, say, budget, select, sendLeft,
+        db, repoId, root, models, say, budget, select, sendLeft,
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPasses: 0,
         stopped: null,
         overBudget: null,
+        unavailable: null,
     };
 }
 
@@ -245,7 +259,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
         scope: options.budgetScope ?? "repo",
         baseline: options.budgetScope === "run" ? loadUsage(db, repoId) : [],
     };
-    const ctx = newContext(db, repoId, root, options.onProgress ?? (() => {}), budget, options.select, options.maxTargets);
+    const ctx = newContext(db, repoId, root, options.models ?? DEFAULT_SUMMARY_MODELS, options.onProgress ?? (() => {}), budget, options.select, options.maxTargets);
     let last: PlannedTarget[] = [];
 
     // a mistyped id must fail before anything is locked, released or rewritten
@@ -259,7 +273,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             ctx.say(`released ${batchId}: ${plural(released, "request")} will be sent again`);
         }
         for (;;){
-            const snap = planSnapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun);
+            const snap = planSnapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun, ctx.models);
             last = snap.targets;
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
@@ -334,11 +348,11 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
  * What a full run would send to a model right now (S11): every target still to be written, as the kind and model of its
  * request, planned the way runSummaries' first pass plans (stale folders redone). A template is no request. Reads only.
  */
-export function plannedRequests(repoRoot: string): ProjectedRequest[] {
+export function plannedRequests(repoRoot: string, models: ResolvedSummaryModels = DEFAULT_SUMMARY_MODELS): ProjectedRequest[] {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     const toWrite: ReadonlySet<TargetState> = new Set(["ready", "waiting", "lazy", "failed"]);
-    return planSnapshot(db, repoId, true, new Set()).targets
+    return planSnapshot(db, repoId, true, new Set(), models).targets
         .filter((t) => toWrite.has(t.state) && t.model !== "template")
         .map((t) => ({ kind: t.kind, model: t.model }));
 }
@@ -354,23 +368,26 @@ const summarizingNow = new Map<string, Promise<StoredSummary>>();
  * this when someone opens a path that has no summary, or an out-of-date one). A current summary comes back as it is,
  * without an API call. A folder whose children aren't all summarized is refused (TargetNotReadyError): its summary would
  * be written over "(no summary yet)" lines. Concurrent calls for one target share one request (ADR-033, amended).
+ * A model the API no longer serves throws ModelUnavailableError, leaving the row as it was (ADR-066).
  */
-export function summarizeNow(repoRoot: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
+export function summarizeNow(
+    repoRoot: string, targetPath: string, summarizer: Summarizer, models: ResolvedSummaryModels = DEFAULT_SUMMARY_MODELS
+): Promise<StoredSummary> {
     const root = path.resolve(repoRoot);
     const key = `${repoKey(root)}\0${targetPath}`;
     const running = summarizingNow.get(key);
     if (running) return running;
 
-    const started = summarizeOnce(root, targetPath, summarizer).finally(() => summarizingNow.delete(key));
+    const started = summarizeOnce(root, targetPath, summarizer, models).finally(() => summarizingNow.delete(key));
     summarizingNow.set(key, started);
     return started;
 }
 
-async function summarizeOnce(root: string, targetPath: string, summarizer: Summarizer): Promise<StoredSummary> {
+async function summarizeOnce(root: string, targetPath: string, summarizer: Summarizer, models: ResolvedSummaryModels): Promise<StoredSummary> {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     requireStructureReady(db, repoId);
-    const snap = planSnapshot(db, repoId, true, new Set());
+    const snap = planSnapshot(db, repoId, true, new Set(), models);
     const target = snap.targets.find((t) => t.path === targetPath);
     if (!target) throw new TargetNotFoundError(targetPath);
     if (target.state === "waiting") throw new TargetNotReadyError(targetPath);
@@ -378,15 +395,20 @@ async function summarizeOnce(root: string, targetPath: string, summarizer: Summa
     const ids = applyTargetUpdates(db, repoId, [target]);
 
     if (target.state !== "current" && target.state !== "template"){
-        const ctx = newContext(db, repoId, root, () => {});
+        const ctx = newContext(db, repoId, root, models, () => {});
         const built = buildRequest(ctx, snap, target, ids);
         const outcome = "failure" in built ? built.failure : await summarizer.summarize(built.request);
+        // the Map shows this message as the answer's error; the stored summary stays as it was (any tokens still count)
+        if (!outcome.ok && outcome.modelUnavailable){
+            ingest(ctx, [outcome], "direct", () => undefined);
+            throw new ModelUnavailableError(outcome.modelUnavailable.model, outcome.modelUnavailable.reason);
+        }
         const destinations = destinationsFor([target], ids);
         ingest(ctx, [outcome], "direct", (customId) => destinations.get(customId));
     }
 
     // this summary moved the stage's counts, and its folder may now be out of date (ADR-032, amended in V1.3)
-    refreshSummaryStatus(root, { summarizerAvailable: true });
+    refreshSummaryStatus(root, { summarizerAvailable: true, models: { ok: true, ...models } });
     return loadSummaries(db, repoId).find((s) => s.kind === target.kind && s.path === target.path)!;
 }
 
@@ -434,7 +456,9 @@ function buildRequest(ctx: RunContext, snap: Snapshot, target: PlannedTarget, id
         return { failure: { customId, ok: false, error: `${target.path} changed after it was indexed; run ${commandHint("index", "<path-to-repo>")} first`, model: null, usage: null } };
     }
 
-    return { request: { customId, model: target.model, system: SYSTEM_PROMPTS[target.kind], prompt } };
+    // a model the setting names goes without the Sonnet fallback beta (ADR-066, R3)
+    const customModel = ctx.models.custom[target.kind];
+    return { request: { customId, model: target.model, system: SYSTEM_PROMPTS[target.kind], prompt, ...(customModel ? { customModel } : {}) } };
 }
 
 function destinationsFor(targets: readonly PlannedTarget[], ids: ReadonlyMap<string, number>): Map<string, Destination> {
@@ -448,6 +472,8 @@ function destinationsFor(targets: readonly PlannedTarget[], ids: ReadonlyMap<str
  * The regular API, a few at a time; each answer is written as it arrives, so a crash loses at most the ones in flight.
  * A big wave (VS Code's files with --direct) runs for hours, so it heartbeats: without that, readers would call the
  * live run crashed after 5 minutes (ADR-032), and a second run could take its lock after 30 and pay twice.
+ * An answer saying a model is gone ends the wave (ADR-066): nothing more is sent, the answers already on their way are
+ * still written, and the run throws ModelUnavailableError. That answer's row is left as it was.
  */
 async function sendDirect(
     ctx: RunContext, summarizer: Summarizer, snap: Snapshot, ready: readonly PlannedTarget[], ids: ReadonlyMap<string, number>,
@@ -457,9 +483,15 @@ async function sendDirect(
     let answered = 0;
     let lastBeat: number | null = null;
 
-    const outcomes = await mapLimit(ready, concurrency, async (target) => {
+    const settled = await mapLimit(ready, concurrency, async (target): Promise<SummaryOutcome | null> => {
+        if (ctx.unavailable !== null) return null;   // never sent: every request to that model would fail the same way
         const built = buildRequest(ctx, snap, target, ids);
         const outcome = "failure" in built ? built.failure : await summarizer.summarize(built.request);
+        if (!outcome.ok && outcome.modelUnavailable){
+            ctx.unavailable ??= new ModelUnavailableError(outcome.modelUnavailable.model, outcome.modelUnavailable.reason);
+            ingest(ctx, [outcome], "direct", () => undefined);   // any tokens still count; the row isn't touched
+            return null;
+        }
         ingest(ctx, [outcome], "direct", (customId) => destinations.get(customId));
         answered++;
 
@@ -470,7 +502,9 @@ async function sendDirect(
         }
         return outcome;
     });
+    if (ctx.unavailable !== null) throw ctx.unavailable;
 
+    const outcomes = settled.filter((o): o is SummaryOutcome => o !== null);
     const errors = errorsOf(outcomes);
     ctx.say(`wave ${ctx.tally.waves} done: ${outcomes.length - errors.length} summarized, ${errors.length} failed`);
     checkFailures(ctx, errors, outcomes.length, "wave");
@@ -519,8 +553,9 @@ async function submitInBatches(ctx: RunContext, summarizer: Summarizer, snap: Sn
             // No batch id came back. Usually Anthropic refused the batch and nothing went out; if the reply was lost on
             // its way back, the batch exists but nothing here can name it (ADR-033). Either way no row can be tied to
             // it, so these rows stay pending, unclaimed and unfailed, and the next run sends them. The cause (an outage,
-            // a rejected key) would sink the next chunk too, and carrying on would only summarize folders over
-            // "(no summary yet)", so the run ends here.
+            // a rejected key, a model that's gone) would sink the next chunk too, and carrying on would only summarize
+            // folders over "(no summary yet)", so the run ends here. A model that's gone keeps its own message (ADR-066).
+            if (err instanceof ModelUnavailableError) throw err;
             throw new Error(`couldn't submit a batch: ${messageOf(err)}`, { cause: err });
         }
 
@@ -649,6 +684,17 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
 
     if (outcomes === null) return { kind: "processing" };
 
+    // A request that errored because its model is gone (ADR-066) is failed like any other: its batch has ended, and a row
+    // still claimed by it would bring every later run back to this batch, even after the setting is fixed. Its stored
+    // summary stays; its error says what to do. Then the run stops: nothing more is sent to a model that's gone.
+    let gone: ModelUnavailableError | null = null;
+    for (const [i, outcome] of outcomes.entries()){
+        if (outcome.ok || !outcome.modelUnavailable) continue;
+        const error = new ModelUnavailableError(outcome.modelUnavailable.model, outcome.modelUnavailable.reason);
+        gone ??= error;
+        outcomes[i] = { ...outcome, error: error.message };
+    }
+
     const destinations = new Map(loadBatchRows(ctx.db, batchId).map((r) => [`s${r.id}`, { ...r, batchId }]));
     ingest(ctx, outcomes, "batch", (customId) => destinations.get(customId));
 
@@ -660,6 +706,7 @@ async function pollBatch(ctx: RunContext, summarizer: Summarizer, batchId: strin
 
     const errors = [...errorsOf(outcomes), ...missing.map(() => "missing from the batch's results")];
     ctx.say(`collected ${batchId}: ${outcomes.length + missing.length - errors.length} summarized, ${errors.length} failed`);
+    if (gone !== null) throw gone;
     checkFailures(ctx, errors, outcomes.length + missing.length, "batch");
     return { kind: "collected" };
 }
@@ -705,6 +752,7 @@ function withinBudget(
         rest: [...ready.slice(end), ...inState(snap, "waiting").filter(ctx.select)]
             .slice(0, Math.max(0, ctx.sendLeft - (Math.min(end, ready.length) - start))),
         restTransport: ctx.budget.restTransport,
+        prices: ctx.models.prices,
     });
     const submission = transport === "batch" ? "batch" : "wave";
     const spentLabel = ctx.budget.scope === "run" ? "spent this run" : "spent";

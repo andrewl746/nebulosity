@@ -13,6 +13,7 @@ import { describeScanned, indexRepository, RepoNotFoundError } from "../../lib/i
 import { repoKey } from "../../lib/index/paths";
 import { IndexLockedError } from "../../lib/db/store/lock";
 import { readConfig, writeConfig } from "../../lib/config";
+import { configuredSummaryModels } from "../../lib/index/summarize/models";
 import { refreshSummaryStatus } from "../../lib/index/summarize/status";
 import { hasAnthropicKey, loadLocalEnv } from "../env";
 
@@ -67,8 +68,11 @@ export async function runIndex(args: readonly string[]): Promise<number> {
             console.log(`[index] ${describeScanned(result.scanned)} (first error: ${result.scanned[0].error})`);
         }
 
-        // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now
-        const summaries = refreshSummaryStatus(root, { summarizerAvailable: hasAnthropicKey() });
+        // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now, with the summary
+        // models setting, since every inputHash holds its model (ADR-066). A setting that can't be used leaves it as it was.
+        const models = configuredSummaryModels();
+        if (!models.ok) console.log(`[index] summaries: not re-derived until the setting is fixed: ${models.error}`);
+        const summaries = refreshSummaryStatus(root, { summarizerAvailable: hasAnthropicKey(), models });
         if (summaries){
             console.log(`[index] summaries: ${summaries.state} ${summaries.done}/${summaries.total}${summaries.note ? ` (${summaries.note})` : ""}`);
         }
