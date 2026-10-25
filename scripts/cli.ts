@@ -7,6 +7,7 @@
  *   nebulosity map --print-port               print the port the Map was last started on (the VS Code extension reads it)
  *   nebulosity mcp                            the MCP server Claude Code starts (stdio)
  *   nebulosity setup [--print]                register the server with Claude Code for the repo in this folder
+ *   nebulosity setup --json                   print the same registration as an mcpServers block, for other MCP clients
  *   nebulosity doctor                         check Node, the data folder, the database, git and claude
  */
 import { spawn, spawnSync, type SpawnSyncReturns, type StdioOptions } from "child_process";
@@ -28,6 +29,7 @@ const USAGE = [
     "  nebulosity map --print-port               print the port the Map was last started on",
     "  nebulosity mcp                            the MCP server Claude Code starts (stdio)",
     "  nebulosity setup [--print]                register the server with Claude Code for the repo in this folder",
+    "  nebulosity setup --json                   print the same registration as an mcpServers block, for other MCP clients",
     "  nebulosity doctor                         check Node, the data folder, the database, git and claude",
     "  nebulosity --version",
 ].join("\n");
@@ -66,15 +68,36 @@ export function addCommand(registration: Registration, platform: NodeJS.Platform
 }
 
 /**
- * How `setup` registers the MCP server for a repo (ADR-048's line, per repo with --scope local): node and the launcher,
- * written with forward slashes. A custom data folder (NEBULOSITY_DATA, absolute) goes with it, so the server Claude Code
- * starts reads the index this copy wrote, not the default folder's.
+ * The registration `setup` makes for a repo (ADR-048's line, per repo with --scope local): node and the launcher. A custom
+ * data folder (NEBULOSITY_DATA, absolute) goes with it, so the server a client starts reads the index this copy wrote, not
+ * the default folder's. On Windows the paths are written with forward slashes, which node, claude and JSON all take
+ * as they are; elsewhere a backslash is part of a file's name, so it stays. Both routes use it: `setup`'s claude mcp
+ * add line and `setup --json`'s block.
  */
+export function setupRegistration(launcher: string, platform: NodeJS.Platform = process.platform, dataFolder?: string): Registration {
+    const slashed = (p: string): string => (platform === "win32" ? p.replace(/\\/g, "/") : p);
+    return { scope: "local", command: "node", args: [slashed(launcher)], env: dataFolder === undefined ? {} : { NEBULOSITY_DATA: slashed(dataFolder) } };
+}
+
+/** How `setup` registers the MCP server with Claude Code: setupRegistration's registration as a claude mcp add line. */
 export function setupCommand(launcher: string, platform: NodeJS.Platform = process.platform, dataFolder?: string): ClaudeCommand {
-    const slashed = (p: string): string => p.replace(/\\/g, "/");
-    return addCommand({
-        scope: "local", command: "node", args: [slashed(launcher)], env: dataFolder === undefined ? {} : { NEBULOSITY_DATA: slashed(dataFolder) },
-    }, platform);
+    return addCommand(setupRegistration(launcher, platform, dataFolder), platform);
+}
+
+/**
+ * A registration as the plain `mcpServers` block that other MCP clients read, and that `claude mcp add-json` takes the
+ * inner object of (ADR-048, amended 2026-10-25): the server named nebulosity with its command and arguments, and `env`
+ * only when the registration has an environment. The scope is Claude Code's own and isn't in it. There's no "type"
+ * key: a client takes a server with a command for a stdio one. Two-space indent and a closing newline, so
+ * `nebulosity setup --json > file.json` writes a file as you'd write it by hand.
+ */
+export function mcpJson(registration: Registration): string {
+    const server = {
+        command: registration.command,
+        args: registration.args,
+        ...(Object.keys(registration.env).length > 0 ? { env: registration.env } : {}),
+    };
+    return `${JSON.stringify({ mcpServers: { nebulosity: server } }, null, 2)}\n`;
 }
 
 const SCOPES: Record<string, string> = { Local: "local", Project: "project", User: "user" };
@@ -235,11 +258,21 @@ function runClaude(command: ClaudeCommand, cwd: string, stdio: StdioOptions): Sp
  * alwaysLoad (R4). It only reads the index (ADR-044's read-only open) and writes no file in the repo (R5). It first reads
  * any registration Claude Code already has (`claude mcp get`, which changes nothing), so a different one is shown before
  * it is replaced, and can be restored if the new one fails.
+ *
+ * `nebulosity setup --json` (alone) prints the same registration as an mcpServers block on stdout and nothing else, for
+ * other MCP clients and for `claude mcp add-json`. It starts no command, reads no index and writes no file: the block is
+ * the same in every folder (a client that starts the server outside a repo gets the Map's repo, ADR-046).
  */
 export async function runSetup(args: readonly string[], cwd: string = process.cwd()): Promise<number> {
-    if (args.some((arg) => arg !== "--print")){
-        console.error("usage: nebulosity setup [--print]");
+    const json = args.length === 1 && args[0] === "--json";
+    if (!json && args.some((arg) => arg !== "--print")){
+        console.error("usage: nebulosity setup [--print | --json]");
         return 1;
+    }
+    const registration = setupRegistration(nebulosityPath("mcp", "launch.mjs"), process.platform, process.env.NEBULOSITY_DATA ? dataDir() : undefined);
+    if (json){
+        process.stdout.write(mcpJson(registration));
+        return 0;
     }
 
     const client = await import("../lib/db/client");
@@ -264,7 +297,8 @@ export async function runSetup(args: readonly string[], cwd: string = process.cw
     // --scope local files the registration under the folder claude runs in: the repo's root, wherever inside it setup ran
     const root = choice.root;
 
-    const add = setupCommand(nebulosityPath("mcp", "launch.mjs"), process.platform, process.env.NEBULOSITY_DATA ? dataDir() : undefined);
+    // setupCommand's line (addCommand over setupRegistration), from the registration --json prints
+    const add = addCommand(registration);
     const remove: ClaudeCommand = { ...add, args: ["mcp", "remove", "--scope", "local", "nebulosity"] };
     const got = runClaude({ ...add, args: ["mcp", "get", "nebulosity"] }, root, "pipe");
     const earlier = got.error || got.status !== 0 ? null : parseRegistration(String(got.stdout ?? ""));

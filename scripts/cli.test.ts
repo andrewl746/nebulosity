@@ -7,7 +7,7 @@ import { DatabaseMissingError, getDb, useReadOnlyDatabase } from "../lib/db/clie
 import { indexRepository } from "../lib/index/pipeline";
 import { copyFixture } from "../test/helpers/fixture";
 import { makeTempDir } from "../test/helpers/temp";
-import { main, parseCli, parseMapArgs, parseRegistration, runDoctor, runSetup, setupCommand, SNIPPET } from "./cli";
+import { addCommand, main, mcpJson, parseCli, parseMapArgs, parseRegistration, runDoctor, runSetup, setupCommand, setupRegistration, SNIPPET } from "./cli";
 
 // No test starts claude, git or npm (the plan's global constraints): the CLI's child processes are stubbed. Everything
 // else in child_process stays real (the indexer's own git calls only run in a folder with a .git, which no copy here has).
@@ -88,6 +88,89 @@ describe("setupCommand (Review Focus 5)", () => {
         expect(setupCommand("/pkg/mcp/launch.mjs", "linux", "/home/ann lee/neb-data").args).toEqual([
             "mcp", "add", "--scope", "local", "--transport", "stdio", "nebulosity", "-e", "NEBULOSITY_DATA=/home/ann lee/neb-data", "--", "node", "/pkg/mcp/launch.mjs",
         ]);
+    });
+});
+
+describe("setupRegistration (pre-ship pass, Task J)", () => {
+    it("is the registration setup's add line is built from: local scope, node and the launcher, the data folder only when given", () => {
+        expect(setupRegistration("/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs", "linux")).toEqual({
+            scope: "local", command: "node", args: ["/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs"], env: {},
+        });
+        expect(setupRegistration("C:\\Users\\Ann Lee\\pkg\\mcp\\launch.mjs", "win32", "C:\\Users\\Ann Lee\\neb-data")).toEqual({
+            scope: "local", command: "node", args: ["C:/Users/Ann Lee/pkg/mcp/launch.mjs"], env: { NEBULOSITY_DATA: "C:/Users/Ann Lee/neb-data" },
+        });
+        // claude mcp add's line for it is setupCommand's (the quoting is addCommand's, per platform)
+        expect(addCommand(setupRegistration("C:\\pkg\\mcp\\launch.mjs", "win32", "C:\\data"), "win32")).toEqual(setupCommand("C:\\pkg\\mcp\\launch.mjs", "win32", "C:\\data"));
+    });
+
+    it("turns backslashes into forward slashes only on Windows: elsewhere a backslash is a character of the file's name", () => {
+        expect(setupCommand("/srv/odd\\name/mcp/launch.mjs", "darwin").args.at(-1)).toBe("/srv/odd\\name/mcp/launch.mjs");
+        expect(setupRegistration("/srv/odd\\name/mcp/launch.mjs", "linux", "/srv/odd\\data")).toEqual({
+            scope: "local", command: "node", args: ["/srv/odd\\name/mcp/launch.mjs"], env: { NEBULOSITY_DATA: "/srv/odd\\data" },
+        });
+    });
+});
+
+describe("mcpJson (pre-ship pass, Task J; Review Focus 4)", () => {
+    /** The block's keys, level by level: exactly mcpServers > nebulosity > command, args (and env when given). */
+    function shape(text: string): string[][] {
+        const block = JSON.parse(text) as { mcpServers: { nebulosity: Record<string, unknown> } };
+        return [Object.keys(block), Object.keys(block.mcpServers), Object.keys(block.mcpServers.nebulosity)];
+    }
+
+    it("prints a POSIX launcher as an mcpServers block: two-space indent, a closing newline, no env and no type", () => {
+        const text = mcpJson(setupRegistration("/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs", "linux"));
+        expect(text).toBe([
+            "{",
+            '  "mcpServers": {',
+            '    "nebulosity": {',
+            '      "command": "node",',
+            '      "args": [',
+            '        "/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs"',
+            "      ]",
+            "    }",
+            "  }",
+            "}",
+            "",
+        ].join("\n"));
+        expect(shape(text)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args"]]);
+    });
+
+    it("adds env with a custom data folder, and only then", () => {
+        const text = mcpJson(setupRegistration("/pkg/mcp/launch.mjs", "linux", "/home/ann lee/neb-data"));
+        expect(text).toBe([
+            "{",
+            '  "mcpServers": {',
+            '    "nebulosity": {',
+            '      "command": "node",',
+            '      "args": [',
+            '        "/pkg/mcp/launch.mjs"',
+            "      ],",
+            '      "env": {',
+            '        "NEBULOSITY_DATA": "/home/ann lee/neb-data"',
+            "      }",
+            "    }",
+            "  }",
+            "}",
+            "",
+        ].join("\n"));
+        expect(shape(text)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args", "env"]]);
+    });
+
+    it("writes a Windows launcher and data folder with forward slashes, unquoted (JSON is no shell line), as valid JSON", () => {
+        const launcher = "C:\\Users\\Ann Lee\\AppData\\Roaming\\npm\\node_modules\\nebulosity\\mcp\\launch.mjs";
+        const bare = mcpJson(setupRegistration(launcher, "win32"));
+        expect(JSON.parse(bare)).toEqual({ mcpServers: { nebulosity: { command: "node", args: ["C:/Users/Ann Lee/AppData/Roaming/npm/node_modules/nebulosity/mcp/launch.mjs"] } } });
+        expect(shape(bare)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args"]]);
+        expect(bare).not.toContain("\\");
+
+        const withData = mcpJson(setupRegistration(launcher, "win32", "C:\\Users\\Ann Lee\\neb-data"));
+        expect(JSON.parse(withData)).toEqual({ mcpServers: { nebulosity: {
+            command: "node", args: ["C:/Users/Ann Lee/AppData/Roaming/npm/node_modules/nebulosity/mcp/launch.mjs"], env: { NEBULOSITY_DATA: "C:/Users/Ann Lee/neb-data" },
+        } } });
+        expect(shape(withData)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args", "env"]]);
+        expect(withData).not.toContain("\\");
+        expect(withData.endsWith("}\n")).toBe(true);
     });
 });
 
@@ -331,6 +414,58 @@ describe("runSetup (ADR-058: R4's registration, R5's snippet)", () => {
         expect(await runSetup(["--print"], repo)).toBe(0);
         expect(commandLines()).toEqual([GET]);
         expect(printed(logs)).toContain(`Run these in ${root}:\n  ${REMOVE}\n  ${ADD}`);
+    });
+
+    /** Everything written to stdout through process.stdout.write, and the spy (console.log goes to its own spy). */
+    function stdoutSpy(): { written: () => string; spy: { mock: { calls: unknown[][] } } } {
+        const spy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+        return { written: () => spy.mock.calls.map((call) => String(call[0])).join(""), spy };
+    }
+
+    it("with --json prints only the mcpServers block, starts no command, reads no index and writes no file (pre-ship pass, Task J)", async () => {
+        stubClaude(null);
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const out = stdoutSpy();
+        // a folder no indexed repo holds: the block names no repo, so it needs none
+        const folder = makeTempDir("neb-json-");
+
+        expect(await runSetup(["--json"], folder)).toBe(0);
+        expect(out.spy.mock.calls).toHaveLength(1);
+        expect(JSON.parse(out.written())).toEqual({ mcpServers: { nebulosity: { command: "node", args: [forward(launcher)] } } });
+        expect(out.written().endsWith("}\n")).toBe(true);
+        expect(logs).not.toHaveBeenCalled();
+        expect(errors).not.toHaveBeenCalled();
+        expect(spawnSync).not.toHaveBeenCalled();
+        expect(getDb).not.toHaveBeenCalled();
+        expect(fs.readdirSync(folder)).toEqual([]);
+    });
+
+    it("with --json carries a custom NEBULOSITY_DATA as env, the absolute path setup registers (pre-ship pass, Task J)", async () => {
+        const out = stdoutSpy();
+        process.env.NEBULOSITY_DATA = "neb-data-elsewhere";
+
+        expect(await runSetup(["--json"], makeTempDir("neb-json-data-"))).toBe(0);
+        expect(JSON.parse(out.written())).toEqual({ mcpServers: { nebulosity: {
+            command: "node", args: [forward(launcher)], env: { NEBULOSITY_DATA: forward(path.resolve("neb-data-elsewhere")) },
+        } } });
+        expect(spawnSync).not.toHaveBeenCalled();
+    });
+
+    it("refuses --json with --print or with anything else, in the usage line, and prints and starts nothing (pre-ship pass, Task J)", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const out = stdoutSpy();
+        const folder = makeTempDir("neb-json-usage-");
+
+        for (const args of [["--json", "--print"], ["--print", "--json"], ["--json", "--json"], ["--json", "x"]]){
+            errors.mockClear();
+            expect(await runSetup(args, folder)).toBe(1);
+            expect(printed(errors)).toBe("usage: nebulosity setup [--print | --json]");
+        }
+        expect(out.spy.mock.calls).toHaveLength(0);
+        expect(logs).not.toHaveBeenCalled();
+        expect(spawnSync).not.toHaveBeenCalled();
     });
 
     it("registers in the repo's root when run in a folder inside it, and says where sessions start (sweep B, item 15)", async () => {
