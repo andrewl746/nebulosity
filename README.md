@@ -154,7 +154,7 @@ npm run build    # builds the Map
 npm link         # puts the nebulosity command on your PATH
 ```
 
-`nebulosity doctor` checks Node, git, Claude Code and Nebulosity's data folder, and says what's missing.
+`nebulosity doctor` checks Node, git, Claude Code, Nebulosity's data folder and the [summary models](#summary-models), and says what's missing.
 
 ### Three commands
 
@@ -191,6 +191,24 @@ With an Anthropic API key, `nebulosity summarize .` writes a short summary of ev
 - **The key** goes in your environment as `ANTHROPIC_API_KEY`, or in a `.env.local` file in the data folder above (in a checkout, in the checkout's folder).
 
 A big first run goes through Anthropic's Batch API at half price, so it can take a while; `--no-wait` returns at once, and running the command again picks up where it left off.
+
+#### Summary models
+
+By default Haiku 5.5 (`claude-haiku-5-5`) summarizes files, and Sonnet 5.5 (`claude-sonnet-5-5`) summarizes folders and the repo. When Anthropic retires those, or you'd rather use others, set `summaryModels` in `config.json` in the data folder above (`.nebulosity/config.json` in a checkout). Any of `file`, `folder` and `repo`; a kind you leave out keeps its default:
+
+```json
+{
+  "summaryModels": {
+    "file": { "model": "claude-haiku-6", "inputPerMTok": 0.1, "outputPerMTok": 0.5 }
+  }
+}
+```
+
+- **Prices** are the model's list prices in US dollars per million input and output tokens, for the estimate and the spend cap. Nebulosity knows the two defaults' prices; for any other model both are required, and `nebulosity summarize` refuses to estimate or send anything without them. Prices you give win over the ones it knows.
+- **The model has to accept the same requests:** structured output (a JSON schema for the answer) and the effort setting. A model you set goes on the plain Messages API, without the server-side fallback the default Sonnet gets.
+- **Changing a model re-summarizes** everything that model writes, since the model is part of what makes a summary current. The command shows the estimate and asks first, as always; while the Map runs, it still redoes only the files you edit.
+- **It's read at each run,** so the Map picks up a change without a restart. Leave the file's other keys as they are: the Map keeps `activeRepo` and `port` there. `nebulosity doctor` shows the models in use, which are set, and what's wrong with a setting it can't use.
+- **When a model is retired,** the first answer that says so stops the run with one message naming the model and this file. Every summary already written is kept.
 
 ### The seven tools Claude Code gets
 
