@@ -10,6 +10,7 @@ import { requireRepository } from "../../db/store/structure";
 import { loadSummaries } from "../../db/store/summaries";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
+import { resolveSummaryModels } from "./models";
 import type { PlannedTarget, TargetState } from "./plan";
 import { runSummaries } from "./run";
 import { refreshSummaryStatus, summaryStageStatus } from "./status";
@@ -70,6 +71,28 @@ describe("refreshSummaryStatus", () => {
         const db = getDb();
         expect(loadSummaries(db, requireRepository(db, repoKey(root))).find((s) => s.path === "src/util/strings.test.ts"))
             .toMatchObject({ status: "skipped", tagline: "Tests for strings" });
+    });
+
+    // the pre-ship pass's final review, m3: a repo indexed for the first time had no stage, so the tools said "not
+    // written yet" and the panel "Summarizing…" where free mode's line belongs
+    it("without a key and with a setting it can't use, reads as free mode as with no setting, and writes no row", () => {
+        const broken = resolveSummaryModels({ file: { model: "claude-zeta-1" } }, "C:/data/config.json");
+        expect(broken.ok).toBe(false);
+        const root = copyFixture();
+        const { repoId } = indexRepository(root);
+        const db = getDb();
+
+        // the same stage as with no setting (the test above): 13 of mini-repo's 14 targets need a model, and none can have one
+        const freeMode = { state: "off", done: 1, total: 14, note: "ANTHROPIC_API_KEY is not set, so 13 of 14 summaries can't be written" };
+        expect(refreshSummaryStatus(root, { summarizerAvailable: false, models: broken })).toEqual(freeMode);
+        expect(readStages(db, repoId).summaries).toMatchObject(freeMode);
+        // ADR-066's rule holds: nothing is planned into the rows (the test template included) until the setting is fixed
+        expect(loadSummaries(db, repoId)).toEqual([]);
+
+        // with a key, the stage is left as it was, as before
+        writeStage(db, repoId, "summaries", { state: "idle", done: 0, total: 0 });
+        expect(refreshSummaryStatus(root, { summarizerAvailable: true, models: broken })).toBeNull();
+        expect(readStages(db, repoId).summaries).toMatchObject({ state: "idle", done: 0, total: 0 });
     });
 
     it("leaves the stage row to a summary run that holds the lock, but still updates the summary rows", async () => {

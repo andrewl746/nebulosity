@@ -69,10 +69,16 @@ export async function runIndex(args: readonly string[]): Promise<number> {
         }
 
         // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now, with the summary
-        // models setting, since every inputHash holds its model (ADR-066). A setting that can't be used leaves it as it was.
+        // models setting, since every inputHash holds its model (ADR-066). A setting that can't be used leaves the rows as
+        // they were, and the stage too with a key; without one the stage still reads as free mode (refreshSummaryStatus).
         const models = configuredSummaryModels();
-        if (!models.ok) console.log(`[index] summaries: not re-derived until the setting is fixed: ${models.error}`);
-        const summaries = refreshSummaryStatus(root, { summarizerAvailable: hasAnthropicKey(), models });
+        const key = hasAnthropicKey();
+        if (!models.ok){
+            console.log(key
+                ? `[index] summaries: not re-derived until the setting is fixed: ${models.error}`
+                : `[index] summaries: summarize refuses the summary models setting until it's fixed: ${models.error}`);
+        }
+        const summaries = refreshSummaryStatus(root, { summarizerAvailable: key, models });
         if (summaries){
             console.log(`[index] summaries: ${summaries.state} ${summaries.done}/${summaries.total}${summaries.note ? ` (${summaries.note})` : ""}`);
         }

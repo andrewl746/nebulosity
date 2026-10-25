@@ -76,19 +76,23 @@ export function summaryStageStatus(targets: readonly PlannedTarget[], context: S
  * A failed run's note is kept until its targets stop waiting.
  *
  * `models` is the summary models setting as the caller resolved it for this job (ADR-066; the defaults when left out).
- * When it can't be used, nothing is planned or written and this returns null: every inputHash holds its model, so a
- * plan with any other models would mark the rows of the set ones stale. The first refresh after the fix catches up.
+ * When it can't be used, no row is planned or written: every inputHash holds its model, so a plan with any other models
+ * would mark the rows of the set ones stale. The first refresh after the fix catches up. Then:
+ * - with a key, the stage is left as it was too, and this returns null;
+ * - without one (free mode, which sends nothing either way), the stage is written as it reads with no setting, from a
+ *   plan with the defaults that touches no row (the pre-ship pass's final review, m3). Otherwise a repo indexed for the
+ *   first time has no summaries stage, and the tools and the panel treat its summaries as pending, not off.
  */
 export function refreshSummaryStatus(
     repoRoot: string, options: { summarizerAvailable: boolean; models?: SummaryModelsResolution }
 ): StageStatus | null {
     const models = options.models ?? { ok: true, ...DEFAULT_SUMMARY_MODELS };
-    if (!models.ok) return null;
+    if (!models.ok && options.summarizerAvailable) return null;
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     // between runs, out-of-date folders are lazy: redone when opened, or by the background worker's sweep
-    const snap = planSnapshot(db, repoId, false, new Set(), models);
-    applyTargetUpdates(db, repoId, snap.targets);
+    const snap = planSnapshot(db, repoId, false, new Set(), models.ok ? models : DEFAULT_SUMMARY_MODELS);
+    if (models.ok) applyTargetUpdates(db, repoId, snap.targets);
     if (isSummaryLockHeld(db)) return null;
 
     let status = summaryStageStatus(snap.targets, { summarizerAvailable: options.summarizerAvailable, inFlight: countInFlight(db, repoId) });
