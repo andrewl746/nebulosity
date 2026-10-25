@@ -594,4 +594,33 @@ describe("runDoctor", () => {
         expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "FAIL"]);
         expect(printed(logs)).toContain("summaryModels.file.inputPerMTok");
     });
+
+    // the pre-ship pass's final review, A-I2 (R25): a hand edit's trailing comma used to read as "the defaults", OK
+    it("fails on a config.json it can't read, naming the file and the parse error, instead of reporting the defaults", async () => {
+        const home = freshInstall();
+        const file = path.join(home, "data", "config.json");
+        fs.mkdirSync(path.join(home, "data"), { recursive: true });
+        fs.writeFileSync(file, '{\n  "summaryModels": { "file": { "model": "claude-haiku-6", "inputPerMTok": 0.1, "outputPerMTok": 0.5 } },\n}\n');
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(1);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "FAIL"]);
+        expect(printed(logs)).toContain(`FAIL summary models: The summary models can't be read: ${file} isn't valid JSON (`);
+        expect(printed(logs)).not.toContain("the defaults");
+    });
+
+    it("lists each config.json moved aside, as a WARN after the summary models", async () => {
+        const home = freshInstall();
+        const data = path.join(home, "data");
+        fs.mkdirSync(data, { recursive: true });
+        const aside = path.join(data, "config.json.invalid-2026-10-25T13-50-12-345Z");
+        fs.writeFileSync(aside, '{ "port": 4000, }');
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(0);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "OK", "WARN"]);
+        expect(printed(logs)).toContain(`WARN ${aside} is a config.json that couldn't be read, moved aside when the settings were written again: copy what you need from it into ${path.join(data, "config.json")}, then delete it`);
+    });
 });

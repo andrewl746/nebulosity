@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { resolveSummaryModels } from "./models";
+import fs from "fs";
+import path from "path";
+import { isolateDataFolder } from "../../../test/helpers/data-folder";
+import { configuredSummaryModels, describeSummaryModels, resolveSummaryModels } from "./models";
+
+const dataFolder = isolateDataFolder();
+
+// the pre-ship pass's final review, A-I2 (R25): the README has people edit config.json by hand
+describe("configuredSummaryModels", () => {
+    const setting = { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } };
+
+    it("can't use a config.json that's there but isn't one JSON object: it names the file and the parse error", () => {
+        const file = path.join(dataFolder(), "config.json");
+        fs.writeFileSync(file, `{\n  "summaryModels": ${JSON.stringify(setting)},\n}\n`);   // a trailing comma
+
+        const resolved = configuredSummaryModels();
+        expect(resolved.ok).toBe(false);
+        const error = resolved.ok ? "" : resolved.error;
+        expect(error.startsWith(`The summary models can't be read: ${file} isn't valid JSON (`)).toBe(true);
+        expect(error.endsWith(`). Fix the file so it holds one JSON object (see the README's "Summary models"); summaries wait until then.`)).toBe(true);
+    });
+
+    it("reads the setting through a leading UTF-8 byte-order mark, and the defaults with no file at all", () => {
+        expect(configuredSummaryModels()).toMatchObject({ ok: true, custom: { file: false, folder: false, repo: false } });
+
+        fs.writeFileSync(path.join(dataFolder(), "config.json"), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(JSON.stringify({ summaryModels: setting }))]));
+        const resolved = configuredSummaryModels();
+        expect(resolved.ok).toBe(true);
+        if (resolved.ok) expect(describeSummaryModels(resolved, "C:/data/config.json")).toBe("files claude-haiku-6 (set in C:/data/config.json), folders claude-sonnet-5-5, the repo claude-sonnet-5-5");
+    });
+});
 
 // The expectations are the plan's decisions (Task M) and pricing.ts's table, read by hand: Haiku 5.5 at $0.10 / $0.50
 // per million tokens, Sonnet 5.5 at $2 / $10, and a longer id takes its family's price.

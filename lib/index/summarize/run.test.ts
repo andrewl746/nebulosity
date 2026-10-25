@@ -729,6 +729,25 @@ describe("runSummaries — the spend cap", () => {
         });
     });
 
+    // R24 (the final review's A-I1): the folders above the files plan as current until the files are rewritten
+    it("projects the folders and the repo a file model change puts out of date before the files go: a budget they don't fit sends nothing", async () => {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        const stub = stubSummarizer();
+        const models = setModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } });
+
+        // Spent: 7 Haiku 5.5 files at (100 × $0.10 + 20 × $0.50) / 1M = $0.00002, and 6 Sonnet 5.5 folders and the repo at
+        // (100 × $2 + 20 × $10) / 1M = $0.0004: $0.00254. This wave, the 7 files to Haiku 6, which has no usage yet:
+        // 7 × (4,600 × $0.10 + 260 × $0.50) / 1M = $0.00413. The rest, the 5 folders and the repo above them, at Sonnet
+        // 5.5's recorded mean through the regular API: 6 × $0.0004 = $0.0024. $0.00907 is over $0.008. (Without the folders,
+        // $0.00667 fitted: the files went, and then the folders, at Sonnet prices the estimate never showed.)
+        expect(await runSummaries(root, { summarizer: stub.summarizer, models, transport: "direct", budgetUsd: 0.008 }))
+            .toMatchObject({ summarized: 0, failed: 0, waves: 0, stopped: true });
+        expect(stub.requests).toHaveLength(0);
+        expect(readIndexStatus(root)?.stages.summaries?.note).toBe("stopped: the next wave would bring the projected spend to $0.0091, over the $0.0080 budget"
+            + " (spent $0.0025, at Anthropic ≈ $0.0000, this wave ≈ $0.0041, the rest ≈ $0.0024); run again with --budget <usd> to go on");
+    });
+
     it("stops rather than spends when the budget isn't a number", async () => {
         const root = indexedFixture();
         const stub = stubSummarizer();
@@ -998,7 +1017,33 @@ describe("plannedRequests", () => {
         expect(requests.filter((r) => r.kind === "file")).toEqual(Array.from({ length: 7 }, () => ({ kind: "file", model: "claude-haiku-6" })));
         expect(requests.filter((r) => r.kind !== "file").every((r) => r.model === "claude-sonnet-5-5")).toBe(true);
     });
+
+    // R24 (the final review's A-I1): a folder's prompt holds its children's stored text, so it plans as current until they're
+    // rewritten, and then the run redoes it. The estimate has to show those requests before the yes.
+    it("after a file model change, counts the folders and the repo the new file summaries put out of date", async () => {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        // every file is due for the new model; mini-repo's 7 non-test files sit under all 5 folders, and the repo
+        const requests = plannedRequests(root, setModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } }));
+        expect(tally(requests)).toEqual({ "file claude-haiku-6": 7, "folder claude-sonnet-5-5": 5, "repo claude-sonnet-5-5": 1 });
+    });
+
+    it("after an edit, counts the edited file and every folder above it up to the repo, and no other", async () => {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+        // src/core/log.ts sits in src/core, in src, in the repo; scripts, src/app and src/util don't change
+        expect(tally(plannedRequests(root))).toEqual({ "file claude-haiku-5-5": 1, "folder claude-sonnet-5-5": 2, "repo claude-sonnet-5-5": 1 });
+    });
 });
+
+/** Requests by "<kind> <model>", for comparing what's planned without its order. */
+function tally(requests: readonly { kind: string; model: string }[]): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const r of requests) counts[`${r.kind} ${r.model}`] = (counts[`${r.kind} ${r.model}`] ?? 0) + 1;
+    return counts;
+}
 
 /** The resolved setting for `setting`, which must be one resolveSummaryModels accepts. */
 function setModels(setting: unknown){

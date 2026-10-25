@@ -316,11 +316,34 @@ export function countStaleFolders(db: Db, repoId: number): number {
 /** The `meta` key holding the time a person said yes to this repo's summary spend (S11). */
 const confirmedKey = (repoId: number): string => `summaries-confirmed:${repoId}`;
 
-/** Records a yes to spending on this repo's summaries (S11): from now on the background worker may refresh them. */
-export function confirmSummaries(db: Db, repoId: number): void {
-    const value = new Date().toISOString();
-    db.insert(meta).values({ key: confirmedKey(repoId), value })
-        .onConflictDoUpdate({ target: meta.key, set: { value } }).run();
+/** The `meta` key holding the budget, in US dollars, of the last run a person said yes to on this repo (R24). */
+const approvedBudgetKey = (repoId: number): string => `summaries-budget:${repoId}`;
+
+/**
+ * Records a yes to spending on this repo's summaries (S11), up to `budgetUsd` for everything the repo has spent on them:
+ * from now on the background worker may refresh them, and its jobs stop at that budget (R24). Each yes replaces the last.
+ */
+export function confirmSummaries(db: Db, repoId: number, budgetUsd: number): void {
+    const entries = [
+        { key: confirmedKey(repoId), value: new Date().toISOString() },
+        { key: approvedBudgetKey(repoId), value: String(budgetUsd) },
+    ];
+    db.transaction((tx) => {
+        for (const entry of entries){
+            tx.insert(meta).values(entry).onConflictDoUpdate({ target: meta.key, set: { value: entry.value } }).run();
+        }
+    });
+}
+
+/**
+ * The budget of the last run a person said yes to on this repo (confirmSummaries), or null when none was recorded: a yes
+ * from before budgets were kept, or summaries a model wrote before the question existed. The worker then uses the CLI's
+ * default (R24).
+ */
+export function approvedBudgetUsd(db: Db, repoId: number): number | null {
+    const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, approvedBudgetKey(repoId))).get();
+    const usd = row === undefined ? NaN : Number(row.value);
+    return Number.isFinite(usd) && usd > 0 ? usd : null;
 }
 
 /**

@@ -13,7 +13,7 @@
 import { spawn, spawnSync, type SpawnSyncReturns, type StdioOptions } from "child_process";
 import fs from "fs";
 import { createRequire } from "module";
-import { DEFAULT_PORT, readConfig, writeConfig } from "../lib/config";
+import { configPath, DEFAULT_PORT, movedAsideConfigs, readConfig, writeConfig } from "../lib/config";
 import { dataDir, dataPath, nebulosityHome, nebulosityPath } from "../lib/home";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
@@ -356,7 +356,8 @@ function claudeVersion(): SpawnSyncReturns<string> {
 
 /**
  * `nebulosity doctor`: one line per check, in order: Node, the data folder, the database, the Map, git, claude, the key,
- * the summary models. Returns 1 when any check FAILs; a WARN (no built Map, no claude, no key) leaves the rest working.
+ * the summary models, then a WARN for each config.json moved aside (R25). Returns 1 when any check FAILs; a WARN (no
+ * built Map, no claude, no key, a moved-aside file) leaves the rest working.
  */
 export async function runDoctor(): Promise<number> {
     const checks: Check[] = [];
@@ -416,6 +417,11 @@ export async function runDoctor(): Promise<number> {
     checks.push(models.ok
         ? { level: "OK", text: `summary models: ${describeSummaryModels(models)}` }
         : { level: "FAIL", text: `summary models: ${models.error}` });
+
+    // a config.json that couldn't be read is moved aside when the settings are written again (R25): a hand edit may wait in it
+    for (const aside of movedAsideConfigs()){
+        checks.push({ level: "WARN", text: `${aside} is a config.json that couldn't be read, moved aside when the settings were written again: copy what you need from it into ${configPath()}, then delete it` });
+    }
 
     for (const check of checks) console.log(`${check.level.padEnd(5)}${check.text}`);
     return checks.some((check) => check.level === "FAIL") ? 1 : 0;

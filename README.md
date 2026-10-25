@@ -188,7 +188,7 @@ Where a summary would go, Nebulosity says summaries are off and what a key would
 With an Anthropic API key, `nebulosity summarize .` writes a short summary of every file and folder. Summaries make the Map's panels, `overview` and `describe` read like a guide, and let search match by meaning, not only by words.
 - **Your code goes to Anthropic:** each file's code is sent to write its summary.
 - **It costs about $1 per 1,000 files, or a little less:** $10.30 for VS Code, $6.02 for AFFiNE.
-- **It asks first:** the command prints its estimate and spends nothing until you say yes (`--yes` for scripts). A repo's spend is capped at $15 unless you raise it with `--budget`.
+- **It asks first:** the command prints its estimate and spends nothing until you say yes (`--yes` for scripts). A repo's spend is capped at $15 unless you raise it with `--budget`. The cap counts everything the repo has ever spent on summaries, not one run, and the Map's automatic refreshes stop at the budget of your last yes too.
 - **The key** goes in your environment as `ANTHROPIC_API_KEY`, or in a `.env.local` file in the data folder above (in a checkout, in the checkout's folder).
 
 A big first run goes through Anthropic's Batch API at half price, so it can take a while; `--no-wait` returns at once, and running the command again picks up where it left off.
@@ -207,10 +207,14 @@ By default Haiku 5.5 (`claude-haiku-5-5`) summarizes files, and Sonnet 5.5 (`cla
 
 - **Prices** are the model's list prices in US dollars per million input and output tokens, for the estimate and the spend cap. Nebulosity knows the two defaults' prices; for any other model both are required, and `nebulosity summarize` refuses to estimate or send anything without them. Prices you give win over the ones it knows.
 - **The model has to accept the same requests:** structured output (a JSON schema for the answer) and the effort setting. A model you set goes on the plain Messages API, without the server-side fallback the default Sonnet gets.
-- **Changing a model re-summarizes** everything that model writes, since the model is part of what makes a summary current. `nebulosity summarize` shows the estimate and asks first, as always. The Map never pays for the change on its own: while it runs, it redoes by itself only summaries the new model has already written, when what they describe changes. The rest show as out of date until you run `nebulosity summarize`, or open them on the Map.
+- **Changing a model re-summarizes** everything that model writes, since the model is part of what makes a summary current, and then every folder above what it rewrote, since a folder's summary is written from its contents' (a new file model redoes every folder and the repo). `nebulosity summarize` shows the estimate, all of that included, and asks first, as always.
+  - **The $15 cap is per repo and cumulative**, so on a repo that has already spent more than about half of it (VS Code's first pass was $10.30), re-summarizing stops at the cap before it sends anything. Run it again with a higher budget, such as `--budget 25`.
+  - **The Map never pays for the change on its own.** While it runs, it redoes by itself only summaries the new model has already written, when what they describe changes, and never past the budget of your last yes. The rest show as out of date until you run `nebulosity summarize`, or open them on the Map.
 - **It's read at each run,** so the Map picks up a change without a restart. Leave the file's other keys as they are: the Map keeps `activeRepo` and `port` there. `nebulosity doctor` shows the models in use, which are set, and what's wrong with a setting it can't use.
-- **A setting that can't be used stops summaries until it's fixed,** even without a key. `nebulosity summarize` refuses it, and writes no test templates, and the summaries' status isn't updated after `nebulosity index` or a save. The index, search, the Map and the tools work as usual.
+- **The file has to be one JSON object.** A byte-order mark or UTF-16, as Windows PowerShell and Notepad save it, is fine. A mistake such as a trailing comma makes it a setting that can't be used (below): `nebulosity doctor` fails, naming the file and where the JSON breaks. Nebulosity never writes over such a file: the next time it saves its own settings (`nebulosity index`, a repo picked on the Map), it first moves yours to `config.json.invalid-<time>` beside it and says so, and doctor lists it until you delete it.
+- **A setting that can't be used stops summaries until it's fixed,** even without a key. `nebulosity summarize` refuses it and writes no test templates, and with a key the summaries' status isn't updated after `nebulosity index` or a save. The index, search, the Map and the tools work as usual, and without a key they say summaries are off, as in free mode.
 - **When a model is retired** (or your key can't use it), the first answer that says so stops the run with one message naming the model and this file. Every summary already written is kept. Choose another model, and the next run picks up where it stopped.
+- **If the default Sonnet's fallback is ever refused.** Folder and repo requests at the defaults carry Anthropic's `server-side-fallback-2026-07-01` beta. If every folder request starts failing over that beta, set `claude-sonnet-5-5` itself for `folder` and `repo`: a model you name goes on the plain Messages API, without the beta, at the price Nebulosity already knows.
 
 ### The seven tools Claude Code gets
 
@@ -360,10 +364,9 @@ Measured on VS Code (20,342 files, 14,849 of them indexed before E4, 15,040 sinc
   - free mode with no API key, and summaries as the paid upgrade;
   - TypeScript and JavaScript, plus Python, Go, Java, C# and Rust ([Languages](#languages)).
 - **What was measured:** three evals against Claude Code on its own, given above along with what didn't improve ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)).
-- **Tested with:**
-  - Node 24.14 and Claude Code 2.1.310 (it needs 2.1.300 or later);
-  - VS Code 1.143.1, and 1.105.0, the extension's oldest supported version;
-  - Windows 11 locally, and Windows, macOS and Linux in CI.
+- **Tested with** (Claude Code 2.1.300 or later is needed):
+  - locally, on Windows 11: Node 24.14, Claude Code 2.1.310, and VS Code 1.143.1 and 1.105.0, the extension's oldest supported version;
+  - in CI, on Windows, macOS and Linux: Node 24.21 and 24.22 (the newest 24 each runner had), Claude Code 2.1.300, and the extension's tests in VS Code's stable release of the day.
 
   If a later version breaks something, these are the ones that worked.
 - **If something it depends on changes:**
