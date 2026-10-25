@@ -300,6 +300,7 @@ export function toFileRecord(
         lineCount: parsed.lineCount,
         isTest: isTestPath(filePath),
         importSpecifiers: parsed.imports,
+        declares: [],
         chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
         symbols: parsed.symbols,
         calls: parsed.calls,

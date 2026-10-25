@@ -31,13 +31,15 @@ export type FileRecord = {
     lineCount: number;
     isTest: boolean;
     importSpecifiers: string[];
+    /** What other files' resolution reads from this one, sorted (ADR-065); [] for TypeScript. */
+    declares: string[];
     chunks: ChunkRecord[];
     symbols: SymbolRow[];
     /** Call facts (ADR-059). */
     calls: CallFacts;
 };
 
-export type StoredFile = { id: number; contentHash: string; importSpecifiers: string[] };
+export type StoredFile = { id: number; contentHash: string; importSpecifiers: string[]; declares: string[] };
 
 export function upsertRepository(db: Db, rootPath: string): number {
     return db.insert(repositories)
@@ -70,7 +72,7 @@ export function requireRepository(db: Db, rootPath: string): number {
 /** path → what the last successful run stored. */
 export function loadStoredFiles(db: Db, repoId: number): Map<string, StoredFile> {
     const rows = db
-        .select({ id: files.id, path: files.path, contentHash: files.contentHash, importSpecifiers: files.importSpecifiers })
+        .select({ id: files.id, path: files.path, contentHash: files.contentHash, importSpecifiers: files.importSpecifiers, declares: files.declares })
         .from(files)
         .where(eq(files.repoId, repoId))
         .all();
@@ -79,6 +81,7 @@ export function loadStoredFiles(db: Db, repoId: number): Map<string, StoredFile>
         id: r.id,
         contentHash: r.contentHash,
         importSpecifiers: JSON.parse(r.importSpecifiers) as string[],
+        declares: JSON.parse(r.declares) as string[],
     }]));
 }
 
@@ -117,6 +120,7 @@ function writeOne(tx: Tx, repoId: number, r: FileRecord): void {
         lineCount: r.lineCount,
         isTest: r.isTest,
         importSpecifiers: JSON.stringify(r.importSpecifiers),
+        declares: JSON.stringify(r.declares),
     };
 
     const { id: fileId } = tx.insert(files)

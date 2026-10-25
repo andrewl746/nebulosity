@@ -294,7 +294,7 @@ describe("indexRepository — code search deferred for a bulk run (ADR-031, amen
         deferCodeSearch(db);   // a bulk run began…
         writeFileRecords(db, crashed, [{
             path: "crashed.ts", kind: "module", contentHash: "h", language: "typescript", sizeBytes: 10, lineCount: 1, isTest: false,
-            importSpecifiers: [], symbols: [], calls: { types: [], bindings: [], calls: [] },
+            importSpecifiers: [], declares: [], symbols: [], calls: { types: [], bindings: [], calls: [] },
             chunks: [{ id: "crashed.ts#a#0", filePath: "crashed.ts", kind: "function", name: "a", nameSplit: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: "h" }],
         }]);                  // …wrote its chunks, and died before filling
         expect(searchCode(db, crashed, '"crashed"', 10)).toEqual([]);

@@ -15,18 +15,23 @@ export function readIndexVersion(db: Db, repoId: number): number {
     return row ? Number(row.value) : 0;
 }
 
-const adapterKey = (repoId: number): string => `adapterVersion:${repoId}`;
+/**
+ * One version per language adapter (ADR-065, the design's C16): TypeScript keeps the key it always had, so no existing
+ * index re-parses; every other adapter has its own, so bumping one language re-parses only that language's files.
+ */
+const adapterKey = (repoId: number, adapterId: string): string =>
+    adapterId === "typescript" ? `adapterVersion:${repoId}` : `adapterVersion:${repoId}:${adapterId}`;
 
-/** The language adapter's version (ADAPTER_VERSION) the repo's last full run parsed its files with; 0 when none recorded one (ADR-053). */
-export function readAdapterVersion(db: Db, repoId: number): number {
-    const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, adapterKey(repoId))).get();
+/** The adapter's version (its `version`) the repo's last full run parsed its files with; 0 when none recorded one (ADR-053). */
+export function readAdapterVersion(db: Db, repoId: number, adapterId = "typescript"): number {
+    const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, adapterKey(repoId, adapterId))).get();
     return row ? Number(row.value) : 0;
 }
 
-export function writeAdapterVersion(db: Db, repoId: number, version: number): void {
+export function writeAdapterVersion(db: Db, repoId: number, version: number, adapterId = "typescript"): void {
     const updatedAt = new Date();
     db.insert(meta)
-        .values({ key: adapterKey(repoId), value: String(version), updatedAt })
+        .values({ key: adapterKey(repoId, adapterId), value: String(version), updatedAt })
         .onConflictDoUpdate({ target: meta.key, set: { value: String(version), updatedAt } })
         .run();
 }
@@ -34,16 +39,17 @@ export function writeAdapterVersion(db: Db, repoId: number, version: number): vo
 /**
  * Records the adapter version a full run parsed with (ADR-053, amended) and, in the same transaction, clears the content
  * hash of the files it couldn't parse again. Their rows are an older adapter's; a cleared hash ("" = not yet processed,
- * ADR-022) makes the next full run parse those files, and only those, with this one.
+ * ADR-022) makes the next full run parse those files, and only those, with this one. Each adapter records its own, with
+ * its own files' unparsed list.
  */
-export function recordAdapterVersion(db: Db, repoId: number, version: number, unparsed: readonly string[]): void {
+export function recordAdapterVersion(db: Db, repoId: number, version: number, unparsed: readonly string[], adapterId = "typescript"): void {
     db.transaction((tx) => {
         for (const batch of chunkRows(unparsed, 1, SQLITE_MAX_PARAMS - 1)){
             tx.update(files).set({ contentHash: "" }).where(and(eq(files.repoId, repoId), inArray(files.path, batch))).run();
         }
         const updatedAt = new Date();
         tx.insert(meta)
-            .values({ key: adapterKey(repoId), value: String(version), updatedAt })
+            .values({ key: adapterKey(repoId, adapterId), value: String(version), updatedAt })
             .onConflictDoUpdate({ target: meta.key, set: { value: String(version), updatedAt } })
             .run();
     });

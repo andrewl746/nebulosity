@@ -27,7 +27,9 @@ const sha256 = (text: string): string => createHash("sha256").update(text).diges
 const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const line = (section: DumpSection, fields: readonly (string | number | boolean)[]): string => [section, ...fields.map(String)].join("\t");
 
-type FileRow = { id: number; path: string; language: string; is_test: number; line_count: number; content_hash: string; import_specifiers: string };
+type FileRow = {
+    id: number; path: string; language: string; is_test: number; line_count: number; content_hash: string; import_specifiers: string; declares: string;
+};
 
 /**
  * The repo's index as dump lines, each section sorted in plain code-unit order. Rows are read with raw statements and
@@ -40,14 +42,15 @@ export function dumpIndex(db: Db, repoId: number, options: { languages?: readonl
     const dump: Dump = { file: [], edge: [], symbol: [], chunk: [], entry: [] };
 
     const fileRows = sqlite.prepare(
-        "select id, path, language, is_test, line_count, content_hash, import_specifiers from files where repo_id = ?"
+        "select id, path, language, is_test, line_count, content_hash, import_specifiers, declares from files where repo_id = ?"
     ).iterate(repoId) as IterableIterator<FileRow>;
     for (const f of fileRows){
         if (wanted !== null && !wanted.has(f.language)) continue;
         kept.set(f.id, f.path);
         const specifiers = JSON.stringify(JSON.parse(f.import_specifiers) as string[]);
-        // the files.declares column arrives with migration 0010 (Task F6); until then every file declares nothing
-        dump.file.push(line("file", [f.path, f.language, f.is_test === 1, f.line_count, f.content_hash, specifiers, "[]"]));
+        // files.declares (migration 0010, ADR-065); the F1 dumps, made before the column existed, printed [] here
+        const declares = JSON.stringify(JSON.parse(f.declares) as string[]);
+        dump.file.push(line("file", [f.path, f.language, f.is_test === 1, f.line_count, f.content_hash, specifiers, declares]));
     }
 
     const edgeRows = sqlite.prepare(
