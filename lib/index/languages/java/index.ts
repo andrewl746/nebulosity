@@ -1,15 +1,13 @@
 import type { LanguageAdapter } from "../adapter";
+import { parseJava } from "./parse";
+import { createJavaResolver } from "./resolve";
 import { javaRules } from "./rules";
 
-/** A stub (Task F of the E4 plan): its grammar loads, but it claims no file until this language's task builds it. */
+/** Java's adapter (ADR-065, the E4 plan's Task J): its rules (rules.ts), its parse (parse.ts) and its resolver (resolve.ts). */
 export const javaAdapter: LanguageAdapter = {
     ...javaRules,
-    version: 0,
+    version: 1,
     grammar: "tree-sitter-java.wasm",
-    parse(){
-        throw new Error("java adapter not built yet");
-    },
-    createResolver(){
-        throw new Error("java adapter not built yet");
-    },
+    parse: parseJava,
+    createResolver: createJavaResolver,
 };
