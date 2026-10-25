@@ -17,7 +17,7 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *
  * How the plan's rules were read where it is silent (each a choice, recorded in progress-csharp.md):
  * 1. Source order: each specifier sits where its name starts (the `using`/`global` keyword for a using directive, the
- *    namespace's name, a type's first identifier, a member's name for ext:), each once, at its first place. An
+ *    namespace's name, a type's first identifier), each once, at its first place. An
  *    attribute [N] gives type:N then type:NAttribute.
  * 2. The names inside using directives and namespace names give only their using/ns specifier. Keywords give nothing
  *    (string, int, decimal, void, var, default, a target-typed new()).
@@ -25,7 +25,8 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *    positional record's and a lambda's too), fields and properties are its exclusions, by name over the whole file.
  *    nameof(N) follows the same rule. Item.cs's `Price.Amount` (a record parameter) and Order.cs's `Total.Amount`
  *    (a property) give nothing.
- * 4. `x?.M(…)` is an invoked member like `x.M(…)` (Order.cs's ext:Invoke). An unqualified call `M(…)` gives nothing.
+ * 4. An invoked member (`x.M(…)`, `x?.M(…)`) gives no specifier of its own (choice 14): only its receiver can, through
+ *    static access (`Guard.NotNull(…)` gives type:Guard). An unqualified call `M(…)` gives nothing.
  * 5. "Names the file declares" are the types it declares, nested ones included; type parameters are left out too.
  * 6. Symbols: a constructor is named as written (the type's name: qualifiedName `Order.Order`), an indexer `this`; a
  *    const field is a field (property). Enum members and a positional record's parameters are not symbols. Exported is
@@ -38,20 +39,17 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * 9. The scan reading reads `using …;` and `namespace …` lines as written, with no tree, so a nested block's
  *    `namespace Pricing` gives ns:Pricing, where the full reading gives ns:Shop.Core.Pricing.
  *
- * Added after jellyfin's first measurement (Step 6, round 1; these cases and their truth were written before the code):
- * 10. A member invoked on a predefined type (`string.IsNullOrEmpty(…)`, `decimal.Round(…)`) gives no ext:: it is a static
- *     call, never an extension call. Program.cs's `string.IsNullOrEmpty` would otherwise link to CollectionExtensions.cs
- *     (Shop.Web.Extensions is imported there).
- * 11. `using static T` brings T's extension methods into scope too (C#'s rule): CheckoutPage.cs's ext:IsNullOrEmpty
- *     resolves through `using static Shop.Web.Extensions.CollectionExtensions` (its static: names the same file).
+ * Added after jellyfin's first measurement (Step 6, round 1; the case and its truth were written before the code):
  * 12. An attribute's two lookup names (N and NAttribute): the one that doesn't resolve is context when the other one
  *     resolves, since C# binds the attribute to the one that exists. ReceiptPage.cs's qtype:Core.Auditing.Audited.
  *
- * The controller's ruling of 2026-10-25 (round 2, for the owner; the plan's ext: kind amended, evidence in
- * progress-csharp.md):
- * 13. ext:M is internal only when a same-named repo extension method is in scope for the file, by C#'s scoping (its
- *     namespace enclosing or imported, project-wide included, or its class named by a using static); otherwise it is
- *     external: the call binds to something else. PriceCalculatorTests.cs's ext:AddShop is external now.
+ * The controller's rulings of 2026-10-25 (rounds 2 and 3, made for the owner; evidence in progress-csharp.md):
+ * 14. No ext: specifier and no extension method in declares: C# extension-method calls are not linked. Binding one
+ *     needs the receiver's and the arguments' types (an applicable instance method or overload always wins), and by name
+ *     alone 19 of 30 sampled links on jellyfin were right. Round 1's choices 10 (a predefined type's static call) and 11
+ *     (a using static's extension methods) and round 2's 13 (ext:'s kind) were about ext: and retire with it. The
+ *     fixture's extension cases (CollectionExtensions.cs, HostExtensions.cs, the AddShop and IsNullOrEmpty calls) stay:
+ *     they give no specifier and no edge.
  */
 
 const P = {
@@ -102,7 +100,7 @@ function kinds(groups: { context?: string[]; internal?: string[]; external?: str
 }
 
 /**
- * The 48 edges of a full run, sorted by source then target, each with the rule that makes it. "type:N, step 1" is an
+ * The 45 edges of a full run, sorted by source then target, each with the rule that makes it. "type:N, step 1" is an
  * enclosing namespace (innermost out), "step 2" a visible using (the file's and the project's), "alias" an alias's
  * target, "static" a type nested in a static:/gstatic: type.
  */
@@ -124,8 +122,6 @@ const EDGES: TruthEdge[] = [
     edge(P.systemClock, P.iclock),                  // type:IClock (base list), step 1: Shop.Core.Time.IClock
     edge(P.scenarios, P.systemClock),               // qtype:Shop.Core.Time.SystemClock, as written
     edge(P.scenarios, P.checkout),                  // type:CheckoutPage, step 2: using Shop.Web.Pages
-    edge(P.hostExtensions, P.collectionExtensions), // ext:IsNullOrEmpty, its namespace Shop.Web.Extensions enclosing (no using)
-    edge(P.hostExtensions, P.serviceExtensions),    // ext:AddShop, its namespace Shop.Web.Extensions enclosing (no using)
     edge(P.serviceExtensions, P.iclock),            // type:IClock (a generic argument), step 2: using Shop.Core.Time
     edge(P.serviceExtensions, P.systemClock),       // type:SystemClock (a generic argument), step 2: using Shop.Core.Time
     edge(P.globalUsings, P.priceMath),              // gstatic:Shop.Core.Pricing.PriceMath
@@ -140,14 +136,13 @@ const EDGES: TruthEdge[] = [
     edge(P.checkout, P.modelItem),                  // type:Item (typeof), step 2: the .csproj's <Using> Shop.Core.Models
     edge(P.checkout, P.order),                      // type:Order (generic base, return type), the <Using>; qtype:Shop.Core.Models.Order too
     edge(P.checkout, P.systemClock),                // type:Clock, alias: the project's galias Clock=Shop.Core.Time.SystemClock
-    edge(P.checkout, P.collectionExtensions),       // static:Shop.Web.Extensions.CollectionExtensions; ext:IsNullOrEmpty through it too
+    edge(P.checkout, P.collectionExtensions),       // static:Shop.Web.Extensions.CollectionExtensions (a using static names its type's file)
     edge(P.checkout, P.pageBase),                   // type:PageBase (base list), step 1: Shop.Web.Pages.PageBase
     edge(P.checkout, P.webGuard),                   // type:Guard (static access), step 2: Shop.Shared.Guard: Shop.Web's own wins
     edge(P.receipt, P.audited),                     // [Core.Auditing.Audited] → qtype:Core.Auditing.AuditedAttribute, under the enclosing Shop
     edge(P.receipt, P.order),                       // type:Receipt, alias: using Receipt = Shop.Core.Models.Order
     edge(P.receipt, P.priceMath),                   // type:Rounding, static: nested in the project's gstatic PriceMath
     edge(P.receipt, P.pageBase),                    // type:PageBase, step 1
-    edge(P.program, P.serviceExtensions),           // ext:AddShop, its namespace visible through using Shop.Web.Extensions
     edge(P.tests, P.totals),                        // type:Cart, step 2: using Shop.Core.Carts
     edge(P.tests, P.cart),                          // type:Cart
     edge(P.tests, P.catalogItem),                   // qtype:Catalog.Item, under the enclosing Shop.Core: Shop.Core.Catalog.Item
@@ -159,11 +154,10 @@ const EDGES: TruthEdge[] = [
     // - no using:, global:, alias:, galias: or ns: makes one by itself;
     // - CheckoutPage.cs's type:PriceCalculator: Shop.Core.Pricing isn't visible there (edit d makes it visible);
     // - PriceCalculatorTests.cs's type:ProductCode: Shop.Core.Catalog isn't visible there (edit b makes it visible);
-    // - PriceCalculatorTests.cs's ext:AddShop: FakeServices.AddShop is an instance method, and the extension's namespace
-    //   Shop.Web.Extensions is neither enclosing nor visible there;
+    // - no extension-method call (choice 14): Program.cs's and HostExtensions.cs's AddShop, HostExtensions.cs's and
+    //   CheckoutPage.cs's IsNullOrEmpty, PriceCalculatorTests.cs's AddShop (FakeServices' own method) give no specifier;
     // - CheckoutPage.cs's type:Audited: no repo type is named Audited (AuditedAttribute is the attribute's class);
     //   ReceiptPage.cs's qtype:Core.Auditing.Audited likewise (context: its twin resolves);
-    // - Program.cs's string.IsNullOrEmpty: a static call on a predefined type gives no ext: at all;
     // - every external name (System, Microsoft.Extensions.DependencyInjection, Xunit, ASP.NET Core's WebApplication).
 ];
 
@@ -210,58 +204,57 @@ export const csharpRepoTruth: FixtureTruth = {
     ],
     specifiers: {
         [P.audited]: ["using:System", "ns:Shop.Core.Auditing", "type:AttributeUsage", "type:AttributeUsageAttribute", "type:AttributeTargets", "type:Attribute"],
-        [P.totals]: ["using:System.Linq", "ns:Shop.Core.Carts", "type:Money", "ext:Sum"],
-        [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts", "type:List", "type:Item", "type:IReadOnlyList", "ext:Add"],
+        [P.totals]: ["using:System.Linq", "ns:Shop.Core.Carts", "type:Money"],
+        [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts", "type:List", "type:Item", "type:IReadOnlyList"],
         [P.catalogItem]: ["ns:Shop.Core.Catalog", "type:ProductCode", "type:Money"],
         [P.productCode]: ["ns:Shop.Core.Catalog"],
         [P.modelItem]: ["ns:Shop.Core.Models", "type:Money"],
         [P.order]: [
             "using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models",
-            "type:List", "type:Item", "type:Guid", "type:Money", "type:OrderStatus", "ext:Add", "ext:Invoke",
+            "type:List", "type:Item", "type:Guid", "type:Money", "type:OrderStatus",
         ],
         [P.orderStatus]: ["ns:Shop.Core.Models"],
         [P.money]: ["using:System", "ns:Shop.Core", "type:IEquatable"],
         [P.calculator]: [
             "using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "static:Shop.Core.Pricing.PriceMath",
-            "ns:Shop.Core", "ns:Shop.Core.Pricing", "type:Money", "type:Cart", "type:Item", "type:Guard", "ext:NotNull", "type:Rounding",
+            "ns:Shop.Core", "ns:Shop.Core.Pricing", "type:Money", "type:Cart", "type:Item", "type:Guard", "type:Rounding",
         ],
-        [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing", "type:MidpointRounding"],         // decimal.Round: no ext: (choice 10)
+        [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing", "type:MidpointRounding"],
         [P.coreGuard]: ["using:System", "ns:Shop.Shared", "type:ArgumentNullException"],
         [P.iclock]: ["using:System", "ns:Shop.Core.Time", "type:DateTimeOffset"],
         [P.systemClock]: ["using:System", "ns:Shop.Core.Time", "type:IClock", "type:DateTimeOffset"],
         [P.scenarios]: [
             "using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests", "type:Fact", "type:FactAttribute",
-            "type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock", "type:Assert", "ext:Equal",
+            "type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock", "type:Assert",
         ],
-        [P.collectionExtensions]: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions", "type:IEnumerable", "ext:Any"],
-        [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions", "type:IServiceCollection", "ext:IsNullOrEmpty", "ext:AddShop"],
+        [P.collectionExtensions]: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions", "type:IEnumerable"],
+        [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions", "type:IServiceCollection"],
         [P.serviceExtensions]: [
             "using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions",
-            "type:IServiceCollection", "ext:AddSingleton", "type:IClock", "type:SystemClock",
+            "type:IServiceCollection", "type:IClock", "type:SystemClock",
         ],
         [P.globalUsings]: ["global:Shop.Core.Carts", "gstatic:Shop.Core.Pricing.PriceMath", "galias:Clock=Shop.Core.Time.SystemClock"],
         [P.cartPage]: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase", "type:Cart", "type:IClock", "type:Order"],
         [P.checkout]: [
             "using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "static:Shop.Web.Extensions.CollectionExtensions", "ns:Shop.Web.Pages",
             "type:Audited", "type:AuditedAttribute", "type:PageBase", "type:Order", "type:Clock", "type:DateTimeOffset",
-            "type:Cart", "type:Type", "type:Item", "type:PriceCalculator", "ext:IsNullOrEmpty", "type:Guard", "ext:NotBlank",
-            "qtype:Shop.Core.Models.Order", "type:Guid", "ext:NewGuid",
+            "type:Cart", "type:Type", "type:Item", "type:PriceCalculator", "type:Guard",
+            "qtype:Shop.Core.Models.Order", "type:Guid",
         ],
         [P.pageBase]: ["ns:Shop.Web.Pages"],
         [P.receipt]: [
             "alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages", "qtype:Core.Auditing.Audited", "qtype:Core.Auditing.AuditedAttribute",
-            "type:PageBase", "type:Receipt", "type:Rounding", "ext:ToString",
+            "type:PageBase", "type:Receipt", "type:Rounding",
         ],
-        // string.IsNullOrEmpty (line 4): no ext: (choice 10)
-        [P.program]: ["using:Shop.Web.Extensions", "type:WebApplication", "ext:CreateBuilder", "ext:AddShop", "ext:Build", "ext:MapGet", "ext:Run"],
-        [P.webGuard]: ["ns:Shop.Shared", "qtype:System.ArgumentException"],                     // string.IsNullOrWhiteSpace: no ext:
+        [P.program]: ["using:Shop.Web.Extensions", "type:WebApplication"],
+        [P.webGuard]: ["ns:Shop.Shared", "qtype:System.ArgumentException"],
         [P.fakes]: ["ns:Shop.Core.Tests.Fakes"],
         [P.tests]: [
             "using:Shop.Core.Carts", "using:Shop.Core.Pricing", "using:Shop.Core.Tests.Fakes", "using:Xunit", "ns:Shop.Core.Tests",
-            "type:Fact", "type:FactAttribute", "type:FakeServices", "ext:AddShop", "type:PriceCalculator", "ext:Total", "type:Cart",
-            "qtype:Catalog.Item", "type:ProductCode", "type:Money", "type:Assert", "ext:Equal",
+            "type:Fact", "type:FactAttribute", "type:FakeServices", "type:PriceCalculator", "type:Cart",
+            "qtype:Catalog.Item", "type:ProductCode", "type:Money", "type:Assert",
         ],
-        [P.seed]: ["using:System", "using:Shop.Core.Models", "ns:Shop.Tools", "type:Order", "type:Guid", "ext:NewGuid", "type:Console", "ext:WriteLine"],
+        [P.seed]: ["using:System", "using:Shop.Core.Models", "ns:Shop.Tools", "type:Order", "type:Guid", "type:Console"],
     },
     declares: {
         [P.audited]: ["type:Shop.Core.Auditing.AuditedAttribute"],
@@ -279,9 +272,9 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.iclock]: ["type:Shop.Core.Time.IClock"],
         [P.systemClock]: ["type:Shop.Core.Time.SystemClock"],
         [P.scenarios]: ["type:Shop.Web.IntegrationTests.CheckoutScenarios"],
-        [P.collectionExtensions]: ["ext:Shop.Web.Extensions.CollectionExtensions.IsNullOrEmpty", "type:Shop.Web.Extensions.CollectionExtensions"],
-        [P.hostExtensions]: ["ext:Shop.Web.Extensions.HostExtensions.AddShopDefaults", "type:Shop.Web.Extensions.HostExtensions"],
-        [P.serviceExtensions]: ["ext:Shop.Web.Extensions.ServiceCollectionExtensions.AddShop", "type:Shop.Web.Extensions.ServiceCollectionExtensions"],
+        [P.collectionExtensions]: ["type:Shop.Web.Extensions.CollectionExtensions"],
+        [P.hostExtensions]: ["type:Shop.Web.Extensions.HostExtensions"],
+        [P.serviceExtensions]: ["type:Shop.Web.Extensions.ServiceCollectionExtensions"],
         // the project-wide usings, exactly as the specifiers write them (C18), sorted
         [P.globalUsings]: ["galias:Clock=Shop.Core.Time.SystemClock", "global:Shop.Core.Carts", "gstatic:Shop.Core.Pricing.PriceMath"],
         [P.cartPage]: ["type:Shop.Web.Pages.CartPage"],
@@ -433,11 +426,11 @@ export const csharpRepoTruth: FixtureTruth = {
             context: ["using:System", "ns:Shop.Core.Auditing"],
             external: ["type:AttributeUsage", "type:AttributeUsageAttribute", "type:AttributeTargets", "type:Attribute"],
         }),
-        [P.totals]: kinds({ context: ["using:System.Linq", "ns:Shop.Core.Carts"], internal: ["type:Money"], external: ["ext:Sum"] }),
+        [P.totals]: kinds({ context: ["using:System.Linq", "ns:Shop.Core.Carts"], internal: ["type:Money"] }),
         [P.cart]: kinds({
             context: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts"],
             internal: ["type:Item"],
-            external: ["type:List", "type:IReadOnlyList", "ext:Add"],
+            external: ["type:List", "type:IReadOnlyList"],
         }),
         [P.catalogItem]: kinds({ context: ["ns:Shop.Core.Catalog"], internal: ["type:ProductCode", "type:Money"] }),
         [P.productCode]: kinds({ context: ["ns:Shop.Core.Catalog"] }),
@@ -445,14 +438,13 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.order]: kinds({
             context: ["using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models"],
             internal: ["type:Item", "type:Money", "type:OrderStatus"],
-            external: ["type:List", "type:Guid", "ext:Add", "ext:Invoke"],
+            external: ["type:List", "type:Guid"],
         }),
         [P.orderStatus]: kinds({ context: ["ns:Shop.Core.Models"] }),
         [P.money]: kinds({ context: ["using:System", "ns:Shop.Core"], external: ["type:IEquatable"] }),
         [P.calculator]: kinds({
             context: ["using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "ns:Shop.Core", "ns:Shop.Core.Pricing"],
             internal: ["static:Shop.Core.Pricing.PriceMath", "type:Money", "type:Cart", "type:Item", "type:Guard", "type:Rounding"],
-            external: ["ext:NotNull"],                                                  // Guard.NotNull is not an extension method
         }),
         [P.priceMath]: kinds({ context: ["using:System", "ns:Shop.Core.Pricing"], external: ["type:MidpointRounding"] }),
         [P.coreGuard]: kinds({ context: ["using:System", "ns:Shop.Shared"], external: ["type:ArgumentNullException"] }),
@@ -461,21 +453,20 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.scenarios]: kinds({
             context: ["using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests"],
             internal: ["type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock"],
-            external: ["type:Fact", "type:FactAttribute", "type:Assert", "ext:Equal"],
+            external: ["type:Fact", "type:FactAttribute", "type:Assert"],
         }),
         [P.collectionExtensions]: kinds({
             context: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions"],
-            external: ["type:IEnumerable", "ext:Any"],
+            external: ["type:IEnumerable"],
         }),
         [P.hostExtensions]: kinds({
             context: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions"],
-            internal: ["ext:IsNullOrEmpty", "ext:AddShop"],
             external: ["type:IServiceCollection"],
         }),
         [P.serviceExtensions]: kinds({
             context: ["using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions"],
             internal: ["type:IClock", "type:SystemClock"],
-            external: ["type:IServiceCollection", "ext:AddSingleton"],
+            external: ["type:IServiceCollection"],
         }),
         [P.globalUsings]: kinds({
             context: ["global:Shop.Core.Carts", "galias:Clock=Shop.Core.Time.SystemClock"],
@@ -490,10 +481,9 @@ export const csharpRepoTruth: FixtureTruth = {
                 "type:Clock",                                                           // no repo type is named Clock, but it resolves (the alias)
                 "type:Cart", "type:Item",
                 "type:PriceCalculator",                                                 // a repo type's name, not visible here: unresolved
-                "ext:IsNullOrEmpty",                                                    // in scope through the using static (choice 11)
                 "type:Guard", "qtype:Shop.Core.Models.Order",
             ],
-            external: ["type:Audited", "type:DateTimeOffset", "type:Type", "ext:NotBlank", "type:Guid", "ext:NewGuid"],
+            external: ["type:Audited", "type:DateTimeOffset", "type:Type", "type:Guid"],
         }),
         [P.pageBase]: kinds({ context: ["ns:Shop.Web.Pages"] }),
         [P.receipt]: kinds({
@@ -502,12 +492,10 @@ export const csharpRepoTruth: FixtureTruth = {
                 "qtype:Core.Auditing.Audited",                                          // the attribute's other lookup name: its twin resolves (choice 12)
             ],
             internal: ["qtype:Core.Auditing.AuditedAttribute", "type:PageBase", "type:Receipt", "type:Rounding"], // type:Receipt: the alias
-            external: ["ext:ToString"],
         }),
         [P.program]: kinds({
             context: ["using:Shop.Web.Extensions"],
-            internal: ["ext:AddShop"],
-            external: ["type:WebApplication", "ext:CreateBuilder", "ext:Build", "ext:MapGet", "ext:Run"],
+            external: ["type:WebApplication"],
         }),
         [P.webGuard]: kinds({ context: ["ns:Shop.Shared"], external: ["qtype:System.ArgumentException"] }),
         [P.fakes]: kinds({ context: ["ns:Shop.Core.Tests.Fakes"] }),
@@ -518,13 +506,13 @@ export const csharpRepoTruth: FixtureTruth = {
                 "type:ProductCode",                                                     // a repo type's name, not visible here: unresolved
                 "type:Money",
             ],
-            // ext:AddShop: the repo's extension AddShop isn't in scope here (choice 13), so FakeServices.AddShop binds
-            external: ["type:Fact", "type:FactAttribute", "ext:AddShop", "ext:Total", "type:Assert", "ext:Equal"],
+            // PriceCalculatorTests.cs's AddShop gives no specifier (choice 14): FakeServices.AddShop is its own method
+            external: ["type:Fact", "type:FactAttribute", "type:Assert"],
         }),
         [P.seed]: kinds({
             context: ["using:System", "using:Shop.Core.Models", "ns:Shop.Tools"],
             internal: ["type:Order"],
-            external: ["type:Guid", "ext:NewGuid", "type:Console", "ext:WriteLine"],
+            external: ["type:Guid", "type:Console"],
         }),
     },
     edges: EDGES,
