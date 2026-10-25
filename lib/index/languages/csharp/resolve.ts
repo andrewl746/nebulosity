@@ -11,7 +11,8 @@
  * - Every file declaring a chosen name gets the edge (partial types); when files of several projects declare it, the
  *   importer's own project's win.
  * - qtype:A.B.N: under each enclosing namespace, as written, through an alias for A, then under each visible using.
- * - ext:M: every extension method M whose namespace is enclosing or visible. static:/gstatic: name their type's files.
+ * - ext:M: every extension method M in scope: its namespace enclosing or visible, or its class named by a using static.
+ *   It is internal only then (the controller's ruling of 2026-10-25). static:/gstatic: name their type's files.
  * - using:, global:, alias:, galias: and ns: make no edge (context).
  */
 import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
@@ -293,7 +294,10 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
                 if (!named) return "external";
                 return twinResolves(importer, specifier) ? "context" : "internal";
             }
-            if (specifier.startsWith("ext:")) return extensions.has(text) ? "internal" : "external";
+            // the controller's ruling (2026-10-25, amending the plan's "any same-named repo extension"): an ext:M call is a
+            // reference to a repo extension only when one named M is in scope by C#'s scoping, and every in-scope one
+            // resolves above; anything else binds elsewhere (an instance method, LINQ, the BCL)
+            if (specifier.startsWith("ext:")) return "external";
             if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")) return "external";
             return "context";
         },

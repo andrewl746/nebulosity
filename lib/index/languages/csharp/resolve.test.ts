@@ -118,6 +118,12 @@ describe("the C# resolver on csharp-repo's truth", () => {
         expect(resolver.resolve(P.hostExtensions, "ext:IsNullOrEmpty")).toEqual([P.collectionExtensions]);
     });
 
+    it("ext:M is internal only when a same-named repo extension is in scope (the controller's ruling of 2026-10-25)", () => {
+        expect(resolver.kindOf(P.program, "ext:AddShop")).toBe("internal");     // in scope through using Shop.Web.Extensions
+        expect(resolver.kindOf(P.tests, "ext:AddShop")).toBe("external");       // declared in the repo, not in scope: FakeServices.AddShop binds
+        expect(resolver.kindOf(P.order, "ext:Add")).toBe("external");           // no repo extension named Add at all
+    });
+
     it("ext:M: a using static of the extension's class brings it into scope", () => {
         expect(resolver.resolve(P.checkout, "ext:IsNullOrEmpty")).toEqual([P.collectionExtensions]);
         expect(resolver.resolve(P.order, "ext:IsNullOrEmpty")).toEqual([]);   // neither imported nor named by a using static there
