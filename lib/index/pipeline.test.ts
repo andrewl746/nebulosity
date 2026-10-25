@@ -4,8 +4,9 @@ import fs from "fs";
 import path from "path";
 import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
+import { toyAdapter } from "../../test/helpers/toy-adapter";
 import { getDb } from "../db/client";
-import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
+import { chunks, entryPoints, files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { loadAllDocLinks, loadDocs } from "../db/store/docs";
 import { loadCallBindings, loadCallsOf, loadInjectionSites, loadTypeDecls } from "../db/store/calls";
 import { loadEntryPoints } from "../db/store/entries";
@@ -15,6 +16,8 @@ import { readStages, type StoredStage } from "../db/store/stages";
 import { findRepository, loadImportEdges, upsertRepository, writeFileRecords } from "../db/store/structure";
 import { readAdapterVersion, writeAdapterVersion } from "../db/store/version";
 import { ADAPTER_VERSION } from "./languages/typescript";
+import { typescriptAdapter } from "./languages/typescript-adapter";
+import { GrammarNotLoadedError } from "./languages/treesitter";
 import { repoKey } from "./paths";
 import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
 
@@ -431,5 +434,105 @@ describe("indexRepository on the calls fixture (ADR-059)", () => {
         expect(ofFile(loadCallBindings(db, result.repoId)).map((b) => b.local)).toEqual(["IFileService", "IWatchingFileService", "Disposable"]);
         expect(ofFile(loadCallsOf(db, result.repoId, "readFile")).map((c) => c.line)).toEqual([15, 15]);
         expect(ofFile(loadInjectionSites(db, result.repoId, "IFileService")).map((c) => c.line)).toEqual([6]);
+    });
+});
+
+describe("indexRepository through the language adapters (ADR-065)", () => {
+    const adapters = [typescriptAdapter, toyAdapter];
+
+    /** A folder holding these files (no git: discovery walks it). */
+    function repo(files: Record<string, string>): string {
+        const dir = makeTempDir("neb-adapters-");
+        for (const [rel, text] of Object.entries(files)){
+            fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+            fs.writeFileSync(path.join(dir, rel), text);
+        }
+        return dir;
+    }
+
+    const edgesOfRepo = (repoId: number) => loadImportEdges(getDb(), repoId)
+        .sort((a, b) => (a.source + a.target < b.source + b.target ? -1 : 1));
+
+    // by the toy's rules (test/helpers/toy-adapter.ts): use:lib/y names lib/y.toy; name:helper names the other file of
+    // lib/ that defines helper (lib/z.toy); use:lib/self names the importer itself, placed with no edge
+    const TOY_REPO = {
+        "a.ts": "import \"./b\";\n",
+        "b.ts": "export {};\n",
+        "lib/x.toy": "use lib/y\nname helper\n",
+        "lib/y.toy": "def thing\n",
+        "lib/z.toy": "def helper\nmain\n",
+        "lib/self.toy": "use lib/self\n",
+    };
+
+    it("stores both languages' files and edges, a name resolved within its folder, and no self edge", () => {
+        const { repoId, files: count } = indexRepository(repo(TOY_REPO), { adapters });
+        expect(count).toBe(6);
+        expect(edgesOfRepo(repoId)).toEqual([
+            { source: "a.ts", target: "b.ts", specifier: "./b" },
+            { source: "lib/x.toy", target: "lib/y.toy", specifier: "use:lib/y" },
+            { source: "lib/x.toy", target: "lib/z.toy", specifier: "name:helper" },
+        ]);
+        const db = getDb();
+        const rows = db.select({ path: files.path, language: files.language, kind: files.kind, declares: files.declares }).from(files)
+            .where(eq(files.repoId, repoId)).orderBy(files.path).all();
+        expect(rows).toEqual([
+            { path: "a.ts", language: "typescript", kind: "module", declares: "[]" },
+            { path: "b.ts", language: "typescript", kind: "module", declares: "[]" },
+            { path: "lib/self.toy", language: "toy", kind: "module", declares: "[]" },
+            { path: "lib/x.toy", language: "toy", kind: "module", declares: "[]" },
+            { path: "lib/y.toy", language: "toy", kind: "module", declares: "[\"def:thing\"]" },
+            { path: "lib/z.toy", language: "toy", kind: "module", declares: "[\"def:helper\",\"main\"]" },
+        ]);
+    });
+
+    it("stores the entry points each adapter names", () => {
+        const { repoId } = indexRepository(repo(TOY_REPO), { adapters });
+        expect(getDb().select({ path: entryPoints.path, declaredBy: entryPoints.declaredBy }).from(entryPoints)
+            .where(eq(entryPoints.repoId, repoId)).all()).toEqual([{ path: "lib/z.toy", declaredBy: "toy main" }]);
+    });
+
+    it("re-parses only the files of an adapter whose version moved", () => {
+        const root = repo(TOY_REPO);
+        const { repoId } = indexRepository(root, { adapters });
+        expect(indexRepository(root, { adapters })).toMatchObject({ changed: 0, unchanged: 6 });
+
+        const bumped = { ...toyAdapter, version: 2 };
+        expect(indexRepository(root, { adapters: [typescriptAdapter, bumped] })).toMatchObject({ changed: 4, unchanged: 2 });
+        expect(readAdapterVersion(getDb(), repoId, "toy")).toBe(2);
+        expect(readAdapterVersion(getDb(), repoId)).toBe(ADAPTER_VERSION);
+        expect(indexRepository(root, { adapters: [typescriptAdapter, bumped] })).toMatchObject({ changed: 0, unchanged: 6 });
+    });
+
+    it("refuses to index a file whose grammar this process hasn't loaded", () => {
+        const unprepared = { ...toyAdapter, grammar: "missing.wasm" };
+        expect(() => indexRepository(repo(TOY_REPO), { adapters: [typescriptAdapter, unprepared] })).toThrow(GrammarNotLoadedError);
+        // with none of its files discovered, nothing needs it
+        expect(indexRepository(repo({ "a.ts": "export {};\n" }), { adapters: [typescriptAdapter, unprepared] }).files).toBe(1);
+    });
+
+    it("leaves TypeScript's edges as they were beside another language's manifest", () => {
+        const root = copyFixture();
+        // read as a tsconfig, src/toy.json would make src/ a module-id root, and "util/strings" would name src/util/strings.ts
+        fs.writeFileSync(path.join(root, "src/toy.json"), "{}\n");
+        fs.writeFileSync(path.join(root, "src/extra.ts"), "import \"util/strings\";\n");
+        const { repoId, edges } = indexRepository(root, { adapters });
+        expect(edges).toBe(11);   // the V1.1 plan's 11 edges, and none from extra.ts
+        expect(edgesOfRepo(repoId).filter((e) => e.source === "src/extra.ts")).toEqual([]);
+    });
+
+    it("indexes a repo whose every absolute path is longer than 260 characters as it does a short one", () => {
+        const plain = copyFixture();
+        let deep = makeTempDir("neb-long-");
+        while (deep.length < 250) deep = path.join(deep, "a-folder-name-of-forty-characters-long-x");
+        fs.cpSync(plain, deep, { recursive: true });
+        expect(path.join(deep, "src/index.ts").length).toBeGreaterThan(260);
+
+        const short = indexRepository(plain);
+        const long = indexRepository(deep);
+        expect(long).toMatchObject({ files: short.files, edges: short.edges, errors: [], skipped: [] });
+        const pairs = (repoId: number) => edgesOfRepo(repoId);
+        expect(pairs(long.repoId)).toEqual(pairs(short.repoId));
+        const paths = (repoId: number) => getDb().select({ p: files.path }).from(files).where(eq(files.repoId, repoId)).orderBy(files.path).all();
+        expect(paths(long.repoId)).toEqual(paths(short.repoId));
     });
 });
