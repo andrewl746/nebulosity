@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
-import { cleanFileChunkSnippet, dampTests, fuseRankings, queryTerms, rankFileNames, testOnlyFolders, toFtsQuery, wantsTests } from "./rank";
+import { claimedExtensions } from "../index/languages/rules";
+import { cleanFileChunkSnippet, dampTests, fileStem, fuseRankings, queryTerms, rankFileNames, testOnlyFolders, toFtsQuery, wantsTests } from "./rank";
 
 /** Files the browser bundles (the static demo, ADR-049) and what each may import: nothing that touches a database or a disk. */
 const BROWSER_SAFE: Record<string, readonly string[]> = {
@@ -94,6 +95,29 @@ describe("rankFileNames", () => {
     it("finds nothing for a stopword", () => {
         expect(rankFileNames(FILES, DECLARED, "the")).toEqual([]);
     });
+
+    // one path per language E4 added (the E4 final review's A-I2): the old stem kept every extension but TypeScript's,
+    // so "order" missed Order.java, "db" missed db.py and "views" missed views.pyi; importer counts made up, by hand
+    const LANGUAGES = [
+        { path: "src/main/java/shop/Order.java", importedBy: 2 }, { path: "src/Shop.Core/Models/Order.cs", importedBy: 3 },
+        { path: "services/beta/src/app/db.py", importedBy: 1 }, { path: "src/app/db.ts", importedBy: 0 },
+        { path: "django/views.py", importedBy: 4 }, { path: "django/views.pyi", importedBy: 0 },
+        { path: "crates/core/src/lib.rs", importedBy: 5 }, { path: "internal/store/store.go", importedBy: 2 },
+    ];
+
+    it("finds a file of every language by its own name, its extension dropped", () => {
+        expect(rankFileNames(LANGUAGES, [], "order")).toEqual(["src/Shop.Core/Models/Order.cs", "src/main/java/shop/Order.java"]);
+        expect(rankFileNames(LANGUAGES, [], "db")).toEqual(["services/beta/src/app/db.py", "src/app/db.ts"]);
+        expect(rankFileNames(LANGUAGES, [], "views")).toEqual(["django/views.py", "django/views.pyi"]);
+        expect(rankFileNames(LANGUAGES, [], "lib")).toEqual(["crates/core/src/lib.rs"]);
+        expect(rankFileNames(LANGUAGES, [], "store")).toEqual(["internal/store/store.go"]);
+    });
+
+    it("drops every claimed extension from a file's name, and keeps TypeScript's stems as they were", () => {
+        for (const extension of claimedExtensions()) expect(fileStem(`a/b/name${extension}`)).toBe("name");
+        expect(["src/util/strings.test.ts", "c.test.d.ts", "x.d.ts", "a/.eslintrc.cjs", "view.spec.tsx"].map(fileStem))
+            .toEqual(["strings", "c.test.d", "x.d", ".eslintrc", "view"]);
+    });
 });
 
 describe("fuseRankings with the file list", () => {
@@ -128,5 +152,19 @@ describe("cleanFileChunkSnippet", () => {
         expect(cleanFileChunkSnippet("…src/vs/x/userActivityRegistry.ts Imports: import { InstantiationType")).toBe("…import { InstantiationType");
         expect(cleanFileChunkSnippet("…import { ChatLocation } from '../../commonTypes.js'")).toBe("…import { ChatLocation } from '../../commonTypes.js'");
         expect(cleanFileChunkSnippet("… Exports: Foo (class) bar (function)")).toBe("… Foo (class) bar (function)");
+    });
+
+    it("drops the File: header of every indexed language's listing (the E4 final review's A-I2)", () => {
+        expect(cleanFileChunkSnippet("File: django/views.py Imports: from django.http import HttpResponse"))
+            .toBe("from django.http import HttpResponse");
+        expect(cleanFileChunkSnippet("File: src/main/java/shop/Order.java Imports: import java.util.List;")).toBe("import java.util.List;");
+        expect(cleanFileChunkSnippet("…ore/src/lib.rs Imports: use std::fmt;")).toBe("…use std::fmt;");
+        for (const extension of claimedExtensions()){
+            expect(cleanFileChunkSnippet(`File: a/b/name${extension} Imports: x`)).toBe("x");
+        }
+    });
+
+    it("keeps an import's last word that only looks like a path", () => {
+        expect(cleanFileChunkSnippet("…os.path Exports: main (function)")).toBe("…os.path main (function)");
     });
 });
