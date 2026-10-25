@@ -366,6 +366,9 @@ Measured on VS Code (20,342 files, 14,849 of them indexed before E4, 15,040 sinc
   - Windows 11 locally, and Windows, macOS and Linux in CI.
 
   If a later version breaks something, these are the ones that worked.
+- **If something it depends on changes:**
+  - When the summary models are retired, name new ones in a setting ([Summary models](#summary-models)).
+  - If Claude Code's `mcp add` changes, `nebulosity setup --json` prints the plain config, which `claude mcp add-json` or another client takes ([Other MCP clients, or by hand](#other-mcp-clients-or-by-hand)).
 - **Not built:** the plan's remaining extras: clustering, an in-Map guide, git-history overlays and the rest of the call graph ([docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md)).
 
 ## Why I built this

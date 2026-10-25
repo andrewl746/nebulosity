@@ -1,14 +1,22 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import { makeTempDir } from "../test/helpers/temp";
 import { readConfig, writeConfig } from "./config";
 
 const original = process.env.NEBULOSITY_HOME;
+const originalData = process.env.NEBULOSITY_DATA;
+
+// these tests find config.json through NEBULOSITY_HOME, so a data folder set in the shell mustn't move it elsewhere
+beforeEach(() => {
+    delete process.env.NEBULOSITY_DATA;
+});
 
 afterEach(() => {
     if (original === undefined) delete process.env.NEBULOSITY_HOME;
     else process.env.NEBULOSITY_HOME = original;
+    if (originalData === undefined) delete process.env.NEBULOSITY_DATA;
+    else process.env.NEBULOSITY_DATA = originalData;
 });
 
 describe("config", () => {
