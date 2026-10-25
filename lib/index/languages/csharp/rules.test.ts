@@ -80,4 +80,14 @@ describe("C#'s specifiers as written (displaySpecifier, B-I3)", () => {
         expect(shown("alias:NoEquals")).toBe("alias:NoEquals");      // not one it writes: unchanged
         expect(shown("constructor:x")).toBe("constructor:x");
     });
+
+    it("shows a generic name without its arity, as the source writes it without its type arguments", () => {
+        const shown = (s: string) => csharpRules.displaySpecifier!(s);
+        expect(shown("type:Box`1")).toBe("Box");
+        expect(shown("qtype:Shop.Core.Outer`1.Inner`2")).toBe("Shop.Core.Outer.Inner");
+        expect(shown("static:Shop.Core.Box`1")).toBe("using static Shop.Core.Box");
+        expect(shown("gstatic:Shop.Core.Box`1")).toBe("global using static Shop.Core.Box");
+        expect(shown("alias:Map=System.Collections.Generic.Dictionary`2")).toBe("using Map = System.Collections.Generic.Dictionary");
+        expect(shown("galias:Map=System.Collections.Generic.Dictionary`2")).toBe("global using Map = System.Collections.Generic.Dictionary");
+    });
 });

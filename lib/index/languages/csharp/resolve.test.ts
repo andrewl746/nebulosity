@@ -176,6 +176,59 @@ describe("the C# resolver on hand-written files", () => {
         expect(reads).toEqual(["src/App/App.csproj"]);
     });
 
+    it("a name with n type arguments: the files declaring it with arity n first (partial parts all), else every file of the name, as before (R5)", () => {
+        const resolver = resolverOf({
+            "Lib/Box.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Box"] },
+            "Lib/BoxOfT.Part.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Box`1"] },
+            "Lib/BoxOfT.cs": { specifiers: ["ns:Lib", "type:Box"], declares: ["type:Lib.Box`1"] },
+            "Lib/BoxOfTwo.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Box`2"] },
+            "Use.cs": { specifiers: ["using:Lib", "ns:App", "type:Box", "type:Box`1", "type:Box`2", "type:Box`3", "qtype:Lib.Box`1", "qtype:Lib.Box`3"] },
+        });
+        expect(resolver.resolve("Use.cs", "type:Box")).toEqual(["Lib/Box.cs"]);
+        expect(resolver.resolve("Use.cs", "type:Box`1")).toEqual(["Lib/BoxOfT.Part.cs", "Lib/BoxOfT.cs"]);   // a generic partial type's two parts
+        expect(resolver.resolve("Use.cs", "type:Box`2")).toEqual(["Lib/BoxOfTwo.cs"]);
+        expect(resolver.resolve("Use.cs", "qtype:Lib.Box`1")).toEqual(["Lib/BoxOfT.Part.cs", "Lib/BoxOfT.cs"]);
+        expect(resolver.resolve("Lib/BoxOfT.cs", "type:Box")).toEqual(["Lib/Box.cs"]);
+        // no Box`3 anywhere: by name, at any arity, as before the pass; internal, as a resolved name is
+        const everyBox = ["Lib/Box.cs", "Lib/BoxOfT.Part.cs", "Lib/BoxOfT.cs", "Lib/BoxOfTwo.cs"];
+        expect(resolver.resolve("Use.cs", "type:Box`3")).toEqual(everyBox);
+        expect(resolver.resolve("Use.cs", "qtype:Lib.Box`3")).toEqual(everyBox);
+        expect(resolver.kindOf("Use.cs", "type:Box`3")).toBe("internal");
+
+        // the arity is looked for through every step before the name is: a using's Box<T> beats the enclosing namespace's Box
+        const nearer = resolverOf({
+            "App/Box.cs": { specifiers: ["ns:App"], declares: ["type:App.Box"] },
+            "Lib/BoxOfT.cs": { specifiers: ["ns:Lib"], declares: ["type:Lib.Box`1"] },
+            "App/Use.cs": { specifiers: ["using:Lib", "ns:App", "type:Box`1", "type:Box`2"] },
+        });
+        expect(nearer.resolve("App/Use.cs", "type:Box`1")).toEqual(["Lib/BoxOfT.cs"]);
+        expect(nearer.resolve("App/Use.cs", "type:Box`2")).toEqual(["App/Box.cs"]);   // by name, C#'s steps: the enclosing namespace first
+    });
+
+    it("a using static's and an alias's target, and a type nested in a generic one: their arity first, else by name", () => {
+        const resolver = resolverOf({
+            "Box.cs": { specifiers: ["ns:N"], declares: ["type:N.Box", "type:N.Box.Lid"] },
+            "BoxOfT.cs": { specifiers: ["ns:N"], declares: ["type:N.Box`1", "type:N.Box`1.Lid"] },
+            "Use.cs": { specifiers: ["static:N.Box`1", "static:N.Box`2", "alias:B=N.Box`1", "alias:C=N.Box`3", "ns:App", "type:Lid", "type:B", "type:C"] },
+        });
+        expect(resolver.resolve("Use.cs", "static:N.Box`1")).toEqual(["BoxOfT.cs"]);
+        expect(resolver.resolve("Use.cs", "static:N.Box`2")).toEqual(["Box.cs", "BoxOfT.cs"]);   // no Box`2: by name
+        expect(resolver.resolve("Use.cs", "type:Lid")).toEqual(["BoxOfT.cs"]);                  // nested in the static N.Box`1
+        expect(resolver.resolve("Use.cs", "type:B")).toEqual(["BoxOfT.cs"]);
+        expect(resolver.resolve("Use.cs", "type:C")).toEqual(["Box.cs", "BoxOfT.cs"]);          // the alias's target by name
+        expect(resolver.kindOf("Use.cs", "static:N.Box`2")).toBe("internal");
+    });
+
+    it("a generic attribute's two lookup names keep its arity: the one that doesn't resolve is context when its twin does", () => {
+        const resolver = resolverOf({
+            "Marker.cs": { specifiers: ["ns:N"], declares: ["type:N.MarkerAttribute`1"] },
+            "Use.cs": { specifiers: ["ns:App", "qtype:N.Marker`1", "qtype:N.MarkerAttribute`1"] },
+        });
+        expect(resolver.resolve("Use.cs", "qtype:N.MarkerAttribute`1")).toEqual(["Marker.cs"]);
+        expect(resolver.resolve("Use.cs", "qtype:N.Marker`1")).toEqual([]);
+        expect(resolver.kindOf("Use.cs", "qtype:N.Marker`1")).toBe("context");
+    });
+
     it("kinds: qtype is internal when its qualifier is a repo namespace (or a parent of one), even unresolved", () => {
         const resolver = resolverOf({
             "M.cs": { specifiers: ["ns:Shop.Core.Models"], declares: ["type:Shop.Core.Models.Order"] },

@@ -9,7 +9,8 @@ import { csharpRules } from "./rules";
  */
 export const csharpAdapter: LanguageAdapter = {
     ...csharpRules,
-    version: 2,
+    // 3: generic names carry their arity (the pre-ship pass, Task C), so every C# file's specifiers and declares are read again
+    version: 3,
     grammar: "tree-sitter-c_sharp.wasm",
     parse: parseCsharp,
     createResolver: createCsharpResolver,

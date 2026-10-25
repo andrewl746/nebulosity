@@ -1,5 +1,6 @@
 import type { LanguageRules } from "../adapter";
 import { dirOf } from "../../paths";
+import { withoutArity } from "./arity";
 
 /** A test project's folder: Shop.Core.Tests, Api.Test, Web.UnitTests, Web.IntegrationTests, Web.FunctionalTests. */
 const TEST_FOLDER = /\.(Tests?|UnitTests|IntegrationTests|FunctionalTests)$/;
@@ -36,11 +37,12 @@ const CSHARP_FORMS: ReadonlyMap<string, (body: string) => string | null> = new M
 /**
  * A specifier as the source writes it, for answers (B-I3): `using:A.B` is `using A.B`, `galias:X=A.B` is
  * `global using X = A.B`, `ns:A.B` is `namespace A.B`, and `type:N` and `qtype:A.B.N` are the code's `N` and `A.B.N`.
+ * A generic name shows without its arity, as the code writes it without its type arguments: `type:Box`1` is `Box`.
  */
 export function displayCsharpSpecifier(specifier: string): string {
     const colon = specifier.indexOf(":");
     const form = colon === -1 ? undefined : CSHARP_FORMS.get(specifier.slice(0, colon));
-    return form?.(specifier.slice(colon + 1)) ?? specifier;
+    return form?.(withoutArity(specifier.slice(colon + 1))) ?? specifier;
 }
 
 /**
