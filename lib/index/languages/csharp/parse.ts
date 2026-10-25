@@ -4,12 +4,16 @@
  * - the declaration pass walks only the file's structure (usings, namespaces, types and their members): the using and
  *   namespace specifiers, the declares, the symbols and the chunks;
  * - the reference walk visits every node with one tree cursor and collects the names the code uses: type names in type
- *   positions, static access `N.Member`, invoked members `x.M(…)`, attributes, qualified names.
+ *   positions, static access `N.Member`, `nameof(N)`, attributes, qualified names.
  * Each specifier remembers where its name starts, so the file's list comes out in source order whichever pass found it.
  *
  * The specifier syntax (the plan's table): using:A.B, global:A.B, static:A.B.C, gstatic:A.B.C, alias:X=A.B.C,
- * galias:X=A.B.C, ns:A.B, type:N, qtype:A.B.N, ext:M. Declares: type:<namespace>.<Type>[.<Nested>], ext:<ns>.<Class>.<M>,
- * main:static, main:top-level, and the file's project-wide usings (C18).
+ * galias:X=A.B.C, ns:A.B, type:N, qtype:A.B.N. Declares: type:<namespace>.<Type>[.<Nested>], main:static,
+ * main:top-level, and the file's project-wide usings (C18).
+ *
+ * Extension-method calls are not read (the controller's ruling of 2026-10-25, amending the plan's ext:): C# binds `x.M(…)`
+ * to an applicable instance method or overload first, so linking one needs the receiver's and the arguments' types. By
+ * name alone, 19 of 30 sampled links on jellyfin were right (progress-csharp.md, round 2).
  */
 import type { Node, TreeCursor } from "web-tree-sitter";
 import type { ChunkKind } from "../../../contracts";
@@ -171,7 +175,6 @@ function readStructure(root: Node, facts: FileFacts): void {
 
         const body = node.childForFieldName("body");
         if (body === null) return;
-        const isStaticClass = node.type === "class_declaration" && modifiers.has("static");
         const self = { name, isInterface: kind === "interface", exported };
         for (const member of flattened(body.namedChildren)){
             if (member.type in TYPE_DECLARATIONS){
@@ -179,16 +182,8 @@ function readStructure(root: Node, facts: FileFacts): void {
                 type(member, namespace, [...outer, name], depth + 1, self);
                 continue;
             }
-            if (member.type === "method_declaration"){
-                const methodName = plain(member.childForFieldName("name")?.text ?? "");
-                const methodModifiers = modifiersOf(member);
-                if (methodName === "Main" && methodModifiers.has("static")) facts.declares.add("main:static");
-                // an extension method: static, in a static class at file or namespace level, its first parameter `this`
-                if (isStaticClass && depth === 0 && methodModifiers.has("static")){
-                    const first = member.childForFieldName("parameters")?.namedChildren.find((p) => p.type === "parameter");
-                    if (first !== undefined && modifiersOf(first).has("this")) facts.declares.add(`ext:${fullName}.${methodName}`);
-                }
-            }
+            if (member.type === "method_declaration" && plain(member.childForFieldName("name")?.text ?? "") === "Main"
+                && modifiersOf(member).has("static")) facts.declares.add("main:static");
             if (depth === 0) memberSymbol(member, self);
         }
     };
@@ -325,21 +320,6 @@ function childMode(parentMode: number, parentType: string, field: string | null,
     }
 }
 
-/**
- * The member name an invocation calls on a receiver (`x.M(…)`, `x?.M(…)`), or null. A member invoked on a predefined
- * type (`string.IsNullOrEmpty(…)`, `decimal.Round(…)`) is a static call, never an extension call: null.
- */
-function invokedMember(invocation: Node): Node | null {
-    const fn = invocation.childForFieldName("function");
-    if (fn === null) return null;
-    if (fn.type === "member_access_expression") return fn.childForFieldName("expression")?.type === "predefined_type" ? null : fn.childForFieldName("name");
-    if (fn.type === "conditional_access_expression"){
-        const binding = fn.lastNamedChild;
-        if (binding !== null && (binding.type === "member_binding_expression" || binding.type === "member_access_expression")) return binding.childForFieldName("name");
-    }
-    return null;
-}
-
 /** The reference walk: one cursor over every node, a mode per depth. */
 function readReferences(root: Node, facts: FileFacts): void {
     let seq = 1_000_000;   // after the structure pass's, though positions rarely tie across passes
@@ -405,18 +385,14 @@ function readReferences(root: Node, facts: FileFacts): void {
                 return true;
             }
             case "invocation_expression": {
+                // nameof(N): N counts like a static access. An invoked member `x.M(…)` gives nothing (extension-method
+                // calls aren't linked); its receiver and type arguments are read as the walk goes on.
                 const node = cursor.currentNode;
-                const member = invokedMember(node);
-                if (member !== null){
-                    const id = member.type === "generic_name" ? member.firstNamedChild : member;
-                    if (id !== null && UPPER_CASE.test(plain(id.text))) emit(id.startIndex, `ext:${plain(id.text)}`);
-                } else{
-                    const fn = node.childForFieldName("function");
-                    if (fn?.type === "identifier" && fn.text === "nameof"){
-                        const args = node.childForFieldName("arguments");
-                        const only = args !== null && args.namedChildCount === 1 ? args.namedChild(0)?.namedChild(0) ?? null : null;
-                        if (only?.type === "identifier") staticName(only.startIndex, plain(only.text));
-                    }
+                const fn = node.childForFieldName("function");
+                if (fn?.type === "identifier" && fn.text === "nameof"){
+                    const args = node.childForFieldName("arguments");
+                    const only = args !== null && args.namedChildCount === 1 ? args.namedChild(0)?.namedChild(0) ?? null : null;
+                    if (only?.type === "identifier") staticName(only.startIndex, plain(only.text));
                 }
                 return true;
             }

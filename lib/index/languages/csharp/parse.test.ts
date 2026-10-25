@@ -66,7 +66,7 @@ describe("parseCsharp", () => {
 
     it("leaves out a static access through the file's fields, locals and foreach variables", () => {
         expect(imports("class C { static int Max = 1; void F() { var Local = 1; foreach (var Each in xs) { Each.M(); } Max.ToString(); Local.ToString(); Other.ToString(); } }"))
-            .toEqual(["ext:M", "ext:ToString", "type:Other"]);
+            .toEqual(["type:Other"]);
     });
 
     it("reads is, as, casts, catch, default, arrays, tuples and nullable types", () => {
@@ -74,18 +74,18 @@ describe("parseCsharp", () => {
             .toEqual(["type:A", "type:B", "type:C2", "type:E", "type:D", "type:F2", "type:G", "type:H", "type:I", "type:J"]);
     });
 
-    it("gives no ext: for a member invoked on a predefined type (a static call, never an extension call)", () => {
-        expect(imports("class C { void F(string s) { string.IsNullOrEmpty(s); int.Parse(s); s.Trim(); object.Equals(s, s); } }")).toEqual(["ext:Trim"]);
+    it("gives an invoked member no specifier (extension-method calls aren't linked); its receiver still can", () => {
+        expect(imports("class C { void F(string s) { string.IsNullOrEmpty(s); s.Trim(); Helper.Run(); x?.Go(); } }")).toEqual(["type:Helper"]);
     });
 
     it("reads a qualified attribute and a generic method's type arguments, and leaves type parameters out", () => {
         expect(imports("[A.B.Marker] class C<T> { T F<U>(U u) => default; void G() { x.Run<Order, T>(); Make<Item>(); } }"))
-            .toEqual(["qtype:A.B.Marker", "qtype:A.B.MarkerAttribute", "ext:Run", "type:Order", "type:Item"]);
+            .toEqual(["qtype:A.B.Marker", "qtype:A.B.MarkerAttribute", "type:Order", "type:Item"]);
     });
 
-    it("declares nested types with their outer types, and extension methods only in a static class", () => {
+    it("declares nested types with their outer types, and no extension methods", () => {
         const parsed = parseCsharp("x.cs", "namespace N.M { public static class E { public static void A(this int i) {} public class In { public class Deep {} } } public class NotStatic { public static void B(this int i) {} } }", "full");
-        expect(parsed.declares).toEqual(["ext:N.M.E.A", "type:N.M.E", "type:N.M.E.In", "type:N.M.E.In.Deep", "type:N.M.NotStatic"]);
+        expect(parsed.declares).toEqual(["type:N.M.E", "type:N.M.E.In", "type:N.M.E.In.Deep", "type:N.M.NotStatic"]);
         expect(parsed.symbols.map((s) => s.qualifiedName)).toEqual(["E", "E.A", "E.In", "NotStatic", "NotStatic.B"]);
     });
 

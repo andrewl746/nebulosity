@@ -11,8 +11,8 @@
  * - Every file declaring a chosen name gets the edge (partial types); when files of several projects declare it, the
  *   importer's own project's win.
  * - qtype:A.B.N: under each enclosing namespace, as written, through an alias for A, then under each visible using.
- * - ext:M: every extension method M in scope: its namespace enclosing or visible, or its class named by a using static.
- *   It is internal only then (the controller's ruling of 2026-10-25). static:/gstatic: name their type's files.
+ * - static:/gstatic: name their type's files.
+ * - Extension-method calls make no specifier, so nothing here resolves them (the controller's ruling of 2026-10-25).
  * - using:, global:, alias:, galias: and ns: make no edge (context).
  */
 import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
@@ -25,8 +25,6 @@ type FileView = Usings & {
     /** The file's namespaces and their parents, innermost first, then "" (the global namespace). */
     enclosing: string[];
 };
-/** One extension method's full name (ext:<namespace>.<Class>.<M>) and the files that declare it. */
-type Extension = { namespace: string; fullName: string; files: string[] };
 
 const join = (outer: string, name: string): string => (outer === "" ? name : `${outer}.${name}`);
 const byPath = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -86,10 +84,9 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         return found;
     };
 
-    // every declared type, extension method and namespace
+    // every declared type and namespace
     const typeFiles = new Map<string, string[]>();
     const simpleNames = new Set<string>();
-    const extensions = new Map<string, Extension[]>();
     const qualifiers = new Set<string>();   // declared namespaces, their parents, and declared types: what a qualified name may start from
     const projectDeclares = new Map<string, Usings>();
     const sortedFiles = [...ctx.files.keys()].sort(byPath);
@@ -103,18 +100,6 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
                 else files.push(file);
                 simpleNames.add(fullName.slice(fullName.lastIndexOf(".") + 1));
                 qualifiers.add(fullName);
-            } else if (fact.startsWith("ext:")){
-                const fullName = body(fact);
-                const name = fullName.slice(fullName.lastIndexOf(".") + 1);
-                const owner = fullName.slice(0, fullName.lastIndexOf("."));
-                let entries = extensions.get(name);
-                if (entries === undefined){
-                    entries = [];
-                    extensions.set(name, entries);
-                }
-                const entry = entries.find((e) => e.fullName === fullName);
-                if (entry !== undefined) entry.files.push(file);
-                else entries.push({ namespace: owner.includes(".") ? owner.slice(0, owner.lastIndexOf(".")) : "", fullName, files: [file] });
             } else if (/^(global|gstatic|galias):/.test(fact)){
                 const project = projectOf(file);
                 let usings = projectDeclares.get(project);
@@ -207,7 +192,8 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
     };
 
     /** The files declaring one full name: the importer's project's when several projects declare it. */
-    const filesFor = (fullName: string, project: string, files: readonly string[] = typeFiles.get(fullName) ?? []): readonly string[] => {
+    const filesFor = (fullName: string, project: string): readonly string[] => {
+        const files = typeFiles.get(fullName) ?? [];
         if (files.length < 2) return files;
         const own = files.filter((f) => projectOf(f) === project);
         return own.length > 0 && own.length < files.length ? own : files;
@@ -267,13 +253,6 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         else if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")){
             const fullName = staticType(view, text);
             files = fullName === null ? [] : filesFor(fullName, view.project);
-        } else if (specifier.startsWith("ext:")){
-            // in scope: an extension class in an enclosing or imported namespace, or one a using static names (C#'s rule)
-            const visible = new Set([...view.enclosing, ...view.namespaces]);
-            const statics = new Set(view.statics.map((s) => staticType(view, s)));
-            files = union((extensions.get(text) ?? [])
-                .filter((e) => visible.has(e.namespace) || statics.has(e.fullName.slice(0, e.fullName.lastIndexOf("."))))
-                .map((e) => filesFor(e.fullName, view.project, e.files)));
         } else{
             files = [];
         }
@@ -294,10 +273,6 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
                 if (!named) return "external";
                 return twinResolves(importer, specifier) ? "context" : "internal";
             }
-            // the controller's ruling (2026-10-25, amending the plan's "any same-named repo extension"): an ext:M call is a
-            // reference to a repo extension only when one named M is in scope by C#'s scoping, and every in-scope one
-            // resolves above; anything else binds elsewhere (an instance method, LINQ, the BCL)
-            if (specifier.startsWith("ext:")) return "external";
             if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")) return "external";
             return "context";
         },

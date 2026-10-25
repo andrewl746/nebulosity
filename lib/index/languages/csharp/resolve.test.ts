@@ -111,22 +111,10 @@ describe("the C# resolver on csharp-repo's truth", () => {
         expect(resolver.resolve(P.webGuard, "qtype:System.ArgumentException")).toEqual([]);
     });
 
-    it("ext:M: an extension whose namespace is visible (a using) or enclosing; none when neither", () => {
-        expect(resolver.resolve(P.program, "ext:AddShop")).toEqual([P.serviceExtensions]);
-        expect(resolver.resolve(P.hostExtensions, "ext:AddShop")).toEqual([P.serviceExtensions]);
-        expect(resolver.resolve(P.tests, "ext:AddShop")).toEqual([]);
-        expect(resolver.resolve(P.hostExtensions, "ext:IsNullOrEmpty")).toEqual([P.collectionExtensions]);
-    });
-
-    it("ext:M is internal only when a same-named repo extension is in scope (the controller's ruling of 2026-10-25)", () => {
-        expect(resolver.kindOf(P.program, "ext:AddShop")).toBe("internal");     // in scope through using Shop.Web.Extensions
-        expect(resolver.kindOf(P.tests, "ext:AddShop")).toBe("external");       // declared in the repo, not in scope: FakeServices.AddShop binds
-        expect(resolver.kindOf(P.order, "ext:Add")).toBe("external");           // no repo extension named Add at all
-    });
-
-    it("ext:M: a using static of the extension's class brings it into scope", () => {
-        expect(resolver.resolve(P.checkout, "ext:IsNullOrEmpty")).toEqual([P.collectionExtensions]);
-        expect(resolver.resolve(P.order, "ext:IsNullOrEmpty")).toEqual([]);   // neither imported nor named by a using static there
+    it("extension-method calls aren't linked: an extension class is reached only by naming it (here a using static)", () => {
+        expect(edgesOf(resolver, P.program, truth.specifiers[P.program])).toEqual([]);              // its AddShop call gives no specifier
+        expect(edgesOf(resolver, P.hostExtensions, truth.specifiers[P.hostExtensions])).toEqual([]);  // nor its AddShop and IsNullOrEmpty
+        expect(resolver.resolve(P.checkout, "static:Shop.Web.Extensions.CollectionExtensions")).toEqual([P.collectionExtensions]);
     });
 
     it("an attribute's lookup name that doesn't resolve is context when its twin does", () => {
@@ -169,15 +157,13 @@ describe("the C# resolver on hand-written files", () => {
         expect(resolver.resolve("tools/Tool/Use.cs", "type:Order")).toEqual([]);
     });
 
-    it("an alias wins over the usings, and an extension in the global namespace is visible everywhere", () => {
+    it("an alias wins over the usings", () => {
         const resolver = resolverOf({
             "A.cs": { specifiers: ["ns:A"], declares: ["type:A.Clock"] },
             "B.cs": { specifiers: ["ns:B"], declares: ["type:B.SystemClock"] },
-            "Ext.cs": { declares: ["ext:Helpers.Tidy", "type:Helpers"] },
-            "Use.cs": { specifiers: ["using:A", "alias:Clock=B.SystemClock", "ns:C", "type:Clock", "ext:Tidy"] },
+            "Use.cs": { specifiers: ["using:A", "alias:Clock=B.SystemClock", "ns:C", "type:Clock"] },
         });
         expect(resolver.resolve("Use.cs", "type:Clock")).toEqual(["B.cs"]);
-        expect(resolver.resolve("Use.cs", "ext:Tidy")).toEqual(["Ext.cs"]);
     });
 
     it("ignores a .csproj under a folder C# leaves out (bin/, obj/ beside a project) and reads each manifest once per cache", () => {
