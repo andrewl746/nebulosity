@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import { makeTempDir } from "../test/helpers/temp";
@@ -136,7 +136,7 @@ describe("config files a hand edit leaves", () => {
         const aside = writeConfig({ ...readConfig(), activeRepo: "C:/repos/other" }, (message) => said.push(message));
         expect(typeof aside).toBe("string");
         expect(path.dirname(aside!)).toBe(path.dirname(file));
-        expect(path.basename(aside!)).toMatch(/^config\.json\.invalid-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/);
+        expect(path.basename(aside!)).toMatch(/^config\.json\.invalid-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-\d+-[0-9a-f]{8}$/);
         expect(fs.readFileSync(aside!, "utf8")).toBe(handEdit);
         expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ activeRepo: "C:/repos/other", port: 3000 });
         expect(said).toHaveLength(1);
@@ -156,5 +156,55 @@ describe("config files a hand edit leaves", () => {
         expect(writeConfig({ activeRepo: "/x", port: 3000 }, () => {})).toBeNull();
         expect(movedAsideConfigs()).toEqual([]);
         expect(readConfig()).toEqual({ activeRepo: "/x", port: 3000 });
+    });
+});
+
+// The pre-ship pass's Final Review #2, minor 1 (ruling R30): two writers, and a write that can't land. Injected, not timed.
+describe("config writes that race or fail", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    function configFile(): string {
+        const home = makeTempDir("neb-config-");
+        process.env.NEBULOSITY_HOME = home;
+        fs.mkdirSync(path.join(home, ".nebulosity"));
+        return path.join(home, ".nebulosity", "config.json");
+    }
+
+    it("gives two files moved aside in the same millisecond different names, even when neither saw the other's", () => {
+        const file = configFile();
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-10-25T13:50:12.345Z"));
+        // each writer checked for a free name before the other had moved its file there
+        vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+        fs.writeFileSync(file, '{ "port": 4001, }');
+        const first = writeConfig({ activeRepo: null, port: 3000 }, () => {});
+        fs.writeFileSync(file, '{ "port": 4002, }');
+        const second = writeConfig({ activeRepo: null, port: 3000 }, () => {});
+
+        expect(typeof first).toBe("string");
+        expect(second).not.toBe(first);
+        expect(fs.readFileSync(first!, "utf8")).toBe('{ "port": 4001, }');
+        expect(fs.readFileSync(second!, "utf8")).toBe('{ "port": 4002, }');
+        expect(path.basename(first!)).toMatch(/^config\.json\.invalid-2026-10-25T13-50-12-345Z-\d+-[0-9a-f]{8}$/);
+    });
+
+    it("leaves the old file whole, and no temporary file behind, when the new one can't be put in its place", () => {
+        const file = configFile();
+        fs.writeFileSync(file, JSON.stringify({ activeRepo: "/r/app", port: 4000 }));
+        const realRename = fs.renameSync;
+        // whatever renames onto config.json fails, as a file another program holds open can on Windows
+        vi.spyOn(fs, "renameSync").mockImplementation(((from: fs.PathLike, to: fs.PathLike) => {
+            if (to === file) throw Object.assign(new Error(`EPERM: operation not permitted, rename '${String(from)}' -> '${file}'`), { code: "EPERM" });
+            return realRename(from, to);
+        }) as typeof fs.renameSync);
+
+        expect(() => writeConfig({ activeRepo: "/r/other", port: 4000 }, () => {})).toThrow("EPERM");
+        vi.restoreAllMocks();
+        expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ activeRepo: "/r/app", port: 4000 });
+        expect(fs.readdirSync(path.dirname(file))).toEqual(["config.json"]);
     });
 });

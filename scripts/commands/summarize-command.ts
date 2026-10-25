@@ -32,7 +32,7 @@ import { getDb } from "../../lib/db/client";
 import { IndexLockedError } from "../../lib/db/store/lock";
 import { readStages } from "../../lib/db/store/stages";
 import { RepoNotIndexedError, requireRepository } from "../../lib/db/store/structure";
-import { confirmSummaries, loadUsage } from "../../lib/db/store/summaries";
+import { confirmSummaries, loadUsage, summariesConfirmed } from "../../lib/db/store/summaries";
 import { embedSummaries } from "../../lib/index/embed";
 import { repoKey } from "../../lib/index/paths";
 import { summarizerFromEnv } from "../../lib/index/summarize/claude";
@@ -194,16 +194,26 @@ async function summarize(options: SummarizeOptions): Promise<number> {
 
 /**
  * The estimate and the yes (S11): prints what a full run would send and cost, then asks. Without a terminal it needs --yes.
- * A run with nothing to send needs no yes. A yes is recorded for the repo. Returns false when the run must not start.
- * The requests are planned, and priced, with the summary models setting (ADR-066).
+ * A run with nothing to send needs no yes. A yes is recorded for the repo, with the run's budget. Returns false when the
+ * run must not start. The requests are planned, and priced, with the summary models setting (ADR-066).
  */
 async function confirmSpend(options: SummarizeOptions, setting: ResolvedSummaryModels): Promise<boolean> {
     const { root } = options;
     const requests = plannedRequests(root, setting);
-    if (requests.length === 0) return true;
-
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
+
+    if (requests.length === 0){
+        // Nothing to say yes to, but the run's budget still sets what the Map's automatic refreshes may spend (R24): the
+        // worker's stop note sends people here with --budget, and what it stopped on may have been opened on the Map
+        // meanwhile (Final Review #2, minor 3; R30). Only for a repo already said yes to: a first yes comes with an estimate.
+        if (summariesConfirmed(db, repoId)){
+            confirmSummaries(db, repoId, options.budgetUsd);
+            say(`Nothing to send. The Map's automatic refreshes may now take this repo's summary spend up to ${formatUsd(options.budgetUsd)} in all.`);
+        }
+        return true;
+    }
+
     const files = requests.filter((r) => r.kind === "file").length;
     // the runner's own rule: auto goes through the Batch API (half price) for waves of BATCH_THRESHOLD or more
     const batch = options.transport === "batch" || (options.transport === "auto" && files >= BATCH_THRESHOLD);

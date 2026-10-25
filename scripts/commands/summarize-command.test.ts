@@ -93,6 +93,30 @@ describe("nebulosity summarize: an estimate and a yes before any spend (S11)", (
         expect(approvedBudgetUsd(db, requireRepository(db, repoKey(plain)))).toBe(15);
     });
 
+    // Final Review #2, minor 3 (ruling R30): the worker's stop note says "--budget <usd> approves more", and the run that
+    // follows it may find nothing waiting (the out-of-date summaries were opened on the Map meanwhile)
+    it("with nothing waiting to be sent, still records the run's budget for a repo already said yes to", async () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+        const db = getDb();
+        const root = copyFixture();
+        indexRepository(root);
+        expect(await runSummarize([root, "--direct", "--yes"])).toBe(0);
+        const repoId = requireRepository(db, repoKey(root));
+        expect(approvedBudgetUsd(db, repoId)).toBe(15);
+        stub.requests.length = 0;
+
+        // no --yes and no terminal: there's no spend to say yes to, only the budget the Map's refreshes keep to
+        expect(await runSummarize([root, "--direct", "--budget", "25"])).toBe(0);
+        expect(stub.requests).toHaveLength(0);
+        expect(approvedBudgetUsd(db, repoId)).toBe(25);
+        expect(printed(log)).toContain("[summarize] Nothing to send. The Map's automatic refreshes may now take this repo's summary spend up to $25.00 in all.");
+
+        // a re-run without --budget records the default again (R24's "the last --budget a confirmed run used")
+        expect(await runSummarize([root, "--direct"])).toBe(0);
+        expect(approvedBudgetUsd(db, repoId)).toBe(15);
+    });
+
     it("with no key, says summaries need one and sends nothing", async () => {
         summarizer = null;
         const root = copyFixture();

@@ -12,7 +12,7 @@ import { prepareLanguages } from "../../lib/index/languages/registry";
 import { describeScanned, indexRepository, RepoNotFoundError } from "../../lib/index/pipeline";
 import { repoKey } from "../../lib/index/paths";
 import { IndexLockedError } from "../../lib/db/store/lock";
-import { readConfig, writeConfig } from "../../lib/config";
+import { ConfigUnreadableError, updateConfig } from "../../lib/config";
 import { configuredSummaryModels } from "../../lib/index/summarize/models";
 import { refreshSummaryStatus } from "../../lib/index/summarize/status";
 import { hasAnthropicKey, loadLocalEnv } from "../env";
@@ -84,7 +84,14 @@ export async function runIndex(args: readonly string[]): Promise<number> {
         }
 
         if (activate){
-            writeConfig({ ...readConfig(), activeRepo: repoKey(root) });
+            // one read-modify-write: the file's other settings are kept from the read that checks it (R30)
+            try{
+                updateConfig((current) => ({ ...current, activeRepo: repoKey(root) }));
+            } catch (err){
+                if (!(err instanceof ConfigUnreadableError)) throw err;
+                console.error(`[index] the index is done, but the active repo is unchanged: ${err.message}`);
+                return 1;
+            }
             console.log(`[index] active repo → ${repoKey(root)}`);
         } else{
             console.log(`[index] active repo unchanged (--no-activate)`);
@@ -92,7 +99,7 @@ export async function runIndex(args: readonly string[]): Promise<number> {
         return 0;
     } catch (err){
         if (err instanceof RepoNotFoundError){
-            // returns before writeConfig, so a typo never becomes the active repo
+            // returns before updateConfig, so a typo never becomes the active repo
             console.error(`[index] ${err.message}. Pass the path to a repository folder.`);
             return 1;
         }

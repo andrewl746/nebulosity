@@ -1,6 +1,6 @@
 import path from "path";
 import type { RepoList } from "../contracts";
-import { readConfig, writeConfig } from "../config";
+import { readConfig, updateConfig } from "../config";
 import { getDb } from "../db/client";
 import { listStagedRepositories } from "../db/store/stages";
 import { commandHint } from "../hints";
@@ -31,9 +31,13 @@ export function listRepos(): RepoList {
     return { active: readConfig().activeRepo, repos };
 }
 
-/** Makes an indexed repo the active one (`activeRepo` in .nebulosity/config.json) and returns the new list. */
+/**
+ * Makes an indexed repo the active one (`activeRepo` in config.json) and returns the new list. One read-modify-write
+ * (updateConfig), so the file's other settings are kept from the same read that checks it; a file that can't be read
+ * refuses the switch (ConfigUnreadableError) rather than be written over.
+ */
 export function setActiveRepo(root: string): RepoList {
     if (!listRepos().repos.some((r) => r.root === root)) throw new UnknownRepoError(root);
-    writeConfig({ ...readConfig(), activeRepo: root });
+    updateConfig((current) => ({ ...current, activeRepo: root }));
     return listRepos();
 }
