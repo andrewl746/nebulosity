@@ -133,6 +133,18 @@ describe("C#'s generic arity (the pre-ship pass, Task C: the CLR's backtick form
         expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["static:A.Box`1", "alias:M=A.Box`2", "alias:N=A.Pair`2"]);
         expect(parseCsharp("x.cs", text, "full").imports).toEqual(["static:A.Box`1", "alias:M=A.Box`2", "alias:N=A.Pair`2"]);
     });
+
+    it("scans a tuple's and an array rank's commas as inside one type argument, as the full reading does (the final review's B-m2)", () => {
+        const text = "using M = global::A.Box<(int A, int B)>;\nusing static A.Box<(int, int)>;\nusing R = A.Box<int[,]>;\nusing T = A.Pair<(int, string), long[][,]>;\n";
+        expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["alias:M=A.Box`1", "static:A.Box`1", "alias:R=A.Box`1", "alias:T=A.Pair`2"]);
+        expect(parseCsharp("x.cs", text, "full").imports).toEqual(["alias:M=A.Box`1", "static:A.Box`1", "alias:R=A.Box`1", "alias:T=A.Pair`2"]);
+    });
+
+    it("scans a target with type arguments before its last segment as its header says: skipped, or read as its first generic segment", () => {
+        const text = "using P = A.Outer<int>.Inner;\nusing O = A.Outer<int>.Inner<string>;\n";
+        expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["alias:O=A.Outer`1"]);
+        expect(parseCsharp("x.cs", text, "full").imports).toEqual(["alias:P=A.Outer`1.Inner", "alias:O=A.Outer`1.Inner`1"]);
+    });
 });
 
 describe("C#'s one export rule (ADR-065, the final review's B-I2)", () => {

@@ -3,10 +3,15 @@
  * its `using …;` and `namespace …` lines, with no syntax tree, so a giant generated file can't grow WebAssembly memory.
  *
  * A using's trailing type arguments give its arity, as the full reading writes it (`using static A.Box<int>;` is
- * static:A.Box`1). Known differences from the full reading: no type or qtype specifier (they need the tree); a target
- * with type arguments before its last segment (`A.Outer<int>.Inner`) is skipped; a nested block
- * namespace reads as written (`namespace Pricing` inside `namespace Shop.Core` gives ns:Pricing, not ns:Shop.Core.Pricing);
- * a using line inside a block comment is read.
+ * static:A.Box`1; a tuple's or an array rank's commas are inside one argument). Known differences from the full reading:
+ * - no type or qtype specifier (they need the tree);
+ * - a target with type arguments before its last segment is misread. With none on its last segment
+ *   (`using M = A.Outer<int>.Inner;`) it's skipped. With some (`using M = A.Outer<int>.Inner<string>;`) it's read as
+ *   its first generic segment, with one argument more than the top-level commas of all its lists: alias:M=A.Outer`1,
+ *   where the full reading gives alias:M=A.Outer`1.Inner`1;
+ * - a nested block namespace reads as written (`namespace Pricing` inside `namespace Shop.Core` gives ns:Pricing, not
+ *   ns:Shop.Core.Pricing);
+ * - a using line inside a block comment is read.
  */
 
 import { withArity } from "./arity";
@@ -18,13 +23,16 @@ const NAMESPACE_LINE = /^\s*namespace\s+(@?[A-Za-z_][\w.@]*)/;
 /** A name a using directive can hold: dotted identifiers, an optional global:: and trailing type arguments. */
 const NAME = /^(global::)?@?[A-Za-z_]\w*(\.@?[A-Za-z_]\w*)*(<.*>)?$/;
 
-/** How many type arguments a list's inside holds: its commas outside any nested `<…>`, plus one. */
+/**
+ * How many type arguments a list's inside holds: its commas outside any nested `<…>`, tuple `(…)` or array rank `[…]`,
+ * plus one, as the full reading counts the list's own commas (`Box<(int A, int B)>` and `Box<int[,]>` are Box`1).
+ */
 function argumentCount(inside: string): number {
     let depth = 0;
     let commas = 0;
     for (const ch of inside){
-        if (ch === "<") depth++;
-        else if (ch === ">") depth--;
+        if (ch === "<" || ch === "(" || ch === "[") depth++;
+        else if (ch === ">" || ch === ")" || ch === "]") depth--;
         else if (ch === "," && depth === 0) commas++;
     }
     return commas + 1;
