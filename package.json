@@ -69,6 +69,7 @@
     "preview-folders": "tsx scripts/preview-folders.ts",
     "report-resolution": "tsx scripts/report-resolution.ts",
     "dump-index": "tsx scripts/dump-index.ts",
+    "grammars": "node scripts/copy-grammars.mjs",
     "measure-typecheck": "node --max-old-space-size=16384 --import tsx scripts/measure-typecheck.ts"
   },
   "dependencies": {
@@ -89,8 +90,10 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
+    "smol-toml": "1.9.1",
     "tsx": "^4.23.0",
     "typescript": "^5",
+    "web-tree-sitter": "0.27.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -103,6 +106,11 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
+    "tree-sitter-c-sharp": "0.23.5",
+    "tree-sitter-go": "0.25.0",
+    "tree-sitter-java": "0.23.5",
+    "tree-sitter-python": "0.25.0",
+    "tree-sitter-rust": "0.24.0",
     "vitest": "^4.1.10"
   }
 }
