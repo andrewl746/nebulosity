@@ -8,6 +8,10 @@
  * - type:N: each enclosing namespace from the innermost out (the global namespace last), the first that holds N; else an
  *   alias named N (the file's, then the project's), its target; else every visible using's U.N together, the types
  *   nested in static: and gstatic: types counting too.
+ * - Generic arity (the pre-ship pass, Task C; the controller's ruling R5): names carry it (arity.ts: type:Box`1), and the
+ *   whole lookup is tried with it first, so `Box<int>` reaches Box<T>'s file and not Box's or Box<T, U>'s, as C# binds
+ *   it. Only when that finds nothing does the lookup run again by name at any arity, as before the pass. Kinds are by
+ *   name, at any arity.
  * - Every file declaring a chosen name gets the edge (partial types); when files of several projects declare it, the
  *   importer's own project's win.
  * - qtype:A.B.N: under each enclosing namespace, as written, through an alias for A, then under each visible using.
@@ -17,9 +21,12 @@
  */
 import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
 import { dirOf } from "../../paths";
+import { splitArity, withoutArity } from "./arity";
 import { CSHARP_MANIFEST, csharpRules, projectFiles } from "./rules";
 
 type Usings = { namespaces: string[]; statics: string[]; aliases: Map<string, string> };
+/** Declared full names to the files declaring them, sorted by path. */
+type Index = Map<string, string[]>;
 type FileView = Usings & {
     project: string;
     /** The file's namespaces and their parents, innermost first, then "" (the global namespace). */
@@ -84,10 +91,18 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         return found;
     };
 
-    // every declared type and namespace
-    const typeFiles = new Map<string, string[]>();
-    const simpleNames = new Set<string>();
-    const qualifiers = new Set<string>();   // declared namespaces, their parents, and declared types: what a qualified name may start from
+    // every declared type, by its full name as declared (arity included: Box`1) and by that name at any arity (Box), the
+    // lookup's second pass; and every namespace. Files are visited sorted, so each list is sorted and a file declaring
+    // two arities of one name (Box and Box`1) is listed once by name.
+    const exactFiles: Index = new Map();
+    const nameFiles: Index = new Map();
+    const add = (index: Index, fullName: string, file: string): void => {
+        const files = index.get(fullName);
+        if (files === undefined) index.set(fullName, [file]);
+        else if (files.at(-1) !== file) files.push(file);
+    };
+    const simpleNames = new Set<string>();   // at any arity
+    const qualifiers = new Set<string>();   // declared namespaces, their parents, and declared types (at any arity): what a qualified name may start from
     const projectDeclares = new Map<string, Usings>();
     const sortedFiles = [...ctx.files.keys()].sort(byPath);
     for (const file of sortedFiles){
@@ -95,11 +110,11 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         for (const fact of facts.declares){
             if (fact.startsWith("type:")){
                 const fullName = body(fact);
-                const files = typeFiles.get(fullName);
-                if (files === undefined) typeFiles.set(fullName, [file]);
-                else files.push(file);
-                simpleNames.add(fullName.slice(fullName.lastIndexOf(".") + 1));
-                qualifiers.add(fullName);
+                const byName = withoutArity(fullName);
+                add(exactFiles, fullName, file);
+                add(nameFiles, byName, file);
+                simpleNames.add(byName.slice(byName.lastIndexOf(".") + 1));
+                qualifiers.add(byName);
             } else if (/^(global|gstatic|galias):/.test(fact)){
                 const project = projectOf(file);
                 let usings = projectDeclares.get(project);
@@ -191,53 +206,79 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         return view;
     };
 
-    /** The files declaring one full name: the importer's project's when several projects declare it. */
-    const filesFor = (fullName: string, project: string): readonly string[] => {
-        const files = typeFiles.get(fullName) ?? [];
+    /** The files declaring one full name in `index`: the importer's project's when several projects declare it. */
+    const filesFor = (index: Index, fullName: string, project: string): readonly string[] => {
+        const files = index.get(fullName) ?? [];
         if (files.length < 2) return files;
         const own = files.filter((f) => projectOf(f) === project);
         return own.length > 0 && own.length < files.length ? own : files;
     };
     const union = (lists: readonly (readonly string[])[]): string[] => [...new Set(lists.flat())].sort(byPath);
 
-    /** A (possibly dotted) name as C# looks it up from `view`: enclosing namespaces, then an alias, then the usings. */
-    const lookUp = (view: FileView, name: string): readonly string[] => {
+    /**
+     * The lookup's two passes (R5): with the arity as written, over the names as declared; then by name, every arity
+     * taken out of the name, the aliases' targets and the static types alike, over the names at any arity.
+     */
+    const PASSES: readonly { index: Index; form: (name: string) => string }[] = [
+        { index: exactFiles, form: (name) => name },
+        { index: nameFiles, form: withoutArity },
+    ];
+
+    /**
+     * A (possibly dotted) name as C# looks it up from `view`, in one pass: enclosing namespaces, then an alias, then the
+     * usings. An alias never takes type arguments, so a name with an arity on its first segment never finds one.
+     */
+    const lookUpIn = ({ index, form }: (typeof PASSES)[number], view: FileView, written: string): readonly string[] => {
+        const name = form(written);
         for (const outer of view.enclosing){
             const fullName = join(outer, name);
-            if (typeFiles.has(fullName)) return filesFor(fullName, view.project);
+            if (index.has(fullName)) return filesFor(index, fullName, view.project);
         }
         const dot = name.indexOf(".");
         const first = dot === -1 ? name : name.slice(0, dot);
         const target = view.aliases.get(first);
         if (target !== undefined){
-            const fullName = dot === -1 ? target : `${target}${name.slice(dot)}`;
-            return typeFiles.has(fullName) ? filesFor(fullName, view.project) : [];
+            const fullName = form(dot === -1 ? target : `${target}${name.slice(dot)}`);
+            return index.has(fullName) ? filesFor(index, fullName, view.project) : [];
         }
         const found: (readonly string[])[] = [];
         for (const scope of [...view.namespaces, ...view.statics]){
-            const fullName = join(scope, name);
-            if (typeFiles.has(fullName)) found.push(filesFor(fullName, view.project));
+            const fullName = form(join(scope, name));
+            if (index.has(fullName)) found.push(filesFor(index, fullName, view.project));
         }
         return union(found);
     };
 
-    /** A using static's type as declared: as written, then under each enclosing namespace; null when the repo has none. */
-    const staticType = (view: FileView, name: string): string | null => {
-        for (const outer of ["", ...view.enclosing]){
-            const fullName = join(outer, name);
-            if (typeFiles.has(fullName)) return fullName;
+    /**
+     * A name's files: those declaring it with its arity, when the whole lookup finds any (so a using's Box<T> beats an
+     * enclosing namespace's Box for `Box<int>`, as C# binds it); else by name at any arity, as before the pass.
+     */
+    const lookUp = (view: FileView, name: string): readonly string[] => {
+        const exact = lookUpIn(PASSES[0], view, name);
+        return exact.length > 0 ? exact : lookUpIn(PASSES[1], view, name);
+    };
+
+    /** A using static's type's files: as written, then under each enclosing namespace; its arity first, else by name. */
+    const staticFiles = (view: FileView, written: string): readonly string[] => {
+        for (const { index, form } of PASSES){
+            for (const outer of ["", ...view.enclosing]){
+                const fullName = form(join(outer, written));
+                if (index.has(fullName)) return filesFor(index, fullName, view.project);
+            }
         }
-        return null;
+        return [];
     };
 
     /**
      * An attribute [N] is looked up as N and as NAttribute (both specifiers are written); C# binds it to the one that
-     * exists, so the other one is only a lookup aid when its twin resolves.
+     * exists, so the other one is only a lookup aid when its twin resolves. A generic attribute's arity stays at the end
+     * of both: Marker`1 and MarkerAttribute`1.
      */
     const twinResolves = (importer: string, specifier: string): boolean => {
         const cls = specifier.slice(0, specifier.indexOf(":") + 1);
-        const text = body(specifier);
-        const twin = text.endsWith("Attribute") ? `${cls}${text.slice(0, -"Attribute".length)}` : `${cls}${text}Attribute`;
+        const [name, arity] = splitArity(body(specifier));
+        const twinName = name.endsWith("Attribute") ? name.slice(0, -"Attribute".length) : `${name}Attribute`;
+        const twin = `${cls}${twinName}${arity}`;
         return (ctx.files.get(importer)?.importSpecifiers.includes(twin) ?? false) && resolve(importer, twin).length > 0;
     };
 
@@ -250,12 +291,8 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         const view = viewOf(importer);
         const text = body(specifier);
         if (specifier.startsWith("type:") || specifier.startsWith("qtype:")) files = lookUp(view, text);
-        else if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")){
-            const fullName = staticType(view, text);
-            files = fullName === null ? [] : filesFor(fullName, view.project);
-        } else{
-            files = [];
-        }
+        else if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")) files = staticFiles(view, text);
+        else files = [];
         const sorted = [...files].sort(byPath);
         resolved.set(key, sorted);
         return sorted;
@@ -265,7 +302,7 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         resolve,
         kindOf(importer, specifier): ReferenceKind {
             if (resolve(importer, specifier).length > 0) return "internal";
-            const text = body(specifier);
+            const text = withoutArity(body(specifier));   // by name, at any arity
             if (specifier.startsWith("type:") || specifier.startsWith("qtype:")){
                 const named = specifier.startsWith("type:")
                     ? simpleNames.has(text)

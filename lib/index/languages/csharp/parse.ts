@@ -11,6 +11,10 @@
  * galias:X=A.B.C, ns:A.B, type:N, qtype:A.B.N. Declares: type:<namespace>.<Type>[.<Nested>], main:static,
  * main:top-level, and the file's project-wide usings (C18).
  *
+ * A generic name carries its arity in the CLR's backtick form (arity.ts; the pre-ship pass, Task C): `Box<int>` and
+ * `typeof(Box<>)` are type:Box`1, `class Box<T>` declares type:<namespace>.Box`1, each generic segment of a dotted name
+ * keeps its own (A.Outer`1.Inner), and a non-generic name has no suffix. Symbols and chunks keep the plain name.
+ *
  * Extension-method calls are not read (the controller's ruling of 2026-10-25, amending the plan's ext:): C# binds `x.M(…)`
  * to an applicable instance method or overload first, so linking one needs the receiver's and the arguments' types. By
  * name alone, 19 of 30 sampled links on jellyfin were right (ADR-065, "C#: extension-method calls are not linked").
@@ -23,6 +27,7 @@ import { assembleChunks, type Declaration } from "../chunking";
 import { endLineOf, leadingSpan, parseTree, startLineOf } from "../treesitter";
 import { countLines } from "../typescript";
 import { emptyCallFacts } from "../typescript-calls";
+import { splitArity, withArity, withoutArity } from "./arity";
 import { scanCsharp } from "./scan";
 
 /** Every leading byte-order mark (a file saved twice by a careless tool can carry two; parseTree drops only one). */
@@ -62,15 +67,39 @@ function plain(name: string): string {
 }
 
 /**
- * A name's dotted text: generic arguments dropped (`List<Item>` → List), an alias qualifier dropped (`global::System.Text`
- * → System.Text). Anything else is its text without whitespace.
+ * The arity a generic name's type arguments give: the list's commas plus one, so typeof's unbound `Box<>` and `Box<,>`
+ * count 1 and 2 as `Box<int>` and `Box<int, string>` do (a nested list's commas are its own children, not counted here).
+ */
+function argumentArity(name: Node): number {
+    const list = name.namedChildren.find((c) => c.type === "type_argument_list");
+    if (list === undefined) return 0;
+    let commas = 0;
+    for (let i = 0; i < list.childCount; i++) if (list.child(i)?.type === ",") commas++;
+    return commas + 1;
+}
+
+/** A type declaration's arity: its type parameters (`class Box<T>` has 1), none for a non-generic type. */
+function parameterArity(declaration: Node): number {
+    const list = declaration.namedChildren.find((c) => c.type === "type_parameter_list");
+    return list === undefined ? 0 : list.namedChildren.filter((c) => c.type === "type_parameter").length;
+}
+
+/** An attribute's second lookup name, before its arity: [Marker<T>] is also MarkerAttribute`1. */
+function attributeName(name: string): string {
+    const [bare, arity] = splitArity(name);
+    return `${bare}Attribute${arity}`;
+}
+
+/**
+ * A name's dotted text: generic arguments as the arity (`List<Item>` → List`1, arity.ts), an alias qualifier dropped
+ * (`global::System.Text` → System.Text). Anything else is its text without whitespace.
  */
 export function dottedName(node: Node): string {
     switch (node.type){
         case "identifier":
             return plain(node.text);
         case "generic_name":
-            return node.firstNamedChild === null ? node.text : dottedName(node.firstNamedChild);
+            return node.firstNamedChild === null ? node.text : withArity(dottedName(node.firstNamedChild), argumentArity(node));
         case "qualified_name": {
             const qualifier = node.childForFieldName("qualifier");
             const name = node.childForFieldName("name");
@@ -126,7 +155,10 @@ type FileFacts = {
     declarations: Declaration[];
     usingTexts: string[];
     exports: string[];
-    /** Simple names of every type the file declares, nested ones included. */
+    /**
+     * Simple names of every type the file declares, nested ones included, each with its arity (Box`1): Box<T>'s file
+     * still refers to a Box written without type arguments, another type.
+     */
     declaredTypes: Set<string>;
     /** Every type parameter's name. */
     typeParameters: Set<string>;
@@ -175,9 +207,11 @@ function readStructure(root: Node, facts: FileFacts): void {
         if (node.type === "record_declaration"){
             for (let i = 0; i < node.childCount; i++) if (node.child(i)?.type === "struct") kind = "struct";
         }
-        const fullName = join(namespace, [...outer, name].join("."));
+        // declared with its arity, as references name it; the symbol and the chunk keep the plain name
+        const declared = withArity(name, parameterArity(node));
+        const fullName = join(namespace, [...outer, declared].join("."));
         facts.declares.add(`type:${fullName}`);
-        facts.declaredTypes.add(name);
+        facts.declaredTypes.add(declared);
 
         // ADR-065's one export rule: a nested type only when its owner is exported too; an interface's members take its flag
         const exported = parent === null ? modifiersOf(node).has("public") : memberExported(node, parent);
@@ -199,7 +233,7 @@ function readStructure(root: Node, facts: FileFacts): void {
         for (const member of flattened(body.namedChildren)){
             if (member.type in TYPE_DECLARATIONS){
                 // a nested type is a symbol only as a top-level type's member (depth 1); deeper ones only declare
-                type(member, namespace, [...outer, name], depth + 1, self);
+                type(member, namespace, [...outer, declared], depth + 1, self);
                 continue;
             }
             if (member.type === "method_declaration" && plain(member.childForFieldName("name")?.text ?? "") === "Main"
@@ -365,8 +399,9 @@ function readReferences(root: Node, facts: FileFacts): void {
                     typeName(cursor.startIndex, plain(cursor.nodeText));
                     return false;
                 case "generic_name": {
-                    const id = cursor.currentNode.firstNamedChild;
-                    if (id !== null) typeName(id.startIndex, plain(id.text));
+                    const node = cursor.currentNode;
+                    const id = node.firstNamedChild;
+                    if (id !== null) typeName(id.startIndex, dottedName(node));   // Box<int> → Box`1
                     return true;
                 }
                 case "qualified_name":
@@ -393,10 +428,10 @@ function readReferences(root: Node, facts: FileFacts): void {
                     const dotted = dottedName(name);
                     if (dotted.includes(".")){
                         emit(name.startIndex, `qtype:${dotted}`);
-                        emit(name.startIndex, `qtype:${dotted}Attribute`);
+                        emit(name.startIndex, `qtype:${attributeName(dotted)}`);
                     } else{
                         typeName(name.startIndex, dotted);
-                        typeName(name.startIndex, `${dotted}Attribute`);
+                        typeName(name.startIndex, attributeName(dotted));
                     }
                     if (name.type === "generic_name"){
                         // [Foo<Bar>]: its type arguments are types
@@ -481,12 +516,17 @@ function readReferences(root: Node, facts: FileFacts): void {
     }
 }
 
-/** The file's specifiers in source order, each once: the found ones, plus the type and static names that survive. */
+/**
+ * The file's specifiers in source order, each once: the found ones, plus the type and static names that survive. A name
+ * the file declares is left out only at its declared arity, so Box<T>'s base type Box stays; type parameters and the
+ * contextual keywords are left out by their plain name, at any arity, as before arity was read.
+ */
 function specifiersOf(facts: FileFacts): string[] {
-    const left = (name: string): boolean => facts.declaredTypes.has(name) || facts.typeParameters.has(name);
+    const left = (name: string): boolean => facts.declaredTypes.has(name) || facts.typeParameters.has(withoutArity(name));
     const all: Found[] = [
         ...facts.found,
-        ...facts.typeNames.filter((f) => !left(f.specifier) && !NOT_TYPE_NAMES.has(f.specifier)).map((f) => ({ ...f, specifier: `type:${f.specifier}` })),
+        ...facts.typeNames.filter((f) => !left(f.specifier) && !NOT_TYPE_NAMES.has(withoutArity(f.specifier)))
+            .map((f) => ({ ...f, specifier: `type:${f.specifier}` })),
         ...facts.staticNames.filter((f) => UPPER_CASE.test(f.specifier) && !left(f.specifier) && !facts.valueNames.has(f.specifier))
             .map((f) => ({ ...f, specifier: `type:${f.specifier}` })),
     ];
