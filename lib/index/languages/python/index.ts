@@ -1,15 +1,13 @@
 import type { LanguageAdapter } from "../adapter";
+import { parsePythonFile } from "./parse";
+import { createPythonResolver } from "./resolve";
 import { pythonRules } from "./rules";
 
-/** A stub (Task F of the E4 plan): its grammar loads, but it claims no file until this language's task builds it. */
+/** Python behind the seam (ADR-065, the E4 plan's Task P): tree-sitter-python for the parse, its own import rules. */
 export const pythonAdapter: LanguageAdapter = {
     ...pythonRules,
-    version: 0,
+    version: 1,
     grammar: "tree-sitter-python.wasm",
-    parse(){
-        throw new Error("python adapter not built yet");
-    },
-    createResolver(){
-        throw new Error("python adapter not built yet");
-    },
+    parse: parsePythonFile,
+    createResolver: createPythonResolver,
 };

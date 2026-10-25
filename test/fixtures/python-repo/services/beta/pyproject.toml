@@ -1,0 +1,7 @@
+[tool.poetry]
+name = "beta"
+version = "0.1.0"
+packages = [{ include = "app", from = "src" }]
+
+[tool.poetry.scripts]
+beta = "app:run"
