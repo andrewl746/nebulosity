@@ -1,0 +1,12 @@
+[package]
+name = "shop-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "shop-admin"
+path = "tools/admin.rs"
+
+[dependencies]
+shop-core = { path = "../core" }
+store = { package = "shop-store", path = "../store" }
