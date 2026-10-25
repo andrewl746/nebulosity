@@ -15,6 +15,7 @@ import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/s
 import { readStages, type StoredStage } from "../db/store/stages";
 import { findRepository, loadImportEdges, upsertRepository, writeFileRecords } from "../db/store/structure";
 import { readAdapterVersion, writeAdapterVersion } from "../db/store/version";
+import type { LanguageAdapter } from "./languages/adapter";
 import { ADAPTER_VERSION } from "./languages/typescript";
 import { typescriptAdapter } from "./languages/typescript-adapter";
 import { GrammarNotLoadedError } from "./languages/treesitter";
@@ -508,6 +509,59 @@ describe("indexRepository through the language adapters (ADR-065)", () => {
         expect(() => indexRepository(repo(TOY_REPO), { adapters: [typescriptAdapter, unprepared] })).toThrow(GrammarNotLoadedError);
         // with none of its files discovered, nothing needs it
         expect(indexRepository(repo({ "a.ts": "export {};\n" }), { adapters: [typescriptAdapter, unprepared] }).files).toBe(1);
+    });
+
+    /**
+     * A toy whose full and parse readings throw on a file holding the line `deep`, as a recursive walk overflows on a deep
+     * file, and whose readings all throw on `broken all`; its scan reads only the `use` lines (test/helpers/toy-adapter.ts).
+     */
+    const throwing: LanguageAdapter = {
+        ...toyAdapter,
+        parse(p, text, reading){
+            if (text.includes("broken all")) throw new Error("unreadable");
+            if (reading !== "scan" && text.includes("deep")) throw new RangeError("Maximum call stack size exceeded");
+            return toyAdapter.parse(p, text, reading);
+        },
+    };
+
+    it("reads a file whose parse throws with the scan instead: its row and imports kept, no declarations (the E4 final review's B-I1)", () => {
+        const { repoId, ...result } = indexRepository(repo({ "a.toy": "use b\nname y\ndeep\ndef x\n", "b.toy": "def y\n", "c.toy": "broken all\n" }),
+            { adapters: [typescriptAdapter, throwing] });
+        // a.toy is scanned: only use:b, so b.toy by its path and no name:y; c.toy throws in every reading, so it is left out
+        expect(result).toMatchObject({
+            files: 2, edges: 1,
+            scanned: [{ path: "a.toy", error: "Maximum call stack size exceeded" }],
+            errors: [{ path: "c.toy", error: "unreadable" }],
+        });
+        expect(edgesOfRepo(repoId)).toEqual([{ source: "a.toy", target: "b.toy", specifier: "use:b" }]);
+        const db = getDb();
+        expect(db.select({ path: files.path, declares: files.declares, lineCount: files.lineCount }).from(files)
+            .where(eq(files.repoId, repoId)).orderBy(files.path).all()).toEqual([
+            { path: "a.toy", declares: "[]", lineCount: 4 },        // the scan declares nothing (K7), but counts the lines
+            { path: "b.toy", declares: "[\"def:y\"]", lineCount: 1 },
+        ]);
+        expect(db.select({ path: files.path, name: symbols.name }).from(symbols).innerJoin(files, eq(files.id, symbols.fileId))
+            .where(eq(files.repoId, repoId)).orderBy(files.path).all()).toEqual([{ path: "b.toy", name: "y" }]);
+        expect(db.select({ path: files.path }).from(chunks).innerJoin(files, eq(files.id, chunks.fileId))
+            .where(and(eq(files.repoId, repoId), eq(files.path, "a.toy"))).all()).toEqual([]);
+    });
+
+    it("never retries a parse that names a grammar not loaded, and never scans a file twice", () => {
+        const scans: string[] = [];
+        const grammarless: LanguageAdapter = {
+            ...toyAdapter,
+            parse(p, text, reading){
+                if (reading === "scan") scans.push(p);
+                if (p === "g.toy") throw new GrammarNotLoadedError(["toy"]);
+                if (reading === "scan") throw new RangeError("the scan overflows too");
+                throw new RangeError("Maximum call stack size exceeded");
+            },
+        };
+        const result = indexRepository(repo({ "g.toy": "def g\n", "s.toy": "def s\n" }), { adapters: [typescriptAdapter, grammarless] });
+        expect(result).toMatchObject({ files: 0, scanned: [] });
+        expect(result.errors.map((e) => e.path)).toEqual(["g.toy", "s.toy"]);
+        expect(result.errors[1].error).toBe("the scan overflows too");
+        expect(scans).toEqual(["s.toy"]);
     });
 
     it("leaves TypeScript's edges as they were beside another language's manifest", () => {

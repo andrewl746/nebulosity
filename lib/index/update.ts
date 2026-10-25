@@ -31,6 +31,8 @@ export type FileChangeResult = {
     /** Paths that needed nothing: the same bytes, or never a source file. */
     unchanged: number;
     errors: FileError[];
+    /** Files whose adapter's parse threw, read by the scan instead and in the index with their imports (IndexResult's `scanned`). */
+    scanned: FileError[];
     /**
      * Every file's imports were re-resolved: the file set changed, or a manifest of any language, a tsconfig, a package.json
      * or a workspace declaration did (ADR-037, ADR-053, ADR-065).
@@ -158,9 +160,13 @@ export function applyFileChanges(
         assertGrammarsLoaded(new Set(pending.flatMap((p) => adapterFor(p.rel, adapters) ?? [])));
 
         const records: FileRecord[] = [];
+        const scanned: FileError[] = [];
         for (const p of pending){
             try{
-                records.push(toFileRecord(p.rel, p.text, p.contentHash, p.size, { ...(p.reading === "full" ? {} : { importsOnly: p.reading }), adapters }));
+                records.push(toFileRecord(p.rel, p.text, p.contentHash, p.size, {
+                    ...(p.reading === "full" ? {} : { importsOnly: p.reading }), adapters,
+                    onScanned: (error) => scanned.push({ path: p.rel, error }),   // a parse that threw, read by the scan (B-I1)
+                }));
             } catch (err){
                 errors.push({ path: p.rel, error: messageOf(err) });
             }
@@ -177,7 +183,11 @@ export function applyFileChanges(
         const deleted = deleteFiles(db, repoId, gone);
 
         const fileSetChanged = changed.some((p) => !stored.has(p)) || deleted.length > 0;
-        const resolvedAll = fileSetChanged || paths.some((p) => resolvesEverything(p, adapters));
+        // manifestsMoved too (the E4 final review's m6): a folder reported as a folder, holding a manifest and no indexed
+        // file, deleted, changes the manifest list with no manifest among the paths and no file set change; without it the
+        // old manifests and cache were kept, against adapter.ts's "emptied whenever a manifest changes", and every later
+        // update saw the lists differ and listed the whole repo again (a cost per save, until the next full run)
+        const resolvedAll = fileSetChanged || manifestsMoved || paths.some((p) => resolvesEverything(p, adapters));
         // ADR-053, amended (V1.7), widened (ADR-065): the worker keeps the resolution state it was given back. It starts
         // again only when what it is made of can have changed: a manifest or resolution input, or the file set (a folder
         // with a package.json deleted). TypeScript's workspace, read afresh, costs about 0.28 s on VS Code, most of it one
@@ -241,6 +251,7 @@ export function applyFileChanges(
             deleted,
             unchanged,
             errors,
+            scanned,
             resolvedAll,
             edgesAdded: added.length,
             edgesRemoved: removed.length + cascaded.length,

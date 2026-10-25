@@ -18,7 +18,7 @@ import { buildFolders, buildLevelEdges } from "./aggregate";
 import { docLinks, folderSuffixes, type KnownPaths } from "./docs";
 import { discoverFiles, isTestPath, readGitHead, type DiscoveredFile, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
-import type { LanguageAdapter } from "./languages/adapter";
+import type { LanguageAdapter, ParsedFile, Reading } from "./languages/adapter";
 import { ADAPTERS, adapterFor } from "./languages/registry";
 import { createResolvers, edgesOf, entryPointsOf } from "./languages/resolution";
 import { GrammarNotLoadedError, isPrepared } from "./languages/treesitter";
@@ -60,6 +60,12 @@ export type IndexResult = {
     folders: number;
     levelEdges: number;
     errors: FileError[];
+    /**
+     * Files whose adapter's parse threw, each with the error, read by the scan instead (the E4 final review's B-I1): in the
+     * index with their imports, as a file over the cap is, but with no declarations or code search. Not in `errors`, which
+     * lists files left out.
+     */
+    scanned: FileError[];
     /** Files left out: over the hard bound, unreadable, or a doc over the cap. */
     skipped: SkippedFile[];
     /** Code files over the size cap, in the index for their imports only: no declarations, code search or summary (ADR-053). */
@@ -138,6 +144,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
+        const scanned: FileError[] = [];
         const skipped: SkippedFile[] = [...discovered.skipped];   // the docs read below add theirs
         let changed = 0;
         let unchanged = 0;
@@ -166,7 +173,9 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 }
 
                 try{
-                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, { importsOnly: file.importsOnly, adapters }));
+                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, {
+                        importsOnly: file.importsOnly, adapters, onScanned: (error) => scanned.push({ path: file.path, error }),
+                    }));
                 } catch (err){
                     errors.push({ path: file.path, error: message(err) });
                 }
@@ -259,6 +268,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             folders: folderRows.length,
             levelEdges: levelRows.length,
             errors,
+            scanned,
             skipped,
             importsOnly: discovered.files.filter((f) => f.importsOnly),
             timingsMs,
@@ -318,16 +328,17 @@ function isDirectory(p: string): boolean {
 /**
  * One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed.
  * A file over the size cap is read for its imports only, parsed or token-scanned by size: no declarations and no chunks,
- * so no code search (ADR-053). The adapter claiming the path parses it (ADR-065); a path no adapter claims throws.
+ * so no code search (ADR-053). The adapter claiming the path parses it (ADR-065); a path no adapter claims throws. A
+ * parse that throws is tried again as a scan (parseOrScan), and `onScanned` hears why.
  */
 export function toFileRecord(
     filePath: string, text: string, contentHash: string, sizeBytes: number,
-    opts: { importsOnly?: "parse" | "scan"; adapters?: readonly LanguageAdapter[] } = {}
+    opts: { importsOnly?: "parse" | "scan"; adapters?: readonly LanguageAdapter[]; onScanned?: (error: string) => void } = {}
 ): FileRecord {
     const adapters = opts.adapters ?? ADAPTERS;
     const adapter = adapterFor(filePath, adapters);
     if (adapter === null) throw new Error(`No language adapter claims ${filePath}`);
-    const parsed = adapter.parse(filePath, text, opts.importsOnly ?? "full");
+    const parsed = parseOrScan(adapter, filePath, text, opts.importsOnly ?? "full", opts.onScanned);
     return {
         path: filePath,
         kind: adapter.id === "typescript" && /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",
@@ -342,4 +353,23 @@ export function toFileRecord(
         symbols: parsed.symbols,
         calls: parsed.calls,
     };
+}
+
+/**
+ * An adapter's parse, or, when the parse throws, its scan (the E4 final review's B-I1). A recursive walk can overflow
+ * the stack on a deep but valid file (a long `else if` chain, a generated concatenation of thousands of terms), and the
+ * seam promises a parse throws only for a file it can't read at all. Without this the file got no row, so it vanished
+ * from the Map and the tools. The scan reads the imports without a tree, as for a file over the cap: the file keeps its
+ * row and its edges, with no declarations or code search. A missing grammar is the guard's to report, never retried;
+ * a scan's own error, or a scan that throws in turn, still drops the file into the run's errors.
+ */
+function parseOrScan(adapter: LanguageAdapter, filePath: string, text: string, reading: Reading, onScanned?: (error: string) => void): ParsedFile {
+    try{
+        return adapter.parse(filePath, text, reading);
+    } catch (err){
+        if (reading === "scan" || err instanceof GrammarNotLoadedError) throw err;
+        const scanned = adapter.parse(filePath, text, "scan");
+        onScanned?.(message(err));
+        return scanned;
+    }
 }

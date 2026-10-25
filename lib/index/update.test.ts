@@ -15,6 +15,7 @@ import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/stor
 import { loadImportEdges } from "../db/store/structure";
 import { loadFileFacts, loadFolderFacts, loadSummaries } from "../db/store/summaries";
 import { readIndexVersion } from "../db/store/version";
+import type { LanguageAdapter } from "./languages/adapter";
 import type { ResolutionState } from "./languages/resolution";
 import { GrammarNotLoadedError } from "./languages/treesitter";
 import { typescriptAdapter } from "./languages/typescript-adapter";
@@ -427,5 +428,46 @@ describe("the incremental update through the language adapters (ADR-065)", () =>
         expect(() => applyFileChanges(root, ["b.toy"], { adapters: [typescriptAdapter, unprepared] })).toThrow(GrammarNotLoadedError);
         write(root, "a.ts", "export const a = 1;\n");
         expect(applyFileChanges(root, ["a.ts"], { adapters: [typescriptAdapter, unprepared] }).changed).toEqual(["a.ts"]);
+    });
+
+    it("reads an edited file whose parse now throws with the scan, keeping its row and its imports (the E4 final review's B-I1)", () => {
+        // a toy whose full and parse readings throw on a line `deep` (a recursive walk's overflow); its scan reads only `use` lines
+        const throwing: LanguageAdapter = {
+            ...toyAdapter,
+            parse(p, text, reading){
+                if (reading !== "scan" && text.includes("deep")) throw new RangeError("Maximum call stack size exceeded");
+                return toyAdapter.parse(p, text, reading);
+            },
+        };
+        const both = [typescriptAdapter, throwing];
+        // by the toy's rules: use:b names b.toy; name:y names the other file of the folder that defines y, c.toy
+        const root = repo({ "a.toy": "use b\nname y\n", "b.toy": "def b\n", "c.toy": "def y\n" });
+        const { repoId } = indexRepository(root, { adapters: both });
+        expect(tables(repoId).imports).toEqual(["a.toy -> b.toy (use:b)", "a.toy -> c.toy (name:y)"]);
+
+        write(root, "a.toy", "use b\nname y\ndeep\n");
+        expect(applyFileChanges(root, ["a.toy"], { adapters: both })).toMatchObject({
+            changed: ["a.toy"], errors: [], scanned: [{ path: "a.toy", error: "Maximum call stack size exceeded" }], edgesAdded: 0, edgesRemoved: 1,
+        });
+        expect(tables(repoId).imports).toEqual(["a.toy -> b.toy (use:b)"]);   // the scan reads no name:y
+        const twin = makeTempDir("neb-twin-");
+        fs.cpSync(root, twin, { recursive: true });
+        expect(tables(repoId)).toEqual(tables(indexRepository(twin, { adapters: both }).repoId));
+    });
+
+    it("starts the resolution state again when a folder holding only a manifest is deleted (the E4 final review's m6)", () => {
+        // sub/ holds a toy.json and no indexed file, so deleting it moves the manifest list but not the file set
+        const root = repo({ "a.toy": "def a\n", "sub/toy.json": "{}\n" });
+        const { repoId } = indexRepository(root, { adapters });
+        write(root, "a.toy", "def a\n# one\n");
+        const first = applyFileChanges(root, ["a.toy"], { adapters });
+        expect(first.resolution.manifests).toEqual(["sub/toy.json"]);
+
+        fs.rmSync(path.join(root, "sub"), { recursive: true });
+        const second = applyFileChanges(root, ["sub"], { adapters, resolution: first.resolution });
+        expect(second).toMatchObject({ changed: [], deleted: [], resolvedAll: true, edgesAdded: 0, edgesRemoved: 0 });
+        expect(second.resolution.manifests).toEqual([]);
+        expect(second.resolution.cache).not.toBe(first.resolution.cache);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
     });
 });
