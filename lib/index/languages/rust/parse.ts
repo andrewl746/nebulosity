@@ -132,6 +132,9 @@ function textOfUsePath(node: Node): string {
     return path === null ? `::${name}` : `${textOfUsePath(path)}::${name}`;
 }
 
+/** The node types a use-tree path is made of (a comment inside a group is a named node too, and no leaf). */
+const USE_PATH_TYPES: ReadonlySet<string> = new Set(["identifier", "scoped_identifier", "crate", "self", "super", "metavariable"]);
+
 /** The leaves of a use tree: groups expanded, `self` in a group its prefix, a glob `<prefix>::*`, a rename `<path> as <alias>`. */
 function leavesOfUseTree(node: Node, prefix: string, inGroup: boolean): string[] {
     switch (node.type){
@@ -143,7 +146,7 @@ function leavesOfUseTree(node: Node, prefix: string, inGroup: boolean): string[]
             return list === null ? [] : leavesOfUseTree(list, path === null ? prefix : joinPath(prefix, textOfUsePath(path)), false);
         }
         case "use_wildcard": {
-            const path = node.namedChildren[0];
+            const path = node.namedChildren.find((child) => USE_PATH_TYPES.has(child.type));
             return [`${path === undefined ? prefix : joinPath(prefix, textOfUsePath(path))}::*`];
         }
         case "use_as_clause": {
@@ -154,6 +157,7 @@ function leavesOfUseTree(node: Node, prefix: string, inGroup: boolean): string[]
             return full === "" ? [] : [`${full} as ${alias.text}`];
         }
         default: {
+            if (!USE_PATH_TYPES.has(node.type)) return [];
             const full = node.type === "self" && inGroup ? prefix : joinPath(prefix, textOfUsePath(node));
             return full === "" ? [] : [full];
         }

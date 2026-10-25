@@ -1,5 +1,5 @@
 //! The admin tool: a `[[bin]]` target with its own path.
-use store::Db;
+use store::{/* shop-cli's rename of shop-store */ Db};
 
 fn main() {
     let db = Db::default();

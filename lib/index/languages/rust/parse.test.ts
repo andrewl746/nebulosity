@@ -76,6 +76,10 @@ describe("Rust's specifiers", () => {
             .toEqual(["use:a::b|super::x", "mod:a::b|c", "mod:|y@other/x.rs", "extern:foo"]);
     });
 
+    it("reads no comment inside a use group as a leaf", () => {
+        expect(importsOf("use crate::{\n    a, // why a\n    /* and b */ b,\n};\n")).toEqual(["use:|crate::a", "use:|crate::b"]);
+    });
+
     it("gives no specifier for a malformed use", () => {
         expect(importsOf("use crate::a::{b, ;\nuse crate::c;\n")).not.toContain("use:|crate::a::b");
     });
@@ -114,6 +118,7 @@ describe("Rust's use-tree text (the scan's reader)", () => {
         expect(leavesOfUseText("::std :: fmt")).toEqual(["::std::fmt"]);
         expect(leavesOfUseText("{a, b::{c, d}}")).toEqual(["a", "b::c", "b::d"]);
         expect(leavesOfUseText("a::{self as b, *}")).toEqual(["a as b", "a::*"]);
+        expect(leavesOfUseText("store::{/* the rename */ Db, e}")).toEqual(["store::Db", "store::e"]);
     });
 
     it("refuses what isn't a use tree", () => {

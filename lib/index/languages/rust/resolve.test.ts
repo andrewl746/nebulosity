@@ -147,14 +147,25 @@ describe("Rust's resolution, beyond the fixture", () => {
         expect(resolver.resolve("other/src/main.rs", "use:|dup::X")).toEqual([]);
     });
 
-    it("inherits a workspace dependency's rename through `workspace = true`", () => {
+    it("inherits a workspace dependency's rename through `workspace = true`; a renamed crate is named only by its rename", () => {
         const resolver = resolverFor({ "crates/b/src/lib.rs": {}, "crates/app/src/main.rs": {} }, {
             "Cargo.toml": "[workspace]\nmembers = [\"crates/*\"]\n[workspace.dependencies]\nshort = { package = \"long-name\", path = \"crates/b\" }\n",
             "crates/b/Cargo.toml": pkg("long-name"),
             "crates/app/Cargo.toml": pkg("app", "[dependencies]\nshort = { workspace = true }\n"),
         });
         expect(resolver.resolve("crates/app/src/main.rs", "use:|short::X")).toEqual(["crates/b/src/lib.rs"]);
-        expect(resolver.resolve("crates/app/src/main.rs", "use:|long_name::X")).toEqual(["crates/b/src/lib.rs"]);
+        expect(resolver.kindOf("crates/app/src/main.rs", "use:|long_name::X")).toBe("external");
+    });
+
+    it("names only the crates the importer's package depends on, and its own library only from outside the library", () => {
+        const resolver = resolverFor({ "a/src/lib.rs": {}, "a/src/main.rs": {}, "a/tests/t.rs": {}, "b/src/lib.rs": {}, "c/src/lib.rs": {} }, {
+            "a/Cargo.toml": pkg("a", "[dev-dependencies]\nb = { path = \"../b\" }\n"), "b/Cargo.toml": pkg("b"), "c/Cargo.toml": pkg("c"),
+        });
+        expect(resolver.resolve("a/src/lib.rs", "use:|b::X")).toEqual(["b/src/lib.rs"]);   // a dev-dependency counts
+        expect(resolver.kindOf("a/src/lib.rs", "use:|c::X")).toBe("external");             // a repo crate, but no dependency
+        expect(resolver.kindOf("a/src/lib.rs", "use:|a::X")).toBe("external");             // the library can't name itself
+        expect(resolver.resolve("a/src/main.rs", "use:|a::X")).toEqual(["a/src/lib.rs"]);
+        expect(resolver.resolve("a/tests/t.rs", "use:|a::X")).toEqual(["a/src/lib.rs"]);
     });
 
     it("finds a [[bin]] with no path where Cargo infers it, honours autobins = false, and reads [lib] name", () => {
@@ -170,9 +181,14 @@ describe("Rust's resolution, beyond the fixture", () => {
     });
 
     it("a bin-only crate's name names nothing, and a leading :: names a crate", () => {
-        const resolver = resolverFor({ "app/src/main.rs": {}, "lib/src/lib.rs": {} }, { "app/Cargo.toml": pkg("app"), "lib/Cargo.toml": pkg("lib-a") });
+        const resolver = resolverFor({ "app/src/main.rs": {}, "lib/src/lib.rs": {} }, {
+            "app/Cargo.toml": pkg("app"), "lib/Cargo.toml": pkg("lib-a", "[dependencies]\napp = { path = \"../app\" }\n"),
+        });
+        const withDependency = resolverFor({ "app/src/main.rs": {}, "lib/src/lib.rs": {} }, {
+            "app/Cargo.toml": pkg("app", "[dependencies]\nlib-a = { path = \"../lib\" }\n"), "lib/Cargo.toml": pkg("lib-a"),
+        });
         expect(resolver.kindOf("lib/src/lib.rs", "use:|app::X")).toBe("external");
-        expect(resolver.resolve("app/src/main.rs", "use:|::lib_a::X")).toEqual(["lib/src/lib.rs"]);
+        expect(withDependency.resolve("app/src/main.rs", "use:|::lib_a::X")).toEqual(["lib/src/lib.rs"]);
     });
 
     it("a #[path] inside an inline module of a non-mod.rs file is relative to that module's folder", () => {

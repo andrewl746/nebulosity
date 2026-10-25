@@ -20,11 +20,16 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * - The module tree: a root's or mod.rs's children sit in its own folder, any other x.rs's in x/; an inline module adds
  *   its name as a folder; `mod y;` is y.rs, else y/mod.rs; #[path] is relative to the declaring file's folder.
  * - A path from module m: crate:: is m's crate root, self:: m, super:: m's parent; a leading name is a child module of m,
- *   else a name the same file's use (same inline level) binds, substituted, else a repo crate's library name or one of
- *   the importer's crate's renames, else external. The rest walks down modules; the target is the deepest module's file,
- *   [importer] when that's the importer's own file.
- * - Kinds: mod: and extern: of a repo crate are internal; use: and path: are internal when their start is crate, self,
- *   super, a child module, a binding to an internal path or a repo crate, else external. A glob binds no name.
+ *   else a name the same file's use (same inline level) binds, substituted, else a repo crate the importer's crate can
+ *   name (below), else external. The rest walks down modules; the target is the deepest module's file, [importer] when
+ *   that's the importer's own file.
+ * - The crates a crate can name (Cargo's extern prelude): its dependencies of every kind, by library name or by their
+ *   rename, plus, from a target that isn't the library (a bin, test, example, bench), its own package's library. The plan
+ *   said every repo crate's library name; rust-analyzer's index contradicted it (91 wrong edges, progress-rust.md), so
+ *   shop-core's util.rs naming shop_store (no dependency) is external here.
+ * - Kinds: mod: and extern: of a nameable crate are internal; use: and path: are internal when their start is crate,
+ *   self, super, a child module, a binding to an internal path or a nameable repo crate, else external. A glob binds
+ *   no name.
  *
  * Calls this truth pins where the plan's text leaves room (each in progress-rust.md):
  * - a symbol's lines start at its first attached #[…] (doc comments left out); a chunk's start at its first attached
@@ -129,7 +134,7 @@ const without = (...dropped: TruthEdge[]): TruthEdge[] =>
 export const rustRepoTruth: FixtureTruth = {
     files: [
         { path: `${CLI}src/bin/report.rs`, language: "rust", isTest: false, lineCount: 4 },
-        { path: `${CLI}src/commands.rs`, language: "rust", isTest: false, lineCount: 6 },
+        { path: `${CLI}src/commands.rs`, language: "rust", isTest: false, lineCount: 9 },
         { path: `${CLI}src/main.rs`, language: "rust", isTest: false, lineCount: 12 },
         { path: `${CLI}tools/admin.rs`, language: "rust", isTest: false, lineCount: 7 },
         { path: `${CORE}benches/bench_orders.rs`, language: "rust", isTest: false, lineCount: 6 },
@@ -144,7 +149,7 @@ export const rustRepoTruth: FixtureTruth = {
         { path: `${CORE}src/lib.rs`, language: "rust", isTest: false, lineCount: 17 },
         { path: `${CORE}src/model.rs`, language: "rust", isTest: false, lineCount: 86 },
         { path: `${CORE}src/nested/deep.rs`, language: "rust", isTest: false, lineCount: 5 },
-        { path: `${CORE}src/util.rs`, language: "rust", isTest: false, lineCount: 7 },
+        { path: `${CORE}src/util.rs`, language: "rust", isTest: false, lineCount: 12 },
         { path: `${CORE}test_data/orphan.rs`, language: "rust", isTest: false, lineCount: 6 },   // test_data/ isn't a test folder
         { path: `${CORE}tests/integration.rs`, language: "rust", isTest: true, lineCount: 8 },   // the tests/ folder rule
         { path: `${STORE}src/db.rs`, language: "rust", isTest: false, lineCount: 13 },
@@ -157,6 +162,7 @@ export const rustRepoTruth: FixtureTruth = {
     excluded: [`${STORE}target/release/stale.rs`, "target/debug/generated.rs", "target/package/shop-core-0.1.0/src/lib.rs"],
     specifiers: {
         [`${CLI}src/bin/report.rs`]: ["path:|shop_core::model::Order::new"],
+        // a // comment inside the group (lines 1-4) is no leaf; tools/admin.rs has a /* */ one inside a one-line group
         [`${CLI}src/commands.rs`]: ["use:|shop_core::Order", "use:|store::Db"],
         [`${CLI}src/main.rs`]: [
             "extern:shop_core", "mod:|commands", "use:|shop_core::model::Order", "use:|store::Db",
@@ -191,7 +197,8 @@ export const rustRepoTruth: FixtureTruth = {
             "path:tests|Order::new",         // line 83 (assert_eq!'s arguments hold no path)
         ],
         [`${CORE}src/nested/deep.rs`]: ["use:|super::super::util::helper"],
-        [`${CORE}src/util.rs`]: ["use:|std::collections::HashMap"],   // std::collections::HashMap::new starts with std: no path:
+        // std::collections::HashMap::new starts with std: no path:; shop_store::Db::default (line 11) does
+        [`${CORE}src/util.rs`]: ["use:|std::collections::HashMap", "path:|shop_store::Db::default"],
         [`${CORE}test_data/orphan.rs`]: ["use:|crate::model::Order"],
         [`${CORE}tests/integration.rs`]: [
             "use:|shop_core::model::Kind", "use:|shop_core::model::Order", "path:|Order::new", "path:|Kind::Small",
@@ -227,7 +234,7 @@ export const rustRepoTruth: FixtureTruth = {
     },
     symbols: {
         [`${CLI}src/bin/report.rs`]: [fileSymbol("main", "function", 1, 4, false)],
-        [`${CLI}src/commands.rs`]: [fileSymbol("run", "function", 4, 6, true)],
+        [`${CLI}src/commands.rs`]: [fileSymbol("run", "function", 7, 9, true)],
         [`${CLI}src/main.rs`]: [fileSymbol("main", "function", 9, 12, false)],
         [`${CLI}tools/admin.rs`]: [fileSymbol("main", "function", 4, 7, false)],
         [`${CORE}benches/bench_orders.rs`]: [fileSymbol("main", "function", 3, 6, false)],
@@ -280,7 +287,10 @@ export const rustRepoTruth: FixtureTruth = {
             fileSymbol("tests", "namespace", 77, 86, false),        // an inline mod; its contents are no symbols
         ],
         [`${CORE}src/nested/deep.rs`]: [fileSymbol("deep_value", "function", 3, 5, true)],
-        [`${CORE}src/util.rs`]: [fileSymbol("helper", "function", 4, 7, true)],
+        [`${CORE}src/util.rs`]: [
+            fileSymbol("helper", "function", 4, 7, true),
+            fileSymbol("unrelated", "function", 10, 12, true),   // its doc comment (9) left out
+        ],
         [`${CORE}test_data/orphan.rs`]: [fileSymbol("sample", "function", 4, 6, false)],
         [`${CORE}tests/integration.rs`]: [fileSymbol("orders_start_small", "function", 3, 8, false)],
         [`${STORE}src/db.rs`]: [
@@ -332,7 +342,10 @@ export const rustRepoTruth: FixtureTruth = {
             "path:tests|Order::new": "external",      // inside tests only the glob, which binds nothing
         },
         [`${CORE}src/nested/deep.rs`]: { "use:|super::super::util::helper": "internal" },
-        [`${CORE}src/util.rs`]: { "use:|std::collections::HashMap": "external" },
+        [`${CORE}src/util.rs`]: {
+            "use:|std::collections::HashMap": "external",
+            "path:|shop_store::Db::default": "external",   // a repo crate, but no dependency of shop-core: out of its reach
+        },
         [`${CORE}test_data/orphan.rs`]: { "use:|crate::model::Order": "internal" },
         [`${CORE}tests/integration.rs`]: {
             "use:|shop_core::model::Kind": "internal", "use:|shop_core::model::Order": "internal",
@@ -359,6 +372,7 @@ export const rustRepoTruth: FixtureTruth = {
     // no inline-module part and no #[path]. The files listed are those whose full reading has one of those.
     scan: {
         [`${CLI}src/bin/report.rs`]: [],
+        [`${CLI}src/commands.rs`]: ["use:|store::Db"],   // its first use spans four lines: not a single-line use
         [`${CLI}src/main.rs`]: ["extern:shop_core", "mod:|commands", "use:|shop_core::model::Order", "use:|store::Db"],
         [`${CLI}tools/admin.rs`]: ["use:|store::Db"],
         [`${CORE}benches/bench_orders.rs`]: ["use:|shop_core::model::Order"],
@@ -368,6 +382,7 @@ export const rustRepoTruth: FixtureTruth = {
         [`${CORE}src/b/mod.rs`]: ["use:|crate::a::Thing"],
         [`${CORE}src/broken.rs`]: ["use:|crate::model::Order"],
         [`${CORE}src/custom.rs`]: ["use:|super::model::Kind"],
+        [`${CORE}src/util.rs`]: ["use:|std::collections::HashMap"],
         [`${CORE}src/lib.rs`]: [
             "mod:|a", "mod:|b", "mod:|broken", "mod:|model", "mod:|util", "mod:|renamed", "mod:|deep", "mod:|missing", "use:|model::Order",
         ],
@@ -423,7 +438,7 @@ export const rustRepoTruth: FixtureTruth = {
     },
     edits: [
         {
-            // util.rs is then reached from no root (an orphan, with only an external use). The unchanged files whose paths
+            // util.rs is then reached from no root (an orphan, with only external references). The unchanged files whose paths
             // walked crate → util now stop at the crate root, since util names no module: lib.rs, not util.rs.
             description: "lib.rs drops `mod util;` (its declares change): b/mod.rs, broken.rs and nested/deep.rs, unchanged, now reach lib.rs instead of util.rs",
             writes: {

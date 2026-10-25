@@ -191,22 +191,31 @@ export function createRustResolver(ctx: ResolveContext): LanguageResolver {
         }
         return best;
     };
+    /** Whether a file belongs to its package's library (its module tree's root is the [lib] root). */
+    const inLibrary = (file: string): boolean => {
+        const node = fileNode.get(file);
+        return node !== undefined && rootOf(node).file === libRoot.get(node.crate);
+    };
     /**
-     * The crate `name` is in `importer`'s code: its crate's rename, else the repo crate with that library name (of two,
-     * the importer's own or its dependency, else none). Only a crate with a library root can be named.
+     * The repo crate `name` is in `importer`'s code, as Cargo's extern prelude has it: a dependency of the importer's
+     * package (of any kind) by its library name, or by its rename (a renamed one only by the rename), and, from a target
+     * that isn't the library (a bin, a test, an example, a bench, an orphan), the package's own library. Only a crate
+     * with a library root can be named. (The plan said any repo crate's library name; rust-analyzer's index showed that
+     * over-links: a `paths::` in its parser, the parser's own module through a glob, reached the `paths` crate.)
      */
     const crateNamed = (importer: string, rawName: string): CrateManifest | null => {
         const name = unraw(rawName);
         const own = crateOfFile(importer);
-        const renamed = own?.renames.get(name);
+        if (own === null) return null;
+        const renamed = own.renames.get(name);
         if (renamed !== undefined){
             const crate = byPackage.get(renamed);
             return crate !== undefined && libRoot.has(crate) ? crate : null;
         }
-        const candidates = byLibName.get(name) ?? [];
-        if (candidates.length <= 1) return candidates[0] ?? null;
-        const preferred = candidates.filter((c) => c === own || (own?.dependencies.has(c.packageName) ?? false));
-        return preferred.length === 1 ? preferred[0] : null;
+        if (own.libName === name && libRoot.has(own) && !inLibrary(importer)) return own;
+        const renamedPackages = new Set(own.renames.values());
+        const candidates = (byLibName.get(name) ?? []).filter((c) => c !== own && own.dependencies.has(c.packageName) && !renamedPackages.has(c.packageName));
+        return candidates.length === 1 ? candidates[0] : null;
     };
 
     // what each file's uses bind, per inline level: "<inline>\0<name>" → the bound path and the specifier binding it

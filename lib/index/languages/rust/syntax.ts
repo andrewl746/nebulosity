@@ -69,8 +69,10 @@ export function unraw(name: string): string {
 /**
  * The leaves of a use tree written as text (`crate::a::{self, b::*, C as D}`), as the tree reading writes them, or null
  * when the text isn't a use tree (a malformed construct gives no specifier). For the line scan, which has no tree.
+ * Comments are no part of a tree: a block comment inside a group, or a line comment after it, is dropped first.
  */
-export function leavesOfUseText(text: string): string[] | null {
+export function leavesOfUseText(written: string): string[] | null {
+    const text = written.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/.*$/, "");
     const tokens: string[] = [];
     const token = /\s*(::|[{},*]|(?:r#)?[A-Za-z_][A-Za-z0-9_]*|\$[A-Za-z_][A-Za-z0-9_]*)/y;
     let at = 0;
