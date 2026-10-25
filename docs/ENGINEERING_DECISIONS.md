@@ -1574,6 +1574,14 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 - **The estimate can fall short after a model change.** It counts only targets that aren't already at Anthropic, so a run that collects a leftover batch for the old model sends those released rows again at the new model's price, beyond the printed estimate. The same happens when the model is changed on purpose while batches are out: their answers land out of date and go again in that run. The spend still stays within the "Spend up to" the user said yes to, and within the spend cap, which projects every submission before it goes.
 **Revisit when:** the API stops naming the model in its 404 (then a gone model fails request by request until the circuit breaker trips), or the requests change in a way a set model can't follow (then the setting needs more than a model and its prices).
 
+**Amended 2026-10-25, by the pass's final review** ("2026 10 25 Pre-ship Pass Final Review #1", seat A; the controller's rulings R24–R26 in the ledger):
+- **A `config.json` that can't be read is no longer "no setting"** (A-I2, R25). The README has people edit it by hand, and a trailing comma, a UTF-8 byte-order mark or UTF-16 (Windows PowerShell 5.1, Notepad) used to read as the defaults without a word: doctor said OK, `summarize` planned with the defaults, and the next `nebulosity index` or repo pick wrote over the hand edit.
+  - Now a leading UTF-8 mark is skipped, and UTF-16 is read when its mark leads.
+  - A file that's there but isn't one JSON object still reads as the defaults for the Map and the MCP server, which start. But the summary models resolution is `ok: false`, naming the file and the parse error, so `summarize` refuses, doctor fails and the worker sends nothing, as for any setting that can't be used.
+  - `writeConfig` never writes over such a file: it renames it to `config.json.invalid-<time>` first and says so, and doctor lists each moved-aside file (API_CONTRACTS §21).
+  - A file of nothing but whitespace counts as missing: nothing is set in it, and nothing can be lost.
+- **The tests can't write a developer's own `config.json`** (A-I3, R26). Every test file gets its own `NEBULOSITY_DATA` through vitest's `setupFiles` (`test/setup.ts`), with the outer value restored after it: three files had moved `NEBULOSITY_HOME` and written to an exported `NEBULOSITY_DATA` while passing.
+
 ## ADR-067 — Complete at ship: the pre-ship pass is the last work, and the remaining extras aren't built (2026-10-25) — amends ADR-043 and ADR-062
 
 **Status:** accepted 2026-10-25.

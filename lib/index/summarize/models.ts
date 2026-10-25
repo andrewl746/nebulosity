@@ -1,4 +1,4 @@
-import { configPath, readConfig } from "../../config";
+import { configPath, readConfigFile } from "../../config";
 import type { SummaryModelSetting, SummaryModelsSetting } from "../../contracts";
 import { pricePerMTok, type ModelPrice } from "./pricing";
 import { SUMMARY_MODELS } from "./prompts";
@@ -138,9 +138,18 @@ export function resolveSummaryModels(setting: unknown, configFile: string): Summ
     return { ok: true, models, prices: pricesFor(models, given), custom };
 }
 
-/** The setting in config.json right now, read through readConfig as the Map and the worker read it at each job. */
+/**
+ * The setting in config.json right now, read as the Map and the worker read it at each job. A file that's there but
+ * can't be read (readConfigFile's problem: a trailing comma, say) can't be used either (R25): what it sets is unknown, and
+ * summarizing with the defaults instead would spend on models the user may have moved away from, so summarize and
+ * doctor refuse it with the file and the parse error. A missing file is the defaults.
+ */
 export function configuredSummaryModels(): SummaryModelsResolution {
-    return resolveSummaryModels(readConfig().summaryModels, configPath());
+    const { config, problem } = readConfigFile();
+    if (problem !== null){
+        return { ok: false, error: `The summary models can't be read: ${problem}. Fix the file so it holds one JSON object (see the README's "Summary models"); summaries wait until then.` };
+    }
+    return resolveSummaryModels(config.summaryModels, configPath());
 }
 
 /** "files claude-haiku-6 (set in <config>), folders claude-sonnet-5-5, the repo claude-sonnet-5-5", or the defaults: for nebulosity doctor. */
