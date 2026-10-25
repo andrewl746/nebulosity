@@ -1,11 +1,16 @@
 import hljs from "highlight.js/lib/core";
+import go from "highlight.js/lib/languages/go";
+import java from "highlight.js/lib/languages/java";
 import javascript from "highlight.js/lib/languages/javascript";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
 import typescript from "highlight.js/lib/languages/typescript";
 import { tooLargeToColor } from "./text";
 
-// only the two languages the index reads, so the rest of highlight.js stays out of the bundle
-hljs.registerLanguage("typescript", typescript);
-hljs.registerLanguage("javascript", javascript);
+// only the languages the index reads (E4, C10: the names paths.ts's languageFor gives), so the rest of highlight.js
+// stays out of the bundle
+const GRAMMARS = { typescript, javascript, python, go, java, rust };
+for (const [name, grammar] of Object.entries(GRAMMARS)) hljs.registerLanguage(name, grammar);
 
 /**
  * Keywords that steer control flow. VS Code colors these pink and the rest (const, function, class) blue; highlight.js

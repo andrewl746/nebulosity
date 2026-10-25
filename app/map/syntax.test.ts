@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
+import { claimedExtensions, rulesFor } from "@/lib/index/languages/rules";
 import { highlightCode, languageFor } from "./syntax";
 
 describe("highlightCode (owner review: code colored like in VS Code)", () => {
@@ -43,6 +44,24 @@ describe("highlightCode (owner review: code colored like in VS Code)", () => {
     });
 });
 
+describe("highlightCode for the other languages the index reads (E4, C10)", () => {
+    it("marks a keyword of each", () => {
+        // each grammar's own keyword list (highlight.js 11.11.1): python's def (its function match), go's and java's
+        // package, rust's let
+        expect(highlightCode("def greet():\n    pass", "python")).toContain('<span class="hljs-keyword">def</span>');
+        expect(highlightCode("package main", "go")).toContain('<span class="hljs-keyword">package</span>');
+        expect(highlightCode("package shop;", "java")).toContain('<span class="hljs-keyword">package</span>');
+        expect(highlightCode("let x = 1;", "rust")).toContain('<span class="hljs-keyword">let</span>');
+    });
+
+    it("colors every language languageFor names for an extension the index claims: a number in each", () => {
+        for (const extension of claimedExtensions()){
+            const language = languageFor(`src/a${extension}`);
+            expect(highlightCode("1", language), extension).toBe('<span class="hljs-number">1</span>');
+        }
+    });
+});
+
 describe("languageFor", () => {
     it("names the language a path's extension implies, as the source route does", () => {
         expect(languageFor("src/a.ts")).toBe("typescript");
@@ -50,6 +69,23 @@ describe("languageFor", () => {
         expect(languageFor("build/c.mjs")).toBe("javascript");
         expect(languageFor("d.js")).toBe("javascript");
         expect(languageFor("README.md")).toBe("text");
+    });
+
+    it("names the merged E4 languages (C10), and nothing else", () => {
+        expect(languageFor("polls/views.py")).toBe("python");
+        expect(languageFor("stubs/os.pyi")).toBe("python");
+        expect(languageFor("cmd/server/main.go")).toBe("go");
+        expect(languageFor("src/main/java/shop/Order.java")).toBe("java");
+        expect(languageFor("crates/core/src/lib.rs")).toBe("rust");
+        expect(languageFor("src/Shop/Program.cs")).toBe("text");      // C# isn't merged
+        expect(languageFor("setup.cfg")).toBe("text");
+    });
+
+    it("mirrors the index's rules for every extension they claim (the UI can't import them, ARCHITECTURE.md §3 rule 3)", () => {
+        for (const extension of claimedExtensions()){
+            const p = `src/a${extension}`;
+            expect(languageFor(p), p).toBe(rulesFor(p)!.languageOf(p));
+        }
     });
 });
 

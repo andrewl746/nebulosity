@@ -286,7 +286,7 @@ type SourceResponse = { repo: string; path: string; content: string; lineCount: 
 - **Only indexed files.** The path must be a file the structure stage indexed. So the route can't read anything else in the repo (a `.env`, a key, `.git/config`), and a path that resolves outside the repo through a symlink is refused too.
 - **`content`** is the file's bytes as UTF-8, up to 1 MB (about 25,000 lines of TypeScript). Past that it stops, and `truncated` is `true`. Only the first 1 MB is read, and the cut never splits a character: it backs off to the start of one that would straddle it (2026-10-13). Line endings are left as stored; the viewer shows them as plain line breaks.
 - **`lineCount`** counts the lines in `content` the way an editor does: a final line break doesn't start another line.
-- **`language`** is `typescript`, `javascript` or `text`, by extension, for highlighting.
+- **`language`** is `typescript`, `javascript` or `text`, by extension, for highlighting. *(E4, ADR-065: also `python` (`.py`, `.pyi`), `go`, `java` and `rust`, the language the index's rules give the file, so the same as `files.language`; the Map's viewer colors each with highlight.js's own grammar, in the same palette. A language joins this list when its adapter is merged.)*
 - Like every `/api` route, it answers only requests addressed to this machine (ADR-039). It reads and never writes.
 
 **Errors:** `400 BAD_REQUEST` for a path that could leave the repo, or an empty one; `404 NOT_FOUND` for a folder, a file the index doesn't know, or a file deleted since; `404 INDEX_EMPTY`.
