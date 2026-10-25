@@ -1262,3 +1262,95 @@ To read this with:
   - After every run, nothing listened on 3126: the bench stops the Map in its teardown, and VS Code's exit would stop it too.
   - The checkout's `.nebulosity/config.json` was byte-identical to the copy taken before V1.8's runs (`cmp`).
   - `git --no-optional-locks status` in `../vscode` was unchanged, still at `cc3fec88`, and no data folder was written there. The one write into `../vscode` was the git extension's `.git/config` key in the draft run, above. `git status` doesn't show it, and the review found it from the file's modified time. Runs 4 and 5 left the file's hash and modified time as they were.
+
+## 2026 10 25 Language Benchmark #1 — E4's five languages on their repos (L1–L4, S15)
+
+- **Code:** `pivot/e4` at `a288a9a`: all five adapters merged (Python, Go, Java, C# and Rust, each `version` 1; TypeScript's still 7), ADR-065.
+- **Machine:** the owner's laptop, Node 24.14.0. Before the timings: no dev server, no headless Chrome, no other agent running (the controller's check), CPU about 7–10% (`Get-Counter`, 9.5% averaged over 6 s), port 3000 untouched.
+- **Repos,** each `git rev-parse HEAD` checked against the plan's pins first, working trees clean before and after: django `0e128d5`, prometheus `a2fda0e`, spring-boot `11778bd`, jellyfin `0786661`, rust-analyzer `0c4d746`.
+- **L1's command:** `npm run bench-languages -- ../django ../prometheus ../spring-boot ../jellyfin ../rust-analyzer --runs 3 --data-root <scratch>`. One process, the grammars loaded once (53 ms), the repos one at a time in that order, three runs each, every run cold into its own fresh `NEBULOSITY_DATA` folder (deleted after it). The structure stage is `indexRepository`'s `totalMs`, as for S1: discover through aggregate, without the code-search fill that follows it.
+- **L2–L4** are the language tasks' Step 6 measurements (each language's ledger, `progress-<id>.md`), re-read by each task's reviewer (`review-<id>.md`): the 30 edges read in the source by someone other than the builder.
+
+### L1, the structure stage cold (≤ 60 s at worst of three)
+
+| Repo | Files (by language) | Edges | Run 1 | Run 2 | Run 3 | **Worst** | Median | rss after its third run |
+|---|---|---|---|---|---|---|---|---|
+| django | 3,048 (python 2,937, javascript 111) | 9,083 | 8.7 s | 8.4 s | 9.2 s | **9.2 s** | 8.7 s | 527 MB |
+| prometheus | 1,016 (go 747, typescript 248, javascript 21) | 5,198 | 10.2 s | 9.5 s | 10.4 s | **10.4 s** | 10.2 s | 569 MB |
+| spring-boot | 8,708 (java 8,705, javascript 3) | 26,937 | 21.8 s | 19.7 s | 19.5 s | **21.8 s** | 19.7 s | 632 MB |
+| jellyfin | 2,251 (csharp 2,251) | 11,544 | 7.9 s | 7.7 s | 7.5 s | **7.9 s** | 7.7 s | 689 MB |
+| rust-analyzer | 1,529 (rust 1,498, typescript 29, javascript 1, python 1) | 6,935 | 7.8 s | 7.6 s | 7.4 s | **7.8 s** | 7.6 s | 687 MB |
+
+**L1: PASS on every repo,** at 7.8–21.8 s worst of three. Parse is the largest stage everywhere (4.2–12.1 s), then write (1.7–7.0 s); resolve is 0.1–0.5 s. Every run of a repo stored the same files and edges, with 0 errors, 0 imports-only and 0 skipped files.
+- **Memory:** rss was 219 MB with the grammars loaded and 674 MB after all fifteen runs, rising from 398 MB after django's first run to a plateau near 690 MB from jellyfin on: what a long-lived process (the background worker) holds after indexing all five, WebAssembly memory included, which never shrinks (the design's §10 risk). It fell slightly over rust-analyzer's three runs (695, 680, 687, then 674 MB).
+- **rust-analyzer** now stores one Python file as well (`lib/smol_str/src/gdb_smolstr_printer.py`, which the Rust task's index, made with only Rust merged, didn't claim). Its 6,935 edges are all its languages' together; the Rust ledger's 6,853 are Rust's alone.
+
+### L2–L4 per language
+
+| Language | Repo | L2: no crash | L3: internal references resolved, by class (bar) | L4: 30 sampled edges read in the source (≥ 29); unresolved read |
+|---|---|---|---|---|
+| Python | django | **PASS**: 2,937/2,937 `.py` files indexed, 0 failed | absolute 12,440/12,443, **99.98%** (≥ 99%); relative 3,547/3,548, **99.97%** (≥ 99%). Counting the six imports reachable only through run-time `sys.path` changes as misses: absolute 12,440/12,449, 99.93% | **30/30**; all 4 unresolved explained (there are only 4) |
+| Go | prometheus | **PASS**: 747/747 | import 1,848/1,848, **100%** (≥ 99%); name 4,515/4,517, **99.96%** (≥ 95%); use 6,017/6,035, **99.7%** (≥ 95%) | **30/30**; 20/20 explained |
+| Java | spring-boot | **PASS**: 8,705/8,705, the 6 whose absolute paths pass 260 characters included | import 18,787/18,787, qualified 119/119, static 30/30: **100%** (≥ 99%); type 9,393/9,418, **99.7%** (≥ 95%) | **30/30**; 20/20 explained |
+| C# | jellyfin | **PASS**: 2,251/2,251, the UTF-8 byte-order mark kept | type 11,338/11,431, **99.2%**; qtype 72/72 and static 9/9, **100%**; gstatic none in jellyfin (each ≥ 95%). No `ext:` class: extension-method calls aren't linked (below) | **29/30** strictly, 30/30 by the plan's rules (#24 below); 20/20 explained |
+| Rust | rust-analyzer | **PASS**: 1,498/1,498 | mod 885/885, relative 7,717/7,717 and other 27,111/27,111, **100%** (≥ 99%, ≥ 99%, ≥ 95%), **by construction, not a measure of quality** (below); orphan 22/216 reported, not barred | **30/30**; 20/20 explained |
+
+What each language's numbers mean, and don't:
+- **Python.** The 4 unresolved references are Sphinx test data importing a module that doesn't exist on purpose (`from .....test import Test`) and three `import_module` calls inside `assertRaises(ImportError)`. The `sys.path` imports (`github_links` from `docs/conf.py`'s `sys.path.append`, `app1`/`app2` from a test's `extend_sys_path`) are counted external, since the rules read package roots from the files and manifests, not from code run at start-up.
+- **Go.** 18 of the 20 misses are external packages whose name isn't their path's last element (`github.com/mwitkow/go-conntrack` is package `conntrack`): external references counted as internal misses, no wrong edge. 1 names a file generated at build time (`EmbedFS`), and 1 is code that never compiles (plan9's `flock`). The binding list was extended past the plan's (G-1: `_` is never a name; G-7: a local `type` binds; G-8: a generic type's and receiver's type parameters bind); the reviewer judged them needed, since the plan's literal list gives a false edge on the fixture.
+- **Java.** The 25 `type:` misses are a `java.lang` name a repo type shares (`Error`) or a member type inherited from a supertype (`HttpSender.Request`), which the rules don't follow; no wrong edge among the 20 read. Context is 0 because spring-boot has no on-demand imports (its checkstyle bans them), so nested types through on-demand imports, which can't resolve while `declares` holds top-level types only, aren't measured here.
+- **C#.** The 93 `type:` misses are inherited properties used as `N.Member` where a repo type is also named N (about 62), external types sharing a repo type's simple name (about 28), 2 namespaces written in an expression, and 1 likely the MimeTypes source package's class. L4's #24 (`Omdb Plugin → BasePlugin.cs`) is right by the plan's rules, which drop generic arity, and wrong by a strict reading: the source binds `BasePlugin<T>` in BasePluginOfT.cs (which derives from BasePlugin, so the dependency is real). **Extension-method calls are not linked:** binding one needs the receiver's and arguments' types (an applicable instance method or overload always wins), and by name alone 19 of 30 sampled links were right (seed 2; 15 of 20 in an even-step sample). Linking them by name made 917 file pairs on jellyfin, about 75% right by those samples; they are not edges.
+- **Rust.** A `use:` or `path:` start is internal exactly when it resolves, so `relative` and `other` can miss only through a `mod` with no file, and with `mod` at 885/885 they can't. The task's first run read 100% on both with 91 wrong edges, which the builder's cross-dependency check caught, not L3: L4 (30/30) and that check (0 edges to a crate the source's package doesn't depend on, after crate visibility was narrowed to Cargo's rule) are the evidence. About 160 internal references are hidden as external, missing from the shares: 126 through `use super::*` globs (the parser's `grammar/*.rs` siblings), 23 likely the same class, 12 into inline modules. The orphans are rust-analyzer's 546 parser test inputs and `minicore.rs`, read as a string, not a module.
+
+## 2026 10 25 Index Benchmark #8 — S1 and L5 with E4's five languages, and the package's size
+
+- **Code:** `pivot/e4` at `a288a9a` (all five adapters merged). For the A/B below, a detached worktree `../Nebulosity-e4-base` at `75b4774`: the E4 plan's base, before any E4 code (V1.7's TypeScript adapter, `ADAPTER_VERSION` 7, plus V1.8), with its own `npm ci`.
+- **Machine:** the owner's laptop, Node 24.14.0, on AC power at 100%, the Balanced power scheme. CPU 3–8% idle between runs. Repos at their pins: VS Code `cc3fec88`, AFFiNE `0b69a6da`.
+
+### S1 on VS Code (≤ 60 s at worst of three): FAIL on this machine today, for the code before E4 as much as for E4
+
+| Set | When | How | VS Code structure stage | AFFiNE |
+|---|---|---|---|---|
+| A | 01:42–01:50 | one process, three cold runs (`npm run bench-languages -- ../vscode ../affine --runs 3 --keep`) | 93.4, 89.8, 94.2 s | 24.4, 21.3, 20.9 s |
+| per process | 01:52 | `NEBULOSITY_DATA=<fresh> npx tsx scripts/index.ts ../vscode --no-activate`, as Index Benchmark #7 | 74.9 s | |
+| **A/B** | 01:57–02:03 | per process, alternated, each into a fresh folder: base, E4, base, E4 | **base 76.7 s, E4 77.4 s, base 75.4 s, E4 77.1 s** | |
+| one run | 02:04 | one process, one run | 75.9 s | |
+| B | 02:05–02:11 | one process, three cold runs, no `--keep`, CPU sampled every 15 s | 80.0, 92.5, 83.3 s | 22.3, 18.4, 17.8 s |
+
+- **The A/B is the reading:** on the same machine, minutes apart, the code before E4 took 75.4–76.7 s and E4's 77.1–77.4 s, with the same parse (36.9–38.9 s) and write (33.3–34.2 s) either side. E4 adds about 1.2 s (1.6%) for its 191 more files. The miss is the machine's: Index Benchmark #7 measured the same TypeScript code at 49.7–56.7 s on 2026-10-15, and #6 at 31.3–50.7 s. Nothing here says why the machine is slower today. The system's settings weren't touched.
+- **The spread between sets is load:** the sampler in set B read 10–37% of all the machine's CPU, with the bench process at about 1.1–1.3 cores, the Claude desktop app at 0.1–0.4 core, Chrome, and a OneDrive sync burst during VS Code's run 2 (92.5 s). A one-process run in a calm minute (75.9 s) matched the per-process ones, so the harness isn't the difference.
+- **S1's bar isn't met** by any run, before E4 or after: this entry records the miss for the owner, with no claim that E4 caused it. A run on the quiet machine of #6 and #7 is owed.
+- **AFFiNE** took 17.8–24.4 s, against F1's 21.2 s (a busy machine, before E4).
+
+### L5: TypeScript's stored facts unchanged: PASS, byte-identical
+
+`npm run dump-index -- ../<repo> --out <file> --languages typescript,javascript` on set A's run-1 databases gives every section's count and sha256 equal to Task F's F1 dumps, made before any E4 code (ledger `progress-F.md`), and `cmp` finds the dump files byte-identical (84,370,309 and 17,788,563 bytes):
+
+| Section | VS Code lines | sha256 | AFFiNE lines | sha256 |
+|---|---|---|---|---|
+| file | 14,849 | `2e180015…` | 6,987 | `c8538de8…` |
+| edge | 140,583 | `772ba187…` | 26,261 | `78ed8874…` |
+| symbol | 232,248 | `3a9e469b…` | 44,448 | `33ec0676…` |
+| chunk | 102,348 | `78ffd7c4…` | 32,379 | `91dde888…` |
+| entry | 50 | `a583e878…` | 100 | `92464746…` |
+
+### What the new languages add
+
+| Repo | Files | By language | Edges | Folders | Level edges |
+|---|---|---|---|---|---|
+| VS Code | 14,849 → **15,040** (+191) | rust 89 (85 in `cli/`, 4 under `extensions/`), python 75 (73 under `extensions/`, 1 in `build/`, 1 in `.github/`), csharp 16, java 7, go 4 (all under `extensions/`) | 140,583 → 141,093 (+510: rust 506, python 3, java 1) | 3,793 → 3,856 | 19,374 → 19,581 |
+| AFFiNE | 6,987 → **7,342** (+355) | rust 353, java 2 (all under `packages/`) | 26,261 → 27,401 (+1,140, all Rust) | 1,984 → 2,060 | 9,335 → 10,143 |
+
+TypeScript's own edges, symbols and chunks are the F1 rows above; the new edges start in the new languages' files, and none joins two adapters' files (the only edges across `files.language` are TypeScript's adapter's own, between its TypeScript and JavaScript files).
+
+### The package (`npm pack --dry-run --json`, against ADR-058's 6.6 MB packed and 25.0 MB unpacked)
+
+| Worktree | Map built | Tarball | Unpacked | Files | Grammars | `.next` |
+|---|---|---|---|---|---|---|
+| base `75b4774` | no | 0.35 MB | 1.37 MB | 197 | | |
+| E4 `a288a9a` | no | 1.02 MB | 9.21 MB | 238 | 7.55 MB | |
+| base `75b4774` | yes (`npm run build:package`) | **5.67 MB** | **21.76 MB** | 606 | | 20.40 MB |
+| E4 `a288a9a` | yes | **6.50 MB** | **30.16 MB** | 647 | 7.55 MB | 20.94 MB |
+
+- **Against ADR-058's figures** (d8d2432's package): packed 6.50 MB against 6.6 MB, unpacked 30.16 MB against 25.0 MB. Against the base built the same way today, E4 adds 0.83 MB packed (+15%) and 8.40 MB unpacked (+39%): the five grammars' 7.55 MB (C#'s 5.35 MB of it), the adapters' code, and 0.54 MB more in the built Map (`.next`), where E4's only changes are highlight.js's five more grammars and the source route reading the rules.
+- `prepack`'s check passed in both: no links, no machine paths, no untracked files.
