@@ -6,7 +6,9 @@ from these files and the E4 plan's Task P rules: change a file here and re-deriv
 
 What it holds: a src-layout package (`src/shop`, found through pyproject's `where`) beside a flat one (`toolkit`), two
 top-level packages named `app` under two roots (`services/alpha`, `services/beta/src`), a Django-style `tests/` root, a
-namespace package (`src/vendors`), a folder that shadows a standard-library name (`email`), a pytest `pythonpath` root
+namespace package (`src/vendors`), a folder that shadows a standard-library name (`email`), a module that does so at a
+root (`tests/logging.py`, which `import logging` never reaches; the pre-ship pass's Task P) beside a package module of
+the same name (`src/shop/logging.py`, reached relatively), a pytest `pythonpath` root
 (`scripts`), a `.pyi` beside its `.py` and one alone, every entry-point kind, a virtual environment (`.venv`, left out, with an editable checkout's `pyproject.toml` that
 the resolver ignores),
 a broken file and two empty `__init__.py` files.
