@@ -486,9 +486,10 @@ export function parseGo(path: string, text: string, reading: Reading): ParsedFil
         if (reading === "full"){
             const read = readDeclarations(root);
             symbols = read.symbols;
-            // the summary names kinds as chunks do (the plan's chunk-kind mapping, B-M1): a struct is a class, as in C# and Rust
+            // the summary names kinds as chunks do (the plan's chunk-kind mapping, B-M1): a struct is a class, as in C# and
+            // Rust, and a method whose receiver can't be read (so it has no parent) is a function
             const exports = symbols.filter((s) => s.parentQualifiedName === null && s.exported)
-                .map((s) => `${s.name} (${s.kind === "struct" ? "class" : s.kind})`);
+                .map((s) => `${s.name} (${s.kind === "struct" ? "class" : s.kind === "method" ? "function" : s.kind})`);
             chunks = assembleChunks(path, text, read.declarations, { imports: importLines, exports });
         }
         return { chunks, symbols, imports: specifiers, declares, calls: emptyCallFacts(), lineCount };
