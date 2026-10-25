@@ -6,8 +6,25 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../../test/helpers/temp";
-import { DatabaseMissingError, DatabaseOutdatedError, openDb, type Db } from "./client";
+import { closeDb, DatabaseMissingError, DatabaseOutdatedError, getDb, openDb, type Db } from "./client";
 import { meta } from "./schema";
+
+describe("closeDb (E4's bench-languages: a fresh data folder per run, in one process)", () => {
+    it("closes the process's database, and the next getDb opens another", () => {
+        const first = getDb();
+        closeDb();
+        expect(first.$client.open).toBe(false);
+        const second = getDb();
+        expect(second).not.toBe(first);
+        expect(second.$client.open).toBe(true);
+        expect(getDb()).toBe(second);
+    });
+
+    it("does nothing when no database is open", () => {
+        closeDb();
+        expect(() => closeDb()).not.toThrow();
+    });
+});
 
 const tempDatabase = (): string => path.join(makeTempDir("neb-db-"), "nebulosity.db");
 const row = (key: string, value: string) => ({ key, value, updatedAt: new Date() });
