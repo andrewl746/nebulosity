@@ -61,7 +61,7 @@ describe("parseCsharp", () => {
     // hand-written snippets for forms the fixture doesn't hold
     it("reads global using static, generic alias targets and global:: names", () => {
         expect(imports("global using static A.B;\nusing global::System.Text;\nusing Map = System.Collections.Generic.Dictionary<string, Order>;\n"))
-            .toEqual(["gstatic:A.B", "using:System.Text", "alias:Map=System.Collections.Generic.Dictionary"]);
+            .toEqual(["gstatic:A.B", "using:System.Text", "alias:Map=System.Collections.Generic.Dictionary`2"]);
         expect(parseCsharp("x.cs", "global using static A.B;\nglobal using M = A.C;\n", "full").declares).toEqual(["galias:M=A.C", "gstatic:A.B"]);
     });
 
@@ -98,7 +98,40 @@ describe("parseCsharp", () => {
 
     it("scans using lines but not using statements or declarations", () => {
         const text = "using A.B;\nglobal using static C.D;\nusing X = E.F<int>;\nnamespace G.H\n{\n    using (var s = Open()) { }\n    using var t = Open();\n    namespace I;\n}\n";
-        expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["using:A.B", "gstatic:C.D", "alias:X=E.F", "ns:G.H", "ns:I"]);
+        expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["using:A.B", "gstatic:C.D", "alias:X=E.F`1", "ns:G.H", "ns:I"]);
+    });
+});
+
+describe("C#'s generic arity (the pre-ship pass, Task C: the CLR's backtick form)", () => {
+    beforeAll(async () => {
+        await loadGrammars([{ id: "csharp", grammar: "tree-sitter-c_sharp.wasm" }]);
+    });
+
+    it("writes a name's arity as its type arguments counted, typeof's unbound Box<> and Box<,> too, and none for no arguments", () => {
+        expect(imports("class C { Box<int> a; Box<int, string> b; Box c; object d = typeof(Box<>); object e = typeof(Box<,>); Box<List<int>, Dictionary<int, string>> f; }"))
+            .toEqual(["type:Box`1", "type:Box`2", "type:Box", "type:List`1", "type:Dictionary`2"]);
+    });
+
+    it("gives each generic segment of a qualified name its arity, and keeps a generic attribute's arity on both its lookup names", () => {
+        expect(imports("using static A.Box<int>;\nusing M = A.Box<int, string>;\nusing N = A.Outer<int>.Inner;\n[Marker<Order>] class C { X.Y<int>.Z h; }"))
+            .toEqual(["static:A.Box`1", "alias:M=A.Box`2", "alias:N=A.Outer`1.Inner", "type:Marker`1", "type:MarkerAttribute`1", "type:Order", "qtype:X.Y`1.Z"]);
+    });
+
+    it("declares each type with its arity, nested types under their generic outer type's; symbols and chunks keep the plain name", () => {
+        const parsed = parseCsharp("x.cs", "namespace N { public class O<T> { public class In<U> {} public class Plain {} } public interface I<in T> {} public delegate void D<T, U>(); public record R<T>(T X); public struct S {} }", "full");
+        expect(parsed.declares).toEqual(["type:N.D`2", "type:N.I`1", "type:N.O`1", "type:N.O`1.In`1", "type:N.O`1.Plain", "type:N.R`1", "type:N.S"]);
+        expect(parsed.symbols.map((s) => s.qualifiedName)).toEqual(["O", "O.In", "O.Plain", "I", "D", "R", "S"]);
+        expect(parsed.chunks.map((c) => c.name)).toEqual(["O", "I", "D", "R", "S", "(file)"]);
+    });
+
+    it("leaves out the file's own names by name and arity: Box<T>'s base type Box and a Box<T, T> are references, Box<T> isn't", () => {
+        expect(imports("class Box<T> : Box { Box<T> Self; Box<T, T> Wide; static Box<T> Make() => Box.Empty; }")).toEqual(["type:Box", "type:Box`2"]);
+    });
+
+    it("scans a using's trailing type arguments to the same arity the full reading gives, nested commas not counted", () => {
+        const text = "using static A.Box<int>;\nusing M = A.Box<int, Dictionary<string, int>>;\nusing N = A.Pair< int , string >;\n";
+        expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["static:A.Box`1", "alias:M=A.Box`2", "alias:N=A.Pair`2"]);
+        expect(parseCsharp("x.cs", text, "full").imports).toEqual(["static:A.Box`1", "alias:M=A.Box`2", "alias:N=A.Pair`2"]);
     });
 });
 

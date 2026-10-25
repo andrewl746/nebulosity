@@ -11,5 +11,9 @@ owns. Two type names are deliberately not visible from where they are written (`
 `IsNullOrEmpty`) are present but not linked: C# binds them by the receiver's and the arguments' types, which the index
 doesn't read.
 
+`src/Shop.Core/Boxes/` holds arity twins, one per file: `Box`, `Box<T>` and `Box<TFirst, TSecond>`, plus `Pair<TLeft, TRight>`,
+which has no twin. Each reader in `src/Shop.Core/Shipping/` writes one arity (`new Box()`; `Box<int>` and `typeof(Box<>)`;
+`Box<string, int>` and `typeof(Box<,>)`), so it reaches only that arity's file.
+
 `src/Shop.Core/Money.cs` starts with a UTF-8 byte-order mark, as Visual Studio writes one. `src/Shop.Web/Pages/CartPage.cs`
 has a syntax error. The files under `bin/` and `obj/` beside a `.csproj` are left out of the index.

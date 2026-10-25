@@ -51,10 +51,26 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *     (a using static's extension methods) and round 2's 13 (ext:'s kind) were about ext: and retire with it. The
  *     fixture's extension cases (CollectionExtensions.cs, HostExtensions.cs, the AddShop and IsNullOrEmpty calls) stay:
  *     they give no specifier and no edge.
+ *
+ * Added in the pre-ship pass (docs/plans/2026-10-25-pre-ship-pass.md, Task C; the controller's ruling R5: exact arity
+ * first, else by name as today), with the arity twins src/Shop.Core/Boxes/ (Box, Box<T>, Box<TFirst, TSecond>, and Pair,
+ * which has no twin) and their readers in src/Shop.Core/Shipping/:
+ * 15. Generic arity, in the CLR's backtick form. A type declared with n type parameters declares type:<ns>.N`n (a generic
+ *     outer type carries its own: O`1.In); a name written with n type arguments is type:N`n, or qtype:A.N`n, each generic
+ *     segment with its own; typeof(Box<>) counts 1 and typeof(Box<,>) 2; with none, no suffix, so every non-generic name
+ *     reads as before. A using static's or an alias's target carries it too. A file's own names are left out by name and
+ *     arity, so BoxOfT.cs's base type Box is a reference (to Box.cs) and BoxOfTwo.cs's Box<TFirst> one (to BoxOfT.cs).
+ * 16. A reference resolves to the files declaring its name with its arity when C#'s lookup (choice 7's steps) finds any;
+ *     when it finds none, it resolves by name at any arity, as before the pass (edit (e)). Partial types (one name, one
+ *     arity, several files) still reach every part. Kinds are by name, as before.
  */
 
 const P = {
     audited: "src/Shop.Core/Auditing/AuditedAttribute.cs",
+    box: "src/Shop.Core/Boxes/Box.cs",
+    boxOfT: "src/Shop.Core/Boxes/BoxOfT.cs",
+    boxOfTwo: "src/Shop.Core/Boxes/BoxOfTwo.cs",
+    pair: "src/Shop.Core/Boxes/Pair.cs",
     totals: "src/Shop.Core/Carts/Cart.Totals.cs",
     cart: "src/Shop.Core/Carts/Cart.cs",
     catalogItem: "src/Shop.Core/Catalog/Item.cs",
@@ -66,6 +82,9 @@ const P = {
     calculator: "src/Shop.Core/Pricing/PriceCalculator.cs",
     priceMath: "src/Shop.Core/Pricing/PriceMath.cs",
     coreGuard: "src/Shop.Core/Shared/Guard.cs",
+    crate: "src/Shop.Core/Shipping/Crate.cs",
+    pallet: "src/Shop.Core/Shipping/Pallet.cs",
+    parcel: "src/Shop.Core/Shipping/Parcel.cs",
     iclock: "src/Shop.Core/Time/IClock.cs",
     systemClock: "src/Shop.Core/Time/SystemClock.cs",
     scenarios: "src/Shop.Web.IntegrationTests/CheckoutScenarios.cs",
@@ -101,12 +120,15 @@ function kinds(groups: { context?: string[]; internal?: string[]; external?: str
 }
 
 /**
- * The 45 edges of a full run, sorted by source then target, each with the rule that makes it. "type:N, step 1" is an
+ * The 51 edges of a full run, sorted by source then target, each with the rule that makes it. "type:N, step 1" is an
  * enclosing namespace (innermost out), "step 2" a visible using (the file's and the project's), "alias" an alias's
- * target, "static" a type nested in a static:/gstatic: type.
+ * target, "static" a type nested in a static:/gstatic: type. "`n" is the arity the name is written and declared with
+ * (choices 15 and 16).
  */
 const EDGES: TruthEdge[] = [
-    edge(P.totals, P.money),                        // type:Money, step 1: Shop.Core.Money (the parent of Shop.Core.Carts)
+    edge(P.boxOfT, P.box),                          // type:Box (Box<T>'s base type, arity 0), step 1: Shop.Core.Boxes.Box; not its own Box`1
+    edge(P.boxOfTwo, P.boxOfT),                     // type:Box`1 (Box<TFirst, TSecond>'s base type Box<TFirst>), step 1: Shop.Core.Boxes.Box`1
+    edge(P.totals, P.money),                       // type:Money, step 1: Shop.Core.Money (the parent of Shop.Core.Carts)
     edge(P.cart, P.catalogItem),                    // type:Item, step 2: using Shop.Core.Catalog (Shop.Core.Models.Item isn't visible)
     edge(P.catalogItem, P.productCode),             // type:ProductCode, step 1: Shop.Core.Catalog.ProductCode (same namespace)
     edge(P.catalogItem, P.money),                   // type:Money, step 1: Shop.Core.Money
@@ -120,6 +142,10 @@ const EDGES: TruthEdge[] = [
     edge(P.calculator, P.money),                    // type:Money, step 1: Shop.Core.Money (enclosing: Shop.Core.Pricing, Shop.Core)
     edge(P.calculator, P.priceMath),                // static:Shop.Core.Pricing.PriceMath; type:Rounding (static) reaches it too
     edge(P.calculator, P.coreGuard),                // type:Guard, step 2: Shop.Shared.Guard, declared in two projects: Shop.Core's wins
+    edge(P.crate, P.boxOfT),                        // type:Box`1 (a field Box<int>, typeof(Box<>)), step 2: using Shop.Core.Boxes; qtype:Shop.Core.Boxes.Box`1 as written
+    edge(P.pallet, P.boxOfTwo),                     // type:Box`2 (Box<string, int>, typeof(Box<,>)), step 2: using Shop.Core.Boxes
+    edge(P.pallet, P.pair),                         // type:Pair`2, step 2: the one Pair (no twin), as before the pass
+    edge(P.parcel, P.box),                          // type:Box (new Box()), step 2: using Shop.Core.Boxes
     edge(P.systemClock, P.iclock),                  // type:IClock (base list), step 1: Shop.Core.Time.IClock
     edge(P.scenarios, P.systemClock),               // qtype:Shop.Core.Time.SystemClock, as written
     edge(P.scenarios, P.checkout),                  // type:CheckoutPage, step 2: using Shop.Web.Pages
@@ -159,17 +185,25 @@ const EDGES: TruthEdge[] = [
     //   CheckoutPage.cs's IsNullOrEmpty, PriceCalculatorTests.cs's AddShop (FakeServices' own method) give no specifier;
     // - CheckoutPage.cs's type:Audited: no repo type is named Audited (AuditedAttribute is the attribute's class);
     //   ReceiptPage.cs's qtype:Core.Auditing.Audited likewise (context: its twin resolves);
-    // - every external name (System, Microsoft.Extensions.DependencyInjection, Xunit, ASP.NET Core's WebApplication).
+    // - every external name (System, Microsoft.Extensions.DependencyInjection, Xunit, ASP.NET Core's WebApplication);
+    // - from Parcel.cs, Crate.cs or Pallet.cs to another arity's Box file, and from BoxOfTwo.cs to Box.cs (choice 16: its
+    //   one Box reference is Box<TFirst>, arity 1); before the pass every Box reference reached all three files.
 ];
 
 const without = (...dropped: TruthEdge[]): TruthEdge[] =>
     EDGES.filter((e) => !dropped.some((d) => d.source === e.source && d.target === e.target));
 /** The edges with these added, sorted as the kit compares them (a mechanical sort of hand-derived edges). */
 const withAdded = (...added: TruthEdge[]): TruthEdge[] => [...EDGES, ...added].sort(byEdge);
+/** The edges without the dropped ones and with the added ones, sorted likewise. */
+const changed = (dropped: TruthEdge[], added: TruthEdge[]): TruthEdge[] => [...without(...dropped), ...added].sort(byEdge);
 
 export const csharpRepoTruth: FixtureTruth = {
     files: [
         { path: P.audited, language: "csharp", isTest: false, lineCount: 10 },
+        { path: P.box, language: "csharp", isTest: false, lineCount: 6 },
+        { path: P.boxOfT, language: "csharp", isTest: false, lineCount: 6 },
+        { path: P.boxOfTwo, language: "csharp", isTest: false, lineCount: 6 },
+        { path: P.pair, language: "csharp", isTest: false, lineCount: 3 },
         { path: P.totals, language: "csharp", isTest: false, lineCount: 8 },
         { path: P.cart, language: "csharp", isTest: false, lineCount: 13 },
         { path: P.catalogItem, language: "csharp", isTest: false, lineCount: 15 },
@@ -181,6 +215,9 @@ export const csharpRepoTruth: FixtureTruth = {
         { path: P.calculator, language: "csharp", isTest: false, lineCount: 20 },
         { path: P.priceMath, language: "csharp", isTest: false, lineCount: 21 },
         { path: P.coreGuard, language: "csharp", isTest: false, lineCount: 12 },
+        { path: P.crate, language: "csharp", isTest: false, lineCount: 13 },
+        { path: P.pallet, language: "csharp", isTest: false, lineCount: 13 },
+        { path: P.parcel, language: "csharp", isTest: false, lineCount: 8 },
         { path: P.iclock, language: "csharp", isTest: false, lineCount: 8 },
         { path: P.systemClock, language: "csharp", isTest: false, lineCount: 8 },
         { path: P.scenarios, language: "csharp", isTest: true, lineCount: 14 },          // a folder segment *.IntegrationTests (no test/ folder)
@@ -205,47 +242,54 @@ export const csharpRepoTruth: FixtureTruth = {
     ],
     specifiers: {
         [P.audited]: ["using:System", "ns:Shop.Core.Auditing", "type:AttributeUsage", "type:AttributeUsageAttribute", "type:AttributeTargets", "type:Attribute"],
+        [P.box]: ["ns:Shop.Core.Boxes"],
+        [P.boxOfT]: ["ns:Shop.Core.Boxes", "type:Box"],                                // T is a type parameter; Box`1 is its own
+        [P.boxOfTwo]: ["ns:Shop.Core.Boxes", "type:Box`1"],                            // TFirst, TSecond: type parameters
+        [P.pair]: ["ns:Shop.Core.Boxes"],
         [P.totals]: ["using:System.Linq", "ns:Shop.Core.Carts", "type:Money"],
-        [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts", "type:List", "type:Item", "type:IReadOnlyList"],
+        [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts", "type:List`1", "type:Item", "type:IReadOnlyList`1"],
         [P.catalogItem]: ["ns:Shop.Core.Catalog", "type:ProductCode", "type:Money"],
         [P.productCode]: ["ns:Shop.Core.Catalog"],
         [P.modelItem]: ["ns:Shop.Core.Models", "type:Money"],
         [P.order]: [
             "using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models",
-            "type:List", "type:Item", "type:Guid", "type:Money", "type:OrderStatus",
+            "type:List`1", "type:Item", "type:Guid", "type:Money", "type:OrderStatus",
         ],
         [P.orderStatus]: ["ns:Shop.Core.Models"],
-        [P.money]: ["using:System", "ns:Shop.Core", "type:IEquatable"],
+        [P.money]: ["using:System", "ns:Shop.Core", "type:IEquatable`1"],
         [P.calculator]: [
             "using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "static:Shop.Core.Pricing.PriceMath",
             "ns:Shop.Core", "ns:Shop.Core.Pricing", "type:Money", "type:Cart", "type:Item", "type:Guard", "type:Rounding",
         ],
         [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing", "type:MidpointRounding"],
         [P.coreGuard]: ["using:System", "ns:Shop.Shared", "type:ArgumentNullException"],
+        [P.crate]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping", "type:Box`1", "qtype:Shop.Core.Boxes.Box`1", "type:Type"], // typeof(Box<>): Box`1 again
+        [P.pallet]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping", "type:Box`2", "type:Type", "type:Pair`2"],         // typeof(Box<,>): Box`2 again
+        [P.parcel]: ["using:Shop.Core.Boxes", "ns:Shop.Core.Shipping", "type:Box"],
         [P.iclock]: ["using:System", "ns:Shop.Core.Time", "type:DateTimeOffset"],
         [P.systemClock]: ["using:System", "ns:Shop.Core.Time", "type:IClock", "type:DateTimeOffset"],
         [P.scenarios]: [
             "using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests", "type:Fact", "type:FactAttribute",
             "type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock", "type:Assert",
         ],
-        [P.collectionExtensions]: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions", "type:IEnumerable"],
+        [P.collectionExtensions]: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions", "type:IEnumerable`1"],
         [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions", "type:IServiceCollection"],
         [P.serviceExtensions]: [
             "using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions",
             "type:IServiceCollection", "type:IClock", "type:SystemClock",
         ],
         [P.globalUsings]: ["global:Shop.Core.Carts", "gstatic:Shop.Core.Pricing.PriceMath", "galias:Clock=Shop.Core.Time.SystemClock"],
-        [P.cartPage]: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase", "type:Cart", "type:IClock", "type:Order"],
+        [P.cartPage]: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase`1", "type:Cart", "type:IClock", "type:Order"],
         [P.checkout]: [
             "using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "static:Shop.Web.Extensions.CollectionExtensions", "ns:Shop.Web.Pages",
-            "type:Audited", "type:AuditedAttribute", "type:PageBase", "type:Order", "type:Clock", "type:DateTimeOffset",
+            "type:Audited", "type:AuditedAttribute", "type:PageBase`1", "type:Order", "type:Clock", "type:DateTimeOffset",
             "type:Cart", "type:Type", "type:Item", "type:PriceCalculator", "type:Guard",
             "qtype:Shop.Core.Models.Order", "type:Guid",
         ],
         [P.pageBase]: ["ns:Shop.Web.Pages"],
         [P.receipt]: [
             "alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages", "qtype:Core.Auditing.Audited", "qtype:Core.Auditing.AuditedAttribute",
-            "type:PageBase", "type:Receipt", "type:Rounding",
+            "type:PageBase`1", "type:Receipt", "type:Rounding",
         ],
         [P.program]: ["using:Shop.Web.Extensions", "type:WebApplication"],
         [P.webGuard]: ["ns:Shop.Shared", "qtype:System.ArgumentException"],
@@ -259,6 +303,10 @@ export const csharpRepoTruth: FixtureTruth = {
     },
     declares: {
         [P.audited]: ["type:Shop.Core.Auditing.AuditedAttribute"],
+        [P.box]: ["type:Shop.Core.Boxes.Box"],
+        [P.boxOfT]: ["type:Shop.Core.Boxes.Box`1"],
+        [P.boxOfTwo]: ["type:Shop.Core.Boxes.Box`2"],
+        [P.pair]: ["type:Shop.Core.Boxes.Pair`2"],
         [P.totals]: ["type:Shop.Core.Carts.Cart"],
         [P.cart]: ["type:Shop.Core.Carts.Cart"],
         [P.catalogItem]: ["type:Shop.Core.Catalog.Item"],
@@ -270,6 +318,9 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.calculator]: ["type:Shop.Core.Pricing.PriceCalculator"],
         [P.priceMath]: ["type:Shop.Core.Pricing.PriceMath", "type:Shop.Core.Pricing.PriceMath.Rounding"],
         [P.coreGuard]: ["type:Shop.Shared.Guard"],
+        [P.crate]: ["type:Shop.Core.Shipping.Crate"],
+        [P.pallet]: ["type:Shop.Core.Shipping.Pallet"],
+        [P.parcel]: ["type:Shop.Core.Shipping.Parcel"],
         [P.iclock]: ["type:Shop.Core.Time.IClock"],
         [P.systemClock]: ["type:Shop.Core.Time.SystemClock"],
         [P.scenarios]: ["type:Shop.Web.IntegrationTests.CheckoutScenarios"],
@@ -280,7 +331,7 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.globalUsings]: ["galias:Clock=Shop.Core.Time.SystemClock", "global:Shop.Core.Carts", "gstatic:Shop.Core.Pricing.PriceMath"],
         [P.cartPage]: ["type:Shop.Web.Pages.CartPage"],
         [P.checkout]: ["type:Shop.Web.Pages.CheckoutPage"],
-        [P.pageBase]: ["type:Shop.Web.Pages.PageBase"],                                 // PageBase<TModel>: the arity dropped
+        [P.pageBase]: ["type:Shop.Web.Pages.PageBase`1"],                               // PageBase<TModel>: arity 1 (choice 15)
         [P.receipt]: ["type:Shop.Web.Pages.ReceiptPage"],
         [P.program]: ["main:top-level"],
         [P.webGuard]: ["type:Shop.Shared.Guard"],
@@ -293,6 +344,19 @@ export const csharpRepoTruth: FixtureTruth = {
             sym("AuditedAttribute", "class", 6, 10, true),                              // its attribute line in, its doc comment out
             sym("Reason", "property", 9, 9, true, "AuditedAttribute"),
         ],
+        [P.box]: [
+            sym("Box", "class", 3, 6, true),
+            sym("IsEmpty", "property", 5, 5, true, "Box"),
+        ],
+        [P.boxOfT]: [
+            sym("Box", "class", 3, 6, true),                                            // a symbol is named without its arity
+            sym("Content", "property", 5, 5, true, "Box"),
+        ],
+        [P.boxOfTwo]: [
+            sym("Box", "class", 3, 6, true),
+            sym("Second", "property", 5, 5, true, "Box"),
+        ],
+        [P.pair]: [sym("Pair", "class", 3, 3, true)],                                   // a positional record: Left and Right are parameters
         [P.totals]: [
             sym("Cart", "class", 5, 8, true),
             sym("Subtotal", "property", 7, 7, true, "Cart"),
@@ -350,6 +414,22 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.coreGuard]: [
             sym("Guard", "class", 5, 12, false),                                        // internal
             sym("NotNull", "method", 7, 11, false, "Guard"),                            // public, but in an internal class
+        ],
+        [P.crate]: [
+            sym("Crate", "class", 6, 13, true),
+            sym("_count", "property", 8, 8, false, "Crate"),
+            sym("Spare", "property", 10, 10, true, "Crate"),
+            sym("Kind", "property", 12, 12, true, "Crate"),
+        ],
+        [P.pallet]: [
+            sym("Pallet", "class", 6, 13, true),
+            sym("Load", "property", 8, 8, true, "Pallet"),
+            sym("Kind", "property", 10, 10, true, "Pallet"),
+            sym("Label", "property", 12, 12, true, "Pallet"),
+        ],
+        [P.parcel]: [
+            sym("Parcel", "class", 5, 8, true),
+            sym("Wrapping", "property", 7, 7, true, "Parcel"),
         ],
         [P.iclock]: [
             sym("IClock", "interface", 5, 8, true),
@@ -427,11 +507,15 @@ export const csharpRepoTruth: FixtureTruth = {
             context: ["using:System", "ns:Shop.Core.Auditing"],
             external: ["type:AttributeUsage", "type:AttributeUsageAttribute", "type:AttributeTargets", "type:Attribute"],
         }),
+        [P.box]: kinds({ context: ["ns:Shop.Core.Boxes"] }),
+        [P.boxOfT]: kinds({ context: ["ns:Shop.Core.Boxes"], internal: ["type:Box"] }),
+        [P.boxOfTwo]: kinds({ context: ["ns:Shop.Core.Boxes"], internal: ["type:Box`1"] }),
+        [P.pair]: kinds({ context: ["ns:Shop.Core.Boxes"] }),
         [P.totals]: kinds({ context: ["using:System.Linq", "ns:Shop.Core.Carts"], internal: ["type:Money"] }),
         [P.cart]: kinds({
             context: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts"],
             internal: ["type:Item"],
-            external: ["type:List", "type:IReadOnlyList"],
+            external: ["type:List`1", "type:IReadOnlyList`1"],
         }),
         [P.catalogItem]: kinds({ context: ["ns:Shop.Core.Catalog"], internal: ["type:ProductCode", "type:Money"] }),
         [P.productCode]: kinds({ context: ["ns:Shop.Core.Catalog"] }),
@@ -439,16 +523,27 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.order]: kinds({
             context: ["using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models"],
             internal: ["type:Item", "type:Money", "type:OrderStatus"],
-            external: ["type:List", "type:Guid"],
+            external: ["type:List`1", "type:Guid"],
         }),
         [P.orderStatus]: kinds({ context: ["ns:Shop.Core.Models"] }),
-        [P.money]: kinds({ context: ["using:System", "ns:Shop.Core"], external: ["type:IEquatable"] }),
+        [P.money]: kinds({ context: ["using:System", "ns:Shop.Core"], external: ["type:IEquatable`1"] }),
         [P.calculator]: kinds({
             context: ["using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "ns:Shop.Core", "ns:Shop.Core.Pricing"],
             internal: ["static:Shop.Core.Pricing.PriceMath", "type:Money", "type:Cart", "type:Item", "type:Guard", "type:Rounding"],
         }),
         [P.priceMath]: kinds({ context: ["using:System", "ns:Shop.Core.Pricing"], external: ["type:MidpointRounding"] }),
         [P.coreGuard]: kinds({ context: ["using:System", "ns:Shop.Shared"], external: ["type:ArgumentNullException"] }),
+        [P.crate]: kinds({
+            context: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
+            internal: ["type:Box`1", "qtype:Shop.Core.Boxes.Box`1"],
+            external: ["type:Type"],
+        }),
+        [P.pallet]: kinds({
+            context: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
+            internal: ["type:Box`2", "type:Pair`2"],
+            external: ["type:Type"],
+        }),
+        [P.parcel]: kinds({ context: ["using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"], internal: ["type:Box"] }),
         [P.iclock]: kinds({ context: ["using:System", "ns:Shop.Core.Time"], external: ["type:DateTimeOffset"] }),
         [P.systemClock]: kinds({ context: ["using:System", "ns:Shop.Core.Time"], internal: ["type:IClock"], external: ["type:DateTimeOffset"] }),
         [P.scenarios]: kinds({
@@ -458,7 +553,7 @@ export const csharpRepoTruth: FixtureTruth = {
         }),
         [P.collectionExtensions]: kinds({
             context: ["using:System.Collections.Generic", "using:System.Linq", "ns:Shop.Web.Extensions"],
-            external: ["type:IEnumerable"],
+            external: ["type:IEnumerable`1"],
         }),
         [P.hostExtensions]: kinds({
             context: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions"],
@@ -473,12 +568,12 @@ export const csharpRepoTruth: FixtureTruth = {
             context: ["global:Shop.Core.Carts", "galias:Clock=Shop.Core.Time.SystemClock"],
             internal: ["gstatic:Shop.Core.Pricing.PriceMath"],
         }),
-        [P.cartPage]: kinds({ context: ["using:Shop.Core.Time", "ns:Shop.Web.Pages"], internal: ["type:PageBase", "type:Cart", "type:IClock", "type:Order"] }),
+        [P.cartPage]: kinds({ context: ["using:Shop.Core.Time", "ns:Shop.Web.Pages"], internal: ["type:PageBase`1", "type:Cart", "type:IClock", "type:Order"] }),
         [P.checkout]: kinds({
             context: ["using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "ns:Shop.Web.Pages"],
             internal: [
                 "static:Shop.Web.Extensions.CollectionExtensions",
-                "type:AuditedAttribute", "type:PageBase", "type:Order",
+                "type:AuditedAttribute", "type:PageBase`1", "type:Order",
                 "type:Clock",                                                           // no repo type is named Clock, but it resolves (the alias)
                 "type:Cart", "type:Item",
                 "type:PriceCalculator",                                                 // a repo type's name, not visible here: unresolved
@@ -492,7 +587,7 @@ export const csharpRepoTruth: FixtureTruth = {
                 "alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages",
                 "qtype:Core.Auditing.Audited",                                          // the attribute's other lookup name: its twin resolves (choice 12)
             ],
-            internal: ["qtype:Core.Auditing.AuditedAttribute", "type:PageBase", "type:Receipt", "type:Rounding"], // type:Receipt: the alias
+            internal: ["qtype:Core.Auditing.AuditedAttribute", "type:PageBase`1", "type:Receipt", "type:Rounding"], // type:Receipt: the alias
         }),
         [P.program]: kinds({
             context: ["using:Shop.Web.Extensions"],
@@ -522,11 +617,13 @@ export const csharpRepoTruth: FixtureTruth = {
         { path: P.seed, declaredBy: "static Main" },
     ],
     // `var shown = clock.Now +;` on line 11; the reference after it (Order, line 14) is still read
-    broken: { path: P.cartPage, specifiers: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase", "type:Cart", "type:IClock", "type:Order"] },
+    broken: { path: P.cartPage, specifiers: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase`1", "type:Cart", "type:IClock", "type:Order"] },
     // the scan reading reads only `using …;` and `namespace …` lines: every file with another specifier differs, and the
     // nested block namespace reads as written (ns:Pricing)
     scan: {
         [P.audited]: ["using:System", "ns:Shop.Core.Auditing"],
+        [P.boxOfT]: ["ns:Shop.Core.Boxes"],
+        [P.boxOfTwo]: ["ns:Shop.Core.Boxes"],
         [P.totals]: ["using:System.Linq", "ns:Shop.Core.Carts"],
         [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts"],
         [P.catalogItem]: ["ns:Shop.Core.Catalog"],
@@ -536,6 +633,9 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.calculator]: ["using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "static:Shop.Core.Pricing.PriceMath", "ns:Shop.Core", "ns:Pricing"],
         [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing"],
         [P.coreGuard]: ["using:System", "ns:Shop.Shared"],
+        [P.crate]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
+        [P.pallet]: ["using:System", "using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
+        [P.parcel]: ["using:Shop.Core.Boxes", "ns:Shop.Core.Shipping"],
         [P.iclock]: ["using:System", "ns:Shop.Core.Time"],
         [P.systemClock]: ["using:System", "ns:Shop.Core.Time"],
         [P.scenarios]: ["using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests"],
@@ -556,6 +656,19 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.audited]: [
             { kind: "class", name: "AuditedAttribute", startLine: 5, endLine: 10 },
             { kind: "file-summary", name: "(file)", startLine: 1, endLine: 10 },
+        ],
+        // a generic type's chunk is named without its arity, as its symbol is
+        [P.boxOfT]: [
+            { kind: "class", name: "Box", startLine: 3, endLine: 6 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 6 },
+        ],
+        [P.boxOfTwo]: [
+            { kind: "class", name: "Box", startLine: 3, endLine: 6 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 6 },
+        ],
+        [P.pair]: [
+            { kind: "class", name: "Pair", startLine: 3, endLine: 3 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 3 },
         ],
         [P.productCode]: [
             { kind: "class", name: "ProductCode", startLine: 3, endLine: 3 },
@@ -646,6 +759,18 @@ export const csharpRepoTruth: FixtureTruth = {
                     + "global using Clock = Shop.Core.Time.SystemClock;\n",
             },
             edgesAfter: withAdded(edge(P.checkout, P.calculator)),
+        },
+        {
+            // no file declares Box`1 any more, so the names written with one type argument (Crate.cs's Box<int>,
+            // typeof(Box<>) and Shop.Core.Boxes.Box<string>; BoxOfTwo.cs's base type Box<TFirst>) resolve by name, as before
+            // the pass (choice 16): to every Box file left, Box.cs and BoxOfTwo.cs (BoxOfTwo.cs's own is a self edge, dropped).
+            // Parcel.cs's Box and Pallet.cs's Box<string, int> still find their own arity's file
+            description: "(e) src/Shop.Core/Boxes/BoxOfT.cs, Box<T>, is deleted (the file set changes): its readers fall back to the name, at any arity",
+            writes: { [P.boxOfT]: null },
+            edgesAfter: changed(
+                [edge(P.boxOfT, P.box), edge(P.boxOfTwo, P.boxOfT), edge(P.crate, P.boxOfT)],
+                [edge(P.boxOfTwo, P.box), edge(P.crate, P.box), edge(P.crate, P.boxOfTwo)],
+            ),
         },
     ],
 };
