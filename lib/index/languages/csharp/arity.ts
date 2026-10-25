@@ -17,9 +17,14 @@ export function withArity(name: string, arity: number): string {
     return arity === 0 ? name : `${name}${TICK}${arity}`;
 }
 
+/** Whether any segment of a dotted name carries an arity: written with type arguments somewhere (A.Outer`1.Inner is). */
+export function hasArity(name: string): boolean {
+    return name.includes(TICK);
+}
+
 /** A name with every arity taken out, as the source writes it without its type arguments: A.Outer`1.Inner`2 → A.Outer.Inner. */
 export function withoutArity(name: string): string {
-    return name.includes(TICK) ? name.replace(EVERY_ARITY, "") : name;
+    return hasArity(name) ? name.replace(EVERY_ARITY, "") : name;
 }
 
 /** The last segment's arity split off: A.Marker`1 → [A.Marker, `1]; a name without one → [name, ""]. */

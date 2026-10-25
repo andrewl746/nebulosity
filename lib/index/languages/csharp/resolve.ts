@@ -8,10 +8,14 @@
  * - type:N: each enclosing namespace from the innermost out (the global namespace last), the first that holds N; else an
  *   alias named N (the file's, then the project's), its target; else every visible using's U.N together, the types
  *   nested in static: and gstatic: types counting too.
- * - Generic arity (the pre-ship pass, Task C; the controller's ruling R5): names carry it (arity.ts: type:Box`1), and the
- *   whole lookup is tried with it first, so `Box<int>` reaches Box<T>'s file and not Box's or Box<T, U>'s, as C# binds
- *   it. Only when that finds nothing does the lookup run again by name at any arity, as before the pass. Kinds are by
- *   name, at any arity.
+ * - Generic arity (the pre-ship pass, Task C; the controller's rulings R5 and R23): names carry it (arity.ts:
+ *   type:Box`1), and the whole lookup is tried with it first, so `Box<int>` reaches Box<T>'s file and not Box's or
+ *   Box<T, U>'s, as C# binds it. Only when that finds nothing, and only for a name written without type arguments, does
+ *   the lookup run again by name at any arity, as before the pass: the parser can drop type arguments (a named tuple's),
+ *   but it never invents them. A name written with them (or reached through an alias's or a using static's target
+ *   written with them) that no file declares at that arity resolves to nothing, since C# can't bind X<T> to a type of
+ *   another arity (CS0308): an outside ILogger<T> never links to a repo's own non-generic ILogger. Kinds follow: a
+ *   type:N`n is a repo name only when a repo type is N with arity n; a type:N, at any arity.
  * - Every file declaring a chosen name gets the edge (partial types); when files of several projects declare it, the
  *   importer's own project's win.
  * - qtype:A.B.N: under each enclosing namespace, as written, through an alias for A, then under each visible using.
@@ -21,7 +25,7 @@
  */
 import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
 import { dirOf } from "../../paths";
-import { splitArity, withoutArity } from "./arity";
+import { hasArity, splitArity, withoutArity } from "./arity";
 import { CSHARP_MANIFEST, csharpRules, projectFiles } from "./rules";
 
 type Usings = { namespaces: string[]; statics: string[]; aliases: Map<string, string> };
@@ -102,6 +106,7 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         else if (files.at(-1) !== file) files.push(file);
     };
     const simpleNames = new Set<string>();   // at any arity
+    const declaredSimpleNames = new Set<string>();   // with the arity they're declared with (Box`1): the kinds of type:N`n
     const qualifiers = new Set<string>();   // declared namespaces, their parents, and declared types (at any arity): what a qualified name may start from
     const projectDeclares = new Map<string, Usings>();
     const sortedFiles = [...ctx.files.keys()].sort(byPath);
@@ -114,6 +119,7 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
                 add(exactFiles, fullName, file);
                 add(nameFiles, byName, file);
                 simpleNames.add(byName.slice(byName.lastIndexOf(".") + 1));
+                declaredSimpleNames.add(fullName.slice(fullName.lastIndexOf(".") + 1));   // no arity holds a dot
                 qualifiers.add(byName);
             } else if (/^(global|gstatic|galias):/.test(fact)){
                 const project = projectOf(file);
@@ -216,12 +222,14 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
     const union = (lists: readonly (readonly string[])[]): string[] => [...new Set(lists.flat())].sort(byPath);
 
     /**
-     * The lookup's two passes (R5): with the arity as written, over the names as declared; then by name, every arity
-     * taken out of the name, the aliases' targets and the static types alike, over the names at any arity.
+     * The lookup's two passes (R5, amended by R23): with the arity as written, over the names as declared; then by name,
+     * over the names at any arity, for a full name written without type arguments only. `form` gives the full name a
+     * pass looks for, or null when that pass can't take it: in the second, a name, an alias's target or a using static's
+     * type written with type arguments, which C# binds only at their arity.
      */
-    const PASSES: readonly { index: Index; form: (name: string) => string }[] = [
+    const PASSES: readonly { index: Index; form: (name: string) => string | null }[] = [
         { index: exactFiles, form: (name) => name },
-        { index: nameFiles, form: withoutArity },
+        { index: nameFiles, form: (name) => (hasArity(name) ? null : name) },
     ];
 
     /**
@@ -230,39 +238,47 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
      */
     const lookUpIn = ({ index, form }: (typeof PASSES)[number], view: FileView, written: string): readonly string[] => {
         const name = form(written);
+        if (name === null) return [];
         for (const outer of view.enclosing){
-            const fullName = join(outer, name);
+            const fullName = join(outer, name);   // a namespace carries no arity
             if (index.has(fullName)) return filesFor(index, fullName, view.project);
         }
         const dot = name.indexOf(".");
         const first = dot === -1 ? name : name.slice(0, dot);
         const target = view.aliases.get(first);
         if (target !== undefined){
+            // the alias hides the usings, so a target this pass can't take ends the lookup
             const fullName = form(dot === -1 ? target : `${target}${name.slice(dot)}`);
-            return index.has(fullName) ? filesFor(index, fullName, view.project) : [];
+            return fullName !== null && index.has(fullName) ? filesFor(index, fullName, view.project) : [];
         }
         const found: (readonly string[])[] = [];
         for (const scope of [...view.namespaces, ...view.statics]){
             const fullName = form(join(scope, name));
-            if (index.has(fullName)) found.push(filesFor(index, fullName, view.project));
+            if (fullName !== null && index.has(fullName)) found.push(filesFor(index, fullName, view.project));
         }
         return union(found);
     };
 
     /**
      * A name's files: those declaring it with its arity, when the whole lookup finds any (so a using's Box<T> beats an
-     * enclosing namespace's Box for `Box<int>`, as C# binds it); else by name at any arity, as before the pass.
+     * enclosing namespace's Box for `Box<int>`, as C# binds it); else, for a name written without type arguments, by
+     * name at any arity, as before the pass; else none.
      */
     const lookUp = (view: FileView, name: string): readonly string[] => {
         const exact = lookUpIn(PASSES[0], view, name);
         return exact.length > 0 ? exact : lookUpIn(PASSES[1], view, name);
     };
 
-    /** A using static's type's files: as written, then under each enclosing namespace; its arity first, else by name. */
+    /**
+     * A using static's type's files: as written, then under each enclosing namespace; its arity first, else by name when
+     * it's written without type arguments.
+     */
     const staticFiles = (view: FileView, written: string): readonly string[] => {
         for (const { index, form } of PASSES){
+            const name = form(written);
+            if (name === null) continue;
             for (const outer of ["", ...view.enclosing]){
-                const fullName = form(join(outer, written));
+                const fullName = join(outer, name);
                 if (index.has(fullName)) return filesFor(index, fullName, view.project);
             }
         }
@@ -302,10 +318,12 @@ export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
         resolve,
         kindOf(importer, specifier): ReferenceKind {
             if (resolve(importer, specifier).length > 0) return "internal";
-            const text = withoutArity(body(specifier));   // by name, at any arity
+            const written = body(specifier);
+            const text = withoutArity(written);   // by name, at any arity
             if (specifier.startsWith("type:") || specifier.startsWith("qtype:")){
+                // type:N`n names a repo type only at its arity, as it resolves (R23); type:N, and a qualifier, at any arity
                 const named = specifier.startsWith("type:")
-                    ? simpleNames.has(text)
+                    ? (hasArity(written) ? declaredSimpleNames.has(written) : simpleNames.has(text))
                     : viewOf(importer).enclosing.some((outer) => qualifiers.has(join(outer, text.slice(0, text.lastIndexOf(".")))));
                 if (!named) return "external";
                 return twinResolves(importer, specifier) ? "context" : "internal";
