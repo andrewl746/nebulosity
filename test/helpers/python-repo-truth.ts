@@ -24,12 +24,15 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * attribute, beats another root's X/name.py (Task P review #1, I1: services/alpha/app/views.py). A relative import
  * counts from F's folder, one folder up per extra dot.
  *
- * Standard-library names stay external (the pre-ship pass's Task P, ruling R4): an absolute import whose first segment
- * is a top-level standard-library module name (CPython 3.14's sys.stdlib_module_names plus the modules removed since
- * 3.10; `test` isn't one) never resolves to a repo file, from any importer, the shadowing module's own root included.
- * tests/logging.py sits directly in the root tests, so without the rule `import logging` and `from logging import
- * getLogger` would reach it from everywhere (the E4 review's M6, second half). Relative imports are unchanged:
- * src/shop/orders.py's `from . import logging` still names src/shop/logging.py, which no root holds directly.
+ * Standard-library names resolve only through F's own roots (the pre-ship pass's Task P, ruling R13, which amends R4):
+ * when an absolute import's first segment X is a standard-library name (one on every Python from 3.10 to 3.14; `test`,
+ * `parser` and `tomllib` aren't), only the roots that contain F are tried, and only those that hold X itself as a module
+ * or a regular package (a namespace folder named X never does: the standard library's regular package beats it at run
+ * time); no other root is tried. So tests/logging.py, directly in the root tests, is reached by tests/test_audit.py's
+ * `import logging` (its own root) but never by package code's (the E4 review's M6, second half), and
+ * scripts/release.py's `from secrets import TOKEN` reaches scripts/secrets.py beside it in the root scripts. Relative
+ * imports are unchanged: src/shop/orders.py's `from . import logging` still names src/shop/logging.py, which no root
+ * holds directly.
  *
  * Readings of points the plan leaves open, used below (each is in progress-python.md):
  * - "module-level" and "top-level" mean the module's own statements: an assignment inside a top-level try or if
@@ -52,13 +55,16 @@ const member = (parent: string, name: string, kind: Kind, startLine: number, end
 });
 const edge = (source: string, target: string): TruthEdge => ({ source, target });
 
-/** The 36 edges of a full run, sorted by source then target, each with the specifier and the rule that makes it. */
+/** The 38 edges of a full run, sorted by source then target, each with the specifier and the rule that makes it. */
 const EDGES: TruthEdge[] = [
     // shop.models:Product: no submodule shop.models.Product anywhere; shop.models in no root holding conftest.py
     // (only ""), and in exactly one other root (src)
     edge("conftest.py", "src/shop/models.py"),
     // helpers: the root scripts (pytest's pythonpath) contains the importer and holds scripts/helpers.py
     edge("scripts/deploy.py", "scripts/helpers.py"),
+    // secrets:TOKEN (a standard-library name, a flat script beside its own secrets.py): the root scripts contains the
+    // importer and holds secrets as a module, scripts/secrets.py; no submodule secrets.TOKEN there, so the module secrets
+    edge("scripts/release.py", "scripts/secrets.py"),
     // app:config: the root services/alpha contains the importer, and services/alpha/app/config.py is the submodule
     edge("services/alpha/app/__init__.py", "services/alpha/app/config.py"),
     // app:db: in the root services/alpha, which contains the importer, there's no submodule app.db but there is the
@@ -122,6 +128,9 @@ const EDGES: TruthEdge[] = [
     // shop.audit:record (an ordinary absolute import of the repo's own package, beside a standard-library one): no
     // submodule shop.audit.record anywhere; shop.audit in no root holding the importer (tests, ""), in exactly one other (src)
     edge("tests/test_audit.py", "src/shop/audit.py"),
+    // logging (a standard-library name): the root tests contains the importer and holds logging as a module,
+    // tests/logging.py (the deepest root containing it; "" holds no logging)
+    edge("tests/test_audit.py", "tests/logging.py"),
     // .text:shout: base toolkit; no module toolkit/text/shout, so toolkit/text
     edge("toolkit/__init__.py", "toolkit/text.py"),
     // toolkit:text, above the syntax error: the submodule toolkit.text
@@ -139,12 +148,13 @@ const EDGES: TruthEdge[] = [
     // not edges:
     // - scripts/deploy.py's app:config: app.config is in two other roots (services/alpha, services/beta/src) and so is
     //   app, so nothing (internal: app is a top-level package's name); its email.utils:formatdate is a standard-library
-    //   name (external, and the stray email/ folder has no utils.py anyway); its import_module("toolkit.text") calls a
-    //   local function, not importlib's (no specifier);
-    // - src/shop/audit.py's logging, src/shop/receipts.py's logging:getLogger and tests/test_audit.py's logging: the
-    //   standard library's logging, never tests/logging.py, although that module sits directly in the root tests (one
-    //   other root for the first two, so a unique hit without the rule; the importer's own root for the third, the first
-    //   hit without the rule). Nor src/shop/logging.py, which no root holds directly;
+    //   name, and neither root containing it (scripts, "") holds email as a module or a regular package (the stray
+    //   email/ folder is a namespace folder, with no utils.py anyway): external; its import_module("toolkit.text") calls
+    //   a local function, not importlib's (no specifier);
+    // - src/shop/audit.py's logging and src/shop/receipts.py's logging:getLogger: the standard library's logging. The
+    //   roots containing them (src, "") hold no logging, and tests/logging.py's root tests doesn't contain them, so it
+    //   never captures them (without the rule, a unique hit among the other roots). Nor src/shop/logging.py, which no
+    //   root holds directly;
     // - src/shop/cart.py's .speedups:fast_total names no file (a relative miss, internal);
     // - src/shop/gui.py's promo:DISCOUNT: no promo anywhere until edit (b) makes extras a root (external);
     // - src/shop/models.pyi beside src/shop/models.py: .py comes first, so nothing reaches the stub;
@@ -197,6 +207,8 @@ export const pythonRepoTruth: FixtureTruth = {
         { path: "extras/promo.py", language: "python", isTest: false, lineCount: 1 },
         { path: "scripts/deploy.py", language: "python", isTest: false, lineCount: 20 },
         { path: "scripts/helpers.py", language: "python", isTest: false, lineCount: 2 },
+        { path: "scripts/release.py", language: "python", isTest: false, lineCount: 5 },
+        { path: "scripts/secrets.py", language: "python", isTest: false, lineCount: 1 },
         { path: "services/alpha/app/__init__.py", language: "python", isTest: false, lineCount: 4 },
         { path: "services/alpha/app/config.py", language: "python", isTest: false, lineCount: 1 },
         { path: "services/alpha/app/views.py", language: "python", isTest: false, lineCount: 5 },
@@ -241,6 +253,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": [],
         "scripts/deploy.py": ["sys", "email.utils:formatdate", "helpers", "app:config"],
         "scripts/helpers.py": [],
+        "scripts/release.py": ["secrets:TOKEN"],
+        "scripts/secrets.py": [],
         "services/alpha/app/__init__.py": ["app:config"],
         "services/alpha/app/config.py": [],
         "services/alpha/app/views.py": ["app:db"],
@@ -291,6 +305,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": [],
         "scripts/deploy.py": ["__main__"],                    // if '__main__' == __name__: (single quotes, operands reversed)
         "scripts/helpers.py": [],
+        "scripts/release.py": [],
+        "scripts/secrets.py": [],
         "services/alpha/app/__init__.py": [],
         "services/alpha/app/config.py": [],
         "services/alpha/app/views.py": [],
@@ -334,6 +350,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": [top("DISCOUNT", "const", 1, 1, true)],
         "scripts/deploy.py": [top("import_module", "function", 9, 11, true), top("main", "function", 14, 16, true)],
         "scripts/helpers.py": [top("banner", "function", 1, 2, true)],
+        "scripts/release.py": [top("publish", "function", 4, 5, true)],
+        "scripts/secrets.py": [top("TOKEN", "const", 1, 1, true)],
         "services/alpha/app/__init__.py": [top("NAME", "const", 3, 3, true), top("db", "const", 4, 4, true)],
         "services/alpha/app/config.py": [top("DEBUG", "const", 1, 1, true)],
         "services/alpha/app/views.py": [top("index", "function", 4, 5, true)],
@@ -424,6 +442,8 @@ export const pythonRepoTruth: FixtureTruth = {
             "app:config": "internal",               // unresolved, but app is a top-level package's name
         },
         "scripts/helpers.py": {},
+        "scripts/release.py": { "secrets:TOKEN": "internal" },   // a standard-library name its own root holds: it resolves
+        "scripts/secrets.py": {},
         "services/alpha/app/__init__.py": { "app:config": "internal" },
         "services/alpha/app/config.py": {},
         "services/alpha/app/views.py": { "app:db": "internal" },
@@ -472,8 +492,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "tests/logging.py": {},
         "tests/model_tests/test_models.py": { "cart_tests.factories:make_cart": "internal", "shop.models:Product": "internal" },
         "tests/runtests.py": { os: "external", sys: "external", cart_tests: "internal", shop: "internal" },
-        // logging from inside the root that holds tests/logging.py: still the standard library's (no same-root exception)
-        "tests/test_audit.py": { logging: "external", "shop.audit:record": "internal" },
+        // logging from inside the root that holds tests/logging.py: it resolves there, so internal
+        "tests/test_audit.py": { logging: "internal", "shop.audit:record": "internal" },
         "toolkit/__init__.py": { ".text:shout": "internal" },
         "toolkit/_speedups.pyi": {},
         "toolkit/broken.py": { json: "external", "toolkit:text": "internal" },
