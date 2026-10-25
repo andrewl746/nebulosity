@@ -7,6 +7,7 @@ import { requireRepository } from "../../db/store/structure";
 import { applyTargetUpdates, countInFlight } from "../../db/store/summaries";
 import { commandHint } from "../../hints";
 import { repoKey } from "../paths";
+import { DEFAULT_SUMMARY_MODELS, type SummaryModelsResolution } from "./models";
 import type { PlannedTarget, TargetState } from "./plan";
 import { plural } from "./prompts";
 import { planSnapshot } from "./snapshot";
@@ -73,12 +74,20 @@ export function summaryStageStatus(targets: readonly PlannedTarget[], context: S
  * get rows, statuses follow the plan (an edited file's summary turns stale), and test templates are written. While a
  * live summary run holds the lock, that run owns the stage row, so only the rows are updated and this returns null.
  * A failed run's note is kept until its targets stop waiting.
+ *
+ * `models` is the summary models setting as the caller resolved it for this job (ADR-066; the defaults when left out).
+ * When it can't be used, nothing is planned or written and this returns null: every inputHash holds its model, so a
+ * plan with any other models would mark the rows of the set ones stale. The first refresh after the fix catches up.
  */
-export function refreshSummaryStatus(repoRoot: string, options: { summarizerAvailable: boolean }): StageStatus | null {
+export function refreshSummaryStatus(
+    repoRoot: string, options: { summarizerAvailable: boolean; models?: SummaryModelsResolution }
+): StageStatus | null {
+    const models = options.models ?? { ok: true, ...DEFAULT_SUMMARY_MODELS };
+    if (!models.ok) return null;
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     // between runs, out-of-date folders are lazy: redone when opened, or by the background worker's sweep
-    const snap = planSnapshot(db, repoId, false, new Set());
+    const snap = planSnapshot(db, repoId, false, new Set(), models);
     applyTargetUpdates(db, repoId, snap.targets);
     if (isSummaryLockHeld(db)) return null;
 

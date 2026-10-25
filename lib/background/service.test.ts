@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+import { isolateDataFolder } from "../../test/helpers/data-folder";
 import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
@@ -14,6 +15,7 @@ import { errorResponseFor, RepoSwitchingError, SummariesNotConfirmedError, Summa
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
+import { resolveSummaryModels } from "../index/summarize/models";
 import { runSummaries } from "../index/summarize/run";
 import type { Summarizer } from "../index/summarize/types";
 import type { RepoWatcher } from "../index/watch";
@@ -31,6 +33,9 @@ const fakeEmbed: EmbedFn = async (texts) => texts.map(() => Float32Array.from([1
 // Date stays real: lock staleness and stage times are compared against the clock
 beforeEach(() => { vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] }); });
 afterEach(() => { vi.useRealTimers(); });
+
+// The service reads the summary models from config.json at each job (ADR-066): only this test's own, never the developer's
+const dataFolder = isolateDataFolder();
 
 /** A watcher the test drives: `changed(paths)` is what chokidar would report after its debounce. */
 function fakeWatcher(){
@@ -333,6 +338,29 @@ describe("background service", () => {
         await service.stop();
     });
 
+    it("reads the summary models at each job: a setting it can't use refuses summarize now with what's wrong, and a fixed one applies to the next job (ADR-066)", async () => {
+        const root = await summarizedFixture();
+        const stub = stubSummarizer();
+        let setting: unknown = { file: { model: "claude-zeta-1" } };
+        const service = createBackgroundService({
+            summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed,
+            summaryModels: () => resolveSummaryModels(setting, "C:/data/config.json"),
+        });
+        await service.setRepo(root);   // the startup check runs with the broken setting: the Map has to start anyway
+        await service.idle();
+
+        const refusal = service.summarizeNow("src/core/log.ts");
+        await expect(refusal).rejects.toThrow("summaryModels.file.inputPerMTok");
+        expect(errorResponseFor(await refusal.catch((err: unknown) => err)).error.code).toBe("SUMMARIES_OFF");
+        expect(stub.requests).toHaveLength(0);
+
+        // no restart: the next job reads the setting again. The model is in the inputHash, so log.ts is due for the new one.
+        setting = { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } };
+        expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh", model: "claude-haiku-6" });
+        expect(stub.requests.map((r) => [r.model, r.customModel])).toEqual([["claude-haiku-6", true]]);
+        await service.stop();
+    });
+
     it("summarize now spends nothing on a repo whose summaries nobody confirmed, and says how to confirm them (S11)", async () => {
         const root = copyFixture();
         indexRepository(root);   // structure only: no yes recorded, no model-written summary
@@ -400,6 +428,94 @@ describe("background service", () => {
         // the repo's prompt names the root folder, which buildFolders calls by the copy's own directory name
         expect(stub.subjects()).toEqual(["File: src/core/log.ts", "Folder: src/core", "Folder: src", `Repository: ${path.basename(root)}`]);
         expect(rowStatus(root, "src/core")).toBe("fresh");
+        await service.stop();
+    });
+
+    // R17 (ADR-066): a model change is paid for only after a yes, so the automatic jobs leave what another model wrote
+    it("after a folder model change, the sweep redoes only folders the model now in use wrote, once their own inputs change", async () => {
+        const root = await summarizedFixture();   // every folder and the repo written by Sonnet 5.5, every file by Haiku 5.5
+        // the service reads config.json itself, at each job
+        fs.writeFileSync(path.join(dataFolder(), "config.json"), JSON.stringify({ summaryModels: { folder: { model: "claude-sonnet-6", inputPerMTok: 2, outputPerMTok: 10 } } }));
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+        expect(rowStatus(root, "src/app")).toBe("stale");   // every folder's inputHash now names Sonnet 6
+
+        // the first sweep: all five folders are out of date, but Sonnet 5.5 wrote them, so they wait for a yes
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.requests).toHaveLength(0);
+
+        // asked for by name, src/core is written by Sonnet 6; then a file inside it changes, and its summary is redone
+        expect(await service.summarizeNow("src/core")).toMatchObject({ status: "fresh", model: "claude-sonnet-6" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["Folder: src/core", "File: src/core/log.ts"]);
+
+        // the next sweep redoes src/core, whose own inputs changed; src, now out of date above it, was Sonnet 5.5's and waits
+        await vi.advanceTimersByTimeAsync(9 * 60_000);   // 20 minutes after setRepo
+        await service.idle();
+        expect(stub.subjects()).toEqual(["Folder: src/core", "File: src/core/log.ts", "Folder: src/core"]);
+        expect(stub.requests.at(-1)).toMatchObject({ model: "claude-sonnet-6", customModel: true });
+        expect(rowStatus(root, "src")).toBe("stale");
+        await service.stop();
+    });
+
+    // Review #2's probe (n1): Anthropic's ids nest (claude-sonnet-4, claude-sonnet-4-5), and only a dated snapshot is the same model
+    it("a folder model whose id starts another's doesn't count that model's folders as its own: the sweep still waits for a yes", async () => {
+        const root = await summarizedFixture();   // every folder written by claude-sonnet-5-5
+        fs.writeFileSync(path.join(dataFolder(), "config.json"), JSON.stringify({ summaryModels: { folder: { model: "claude-sonnet-5", inputPerMTok: 2, outputPerMTok: 10 } } }));
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        // a file inside src/core changes and its summary is redone (Haiku 5.5 is still the file model): 1 request
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+
+        // two sweeps: claude-sonnet-5-5 isn't a snapshot of claude-sonnet-5, so none of its five folders goes unasked
+        await vi.advanceTimersByTimeAsync(19 * 60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
+        await service.stop();
+    });
+
+    it("after a file model change, a saved file waits for a yes until the model now in use has written it", async () => {
+        const root = await summarizedFixture();
+        fs.writeFileSync(path.join(dataFolder(), "config.json"), JSON.stringify({ summaryModels: { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } } }));
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        // Haiku 5.5 wrote log.ts: a save leaves it out of date, and its quiet minute sends nothing
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.requests).toHaveLength(0);
+
+        // once Haiku 6 has written it (asked for by name), the next save is refreshed as usual
+        expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh", model: "claude-haiku-6" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const more = 2;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts", "File: src/core/log.ts"]);
+        expect(stub.requests.map((r) => r.model)).toEqual(["claude-haiku-6", "claude-haiku-6"]);
         await service.stop();
     });
 

@@ -21,6 +21,9 @@
  *   means the repo itself). It's one request, so no budget applies.
  * - --release-batch <batch id> (repeatable) gives up on a batch whose results keep failing to download: its
  *   requests are sent again in this run, and paid for again. The summaries stage's note names such a batch.
+ * - The models are the defaults unless summaryModels in config.json sets them (ADR-066). A setting that can't be used
+ *   is refused before anything is estimated or sent, and a model the API no longer serves stops the run at its first
+ *   answer, with one message saying where to choose another.
  */
 import path from "path";
 import readline from "readline/promises";
@@ -33,12 +36,13 @@ import { embedSummaries } from "../../lib/index/embed";
 import { repoKey } from "../../lib/index/paths";
 import { summarizerFromEnv } from "../../lib/index/summarize/claude";
 import { estimateSpend } from "../../lib/index/summarize/estimate";
-import { costUsd, formatUsd } from "../../lib/index/summarize/pricing";
+import { configuredSummaryModels, type ResolvedSummaryModels } from "../../lib/index/summarize/models";
+import { costUsd, formatUsd, type PriceTable } from "../../lib/index/summarize/pricing";
 import {
     BATCH_THRESHOLD, BatchesUnreachableError, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError,
     TargetNotReadyError, UnknownBatchError, type Transport,
 } from "../../lib/index/summarize/run";
-import { SUMMARY_MODELS } from "../../lib/index/summarize/prompts";
+import { ModelUnavailableError } from "../../lib/index/summarize/types";
 import { keyHint } from "../../lib/hints";
 import { loadLocalEnv } from "../env";
 
@@ -124,8 +128,10 @@ export async function runSummarize(args: readonly string[]): Promise<number> {
     try{
         return await summarize(options);
     } catch (err){
+        // ModelUnavailableError: the run stopped at the first answer saying a model is gone, and its message says where to
+        // choose another (ADR-066)
         if (err instanceof RepoNotIndexedError || err instanceof TargetNotFoundError || err instanceof TargetNotReadyError
-            || err instanceof StructureNotReadyError || err instanceof UnknownBatchError){
+            || err instanceof StructureNotReadyError || err instanceof UnknownBatchError || err instanceof ModelUnavailableError){
             console.error(`[summarize] ${err.message}`);
             return 1;
         }
@@ -144,6 +150,14 @@ export async function runSummarize(args: readonly string[]): Promise<number> {
 
 async function summarize(options: SummarizeOptions): Promise<number> {
     const { root, onePath } = options;
+
+    // The summary models (ADR-066), checked before anything is estimated or sent: a model with no price would be
+    // estimated at $0 (Review Focus 3), and a setting that isn't one can't be planned with.
+    const models = configuredSummaryModels();
+    if (!models.ok){
+        console.error(`[summarize] ${models.error}`);
+        return 1;
+    }
     const summarizer = summarizerFromEnv();
 
     if (onePath !== null){
@@ -151,14 +165,14 @@ async function summarize(options: SummarizeOptions): Promise<number> {
             console.error(`[summarize] ANTHROPIC_API_KEY is not set (${keyHint()}).`);
             return 1;
         }
-        const row = await summarizeNow(root, onePath, summarizer);
+        const row = await summarizeNow(root, onePath, summarizer, models);
         say(`${row.kind} ${row.path || "(repo)"}: ${row.status}${row.error ? ` (${row.error})` : ""}`);
         if (row.tagline) say(`${row.tagline} — ${row.summary}`);
     } else{
         if (!summarizer) say(`ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key: ${keyHint()}).`);
-        else if (!(await confirmSpend(options))) return 1;
+        else if (!(await confirmSpend(options, models))) return 1;
         const result = await runSummaries(root, {
-            summarizer, transport: options.transport, wait: options.wait, budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,
+            summarizer, models, transport: options.transport, wait: options.wait, budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,
         });
         say(`up to date ${result.upToDate}/${result.total} · summarized ${result.summarized} · templated ${result.templated}`
             + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
@@ -173,17 +187,18 @@ async function summarize(options: SummarizeOptions): Promise<number> {
     if (embedded.embedded > 0) process.stdout.write("\n");
     say(`embedded ${embedded.embedded} summaries; ${embedded.total} now have vectors`);
 
-    printSpend(root);
+    printSpend(root, models.prices);
     return 0;
 }
 
 /**
  * The estimate and the yes (S11): prints what a full run would send and cost, then asks. Without a terminal it needs --yes.
  * A run with nothing to send needs no yes. A yes is recorded for the repo. Returns false when the run must not start.
+ * The requests are planned, and priced, with the summary models setting (ADR-066).
  */
-async function confirmSpend(options: SummarizeOptions): Promise<boolean> {
+async function confirmSpend(options: SummarizeOptions, setting: ResolvedSummaryModels): Promise<boolean> {
     const { root } = options;
-    const requests = plannedRequests(root);
+    const requests = plannedRequests(root, setting);
     if (requests.length === 0) return true;
 
     const db = getDb();
@@ -191,10 +206,14 @@ async function confirmSpend(options: SummarizeOptions): Promise<boolean> {
     const files = requests.filter((r) => r.kind === "file").length;
     // the runner's own rule: auto goes through the Batch API (half price) for waves of BATCH_THRESHOLD or more
     const batch = options.transport === "batch" || (options.transport === "auto" && files >= BATCH_THRESHOLD);
-    const estimate = estimateSpend(requests, loadUsage(db, repoId), batch ? "batch" : "direct");
+    const estimate = estimateSpend(requests, loadUsage(db, repoId), batch ? "batch" : "direct", setting.prices);
     const noPrice = estimate.unpriced.length > 0 ? ` (no price on file for: ${estimate.unpriced.join(", ")})` : "";
-    say(`${path.basename(root)}: about ${estimate.requests.toLocaleString("en-US")} requests (${files.toLocaleString("en-US")} files to ${SUMMARY_MODELS.file},`
-        + ` ${requests.filter((r) => r.kind === "folder").length.toLocaleString("en-US")} folders and the repo to ${SUMMARY_MODELS.folder}), about ${formatUsd(estimate.usd)} at list prices`
+    const { models } = setting;
+    const folders = requests.filter((r) => r.kind === "folder").length.toLocaleString("en-US");
+    // the repo is named apart only when the setting gives it a model of its own
+    const above = models.repo === models.folder ? `${folders} folders and the repo to ${models.folder}` : `${folders} folders to ${models.folder} and the repo to ${models.repo}`;
+    say(`${path.basename(root)}: about ${estimate.requests.toLocaleString("en-US")} requests (${files.toLocaleString("en-US")} files to ${models.file},`
+        + ` ${above}), about ${formatUsd(estimate.usd)} at list prices`
         + `${batch ? ", by the Batch API" : ""}${noPrice}. Writing summaries sends each file's code to Anthropic.`);
 
     if (!options.yes){
@@ -223,15 +242,16 @@ function summariesNote(root: string): string {
 /**
  * What this repo's summaries have cost so far, per model and transport (success criterion S2).
  * A model with no price on file (a server-side fallback model, say) isn't counted as $0:
- * the total then reads "at least" and names the models it couldn't price.
+ * the total then reads "at least" and names the models it couldn't price. `prices` are the
+ * summary models setting's (ADR-066), checked before the built-in table.
  */
-function printSpend(root: string): void {
+function printSpend(root: string, prices: PriceTable): void {
     const db = getDb();
     let total = 0;
     const unpriced = new Set<string>();
 
     for (const row of loadUsage(db, requireRepository(db, repoKey(root)))){
-        const cost = costUsd(row.model, row, row.transport);
+        const cost = costUsd(row.model, row, row.transport, prices);
         if (cost === null) unpriced.add(row.model);
         else total += cost;
         say(`spend: ${row.model} ${row.transport} · ${row.requests} requests · ${row.inputTokens.toLocaleString("en-US")} in`

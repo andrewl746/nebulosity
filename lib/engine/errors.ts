@@ -3,8 +3,9 @@ import { DatabaseMissingError, DatabaseOutdatedError } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { RepoNotIndexedError } from "../db/store/structure";
 import { commandHint, keyHint } from "../hints";
+import { SummaryModelsError } from "../index/summarize/models";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
-import { SummarizerAuthError } from "../index/summarize/types";
+import { ModelUnavailableError, SummarizerAuthError } from "../index/summarize/types";
 import { NotAFolderError, PathNotFoundError } from "./level";
 import { UnknownRepoError } from "./repos";
 
@@ -87,8 +88,10 @@ function codeFor(err: unknown): ErrorCode {
     if (err instanceof NotAFolderError || err instanceof BadInputError) return "BAD_REQUEST";
     if (err instanceof IndexLockedError || err instanceof StructureNotReadyError || err instanceof RepoSwitchingError) return "INDEX_LOCKED";
     if (err instanceof TargetNotReadyError || err instanceof DatabaseOutdatedError) return "NOT_READY";
-    if (err instanceof SummariesOffError || err instanceof SummariesNotConfirmedError) return "SUMMARIES_OFF";
-    // Anthropic refused the key: the fault is upstream of this server, and retrying won't help until the key changes
-    if (err instanceof SummarizerAuthError) return "UPSTREAM";
+    // a summary-models setting that can't be used turns summaries off until it's fixed, like a missing key (ADR-066)
+    if (err instanceof SummariesOffError || err instanceof SummariesNotConfirmedError || err instanceof SummaryModelsError) return "SUMMARIES_OFF";
+    // Anthropic refused the key, or no longer serves the model: the fault is upstream of this server, and retrying won't
+    // help until the key or the setting changes (ADR-066)
+    if (err instanceof SummarizerAuthError || err instanceof ModelUnavailableError) return "UPSTREAM";
     return "INTERNAL";
 }

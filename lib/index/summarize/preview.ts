@@ -8,10 +8,11 @@ import { commandHint } from "../../hints";
 import { ASSUMED_TOKENS } from "./budget";
 import { perRequestPrice, pickSample, usageStats, type UsageStats } from "./compare";
 import { mapLimit } from "./concurrency";
+import { DEFAULT_SUMMARY_MODELS, type ResolvedSummaryModels } from "./models";
 import { planSummaries, writtenByModel, type PlannedTarget } from "./plan";
-import { formatUsd, pricePerMTok } from "./pricing";
+import { formatUsd, pricePerMTok, type PriceTable } from "./pricing";
 import {
-    FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT, SUMMARY_MODELS,
+    FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT,
 } from "./prompts";
 import { buildFilePrompt, requireStructureReady } from "./run";
 import type { Summarizer, SummaryOutcome } from "./types";
@@ -124,6 +125,8 @@ export type PreviewInput = {
     summarizer: Summarizer;
     /** A file's prompt (buildFilePrompt), or null when the file changed after indexing: that counts as a failure. */
     filePrompt: (file: FileFacts) => string | null;
+    /** The summary models setting, as a real run would resolve it (ADR-066). Default: the built-in models. */
+    models?: ResolvedSummaryModels;
     concurrency?: number;
     onProgress?: (message: string) => void;
 };
@@ -158,6 +161,7 @@ export async function runFolderPreview(input: PreviewInput): Promise<FolderPrevi
     const sent = new Set<string>();
     const answers = new Map<string, SummaryOutcome>();
     const waves: string[][] = [];
+    const setting = input.models ?? DEFAULT_SUMMARY_MODELS;
 
     const send = (target: PlannedTarget): Promise<SummaryOutcome> => {
         const customId = keyOf(target);
@@ -165,12 +169,14 @@ export async function runFolderPreview(input: PreviewInput): Promise<FolderPrevi
         if (prompt === null){
             return Promise.resolve({ customId, ok: false, error: `${target.path} changed after it was indexed; run ${commandHint("index", "<path-to-repo>")} first`, model: null, usage: null });
         }
-        return input.summarizer.summarize({ customId, model: target.model, system: SYSTEM_PROMPTS[target.kind], prompt });
+        // as the runner builds it: a set model goes without the Sonnet fallback beta (ADR-066, R3)
+        const customModel = setting.custom[target.kind];
+        return input.summarizer.summarize({ customId, model: target.model, system: SYSTEM_PROMPTS[target.kind], prompt, ...(customModel ? { customModel } : {}) });
     };
 
     for (;;){
         // refreshStaleFolders: true, as in a full run (npm run summarize): an out-of-date folder is redone, not left lazy
-        const plan = planSummaries(input.files, input.folders, [...rows.values()], { models: SUMMARY_MODELS, refreshStaleFolders: true, failedThisRun });
+        const plan = planSummaries(input.files, input.folders, [...rows.values()], { models: setting.models, refreshStaleFolders: true, failedThisRun });
         const wave = nextWave(plan, scope, sent);
 
         if (wave.length === 0){
@@ -222,7 +228,8 @@ export function unfinished(preview: FolderPreview): PlannedTarget[] {
  * runs the loop with buildFilePrompt's real file prompts, and adds what the review needs from the graph.
  */
 export async function previewRepoFolders(
-    db: Db, repoId: number, root: string, samples: readonly SampleFolder[], summarizer: Summarizer, onProgress?: (message: string) => void
+    db: Db, repoId: number, root: string, samples: readonly SampleFolder[], summarizer: Summarizer, onProgress?: (message: string) => void,
+    models?: ResolvedSummaryModels
 ): Promise<Pick<FolderPreviewReport, "preview" | "importerLines" | "fullPass">> {
     requireStructureReady(db, repoId);
     const files = loadFileFacts(db, repoId);
@@ -235,6 +242,7 @@ export async function previewRepoFolders(
     const preview = await runFolderPreview({
         files, folders, stored: loadSummaries(db, repoId), sample: samples.map((s) => s.path), summarizer,
         filePrompt: (file) => buildFilePrompt(db, repoId, root, file),
+        models,
         onProgress,
     });
 
@@ -246,6 +254,8 @@ export type FolderPreviewReport = {
     repo: string;
     effort: string;
     models: { file: string; folder: string };
+    /** The summary models setting's prices, checked before the built-in table (ADR-066). */
+    prices?: PriceTable;
     samples: readonly SampleFolder[];
     preview: FolderPreview;
     /** The "Imported by" line of each file in Review #1's sample. */
@@ -262,15 +272,15 @@ export function renderFolderPreview(report: FolderPreviewReport): string {
     const sent = [...preview.final.values()].filter((t) => preview.answers.has(keyOf(t)));
     const sentFiles = sent.filter((t) => t.kind === "file");
     const sentFolders = sent.filter((t) => t.kind !== "file");
-    const fileStats = usageStats(models.file, sentFiles.map((t) => preview.answers.get(keyOf(t))));
-    const folderStats = usageStats(models.folder, sentFolders.map((t) => preview.answers.get(keyOf(t))));
+    const fileStats = usageStats(models.file, sentFiles.map((t) => preview.answers.get(keyOf(t))), report.prices);
+    const folderStats = usageStats(models.folder, sentFolders.map((t) => preview.answers.get(keyOf(t))), report.prices);
     const tests = preview.scope.files.filter((f) => f.isTest).length;
     const problems = failures(preview);
 
     // The estimate multiplies what it prints (perRequestPrice, rounded token means), so each line can be redone by hand.
     const filePrice = perRequestPrice(fileStats.meanCost);
     const filesTotal = (fullPass.files * filePrice.value) / 2;
-    const folderPrice = pricePerMTok(models.folder) ?? { input: 0, output: 0 };
+    const folderPrice = pricePerMTok(models.folder, report.prices) ?? { input: 0, output: 0 };
     const meanIn = Math.round(folderStats.meanInputTokens);
     const meanOut = Math.round(folderStats.meanOutputTokens);
     const foldersTotal = (fullPass.folders * (meanIn * folderPrice.input + meanOut * folderPrice.output)) / 1_000_000 / 2;

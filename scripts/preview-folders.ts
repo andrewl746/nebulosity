@@ -19,9 +19,10 @@ import { nextReviewNumber, reviewDate, SUMMARY_REVIEW_HEADER } from "../lib/inde
 import {
     previewRepoFolders, renderFolderPreview, SampleNotIndexedError, unfinished, type SampleFolder,
 } from "../lib/index/summarize/preview";
-import { SUMMARY_EFFORT, SUMMARY_MODELS } from "../lib/index/summarize/prompts";
+import { SUMMARY_EFFORT } from "../lib/index/summarize/prompts";
 import { StructureNotReadyError } from "../lib/index/summarize/run";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
+import { summaryModelsOrExit } from "./summary-models";
 
 /** The sample, picked by the controller for variety (plan, Addendum 2): 128 non-test files and about 25 folders of VS Code. */
 const REVIEW_3_FOLDERS: SampleFolder[] = [
@@ -54,6 +55,8 @@ if (!hasAnthropicKey()){
     console.error("[preview] ANTHROPIC_API_KEY is not set (put it in .env.local).");
     process.exit(1);
 }
+// the models a real run would use: the defaults, or summaryModels in config.json (ADR-066)
+const setting = summaryModelsOrExit("preview");
 
 const root = path.resolve(args[0]);
 const out = nebulosityPath("docs", "SUMMARY_REVIEW.md");
@@ -63,16 +66,16 @@ async function main(): Promise<void> {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     const summarizer = createClaudeSummarizer(new Anthropic({ maxRetries: 3 }), SUMMARY_EFFORT);
-    const models = { file: SUMMARY_MODELS.file, folder: SUMMARY_MODELS.folder };
+    const models = { file: setting.models.file, folder: setting.models.folder };
 
     say(`${REVIEW_3_FOLDERS.length} sample folders: files with ${models.file}, then folders bottom-up with ${models.folder}`);
-    const result = await previewRepoFolders(db, repoId, root, REVIEW_3_FOLDERS, summarizer, say);
+    const result = await previewRepoFolders(db, repoId, root, REVIEW_3_FOLDERS, summarizer, say, setting);
     for (const target of unfinished(result.preview)) say(`never became ready: ${target.kind} ${target.path} (${target.state})`);
 
     const existing = fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "";
     const title = `${reviewDate(new Date())} Summary Review #${nextReviewNumber(existing)} — folder preview:`
         + ` ${models.file} files and ${models.folder} folders on ${REVIEW_3_FOLDERS.length} folders of ${path.basename(root)}`;
-    const section = renderFolderPreview({ title, repo: repoKey(root), effort: SUMMARY_EFFORT, models, samples: REVIEW_3_FOLDERS, ...result });
+    const section = renderFolderPreview({ title, repo: repoKey(root), effort: SUMMARY_EFFORT, models, prices: setting.prices, samples: REVIEW_3_FOLDERS, ...result });
     fs.writeFileSync(out, `${existing || SUMMARY_REVIEW_HEADER}\n${section}`);
     say(`wrote "${title}" to ${out}`);
 }

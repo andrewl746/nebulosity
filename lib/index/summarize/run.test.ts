@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
+import { configPath } from "../../config";
 import { copyFixture } from "../../../test/helpers/fixture";
+import { rejectionOf } from "../../../test/helpers/rejection";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { makeTempDir } from "../../../test/helpers/temp";
 import { getDb } from "../../db/client";
@@ -13,8 +16,11 @@ import { loadBatchRows, loadFileFacts, loadSummaries, loadUsage, markInFlight, t
 import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
+import { createClaudeSummarizer } from "./claude";
+import { resolveSummaryModels } from "./models";
 import { buildFilePrompt, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
-import { BatchGoneError, SummarizerAuthError, type Summarizer } from "./types";
+import { refreshSummaryStatus } from "./status";
+import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type Summarizer } from "./types";
 
 // markInFlight calls straight through to the real one; a single test makes it throw once
 vi.mock("../../db/store/summaries", async (importOriginal) => {
@@ -984,5 +990,242 @@ describe("plannedRequests", () => {
         const root = indexedFixture();
         await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
         expect(plannedRequests(root)).toEqual([]);
+    });
+
+    it("lists the model set for a kind (ADR-066)", () => {
+        const root = indexedFixture();
+        const requests = plannedRequests(root, setModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } }));
+        expect(requests.filter((r) => r.kind === "file")).toEqual(Array.from({ length: 7 }, () => ({ kind: "file", model: "claude-haiku-6" })));
+        expect(requests.filter((r) => r.kind !== "file").every((r) => r.model === "claude-sonnet-5-5")).toBe(true);
+    });
+});
+
+/** The resolved setting for `setting`, which must be one resolveSummaryModels accepts. */
+function setModels(setting: unknown){
+    const resolved = resolveSummaryModels(setting, configPath());
+    if (!resolved.ok) throw new Error(resolved.error);
+    return resolved;
+}
+
+describe("runSummaries — models set in summaryModels (ADR-066)", () => {
+    // Every file gets the same text from both stubs, so the folders' prompts, which carry their files' summaries, don't move
+    const FILE_TEXTS = Object.fromEntries(["src/app/main.ts", "src/core/log.ts", "src/util/strings.ts", "src/app/view.tsx", "src/core/index.ts", "src/index.ts", "scripts/build.js"]
+        .map((p) => [p, { tagline: `About ${p}`, summary: `Summary of ${p}.` }]));
+
+    it("writes a kind with its set model, marks those requests as set, and a new model re-summarizes only that kind (R2)", async () => {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer({ texts: FILE_TEXTS }).summarizer, transport: "direct" });
+
+        const stub = stubSummarizer({ texts: FILE_TEXTS });
+        const models = setModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } });
+        // the model is part of every file's inputHash, so all 7 files go again; the folders' prompts are unchanged
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", models })).toMatchObject({ summarized: 7, failed: 0 });
+        expect(stub.requests.map((r) => [r.model, r.customModel])).toEqual(Array.from({ length: 7 }, () => ["claude-haiku-6", true]));
+        expect(row(root, "src/core/log.ts")).toMatchObject({ status: "fresh", model: "claude-haiku-6" });
+        expect(row(root, "src/core")).toMatchObject({ status: "fresh", model: "claude-sonnet-5-5" });
+
+        // a kind left at its default is never marked: the Sonnet fallback beta stays with it (R3)
+        const defaults = stubSummarizer({ texts: FILE_TEXTS });
+        await runSummaries(root, { summarizer: defaults.summarizer, transport: "direct" });
+        expect(defaults.requests).toHaveLength(7);
+        expect(defaults.requests.every((r) => r.model === "claude-haiku-5-5" && !r.customModel)).toBe(true);
+    });
+
+    it("prices the spend cap's projection at the set prices: no model counted as $0", async () => {
+        const root = indexedFixture();
+        const said: string[] = [];
+        const models = setModels({ file: { model: "claude-zeta-1", inputPerMTok: 1, outputPerMTok: 5 } });
+
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct", models, budgetUsd: 15, onProgress: (m) => said.push(m) });
+
+        // wave 1: the 7 files at ASSUMED_TOKENS (4,600 in, 260 out) and the set prices: 7 × (4,600 × $1 + 260 × $5) / 1M = $0.0413
+        expect(said.find((m) => m.startsWith("budget:"))).toContain("this wave ≈ $0.0413");
+        expect(said.some((m) => m.includes("no price on file"))).toBe(false);
+    });
+});
+
+/**
+ * An Anthropic client that no longer serves any model but the `served` ones: each request to another model, and each
+ * such request of a batch, is answered with the 404 the API gives for an unknown model ("model: <id>", a
+ * not_found_error); a served model writes a whole summary. Batch ids are numbered across the file, as the stub's are
+ * (stubSummarizer), and zero-padded so they sort in the order they were made. No request leaves the process.
+ */
+let goneBatches = 0;
+function retiredClient(options: { refuseBatches?: boolean; served?: readonly string[] } = {}){
+    const sent: { endpoint: string; model: string }[] = [];
+    const batches = new Map<string, { customId: string; model: string }[]>();
+    const served = (model: string) => options.served?.includes(model) ?? false;
+    const notFound = (model: string) =>
+        new Anthropic.NotFoundError(404, { type: "error", error: { type: "not_found_error", message: `model: ${model}` }, request_id: null }, undefined, new Headers(), "not_found_error");
+    const reply = (model: string) => ({
+        model, stop_reason: "end_turn", usage: { input_tokens: 100, output_tokens: 20 },
+        content: [{ type: "text", text: JSON.stringify({ tagline: `Written by ${model}`, summary: `A summary by ${model}.` }) }],
+    });
+    const answer = (endpoint: string) => async (params: { model: string }) => {
+        sent.push({ endpoint, model: params.model });
+        if (served(params.model)) return reply(params.model);
+        throw notFound(params.model);
+    };
+    const client = {
+        messages: {
+            create: answer("messages"),
+            batches: {
+                create: async (params: { requests: { custom_id: string; params: { model: string } }[] }) => {
+                    sent.push(...params.requests.map((r) => ({ endpoint: "batch", model: r.params.model })));
+                    if (options.refuseBatches) throw notFound(params.requests[0].params.model);
+                    goneBatches++;
+                    const id = `msgbatch_retired_${String(goneBatches).padStart(4, "0")}`;
+                    batches.set(id, params.requests.map((r) => ({ customId: r.custom_id, model: r.params.model })));
+                    return { id };
+                },
+                retrieve: async () => ({ processing_status: "ended" }),
+                results: async (id: string) => (async function* (){
+                    for (const r of batches.get(id) ?? []){
+                        yield served(r.model)
+                            ? { custom_id: r.customId, result: { type: "succeeded", message: reply(r.model) } }
+                            : { custom_id: r.customId, result: { type: "errored", error: { type: "error", error: { type: "not_found_error", message: `model: ${r.model}` }, request_id: null } } };
+                    }
+                })(),
+            },
+        },
+        beta: { messages: { create: answer("beta") } },
+    };
+    return { summarizer: createClaudeSummarizer(client as unknown as Anthropic), sent, batches };
+}
+
+/** The message a run stops with when Anthropic no longer serves `model` (Review Focus 2). */
+function expectRetiredMessage(message: string, model: string): void {
+    expect(message).toContain(model);
+    expect(message).toContain(configPath());
+    expect(message).toContain("Summary models");
+}
+
+describe("runSummaries — a model the API no longer serves (ADR-066, Review Focus 2)", () => {
+    /** The fixture summarized, then two files edited and re-indexed: both wait for Haiku, their old summaries kept. */
+    async function twoFilesWaiting(): Promise<string> {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        fs.appendFileSync(path.join(root, "src/util/strings.ts"), "export const extra = 2;\n");
+        indexRepository(root);
+        refreshSummaryStatus(root, { summarizerAvailable: true });   // the rows as the Map shows them now: both stale
+        return root;
+    }
+
+    it("stops at the first answer on the regular API: no second request, one message, and the stored rows unchanged", async () => {
+        const root = await twoFilesWaiting();
+        const before = rows(root);
+        const usageBefore = loadUsage(getDb(), requireRepository(getDb(), repoKey(root)));
+        const retired = retiredClient();
+
+        const run = runSummaries(root, { summarizer: retired.summarizer, transport: "direct", concurrency: 1 });
+
+        await expect(run).rejects.toThrow(ModelUnavailableError);
+        const error = await rejectionOf(run);
+        expectRetiredMessage(error.message, "claude-haiku-5-5");
+        expect(retired.sent).toEqual([{ endpoint: "messages", model: "claude-haiku-5-5" }]);
+        expect(rows(root)).toEqual(before);
+        expect(loadUsage(getDb(), requireRepository(getDb(), repoKey(root)))).toEqual(usageBefore);
+        // the stage says the same, for the Map's status
+        expectRetiredMessage(readStages(getDb(), requireRepository(getDb(), repoKey(root))).summaries?.note ?? "", "claude-haiku-5-5");
+    });
+
+    it("sends nothing more after the answers already on their way: 4 of the fixture's 7 files, not 7", async () => {
+        const root = indexedFixture();
+        refreshSummaryStatus(root, { summarizerAvailable: true });
+        const before = rows(root);
+        const retired = retiredClient();
+
+        // the default 4 at a time: all 4 are out before the first 404 comes back, and the other 3 never go
+        await expect(runSummaries(root, { summarizer: retired.summarizer, transport: "direct" })).rejects.toThrow(ModelUnavailableError);
+        expect(retired.sent).toHaveLength(4);
+        expect(rows(root)).toEqual(before);
+    });
+
+    it("stops at a batch result that errored that way: nothing more is sent, every stored summary is kept, and no row stays claimed", async () => {
+        const root = await twoFilesWaiting();
+        const before = rows(root);
+        const retired = retiredClient();
+
+        const run = runSummaries(root, { summarizer: retired.summarizer, transport: "batch", pollIntervalMs: 0 });
+
+        await expect(run).rejects.toThrow(ModelUnavailableError);
+        expectRetiredMessage((await rejectionOf(run)).message, "claude-haiku-5-5");
+        // one batch of the two files, and nothing after it
+        expect(retired.sent).toEqual([{ endpoint: "batch", model: "claude-haiku-5-5" }, { endpoint: "batch", model: "claude-haiku-5-5" }]);
+        expect(retired.batches.size).toBe(1);
+
+        const after = rows(root);
+        const text = (r: (typeof after)[number]) => ({ path: r.path, tagline: r.tagline, summary: r.summary, model: r.model, inputHash: r.inputHash });
+        expect(after.map(text)).toEqual(before.map(text));
+        expect(after.filter((r) => r.batchId !== null)).toEqual([]);
+        // the batch is collected, so its two rows are released, failed with the message the run stopped with
+        for (const p of ["src/core/log.ts", "src/util/strings.ts"]){
+            expect(row(root, p)?.status).toBe("failed");
+            expectRetiredMessage(row(root, p)?.error ?? "", "claude-haiku-5-5");
+        }
+        expect(after.filter((r) => !["src/core/log.ts", "src/util/strings.ts"].includes(r.path))).toEqual(before.filter((r) => !["src/core/log.ts", "src/util/strings.ts"].includes(r.path)));
+    });
+
+    it("stops when Anthropic refuses to create a batch for that reason, and leaves the rows unclaimed for the next run", async () => {
+        const root = await twoFilesWaiting();
+        const before = rows(root);
+        const retired = retiredClient({ refuseBatches: true });
+
+        const run = runSummaries(root, { summarizer: retired.summarizer, transport: "batch", pollIntervalMs: 0 });
+
+        await expect(run).rejects.toThrow(ModelUnavailableError);
+        expectRetiredMessage((await rejectionOf(run)).message, "claude-haiku-5-5");
+        expect(retired.sent).toHaveLength(2);   // the refused batch's two requests, and nothing after them
+        expect(rows(root)).toEqual(before);
+    });
+
+    it("summarizeNow says so with the same message, and keeps the stored row", async () => {
+        const root = await twoFilesWaiting();
+        const before = rows(root);
+        const retired = retiredClient();
+
+        const asked = summarizeNow(root, "src/core/log.ts", retired.summarizer);
+
+        await expect(asked).rejects.toThrow(ModelUnavailableError);
+        expectRetiredMessage((await rejectionOf(asked)).message, "claude-haiku-5-5");
+        expect(retired.sent).toHaveLength(1);
+        expect(rows(root)).toEqual(before);
+    });
+
+    // I2 (R17): a gone model stops a run only while the run still uses it
+    it("a batch left at Anthropic for a model the setting no longer uses stops nothing: its rows go again with the model now in use", async () => {
+        // The first wave went out as two batches for Haiku 5.5, which is gone: 2 of indexedTwelveFiles' files, then the
+        // other 10 (a wave over 5,000 is split this way). A throwaway stub's batch is regrouped into the two.
+        const root = indexedTwelveFiles();
+        const db = getDb();
+        const client = retiredClient({ served: ["claude-haiku-6", "claude-sonnet-5-5"] });
+        const carrier = stubSummarizer({ pollsBeforeDone: 99 });
+        await runSummaries(root, { summarizer: carrier.summarizer, transport: "batch", wait: false });
+        const [carrierId] = carrier.batches.keys();
+        const rowOf = new Map(loadBatchRows(db, carrierId).map((r) => [`s${r.id}`, r]));
+        const requests = carrier.batches.get(carrierId)!.requests;
+        const first = await client.summarizer.submitBatch(requests.slice(0, 2));
+        markInFlight(db, first, requests.slice(0, 2).map((r) => rowOf.get(r.customId)!));
+        const second = await client.summarizer.submitBatch(requests.slice(2));
+        markInFlight(db, second, requests.slice(2).map((r) => rowOf.get(r.customId)!));
+        client.sent.length = 0;
+
+        // run 1, at the defaults: the first batch's answers say Haiku 5.5 is gone, and the run stops there
+        await expect(runSummaries(root, { summarizer: client.summarizer, transport: "batch", pollIntervalMs: 0 })).rejects.toThrow(ModelUnavailableError);
+        expect(loadBatchRows(db, second)).toHaveLength(10);   // still at Anthropic
+        expect(client.sent).toEqual([]);
+
+        // run 2, after the user set Haiku 6 for files, the way the worker runs (the regular API, no waiting, so the
+        // second batch is collected by collectEndedBatches): its 10 answers name a model the setting no longer uses, so
+        // they neither stop the run nor trip the circuit breaker (10 of 10 failed would), and their rows go again
+        const models = setModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } });
+        const result = await runSummaries(root, { summarizer: client.summarizer, models, transport: "direct", wait: false });
+
+        expect(result).toMatchObject({ stopped: false, failed: 0, inFlight: 0, upToDate: 14, summarized: 14 });
+        expect(client.sent.filter((s) => s.model === "claude-haiku-6")).toHaveLength(12);
+        expect(client.sent.some((s) => s.model === "claude-haiku-5-5")).toBe(false);
+        expect(rows(root).filter((r) => r.kind === "file").map((r) => [r.status, r.model]))
+            .toEqual(Array.from({ length: 12 }, () => ["fresh", "claude-haiku-6"]));
     });
 });

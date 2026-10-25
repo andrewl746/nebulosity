@@ -5,7 +5,8 @@ import { dataDir } from "../home";
 import { IndexLockedError } from "../db/store/lock";
 import { RepoNotIndexedError } from "../db/store/structure";
 import { StructureNotReadyError, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "../index/summarize/run";
-import { SummarizerAuthError } from "../index/summarize/types";
+import { SummaryModelsError } from "../index/summarize/models";
+import { ModelUnavailableError, SummarizerAuthError } from "../index/summarize/types";
 import { BadInputError, errorResponseFor, NoActiveRepoError, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "./errors";
 import { NotAFolderError, PathNotFoundError } from "./level";
 import { UnknownRepoError } from "./repos";
@@ -26,6 +27,9 @@ describe("errorResponseFor", () => {
             [new SummariesOffError(), "SUMMARIES_OFF", 409],
             [new SummariesNotConfirmedError("/r"), "SUMMARIES_OFF", 409],
             [new SummarizerAuthError("invalid x-api-key"), "UPSTREAM", 502],
+            // ADR-066: Anthropic no longer serves the model, upstream like a rejected key; a setting that can't be used turns summaries off
+            [new ModelUnavailableError("claude-haiku-5-5", "model: claude-haiku-5-5"), "UPSTREAM", 502],
+            [new SummaryModelsError("summaryModels.file.inputPerMTok is missing"), "SUMMARIES_OFF", 409],
             [new RepoSwitchingError("C:/b", "C:/a"), "INDEX_LOCKED", 409],
             [new DatabaseMissingError("/home/.nebulosity/nebulosity.db"), "INDEX_EMPTY", 404],
             [new DatabaseOutdatedError(), "NOT_READY", 409],

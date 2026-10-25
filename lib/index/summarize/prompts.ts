@@ -6,7 +6,10 @@ import { dirOf } from "../paths";
 /** Part of every inputHash. Bump it to redo every summary on purpose (a better prompt, new settings). Version 2: ADR-034. */
 export const PROMPT_VERSION = 2;
 
-/** Who writes what (ADR-028): Haiku for the many files, Sonnet for the folders and the repo people read first. */
+/**
+ * Who writes what by default (ADR-028): Haiku for the many files, Sonnet for the folders and the repo people read first.
+ * summaryModels in config.json overrides any kind (ADR-066); every reader takes the models resolved from it (models.ts).
+ */
 export const SUMMARY_MODELS = {
     file: "claude-haiku-5-5",
     folder: "claude-sonnet-5-5",

@@ -1,6 +1,6 @@
 import type { SummaryTargetKind } from "../../db/schema";
 import type { UsageRow } from "../../db/store/summaries";
-import { costUsd } from "./pricing";
+import { costUsd, type PriceTable } from "./pricing";
 import type { TokenUsage } from "./types";
 
 /**
@@ -37,6 +37,8 @@ export type SpendInput = {
     /** The targets still ready or waiting after it, and the transport they're priced at. */
     rest: readonly ProjectedRequest[];
     restTransport: Billing;
+    /** Prices to check before the built-in table: the summary models setting's (ADR-066). */
+    prices?: PriceTable;
 };
 
 /** The projection's four parts in USD, their total, and the models that had to be counted as $0. */
@@ -60,7 +62,7 @@ export function projectSpend(input: SpendInput): SpendProjection {
 
     // A model with no price on file can't be priced, but it isn't free either: it adds $0 here, and the caller names it.
     const price = (model: string, tokens: TokenUsage, transport: Billing): number => {
-        const cost = costUsd(model, tokens, transport);
+        const cost = costUsd(model, tokens, transport, input.prices);
         if (cost === null) unpriced.add(model);
         return cost ?? 0;
     };

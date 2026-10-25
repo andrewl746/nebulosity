@@ -355,8 +355,8 @@ function claudeVersion(): SpawnSyncReturns<string> {
 }
 
 /**
- * `nebulosity doctor`: one line per check, in order: Node, the data folder, the database, the Map, git, claude, the key.
- * Returns 1 when any check FAILs; a WARN (no built Map, no claude, no key) leaves the rest working.
+ * `nebulosity doctor`: one line per check, in order: Node, the data folder, the database, the Map, git, claude, the key,
+ * the summary models. Returns 1 when any check FAILs; a WARN (no built Map, no claude, no key) leaves the rest working.
  */
 export async function runDoctor(): Promise<number> {
     const checks: Check[] = [];
@@ -409,6 +409,13 @@ export async function runDoctor(): Promise<number> {
     checks.push(hasAnthropicKey()
         ? { level: "OK", text: "ANTHROPIC_API_KEY set: summaries and meaning search are available" }
         : { level: "WARN", text: "ANTHROPIC_API_KEY not set: free mode (the index, code search, imports and the Map; summaries and meaning search need a key)" });
+
+    // the models in use and which are set (ADR-066); a setting that can't be used is a FAIL, since summarize refuses it
+    const { configuredSummaryModels, describeSummaryModels } = await import("../lib/index/summarize/models");
+    const models = configuredSummaryModels();
+    checks.push(models.ok
+        ? { level: "OK", text: `summary models: ${describeSummaryModels(models)}` }
+        : { level: "FAIL", text: `summary models: ${models.error}` });
 
     for (const check of checks) console.log(`${check.level.padEnd(5)}${check.text}`);
     return checks.some((check) => check.level === "FAIL") ? 1 : 0;

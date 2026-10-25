@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — HTTP + SSE Contracts
 
-> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools. §18 holds V1.5's static demo files. §19 and §20 hold V1.8's route and editor bridge for the VS Code extension, and §15 its `server` field.
+> **Rewritten in slice V1.3 (2026-10-12; ADR-040).** Section numbers are stable, because code comments cite them: §2, §3 and §6 are retired, §4 was rewritten, and §9–§15 hold the pivot's endpoints. §5 (`/api/chat`) is E1's. §17 holds V1.4's MCP tools. §18 holds V1.5's static demo files. §19 and §20 hold V1.8's route and editor bridge for the VS Code extension, and §15 its `server` field. §21 is the settings file, `config.json` (the pre-ship pass, ADR-066).
 
 **Status:** Approved design. These contracts are **binding**: UI and server may only communicate through what is defined here.
 **Single source of truth in code:** every type below lives in `lib/contracts.ts`, imported by both route handlers and UI components. If this doc and `lib/contracts.ts` ever disagree, fix the drift immediately — that file is the compiler-enforced version of this document. (Persistence shapes are separate: they live in `lib/db/schema.ts` per ADR-013 and are documented in `DATABASE_DESIGN.md`.)
@@ -243,9 +243,9 @@ type SummarizeResponse = { path: string; kind: "repo" | "folder" | "file"; tagli
 - **Duplicates.** Concurrent requests for one target share one request (ADR-033, amended).
 - **Status codes.**
   - `409 NOT_READY`: a folder whose files or subfolders aren't all summarized yet. Its summary would be written over "(no summary yet)".
-  - `409 SUMMARIES_OFF`: no API key, or the repo's summaries were never confirmed (no yes recorded by `nebulosity summarize`, and no summary written by a model). The message says to run `nebulosity summarize`, which shows the estimate and asks first; nothing is sent (S11, ADR-038 amended).
+  - `409 SUMMARIES_OFF`: no API key, or the repo's summaries were never confirmed (no yes recorded by `nebulosity summarize`, and no summary written by a model). The message says to run `nebulosity summarize`, which shows the estimate and asks first; nothing is sent (S11, ADR-038 amended). Also a `summaryModels` setting that can't be used (§21, ADR-066): the message says which fields are wrong, and in which file.
   - `409 INDEX_LOCKED`: the background worker is still switching to the active repo (ADR-038, amended); try again in a moment. It never summarizes another repo's path.
-  - `502 UPSTREAM`: Anthropic refused the API key.
+  - `502 UPSTREAM`: Anthropic refused the API key, or doesn't serve the model to it (a 404 naming it: retired, or not open to this key; ADR-066). Then the message names the model and says to choose another under `summaryModels` in `config.json` (§21), and the stored summary is left as it was.
   - `404 NOT_FOUND`, `400 BAD_REQUEST` and `403 FORBIDDEN` as usual.
   - `500 INTERNAL` when the background worker stopped before answering.
 - **Afterwards.** The summary lands in the index, so the index version moves and the Map refetches. Its vector follows within seconds.
@@ -472,3 +472,30 @@ type BridgeFromMap =
 - **`open`** is posted for a file box clicked on the Map and for a declaration row in its panel, and for nothing else (not a search pick, a panel link, `focus_node` or a `follow`). Its `line`, when present, is **1-based**: the declaration's first line as the panel shows it ("line 272"), which the extension opens with the cursor at that line's start. A file box sends no `line`.
 - **`version`** is the bridge's, 1; `GET /api/repos`' `server.bridge` (§15) names the one a server speaks. A Map that gets another version ignores the hello.
 - **`drawn`** is posted when a new level is drawn, when the selection changes on the level drawn, and once after each `ready` while a level is on screen; the extension's test and benchmarks read it (V1.8 plan P1). `path` and `page` name the level on screen (page 0 is the first) and `selected` the selected path, or `null`. Like every message from the Map, it comes only after the handshake.
+
+## 21. The settings file (`config.json`) (the pre-ship pass, 2026-10-25, ADR-066)
+
+`config.json` in the data folder (`NEBULOSITY_DATA`, else `.nebulosity/` in a checkout; `lib/home.ts`) holds the few settings that outlive a run. `lib/config.ts` reads and writes it; nothing here is HTTP.
+
+```ts
+type NebulosityConfig = {
+  activeRepo: string | null;   // the repo the Map and the MCP server show (§15's POST, nebulosity index)
+  port: number;                // the Map's port (nebulosity map --port), where live events go (§14)
+  summaryModels?: unknown;     // as found in the file; resolveSummaryModels checks it (below)
+};
+type SummaryModelSetting = { model: string; inputPerMTok?: number; outputPerMTok?: number };
+type SummaryModelsSetting = Partial<Record<"file" | "folder" | "repo", SummaryModelSetting>>;
+```
+
+- **`activeRepo`** is a string or `null`; anything else reads as `null`. **`port`** is an integer from 1 to 65535; anything else reads as 3000. A file that's missing, unreadable or not a JSON object reads as both defaults.
+- **Kept as found.** `readConfig()` returns `summaryModels`, and any key this version doesn't know, exactly as the file holds them, valid or not, so a rewrite (`writeConfig({ ...readConfig(), activeRepo })`, the repo picker's and `nebulosity index`'s) keeps them. It never throws over them: the Map starts with a setting it can't use.
+- **`summaryModels`** sets the model that writes each kind's summaries (`SummaryModelsSetting`). A kind left out, or the whole key left out or `null`, keeps its default (`SUMMARY_MODELS`, ADR-028: `claude-haiku-5-5` for files, `claude-sonnet-5-5` for folders and the repo). For example:
+  ```json
+  { "summaryModels": { "file": { "model": "claude-haiku-6", "inputPerMTok": 0.1, "outputPerMTok": 0.5 } } }
+  ```
+  - `model` is a string, trimmed of surrounding whitespace. The trimmed id is what's sent and hashed, and it has 1 to 200 characters, so a blank one is refused.
+  - The prices are the model's list prices in US dollars per million input and output tokens, finite numbers from 0 up.
+  - The prices are required for a model the built-in price table doesn't have (an exact id, or a dated snapshot of one, `<id>-YYYYMMDD`; any other longer id is a different model), and optional for one it has; a given price wins over the table's, field by field. A price another kind gives the same model counts, and one model given two different prices is refused, since spend is recorded per model.
+  - Any other kind or field, a wrong type, or a missing price is refused with one message that names each field (such as `summaryModels.file.inputPerMTok`) and this file's path.
+- **Who reads `summaryModels`.** `resolveSummaryModels(setting, configPath)` (`lib/index/summarize/models.ts`) turns it into the models, every model's price and which kinds are set. `nebulosity summarize` reads it before it estimates or sends anything, and refuses one it can't use; the background worker and the Map's `POST /api/summarize` read it at each job, so a change applies without a restart. While it can't be used, the summaries stage isn't re-derived, `nebulosity summarize` writes no templates (with a key or without), the worker sends nothing, and §13 answers `409 SUMMARIES_OFF` with the message. `nebulosity doctor` prints the models in use and which are set, and fails on a setting it can't use.
+- **What a change costs, and who pays it (ADR-066, R17).** The worker's automatic jobs (a refresh after a save, the sweep of out-of-date folders) send only targets whose text the model now in use wrote, or that no model has written. Text another model wrote waits for `nebulosity summarize`'s estimate and yes, or for §13 when a panel opens it. A batch left at Anthropic for a model the setting no longer names stops nothing: its rows are released for the model now in use.

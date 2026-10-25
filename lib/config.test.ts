@@ -32,4 +32,30 @@ describe("config", () => {
         fs.writeFileSync(path.join(home, ".nebulosity", "config.json"), JSON.stringify({ activeRepo: "C:/r", port: "nope" }));
         expect(readConfig()).toEqual({ activeRepo: "C:/r", port: 3000 });
     });
+
+    // Review Focus 1: the repo picker and `nebulosity index` rewrite the file with writeConfig({ ...readConfig(), activeRepo })
+    it("keeps summaryModels, and a key it doesn't know, through a rewrite of the active repo", () => {
+        const home = makeTempDir("neb-config-");
+        process.env.NEBULOSITY_HOME = home;
+        const summaryModels = { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 }, repo: { model: "claude-sonnet-6" } };
+        fs.mkdirSync(path.join(home, ".nebulosity"));
+        fs.writeFileSync(path.join(home, ".nebulosity", "config.json"), JSON.stringify({ activeRepo: "C:/r", port: 3000, summaryModels, futureKey: [1, 2] }));
+
+        writeConfig({ ...readConfig(), activeRepo: "/x" });
+
+        const written = JSON.parse(fs.readFileSync(path.join(home, ".nebulosity", "config.json"), "utf8")) as Record<string, unknown>;
+        expect(written.summaryModels).toEqual(summaryModels);
+        expect(written.futureKey).toEqual([1, 2]);
+        expect(written.activeRepo).toBe("/x");
+    });
+
+    it("never throws over a summaryModels it can't use: the Map has to start, and the setting is kept as written", () => {
+        const home = makeTempDir("neb-config-");
+        process.env.NEBULOSITY_HOME = home;
+        fs.mkdirSync(path.join(home, ".nebulosity"));
+        fs.writeFileSync(path.join(home, ".nebulosity", "config.json"), JSON.stringify({ activeRepo: "C:/r", summaryModels: "claude-haiku-6" }));
+
+        expect(() => readConfig()).not.toThrow();
+        expect(readConfig()).toMatchObject({ activeRepo: "C:/r", port: 3000, summaryModels: "claude-haiku-6" });
+    });
 });
