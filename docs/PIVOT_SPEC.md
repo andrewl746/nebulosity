@@ -354,6 +354,8 @@ An MCP tool handler fires a request at `POST http://127.0.0.1:<port>/api/live` w
 
 ## 10. Extras, in order (design level; each gets its own plan)
 
+> **2026-10-25 (ADR-067): the project is complete at ship.** E4 is built (ADR-065). E5, E1, E3 and E2's remaining parts (`callees` and the call-flow view; V1.7's `calls` stays) are not built. Their sections below stay as the design record.
+
 **The order since 2026-10-13 (ADR-043): E4 → E5 → E1,** after V1.6. E4 decides who can use Nebulosity at all (Python first, Go if there's time). E5 suits the big repos Nebulosity is for. E1 serves the owner's learning goal more than users, since Claude Code with the MCP tools already drives the Map. E3 shrinks and is optional, and E2 waits on a measurement (both below). The sections keep their labels so references elsewhere still hold.
 
 **E1 — The Guide (LangGraph).**

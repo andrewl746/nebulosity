@@ -303,7 +303,20 @@ Measured on VS Code (20,342 files, 14,849 of them indexed before E4, 15,040 sinc
 
 ## Status
 
-E4 adds Python, Go, Java, C# and Rust ([Languages](#languages)), built on the `pivot/e4` branch and waiting on its final review and the owner's look. V1.8 adds the VS Code extension ([In VS Code](#in-vs-code)), built and not yet published: the owner's check of it comes first. V1.7 is built: the `calls` tool, over calls read from declared types, on top of V1.6's single `nebulosity` command for Windows, macOS and Linux, its free mode with no API key and its five tested repos. V1.7 read TypeScript and JavaScript only. Its eval, Eval #3, failed the ship gate set before it ran, on conditions 1, 2, 3 and 5 ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)), as Eval #2 failed its own. Going public was on hold until Eval #3's verdict. By the owner's call of 2026-10-15, the hold lifts after that verdict whatever it is, and the gate decides what this README claims: since it failed, the results above are stated as measured, with the failed conditions named, and nothing is claimed beyond them. Since 2026-10-22 it is described as the dependency-structure layer for Claude Code ([ADR-061](docs/ENGINEERING_DECISIONS.md)): the pitch is narrowed to what three evals measured, and every feature stays. Deploying the demo, making the repo public, publishing the package and recording the video are the owner's. What comes next is the owner's decision; the plan has clustering and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+**Complete.** This is Nebulosity's last release. It isn't maintained after it, so issues and pull requests may go unanswered ([ADR-067](docs/ENGINEERING_DECISIONS.md)).
+
+- **What's here:**
+  - the seven tools Claude Code gets, the Map and the VS Code extension;
+  - free mode with no API key, and summaries as the paid upgrade;
+  - TypeScript and JavaScript, plus Python, Go, Java, C# and Rust ([Languages](#languages)).
+- **What was measured:** three evals against Claude Code on its own, given above along with what didn't improve ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)).
+- **Tested with:**
+  - Node 24.14 and Claude Code 2.1.310 (it needs 2.1.300 or later);
+  - VS Code 1.143.1, and 1.105.0, the extension's oldest supported version;
+  - Windows 11 locally, and Windows, macOS and Linux in CI.
+
+  If a later version breaks something, these are the ones that worked.
+- **Not built:** the plan's remaining extras: clustering, an in-Map guide, git-history overlays and the rest of the call graph ([docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md)).
 
 ## Why I built this
 

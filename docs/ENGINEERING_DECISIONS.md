@@ -1491,3 +1491,45 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
   - Rust skips a `use` or path with an error and keeps the other paths.
 
   K8 checks one broken file per fixture. None of these readings guesses a target the source doesn't name.
+
+## ADR-067 — Complete at ship: the pre-ship pass is the last work, and the remaining extras aren't built (2026-10-25) — amends ADR-043 and ADR-062
+
+**Status:** accepted 2026-10-25.
+- The owner, after E4: "once i ship nebulosity i dont plan to work on it ever again".
+- The controller recommended building no more features and doing one pass so the tool keeps working unattended. The owner answered "do the pass and then the 5 things u proposed", then delegated the remaining calls overnight.
+- The plan is `docs/plans/2026-10-25-pre-ship-pass.md`, and its ledger is `.superpowers/sdd/2026-10-25-pre-ship-pass/`.
+
+**Context:**
+- ADR-043 ordered the extras E4 → E5 → E1, with E3 optional and E2 behind a measurement. ADR-062 put V1.8 before E4 and the ship.
+- E4 is built (ADR-065).
+- Nothing after the ship will be maintained, so whatever ships has to keep working with nobody there to fix it.
+
+**Decision:**
+- **The pre-ship pass is the last work before the ship list:**
+  - summary models as a setting (ADR-066);
+  - `nebulosity setup --json` (ADR-048 amended);
+  - Python's standard-library names kept external, and C#'s generic arity (ADR-065 amended);
+  - the README's status;
+  - CI on three systems, and S1 re-measured.
+- **Not built:**
+  - E5 (clustering), E1 (the Guide) and E3 (git-history overlays);
+  - E2's remaining parts, `callees` and the call-flow view (V1.7's `calls` stays);
+  - Ruby and `calls` for Java and C# (the E4 design's §11, questions 1 and 2);
+  - Eval #4.
+- **The README says the project is complete and not maintained,** and names the versions it was tested with.
+
+**Alternatives:**
+- **(a) E5 first, then ship.** Its main visible effect, related boxes grouped on big levels, already exists as V1.3.1's paged groups.
+- **(b) E1.** It needs the user's own API key and can't run in the hosted demo. Claude Code already drives the Map through the tools (PIVOT_SPEC §10).
+- **(c) Ruby, for its relevance to Rails shops.** Rails code has few import lines (it loads constants by naming convention), so Ruby needs a new kind of resolution, with an accuracy risk nobody would be around to fix.
+- **(d) A confirmatory Eval #4.** Eval #3's grouping by kind was made after its runs, but Eval #2's graph questions were defined before theirs and point the same way, so another eval would add less than it costs.
+
+**Consequences:**
+- PIVOT_SPEC §10 and the roadmap's rows for E5, E1, E3 and E2 say "not built (ADR-067)". Their sections stay as the design record.
+- What keeps the shipped tool working is in the pass:
+  - a model the API retires is a setting (ADR-066);
+  - a changed `claude mcp add` has `setup --json` (ADR-048);
+  - two known kinds of wrong link on other people's repos are closed (ADR-065).
+- Anyone who picks the project up later starts from these docs, and nothing in them is promised.
+
+**Revisit when:** the owner decides to work on Nebulosity again.
