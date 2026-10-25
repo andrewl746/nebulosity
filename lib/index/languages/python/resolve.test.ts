@@ -270,12 +270,30 @@ describe("python resolver: one rule at a time", () => {
         }
     });
 
+    it("a standard-library name stops at the deepest own root that holds it, even when its submodule is missing there (R13, m4)", () => {
+        const r = createPythonResolver(smallContext({
+            // roots "" and tests; both contain tests/run.py, and both hold logging (tests/logging.py, logging/__init__.py)
+            "tests/helpers/__init__.py": [], "tests/logging.py": [], "tests/run.py": [],
+            "logging/__init__.py": [], "logging/handlers.py": [], "app.py": [],
+        }));
+        // Python binds logging at the first root holding it, tests/logging.py, which has no submodule handlers: an
+        // internal miss, never "" 's logging/handlers.py
+        expect(r.resolve("tests/run.py", "logging.handlers")).toEqual([]);
+        expect(r.kindOf("tests/run.py", "logging.handlers")).toBe("internal");
+        // from logging import handlers: no submodule there either, so the module logging that root holds
+        expect(r.resolve("tests/run.py", "logging:handlers")).toEqual(["tests/logging.py"]);
+        expect(r.resolve("tests/run.py", "logging")).toEqual(["tests/logging.py"]);
+        // from "", the one own root, the package and its submodule
+        expect(r.resolve("app.py", "logging.handlers")).toEqual(["logging/handlers.py"]);
+        expect(r.resolve("app.py", "logging:handlers")).toEqual(["logging/handlers.py"]);
+    });
+
     it("entry points don't apply the standard-library rule: a declared script's module is found as before (M2)", () => {
         const r = createPythonResolver(smallContext(
             { "tools/logging.py": [] },
             { "pyproject.toml": "[project.scripts]\nlog = \"logging:main\"\n[tool.pytest.ini_options]\npythonpath = [\"tools\"]\n" },
         ));
-        // tools is a root (pytest's pythonpath) that the manifest's folder "" doesn't contain: the other roots' unique hit
+        // tools is a root (pytest's pythonpath) that doesn't contain the manifest's folder "": the other roots' unique hit
         expect(r.entryPoints()).toEqual([{ path: "tools/logging.py", declaredBy: "pyproject.toml [project.scripts] log" }]);
     });
 

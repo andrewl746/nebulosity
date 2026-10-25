@@ -1,11 +1,12 @@
 /**
- * The top-level names that are Python's standard library on every Python from 3.10 to 3.14 (the pre-ship pass's Task P,
- * ruling R13, which amends R4). An absolute import whose first segment is one of these resolves only through the roots
- * that contain the importing file (resolve.ts), so a repo's `tests/logging.py` is reached by a test beside it but never
- * captures package code's `import logging` from another root (the E4 Python review's M6, second half). It's a fixed
- * list, never read at run time: nothing here runs Python.
+ * Python's top-level standard-library names: every public name that's standard on every Python from 3.10 to 3.14, plus
+ * the private `_` names 3.14 lists (some of them newer than 3.10; see ADDED_AFTER_3_10). The pre-ship pass's Task P,
+ * ruling R13, which amends R4. An absolute import whose first segment is one of these resolves only through the
+ * importer's own roots (resolve.ts), so a repo's `tests/logging.py` is reached by a test beside it but never captures
+ * package code's `import logging` from another root (the E4 Python review's M6, second half). It's a fixed list, never
+ * read at run time: nothing here runs Python.
  *
- * Why only names that are standard on every supported Python: a name that isn't the standard library's on one of them
+ * Why only public names that are standard on every supported Python: a name that isn't the standard library's on one of them
  * can be the repo's own module there, so the repo's file may be the only thing such an import reaches. On 3.10 a repo
  * can keep its own `tomllib.py` (a backport), and on 3.12 its own `parser.py`, `imp.py` or `distutils/` shadows nothing
  * (the standard library has none). So the modules added after 3.10 are left out, and those removed since 3.10 are not
@@ -66,7 +67,10 @@ const ADDED_AFTER_3_10: ReadonlySet<string> = new Set(["tomllib", "annotationlib
 
 const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** The standard library's top-level names on every Python from 3.10 to 3.14: 294, in code-unit order. */
+/**
+ * Every public top-level name standard on every Python from 3.10 to 3.14, plus 3.14's private ones: 294, in code-unit
+ * order.
+ */
 export const STDLIB_MODULES: ReadonlySet<string> = new Set(CPYTHON_3_14.filter((name) => !ADDED_AFTER_3_10.has(name)).sort(byCodeUnit));
 
 /** Whether a dotted module name (`logging`, `logging.handlers`, `email.utils`) starts with a standard-library name. */

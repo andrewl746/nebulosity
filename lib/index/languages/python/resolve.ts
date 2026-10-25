@@ -16,11 +16,12 @@
  * - **Relative:** from F's folder, one folder up per dot after the first; `.:c` is the module `base/c`, else the
  *   package `base/__init__`; `.m:c` is `base/m/c`, else `base/m`.
  * - **The standard library** (stdlib.ts, the pre-ship pass's ruling R13, which amends R4): an absolute specifier whose
- *   first segment X is a standard-library name resolves only through the roots that contain F, and only those holding
- *   X itself as a module or a regular package (a namespace folder named X never does: the standard library's regular
- *   package beats it at run time). The other roots are never tried, so a repo's `tests/logging.py` is reached by a
- *   test beside it but never captures package code's `import logging`. It's internal when such a root holds X,
- *   resolved or not, else external. Relative specifiers and entry points are untouched.
+ *   first segment X is a standard-library name resolves only in the first (deepest) root that contains F and holds X
+ *   itself as a module or a regular package (a namespace folder named X never does: the standard library's regular
+ *   package beats it at run time). Python binds X there, so a submodule missing in that root is a miss, not a reason
+ *   to look further out. The other roots are never tried, so a repo's `tests/logging.py` is reached by a test beside
+ *   it but never captures package code's `import logging`. It's internal when such a root holds X, resolved or not,
+ *   else external. Relative specifiers and entry points are untouched.
  *
  * Manifests inside a virtual environment (the folder of a pyvenv.cfg, which rules.ts leaves out) are ignored.
  */
@@ -28,7 +29,7 @@ import { parse as parseToml } from "smol-toml";
 import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
 import { dirOf, joinRepoPath } from "../../paths";
 import { inVirtualEnvironment, PROJECT_MANIFEST, virtualEnvironments } from "./rules";
-import { STDLIB_MODULES } from "./stdlib";
+import { isStdlibModule } from "./stdlib";
 
 const DOTTED_NAME = /^[^\W\d]\w*(\.[^\W\d]\w*)*$/u;
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -213,8 +214,9 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
      * root's X/name.py (two services' `app` packages, the Task P review's I1). Only then the other roots, each candidate
      * in turn: exactly one hit resolves, and none or several move on to the next candidate.
      *
-     * `stdlib` is the candidates' first segment when it's a standard-library name (R13), else null: then only the roots
-     * containing the folder that hold it are tried, and no other root, so another root's module never captures it.
+     * `stdlib` is the candidates' first segment when it's a standard-library name (R13), else null: then only the first
+     * (deepest) root containing the folder that holds it is tried, and no other root, so another root's module never
+     * captures it. Python binds the name at that root, so a submodule it lacks there isn't looked for further out (m4).
      */
     const absoluteCache = new Map<string, string | null>();
     const absolute = (folder: string, candidates: readonly string[], stdlib: string | null = null): string | null => {
@@ -228,6 +230,7 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
                 target = moduleUnder(root, dotted);
                 if (target !== null) break search;
             }
+            if (stdlib !== null) break;   // the first holding root binds the name, whatever its submodules
         }
         for (let i = 0; target === null && stdlib === null && i < candidates.length; i++){
             const hits = outside.map((root) => moduleUnder(root, candidates[i])).filter((t): t is string => t !== null);
@@ -250,7 +253,7 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
             // would otherwise be a unique hit for every importer outside that root
             const first = source.split(".", 1)[0];
             return absolute(dirOf(importer), name !== null && name !== "*" ? [`${source}.${name}`, source] : [source],
-                STDLIB_MODULES.has(first) ? first : null);
+                isStdlibModule(first) ? first : null);
         }
 
         let base = dirOf(importer);
@@ -282,7 +285,7 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
             const first = /^[^.:]*/.exec(specifier)![0];
             // a standard-library name is the repo's only where one of the importer's own roots holds it (R13), not wherever
             // the internal names say: another root's logging.py puts logging among them
-            if (STDLIB_MODULES.has(first)) return rootsFor(dirOf(importer)).inside.some((root) => holds(root, first)) ? "internal" : "external";
+            if (isStdlibModule(first)) return rootsFor(dirOf(importer)).inside.some((root) => holds(root, first)) ? "internal" : "external";
             return internalNames.has(first) ? "internal" : "external";
         },
         classOf: (_importer: string, specifier: string): string => (specifier.startsWith(".") ? "relative" : "absolute"),

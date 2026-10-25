@@ -25,10 +25,10 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * counts from F's folder, one folder up per extra dot.
  *
  * Standard-library names resolve only through F's own roots (the pre-ship pass's Task P, ruling R13, which amends R4):
- * when an absolute import's first segment X is a standard-library name (one on every Python from 3.10 to 3.14; `test`,
- * `parser` and `tomllib` aren't), only the roots that contain F are tried, and only those that hold X itself as a module
- * or a regular package (a namespace folder named X never does: the standard library's regular package beats it at run
- * time); no other root is tried. So tests/logging.py, directly in the root tests, is reached by tests/test_audit.py's
+ * when an absolute import's first segment X is a standard-library name (every public one standard on every Python
+ * from 3.10 to 3.14, and 3.14's private ones; `test`, `parser` and `tomllib` aren't), only the first (deepest) root
+ * that contains F and holds X itself as a module or a regular package is tried (a namespace folder named X never holds
+ * it: the standard library's regular package beats it at run time); no other root is tried. So tests/logging.py, directly in the root tests, is reached by tests/test_audit.py's
  * `import logging` (its own root) but never by package code's (the E4 review's M6, second half), and
  * scripts/release.py's `from secrets import TOKEN` reaches scripts/secrets.py beside it in the root scripts. Relative
  * imports are unchanged: src/shop/orders.py's `from . import logging` still names src/shop/logging.py, which no root

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { isStdlibModule, STDLIB_MODULES } from "./stdlib";
 
-// The standard-library list (the pre-ship pass's Task P, ruling R13): the names that are the standard library's on every
-// Python from 3.10 to 3.14, which is CPython 3.14.3's sys.stdlib_module_names (297 names, read once) minus the three
-// public top-level modules added after 3.10 (tomllib in 3.11; annotationlib and compression in 3.14).
+// The standard-library list (the pre-ship pass's Task P, ruling R13): every public name standard on every Python from
+// 3.10 to 3.14, plus 3.14's private ones. That's CPython 3.14.3's sys.stdlib_module_names (297 names, read once) minus
+// the three public top-level modules added after 3.10 (tomllib in 3.11; annotationlib and compression in 3.14).
 
 /** Removed since 3.10: on a current Python nothing in the standard library has these names, so they aren't listed. */
 const REMOVED = [
