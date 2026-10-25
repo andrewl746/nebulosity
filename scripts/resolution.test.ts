@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extensionOf, packageNameOf, resolutionReport } from "./resolution";
+import type { LanguageResolver } from "../lib/index/languages/adapter";
+import { adapterReportLines, adapterResolutionReport, extensionOf, packageNameOf, resolutionReport } from "./resolution";
 
 describe("packageNameOf", () => {
     it("keeps a scope with its name, and drops a subpath", () => {
@@ -56,5 +57,57 @@ describe("relative specifiers naming files the index doesn't read", () => {
         expect(extensionOf("./worker?worker")).toBe("");
         expect(extensionOf("../v1.2/file")).toBe("");
         expect(extensionOf("./.env")).toBe("");
+    });
+});
+
+describe("a language adapter's report (E4: every language but TypeScript)", () => {
+    // a resolver from a table: "x" resolves, "self" names the importer (placed: resolved), "ext" is external, "ctx" context
+    const resolver: LanguageResolver = {
+        resolve: (importer, specifier) => (specifier.endsWith(":x") ? ["t.k"] : specifier.endsWith(":self") ? [importer] : []),
+        kindOf: (_importer, specifier) => (specifier.startsWith("ext:") ? "external" : specifier.startsWith("ctx:") ? "context" : "internal"),
+        entryPoints: () => [],
+    };
+    const files = [
+        { path: "b.k", specifiers: ["use:x", "use:gone", "name:self", "ext:lib", "ctx:ns"] },
+        { path: "a.k", specifiers: ["name:missing", "use:x", "ext:other"] },
+    ];
+
+    it("counts internal references resolved (the importer itself counts), external and context apart, per class, and the misses in order", () => {
+        expect(adapterResolutionReport(files, resolver)).toEqual({
+            internal: { total: 5, resolved: 3 },
+            external: 2,
+            context: 1,
+            classes: [
+                { name: "ctx", total: 0, resolved: 0 },
+                { name: "ext", total: 0, resolved: 0 },
+                { name: "name", total: 2, resolved: 1 },
+                { name: "use", total: 3, resolved: 2 },
+            ],
+            misses: [{ importer: "a.k", specifier: "name:missing" }, { importer: "b.k", specifier: "use:gone" }],
+        });
+    });
+
+    it("takes the resolver's own class when it has one", () => {
+        const classed: LanguageResolver = { ...resolver, classOf: (importer) => (importer === "a.k" ? "orphan" : "tree") };
+        expect(adapterResolutionReport(files, classed).classes).toEqual([
+            { name: "orphan", total: 2, resolved: 1 },
+            { name: "tree", total: 3, resolved: 2 },
+        ]);
+    });
+
+    it("prints a line for the language, one per class and up to 20 misses", () => {
+        expect(adapterReportLines("k", adapterResolutionReport(files, resolver))).toEqual([
+            "[resolution] k: internal 3/5 (60.0%) · external 2 · context 1",
+            "[resolution] k ctx: internal 0/0 (n/a)",
+            "[resolution] k ext: internal 0/0 (n/a)",
+            "[resolution] k name: internal 1/2 (50.0%)",
+            "[resolution] k use: internal 2/3 (66.7%)",
+            "[resolution] k miss a.k name:missing",
+            "[resolution] k miss b.k use:gone",
+        ]);
+        const many = Array.from({ length: 25 }, (_, i) => ({ path: `f${String(i).padStart(2, "0")}.k`, specifiers: ["use:gone"] }));
+        const lines = adapterReportLines("k", adapterResolutionReport(many, resolver));
+        expect(lines.filter((l) => l.includes(" miss "))).toHaveLength(20);
+        expect(lines.at(-1)).toBe("[resolution] k miss f19.k use:gone");
     });
 });

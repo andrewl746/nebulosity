@@ -70,6 +70,7 @@
     "report-resolution": "tsx scripts/report-resolution.ts",
     "dump-index": "tsx scripts/dump-index.ts",
     "grammars": "node scripts/copy-grammars.mjs",
+    "sample-edges": "tsx scripts/sample-edges.ts",
     "measure-typecheck": "node --max-old-space-size=16384 --import tsx scripts/measure-typecheck.ts"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import type { LanguageResolver } from "../lib/index/languages/adapter";
 import { packageNameOf } from "../lib/index/workspace";
 
 /**
@@ -80,4 +81,65 @@ export function resolutionReport(
     report.unresolvedBare = [...misses].sort(mostFirst).slice(0, top).map(([name, count]) => ({ name, count }));
     report.notCode.byExtension = [...notCode].sort(mostFirst).map(([extension, count]) => ({ extension, count }));
     return report;
+}
+
+/**
+ * How much of one language's references its resolver places (E4's L3, ADR-065), for every language but TypeScript:
+ * the internal ones (the language's rules put the target in the repo) and how many resolved, the external and context
+ * ones counted apart, the same per class (the resolver's classOf, else the specifier's text before its first ":"; each
+ * L3 bar is per class), and every unresolved internal reference. A reference is resolved when resolve returns any path,
+ * the importer itself included (placed, with no edge of its own).
+ */
+export type AdapterReport = {
+    internal: { total: number; resolved: number };
+    external: number;
+    context: number;
+    /** Every class met, by name: its internal references and how many resolved. */
+    classes: { name: string; total: number; resolved: number }[];
+    /** The unresolved internal references, by importer, then specifier. */
+    misses: { importer: string; specifier: string }[];
+};
+
+const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+export function adapterResolutionReport(files: readonly { path: string; specifiers: readonly string[] }[], resolver: LanguageResolver): AdapterReport {
+    const report: AdapterReport = { internal: { total: 0, resolved: 0 }, external: 0, context: 0, classes: [], misses: [] };
+    const classes = new Map<string, { total: number; resolved: number }>();
+    for (const file of files){
+        for (const specifier of file.specifiers){
+            const name = resolver.classOf?.(file.path, specifier) ?? (specifier.includes(":") ? specifier.slice(0, specifier.indexOf(":")) : specifier);
+            const counts = classes.get(name) ?? { total: 0, resolved: 0 };
+            classes.set(name, counts);
+            const kind = resolver.kindOf(file.path, specifier);
+            if (kind === "external"){
+                report.external++;
+                continue;
+            }
+            if (kind === "context"){
+                report.context++;
+                continue;
+            }
+            const resolved = resolver.resolve(file.path, specifier).length > 0;
+            report.internal.total++;
+            counts.total++;
+            if (resolved){
+                report.internal.resolved++;
+                counts.resolved++;
+            } else report.misses.push({ importer: file.path, specifier });
+        }
+    }
+    report.classes = [...classes].sort(([a], [b]) => byText(a, b)).map(([name, c]) => ({ name, ...c }));
+    report.misses.sort((a, b) => byText(a.importer, b.importer) || byText(a.specifier, b.specifier));
+    return report;
+}
+
+const share = (r: { total: number; resolved: number }): string => (r.total === 0 ? "n/a" : `${((100 * r.resolved) / r.total).toFixed(1)}%`);
+
+/** The report's lines: the language, one per class, then up to `top` misses in their fixed order. */
+export function adapterReportLines(id: string, report: AdapterReport, top = 20): string[] {
+    return [
+        `[resolution] ${id}: internal ${report.internal.resolved}/${report.internal.total} (${share(report.internal)}) · external ${report.external} · context ${report.context}`,
+        ...report.classes.map((c) => `[resolution] ${id} ${c.name}: internal ${c.resolved}/${c.total} (${share(c)})`),
+        ...report.misses.slice(0, top).map((m) => `[resolution] ${id} miss ${m.importer} ${m.specifier}`),
+    ];
 }
