@@ -2,7 +2,9 @@ import { watch } from "chokidar";
 import fs from "fs";
 import path from "path";
 import { gitIgnored, IGNORED_DIRS, WALK_ONLY_IGNORED_DIRS } from "./discover";
-import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript";
+import type { LanguageRules } from "./languages/adapter";
+import { claimedExtensions, isManifestPath, RULES } from "./languages/rules";
+import { TYPESCRIPT_EXTENSIONS } from "./languages/typescript-rules";
 import { normalizeSlashes } from "./paths";
 
 export type Batcher = { add(item: string): void; flush(): void; cancel(): void };
@@ -49,12 +51,14 @@ export function createBatcher(onFlush: (items: string[]) => void, timing: { quie
 
 /**
  * What a watcher reports: source files, plus the files that change which sources exist or what they resolve to: a
- * tsconfig, a .gitignore, a package.json, and the root's workspace declarations (ADR-053).
+ * tsconfig, a .gitignore, a package.json, and the root's workspace declarations (ADR-053), and every language's code
+ * files and manifests (a go.mod, a Cargo.toml, a .csproj…, ADR-065).
  */
-export function isWatchedFile(rel: string): boolean {
+export function isWatchedFile(rel: string, rules: readonly LanguageRules[] = RULES): boolean {
     const base = rel.slice(rel.lastIndexOf("/") + 1);
     return TYPESCRIPT_EXTENSIONS.some((ext) => rel.endsWith(ext)) || /^tsconfig[^/]*\.json$/.test(base) || base === ".gitignore"
-        || base === "package.json" || rel === "pnpm-workspace.yaml" || rel === "lerna.json";
+        || base === "package.json" || rel === "pnpm-workspace.yaml" || rel === "lerna.json"
+        || claimedExtensions(rules).some((ext) => rel.endsWith(ext)) || isManifestPath(rel, rules);
 }
 
 /**

@@ -3,7 +3,10 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { makeTempDir } from "../../test/helpers/temp";
+import { toyRules } from "../../test/helpers/toy-adapter";
 import type { FSWatcher } from "chokidar";
+import { isManifestPath, RULES } from "./languages/rules";
+import { typescriptRules } from "./languages/typescript-rules";
 import { createBatcher, createFolderFilter, isWatchedFile, watchRepository } from "./watch";
 
 // the real chokidar, wrapped only to keep each watcher it makes, so a test can make one report an error
@@ -83,6 +86,30 @@ describe("isWatchedFile", () => {
         expect(isWatchedFile("lerna.json")).toBe(true);
         expect(isWatchedFile("packages/p/pnpm-workspace.yaml")).toBe(false);
         expect(isWatchedFile("packages/p/lerna.json")).toBe(false);
+    });
+
+    it("reports every language's code files and manifests (ADR-065)", () => {
+        for (const rules of RULES){
+            for (const ext of rules.extensions) expect(isWatchedFile(`src/a${ext}`), `${rules.id} ${ext}`).toBe(true);
+        }
+        // names some language's rules may call a manifest: each one isManifestPath accepts is watched
+        const candidates = [
+            "package.json", "tsconfig.json", "go.mod", "go.work", "Cargo.toml", "pyproject.toml", "setup.cfg", "setup.py", "pyvenv.cfg",
+            "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "src/App/App.csproj", "Directory.Build.props",
+        ];
+        for (const name of candidates) for (const rel of [name, `sub/dir/${name}`]){
+            if (isManifestPath(rel)) expect(isWatchedFile(rel), rel).toBe(true);
+        }
+    });
+
+    it("reports a test language's code files and manifests when given its rules", () => {
+        const rules = [typescriptRules, toyRules];
+        expect(isWatchedFile("lib/a.toy", rules)).toBe(true);
+        expect(isWatchedFile("pkg/toy.json", rules)).toBe(true);
+        expect(isWatchedFile("setup.toy", rules)).toBe(true);
+        expect(isWatchedFile("lib/a.toy")).toBe(false);   // no registry language claims .toy
+        expect(isWatchedFile("src/a.ts", rules)).toBe(true);
+        expect(isWatchedFile("package.json", rules)).toBe(true);
     });
 });
 

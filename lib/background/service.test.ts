@@ -291,7 +291,7 @@ describe("background service", () => {
         await service.stop();
     });
 
-    it("reads the workspace manifests for the first update after the startup check, not for the next (ADR-053, amended)", async () => {
+    it("passes the resolution state back: the workspace manifests are read for the first update after the startup check, not for the next (ADR-053 amended, ADR-065)", async () => {
         const root = copyFixture(ARCH_FIXTURE);
         indexRepository(root);
         const watcher = fakeWatcher();

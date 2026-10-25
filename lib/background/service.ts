@@ -14,7 +14,7 @@ import { refreshSummaryStatus } from "../index/summarize/status";
 import type { Summarizer } from "../index/summarize/types";
 import { applyFileChanges } from "../index/update";
 import { watchRepository, type RepoWatcher } from "../index/watch";
-import type { Workspace } from "../index/workspace";
+import type { ResolutionState } from "../index/languages/resolution";
 
 /** More changed paths than this at once (a branch switch, a big pull), and one full run is cheaper than an update. */
 export const MAX_INCREMENTAL_PATHS = 500;
@@ -101,8 +101,11 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     const pendingUpdate = new Set<string>();
     const pendingRefresh = new Set<string>();
     let embedQueued = false;
-    /** The workspace the last update resolved with (ADR-053, amended): kept until a full run or a repo switch, since a full run may have seen a new manifest. */
-    let workspace: Workspace | undefined;
+    /**
+     * What the last update resolved with (ADR-053 amended, ADR-065): the manifests and the adapters' cache (TypeScript's
+     * workspace). Kept until a full run or a repo switch, since a full run may have seen a new manifest.
+     */
+    let resolution: ResolutionState | undefined;
     /** Files refreshed automatically in the last AUTO_REFRESH_WINDOW_MS: each refresh's count leaves it when its window ends. */
     let refreshedInWindow = 0;
     const lanes: Record<Lane, Promise<unknown>> = { structure: Promise.resolve(), maintenance: Promise.resolve() };
@@ -145,12 +148,12 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         try{
             if (paths.length > MAX_INCREMENTAL_PATHS || paths.some((p) => p === ".gitignore" || p.endsWith("/.gitignore"))){
                 log(`re-indexing the whole repo (${paths.length} paths changed)`);
-                workspace = undefined;
+                resolution = undefined;
                 indexRepository(repo);
                 // too many to refresh one by one: they stay out of date until opened, swept, or npm run summarize
             } else{
-                const result = applyFileChanges(repo, paths, { workspace });
-                workspace = result.workspace;
+                const result = applyFileChanges(repo, paths, { resolution });
+                resolution = result.resolution;
                 log(`updated ${result.changed.length} changed and ${result.deleted.length} deleted files in ${Math.round(result.totalMs)} ms`);
                 if (deps.summarizer !== null && mayRefresh(repo)) armSummaryTimers(result.changed);
                 for (const p of result.deleted) cancelSummaryTimer(p);
@@ -317,7 +320,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         refreshedInWindow = 0;   // its timers just went with retryTimers: another repo starts a fresh window
         pendingUpdate.clear();
         pendingRefresh.clear();
-        workspace = undefined;
+        resolution = undefined;
         const current = watcher;
         watcher = null;
         await current?.close();
@@ -356,7 +359,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
 
         // the startup check (PIVOT_SPEC.md §5.6): one warm full run catches what changed while nothing watched
         await serial("structure", () => {
-            workspace = undefined;
+            resolution = undefined;
             try{
                 indexRepository(repo);
             } catch (err){
@@ -409,7 +412,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 return Promise.reject(err);
             }
             return serial("structure", () => {
-                workspace = undefined;
+                resolution = undefined;
                 const result = indexRepository(repo, { onProgress });
                 refreshSummaryStatus(repo, { summarizerAvailable });
                 return result;
