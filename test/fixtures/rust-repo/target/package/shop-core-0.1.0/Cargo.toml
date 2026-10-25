@@ -1,0 +1,5 @@
+# The copy `cargo package` leaves in target/: a manifest under a folder the Rust rules leave out, so resolution ignores it.
+[package]
+name = "shop-core"
+version = "0.1.0"
+edition = "2021"
