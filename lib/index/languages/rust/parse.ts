@@ -23,7 +23,7 @@ export function parseRust(path: string, text: string, reading: Reading): ParsedF
 
     return parseTree("rust", text, (root) => {
         const imports = new Set<string>();
-        collectReferences(root, [], imports);
+        collectReferences(root, imports);
         const declares = [...imports].filter((s) => s.startsWith("mod:")).sort();
         if (reading === "parse") return { chunks: [], symbols: [], imports: [...imports], declares, calls: emptyCallFacts(), lineCount };
 
@@ -44,57 +44,77 @@ export function parseRust(path: string, text: string, reading: Reading): ParsedF
 
 /* ─────────────────────────────── references ─────────────────────────────── */
 
-/** Every reference under `node`, in source order, with the inline-module path it sits in. */
-function collectReferences(node: Node, inline: readonly string[], out: Set<string>): void {
-    switch (node.type){
-        case "use_declaration": {
-            if (node.hasError) return;   // a malformed use gives no specifier rather than a guess
-            const argument = node.childForFieldName("argument");
-            if (argument !== null) for (const leaf of leavesOfUseTree(argument, "", false)) out.add(specifierForUse(inline, leaf));
-            return;
-        }
-        case "mod_item": {
-            const name = node.childForFieldName("name");
-            if (name === null || name.isMissing) return;
-            const body = node.childForFieldName("body");
-            if (body === null) out.add(modSpecifier(inline, name.text, pathAttributeOf(node)));
-            else for (const child of body.namedChildren) collectReferences(child, [...inline, name.text], out);
-            return;
-        }
-        case "extern_crate_declaration": {
-            const name = node.childForFieldName("name");
-            if (name !== null && !name.isMissing) out.add(`extern:${unraw(name.text)}`);
-            return;
-        }
-        case "visibility_modifier":
-            return;   // pub(in crate::a) restricts visibility; it refers to nothing
-        case "scoped_identifier":
-        case "scoped_type_identifier": {
-            const segments = codeSegments(node);
-            if (segments !== null && !node.hasError){
-                const named = segments[0] === "" ? segments.slice(1) : segments;
-                if (named.length >= 2 && !STANDARD_CRATES.has(named[0]) && !named[0].startsWith("$")) out.add(pathSpecifier(inline, segments.join("::")));
+/**
+ * Every reference under `root`, in source order, with the inline-module path each sits in. One pre-order walk with an
+ * explicit stack, not recursion (B-I1): a long chain of `+` or of method calls nests deeper than the call stack goes.
+ * Each node either records what it is and lists the children to read next (pushed in reverse, so they pop in source
+ * order), or reads its own subtree whole and lists none.
+ */
+function collectReferences(root: Node, out: Set<string>): void {
+    const stack: { node: Node; inline: readonly string[] }[] = [{ node: root, inline: [] }];
+    const next = (nodes: readonly Node[], inline: readonly string[]): void => {
+        for (let i = nodes.length - 1; i >= 0; i--) stack.push({ node: nodes[i], inline });
+    };
+
+    while (stack.length > 0){
+        const { node, inline } = stack.pop()!;
+        switch (node.type){
+            case "use_declaration": {
+                if (node.hasError) continue;   // a malformed use gives no specifier rather than a guess
+                const argument = node.childForFieldName("argument");
+                if (argument !== null) for (const leaf of leavesOfUseTree(argument, "", false)) out.add(specifierForUse(inline, leaf));
+                continue;
             }
-            collectWithinChain(node.childForFieldName("path"), inline, out);
-            return;
+            case "mod_item": {
+                const name = node.childForFieldName("name");
+                if (name === null || name.isMissing) continue;
+                const body = node.childForFieldName("body");
+                if (body === null) out.add(modSpecifier(inline, name.text, pathAttributeOf(node)));
+                else next(body.namedChildren, [...inline, name.text]);
+                continue;
+            }
+            case "extern_crate_declaration": {
+                const name = node.childForFieldName("name");
+                if (name !== null && !name.isMissing) out.add(`extern:${unraw(name.text)}`);
+                continue;
+            }
+            case "visibility_modifier":
+                continue;   // pub(in crate::a) restricts visibility; it refers to nothing
+            case "scoped_identifier":
+            case "scoped_type_identifier": {
+                const segments = codeSegments(node);
+                if (segments !== null && !node.hasError){
+                    const named = segments[0] === "" ? segments.slice(1) : segments;
+                    if (named.length >= 2 && !STANDARD_CRATES.has(named[0]) && !named[0].startsWith("$")) out.add(pathSpecifier(inline, segments.join("::")));
+                }
+                next(withinChain(node.childForFieldName("path")), inline);
+                continue;
+            }
+            default:
+                next(node.namedChildren, inline);
         }
-        default:
-            for (const child of node.namedChildren) collectReferences(child, inline, out);
     }
 }
 
 /**
  * Inside a path's own chain (its `path` field, down to the first segment) only the generic arguments hold further
  * references: `crate::a::Wrapper<crate::b::Thing>` gives two paths, `crate::a` (the inner chain) gives none of its own.
+ * The nodes to read, in source order (the chain's deepest part is written first).
  */
-function collectWithinChain(node: Node | null, inline: readonly string[], out: Set<string>): void {
-    if (node === null) return;
-    if (node.type === "scoped_identifier" || node.type === "scoped_type_identifier") collectWithinChain(node.childForFieldName("path"), inline, out);
-    else if (node.type === "generic_type"){
-        collectWithinChain(node.childForFieldName("type"), inline, out);
-        const args = node.childForFieldName("type_arguments");
-        if (args !== null) collectReferences(args, inline, out);
-    } else if (node.type === "bracketed_type") collectReferences(node, inline, out);   // <T as crate::a::Tr>::x: the trait's path
+function withinChain(start: Node | null): Node[] {
+    const found: Node[] = [];   // outermost first, reversed below
+    for (let node = start; node !== null;){
+        if (node.type === "scoped_identifier" || node.type === "scoped_type_identifier") node = node.childForFieldName("path");
+        else if (node.type === "generic_type"){
+            const args = node.childForFieldName("type_arguments");
+            if (args !== null) found.push(args);
+            node = node.childForFieldName("type");
+        } else{
+            if (node.type === "bracketed_type") found.push(node);   // <T as crate::a::Tr>::x: the trait's path
+            node = null;
+        }
+    }
+    return found.reverse();
 }
 
 /** A code path's segments without generic arguments (`Vec::<u8>::new` → Vec, new), "" first for a leading `::`; null for `<T as Tr>::x`. */

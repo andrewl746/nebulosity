@@ -69,10 +69,13 @@ function declaresWithColon(node: Node): boolean {
  * Every name a function binds anywhere inside it (the plan's function-level approximation): parameters, results and
  * the receiver (of nested function literals too), type parameters, `:=`, var and const, range and select receives
  * that declare, a type switch's alias, labels, local types (G-7), and a method receiver's type parameters (G-8).
+ * An explicit stack, not recursion: a long chain of `+` or `else if` nests deeper than the call stack goes (B-I1).
  */
 function bindingsOf(fn: Node): Set<string> {
     const bound = new Set<string>();
-    const visit = (node: Node): void => {
+    const stack: Node[] = [fn];
+    while (stack.length > 0){
+        const node = stack.pop()!;
         switch (node.type){
             case "parameter_declaration":
             case "variadic_parameter_declaration":
@@ -103,9 +106,10 @@ function bindingsOf(fn: Node): Set<string> {
                 break;
             }
         }
-        for (const child of node.namedChildren) if (child !== null) visit(child);
-    };
-    visit(fn);
+        // the order doesn't matter (a set of names), but the walk stays the recursion's pre-order
+        const children = node.namedChildren;
+        for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]);
+    }
 
     // G-8: `func (b Box[T]) …` declares T for the method
     if (fn.type === "method_declaration"){
@@ -185,9 +189,21 @@ function topLevelNames(root: Node): string[] {
     return names.filter((n) => n !== "_");
 }
 
+/** A node the specifier walk still has to read, with the names bound where it sits (null outside any function). */
+type Visit = { node: Node; bound: ReadonlySet<string> | null };
+
+/** A node's children in the given fields, in order, each to be read under `bound`. */
+function fieldVisits(node: Node, fields: readonly string[], bound: ReadonlySet<string> | null): Visit[] {
+    return fields.flatMap((f) => node.childrenForFieldName(f).map((child) => ({ node: child, bound })));
+}
+
 /**
  * The file's specifiers in source order, each once. A node inside an ERROR is read as nothing: a malformed construct
  * gives no specifier rather than a guess.
+ *
+ * One pre-order walk with an explicit stack, not recursion (B-I1): a long chain of `+`, a long builder chain or a long
+ * `else if` nests deeper than the call stack goes. Each node either records what it is and lists the children to read
+ * next (pushed in reverse, so they pop in source order), or reads what it needs itself and lists none.
  */
 function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers: string[]; importLines: string[] } {
     const specifiers = new Set<string>();
@@ -200,14 +216,15 @@ function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers
         specifiers.add(`name:${text}`);
     };
 
-    const walk = (node: Node, bound: ReadonlySet<string> | null): void => {
-        if (node.isError || node.isMissing) return;
-        const children = (): void => {
-            for (const child of node.namedChildren) if (child !== null) walk(child, bound);
-        };
-        const field = (f: string, scope: ReadonlySet<string> | null = bound): void => {
-            for (const child of node.childrenForFieldName(f)) if (child !== null) walk(child, scope);
-        };
+    const stack: Visit[] = [];
+    const next = (visits: readonly Visit[]): void => {
+        for (let i = visits.length - 1; i >= 0; i--) stack.push(visits[i]);
+    };
+    next(root.namedChildren.map((node) => ({ node, bound: null })));
+
+    while (stack.length > 0){
+        const { node, bound } = stack.pop()!;
+        if (node.isError || node.isMissing) continue;
 
         switch (node.type){
             case "comment":
@@ -215,39 +232,34 @@ function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers
             case "field_identifier":
             case "package_identifier":
             case "label_name":
-                return;
+                continue;
 
             case "import_spec": {
-                if (node.hasError) return;
+                if (node.hasError) continue;
                 const path = stringContent(node.childForFieldName("path"));
-                if (path === null) return;
+                if (path === null) continue;
                 specifiers.add(importSpecifier(path, node.childForFieldName("name")?.text ?? null));
                 importLines.push(`import ${node.text.trim()}`);
-                return;
+                continue;
             }
 
             // the outermost function, method or top-level function literal: its bindings hold for everything in it
             case "function_declaration":
-            case "method_declaration": {
-                const scope = bindingsOf(node);
-                for (const f of ["type_parameters", "receiver", "parameters", "result", "body"]) field(f, scope);
-                return;
-            }
-            case "func_literal": {
-                const scope = bound ?? bindingsOf(node);
-                for (const f of ["parameters", "result", "body"]) field(f, scope);
-                return;
-            }
+            case "method_declaration":
+                next(fieldVisits(node, ["type_parameters", "receiver", "parameters", "result", "body"], bindingsOf(node)));
+                continue;
+            case "func_literal":
+                next(fieldVisits(node, ["parameters", "result", "body"], bound ?? bindingsOf(node)));
+                continue;
 
             // G-8: a generic type's type parameters are bound inside its own spec
             case "type_spec":
             case "type_alias": {
                 const params = node.childForFieldName("type_parameters");
                 const scope = params === null ? bound : new Set([...(bound ?? []), ...params.descendantsOfType("type_parameter_declaration")
-                    .flatMap((d) => (d === null ? [] : identifiersOf(d, "name")))]);
-                field("type_parameters", scope);
-                field("type", scope);
-                return;
+                    .flatMap((d) => identifiersOf(d, "name"))]);
+                next(fieldVisits(node, ["type_parameters", "type"], scope));
+                continue;
             }
 
             case "selector_expression": {
@@ -255,51 +267,46 @@ function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers
                 const member = node.childForFieldName("field");
                 if (operand !== null && operand.type === "identifier" && !operand.isMissing && member !== null && !member.isMissing){
                     if (free(operand.text, bound)) specifiers.add(`use:${operand.text}.${member.text}`);
-                    return;   // a bound or top-level operand is no reference, and a free one is read through its use:
+                    continue;   // a bound or top-level operand is no reference, and a free one is read through its use:
                 }
-                if (operand !== null) walk(operand, bound);
-                return;
+                if (operand !== null) next([{ node: operand, bound }]);
+                continue;
             }
             case "qualified_type": {
                 const pkg = node.childForFieldName("package");
                 const member = node.childForFieldName("name");
                 if (pkg !== null && member !== null && !pkg.isMissing && !member.isMissing && free(pkg.text, bound)) specifiers.add(`use:${pkg.text}.${member.text}`);
-                return;
+                continue;
             }
 
             // declaration sites are never names (G-4): walk only the parts that are types or values
             case "parameter_declaration":
             case "variadic_parameter_declaration":
             case "field_declaration":
-                field("type");
-                return;
             case "type_parameter_declaration":
-                field("type");
-                return;
+                next(fieldVisits(node, ["type"], bound));
+                continue;
             case "const_spec":
             case "var_spec":
-                field("type");
-                field("value");
-                return;
+                next(fieldVisits(node, ["type", "value"], bound));
+                continue;
 
             // a keyed element's key is a field name or a map key: a bare identifier there is no reference
             case "keyed_element": {
                 const key = node.childForFieldName("key");
                 const keyExpression = key?.namedChildren[0] ?? null;
-                if (key !== null && !(key.namedChildCount === 1 && keyExpression?.type === "identifier")) walk(key, bound);
-                field("value");
-                return;
+                const readKey = key !== null && !(key.namedChildCount === 1 && keyExpression?.type === "identifier");
+                next([...(readKey ? [{ node: key, bound }] : []), ...fieldVisits(node, ["value"], bound)]);
+                continue;
             }
 
             case "identifier":
             case "type_identifier":
                 name(node, bound);
-                return;
+                continue;
         }
-        children();
-    };
-
-    for (const node of root.namedChildren) if (node !== null) walk(node, null);
+        next(node.namedChildren.map((child) => ({ node: child, bound })));
+    }
     return { specifiers: [...specifiers], importLines };
 }
 

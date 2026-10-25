@@ -209,3 +209,15 @@ describe("Go's one export rule (ADR-065, the final review's B-I2)", () => {
         ]);
     });
 });
+
+describe("a valid Go file nested deeper than the call stack goes (B-I1)", () => {
+    // `pkg.Deep + x + x + …`: a left-nested chain of 40,000 terms, whose deepest node is the first term
+    const deep = go("package p", "", "import \"example.com/pkg\"", "", "func f(x int) int {", `\treturn pkg.Deep${" + x".repeat(39_999)}`, "}");
+
+    it.each(["full", "parse"] as const)("parses in the %s reading, down to the deepest term", (reading) => {
+        const parsed = parseGo("deep.go", deep, reading);
+        expect(parsed.imports).toEqual(["import:example.com/pkg", "use:pkg.Deep"]);
+        expect(parsed.declares).toEqual(["f", "package:p"]);
+        expect(parsed.lineCount).toBe(7);
+    });
+});

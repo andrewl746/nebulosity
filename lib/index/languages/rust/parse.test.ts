@@ -158,3 +158,14 @@ describe("Rust's one export rule (ADR-065, the final review's B-I2)", () => {
         ]);
     });
 });
+
+describe("a valid Rust file nested deeper than the call stack goes (B-I1)", () => {
+    // `crate::deep::value() + x + x + …`: a left-nested chain of 40,000 terms, whose deepest node is the first term
+    const deep = `use crate::a::Thing;\n\nfn f(x: u32) -> u32 {\n    crate::deep::value()${" + x".repeat(39_999)}\n}\n`;
+
+    it.each(["full", "parse"] as const)("parses in the %s reading, down to the deepest term", (reading) => {
+        const parsed = parseRust("deep.rs", deep, reading);
+        expect(parsed.imports).toEqual(["use:|crate::a::Thing", "path:|crate::deep::value"]);
+        expect(parsed.lineCount).toBe(5);
+    });
+});
