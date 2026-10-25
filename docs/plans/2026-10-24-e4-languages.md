@@ -448,6 +448,16 @@ export type FixtureTruth = {
 - **The `scan` reading** is a line scan of the import forms below, with no tree. Its known differences from `full` go in `truth.scan`.
 - **Specifiers** are written exactly as each task's table says. A malformed construct gives no specifier rather than a guess.
 - **`kindOf`** is `internal` for every specifier that resolves to a file, whatever the task's own table says.
+- **Chunk kinds** (the controller's ruling of 2026-10-25, after Task F's review M1, made for the owner overnight). `ChunkKind` (`lib/contracts.ts`) has no `struct` or `trait`, and it doesn't gain them (`CONTRACTS_VERSION` 3, no contract change). So the five languages map their declarations the same way:
+  - a struct (Go's `type T struct`, C#'s `struct` and `record struct`, Rust's `struct`) is `"class"`, as are Java's and C#'s `record`;
+  - a trait (Rust) is `"interface"`, like Go's, Java's and C#'s interfaces;
+  - an enum is `"enum"`;
+  - a named type that is neither a struct nor an interface (Go's `type X int`, Rust's and C#'s aliases) is `"type"`;
+  - a constant or static is `"const"`;
+  - a module or namespace declaration, where one is chunked, is `"namespace"`.
+  Symbols keep the precise kinds (`struct`, `trait`, …): only chunks take this coarse mapping.
+- **Manifests in excluded folders** (Task F's review M10): `ResolveContext.manifests` holds every manifest discovery found, including those under folders your own `excluded()` leaves out (a vendored `go.mod` under `vendor/`, a `Cargo.toml` under `target/`). Your resolver ignores those.
+- **Report classes** (Task F's review M11): without `classOf`, the resolution report's class is the text before a specifier's first `:`. So prefix every specifier with `<class>:`, as the task tables do, or implement `classOf`.
 
 ---
 
