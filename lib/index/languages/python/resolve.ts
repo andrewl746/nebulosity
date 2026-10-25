@@ -15,6 +15,9 @@
  *   (so the importer's own package X beats another root's X/name.py); `X:*` and plain `X` are the module `X`.
  * - **Relative:** from F's folder, one folder up per dot after the first; `.:c` is the module `base/c`, else the
  *   package `base/__init__`; `.m:c` is `base/m/c`, else `base/m`.
+ * - **The standard library** (stdlib.ts, the pre-ship pass's ruling R4): an absolute specifier whose first segment is a
+ *   top-level standard-library name never resolves and is external, from every importer, the shadowing module's own
+ *   root included: a repo's `tests/logging.py` never captures `import logging`. Relative specifiers are untouched.
  *
  * Manifests inside a virtual environment (the folder of a pyvenv.cfg, which rules.ts leaves out) are ignored.
  */
@@ -22,6 +25,7 @@ import { parse as parseToml } from "smol-toml";
 import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
 import { dirOf, joinRepoPath } from "../../paths";
 import { inVirtualEnvironment, PROJECT_MANIFEST, virtualEnvironments } from "./rules";
+import { isStdlibModule } from "./stdlib";
 
 const DOTTED_NAME = /^[^\W\d]\w*(\.[^\W\d]\w*)*$/u;
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -227,7 +231,9 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
 
         const dots = /^\.*/.exec(source)![0].length;
         if (dots === 0){
-            if (!DOTTED_NAME.test(source)) return null;
+            // the standard library's, whatever the repo holds under that name (R4): a module named like it in a root would
+            // otherwise be a unique hit for every importer outside that root, and the first hit inside it
+            if (!DOTTED_NAME.test(source) || isStdlibModule(source)) return null;
             return absolute(dirOf(importer), name !== null && name !== "*" ? [`${source}.${name}`, source] : [source]);
         }
 
@@ -256,8 +262,11 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
     return {
         resolve,
         kindOf(importer: string, specifier: string): ReferenceKind {
-            if (specifier.startsWith(".") || target(importer, specifier) !== null) return "internal";
+            if (specifier.startsWith(".")) return "internal";
             const first = /^[^.:]*/.exec(specifier)![0];
+            // before the internal names: a root's logging.py puts logging among them, but `import logging` stays external
+            if (isStdlibModule(first)) return "external";
+            if (target(importer, specifier) !== null) return "internal";
             return internalNames.has(first) ? "internal" : "external";
         },
         classOf: (_importer: string, specifier: string): string => (specifier.startsWith(".") ? "relative" : "absolute"),

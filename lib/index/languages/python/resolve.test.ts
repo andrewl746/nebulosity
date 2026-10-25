@@ -215,12 +215,43 @@ describe("python resolver: one rule at a time", () => {
     });
 
     it("kindOf: internal when it resolves, or when its first segment is a top-level package or a root's module; else external", () => {
-        const r = createPythonResolver(smallContext({ "pkg/__init__.py": [], "settings.py": [], "email/templates.py": [], "a.py": [] }));
+        const r = createPythonResolver(smallContext({ "pkg/__init__.py": [], "settings.py": [], "vendored/templates.py": [], "a.py": [] }));
         expect(r.kindOf("a.py", "pkg.missing:x")).toBe("internal");
         expect(r.kindOf("a.py", "settings.nothing")).toBe("internal");
-        expect(r.kindOf("a.py", "email.utils:formatdate")).toBe("external");   // a namespace folder: internal only when it resolves
-        expect(r.kindOf("a.py", "email:templates")).toBe("internal");          // it does
+        expect(r.kindOf("a.py", "vendored.utils:formatdate")).toBe("external");   // a namespace folder: internal only when it resolves
+        expect(r.kindOf("a.py", "vendored:templates")).toBe("internal");          // it does
         expect(r.kindOf("a.py", "os.path")).toBe("external");
+    });
+
+    it("an absolute import whose first segment is a standard-library name never resolves, from any importer (R4)", () => {
+        const r = createPythonResolver(smallContext({
+            // roots "" and tests (the parent of the package tests/helpers); tests/logging.py and json.py sit directly in them
+            "tests/helpers/__init__.py": [], "tests/logging.py": [], "tests/run.py": [],
+            "pkg/__init__.py": [], "pkg/logging.py": [], "pkg/a.py": [],
+            "json.py": [], "imp/__init__.py": [], "email/templates.py": [], "test/__init__.py": [], "test/support.py": [], "app.py": [],
+        }));
+        // another root's module: without the rule, a unique hit among the other roots
+        expect(r.resolve("pkg/a.py", "logging")).toEqual([]);
+        expect(r.resolve("pkg/a.py", "logging:getLogger")).toEqual([]);
+        // the importer's own root: without the rule, the first hit (no same-root exception)
+        expect(r.resolve("tests/run.py", "logging")).toEqual([]);
+        expect(r.resolve("app.py", "json")).toEqual([]);
+        // a module removed since 3.10 (imp, 3.12) is still the standard library's, and so is a namespace folder's email
+        expect(r.resolve("app.py", "imp")).toEqual([]);
+        expect(r.resolve("app.py", "email:templates")).toEqual([]);
+        for (const [importer, specifier] of [["pkg/a.py", "logging"], ["tests/run.py", "logging:getLogger"], ["pkg/a.py", "logging.handlers"],
+            ["app.py", "json.decoder"], ["app.py", "imp"], ["app.py", "email:templates"]]){
+            expect(r.kindOf(importer, specifier), `${importer} ${specifier}`).toBe("external");
+        }
+        // relative imports are unchanged, and so are absolute ones whose first segment is the repo's own (test isn't listed)
+        expect(r.resolve("pkg/a.py", ".:logging")).toEqual(["pkg/logging.py"]);
+        expect(r.resolve("pkg/a.py", ".logging:configure")).toEqual(["pkg/logging.py"]);
+        expect(r.resolve("app.py", "pkg.logging")).toEqual(["pkg/logging.py"]);
+        expect(r.resolve("app.py", "test.support")).toEqual(["test/support.py"]);
+        expect(r.resolve("tests/run.py", "helpers")).toEqual(["tests/helpers/__init__.py"]);
+        for (const [importer, specifier] of [["pkg/a.py", ".:logging"], ["app.py", "pkg.logging"], ["app.py", "test.support"]]){
+            expect(r.kindOf(importer, specifier), `${importer} ${specifier}`).toBe("internal");
+        }
     });
 
     it("entry points: every script kind, __main__.py, the marker; the first declaration of a path wins", () => {
