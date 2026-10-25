@@ -312,13 +312,26 @@ type GoSymbols = { symbols: SymbolRow[]; declarations: Declaration[] };
 function readDeclarations(root: Node): GoSymbols {
     const symbols: SymbolRow[] = [];
     const declarations: Declaration[] = [];
-    const add = (name: string, kind: SymbolKind, node: Node, parent: string | null): void => {
+    /** `ownerExported`: ADR-065's one export rule, a member is exported only when its owner is too. */
+    const add = (name: string, kind: SymbolKind, node: Node, parent: string | null, ownerExported = true): void => {
         if (name === "_" || name === "") return;
         symbols.push({
             name, qualifiedName: parent === null ? name : `${parent}.${name}`, kind,
-            startLine: startLineOf(node), endLine: endLineOf(node), exported: isExported(name), parentQualifiedName: parent,
+            startLine: startLineOf(node), endLine: endLineOf(node), exported: ownerExported && isExported(name), parentQualifiedName: parent,
         });
     };
+
+    // A method sits outside its type, often in another file of the package, so only a receiver type this file declares
+    // can gate it (the parse sees one file); a field or an interface method always sits inside its type.
+    const declaredTypes = new Set<string>();
+    for (const node of root.namedChildren){
+        if (node.type !== "type_declaration") continue;
+        for (const spec of specsOf(node)){
+            const name = specName(spec);
+            if (name !== null) declaredTypes.add(name);
+        }
+    }
+    const receiverAllows = (parent: string | null): boolean => parent === null || !declaredTypes.has(parent) || isExported(parent);
 
     for (const node of root.namedChildren){
         if (node === null || !TOP_LEVEL_DECLARATIONS.has(node.type)) continue;
@@ -334,9 +347,9 @@ function readDeclarations(root: Node): GoSymbols {
         } else if (node.type === "method_declaration"){
             const name = node.childForFieldName("name")?.text ?? "";
             const parent = receiverName(node);
-            add(name, "method", node, parent);
+            add(name, "method", node, parent, receiverAllows(parent));
             names.push(parent === null ? name : `${parent}.${name}`);
-            exported = isExported(name);
+            exported = receiverAllows(parent) && isExported(name);
             chunkKind = "function";
         } else if (node.type === "type_declaration"){
             const kinds = new Set<string>();
@@ -353,11 +366,11 @@ function readDeclarations(root: Node): GoSymbols {
                         for (const member of childrenOfType(fields, "field_declaration")){
                             const memberNames = member.childrenForFieldName("name").filter((c): c is Node => c !== null).map((c) => c.text);
                             const embedded = memberNames.length === 0 ? embeddedName(member.childForFieldName("type")) : null;
-                            for (const memberName of embedded === null ? memberNames : [embedded]) add(memberName, "property", member, name);
+                            for (const memberName of embedded === null ? memberNames : [embedded]) add(memberName, "property", member, name, isExported(name));
                         }
                     }
                 } else if (kind === "interface" && type !== null){
-                    for (const method of childrenOfType(type, "method_elem")) add(method.childForFieldName("name")?.text ?? "", "method", method, name);
+                    for (const method of childrenOfType(type, "method_elem")) add(method.childForFieldName("name")?.text ?? "", "method", method, name, isExported(name));
                 }
             }
             // the chunk kinds of the plan's common rules: a struct is a class; a group of mixed kinds is a type

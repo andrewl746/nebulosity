@@ -98,6 +98,14 @@ function flattened(nodes: readonly Node[]): Node[] {
 
 const join = (outer: string, name: string): string => (outer === "" ? name : `${outer}.${name}`);
 
+/**
+ * Exported, for a member or a nested type (ADR-065's one rule for every language): only when its owner is exported and
+ * it is `public` itself; an interface's members have no visibility of their own to read, so they take the interface's.
+ */
+function memberExported(member: Node, owner: { isInterface: boolean; exported: boolean }): boolean {
+    return owner.isInterface ? owner.exported : owner.exported && modifiersOf(member).has("public");
+}
+
 type Found = { at: number; seq: number; specifier: string };
 
 /** What the two passes collect. */
@@ -159,8 +167,8 @@ function readStructure(root: Node, facts: FileFacts): void {
         facts.declares.add(`type:${fullName}`);
         facts.declaredTypes.add(name);
 
-        const modifiers = modifiersOf(node);
-        const exported = parent?.isInterface ? parent.exported : modifiers.has("public");
+        // ADR-065's one export rule: a nested type only when its owner is exported too; an interface's members take its flag
+        const exported = parent === null ? modifiersOf(node).has("public") : memberExported(node, parent);
         if (depth <= 1){
             facts.symbols.push({
                 name, qualifiedName: parent === null ? name : `${parent.name}.${name}`, kind,
@@ -193,7 +201,7 @@ function readStructure(root: Node, facts: FileFacts): void {
         const add = (name: string, kind: SymbolKind): void => {
             facts.symbols.push({
                 name, qualifiedName: `${owner.name}.${name}`, kind, startLine: startLineOf(member), endLine: endLineOf(member),
-                exported: owner.isInterface ? owner.exported : modifiersOf(member).has("public"), parentQualifiedName: owner.name,
+                exported: memberExported(member, owner), parentQualifiedName: owner.name,
             });
         };
         const named = (): string | null => {

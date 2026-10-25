@@ -241,7 +241,28 @@ const ITEM_KINDS: Record<string, { symbol: SymbolKind; chunk: ChunkKind }> = {
     macro_definition: { symbol: "function", chunk: "function" },
 };
 
-/** The top-level items' symbols (with their members) and chunk declarations, and the summary's import lines. */
+/** The items an impl block can name as its self type or its trait. */
+const TYPE_ITEMS: ReadonlySet<string> = new Set(["struct_item", "union_item", "enum_item", "trait_item", "type_item"]);
+
+/** The name of a type this file may declare that `node` names (`Foo`, `Foo<T>`, `&mut Foo`), or null for a path (`a::Foo`) and anything else. */
+function plainTypeName(node: Node | null): string | null {
+    let type = node;
+    while (type !== null && (type.type === "reference_type" || type.type === "pointer_type" || type.type === "generic_type")){
+        type = type.childForFieldName("type");
+    }
+    return type !== null && type.type === "type_identifier" ? type.text : null;
+}
+
+/**
+ * The top-level items' symbols (with their members) and chunk declarations, and the summary's import lines.
+ *
+ * Exported follows ADR-065's one rule for every language: a member only when its owner is exported too. A field needs its
+ * own `pub` and its struct's; a trait's fns have no visibility of their own, so they take the trait's. An impl's fns sit
+ * outside their type's body, often in another file, so only an owner this file declares can gate them (the parse sees
+ * one file): an inherent impl's fn needs its own `pub` and, when this file declares the self type, that type's; a trait
+ * impl's fn has no visibility of its own (it is as visible as the type and the trait), so it is exported unless this
+ * file declares the self type or the trait without `pub`.
+ */
 function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declaration[]; summaryImports: string[] } {
     const symbols: SymbolRow[] = [];
     const declarations: Declaration[] = [];
@@ -249,12 +270,24 @@ function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declara
     const symbol = (node: Node, name: string, kind: SymbolKind, exported: boolean, parent: string | null): void => {
         symbols.push({ name, qualifiedName: parent === null ? name : `${parent}.${name}`, kind, ...symbolLines(node), exported, parentQualifiedName: parent });
     };
-    const methods = (body: Node | null, parent: string): void => {
+    const methods = (body: Node | null, parent: string, exported: (member: Node) => boolean): void => {
         for (const member of body?.namedChildren ?? []){
             if (member.type !== "function_item" && member.type !== "function_signature_item") continue;
             const name = member.childForFieldName("name");
-            if (name !== null && !name.isMissing) symbol(member, name.text, "method", isPub(member), parent);
+            if (name !== null && !name.isMissing) symbol(member, name.text, "method", exported(member), parent);
         }
+    };
+
+    // the types this file declares, by name, and whether each is exported: what gates an impl's fns (an impl may come first)
+    const declaredTypes = new Map<string, boolean>();
+    for (const item of root.namedChildren){
+        const name = TYPE_ITEMS.has(item.type) ? item.childForFieldName("name") : null;
+        if (name !== null && !name.isMissing) declaredTypes.set(name.text, isPub(item));
+    }
+    /** An owner's flag when this file declares it; true (no gate) when it doesn't. */
+    const ownerAllows = (node: Node | null): boolean => {
+        const name = plainTypeName(node);
+        return name === null ? true : declaredTypes.get(name) ?? true;
     };
 
     for (const item of root.namedChildren){
@@ -263,9 +296,15 @@ function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declara
             continue;
         }
         if (item.type === "impl_item"){
-            const self = baseName(item.childForFieldName("type"));
+            const selfType = item.childForFieldName("type");
+            const self = baseName(selfType);
             const trait = item.childForFieldName("trait");
-            methods(item.childForFieldName("body"), self);
+            const selfAllows = ownerAllows(selfType);
+            if (trait === null) methods(item.childForFieldName("body"), self, (member) => selfAllows && isPub(member));
+            else{
+                const traitAllows = ownerAllows(trait);
+                methods(item.childForFieldName("body"), self, () => selfAllows && traitAllows);
+            }
             declarations.push({ kind: "class", name: trait === null ? `impl ${self}` : `impl ${baseName(trait)} for ${self}`, ...chunkSpan(item), exported: false });
             continue;
         }
@@ -279,9 +318,9 @@ function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declara
             const body = item.childForFieldName("body");
             for (const field of body?.type === "field_declaration_list" ? body.namedChildren : []){
                 const fieldName = field.type === "field_declaration" ? field.childForFieldName("name") : null;
-                if (fieldName !== null && !fieldName.isMissing) symbol(field, fieldName.text, "property", isPub(field), name.text);
+                if (fieldName !== null && !fieldName.isMissing) symbol(field, fieldName.text, "property", exported && isPub(field), name.text);
             }
-        } else if (item.type === "trait_item") methods(item.childForFieldName("body"), name.text);
+        } else if (item.type === "trait_item") methods(item.childForFieldName("body"), name.text, () => exported);
         declarations.push({ kind: kinds.chunk, name: name.text, ...chunkSpan(item), exported });
     }
     return { symbols, declarations, summaryImports };

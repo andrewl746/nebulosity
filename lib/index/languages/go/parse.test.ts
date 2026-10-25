@@ -173,3 +173,39 @@ describe("the Go parse, case by case", () => {
         expect(crlf.symbols).toEqual(truth.symbols["cmd/shop/main.go"]);
     });
 });
+
+describe("Go's one export rule (ADR-065, the final review's B-I2)", () => {
+    it("exports a field, an interface method or a method only when its owner type is exported too", () => {
+        const parsed = full(go(
+            "package p",
+            "",
+            "type hidden struct {",
+            "\tShown int",
+            "}",
+            "",
+            "type getter interface {",
+            "\tGet() int",
+            "}",
+            "",
+            "type Open struct {",
+            "\tShown int",
+            "\tquiet int",
+            "}",
+            "",
+            "func (h *hidden) Shown2() {}",
+            "func (o Open) Do() {}",
+            "func (e Elsewhere) Run() {}",
+        ));
+        expect(parsed.symbols.map((s) => [s.qualifiedName, s.exported])).toEqual([
+            ["hidden", false], ["hidden.Shown", false],
+            ["getter", false], ["getter.Get", false],
+            ["Open", true], ["Open.Shown", true], ["Open.quiet", false],
+            ["hidden.Shown2", false],   // its receiver's type is declared here, unexported
+            ["Open.Do", true],
+            ["Elsewhere.Run", true],    // its receiver's type isn't declared in this file, so only the case decides
+        ]);
+        expect(parsed.chunks.filter((c) => c.kind === "function").map((c) => [c.name, c.exported])).toEqual([
+            ["hidden.Shown2", false], ["Open.Do", true], ["Elsewhere.Run", true],
+        ]);
+    });
+});

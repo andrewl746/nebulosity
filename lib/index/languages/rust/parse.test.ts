@@ -96,7 +96,7 @@ describe("Rust's items", () => {
     it("names impl chunks by base names and gives their fns the self type's base name as parent", () => {
         const parsed = parseRust("x.rs", "impl<T> a::Foo<T> { pub fn new() {} }\nimpl Tr for &mut b::Bar { fn x() {} }\n", "full");
         expect(parsed.chunks.map((c) => c.name)).toEqual(["impl Foo", "impl Tr for Bar", "(file)"]);
-        expect(parsed.symbols.map((s) => [s.qualifiedName, s.exported])).toEqual([["Foo.new", true], ["Bar.x", false]]);
+        expect(parsed.symbols.map((s) => [s.qualifiedName, s.exported])).toEqual([["Foo.new", true], ["Bar.x", true]]);   // neither owner is declared here
     });
 
     it("keeps attributes in a symbol's lines across a comment, and a chunk's doc comment above its attributes", () => {
@@ -125,5 +125,36 @@ describe("Rust's use-tree text (the scan's reader)", () => {
         expect(leavesOfUseText("a::{b, ")).toBeNull();
         expect(leavesOfUseText("a::")).toBeNull();
         expect(leavesOfUseText("a b")).toBeNull();
+    });
+});
+
+describe("Rust's one export rule (ADR-065, the final review's B-I2)", () => {
+    it("exports a member only when its owner is: fields and inherent fns by their own pub too, trait fns by the trait's", () => {
+        const parsed = parseRust("x.rs", [
+            "struct Hidden { pub shown: u32 }",
+            "impl Hidden { pub fn shown() {} }",
+            "pub struct Open { pub shown: u32, quiet: u32 }",
+            "impl Open { pub fn shown() {} fn quiet() {} }",
+            "pub trait Thing { fn do_it(); }",
+            "trait Private { fn hide(); }",
+            "impl Thing for Open { fn do_it() {} }",
+            "impl Private for Open { fn hide() {} }",
+            "impl Thing for Hidden { fn do_it() {} }",
+            "impl std::fmt::Display for Elsewhere { fn fmt() {} }",
+            "impl Elsewhere { pub fn run() {} fn stay() {} }",
+        ].join("\n"), "full");
+        expect(parsed.symbols.map((s) => [s.qualifiedName, s.exported])).toEqual([
+            ["Hidden", false], ["Hidden.shown", false],
+            ["Hidden.shown", false],      // pub, but Hidden, declared here, isn't
+            ["Open", true], ["Open.shown", true], ["Open.quiet", false],
+            ["Open.shown", true], ["Open.quiet", false],
+            ["Thing", true], ["Thing.do_it", true],     // a trait fn takes the trait's pub
+            ["Private", false], ["Private.hide", false],
+            ["Open.do_it", true],         // a trait impl's fn: Open and Thing are both pub
+            ["Open.hide", false],         // Private, declared here, isn't pub
+            ["Hidden.do_it", false],      // Hidden, declared here, isn't pub
+            ["Elsewhere.fmt", true],      // neither the type nor the trait is declared here
+            ["Elsewhere.run", true], ["Elsewhere.stay", false],
+        ]);
     });
 });

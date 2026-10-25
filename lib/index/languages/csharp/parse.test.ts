@@ -100,3 +100,24 @@ describe("parseCsharp", () => {
         expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["using:A.B", "gstatic:C.D", "alias:X=E.F", "ns:G.H", "ns:I"]);
     });
 });
+
+describe("C#'s one export rule (ADR-065, the final review's B-I2)", () => {
+    beforeAll(async () => {
+        await loadGrammars([{ id: "csharp", grammar: "tree-sitter-c_sharp.wasm" }]);
+    });
+
+    it("exports a member or a nested type only when its owner is exported and it is public; an interface's members take its flag", () => {
+        const parsed = parseCsharp("x.cs", [
+            "internal class Hidden { public void Shown() {} public class Inner {} }",
+            "public class Open { public void Shown() {} void Quiet() {} public class Inner {} class Private {} }",
+            "public interface IThing { void Do(); }",
+            "interface IHidden { void Do(); }",
+        ].join("\n"), "full");
+        expect(parsed.symbols.map((s) => [s.qualifiedName, s.exported])).toEqual([
+            ["Hidden", false], ["Hidden.Shown", false], ["Hidden.Inner", false],
+            ["Open", true], ["Open.Shown", true], ["Open.Quiet", false], ["Open.Inner", true], ["Open.Private", false],
+            ["IThing", true], ["IThing.Do", true],
+            ["IHidden", false], ["IHidden.Do", false],
+        ]);
+    });
+});
