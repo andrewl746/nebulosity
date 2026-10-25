@@ -170,6 +170,7 @@ nebulosity setup      # connect Claude Code to this repo
 - **`map`** uses port 3000. `nebulosity map --port <n>` picks another and saves it, so Claude Code's activity and `show_on_map` reach that Map. `nebulosity map --print-port` prints the saved port and starts nothing (the VS Code extension asks it where the Map is).
 - **`setup`** registers Nebulosity's MCP server with Claude Code for this repo only (`claude mcp add --scope local`). Do it once per repo. Afterwards `claude mcp list` shows `nebulosity` as connected.
   - `nebulosity setup --print` shows the commands instead of running them: the add line, and before it a remove line when the repo already has a registration.
+  - `nebulosity setup --json` prints the registration as a JSON block for other MCP clients and runs nothing: see [Other MCP clients, or by hand](#other-mcp-clients-or-by-hand).
   - Running `nebulosity setup` again replaces the registration. That drops anything you added to it by hand, such as an `-e` setting.
 - **Where the index lives:** in your user data folder (`%LOCALAPPDATA%\Nebulosity` on Windows, `~/Library/Application Support/Nebulosity` on macOS, `~/.local/share/nebulosity` on Linux), or in `.nebulosity/` inside a checkout. Nothing is written into your repo.
 
@@ -207,6 +208,35 @@ Good to know:
 - The six tools that answer questions load at the start of every session, with no setting to change; their definitions and instructions take about 2,400 tokens. `show_on_map` loads when Claude Code needs it.
 - To keep tool calls off the Map, run `nebulosity setup --print`, add `-e NEBULOSITY_LIVE=off` right after the name `nebulosity` in the add line it prints, and run what it prints. A later plain `nebulosity setup` drops that setting again.
 
+### Other MCP clients, or by hand
+
+`nebulosity setup --json` prints the registration `nebulosity setup` makes, as a plain `mcpServers` block, and nothing else. It runs nothing and writes nothing, so `nebulosity setup --json > nebulosity.json` saves it. From an installed copy on Windows it looks like this (the paths have forward slashes there too):
+
+```json
+{
+  "mcpServers": {
+    "nebulosity": {
+      "command": "node",
+      "args": [
+        "C:/Users/you/AppData/Roaming/npm/node_modules/nebulosity/mcp/launch.mjs"
+      ],
+      "env": {
+        "NEBULOSITY_DATA": "C:/Users/you/AppData/Local/Nebulosity"
+      }
+    }
+  }
+}
+```
+
+- **In Claude Code, without `nebulosity setup`:** in your repo's root, run `claude mcp add-json nebulosity '<the "nebulosity" object>' --scope local`, where the object is everything from the `{` after `"nebulosity":` to its closing `}`. Run it from bash or zsh (on Windows, Git Bash): Windows PowerShell 5.1 drops the double quotes inside an argument it passes to a program, and cmd doesn't treat single quotes as quotes.
+- **Clients that read an `mcpServers` block,** such as Cursor and Claude Desktop, take the block as it is: as the whole file, or add its `"nebulosity"` entry to the `mcpServers` already there.
+  - Cursor: `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for every project ([Cursor's docs](https://cursor.com/docs/context/mcp)).
+  - Claude Desktop: `claude_desktop_config.json`, which Settings > Developer > Edit Config opens. Quit and restart Claude Desktop after saving it ([the MCP guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers)).
+  - Any other client: your client's MCP settings.
+  - The block has no `"type"`, since a server with a `command` is a stdio server. Add `"type": "stdio"` if your client asks for one.
+- **Settings** go in `env`: for example `"NEBULOSITY_LIVE": "off"` keeps tool calls off the Map.
+- **Which repo it answers about:** Claude Code tells the server which folder its session is in; other clients don't. So outside Claude Code the server answers about the indexed repo holding the folder the client starts it in, else about the Map's repo (the one last indexed with `nebulosity index`, without `--no-activate`, or picked on the Map), and then each answer's first line says so. Run `nebulosity index` in your repo first.
+
 ### In VS Code
 
 The Nebulosity extension shows the Map in a panel beside your code, with Claude Code's activity on it. The Map follows the file you're in, a file you click on the Map opens in the editor, and "What depends on this file?" lists a file's importers and lights them on the Map. It's a window onto `nebulosity map`, so it needs the package above, and like the package it works without an API key.
@@ -228,7 +258,7 @@ The extension uses a Map that's already running, or starts one, and stops the on
 
 ### Windows, macOS and Linux
 
-Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. It also runs `nebulosity setup` against a real Claude Code, checks that the installed Map's background worker picks up a saved file, and checks that `summarize` refuses to spend without a key or a yes.
+Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. It also runs `nebulosity setup` against a real Claude Code, registers the block `nebulosity setup --json` prints with `claude mcp add-json`, checks that the installed Map's background worker picks up a saved file, and checks that `summarize` refuses to spend without a key or a yes.
 
 The Map works at any window size, down to a narrow VS Code panel ([docs/VISUAL_REFRESH.md](docs/VISUAL_REFRESH.md) §10). From a checkout, `npm run check-layout -- http://127.0.0.1:<port>` checks a running Map in headless Chrome at 20 window sizes, from 1440 × 900 to 200 × 260 (the Map must be showing the VS Code demo repo, whose folders its states visit).
 
