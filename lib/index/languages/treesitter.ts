@@ -11,8 +11,18 @@
  * it always deletes it.
  */
 import fs from "fs";
+import zlib from "zlib";
 import type { Language, Node, Parser, Query } from "web-tree-sitter";
 import { nebulosityPath } from "../../home";
+
+/**
+ * A grammar's committed file: its package's file name plus ".gz" (scripts/copy-grammars.mjs). The grammars ship
+ * gzip-compressed to keep the unpacked package under ADR-058's 25.0 MB (the E4 final review's A-I1): 7.54 MB of
+ * WebAssembly is 0.60 MB compressed.
+ */
+export function grammarPath(grammar: string): string {
+    return nebulosityPath("lib", "index", "languages", "grammars", `${grammar}.gz`);
+}
 
 type TreeSitter = typeof import("web-tree-sitter");
 type Loaded = { language: Language; parser: Parser };
@@ -46,9 +56,11 @@ function startRuntime(): Promise<TreeSitter> {
 }
 
 /**
- * Loads the runtime once, then each listed grammar once, from lib/index/languages/grammars/ (the committed .wasm files,
- * scripts/copy-grammars.mjs). Idempotent: an id already loaded is skipped. A grammar that fails to load rejects the
- * whole call and can be tried again.
+ * Loads the runtime once, then each listed grammar once, from its committed `.gz` file (grammarPath), decompressed here:
+ * about 8 ms more for all five than reading them uncompressed, once per process, since a loaded grammar is never read
+ * again. The synchronous gunzip measured faster than zlib's thread-pool one for these sizes (19 against 26 ms for the
+ * five grammars' whole load), and the load is already async around it. Idempotent: an id already loaded is skipped. A
+ * grammar that fails to load rejects the whole call and can be tried again.
  */
 export async function loadGrammars(list: readonly { id: string; grammar: string }[]): Promise<void> {
     const treeSitter = await startRuntime();
@@ -57,8 +69,9 @@ export async function loadGrammars(list: readonly { id: string; grammar: string 
         let pending = loading.get(id);
         if (pending === undefined){
             pending = (async () => {
-                // read the bytes here rather than hand Language.load a path: one file read, the same on every system
-                const bytes = await fs.promises.readFile(nebulosityPath("lib", "index", "languages", "grammars", grammar));
+                // read the bytes here rather than hand Language.load a path: one file read, the same on every system,
+                // and the bytes are compressed anyway
+                const bytes = zlib.gunzipSync(await fs.promises.readFile(grammarPath(grammar)));
                 const language = await treeSitter.Language.load(new Uint8Array(bytes));
                 const parser = new treeSitter.Parser();
                 parser.setLanguage(language);

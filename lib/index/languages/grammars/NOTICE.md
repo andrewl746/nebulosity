@@ -1,15 +1,16 @@
 # Third-party notices: the tree-sitter grammars and their runtime
 
-Written by `scripts/copy-grammars.mjs` (`npm run grammars`); don't edit by hand. The `.wasm` files in this folder are
-copied unchanged from the npm packages below, pinned exactly in `package.json`.
+Written by `scripts/copy-grammars.mjs` (`npm run grammars`); don't edit by hand. The `.wasm.gz` files in this folder
+are the `.wasm` files of the npm packages below, pinned exactly in `package.json`, gzip-compressed and otherwise
+unchanged: each decompresses to its package's own bytes (their sha256 is in `grammars.json`).
 
 | Package | Version | License | Copyright | What |
 |---|---|---|---|---|
-| tree-sitter-python | 0.25.0 | MIT | Copyright (c) 2016 Max Brunsfeld | `tree-sitter-python.wasm`, the python grammar |
-| tree-sitter-go | 0.25.0 | MIT | Copyright (c) 2014 Max Brunsfeld | `tree-sitter-go.wasm`, the go grammar |
-| tree-sitter-java | 0.23.5 | MIT | Copyright (c) 2017 Ayman Nadeem | `tree-sitter-java.wasm`, the java grammar |
-| tree-sitter-c-sharp | 0.23.5 | MIT | Copyright (c) 2014-2023 Max Brunsfeld, Damien Guard, Amaan Qureshi, and contributors. | `tree-sitter-c_sharp.wasm`, the csharp grammar |
-| tree-sitter-rust | 0.24.0 | MIT | Copyright (c) 2017 Maxim Sokolov | `tree-sitter-rust.wasm`, the rust grammar |
+| tree-sitter-python | 0.25.0 | MIT | Copyright (c) 2016 Max Brunsfeld | `tree-sitter-python.wasm.gz`, the python grammar |
+| tree-sitter-go | 0.25.0 | MIT | Copyright (c) 2014 Max Brunsfeld | `tree-sitter-go.wasm.gz`, the go grammar |
+| tree-sitter-java | 0.23.5 | MIT | Copyright (c) 2017 Ayman Nadeem | `tree-sitter-java.wasm.gz`, the java grammar |
+| tree-sitter-c-sharp | 0.23.5 | MIT | Copyright (c) 2014-2023 Max Brunsfeld, Damien Guard, Amaan Qureshi, and contributors. | `tree-sitter-c_sharp.wasm.gz`, the csharp grammar |
+| tree-sitter-rust | 0.24.0 | MIT | Copyright (c) 2017 Maxim Sokolov | `tree-sitter-rust.wasm.gz`, the rust grammar |
 | web-tree-sitter | 0.27.1 | MIT | Copyright (c) 2018 Max Brunsfeld | a runtime dependency |
 | smol-toml | 1.9.1 | BSD-3-Clause | Copyright (c) Squirrel Chat et al., All rights reserved. | a runtime dependency |
 
