@@ -8,6 +8,10 @@
 
 **Tech Stack:** TypeScript run by tsx, web-tree-sitter 0.27.1, smol-toml 1.9.1, better-sqlite3 with Drizzle (migration 0010), Vitest.
 
+**Models (the owner's rule, 2026-10-24, verbatim: "only use opus 5.5 max for planning. for implementation use opus 5.5 xhigh"):**
+- Every implementation subagent, implementers and their reviewers alike, runs Opus 5.5 at xhigh effort (`model: "opus"`, `effort: "xhigh"`).
+- Planning, and any review of this plan, runs Opus 5.5 at max.
+
 **Spec:** the design, `.superpowers/sdd/2026-10-24-e4-languages/design.md` in the main checkout (from a sibling worktree, `../Nebulosity/.superpowers/sdd/2026-10-24-e4-languages/design.md`; gitignored and kept), and ADR-065 (proposed) in `docs/ENGINEERING_DECISIONS.md`. Every decision there is a call made for the owner overnight; don't reopen one unless the code or the data contradicts it, and then stop and write the evidence in your progress file.
 
 ## How this plan runs
@@ -31,7 +35,14 @@
 - Tests transcribe hand-derived truth: a fixture's truth file is written by reading the fixture's files, before the adapter's code, never by running the code.
 - Don't start the Map (`npm run dev`, `next start`, `nebulosity map`): port 3000 is the owner's.
 - Never index into the owner's database. Every index run of a real repo either sets `NEBULOSITY_DATA` to a scratch folder or runs from a worktree, whose own `.nebulosity/` is its data folder.
-- The benchmark repos are read-only, at these commits (`git -C <repo> rev-parse --short HEAD` must print them before any measurement): `../django` `0e128d5`, `../prometheus` `a2fda0e`, `../spring-boot` `11778bdc`, `../jellyfin` `0786661`, `../rust-analyzer` `0c4d746`. `../vscode` is at `cc3fec88` and `../affine` at `0b69a6da`.
+- The benchmark repos are shallow clones the owner approved on 2026-10-24 ("Yes: shallow-clone django/django, prometheus/prometheus, spring-projects/spring-boot, jellyfin/jellyfin and rust-lang/rust-analyzer next to ../vscode for E4's benchmarks"). They're read-only: index them, never modify them. `git -C <repo> rev-parse HEAD` must print these before any measurement:
+  - `../django` `0e128d524d0a7c55a955570d6e5da983ac6ce6c7`;
+  - `../prometheus` `a2fda0ef4638518a6a6fb27fc48be88fbd732f4b`;
+  - `../spring-boot` `11778bdc24f72f208f532eba8185311473908019` (checked out with `core.longpaths=true`, set in that repo only);
+  - `../jellyfin` `07866611e9d83db50aab03fe0aa15714fccc3fe0`;
+  - `../rust-analyzer` `0c4d74686b21f2b3bd8872b6d3cf36ad2e740d49`.
+
+  `../vscode` is at `cc3fec88` and `../affine` at `0b69a6da`.
 
 ## Review Focus
 
@@ -147,10 +158,16 @@ export type ResolveContext = {
 export type ReferenceKind = "internal" | "external" | "context";
 
 export type LanguageResolver = {
-    /** The files one specifier of `importer` refers to, sorted by path, never `importer` itself; [] when none. */
+    /**
+     * The files one specifier of `importer` refers to, sorted by path. `[importer]` means placed but with no edge of its own:
+     * the reference names the importer's own file, or another specifier of the same file carries its edges. `edgesOf`
+     * drops it, and the report counts it resolved. `[]` means it can't be placed.
+     */
     resolve(importer: string, specifier: string): string[];
     kindOf(importer: string, specifier: string): ReferenceKind;
-    /** The files the language's build tool or runtime starts from, sorted by path. */
+    /** The class the resolution report counts it under (each L3 bar is per class); without it, the specifier's text before its first ":". */
+    classOf?(importer: string, specifier: string): string;
+    /** The files the language's build tool or runtime starts from, sorted by path, each once. */
     entryPoints(): { path: string; declaredBy: string }[];
 };
 
@@ -169,11 +186,11 @@ export type LanguageAdapter = LanguageRules & {
 
 `registry.ts`: `ADAPTERS: readonly LanguageAdapter[]` (same order; each adapter's rules are the `RULES` entry's own object fields); `adapterFor(path, adapters = ADAPTERS): LanguageAdapter | null`; `adapterById(id, adapters = ADAPTERS): LanguageAdapter | null`; `prepareLanguages(adapters = ADAPTERS): Promise<void>`, which calls `loadGrammars` for every adapter whose `grammar` isn't null (stubs included).
 
-`treesitter.ts`: `loadGrammars(list: readonly { id: string; grammar: string }[]): Promise<void>` (idempotent; loads the runtime once, then each grammar from `nebulosityPath("lib", "index", "languages", "grammars", grammar)`); `isPrepared(id: string): boolean`; `parseTree<T>(id: string, text: string, use: (root: Node) => T): T`, which drops one leading U+FEFF, parses, calls `use` and deletes the tree in a `finally`, and throws `GrammarNotLoadedError` when `id` isn't loaded; `class GrammarNotLoadedError extends Error` (its message names the ids and says to await `prepareLanguages()` first); `startLineOf(node: Node): number` and `endLineOf(node: Node): number` (1-based rows); `leadingSpan(node: Node, attached: (previous: Node) => boolean): { startLine: number; endLine: number }`, which extends the node's line range up over the previous siblings `attached` accepts while each ends on the line just above (no blank line). `Node` is `import type { Node } from "web-tree-sitter"`.
+`treesitter.ts`: `loadGrammars(list: readonly { id: string; grammar: string }[]): Promise<void>` (idempotent; loads the runtime once, then each grammar from `nebulosityPath("lib", "index", "languages", "grammars", grammar)`); `isPrepared(id: string): boolean`; `parseTree<T>(id: string, text: string, use: (root: Node) => T): T`, which drops one leading U+FEFF, parses, calls `use` and deletes the tree in a `finally`, and throws `GrammarNotLoadedError` when `id` isn't loaded; `class GrammarNotLoadedError extends Error` (its message names the ids and says to await `prepareLanguages()` first); `compileQuery(id: string, source: string): Query` (cached per id and source; it throws `GrammarNotLoadedError` like `parseTree`), so adapters can use tree-sitter queries without importing `web-tree-sitter` themselves (`Query` as a type import); `startLineOf(node: Node): number` and `endLineOf(node: Node): number` (1-based rows); `leadingSpan(node: Node, attached: (previous: Node) => boolean): { startLine: number; endLine: number }`, which extends the node's line range up over the previous siblings `attached` accepts while each ends on the line just above (no blank line). `Node` is `import type { Node } from "web-tree-sitter"`.
 
 `chunking.ts`: `type Declaration = { kind: ChunkKind; name: string; startLine: number; endLine: number; exported: boolean }`; `assembleChunks(filePath: string, text: string, declarations: readonly Declaration[], summary: { imports: readonly string[]; exports: readonly string[] }): CodeChunk[]`. One leading U+FEFF is dropped first. Each declaration becomes a chunk whose text is exactly its whole lines `startLine..endLine` joined by `\n`, in the given order. Then comes the file-summary chunk, with text `File: <path>`, blank line, `Imports:`, the imports one per line or `  (none)`, blank line, `Exports:`, the exports one per line or `  (none)`, plus `name "(file)"`, `kind "file-summary"`, lines `1..max(1, countLines(text))`, `exported false` (the format of `lib/chunks.ts`'s `createFileSummaryChunk`). `fileHash` is the sha256 hex of the text. Finally `disambiguateIds` and then `splitOversizedChunks`, both exported unchanged from `lib/chunks.ts`. An export line reads `<name> (<kind>)`.
 
-`resolution.ts`: `edgesOf(resolver: LanguageResolver, source: string, specifiers: readonly string[]): ImportEdge[]` (one edge per target file, in specifier order and then `resolve`'s order, named by the first specifier that reaches it, never `source` itself); `createResolvers(adapters: readonly LanguageAdapter[], base: Omit<ResolveContext, "files">, files: ReadonlyMap<string, StoredFacts>): Map<string, LanguageResolver>` (keyed by adapter id, each adapter given the files `adapterFor` maps to it, only adapters with at least one file); `entryPointsOf(resolvers: ReadonlyMap<string, LanguageResolver>): { path: string; declaredBy: string }[]` (registry order; the first adapter's entry wins on a shared path; sorted by path); `type ResolutionState = { manifests: readonly string[]; cache: Map<string, unknown> }`.
+`resolution.ts`: `edgesOf(resolver: LanguageResolver, source: string, specifiers: readonly string[]): ImportEdge[]` (one edge per target file, in specifier order and then `resolve`'s order, named by the first specifier that reaches it, never `source` itself); `createResolvers(adapters: readonly LanguageAdapter[], base: Omit<ResolveContext, "files">, files: ReadonlyMap<string, StoredFacts>): Map<string, LanguageResolver>` (keyed by adapter id, each adapter given the files `adapterFor` maps to it, only adapters with at least one file); `entryPointsOf(resolvers: ReadonlyMap<string, LanguageResolver>): { path: string; declaredBy: string }[]` (registry order; one entry per path, the first one met winning, within one adapter too, since `entry_points` has a unique index; sorted by path); `type ResolutionState = { manifests: readonly string[]; cache: Map<string, unknown> }`.
 
 Elsewhere:
 - `IndexOptions.adapters?: readonly LanguageAdapter[]` (tests only, like `maxFileBytes`; default `ADAPTERS`).
@@ -239,8 +256,8 @@ export type FixtureTruth = {
 - K9 a full run's files (path, language, isTest, lineCount), no `excluded` file indexed, `edges`, `entryPoints`;
 - K10 `kindOf` for every specifier equals `kinds`;
 - K11 a second full run changes nothing (changed 0, the same edges);
-- K12 each edit through `applyFileChanges` gives `edgesAfter`, and a fresh full run on the edited copy gives the same;
-- K13 every truth file converted to CRLF gives the same specifiers, declares and symbols, and with a leading U+FEFF the same products, chunk text included.
+- K12 each edit, applied through `applyFileChanges` passed the `resolution` a previous update returned (a warmed cache), gives `edgesAfter`. A fresh full run on the edited copy gives the same edges and the same entry points;
+- K13 every truth file converted to CRLF gives the same specifiers, declares and symbols in all three readings, and with a leading U+FEFF the same products, chunk text included.
 
 - [ ] **F1. The before-dumps.** Write `scripts/dump-index.ts <repo> --out <file> [--languages <a,b>]` (npm script `dump-index`; read-only through `useReadOnlyDatabase()`). It writes sorted, tab-separated lines in five sections:
   - `file` path language isTest lineCount contentHash specifiers-JSON declares-JSON (`declares` printed as `[]` while the column doesn't exist);
@@ -279,7 +296,7 @@ export type FixtureTruth = {
   - Tests (`treesitter.test.ts`, `registry.test.ts`):
     - after `prepareLanguages()`, `isPrepared` holds for all five;
     - `parseTree` gives root types `module` for `import os\n` (python), `source_file` for `package main\n` (go), `program` for `class A {}` (java), `compilation_unit` for `class A {}` (csharp), and `source_file` for `fn main() {}` (rust), with `hasError` false;
-    - `"﻿" + "import os\n"` parses with `hasError` false;
+    - a text starting with the byte-order mark U+FEFF (built in the test with `String.fromCharCode(0xfeff)` before `import os` and a newline) parses with `hasError` false;
     - `parseTree("nope", …)` throws `GrammarNotLoadedError`;
     - `parseTree` deletes the tree when `use` throws (spy on the tree's `delete`);
     - `typescriptAdapter.parse` deep-equals `parseTypeScriptFile` plus `declares: []` on a mini-repo file.
@@ -329,10 +346,12 @@ export type FixtureTruth = {
     - its resolver: `use:<p>` → `<p>.toy` when indexed; `name:<N>` → the other files in the importer's folder declaring `def:<N>`; `kindOf` `internal` for both; entry points are files declaring `main`, declared by `toy main`.
   - Tests with `adapters: [typescriptAdapter, toyAdapter]` on small temp repos:
     - edges of both kinds;
+    - a toy file whose `use` names its own path gets no self edge: `edgesOf` drops the `[importer]` result;
     - entry points;
     - bumping the toy version to 2 re-parses only `.toy` files (TypeScript's counted unchanged);
     - an unprepared grammar adapter (a toy with `grammar: "missing.wasm"`) makes `indexRepository` throw `GrammarNotLoadedError`;
     - a `go.mod`-like toy manifest beside TypeScript files leaves TypeScript's edges as they were;
+    - **long paths:** a copy of the mini-repo under a folder deep enough that every absolute path passes 260 characters (Windows' MAX_PATH; spring-boot has 14 such paths), indexed by walking, gives the same files and edges as a plain copy;
     - every existing pipeline test passes unchanged.
   - Commit and push.
 - [ ] **F9. The incremental update, the worker and the watcher.**
@@ -340,7 +359,8 @@ export type FixtureTruth = {
     - `excluded` uses `claimedExtensions(adapters)` and `exclusionFor(state.manifests, adapters)`;
     - the guard as in F8, for the files about to be parsed;
     - `resolvedAll` (the file set changed, or a path matches `resolvesEverything`, now TypeScript's `RESOLUTION_INPUT` or `isManifestPath`) starts a new state `{ manifests: listManifests(root, adapters), cache: new Map() }`, else `options.resolution` is reused;
-    - **the declares rule:** when a changed file's new `declares` differ from its stored ones, every file of that adapter is re-resolved (its sources added to the diffed set);
+    - **the declares rule:** when a changed file's new `declares` differ from its stored ones, every file of that adapter is re-resolved (its sources added to the diffed set), and the entry points are computed again;
+    - a manifest added or deleted re-applies the exclusions both ways: files newly excluded leave the index, and files no longer excluded are found by listing the repo's files again, as a full run would;
     - it returns `resolution`.
   - `lib/background/service.ts` keeps `resolution` where it kept `workspace`, with the same lifetime.
   - `watch.ts`'s `isWatchedFile` also accepts a claimed extension or `isManifestPath`.
@@ -373,8 +393,13 @@ export type FixtureTruth = {
   - `test/helpers/adapter-conformance.test.ts` runs `describeAdapterConformance(toyAdapter, { name: "toy-repo", truth })`, all of K1–K13 green.
   - Commit and push.
 - [ ] **F13. The resolution report and the sample.**
-  - `scripts/report-resolution.ts` keeps TypeScript's lines exactly. Then, for each other adapter with files, it prints `[resolution] <id>: internal <resolved>/<total> (<pct>) · external <n> · context <n>`, then up to 20 lines `[resolution] <id> miss <importer> <specifier>`, the misses in a fixed order (path, then specifier). A language task may add its own miss classes after those lines, in its own folder (an optional `report(ctx): string[]` export).
-  - `scripts/sample-edges.ts <repo> --language <files.language> [--count 30] [--seed 1] [--unresolved 20]` draws with `mulberry32` (`scripts/eval/stats.ts`) the stored edges whose source has that language. It prints `<source> -> <target>  (<specifier>)`, then the unresolved internal references, re-resolved from the stored specifiers.
+  - `scripts/report-resolution.ts` keeps TypeScript's lines exactly. Then, for each other adapter with files, it prints:
+    - `[resolution] <id>: internal <resolved>/<total> (<pct>) · external <n> · context <n>`;
+    - one line per class (`classOf`, else the text before the specifier's first `:`): `[resolution] <id> <class>: internal <resolved>/<total> (<pct>)`;
+    - up to 20 lines `[resolution] <id> miss <importer> <specifier>`, the misses in a fixed order (path, then specifier).
+
+    A reference is resolved when `resolve` returns any path, the importer itself included.
+  - `scripts/sample-edges.ts <repo> --language <files.language> [--count 30] [--seed 1] [--unresolved 20]` (npm script `sample-edges`) draws with `mulberry32` (`scripts/eval/stats.ts`) the stored edges whose source has that language. It prints `<source> -> <target>  (<specifier>)`, then the unresolved internal references, re-resolved from the stored specifiers.
   - Tests: the report on the toy repo (hand-counted); the sample's order for seed 1 on the toy repo.
   - Commit and push.
 - [ ] **F14. The after-dumps, docs, push.**
@@ -396,7 +421,7 @@ export type FixtureTruth = {
 - `progress-<id>.md` in the ledger.
 
 **Interfaces.**
-- Consumes Task F's `adapter.ts`, `treesitter.ts` (`parseTree`, `startLineOf`, `endLineOf`, `leadingSpan`), `chunking.ts` (`assembleChunks`), `fixture-truth.ts`, `describeAdapterConformance`, `smol-toml` (`parse`), `lib/index/paths.ts`'s path helpers and `typescript.ts`'s `countLines`.
+- Consumes Task F's `adapter.ts`, `treesitter.ts` (`parseTree`, `compileQuery`, `startLineOf`, `endLineOf`, `leadingSpan`), `chunking.ts` (`assembleChunks`), `fixture-truth.ts`, `describeAdapterConformance`, `smol-toml` (`parse`), `lib/index/paths.ts`'s path helpers and `typescript.ts`'s `countLines`.
 - Produces `<id>Rules: LanguageRules` from `rules.ts` and `<id>Adapter: LanguageAdapter` from `index.ts`, with `version: 1` and the grammar file Task F set. Nothing outside the folder imports anything else from it.
 
 **Steps.**
@@ -417,7 +442,8 @@ export type FixtureTruth = {
 
 **Common rules.**
 - Every tree goes through `parseTree` (it deletes the tree). Read the grammar's `node-types.json` in its devDependency for node and field names.
-- **Symbols:** the top-level declarations, plus the members of top-level types (one level, including nested types as members), in source order. `qualifiedName` is `parent.name`, `parentQualifiedName` is the parent's qualifiedName or null, and lines run from the declaration's first to last line (without its comments).
+- **Symbols:** the top-level declarations, plus the members of top-level types (one level, including nested types as members), in source order. `qualifiedName` is `parent.name`, and `parentQualifiedName` is the parent's qualifiedName or null. Lines run from the declaration's first line to its last: its decorators, annotations or attributes included, as TypeScript's `getStart` includes decorators, and its comments left out. Python's `decorated_definition` starts at its first decorator, Rust's attached `#[…]` items before an item count, and Java's and C#'s sit inside the declaration already.
+- **Placed, no edge:** a reference whose target is the importer's own file (Rust's `use super::*` inside an inline `mod tests`), or whose edges another specifier of the same file carries (a Go import whose uses resolve), resolves to `[importer]`, never to `[]`.
 - **Chunks:** one per top-level declaration. The span is `leadingSpan` over attached comments, decorators or attributes. The summary's imports are each import statement's text trimmed, one per line; its exports are the exported top-level declarations as `<name> (<kind>)`.
 - **The `scan` reading** is a line scan of the import forms below, with no tree. Its known differences from `full` go in `truth.scan`.
 - **Specifiers** are written exactly as each task's table says. A malformed construct gives no specifier rather than a guess.
@@ -501,7 +527,9 @@ Edits:
 - (b) change pyproject's `where`;
 - (c) delete a module.
 
-**L3 bars** (django `0e128d5`): relative imports ≥ 99%; absolute imports whose first segment is a repo top-level name ≥ 99%.
+**`classOf`:** `relative` (a specifier starting with `.`), else `absolute`.
+
+**L3 bars** (django `0e128d5`): internal `relative` ≥ 99%; internal `absolute` (their first segment a repo top-level name) ≥ 99%.
 
 ---
 
@@ -531,7 +559,10 @@ Edits:
 - **`use:x.N`:** when `x` is one of the file's import aliases, the files of that package declaring `N`. Otherwise it's read as `name:x`.
 - **`name:N`:** the other files in the importer's folder with the same `package:` declaring `N`. A non-test importer never reaches a `_test.go` file. Dot-imported packages' files declaring `N` are tried too.
 - **Several files declaring one name** (build-tag twins) all get the edge.
-- **`import:` itself:** with ` as _` or ` as .`, every non-test file of the package. Without an alias, every non-test file of the package only when none of the file's uses of that import resolved (worked out from the importer's own specifiers in `ctx.files`). Otherwise no edge.
+- **`import:` itself:**
+  - with ` as _` or ` as .`: every non-test file of the package;
+  - with no alias or any other alias: when at least one of the file's uses of that import resolves (worked out from the importer's own specifiers in `ctx.files`), `[importer]` (placed: its uses carry the edges); when none does, every non-test file of the package;
+  - an import outside the repo's modules: `[]`.
 - **`kindOf`:**
   - `import:` → internal when under a repo module, else external;
   - `use:x.N` → internal when `x` is an internal import's alias, or `x` reads as `name:x`; external when `x` is an external import's alias;
@@ -639,6 +670,8 @@ Edits:
 
 **L3 bars** (spring-boot `11778bdc`): internal `import:`, `static:` and `qualified:` ≥ 99%; internal `type:` ≥ 95%.
 
+**Long paths (L2):** spring-boot has 6 tracked `.java` files whose absolute paths pass 260 characters (14 tracked files in all). Step 6 lists them (`git -C ../spring-boot ls-files`, with the root's length added) and shows each one indexed: none failed, none missing. Node 24 read one such file correctly on 2026-10-24 (a 275-character path). If one fails, it's a shared fix: record it for Task I.
+
 ---
 
 ## Task C: C#
@@ -650,7 +683,7 @@ Edits:
 - `excluded`: files under `<folder of a .csproj>/bin/` and `<folder of a .csproj>/obj/`.
 
 **Specifiers:**
-- the file's usings: `using:A.B`; global using → `global:A.B`; `using static` (global or not) → `static:A.B.C`; an alias → `alias:X=A.B.C` (global alias `galias:X=A.B.C`);
+- the file's usings: `using:A.B`; global using → `global:A.B`; `using static` → `static:A.B.C`, and `global using static` → `gstatic:A.B.C`; an alias → `alias:X=A.B.C`, and a global alias → `galias:X=A.B.C`;
 - the file's namespaces, outermost first: `ns:A.B`, nested blocks giving `ns:A` and `ns:A.B`;
 - `type:N` for each simple type name used: in types, base lists, `new N(…)`, generic `N<…>`, `typeof(N)`, `nameof(N)`, `is`/`as`/casts, catch types, attributes (`[N]` gives `type:N` and `type:NAttribute`), and static access `N.Member` when `N` starts upper-case and isn't a local, parameter, field or property of the file. Leave out names the file declares and type parameters;
 - `qtype:A.B.N` for a qualified type name;
@@ -660,25 +693,26 @@ Edits:
 - `type:A.B.C` for each type, nested ones as `A.B.C.D`, generic arity dropped;
 - `ext:A.B.C.M` for each extension method: a static method whose first parameter has the `this` modifier, in a static class `C` in namespace `A.B`;
 - `main:static` for a `static … Main(` method;
-- `main:top-level` for top-level statements.
+- `main:top-level` for top-level statements;
+- the file's project-wide usings, exactly as its specifiers write them: every `global:`, `gstatic:` and `galias:` string. They change how every file of the project resolves, so a change to one must re-resolve them all (F9's declares rule).
 
 **Resolution.**
-- **A file's project** is the folder of the nearest `.csproj` above it (else the repo root). The project's usings are its files' `global:`, `static:` and `galias:` specifiers, plus the `.csproj`'s and `Directory.Build.props`' `<Using Include="X" />` items.
+- **A file's project** is the folder of the nearest `.csproj` above it (else the repo root). The project's usings are the `global:`, `gstatic:` and `galias:` declares of its files, plus the `.csproj`'s and `Directory.Build.props`' `<Using Include="X" />` items. A file-scoped `using:`, `static:` or `alias:` applies to its own file only.
 - **`type:N`:**
   1. each enclosing namespace from the innermost out (`A.B.C`, `A.B`, `A`): the first one that holds `ns.N` wins;
   2. else every visible using's `u.N`, together (the file's `using:` and the project's);
   3. an alias `N` names its target;
-  4. types nested in `static:` types count too.
+  4. types nested in `static:` and the project's `gstatic:` types count too.
 - **Every file declaring the chosen name** gets the edge (partial types). When the name is declared in several projects, the importer's project's files win.
 - **`qtype:A.B.N`** is tried as written and under each enclosing namespace.
 - **`ext:M`:** every extension method `M` whose namespace is enclosing or visible.
-- **`static:`** names its type's file(s).
+- **`static:` and `gstatic:`** name their type's file(s).
 - **No edges** from `using:`, `global:`, `alias:`, `galias:` or `ns:`.
 - **`kindOf`:**
   - `type:N` → internal when some repo type's simple name is `N`, else external;
   - `qtype:` → internal when its namespace part is declared in the repo;
   - `ext:M` → internal when some repo extension method is named `M`, else external;
-  - `static:` → internal when its type is declared;
+  - `static:` and `gstatic:` → internal when its type is declared;
   - the other kinds → context.
 - **Entry points:** `main:static` → `static Main`; `main:top-level` → `top-level statements`.
 
@@ -714,9 +748,10 @@ Edits:
 Edits:
 - (a) rename a type (declares change);
 - (b) add a `<Using Include>` to a `.csproj`;
-- (c) delete one part of the partial class.
+- (c) delete one part of the partial class;
+- (d) add a `global using` to one Shop.Web file, so another Shop.Web file's simple name now resolves (declares change through a project-wide using).
 
-**L3 bars** (jellyfin `0786661`): internal `type:`, `qtype:` and `static:` ≥ 95%; internal `ext:` ≥ 95%, with the miss classes named.
+**L3 bars** (jellyfin `0786661`): internal `type:`, `qtype:`, `static:` and `gstatic:` ≥ 95%; internal `ext:` ≥ 95%, with the miss classes named.
 
 **Watch in L4:** `ext:` can over-link on common names (`Add`, `Get`) when a repo extension method shares one with an instance method. If the sample shows it, narrow `ext:` to the names that no repo type also declares as an instance method, with a fixture case and its truth first.
 
@@ -730,7 +765,7 @@ Edits:
 - `manifest`: `/(^|\/)Cargo\.toml$/`;
 - `excluded`: files under `<folder of a Cargo.toml>/target/`.
 
-**Specifiers.** Each carries the inline-module path it sits in, before a `|` (empty at file level; `tests` inside `mod tests { … }`; `a::b` for nesting):
+**Specifiers.** Each carries the inline-module path it sits in, before a `|` (empty at file level; `tests` inside `mod tests { … }`; `a::b` for nesting), for example `use:|crate::a::Thing`, `use:tests|super::*` and `mod:|a`:
 - `mod:<inline>|<name>` for `mod x;`, with `@<path>` when it has `#[path = "…"]`;
 - `use:<inline>|<path>` for each leaf of a use tree:
   - groups expanded;
@@ -757,7 +792,7 @@ Edits:
 - **A path from module m** (the file's module plus the inline part):
   - `crate::` starts at m's crate root; `self::` at m; `super::` at m's parent (repeatable); `::x` names a crate;
   - a leading identifier `x` is, in turn: a child module of m; a name the same file's `use` (at the same inline level) binds, substituted; a visible crate name; else external.
-  - The remaining segments walk down the module tree as far as they name modules. The target is the file of the deepest module reached, and nothing when that is the importer itself. A glob is the module's file.
+  - The remaining segments walk down the module tree as far as they name modules. The target is the file of the deepest module reached; when that's the importer's own file (an inline module, or the file's own module, as with `use super::*` in an inline `mod tests`), the path resolves to `[importer]`. A glob is the module's file.
 - **`mod:`** is the child's file. **`extern:x`** is crate `x`'s library root.
 - **`kindOf`:** `mod:` → internal; `use:` and `path:` → internal when their start resolves by the rules above (crate, self, super, a child module, a binding to an internal path, a repo crate), else external. References from orphans are counted on their own report line and are left out of the L3 shares (rust-analyzer's `test_data`).
 - **Entry points** (`declaredBy` exactly): `<Cargo.toml path> [lib]`, `<Cargo.toml path> src/main.rs`, `<Cargo.toml path> [[bin]] <name>`, `<Cargo.toml path> build`, `<Cargo.toml path> tests`, `<Cargo.toml path> examples` and `<Cargo.toml path> benches`, each for its root files.
@@ -774,7 +809,7 @@ Edits:
 **Fixture list** (`test/fixtures/rust-repo/`):
 1. a workspace `Cargo.toml` (`members = ["crates/*"]`) with `crates/core` (`shop-core`, a lib), `crates/store` (`shop-store`) and `crates/cli` (a bin depending on `shop-core`, plus `store = { package = "shop-store", path = "../store" }`);
 2. `mod a;` → `a.rs`, `mod b;` → `b/mod.rs`, `a/inner.rs` from `a.rs`, `#[path = "custom.rs"] mod renamed;`, `mod nested { mod deep; }`;
-3. an inline `mod tests { use super::*; }` (no edge);
+3. an inline `mod tests { use super::*; }` (placed, no edge: `[importer]`);
 4. `use crate::a::Thing`, `use crate::b`, `use super::x`, `use self::inner::Y`, a grouped use, a glob, a rename;
 5. `use shop_core::model::Order`, and `use store::Db` through the rename;
 6. a `pub use` re-export in `lib.rs`, reached by another crate;
@@ -792,7 +827,9 @@ Edits:
 - (b) rename `shop-core`'s package in its `Cargo.toml`;
 - (c) add `b/extra.rs` with its `mod` line.
 
-**L3 bars** (rust-analyzer `0c4d746`, orphans left out): `mod:` and `crate::`/`self::`/`super::` paths ≥ 99%; other internal references ≥ 95%.
+**`classOf`:** `orphan` for every reference from an orphan file; else `mod` for `mod:`, `relative` for a `use:` or `path:` starting with `crate`, `self` or `super`, and `other` for the rest.
+
+**L3 bars** (rust-analyzer `0c4d746`; the `orphan` class is reported, not barred): internal `mod` and `relative` ≥ 99%; internal `other` ≥ 95%.
 
 ---
 
