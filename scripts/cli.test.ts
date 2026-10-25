@@ -292,6 +292,27 @@ describe("nebulosity map (final review, C-M2)", () => {
         expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: "/r/app", port: 3000 });
     });
 
+    // Final Review #2, out of scope (ruling R30): the Map used to start on the defaults without a word
+    it("warns in one line, naming the file and doctor, when config.json can't be read, and still starts", async () => {
+        const { configFile } = builtCopy();
+        const broken = '{ "activeRepo": "/r/app", }';
+        fs.writeFileSync(configFile, broken);
+        vi.mocked(spawn).mockImplementation((() => {
+            const child = new EventEmitter();
+            setImmediate(() => child.emit("exit", 0));
+            return child;
+        }) as unknown as typeof spawn);
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await main(["map"])).toBe(0);
+        const lines = errors.mock.calls.map((call) => String(call[0]));
+        expect(lines).toHaveLength(1);
+        expect(lines[0].startsWith(`[map] ${configFile} isn't valid JSON (`)).toBe(true);
+        expect(lines[0].endsWith("): the Map starts without its settings (no active repo) until it's fixed; nebulosity doctor says more")).toBe(true);
+        // the default port needs no save, so the hand edit stays where it is
+        expect(fs.readFileSync(configFile, "utf8")).toBe(broken);
+    });
+
     it("map --print-port prints the saved port", async () => {
         // a copy with no built Map: print-port answers before the BUILD_ID check, and starts and saves nothing
         const home = makeTempDir("neb-print-port-");

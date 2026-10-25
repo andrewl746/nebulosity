@@ -13,7 +13,7 @@
 import { spawn, spawnSync, type SpawnSyncReturns, type StdioOptions } from "child_process";
 import fs from "fs";
 import { createRequire } from "module";
-import { configPath, DEFAULT_PORT, movedAsideConfigs, readConfig, writeConfig } from "../lib/config";
+import { ConfigUnreadableError, configPath, DEFAULT_PORT, movedAsideConfigs, readConfig, readConfigFile, updateConfig } from "../lib/config";
 import { dataDir, dataPath, nebulosityHome, nebulosityPath } from "../lib/home";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
@@ -222,8 +222,16 @@ async function runMap(args: readonly string[]): Promise<number> {
         return 1;
     }
 
-    const config = readConfig();
-    if (config.port !== port) writeConfig({ ...config, port });
+    // a config.json it can't read: the Map would start on the defaults without a word (Final Review #2, R30)
+    const { problem } = readConfigFile();
+    if (problem !== null) console.error(`[map] ${problem}: the Map starts without its settings (no active repo) until it's fixed; nebulosity doctor says more`);
+    try{
+        updateConfig((current) => (current.port === port ? null : { ...current, port }));
+    } catch (err){
+        if (!(err instanceof ConfigUnreadableError)) throw err;
+        console.error(`[map] the port couldn't be saved, so live events wouldn't reach this Map: ${err.message}`);
+        return 1;
+    }
 
     // next resolves from this copy's own node_modules, whatever the working folder
     const next = createRequire(nebulosityPath("package.json")).resolve("next/dist/bin/next");
