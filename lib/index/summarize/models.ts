@@ -63,7 +63,8 @@ export const DEFAULT_SUMMARY_MODELS: ResolvedSummaryModels = {
  * - A kind left out keeps its default. A kind's model is trimmed of surrounding whitespace, and the trimmed id, which
  *   is what's sent and hashed, has 1 to MAX_MODEL_ID_LENGTH characters.
  * - Prices are US dollars per million tokens, finite and 0 or more. They're required for a model the table doesn't
- *   price (its prefix match, as pricePerMTok); for one it does, each given price wins over the table's.
+ *   price (an exact id, or a dated snapshot of one, as pricePerMTok); for one it does, each given price wins over the
+ *   table's.
  * - Spend is recorded per model, so one model given two different prices (by two kinds) is refused.
  */
 export function resolveSummaryModels(setting: unknown, configFile: string): SummaryModelsResolution {

@@ -18,19 +18,24 @@ const PRICES: PriceTable = {
 };
 
 /**
- * A model's prices: the given ones (the setting's) before the built-in table, an exact id before a family. A longer id
- * (a dated snapshot) takes the price of the longest id it starts with, the given ones winning a tie. Null when there's
- * no price on file.
+ * The model a dated snapshot id belongs to ("claude-sonnet-5-5-20261001" → "claude-sonnet-5-5"), or null for an id with
+ * no date at its end. Only a date makes two ids one model: Anthropic's ids nest (claude-sonnet-4, claude-sonnet-4-5),
+ * so a longer id that merely starts with another is a different model, with its own price.
+ */
+export function snapshotOf(model: string): string | null {
+    return /-\d{8}$/.test(model) ? model.slice(0, -9) : null;
+}
+
+/**
+ * A model's prices: the given ones (the setting's) before the built-in table. A dated snapshot takes its model's price
+ * when it has none of its own. Null when there's no price on file.
  */
 export function pricePerMTok(model: string, prices: PriceTable = {}): ModelPrice | null {
     // own keys only: an id such as "constructor" mustn't find Object's
-    if (Object.hasOwn(prices, model)) return prices[model];
-    if (Object.hasOwn(PRICES, model)) return PRICES[model];
-
-    // given first, so the stable sort keeps a given family ahead of a table family of the same length
-    const families = [...Object.entries(prices), ...Object.entries(PRICES)].filter(([known]) => model.startsWith(known));
-    families.sort(([a], [b]) => b.length - a.length);
-    return families[0]?.[1] ?? null;
+    const lookUp = (id: string): ModelPrice | null =>
+        Object.hasOwn(prices, id) ? prices[id] : Object.hasOwn(PRICES, id) ? PRICES[id] : null;
+    const family = snapshotOf(model);
+    return lookUp(model) ?? (family === null ? null : lookUp(family));
 }
 
 export function costUsd(model: string, usage: TokenUsage, transport: "direct" | "batch", prices?: PriceTable): number | null {

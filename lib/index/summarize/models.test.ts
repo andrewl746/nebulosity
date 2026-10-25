@@ -61,6 +61,9 @@ describe("resolveSummaryModels", () => {
         // input from the setting, output still the table's $10
         const resolved = resolveSummaryModels({ repo: { model: "claude-sonnet-5-5", inputPerMTok: 1 } }, CONFIG);
         expect(resolved).toMatchObject({ ok: true, prices: { "claude-sonnet-5-5": { input: 1, output: 10 } }, custom: { file: false, folder: false, repo: true } });
+
+        // only a dated snapshot is the table's family: a longer id that isn't one is another model, priced by the setting
+        expect(errorOf({ folder: { model: "claude-sonnet-5-5-turbo" } })).toContain("summaryModels.folder.inputPerMTok");
     });
 
     it("refuses an empty model, a kind other than file, folder or repo, and a setting that isn't an object", () => {

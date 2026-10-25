@@ -79,13 +79,25 @@ function withFallback(request: SummaryRequest): boolean {
 /**
  * The model a 404 says the API doesn't serve, or null when the 404 is about something else (a batch past retention,
  * another workspace's batch). The API answers an unknown model with a not_found_error whose message names it
- * ("model: claude-haiku-5-5"). When the request's model is known, the message has to name that model; when it isn't
- * (a batch another process submitted), the model is read from that wording.
+ * ("model: claude-haiku-5-5"). When the request's model is known, the message has to name that model whole (not as
+ * the start of a longer id: claude-sonnet-5-5 isn't claude-sonnet-5); when it isn't (a batch another process
+ * submitted), the model is read from that wording.
  */
 export function unavailableModel(type: string | null | undefined, message: string, model?: string): string | null {
     if (type !== "not_found_error") return null;
-    if (model !== undefined) return message.includes(model) ? model : null;
-    return /\bmodel: ([\w.:@-]+)/.exec(message)?.[1] ?? null;   // a model id's characters, so trailing punctuation stays out
+    if (model !== undefined) return namesWhole(message, model) ? model : null;
+    // a model id's characters (letters, digits, - _ . : @), less a sentence's closing . or :, which no id ends with
+    return /\bmodel: ([\w.:@-]+)/.exec(message)?.[1].replace(/[.:]+$/, "") || null;
+}
+
+/** Whether `message` holds `model` as a whole id: no id character just before it, nor a letter, digit, - or _ just after. */
+function namesWhole(message: string, model: string): boolean {
+    for (let at = message.indexOf(model); at !== -1; at = message.indexOf(model, at + 1)){
+        const before = message[at - 1] ?? "";
+        const after = message[at + model.length] ?? "";
+        if (!/[\w.:@-]/.test(before) && !/[\w-]/.test(after)) return true;
+    }
+    return false;
 }
 
 /** The API's own words in an SDK error (its body's error.message) and its error.type, which the SDK reads from that body too. */

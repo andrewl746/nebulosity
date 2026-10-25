@@ -11,6 +11,7 @@ import { indexRepository, type IndexOptions, type IndexResult } from "../index/p
 import { configuredSummaryModels, SummaryModelsError, type SummaryModelsResolution } from "../index/summarize/models";
 import { runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
 import type { PlannedTarget } from "../index/summarize/plan";
+import { snapshotOf } from "../index/summarize/pricing";
 import { refreshSummaryStatus } from "../index/summarize/status";
 import type { Summarizer } from "../index/summarize/types";
 import { applyFileChanges } from "../index/update";
@@ -190,8 +191,9 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
      * What an automatic job (a refresh after a save, the sweep) may send without asking (ADR-066, R17): a target whose
      * stored text the model now in use for its kind wrote (so it's out of date only because its inputs changed), or one
      * no model has written yet. Text another model wrote waits for `nebulosity summarize`'s estimate and yes, "Summarize
-     * now", or a panel being opened: redoing it is a model change, and only a yes pays for that. A dated id the API
-     * reported (`<model>-20261001`) counts as its model. Read once per job, from the rows as the job starts.
+     * now", or a panel being opened: redoing it is a model change, and only a yes pays for that. A dated snapshot the API
+     * reported (`<model>-20261001`) counts as its model, and nothing else does: claude-sonnet-5-5 isn't claude-sonnet-5
+     * (snapshotOf). Read once per job, from the rows as the job starts.
      */
     function sentUnasked(repo: string): (target: PlannedTarget) => boolean {
         const db = getDb();
@@ -199,7 +201,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         const writtenBy = new Map(repoId === null ? [] : loadSummaries(db, repoId).map((s) => [targetKey(s.kind, s.path), s.model]));
         return (target) => {
             const model = writtenBy.get(targetKey(target.kind, target.path));
-            return !model || model === "template" || model === target.model || model.startsWith(`${target.model}-`);
+            return !model || model === "template" || model === target.model || snapshotOf(model) === target.model;
         };
     }
 

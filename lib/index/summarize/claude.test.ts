@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
-import { cleanTagline, createClaudeSummarizer, outcomeFromBatchItem, outcomeFromReply, parseSummary, requestParams, SUMMARY_SCHEMA } from "./claude";
+import {
+    cleanTagline, createClaudeSummarizer, outcomeFromBatchItem, outcomeFromReply, parseSummary, requestParams, SUMMARY_SCHEMA, unavailableModel,
+} from "./claude";
 import { rejectionOf } from "../../../test/helpers/rejection";
 import { configPath } from "../../config";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT } from "./prompts";
@@ -160,6 +162,16 @@ describe("outcomeFromBatchItem", () => {
         // a 404 about something else, and another error that names the model, are ordinary failures
         expect(outcomeFromBatchItem(errored("not_found_error", "file not found"), "claude-haiku-5-5")).not.toHaveProperty("modelUnavailable");
         expect(outcomeFromBatchItem(errored("invalid_request_error", "model: claude-haiku-5-5"), "claude-haiku-5-5")).not.toHaveProperty("modelUnavailable");
+    });
+
+    it("reads the model id out of the API's wording without a sentence's closing . or :, and only a whole id counts", () => {
+        // read from the wording (a batch this process didn't submit)
+        expect(unavailableModel("not_found_error", "model: claude-haiku-5-5.")).toBe("claude-haiku-5-5");
+        expect(unavailableModel("not_found_error", "model: claude-haiku-5-5:")).toBe("claude-haiku-5-5");
+        expect(unavailableModel("not_found_error", "model: claude-haiku-5-5")).toBe("claude-haiku-5-5");
+        // the request's own model must be named whole: claude-sonnet-5-5 is another model than claude-sonnet-5
+        expect(unavailableModel("not_found_error", "model: claude-sonnet-5-5", "claude-sonnet-5")).toBeNull();
+        expect(unavailableModel("not_found_error", "model: claude-sonnet-5.", "claude-sonnet-5")).toBe("claude-sonnet-5");
     });
 
     it("keeps the token count of a reply it couldn't use, so spend stays honest", () => {

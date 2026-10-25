@@ -466,6 +466,30 @@ describe("background service", () => {
         await service.stop();
     });
 
+    // Review #2's probe (n1): Anthropic's ids nest (claude-sonnet-4, claude-sonnet-4-5), and only a dated snapshot is the same model
+    it("a folder model whose id starts another's doesn't count that model's folders as its own: the sweep still waits for a yes", async () => {
+        const root = await summarizedFixture();   // every folder written by claude-sonnet-5-5
+        fs.writeFileSync(path.join(dataFolder(), "config.json"), JSON.stringify({ summaryModels: { folder: { model: "claude-sonnet-5", inputPerMTok: 2, outputPerMTok: 10 } } }));
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        // a file inside src/core changes and its summary is redone (Haiku 5.5 is still the file model): 1 request
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+
+        // two sweeps: claude-sonnet-5-5 isn't a snapshot of claude-sonnet-5, so none of its five folders goes unasked
+        await vi.advanceTimersByTimeAsync(19 * 60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
+        await service.stop();
+    });
+
     it("after a file model change, a saved file waits for a yes until the model now in use has written it", async () => {
         const root = await summarizedFixture();
         fs.writeFileSync(path.join(dataFolder(), "config.json"), JSON.stringify({ summaryModels: { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } } }));
