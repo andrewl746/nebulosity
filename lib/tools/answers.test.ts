@@ -1,11 +1,13 @@
 import path from "path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { copyFixture } from "../../test/helpers/fixture";
 import type { DescribeResponse, MapNode, SearchResult } from "../contracts";
 import { architecture } from "../engine/architecture";
 import { layersOf } from "../engine/architecture";
+import { prepareLanguages } from "../index/languages/registry";
 import { indexRepository } from "../index/pipeline";
 import type { Overview } from "../engine/overview";
-import type { ChainAnswer, ReachAnswer } from "../engine/reach";
+import { importChain, type ChainAnswer, type ReachAnswer } from "../engine/reach";
 import type { MemberAnswer, TypeAnswer } from "../engine/calls";
 import { architectureAnswer, callsAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import { answerText, MAX_ANSWER_CHARS, SUMMARIES_OFF_LINE as S } from "./text";
@@ -737,5 +739,51 @@ describe("callsAnswer with one file whose row is longer than a whole page (V1.7 
         expect(row).not.toBeNull();
         expect(row!.shown.length + row!.hidden).toBe(20_000);
         expect(lines).toContain("… 1 more (next page: offset 1)");
+    });
+});
+
+describe("chain and cycle answers show another language's import as written (B-I3)", () => {
+    // Each step's import, derived by hand from the fixtures' truths: an edge is named by the first of the importer's
+    // specifiers that reaches the target (resolution.ts's edgesOf), and its language's displaySpecifier writes it as the
+    // source does. TypeScript keeps its quoted module path: the chainAnswer and architecture tests above.
+    const fixtures = path.join(__dirname, "..", "..", "test", "fixtures");
+    const indexed = (fixture: string): string => {
+        const root = copyFixture(path.join(fixtures, fixture));
+        indexRepository(root);
+        return root;
+    };
+    beforeAll(async () => {
+        await prepareLanguages();
+    });
+
+    it.each([
+        // the first specifier reaching model.rs (extern:shop_core reaches lib.rs, mod:|commands commands.rs)
+        ["rust-repo", "crates/cli/src/main.rs", "crates/core/src/model.rs", "(use shop_core::model::Order)"],
+        // import:…/internal/api is placed (its uses resolve), use:api.Handler reaches handler.go, then use:api.Open
+        ["go-repo", "cmd/shop/main.go", "internal/api/api.go", "(api.Open)"],
+        // the dot import reaches every non-test file of internal/text
+        ["go-repo", "cmd/shop/main.go", "internal/text/text.go", '(import . "example.com/shop/internal/text")'],
+        // importlib, os, importlib:import_module and requests reach no file; .:VERSION is the package's __init__.py
+        ["python-repo", "src/shop/cli.py", "src/shop/__init__.py", "(from . import VERSION)"],
+        // static:com.example.lib.Constants reaches Constants.java, then static:com.example.lib.Strings
+        ["java-repo", "app/src/main/java/com/example/app/App.java", "lib/src/main/java/com/example/lib/Strings.java", "(import static com.example.lib.Strings)"],
+        // the usings are context (no edge); type:Guard, by static access, is Shop.Web's own Guard
+        ["csharp-repo", "src/Shop.Web/Pages/CheckoutPage.cs", "src/Shop.Web/Shared/Guard.cs", "(Guard)"],
+    ])("imports … to on %s: %s to %s", (fixture, from, to, note) => {
+        const root = indexed(fixture);
+        expect(chainAnswer(importChain(root, from, to)).body).toEqual([`${from} reaches ${to} in 1 step:`, `  ${from}`, `  → ${to}  ${note}`]);
+    });
+
+    it("architecture's cycle through a Rust file", () => {
+        // a.rs ↔ a/inner.rs and a.rs ↔ a/tests.rs are both 2 steps; neighbours in path order put a/inner.rs first.
+        // a.rs reaches it by mod:|inner (before use:|self::inner::Y), and inner.rs reaches a.rs by use:|super::Thing
+        const root = indexed("rust-repo");
+        const lines = answerText(architectureAnswer(architecture(root, "crates/core/src/a.rs", "cycles"), { limit: 50, offset: 0 })).split("\n");
+        expect(lines.slice(0, 4)).toEqual([
+            "The shortest import cycle through crates/core/src/a.rs (2 steps):",
+            "  crates/core/src/a.rs",
+            "  → crates/core/src/a/inner.rs  (mod inner)",
+            "  → crates/core/src/a.rs  (use super::Thing)",
+        ]);
     });
 });

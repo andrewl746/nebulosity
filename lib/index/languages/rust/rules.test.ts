@@ -66,3 +66,18 @@ describe("Rust's rules", () => {
         expect(excluded("target/doc/search.js")).toBe(false);
     });
 });
+
+describe("Rust's specifiers as written (displaySpecifier, B-I3)", () => {
+    it("shows a use, mod or extern crate as its statement, and a path as the code writes it", () => {
+        const shown = (s: string) => rustRules.displaySpecifier!(s);
+        expect(shown("use:|shop_core::model::Order")).toBe("use shop_core::model::Order");
+        expect(shown("use:|crate::a::Thing as Widget")).toBe("use crate::a::Thing as Widget");
+        expect(shown("use:tests|super::*")).toBe("use super::*");    // the inline module isn't written in it
+        expect(shown("mod:|commands")).toBe("mod commands");
+        expect(shown("mod:nested|deep")).toBe("mod deep");
+        expect(shown("mod:|renamed@custom.rs")).toBe('#[path = "custom.rs"] mod renamed');
+        expect(shown("extern:shop_core")).toBe("extern crate shop_core");
+        expect(shown("path:|crate::util::helper")).toBe("crate::util::helper");
+        expect(shown("./not/rust")).toBe("./not/rust");
+    });
+});

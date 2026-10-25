@@ -26,6 +26,17 @@ export function inVirtualEnvironment(path: string, venvs: readonly string[]): bo
     return venvs.some((prefix) => path.startsWith(prefix));
 }
 
+/**
+ * A specifier as the source writes it, for answers (B-I3): `a.b` is `import a.b`, `a.b:c` is `from a.b import c`, and
+ * `..m:*` is `from ..m import *`. The specifier keeps no alias, so `import a.b as c` reads `import a.b`, and a dynamic
+ * `import_module("a.b")` reads as the import it performs.
+ */
+export function displayPythonSpecifier(specifier: string): string {
+    if (specifier === "") return specifier;
+    const colon = specifier.indexOf(":");
+    return colon === -1 ? `import ${specifier}` : `from ${specifier.slice(0, colon)} import ${specifier.slice(colon + 1)}`;
+}
+
 export const pythonRules: LanguageRules = {
     id: "python",
     extensions: [".py", ".pyi"],
@@ -36,4 +47,5 @@ export const pythonRules: LanguageRules = {
         const venvs = virtualEnvironments(manifests);
         return (path) => inVirtualEnvironment(path, venvs);
     },
+    displaySpecifier: displayPythonSpecifier,
 };
