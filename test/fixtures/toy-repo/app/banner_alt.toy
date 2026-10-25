@@ -1,0 +1,4 @@
+# a second banner, as Go's build-tag twins declare one name twice
+def banner
+
+def _hidden

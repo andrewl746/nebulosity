@@ -1,0 +1,3 @@
+def shout
+def whisper
+use lib/strings

@@ -1,0 +1,5 @@
+# the program starts here
+main
+use app/greet
+use strings
+name banner

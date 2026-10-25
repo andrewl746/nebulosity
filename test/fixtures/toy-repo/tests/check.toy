@@ -1,0 +1,3 @@
+use app/main
+use deps/vendored
+name nothing
