@@ -195,7 +195,9 @@ function listBlock(header: string, paths: readonly string[]): string[] {
 export function rootLines(tests: number, roots: Roots | null): string[] {
     const lines: string[] = [];
     if (tests > 0) lines.push(`Tests among them: ${formatCount(tests)}.`);
-    if (roots && roots.declared.length > 0) lines.push(...listBlock(`Entry points a package.json names that load it (${formatCount(roots.declared.length)}):`, roots.declared));
+    // "a package.json" only when every entry point came from one, as before E4; else a language's build file named them (ADR-065)
+    const declaredBy = roots?.manifestOnly === false ? "Entry points that load it" : "Entry points a package.json names that load it";
+    if (roots && roots.declared.length > 0) lines.push(...listBlock(`${declaredBy} (${formatCount(roots.declared.length)}):`, roots.declared));
     if (roots && roots.others.length > 0) lines.push(...listBlock(`Other files nothing imports that load it (${formatCount(roots.others.length)}):`, roots.others));
     return lines;
 }
@@ -340,7 +342,8 @@ function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; of
     const head = `Files in ${whereOf(a)} that no indexed file imports: `;
     if (total === 0) return { lines: [`${head}none${tests}.`], notes: [] };
     const lines = [`${head}${formatCount(total)}${tests}.`];
-    if (u.declared.length > 0) lines.push(...listBlock(`Named as entry points by a package.json (${formatCount(u.declared.length)}):`, u.declared));
+    const declaredBy = u.manifestOnly ? "Named as entry points by a package.json" : "Entry points";   // ADR-065, as rootLines
+    if (u.declared.length > 0) lines.push(...listBlock(`${declaredBy} (${formatCount(u.declared.length)}):`, u.declared));
     if (u.others.length > 0){
         lines.push(`Not named anywhere (${formatCount(u.others.length)}):`);
         if (page.offset >= u.others.length) return { lines: [...lines, `Nothing at offset ${page.offset}: the list has ${formatCount(u.others.length)}.`], notes: [UNUSED_NOTE] };
@@ -368,7 +371,8 @@ function summaryLines(a: ArchitectureAnswer): string[] {
     const u = a.unused!;
     const total = u.declared.length + u.others.length;
     lines.push(total === 0 ? "Files nothing imports: none, not counting tests"
-        : `Files nothing imports: ${formatCount(total)}, not counting tests${u.declared.length > 0 ? ` (${plural(u.declared.length, "entry point")} named by a package.json)` : ""}`);
+        : `Files nothing imports: ${formatCount(total)}, not counting tests${u.declared.length > 0
+            ? ` (${plural(u.declared.length, "entry point")}${u.manifestOnly ? " named by a package.json" : ""})` : ""}`);
     lines.push('For details, ask again with report "layers", "conventions", "cycles" or "unused".');
     return lines;
 }

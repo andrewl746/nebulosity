@@ -104,7 +104,8 @@ describe("conventionsOf, the threshold relative to the place", () => {
 
 describe("architecture(), against the ground truth", () => {
     it("files nothing imports in src: one an entry point, one not named, one test", () => {
-        expect(architecture(root, "src", "unused").unused).toEqual({ declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts"], tests: 1 });
+        // manifestOnly: loader.ts is the root package.json's main (ADR-065)
+        expect(architecture(root, "src", "unused").unused).toEqual({ declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts"], tests: 1, manifestOnly: true });
     });
 
     it("refuses a file except for cycles", () => {

@@ -26,6 +26,7 @@ describe("impact of strings.ts on the architecture fixture", () => {
         expect(impact(root, target, "dependents", { groupBy: "src" }).roots).toEqual({
             declared: ["src/app/loader.ts"],
             others: ["src/app/legacy.ts", "tools/fixtures/legacy-ids.ts"],
+            manifestOnly: true,   // loader.ts is the root package.json's main
         });
     });
 
@@ -59,7 +60,16 @@ describe("areasOf and rootsAmong, hand-built", () => {
 
     it("leaves out tests and files something imports", () => {
         const inDegree = (p: string): number => (p === "a.ts" ? 1 : 0);
-        expect(rootsAmong([{ path: "a.ts", distance: 1 }, { path: "test/b.ts", distance: 1 }, { path: "c.ts", distance: 2 }], inDegree, new Set()))
-            .toEqual({ declared: [], others: ["c.ts"] });
+        expect(rootsAmong([{ path: "a.ts", distance: 1 }, { path: "test/b.ts", distance: 1 }, { path: "c.ts", distance: 2 }], inDegree, new Map()))
+            .toEqual({ declared: [], others: ["c.ts"], manifestOnly: true });
+    });
+
+    it("says whether every entry point among them came from a package.json (ADR-065)", () => {
+        const none = (): number => 0;
+        const reached = [{ path: "a.ts", distance: 1 }, { path: "crates/core/src/lib.rs", distance: 1 }, { path: "c.ts", distance: 1 }];
+        const fromPackage = new Map([["a.ts", "package.json main"]]);
+        expect(rootsAmong(reached, none, fromPackage)).toEqual({ declared: ["a.ts"], others: ["c.ts", "crates/core/src/lib.rs"], manifestOnly: true });
+        const fromCargo = new Map([["a.ts", "package.json main"], ["crates/core/src/lib.rs", "crates/core/Cargo.toml [lib]"]]);
+        expect(rootsAmong(reached, none, fromCargo)).toEqual({ declared: ["a.ts", "crates/core/src/lib.rs"], others: ["c.ts"], manifestOnly: false });
     });
 });

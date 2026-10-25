@@ -23,6 +23,12 @@ export function replaceEntryPoints(db: Db, repoId: number, rows: readonly EntryR
     });
 }
 
+/** Each entry point's path → what declared it ("packages/core/package.json main", "crates/core/Cargo.toml [lib]", ADR-065). */
+export function loadEntryPointsDeclaredBy(db: Db, repoId: number): Map<string, string> {
+    return new Map(db.select({ path: entryPoints.path, declaredBy: entryPoints.declaredBy }).from(entryPoints)
+        .where(eq(entryPoints.repoId, repoId)).all().map((r) => [r.path, r.declaredBy]));
+}
+
 export function loadEntryPoints(db: Db, repoId: number): Set<string> {
     return new Set(db.select({ path: entryPoints.path }).from(entryPoints).where(eq(entryPoints.repoId, repoId)).all().map((r) => r.path));
 }

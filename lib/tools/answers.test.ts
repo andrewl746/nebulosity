@@ -312,7 +312,7 @@ describe("impact and root lines (ADR-055)", () => {
             ["src/app/loader.ts", 4],
         ].map(([p, d]) => ({ path: p as string, distance: d as number })),
     };
-    const roots = { declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts", "tools/fixtures/legacy-ids.ts"] };
+    const roots = { declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts", "tools/fixtures/legacy-ids.ts"], manifestOnly: true };
 
     it("impact counts by area, then tests and the files nothing imports that load it (ADR-055)", () => {
         const text = answerText(impactAnswer({
@@ -353,6 +353,11 @@ describe("impact and root lines (ADR-055)", () => {
         ]);
     });
 
+    it("names no package.json when an entry point among them came from another language's build file (ADR-065)", () => {
+        const cargo = { declared: ["crates/core/src/lib.rs"], others: [], manifestOnly: false };
+        expect(rootLines(0, cargo)).toEqual(["Entry points that load it (1):", "  crates/core/src/lib.rs"]);
+    });
+
     it("a list within a folder says so in its first line", () => {
         const text = answerText(reachAnswer({
             path: "src/editor", kind: "folder", direction: "dependents", direct: 1, indexVersion: 1, within: "src/platform",
@@ -372,7 +377,7 @@ describe("impact and root lines (ADR-055)", () => {
     it("a page whose root lines are long still fits the answer limit (F24)", () => {
         // 100 root paths of about 150 characters: about 15,000 characters after the list, which the list's budget must leave room for
         const long = (tag: string): string[] => Array.from({ length: 50 }, (_, i) => `${tag.repeat(145)}${String(i).padStart(3, "0")}.ts`);
-        const after = rootLines(0, { declared: long("d"), others: long("o") });
+        const after = rootLines(0, { declared: long("d"), others: long("o"), manifestOnly: true });
         expect(after.join("\n").length).toBeGreaterThan(15_000);
         // 400 reached files of about 310 characters: the list alone would be about 125,000, so it must be cut
         const reached = Array.from({ length: 400 }, (_, i) => ({ path: `${"p".repeat(300)}${String(i).padStart(3, "0")}.ts`, distance: 1 }));
@@ -547,6 +552,19 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         ]);
     });
 
+    it("names no package.json when an entry point came from another language's build file, in the unused report and the summary (ADR-065)", () => {
+        const unused = { declared: ["crates/core/src/lib.rs"], others: [], tests: 0, manifestOnly: false };
+        expect(answerText(architectureAnswer({ path: "crates", kind: "folder", report: "unused", unused }, page)).split("\n")).toEqual([
+            "Files in crates/ that no indexed file imports: 1.",
+            "Entry points (1):",
+            "  crates/core/src/lib.rs",
+            "Note: a file nothing imports may still be loaded by name (a build script, a worker, an HTML page, a test runner), so check before deleting it.",
+        ]);
+        const rest = { layers: { levels: [], against: [], tangled: [], circles: [], unlinked: [] }, conventions: { minFolders: 3, names: [], pairs: [] }, cycles: [], unused };
+        expect(answerText(architectureAnswer({ path: "crates", kind: "folder", report: "summary", ...rest }, page)).split("\n"))
+            .toContain("Files nothing imports: 1, not counting tests (1 entry point)");
+    });
+
     it("keeps a huge conventions report and a huge cycles report under the answer limit", () => {
         // 150 recurring names, each importing every name: 22,500 pairs, of which 150 are rare
         const names = Array.from({ length: 150 }, (_, i) => ({ name: `env${String(i).padStart(3, "0")}`, folders: 3 }));
@@ -577,7 +595,7 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         expect(cycleText.split("\n").slice(-6, -5)).toEqual(["Docs to read before answering how this is organized or why:"]);
         const others = Array.from({ length: 3_000 }, (_, i) => `src/${"u".repeat(150)}${i}.ts`);
         const declared = Array.from({ length: 60 }, (_, i) => `src/${"e".repeat(150)}${i}.ts`);
-        const unusedText = answerText(architectureAnswer({ path: "src", kind: "folder", report: "unused", unused: { declared, others, tests: 0 }, docs }, { limit: 500, offset: 0 }));
+        const unusedText = answerText(architectureAnswer({ path: "src", kind: "folder", report: "unused", unused: { declared, others, tests: 0, manifestOnly: true }, docs }, { limit: 500, offset: 0 }));
         expect(unusedText.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
         expect(unusedText).toContain("(next page: offset ");
     });
@@ -600,7 +618,7 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
     it("keeps layers, the summary and a long cycle under the limit, and says how many were left out", () => {
         const part = (p: string) => ({ path: p, kind: "file" as const });
         const none = (): [string, string][] => [];
-        const rest = { conventions: { minFolders: 3, names: [], pairs: [] }, cycles: [], unused: { declared: [], others: [], tests: 0 } };
+        const rest = { conventions: { minFolders: 3, names: [], pairs: [] }, cycles: [], unused: { declared: [], others: [], tests: 0, manifestOnly: true } };
         // a flat folder of 3,001 files each importing one helper: two levels, the second with 3,000 names
         const flatParts = [part("helper.ts"), ...Array.from({ length: 3_000 }, (_, i) => part(`file${String(i).padStart(4, "0")}.ts`))];
         const flat = layersOf(flatParts, flatParts.slice(1).map((p) => ({ source: p.path, target: "helper.ts", count: 1 })), none);

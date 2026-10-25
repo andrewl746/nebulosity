@@ -1,6 +1,6 @@
 import path from "path";
 import { getDb } from "../db/client";
-import { loadEntryPoints } from "../db/store/entries";
+import { loadEntryPointsDeclaredBy } from "../db/store/entries";
 import { loadFolderInfo } from "../db/store/map";
 import { requireRepository } from "../db/store/structure";
 import { childToward, lcaFolder } from "../index/aggregate";
@@ -11,8 +11,11 @@ import { rangeOf } from "./graph";
 import { importIndexFor, reach, type Direction, type ImportIndex, type ReachAnswer, type Reached } from "./reach";
 
 export type ImpactArea = { path: string; kind: "folder" | "file"; count: number };
-/** Files nothing imports among those reached, tests left out: those a package.json names, and the others (R8). */
-export type Roots = { declared: string[]; others: string[] };
+/**
+ * Files nothing imports among those reached, tests left out: the declared entry points, and the others (R8, widened by
+ * ADR-065). manifestOnly: every declared one came from a package.json, so the answer can say "a package.json".
+ */
+export type Roots = { declared: string[]; others: string[]; manifestOnly: boolean };
 
 /** What depends on a place (or what it depends on), counted by area (ADR-055): "what breaks if I change this". */
 export type Impact = {
@@ -53,10 +56,19 @@ export function areasOf(reached: readonly Reached[], target: { path: string; kin
     return { areas: [...counts.values()].sort((a, b) => b.count - a.count || compare(a.path, b.path)), elsewhere };
 }
 
-/** The files among `reached` that nothing imports, tests left out, split by whether a package.json names them; each by path. */
-export function rootsAmong(reached: readonly Reached[], inDegreeOf: (p: string) => number, declared: ReadonlySet<string>): Roots {
+/**
+ * The files among `reached` that nothing imports, tests left out, split by whether an entry point's declaration names
+ * them (`entries`: path → declaredBy); each by path.
+ */
+export function rootsAmong(reached: readonly Reached[], inDegreeOf: (p: string) => number, entries: ReadonlyMap<string, string>): Roots {
     const roots = reached.map((r) => r.path).filter((p) => inDegreeOf(p) === 0 && !isTestPath(p)).sort(compare);
-    return { declared: roots.filter((p) => declared.has(p)), others: roots.filter((p) => !declared.has(p)) };
+    const declared = roots.filter((p) => entries.has(p));
+    return { declared, others: roots.filter((p) => !entries.has(p)), manifestOnly: declaredByPackageJson(declared, entries) };
+}
+
+/** Whether every one of these entry points came from a package.json (ADR-065): then the answers name it, as before E4. */
+export function declaredByPackageJson(declared: readonly string[], entries: ReadonlyMap<string, string>): boolean {
+    return declared.every((p) => entries.get(p)?.includes("package.json") === true);
 }
 
 /** How many files import a file, from the import index (0 for a path it doesn't hold). */
@@ -79,7 +91,7 @@ export function impact(repoRoot: string, targetPath: string, direction: Directio
         const { areas, elsewhere } = areasOf(answer.reached, { path: answer.path, kind: answer.kind }, groupBy);
         const tests = answer.reached.filter((r) => isTestPath(r.path)).length;
         const roots = direction === "dependents"
-            ? rootsAmong(answer.reached, inDegreeIn(importIndexFor(db, repoId, answer.indexVersion)), loadEntryPoints(db, repoId))
+            ? rootsAmong(answer.reached, inDegreeIn(importIndexFor(db, repoId, answer.indexVersion)), loadEntryPointsDeclaredBy(db, repoId))
             : null;
         return { reach: answer, groupBy, areas, elsewhere, tests, roots };
     });
