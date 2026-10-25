@@ -1,0 +1,620 @@
+import type { SymbolKind, SymbolRow } from "../../lib/db/schema";
+import type { ReferenceKind } from "../../lib/index/languages/adapter";
+import type { FixtureTruth, TruthEdge } from "./fixture-truth";
+
+/**
+ * test/fixtures/csharp-repo's ground truth, DERIVED BY HAND from the fixture's files and the plan's Task C rules
+ * (docs/plans/2026-10-24-e4-languages.md, "Task C: C#", and "The language tasks"), before the C# adapter's code
+ * existed: never by running the code (CLAUDE.md). Change a fixture file and re-derive this by hand.
+ *
+ * Projects (a file's project is the folder of the nearest .csproj above it, else the repo root):
+ * - src/Shop.Core (no Using items), src/Shop.Web (<Using Include="Shop.Core.Models" />, and GlobalUsings.cs's
+ *   global:Shop.Core.Carts, gstatic:Shop.Core.Pricing.PriceMath and galias:Clock=Shop.Core.Time.SystemClock),
+ *   src/Shop.Web.IntegrationTests, tests/Shop.Core.Tests; tools/bin/Seed.cs belongs to the repo root's.
+ * - The root Directory.Build.props has no Using items, so it changes nothing.
+ * - Excluded: the .cs files under src/Shop.Core/bin/, src/Shop.Core/obj/ and src/Shop.Web/obj/ (beside a .csproj).
+ *   tools/bin/ has no .csproj beside it, so tools/bin/Seed.cs is indexed.
+ *
+ * How the plan's rules were read where it is silent (each a choice, recorded in progress-csharp.md):
+ * 1. Source order: each specifier sits where its name starts (the `using`/`global` keyword for a using directive, the
+ *    namespace's name, a type's first identifier, a member's name for ext:), each once, at its first place. An
+ *    attribute [N] gives type:N then type:NAttribute.
+ * 2. The names inside using directives and namespace names give only their using/ns specifier. Keywords give nothing
+ *    (string, int, decimal, void, var, default, a target-typed new()).
+ * 3. Static access N.Member: N is the identifier a member access starts with. The file's locals, parameters (a
+ *    positional record's and a lambda's too), fields and properties are its exclusions, by name over the whole file.
+ *    nameof(N) follows the same rule. Item.cs's `Price.Amount` (a record parameter) and Order.cs's `Total.Amount`
+ *    (a property) give nothing.
+ * 4. `x?.M(…)` is an invoked member like `x.M(…)` (Order.cs's ext:Invoke). An unqualified call `M(…)` gives nothing.
+ * 5. "Names the file declares" are the types it declares, nested ones included; type parameters are left out too.
+ * 6. Symbols: a constructor is named as written (the type's name: qualifiedName `Order.Order`), an indexer `this`; a
+ *    const field is a field (property). Enum members and a positional record's parameters are not symbols. Exported is
+ *    the declaration's own `public` (so Guard.NotNull, public in an internal class, is exported); an interface's
+ *    members are exported when the interface is public.
+ * 7. type:N's steps meet no conflict in this fixture (no alias shares a name with a visible type, no two usings hold
+ *    the same name), so their order between the alias and the usings doesn't change any edge here.
+ * 8. qtype:'s kind: internal when it resolves, or when its qualifier, as written or under an enclosing namespace, is a
+ *    namespace the repo declares (a declared namespace or a prefix of one). qtype:System.ArgumentException: external.
+ * 9. The scan reading reads `using …;` and `namespace …` lines as written, with no tree, so a nested block's
+ *    `namespace Pricing` gives ns:Pricing, where the full reading gives ns:Shop.Core.Pricing.
+ */
+
+const P = {
+    audited: "src/Shop.Core/Auditing/AuditedAttribute.cs",
+    totals: "src/Shop.Core/Carts/Cart.Totals.cs",
+    cart: "src/Shop.Core/Carts/Cart.cs",
+    catalogItem: "src/Shop.Core/Catalog/Item.cs",
+    productCode: "src/Shop.Core/Catalog/ProductCode.cs",
+    modelItem: "src/Shop.Core/Models/Item.cs",
+    order: "src/Shop.Core/Models/Order.cs",
+    orderStatus: "src/Shop.Core/Models/OrderStatus.cs",
+    money: "src/Shop.Core/Money.cs",
+    calculator: "src/Shop.Core/Pricing/PriceCalculator.cs",
+    priceMath: "src/Shop.Core/Pricing/PriceMath.cs",
+    coreGuard: "src/Shop.Core/Shared/Guard.cs",
+    iclock: "src/Shop.Core/Time/IClock.cs",
+    systemClock: "src/Shop.Core/Time/SystemClock.cs",
+    scenarios: "src/Shop.Web.IntegrationTests/CheckoutScenarios.cs",
+    hostExtensions: "src/Shop.Web/Extensions/HostExtensions.cs",
+    serviceExtensions: "src/Shop.Web/Extensions/ServiceCollectionExtensions.cs",
+    globalUsings: "src/Shop.Web/GlobalUsings.cs",
+    cartPage: "src/Shop.Web/Pages/CartPage.cs",
+    checkout: "src/Shop.Web/Pages/CheckoutPage.cs",
+    pageBase: "src/Shop.Web/Pages/PageBase.cs",
+    receipt: "src/Shop.Web/Pages/ReceiptPage.cs",
+    program: "src/Shop.Web/Program.cs",
+    webGuard: "src/Shop.Web/Shared/Guard.cs",
+    fakes: "tests/Shop.Core.Tests/Fakes/FakeServices.cs",
+    tests: "tests/Shop.Core.Tests/PriceCalculatorTests.cs",
+    seed: "tools/bin/Seed.cs",
+} as const;
+
+/** A top-level declaration (parent null) or a member of a top-level type. */
+const sym = (name: string, kind: SymbolKind, startLine: number, endLine: number, exported: boolean, parent: string | null = null): SymbolRow => ({
+    name, qualifiedName: parent === null ? name : `${parent}.${name}`, kind, startLine, endLine, exported, parentQualifiedName: parent,
+});
+const edge = (source: string, target: string): TruthEdge => ({ source, target });
+const byEdge = (a: TruthEdge, b: TruthEdge): number =>
+    (a.source < b.source ? -1 : a.source > b.source ? 1 : a.target < b.target ? -1 : a.target > b.target ? 1 : 0);
+/** One file's kinds, grouped (the kit checks they name exactly the file's specifiers). */
+function kinds(groups: { context?: string[]; internal?: string[]; external?: string[] }): Record<string, ReferenceKind> {
+    const out: Record<string, ReferenceKind> = {};
+    for (const s of groups.context ?? []) out[s] = "context";
+    for (const s of groups.internal ?? []) out[s] = "internal";
+    for (const s of groups.external ?? []) out[s] = "external";
+    return out;
+}
+
+/**
+ * The 45 edges of a full run, sorted by source then target, each with the rule that makes it. "type:N, step 1" is an
+ * enclosing namespace (innermost out), "step 2" a visible using (the file's and the project's), "alias" an alias's
+ * target, "static" a type nested in a static:/gstatic: type.
+ */
+const EDGES: TruthEdge[] = [
+    edge(P.totals, P.money),                        // type:Money, step 1: Shop.Core.Money (the parent of Shop.Core.Carts)
+    edge(P.cart, P.catalogItem),                    // type:Item, step 2: using Shop.Core.Catalog (Shop.Core.Models.Item isn't visible)
+    edge(P.catalogItem, P.productCode),             // type:ProductCode, step 1: Shop.Core.Catalog.ProductCode (same namespace)
+    edge(P.catalogItem, P.money),                   // type:Money, step 1: Shop.Core.Money
+    edge(P.modelItem, P.money),                     // type:Money (a record parameter's type), step 1: Shop.Core.Money
+    edge(P.order, P.modelItem),                     // type:Item, step 1: Shop.Core.Models.Item (same namespace; not Catalog's)
+    edge(P.order, P.orderStatus),                   // type:OrderStatus, step 1: Shop.Core.Models.OrderStatus
+    edge(P.order, P.money),                         // type:Money, step 1: Shop.Core.Money (parent namespace)
+    edge(P.calculator, P.totals),                   // type:Cart, step 2: Shop.Core.Carts.Cart, the partial class's second part
+    edge(P.calculator, P.cart),                     // type:Cart, the first part
+    edge(P.calculator, P.catalogItem),              // type:Item, step 2: using Shop.Core.Catalog
+    edge(P.calculator, P.money),                    // type:Money, step 1: Shop.Core.Money (enclosing: Shop.Core.Pricing, Shop.Core)
+    edge(P.calculator, P.priceMath),                // static:Shop.Core.Pricing.PriceMath; type:Rounding (static) reaches it too
+    edge(P.calculator, P.coreGuard),                // type:Guard, step 2: Shop.Shared.Guard, declared in two projects: Shop.Core's wins
+    edge(P.systemClock, P.iclock),                  // type:IClock (base list), step 1: Shop.Core.Time.IClock
+    edge(P.scenarios, P.systemClock),               // qtype:Shop.Core.Time.SystemClock, as written
+    edge(P.scenarios, P.checkout),                  // type:CheckoutPage, step 2: using Shop.Web.Pages
+    edge(P.hostExtensions, P.serviceExtensions),    // ext:AddShop, its namespace Shop.Web.Extensions enclosing (no using)
+    edge(P.serviceExtensions, P.iclock),            // type:IClock (a generic argument), step 2: using Shop.Core.Time
+    edge(P.serviceExtensions, P.systemClock),       // type:SystemClock (a generic argument), step 2: using Shop.Core.Time
+    edge(P.globalUsings, P.priceMath),              // gstatic:Shop.Core.Pricing.PriceMath
+    edge(P.cartPage, P.totals),                     // type:Cart, step 2: the project's global using Shop.Core.Carts
+    edge(P.cartPage, P.cart),                       // type:Cart
+    edge(P.cartPage, P.order),                      // type:Order, after the syntax error: step 2, the .csproj's <Using> Shop.Core.Models
+    edge(P.cartPage, P.iclock),                     // type:IClock, step 2: using Shop.Core.Time
+    edge(P.cartPage, P.pageBase),                   // type:PageBase, step 1: Shop.Web.Pages.PageBase
+    edge(P.checkout, P.audited),                    // [Audited] → type:AuditedAttribute, step 2: using Shop.Core.Auditing
+    edge(P.checkout, P.totals),                     // type:Cart (nameof, a parameter), step 2: global using Shop.Core.Carts
+    edge(P.checkout, P.cart),                       // type:Cart
+    edge(P.checkout, P.modelItem),                  // type:Item (typeof), step 2: the .csproj's <Using> Shop.Core.Models
+    edge(P.checkout, P.order),                      // type:Order (generic base, return type), the <Using>; qtype:Shop.Core.Models.Order too
+    edge(P.checkout, P.systemClock),                // type:Clock, alias: the project's galias Clock=Shop.Core.Time.SystemClock
+    edge(P.checkout, P.pageBase),                   // type:PageBase (base list), step 1: Shop.Web.Pages.PageBase
+    edge(P.checkout, P.webGuard),                   // type:Guard (static access), step 2: Shop.Shared.Guard: Shop.Web's own wins
+    edge(P.receipt, P.order),                       // type:Receipt, alias: using Receipt = Shop.Core.Models.Order
+    edge(P.receipt, P.priceMath),                   // type:Rounding, static: nested in the project's gstatic PriceMath
+    edge(P.receipt, P.pageBase),                    // type:PageBase, step 1
+    edge(P.program, P.serviceExtensions),           // ext:AddShop, its namespace visible through using Shop.Web.Extensions
+    edge(P.tests, P.totals),                        // type:Cart, step 2: using Shop.Core.Carts
+    edge(P.tests, P.cart),                          // type:Cart
+    edge(P.tests, P.catalogItem),                   // qtype:Catalog.Item, under the enclosing Shop.Core: Shop.Core.Catalog.Item
+    edge(P.tests, P.money),                         // type:Money (static access Money.Zero), step 1: Shop.Core.Money
+    edge(P.tests, P.calculator),                    // type:PriceCalculator, step 2: using Shop.Core.Pricing
+    edge(P.tests, P.fakes),                         // type:FakeServices, step 2: using Shop.Core.Tests.Fakes
+    edge(P.seed, P.order),                          // type:Order, step 2: using Shop.Core.Models (the repo root's project)
+    // not edges:
+    // - no using:, global:, alias:, galias: or ns: makes one by itself;
+    // - CheckoutPage.cs's type:PriceCalculator: Shop.Core.Pricing isn't visible there (edit d makes it visible);
+    // - PriceCalculatorTests.cs's type:ProductCode: Shop.Core.Catalog isn't visible there (edit b makes it visible);
+    // - PriceCalculatorTests.cs's ext:AddShop: FakeServices.AddShop is an instance method, and the extension's namespace
+    //   Shop.Web.Extensions is neither enclosing nor visible there;
+    // - CheckoutPage.cs's type:Audited: no repo type is named Audited (AuditedAttribute is the attribute's class);
+    // - every external name (System, Microsoft.Extensions.DependencyInjection, Xunit, ASP.NET Core's WebApplication).
+];
+
+const without = (...dropped: TruthEdge[]): TruthEdge[] =>
+    EDGES.filter((e) => !dropped.some((d) => d.source === e.source && d.target === e.target));
+/** The edges with these added, sorted as the kit compares them (a mechanical sort of hand-derived edges). */
+const withAdded = (...added: TruthEdge[]): TruthEdge[] => [...EDGES, ...added].sort(byEdge);
+
+export const csharpRepoTruth: FixtureTruth = {
+    files: [
+        { path: P.audited, language: "csharp", isTest: false, lineCount: 10 },
+        { path: P.totals, language: "csharp", isTest: false, lineCount: 8 },
+        { path: P.cart, language: "csharp", isTest: false, lineCount: 13 },
+        { path: P.catalogItem, language: "csharp", isTest: false, lineCount: 15 },
+        { path: P.productCode, language: "csharp", isTest: false, lineCount: 3 },
+        { path: P.modelItem, language: "csharp", isTest: false, lineCount: 7 },
+        { path: P.order, language: "csharp", isTest: false, lineCount: 41 },
+        { path: P.orderStatus, language: "csharp", isTest: false, lineCount: 8 },
+        { path: P.money, language: "csharp", isTest: false, lineCount: 21 },             // starts with a UTF-8 BOM: no extra line
+        { path: P.calculator, language: "csharp", isTest: false, lineCount: 20 },
+        { path: P.priceMath, language: "csharp", isTest: false, lineCount: 21 },
+        { path: P.coreGuard, language: "csharp", isTest: false, lineCount: 12 },
+        { path: P.iclock, language: "csharp", isTest: false, lineCount: 8 },
+        { path: P.systemClock, language: "csharp", isTest: false, lineCount: 8 },
+        { path: P.scenarios, language: "csharp", isTest: true, lineCount: 14 },          // a folder segment *.IntegrationTests (no test/ folder)
+        { path: P.hostExtensions, language: "csharp", isTest: false, lineCount: 12 },
+        { path: P.serviceExtensions, language: "csharp", isTest: false, lineCount: 13 },
+        { path: P.globalUsings, language: "csharp", isTest: false, lineCount: 3 },
+        { path: P.cartPage, language: "csharp", isTest: false, lineCount: 15 },
+        { path: P.checkout, language: "csharp", isTest: false, lineCount: 29 },
+        { path: P.pageBase, language: "csharp", isTest: false, lineCount: 9 },
+        { path: P.receipt, language: "csharp", isTest: false, lineCount: 12 },
+        { path: P.program, language: "csharp", isTest: false, lineCount: 8 },
+        { path: P.webGuard, language: "csharp", isTest: false, lineCount: 9 },
+        { path: P.fakes, language: "csharp", isTest: true, lineCount: 13 },              // the folder rule (tests/, Shop.Core.Tests)
+        { path: P.tests, language: "csharp", isTest: true, lineCount: 18 },              // the folder rule and the name *Tests.cs
+        { path: P.seed, language: "csharp", isTest: false, lineCount: 13 },
+    ],
+    excluded: [
+        "src/Shop.Core/bin/Debug/net8.0/Shop.Core.Generated.cs",
+        "src/Shop.Core/obj/Debug/net8.0/Shop.Core.AssemblyInfo.cs",
+        "src/Shop.Web/obj/Debug/net8.0/Shop.Web.GlobalUsings.g.cs",
+    ],
+    specifiers: {
+        [P.audited]: ["using:System", "ns:Shop.Core.Auditing", "type:AttributeUsage", "type:AttributeUsageAttribute", "type:AttributeTargets", "type:Attribute"],
+        [P.totals]: ["using:System.Linq", "ns:Shop.Core.Carts", "type:Money", "ext:Sum"],
+        [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts", "type:List", "type:Item", "type:IReadOnlyList", "ext:Add"],
+        [P.catalogItem]: ["ns:Shop.Core.Catalog", "type:ProductCode", "type:Money"],
+        [P.productCode]: ["ns:Shop.Core.Catalog"],
+        [P.modelItem]: ["ns:Shop.Core.Models", "type:Money"],
+        [P.order]: [
+            "using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models",
+            "type:List", "type:Item", "type:Guid", "type:Money", "type:OrderStatus", "ext:Add", "ext:Invoke",
+        ],
+        [P.orderStatus]: ["ns:Shop.Core.Models"],
+        [P.money]: ["using:System", "ns:Shop.Core", "type:IEquatable"],
+        [P.calculator]: [
+            "using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "static:Shop.Core.Pricing.PriceMath",
+            "ns:Shop.Core", "ns:Shop.Core.Pricing", "type:Money", "type:Cart", "type:Item", "type:Guard", "ext:NotNull", "type:Rounding",
+        ],
+        [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing", "ext:Round", "type:MidpointRounding"],
+        [P.coreGuard]: ["using:System", "ns:Shop.Shared", "type:ArgumentNullException"],
+        [P.iclock]: ["using:System", "ns:Shop.Core.Time", "type:DateTimeOffset"],
+        [P.systemClock]: ["using:System", "ns:Shop.Core.Time", "type:IClock", "type:DateTimeOffset"],
+        [P.scenarios]: [
+            "using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests", "type:Fact", "type:FactAttribute",
+            "type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock", "type:Assert", "ext:Equal",
+        ],
+        [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions", "type:IServiceCollection", "ext:AddShop"],
+        [P.serviceExtensions]: [
+            "using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions",
+            "type:IServiceCollection", "ext:AddSingleton", "type:IClock", "type:SystemClock",
+        ],
+        [P.globalUsings]: ["global:Shop.Core.Carts", "gstatic:Shop.Core.Pricing.PriceMath", "galias:Clock=Shop.Core.Time.SystemClock"],
+        [P.cartPage]: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase", "type:Cart", "type:IClock", "type:Order"],
+        [P.checkout]: [
+            "using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "ns:Shop.Web.Pages",
+            "type:Audited", "type:AuditedAttribute", "type:PageBase", "type:Order", "type:Clock", "type:DateTimeOffset",
+            "type:Cart", "type:Type", "type:Item", "type:PriceCalculator", "type:Guard", "ext:NotBlank",
+            "qtype:Shop.Core.Models.Order", "type:Guid", "ext:NewGuid",
+        ],
+        [P.pageBase]: ["ns:Shop.Web.Pages"],
+        [P.receipt]: ["alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages", "type:PageBase", "type:Receipt", "type:Rounding", "ext:ToString"],
+        [P.program]: ["using:Shop.Web.Extensions", "type:WebApplication", "ext:CreateBuilder", "ext:AddShop", "ext:Build", "ext:MapGet", "ext:Run"],
+        [P.webGuard]: ["ns:Shop.Shared", "ext:IsNullOrWhiteSpace", "qtype:System.ArgumentException"],
+        [P.fakes]: ["ns:Shop.Core.Tests.Fakes"],
+        [P.tests]: [
+            "using:Shop.Core.Carts", "using:Shop.Core.Pricing", "using:Shop.Core.Tests.Fakes", "using:Xunit", "ns:Shop.Core.Tests",
+            "type:Fact", "type:FactAttribute", "type:FakeServices", "ext:AddShop", "type:PriceCalculator", "ext:Total", "type:Cart",
+            "qtype:Catalog.Item", "type:ProductCode", "type:Money", "type:Assert", "ext:Equal",
+        ],
+        [P.seed]: ["using:System", "using:Shop.Core.Models", "ns:Shop.Tools", "type:Order", "type:Guid", "ext:NewGuid", "type:Console", "ext:WriteLine"],
+    },
+    declares: {
+        [P.audited]: ["type:Shop.Core.Auditing.AuditedAttribute"],
+        [P.totals]: ["type:Shop.Core.Carts.Cart"],
+        [P.cart]: ["type:Shop.Core.Carts.Cart"],
+        [P.catalogItem]: ["type:Shop.Core.Catalog.Item"],
+        [P.productCode]: ["type:Shop.Core.Catalog.ProductCode"],
+        [P.modelItem]: ["type:Shop.Core.Models.Item"],
+        [P.order]: ["type:Shop.Core.Models.Order", "type:Shop.Core.Models.OrderPlacedHandler"],
+        [P.orderStatus]: ["type:Shop.Core.Models.OrderStatus"],
+        [P.money]: ["type:Shop.Core.Money"],
+        [P.calculator]: ["type:Shop.Core.Pricing.PriceCalculator"],
+        [P.priceMath]: ["type:Shop.Core.Pricing.PriceMath", "type:Shop.Core.Pricing.PriceMath.Rounding"],
+        [P.coreGuard]: ["type:Shop.Shared.Guard"],
+        [P.iclock]: ["type:Shop.Core.Time.IClock"],
+        [P.systemClock]: ["type:Shop.Core.Time.SystemClock"],
+        [P.scenarios]: ["type:Shop.Web.IntegrationTests.CheckoutScenarios"],
+        [P.hostExtensions]: ["ext:Shop.Web.Extensions.HostExtensions.AddShopDefaults", "type:Shop.Web.Extensions.HostExtensions"],
+        [P.serviceExtensions]: ["ext:Shop.Web.Extensions.ServiceCollectionExtensions.AddShop", "type:Shop.Web.Extensions.ServiceCollectionExtensions"],
+        // the project-wide usings, exactly as the specifiers write them (C18), sorted
+        [P.globalUsings]: ["galias:Clock=Shop.Core.Time.SystemClock", "global:Shop.Core.Carts", "gstatic:Shop.Core.Pricing.PriceMath"],
+        [P.cartPage]: ["type:Shop.Web.Pages.CartPage"],
+        [P.checkout]: ["type:Shop.Web.Pages.CheckoutPage"],
+        [P.pageBase]: ["type:Shop.Web.Pages.PageBase"],                                 // PageBase<TModel>: the arity dropped
+        [P.receipt]: ["type:Shop.Web.Pages.ReceiptPage"],
+        [P.program]: ["main:top-level"],
+        [P.webGuard]: ["type:Shop.Shared.Guard"],
+        [P.fakes]: ["type:Shop.Core.Tests.Fakes.FakeServices"],
+        [P.tests]: ["type:Shop.Core.Tests.PriceCalculatorTests"],
+        [P.seed]: ["main:static", "type:Shop.Tools.Seeder"],
+    },
+    symbols: {
+        [P.audited]: [
+            sym("AuditedAttribute", "class", 6, 10, true),                              // its attribute line in, its doc comment out
+            sym("Reason", "property", 9, 9, true, "AuditedAttribute"),
+        ],
+        [P.totals]: [
+            sym("Cart", "class", 5, 8, true),
+            sym("Subtotal", "property", 7, 7, true, "Cart"),
+        ],
+        [P.cart]: [
+            sym("Cart", "class", 6, 13, true),
+            sym("_lines", "property", 8, 8, false, "Cart"),
+            sym("Lines", "property", 10, 10, true, "Cart"),
+            sym("Add", "method", 12, 12, true, "Cart"),
+        ],
+        [P.catalogItem]: [
+            sym("Item", "class", 3, 14, true),
+            sym("Item", "constructor", 5, 9, true, "Item"),
+            sym("Code", "property", 11, 11, true, "Item"),
+            sym("ListPrice", "property", 13, 13, true, "Item"),
+        ],
+        [P.productCode]: [sym("ProductCode", "struct", 3, 3, true)],                  // a record struct
+        [P.modelItem]: [
+            sym("Item", "class", 4, 7, true),                                           // a record; Sku and Price are parameters, not members
+            sym("IsFree", "property", 6, 6, true, "Item"),
+        ],
+        [P.order]: [
+            sym("OrderPlacedHandler", "type", 6, 6, true),                              // a delegate
+            sym("Order", "class", 9, 41, true),
+            sym("_items", "property", 11, 11, false, "Order"),
+            sym("Order", "constructor", 13, 17, true, "Order"),
+            sym("Placed", "property", 19, 19, true, "Order"),                           // an event
+            sym("Id", "property", 21, 21, true, "Order"),
+            sym("Total", "property", 23, 23, true, "Order"),
+            sym("Status", "property", 25, 25, true, "Order"),
+            sym("this", "accessor", 27, 27, true, "Order"),                             // the indexer
+            sym("Add", "method", 29, 32, true, "Order"),
+            sym("Place", "method", 34, 38, true, "Order"),
+            sym("ToString", "method", 40, 40, true, "Order"),
+        ],
+        [P.orderStatus]: [sym("OrderStatus", "enum", 3, 8, true)],                    // its members are not symbols
+        [P.money]: [
+            sym("Money", "struct", 6, 21, true),
+            sym("Zero", "property", 8, 8, true, "Money"),
+            sym("Money", "constructor", 10, 14, true, "Money"),
+            sym("Amount", "property", 16, 16, true, "Money"),
+            sym("Currency", "property", 18, 18, true, "Money"),
+            sym("Equals", "method", 20, 20, true, "Money"),
+        ],
+        [P.calculator]: [
+            sym("PriceCalculator", "class", 10, 18, true),                              // inside the nested block namespace
+            sym("Total", "method", 12, 17, true, "PriceCalculator"),
+        ],
+        [P.priceMath]: [
+            sym("PriceMath", "class", 5, 21, true),
+            sym("Rounding", "enum", 7, 11, true, "PriceMath"),                          // a nested type, a member
+            sym("Decimals", "property", 13, 13, true, "PriceMath"),                     // a const field
+            sym("Round", "method", 15, 20, true, "PriceMath"),
+        ],
+        [P.coreGuard]: [
+            sym("Guard", "class", 5, 12, false),                                        // internal
+            sym("NotNull", "method", 7, 11, true, "Guard"),                             // public, in an internal class
+        ],
+        [P.iclock]: [
+            sym("IClock", "interface", 5, 8, true),
+            sym("Now", "property", 7, 7, true, "IClock"),                               // the interface is public
+        ],
+        [P.systemClock]: [
+            sym("SystemClock", "class", 5, 8, true),
+            sym("Now", "property", 7, 7, true, "SystemClock"),
+        ],
+        [P.scenarios]: [
+            sym("CheckoutScenarios", "class", 6, 14, true),
+            sym("PageIsTitledForTheCart", "method", 8, 13, true, "CheckoutScenarios"), // from its [Fact] line
+        ],
+        [P.hostExtensions]: [
+            sym("HostExtensions", "class", 5, 12, true),
+            sym("AddShopDefaults", "method", 8, 11, true, "HostExtensions"),            // its comment out
+        ],
+        [P.serviceExtensions]: [
+            sym("ServiceCollectionExtensions", "class", 6, 13, true),
+            sym("AddShop", "method", 8, 12, true, "ServiceCollectionExtensions"),
+        ],
+        [P.globalUsings]: [],
+        [P.cartPage]: [
+            sym("CartPage", "class", 5, 15, true),
+            sym("Title", "property", 7, 7, true, "CartPage"),
+            sym("Refresh", "method", 9, 12, true, "CartPage"),                          // holds the syntax error
+            sym("Last", "property", 14, 14, true, "CartPage"),
+        ],
+        [P.checkout]: [
+            sym("CheckoutPage", "class", 8, 29, true),
+            sym("CheckoutPage", "constructor", 11, 14, true, "CheckoutPage"),
+            sym("StartedAt", "property", 16, 16, true, "CheckoutPage"),
+            sym("Title", "property", 18, 18, true, "CheckoutPage"),
+            sym("ModelType", "property", 20, 20, true, "CheckoutPage"),
+            sym("Calculator", "property", 22, 22, true, "CheckoutPage"),
+            sym("Place", "method", 24, 28, true, "CheckoutPage"),
+        ],
+        [P.pageBase]: [
+            sym("PageBase", "class", 3, 9, true),
+            sym("Title", "property", 6, 6, true, "PageBase"),
+            sym("Model", "property", 8, 8, true, "PageBase"),
+        ],
+        [P.receipt]: [
+            sym("ReceiptPage", "class", 5, 12, true),
+            sym("Title", "property", 7, 7, true, "ReceiptPage"),
+            sym("Mode", "property", 9, 9, true, "ReceiptPage"),
+            sym("Describe", "method", 11, 11, true, "ReceiptPage"),
+        ],
+        [P.program]: [],                                                                // top-level statements only
+        [P.webGuard]: [
+            sym("Guard", "class", 3, 9, false),
+            sym("NotBlank", "method", 5, 8, true, "Guard"),
+        ],
+        [P.fakes]: [
+            sym("FakeServices", "class", 4, 13, true),
+            sym("Registrations", "property", 6, 6, true, "FakeServices"),
+            sym("AddShop", "method", 8, 12, true, "FakeServices"),
+        ],
+        [P.tests]: [
+            sym("PriceCalculatorTests", "class", 8, 18, true),
+            sym("AFreeExtraItemCostsNothing", "method", 10, 17, true, "PriceCalculatorTests"),
+        ],
+        [P.seed]: [
+            sym("Seeder", "class", 6, 13, false),
+            sym("Main", "method", 8, 12, false, "Seeder"),                              // private
+        ],
+    },
+    kinds: {
+        [P.audited]: kinds({
+            context: ["using:System", "ns:Shop.Core.Auditing"],
+            external: ["type:AttributeUsage", "type:AttributeUsageAttribute", "type:AttributeTargets", "type:Attribute"],
+        }),
+        [P.totals]: kinds({ context: ["using:System.Linq", "ns:Shop.Core.Carts"], internal: ["type:Money"], external: ["ext:Sum"] }),
+        [P.cart]: kinds({
+            context: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts"],
+            internal: ["type:Item"],
+            external: ["type:List", "type:IReadOnlyList", "ext:Add"],
+        }),
+        [P.catalogItem]: kinds({ context: ["ns:Shop.Core.Catalog"], internal: ["type:ProductCode", "type:Money"] }),
+        [P.productCode]: kinds({ context: ["ns:Shop.Core.Catalog"] }),
+        [P.modelItem]: kinds({ context: ["ns:Shop.Core.Models"], internal: ["type:Money"] }),
+        [P.order]: kinds({
+            context: ["using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models"],
+            internal: ["type:Item", "type:Money", "type:OrderStatus"],
+            external: ["type:List", "type:Guid", "ext:Add", "ext:Invoke"],
+        }),
+        [P.orderStatus]: kinds({ context: ["ns:Shop.Core.Models"] }),
+        [P.money]: kinds({ context: ["using:System", "ns:Shop.Core"], external: ["type:IEquatable"] }),
+        [P.calculator]: kinds({
+            context: ["using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "ns:Shop.Core", "ns:Shop.Core.Pricing"],
+            internal: ["static:Shop.Core.Pricing.PriceMath", "type:Money", "type:Cart", "type:Item", "type:Guard", "type:Rounding"],
+            external: ["ext:NotNull"],                                                  // Guard.NotNull is not an extension method
+        }),
+        [P.priceMath]: kinds({ context: ["using:System", "ns:Shop.Core.Pricing"], external: ["ext:Round", "type:MidpointRounding"] }),
+        [P.coreGuard]: kinds({ context: ["using:System", "ns:Shop.Shared"], external: ["type:ArgumentNullException"] }),
+        [P.iclock]: kinds({ context: ["using:System", "ns:Shop.Core.Time"], external: ["type:DateTimeOffset"] }),
+        [P.systemClock]: kinds({ context: ["using:System", "ns:Shop.Core.Time"], internal: ["type:IClock"], external: ["type:DateTimeOffset"] }),
+        [P.scenarios]: kinds({
+            context: ["using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests"],
+            internal: ["type:CheckoutPage", "qtype:Shop.Core.Time.SystemClock"],
+            external: ["type:Fact", "type:FactAttribute", "type:Assert", "ext:Equal"],
+        }),
+        [P.hostExtensions]: kinds({
+            context: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions"],
+            internal: ["ext:AddShop"],
+            external: ["type:IServiceCollection"],
+        }),
+        [P.serviceExtensions]: kinds({
+            context: ["using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions"],
+            internal: ["type:IClock", "type:SystemClock"],
+            external: ["type:IServiceCollection", "ext:AddSingleton"],
+        }),
+        [P.globalUsings]: kinds({
+            context: ["global:Shop.Core.Carts", "galias:Clock=Shop.Core.Time.SystemClock"],
+            internal: ["gstatic:Shop.Core.Pricing.PriceMath"],
+        }),
+        [P.cartPage]: kinds({ context: ["using:Shop.Core.Time", "ns:Shop.Web.Pages"], internal: ["type:PageBase", "type:Cart", "type:IClock", "type:Order"] }),
+        [P.checkout]: kinds({
+            context: ["using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "ns:Shop.Web.Pages"],
+            internal: [
+                "type:AuditedAttribute", "type:PageBase", "type:Order",
+                "type:Clock",                                                           // no repo type is named Clock, but it resolves (the alias)
+                "type:Cart", "type:Item",
+                "type:PriceCalculator",                                                 // a repo type's name, not visible here: unresolved
+                "type:Guard", "qtype:Shop.Core.Models.Order",
+            ],
+            external: ["type:Audited", "type:DateTimeOffset", "type:Type", "ext:NotBlank", "type:Guid", "ext:NewGuid"],
+        }),
+        [P.pageBase]: kinds({ context: ["ns:Shop.Web.Pages"] }),
+        [P.receipt]: kinds({
+            context: ["alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages"],
+            internal: ["type:PageBase", "type:Receipt", "type:Rounding"],               // type:Receipt resolves through the alias
+            external: ["ext:ToString"],
+        }),
+        [P.program]: kinds({
+            context: ["using:Shop.Web.Extensions"],
+            internal: ["ext:AddShop"],
+            external: ["type:WebApplication", "ext:CreateBuilder", "ext:Build", "ext:MapGet", "ext:Run"],
+        }),
+        [P.webGuard]: kinds({ context: ["ns:Shop.Shared"], external: ["ext:IsNullOrWhiteSpace", "qtype:System.ArgumentException"] }),
+        [P.fakes]: kinds({ context: ["ns:Shop.Core.Tests.Fakes"] }),
+        [P.tests]: kinds({
+            context: ["using:Shop.Core.Carts", "using:Shop.Core.Pricing", "using:Shop.Core.Tests.Fakes", "using:Xunit", "ns:Shop.Core.Tests"],
+            internal: [
+                "type:FakeServices",
+                "ext:AddShop",                                                          // a repo extension's name, not visible here: unresolved
+                "type:PriceCalculator", "type:Cart", "qtype:Catalog.Item",
+                "type:ProductCode",                                                     // a repo type's name, not visible here: unresolved
+                "type:Money",
+            ],
+            external: ["type:Fact", "type:FactAttribute", "ext:Total", "type:Assert", "ext:Equal"],
+        }),
+        [P.seed]: kinds({
+            context: ["using:System", "using:Shop.Core.Models", "ns:Shop.Tools"],
+            internal: ["type:Order"],
+            external: ["type:Guid", "ext:NewGuid", "type:Console", "ext:WriteLine"],
+        }),
+    },
+    edges: EDGES,
+    entryPoints: [
+        { path: P.program, declaredBy: "top-level statements" },
+        { path: P.seed, declaredBy: "static Main" },
+    ],
+    // `var shown = clock.Now +;` on line 11; the reference after it (Order, line 14) is still read
+    broken: { path: P.cartPage, specifiers: ["using:Shop.Core.Time", "ns:Shop.Web.Pages", "type:PageBase", "type:Cart", "type:IClock", "type:Order"] },
+    // the scan reading reads only `using …;` and `namespace …` lines: every file with another specifier differs, and the
+    // nested block namespace reads as written (ns:Pricing)
+    scan: {
+        [P.audited]: ["using:System", "ns:Shop.Core.Auditing"],
+        [P.totals]: ["using:System.Linq", "ns:Shop.Core.Carts"],
+        [P.cart]: ["using:System.Collections.Generic", "using:Shop.Core.Catalog", "ns:Shop.Core.Carts"],
+        [P.catalogItem]: ["ns:Shop.Core.Catalog"],
+        [P.modelItem]: ["ns:Shop.Core.Models"],
+        [P.order]: ["using:System", "using:System.Collections.Generic", "ns:Shop.Core.Models"],
+        [P.money]: ["using:System", "ns:Shop.Core"],
+        [P.calculator]: ["using:Shop.Core.Carts", "using:Shop.Core.Catalog", "using:Shop.Shared", "static:Shop.Core.Pricing.PriceMath", "ns:Shop.Core", "ns:Pricing"],
+        [P.priceMath]: ["using:System", "ns:Shop.Core.Pricing"],
+        [P.coreGuard]: ["using:System", "ns:Shop.Shared"],
+        [P.iclock]: ["using:System", "ns:Shop.Core.Time"],
+        [P.systemClock]: ["using:System", "ns:Shop.Core.Time"],
+        [P.scenarios]: ["using:Shop.Web.Pages", "using:Xunit", "ns:Shop.Web.IntegrationTests"],
+        [P.hostExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "ns:Shop.Web.Extensions"],
+        [P.serviceExtensions]: ["using:Microsoft.Extensions.DependencyInjection", "using:Shop.Core.Time", "ns:Shop.Web.Extensions"],
+        [P.cartPage]: ["using:Shop.Core.Time", "ns:Shop.Web.Pages"],
+        [P.checkout]: ["using:System", "using:Shop.Core.Auditing", "using:Shop.Shared", "ns:Shop.Web.Pages"],
+        [P.receipt]: ["alias:Receipt=Shop.Core.Models.Order", "ns:Shop.Web.Pages"],
+        [P.program]: ["using:Shop.Web.Extensions"],
+        [P.webGuard]: ["ns:Shop.Shared"],
+        [P.tests]: ["using:Shop.Core.Carts", "using:Shop.Core.Pricing", "using:Shop.Core.Tests.Fakes", "using:Xunit", "ns:Shop.Core.Tests"],
+        [P.seed]: ["using:System", "using:Shop.Core.Models", "ns:Shop.Tools"],
+    },
+    // chunks: each type declaration at file or namespace level (struct, record and record struct → class, a delegate →
+    // type), from its attached comment; then the file summary. Nested types are inside their parent's chunk.
+    chunks: {
+        [P.audited]: [
+            { kind: "class", name: "AuditedAttribute", startLine: 5, endLine: 10 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 10 },
+        ],
+        [P.productCode]: [
+            { kind: "class", name: "ProductCode", startLine: 3, endLine: 3 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 3 },
+        ],
+        [P.modelItem]: [
+            { kind: "class", name: "Item", startLine: 3, endLine: 7 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 7 },
+        ],
+        [P.order]: [
+            { kind: "type", name: "OrderPlacedHandler", startLine: 6, endLine: 6 },
+            { kind: "class", name: "Order", startLine: 8, endLine: 41 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 41 },
+        ],
+        [P.orderStatus]: [
+            { kind: "enum", name: "OrderStatus", startLine: 3, endLine: 8 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 8 },
+        ],
+        [P.money]: [
+            { kind: "class", name: "Money", startLine: 5, endLine: 21 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 21 },
+        ],
+        [P.calculator]: [
+            { kind: "class", name: "PriceCalculator", startLine: 10, endLine: 18 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 20 },
+        ],
+        [P.priceMath]: [
+            { kind: "class", name: "PriceMath", startLine: 5, endLine: 21 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 21 },
+        ],
+        [P.iclock]: [
+            { kind: "interface", name: "IClock", startLine: 5, endLine: 8 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 8 },
+        ],
+        [P.globalUsings]: [{ kind: "file-summary", name: "(file)", startLine: 1, endLine: 3 }],
+        [P.checkout]: [
+            { kind: "class", name: "CheckoutPage", startLine: 7, endLine: 29 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 29 },
+        ],
+        [P.program]: [{ kind: "file-summary", name: "(file)", startLine: 1, endLine: 8 }],
+        [P.tests]: [
+            { kind: "class", name: "PriceCalculatorTests", startLine: 8, endLine: 18 },
+            { kind: "file-summary", name: "(file)", startLine: 1, endLine: 18 },
+        ],
+    },
+    edits: [
+        {
+            // Cart.cs's and PriceCalculator.cs's type:Item now find nothing visible (Shop.Core.Models.Item isn't visible to
+            // them), and PriceCalculatorTests.cs's qtype:Catalog.Item names nothing; Catalog/Item.cs keeps its own two edges
+            description: "(a) src/Shop.Core/Catalog/Item.cs renames its class Item to Product (its declares change): three unchanged importers lose their edges to it",
+            writes: {
+                [P.catalogItem]: "namespace Shop.Core.Catalog\n{\n    public class Product\n    {\n        public Product(ProductCode code, Money listPrice)\n        {\n"
+                    + "            Code = code;\n            ListPrice = listPrice;\n        }\n\n        public ProductCode Code { get; }\n\n"
+                    + "        public Money ListPrice { get; }\n    }\n}\n",
+            },
+            edgesAfter: without(edge(P.cart, P.catalogItem), edge(P.calculator, P.catalogItem), edge(P.tests, P.catalogItem)),
+        },
+        {
+            // the test project's usings gain Shop.Core.Catalog: PriceCalculatorTests.cs's type:ProductCode (step 2) resolves.
+            // Nothing else of that project changes (FakeServices.cs has no type name; Cart, PriceCalculator, FakeServices and
+            // Money resolve as before, Money still at step 1)
+            description: "(b) tests/Shop.Core.Tests/Shop.Core.Tests.csproj gains <Using Include=\"Shop.Core.Catalog\" /> (a manifest changes): PriceCalculatorTests.cs's ProductCode resolves",
+            writes: {
+                "tests/Shop.Core.Tests/Shop.Core.Tests.csproj": "<Project Sdk=\"Microsoft.NET.Sdk\">\n\n  <PropertyGroup>\n    <TargetFramework>net8.0</TargetFramework>\n"
+                    + "    <IsPackable>false</IsPackable>\n  </PropertyGroup>\n\n  <ItemGroup>\n    <PackageReference Include=\"xunit\" Version=\"2.9.2\" />\n"
+                    + "  </ItemGroup>\n\n  <ItemGroup>\n    <Using Include=\"Shop.Core.Catalog\" />\n  </ItemGroup>\n\n  <ItemGroup>\n"
+                    + "    <ProjectReference Include=\"..\\..\\src\\Shop.Core\\Shop.Core.csproj\" />\n  </ItemGroup>\n\n</Project>\n",
+            },
+            edgesAfter: withAdded(edge(P.tests, P.productCode)),
+        },
+        {
+            // the partial class's second part goes (the file set changes): every reader of type:Cart keeps only Cart.cs, and
+            // Cart.Totals.cs's own edge to Money.cs goes with it
+            description: "(c) src/Shop.Core/Carts/Cart.Totals.cs, one part of the partial class Cart, is deleted",
+            writes: { [P.totals]: null },
+            edgesAfter: without(
+                edge(P.totals, P.money), edge(P.calculator, P.totals), edge(P.cartPage, P.totals), edge(P.checkout, P.totals), edge(P.tests, P.totals)
+            ),
+        },
+        {
+            // GlobalUsings.cs's declares gain global:Shop.Core.Pricing, so every C# file re-resolves: CheckoutPage.cs's
+            // type:PriceCalculator (step 2, the project's usings) now resolves. No other Shop.Web name changes: Rounding is
+            // PriceMath's nested type (Shop.Core.Pricing.Rounding is no type), and the rest resolved before step 2 or name
+            // nothing in Shop.Core.Pricing
+            description: "(d) src/Shop.Web/GlobalUsings.cs gains global using Shop.Core.Pricing (a project-wide using, through declares): CheckoutPage.cs's PriceCalculator resolves",
+            writes: {
+                [P.globalUsings]: "global using Shop.Core.Carts;\nglobal using Shop.Core.Pricing;\nglobal using static Shop.Core.Pricing.PriceMath;\n"
+                    + "global using Clock = Shop.Core.Time.SystemClock;\n",
+            },
+            edgesAfter: withAdded(edge(P.checkout, P.calculator)),
+        },
+    ],
+};

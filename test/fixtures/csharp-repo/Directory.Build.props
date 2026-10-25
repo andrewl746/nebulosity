@@ -1,0 +1,7 @@
+<Project>
+  <!-- Defaults for every project of the shop: no Using items here. -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>
