@@ -131,7 +131,7 @@ nebulosity/
 │   │                        #   the adapters (LanguageAdapter: one parse, five products; one resolver per run): registry.ts
 │   │                        #     (ADAPTERS, adapterFor, prepareLanguages), typescript-adapter.ts over typescript.ts,
 │   │                        #     <lang>/index.ts, and their shared parts treesitter.ts (web-tree-sitter, loaded only by
-│   │                        #     prepareLanguages), chunking.ts, resolution.ts; grammars/ (the five committed .wasm);
+│   │                        #     prepareLanguages), chunking.ts, resolution.ts; grammars/ (the five committed .wasm.gz);
 │   │                        #     read by the full run and the incremental update.
 │   │                        #   Built 2026-10-25: python/, go/, java/, csharp/, rust/, each its rules.ts, index.ts,
 │   │                        #     parse.ts and resolve.ts with their tests and a conformance.test.ts (C# and Rust keep

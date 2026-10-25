@@ -275,6 +275,8 @@ export type FixtureTruth = {
   - Run it and commit the files.
   - Test (`lib/index/languages/grammars.test.ts`): every `grammars.json` entry's file exists and hashes to its `sha256`, and when `node_modules/<package>` exists the committed file is byte-equal to the package's.
   - Commit and push.
+
+  *(Amended 2026-10-25, the final review's A-I1: the script writes each grammar gzip-compressed, as `<file>.gz` (the raw copies removed), `grammars.json` keeps the package file's name and its own sha256, `NOTICE.md` says "gzip-compressed and otherwise unchanged", and `loadGrammars` gunzips each once per process. The test checks the `.gz` files decompress to the sha256 and to the package's file. The unpacked package was 30.16 MB with the raw grammars, over ADR-058's 25.0 MB; it is 23.22 MB this way (BENCHMARKS.md, Index Benchmark #8).)*
 - [ ] **F3. Types and pure rules.**
   - Write `adapter.ts` as above.
   - Write `typescript-rules.ts`: `typescriptRules` has id `typescript`, `TYPESCRIPT_EXTENSIONS` and `languageOf` moved here from `typescript.ts` (which re-exports both, so no importer changes), `isTest` = `/\.(test|spec)\.[cm]?[jt]sx?$/.test(path)`, `manifest` = today's `MANIFEST` (`discover.ts` re-exports it as `MANIFEST`), and `excluded` = `() => () => false`.

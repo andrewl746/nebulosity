@@ -1343,14 +1343,16 @@ What each language's numbers mean, and don't:
 
 TypeScript's own edges, symbols and chunks are the F1 rows above; the new edges start in the new languages' files, and none joins two adapters' files (the only edges across `files.language` are TypeScript's adapter's own, between its TypeScript and JavaScript files).
 
-### The package (`npm pack --dry-run --json`, against ADR-058's 6.6 MB packed and 25.0 MB unpacked)
+### The package (`npm pack --dry-run --json`, against ADR-058's 6.6 MB packed and 25.0 MB unpacked): unpacked FAIL as first built (30.16 MB, 5.16 MB over), PASS after the grammars were gzipped (23.22 MB); packed PASS both times (6.50, then 6.45 MB)
 
 | Worktree | Map built | Tarball | Unpacked | Files | Grammars | `.next` |
 |---|---|---|---|---|---|---|
 | base `75b4774` | no | 0.35 MB | 1.37 MB | 197 | | |
 | E4 `a288a9a` | no | 1.02 MB | 9.21 MB | 238 | 7.55 MB | |
 | base `75b4774` | yes (`npm run build:package`) | **5.67 MB** | **21.76 MB** | 606 | | 20.40 MB |
-| E4 `a288a9a` | yes | **6.50 MB** | **30.16 MB** | 647 | 7.55 MB | 20.94 MB |
+| E4 `a288a9a`, as first built | yes | **6.50 MB** | **30.16 MB: FAIL** | 647 | 7.55 MB | 20.94 MB |
+| E4 `035e00f`, the grammars gzipped (the final review's fix wave) | yes | **6.45 MB** | **23.22 MB: PASS** | 647 | 0.61 MB | 20.94 MB |
 
-- **Against ADR-058's figures** (d8d2432's package): packed 6.50 MB against 6.6 MB, unpacked 30.16 MB against 25.0 MB. Against the base built the same way today, E4 adds 0.83 MB packed (+15%) and 8.40 MB unpacked (+39%): the five grammars' 7.55 MB (C#'s 5.35 MB of it), the adapters' code, and 0.54 MB more in the built Map (`.next`), where E4's only changes are highlight.js's five more grammars and the source route reading the rules.
-- `prepack`'s check passed in both: no links, no machine paths, no untracked files.
+- **Against ADR-058's bars** (d8d2432's package, 6.6 and 25.0 MB, stated as bars by ADR-058's amendment of 2026-10-25): as first built, packed 6.50 MB was under 6.6 MB and **unpacked 30.16 MB was over 25.0 MB by 5.16 MB: a missed bar**, which this entry first gave without a verdict (the final review's A-I1). Against the base built the same way today, E4 added 0.83 MB packed (+15%) and 8.40 MB unpacked (+39%): the five grammars' 7.55 MB (C#'s 5.35 MB of it), the adapters' code, and 0.54 MB more in the built Map (`.next`), where E4's only changes are highlight.js's five more grammars and the source route reading the rules.
+- **After the fix** (`035e00f`, measured 2026-10-25 with the Map rebuilt by `npm run build:package` in `../Nebulosity-e4`): the grammars ship as `.wasm.gz` (320,696 + 118,602 + 68,790 + 52,670 + 40,511 = 601,269 bytes, from 7,542,834), so the package is 6,445,025 bytes packed and 23,220,123 unpacked, 647 files: **both bars met**, and E4 now adds 0.78 MB packed and 1.46 MB unpacked to the base. The packed size hardly moves, since npm's tarball was already gzipped. The cost is the loader's gunzip, once per process: the five grammars' load measured 17.6–20.7 ms against 11.0–13.1 ms read raw (6 alternated processes each, the runtime's own start about 10 ms either way), about 8 ms. An index run of the C# fixture (a copy, into a scratch `NEBULOSITY_DATA`) gave its truth's 45 edges.
+- `prepack`'s check passed in every built row: no links, no machine paths, no untracked files.
