@@ -133,7 +133,7 @@ export async function main(argv: readonly string[]): Promise<number> {
             return 0;
         // each command loads what it needs when it runs, so --version or the MCP server's start never loads the indexer
         case "index":
-            return (await import("./commands/index-command")).runIndex(args);
+            return await (await import("./commands/index-command")).runIndex(args);
         case "summarize":
             return (await import("./commands/summarize-command")).runSummarize(args);
         case "map":

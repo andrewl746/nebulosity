@@ -8,6 +8,7 @@
  * Free: it never calls Anthropic (the summaries stage's status is only re-derived).
  */
 import path from "path";
+import { prepareLanguages } from "../../lib/index/languages/registry";
 import { indexRepository, RepoNotFoundError } from "../../lib/index/pipeline";
 import { repoKey } from "../../lib/index/paths";
 import { IndexLockedError } from "../../lib/db/store/lock";
@@ -15,8 +16,11 @@ import { readConfig, writeConfig } from "../../lib/config";
 import { refreshSummaryStatus } from "../../lib/index/summarize/status";
 import { hasAnthropicKey, loadLocalEnv } from "../env";
 
-/** Indexes the repo the arguments name. Returns the exit code: 0 done, 1 bad arguments or no such repo, 2 the index is locked. */
-export function runIndex(args: readonly string[]): number {
+/**
+ * Indexes the repo the arguments name. Resolves to the exit code: 0 done, 1 bad arguments or no such repo, 2 the index
+ * is locked. Async because the tree-sitter grammars load first (prepareLanguages, ADR-065); the run itself is synchronous.
+ */
+export async function runIndex(args: readonly string[]): Promise<number> {
     loadLocalEnv();
 
     const [target, ...extra] = args;
@@ -31,6 +35,9 @@ export function runIndex(args: readonly string[]): number {
     const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
     console.log(`[index] ${root}`);
+
+    // the grammars load once, asynchronously (WebAssembly can't start synchronously); the run is then synchronous
+    await prepareLanguages();
 
     try{
         const result = indexRepository(root, {

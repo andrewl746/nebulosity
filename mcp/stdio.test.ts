@@ -32,10 +32,11 @@ function childEnv(home: string, projectDir: string): Record<string, string> & No
     return env as Record<string, string> & NodeJS.ProcessEnv;
 }
 
-/** A Nebulosity home of its own: this checkout's migrations, and no database yet. */
+/** A Nebulosity home of its own: this checkout's migrations and tree-sitter grammars (ADR-065), and no database yet. */
 function freshHome(): string {
     const home = makeTempDir("neb-mcp-home-");
     fs.cpSync(path.join(CHECKOUT, "lib", "db", "migrations"), path.join(home, "lib", "db", "migrations"), { recursive: true });
+    fs.cpSync(path.join(CHECKOUT, "lib", "index", "languages", "grammars"), path.join(home, "lib", "index", "languages", "grammars"), { recursive: true });
     return home;
 }
 
