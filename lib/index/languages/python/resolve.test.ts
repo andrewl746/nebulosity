@@ -135,6 +135,23 @@ describe("python resolver: one rule at a time", () => {
         expect(r.resolve("a.py", "pkg.missing")).toEqual([]);
     });
 
+    it("X:name tries X.name then X in each containing root before any other root: the importer's own package wins (review I1)", () => {
+        // the Task P review's reproduction: svc_a's app defines db as an attribute, svc_b's app has a db.py
+        const files = { "svc_a/app/__init__.py": [], "svc_a/app/views.py": ["app:db"], "svc_b/app/__init__.py": [], "svc_b/app/db.py": [] };
+        const r = createPythonResolver(smallContext(files));
+        expect(r.resolve("svc_a/app/views.py", "app:db")).toEqual(["svc_a/app/__init__.py"]);
+        expect(r.resolve("svc_b/app/__init__.py", "app:db")).toEqual(["svc_b/app/db.py"]);   // svc_b's own submodule
+        // from outside both roots: a unique other-root hit for app.db comes before app (which two roots hold)
+        const outside = createPythonResolver(smallContext({ ...files, "tool.py": ["app:db", "app:other"] }));
+        expect(outside.resolve("tool.py", "app:db")).toEqual(["svc_b/app/db.py"]);
+        expect(outside.resolve("tool.py", "app:other")).toEqual([]);   // no app.other anywhere, and app is in two roots
+        // between containing roots too: the deeper one is tried for both names first, so its app beats the shallower root's app/db.py
+        const nested = createPythonResolver(smallContext({
+            "inner/app/__init__.py": [], "inner/run.py": ["app:db"], "app/__init__.py": [], "app/db.py": [],
+        }));
+        expect(nested.resolve("inner/run.py", "app:db")).toEqual(["inner/app/__init__.py"]);
+    });
+
     it("relative: one folder up per dot after the first; .:c is base/c, else base's __init__; past the root is nothing", () => {
         const r = createPythonResolver(smallContext({
             "p/__init__.py": [], "p/c.py": [], "p/q/__init__.py": [], "p/q/a.py": [], "p/m/__init__.py": [], "p/m/n.py": [], "top.py": [],

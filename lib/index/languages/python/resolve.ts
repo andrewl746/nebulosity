@@ -11,7 +11,8 @@
  *   `r/a/b/c/__init__.pyi`.
  * - **Absolute, from file F:** the roots that contain F, deepest first (the first hit wins); else the other roots, where
  *   exactly one hit resolves and two or more resolve to nothing (two packages named `app`, neither of them F's).
- * - **`X:name`** is the submodule `X.name`, else the module `X`; `X:*` and plain `X` are the module `X`.
+ * - **`X:name`** is the submodule `X.name`, else the module `X`, tried together in each containing root before the next
+ *   (so the importer's own package X beats another root's X/name.py); `X:*` and plain `X` are the module `X`.
  * - **Relative:** from F's folder, one folder up per dot after the first; `.:c` is the module `base/c`, else the
  *   package `base/__init__`; `.m:c` is `base/m/c`, else `base/m`.
  *
@@ -191,20 +192,28 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
         return found;
     };
 
-    /** An absolute module from a folder: the containing roots, deepest first; else exactly one hit among the others. */
+    /**
+     * An absolute module from a folder, given its candidate names in order (`X.name` then `X` for `from X import name`;
+     * one name otherwise). Each root containing the folder, deepest first, is tried for every candidate before the next
+     * root, the first hit winning: the importer's own package X, which may define `name` as an attribute, beats another
+     * root's X/name.py (two services' `app` packages, the Task P review's I1). Only then the other roots, each candidate
+     * in turn: exactly one hit resolves, and none or several move on to the next candidate.
+     */
     const absoluteCache = new Map<string, string | null>();
-    const absolute = (folder: string, dotted: string): string | null => {
-        const key = `${folder}\0${dotted}`;
+    const absolute = (folder: string, candidates: readonly string[]): string | null => {
+        const key = `${folder}\0${candidates.join("\0")}`;
         if (absoluteCache.has(key)) return absoluteCache.get(key)!;
         const { inside, outside } = rootsFor(folder);
         let target: string | null = null;
-        for (const root of inside){
-            target = moduleUnder(root, dotted);
-            if (target !== null) break;
+        search: for (const root of inside){
+            for (const dotted of candidates){
+                target = moduleUnder(root, dotted);
+                if (target !== null) break search;
+            }
         }
-        if (target === null){
-            const hits = outside.map((root) => moduleUnder(root, dotted)).filter((t): t is string => t !== null);
-            target = hits.length === 1 ? hits[0] : null;
+        for (let i = 0; target === null && i < candidates.length; i++){
+            const hits = outside.map((root) => moduleUnder(root, candidates[i])).filter((t): t is string => t !== null);
+            if (hits.length === 1) target = hits[0];
         }
         absoluteCache.set(key, target);
         return target;
@@ -219,12 +228,7 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
         const dots = /^\.*/.exec(source)![0].length;
         if (dots === 0){
             if (!DOTTED_NAME.test(source)) return null;
-            const folder = dirOf(importer);
-            if (name !== null && name !== "*"){
-                const submodule = absolute(folder, `${source}.${name}`);
-                if (submodule !== null) return submodule;
-            }
-            return absolute(folder, source);
+            return absolute(dirOf(importer), name !== null && name !== "*" ? [`${source}.${name}`, source] : [source]);
         }
 
         let base = dirOf(importer);
@@ -265,7 +269,7 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
             for (const script of scripts){
                 const folder = dirOf(script.manifest);
                 const file = moduleUnder(folder, script.module) ?? moduleUnder(folder === "" ? "src" : `${folder}/src`, script.module)
-                    ?? absolute(folder, script.module);
+                    ?? absolute(folder, [script.module]);
                 if (file !== null) add(file, script.declaredBy);
             }
             const sorted = [...ctx.files.keys()].sort(compare);
