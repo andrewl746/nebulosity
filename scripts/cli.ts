@@ -297,6 +297,7 @@ export async function runSetup(args: readonly string[], cwd: string = process.cw
     // --scope local files the registration under the folder claude runs in: the repo's root, wherever inside it setup ran
     const root = choice.root;
 
+    // setupCommand's line (addCommand over setupRegistration), from the registration --json prints
     const add = addCommand(registration);
     const remove: ClaudeCommand = { ...add, args: ["mcp", "remove", "--scope", "local", "nebulosity"] };
     const got = runClaude({ ...add, args: ["mcp", "get", "nebulosity"] }, root, "pipe");

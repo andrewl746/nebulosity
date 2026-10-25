@@ -210,7 +210,7 @@ Good to know:
 
 ### Other MCP clients, or by hand
 
-`nebulosity setup --json` prints the registration `nebulosity setup` makes, as a plain `mcpServers` block, and nothing else. It runs nothing and writes nothing, so `nebulosity setup --json > nebulosity.json` saves it. From an installed copy on Windows it looks like this (the paths have forward slashes there too):
+`nebulosity setup --json` prints the registration `nebulosity setup` makes, as a plain `mcpServers` block, and nothing else. It runs nothing and writes nothing, so `nebulosity setup --json > nebulosity.json` saves it (from bash, zsh or cmd: Windows PowerShell 5.1's `>` writes UTF-16). From an installed copy on Windows it looks like this (the paths have forward slashes there too):
 
 ```json
 {
@@ -231,9 +231,10 @@ Good to know:
 - **In Claude Code, without `nebulosity setup`:** in your repo's root, run `claude mcp add-json nebulosity '<the "nebulosity" object>' --scope local`, where the object is everything from the `{` after `"nebulosity":` to its closing `}`. Run it from bash or zsh (on Windows, Git Bash): Windows PowerShell 5.1 drops the double quotes inside an argument it passes to a program, and cmd doesn't treat single quotes as quotes.
 - **Clients that read an `mcpServers` block,** such as Cursor and Claude Desktop, take the block as it is: as the whole file, or add its `"nebulosity"` entry to the `mcpServers` already there.
   - Cursor: `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for every project ([Cursor's docs](https://cursor.com/docs/context/mcp)).
-  - Claude Desktop: `claude_desktop_config.json`, which Settings > Developer > Edit Config opens. Quit and restart Claude Desktop after saving it ([the MCP guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers)).
+  - Claude Desktop: `claude_desktop_config.json`, which Settings > Developer > Edit Config opens if your version has it. Quit and restart Claude Desktop after saving it ([the MCP guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers)).
   - Any other client: your client's MCP settings.
   - The block has no `"type"`, since a server with a `command` is a stdio server. Add `"type": "stdio"` if your client asks for one.
+  - If the client can't start `node` (an app opened from the desktop may not get your shell's PATH), put node's full path in `"command"`: `which node` prints it, or `where node` on Windows.
 - **Settings** go in `env`: for example `"NEBULOSITY_LIVE": "off"` keeps tool calls off the Map.
 - **Which repo it answers about:** Claude Code tells the server which folder its session is in; other clients don't. So outside Claude Code the server answers about the indexed repo holding the folder the client starts it in, else about the Map's repo (the one last indexed with `nebulosity index`, without `--no-activate`, or picked on the Map), and then each answer's first line says so. Run `nebulosity index` in your repo first.
 

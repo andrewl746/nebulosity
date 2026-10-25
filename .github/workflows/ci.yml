@@ -179,11 +179,14 @@ jobs:
           "$BIN/nebulosity" setup || { echo "nebulosity setup failed"; failed=yes; }
           got=$(claude mcp get nebulosity) || { echo "claude mcp get nebulosity failed"; failed=yes; }
           echo "$got"
-          # the registration as Claude Code holds it: this repo's local scope, node and the installed launcher, the data
-          # folder an installed copy always passes, and the health check's answer (the server started and listed its tools)
-          for want in "Scope: Local config" "Command: node" "Args: $LAUNCHER" "NEBULOSITY_DATA=$NEBULOSITY_DATA" "Connected"; do
+          # the registration as Claude Code holds it: this repo's local scope, node and the installed launcher, and the data
+          # folder an installed copy always passes
+          for want in "Scope: Local config" "Command: node" "Args: $LAUNCHER" "NEBULOSITY_DATA=$NEBULOSITY_DATA"; do
             grep -qF -- "$want" <<< "$got" || { echo "claude mcp get doesn't show: $want"; failed=yes; }
           done
+          # and the health check's answer: the server started and listed its tools. The tick may print as √ on Windows; a
+          # status starting "!" ("! Connected · tools fetch failed", "! Needs authentication") or a cross isn't connected
+          tr -d '\r' <<< "$got" | grep -E -- '^  Status: [^ !]+ Connected$' > /dev/null || { echo "claude mcp get doesn't show the server connected"; failed=yes; }
           printed=$("$BIN/nebulosity" setup --print) || { echo "nebulosity setup --print failed"; failed=yes; }
           echo "$printed"
           # a registration exists now, so --print gives the remove line before the add line
@@ -196,7 +199,8 @@ jobs:
           test -z "$failed"
       # The same registration as a plain mcpServers block (ADR-048, amended 2026-10-25): setup --json prints it, and Claude
       # Code's own add-json registers the block's "nebulosity" object under a second name, nebulosity-json, which has to
-      # connect with setup's command, launcher and data folder. It's removed at the end of the step, whatever happened.
+      # connect with setup's command, launcher and data folder. It's removed at the end of the step whatever happened, and
+      # checked gone.
       - name: nebulosity setup --json with the real Claude Code
         if: ${{ !cancelled() && steps.claude.outcome == 'success' && steps.copy.outcome == 'success' }}
         timeout-minutes: 5
@@ -235,7 +239,8 @@ jobs:
             done
             claude mcp remove nebulosity-json --scope local || { echo "claude mcp remove nebulosity-json failed"; failed=yes; }
           fi
-          # gone, whatever happened above (an add that failed halfway included)
+          # an add that failed may still have written the entry: removed quietly here too, then checked gone either way
+          [ -n "$added" ] || claude mcp remove nebulosity-json --scope local > /dev/null 2>&1 || true
           left=$(claude mcp get nebulosity-json 2>&1 || true)
           if grep -qF "Command: node" <<< "$left"; then echo "nebulosity-json is still registered"; failed=yes; fi
           after=$(find . | sort)
