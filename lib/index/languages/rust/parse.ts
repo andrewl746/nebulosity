@@ -23,7 +23,7 @@ export function parseRust(path: string, text: string, reading: Reading): ParsedF
 
     return parseTree("rust", text, (root) => {
         const imports = new Set<string>();
-        collectReferences(root, [], imports);
+        collectReferences(root, imports);
         const declares = [...imports].filter((s) => s.startsWith("mod:")).sort();
         if (reading === "parse") return { chunks: [], symbols: [], imports: [...imports], declares, calls: emptyCallFacts(), lineCount };
 
@@ -44,57 +44,77 @@ export function parseRust(path: string, text: string, reading: Reading): ParsedF
 
 /* ─────────────────────────────── references ─────────────────────────────── */
 
-/** Every reference under `node`, in source order, with the inline-module path it sits in. */
-function collectReferences(node: Node, inline: readonly string[], out: Set<string>): void {
-    switch (node.type){
-        case "use_declaration": {
-            if (node.hasError) return;   // a malformed use gives no specifier rather than a guess
-            const argument = node.childForFieldName("argument");
-            if (argument !== null) for (const leaf of leavesOfUseTree(argument, "", false)) out.add(specifierForUse(inline, leaf));
-            return;
-        }
-        case "mod_item": {
-            const name = node.childForFieldName("name");
-            if (name === null || name.isMissing) return;
-            const body = node.childForFieldName("body");
-            if (body === null) out.add(modSpecifier(inline, name.text, pathAttributeOf(node)));
-            else for (const child of body.namedChildren) collectReferences(child, [...inline, name.text], out);
-            return;
-        }
-        case "extern_crate_declaration": {
-            const name = node.childForFieldName("name");
-            if (name !== null && !name.isMissing) out.add(`extern:${unraw(name.text)}`);
-            return;
-        }
-        case "visibility_modifier":
-            return;   // pub(in crate::a) restricts visibility; it refers to nothing
-        case "scoped_identifier":
-        case "scoped_type_identifier": {
-            const segments = codeSegments(node);
-            if (segments !== null && !node.hasError){
-                const named = segments[0] === "" ? segments.slice(1) : segments;
-                if (named.length >= 2 && !STANDARD_CRATES.has(named[0]) && !named[0].startsWith("$")) out.add(pathSpecifier(inline, segments.join("::")));
+/**
+ * Every reference under `root`, in source order, with the inline-module path each sits in. One pre-order walk with an
+ * explicit stack, not recursion (B-I1): a long chain of `+` or of method calls nests deeper than the call stack goes.
+ * Each node either records what it is and lists the children to read next (pushed in reverse, so they pop in source
+ * order), or reads its own subtree whole and lists none.
+ */
+function collectReferences(root: Node, out: Set<string>): void {
+    const stack: { node: Node; inline: readonly string[] }[] = [{ node: root, inline: [] }];
+    const next = (nodes: readonly Node[], inline: readonly string[]): void => {
+        for (let i = nodes.length - 1; i >= 0; i--) stack.push({ node: nodes[i], inline });
+    };
+
+    while (stack.length > 0){
+        const { node, inline } = stack.pop()!;
+        switch (node.type){
+            case "use_declaration": {
+                if (node.hasError) continue;   // a malformed use gives no specifier rather than a guess
+                const argument = node.childForFieldName("argument");
+                if (argument !== null) for (const leaf of leavesOfUseTree(argument, "", false)) out.add(specifierForUse(inline, leaf));
+                continue;
             }
-            collectWithinChain(node.childForFieldName("path"), inline, out);
-            return;
+            case "mod_item": {
+                const name = node.childForFieldName("name");
+                if (name === null || name.isMissing) continue;
+                const body = node.childForFieldName("body");
+                if (body === null) out.add(modSpecifier(inline, name.text, pathAttributeOf(node)));
+                else next(body.namedChildren, [...inline, name.text]);
+                continue;
+            }
+            case "extern_crate_declaration": {
+                const name = node.childForFieldName("name");
+                if (name !== null && !name.isMissing) out.add(`extern:${unraw(name.text)}`);
+                continue;
+            }
+            case "visibility_modifier":
+                continue;   // pub(in crate::a) restricts visibility; it refers to nothing
+            case "scoped_identifier":
+            case "scoped_type_identifier": {
+                const segments = codeSegments(node);
+                if (segments !== null && !node.hasError){
+                    const named = segments[0] === "" ? segments.slice(1) : segments;
+                    if (named.length >= 2 && !STANDARD_CRATES.has(named[0]) && !named[0].startsWith("$")) out.add(pathSpecifier(inline, segments.join("::")));
+                }
+                next(withinChain(node.childForFieldName("path")), inline);
+                continue;
+            }
+            default:
+                next(node.namedChildren, inline);
         }
-        default:
-            for (const child of node.namedChildren) collectReferences(child, inline, out);
     }
 }
 
 /**
  * Inside a path's own chain (its `path` field, down to the first segment) only the generic arguments hold further
  * references: `crate::a::Wrapper<crate::b::Thing>` gives two paths, `crate::a` (the inner chain) gives none of its own.
+ * The nodes to read, in source order (the chain's deepest part is written first).
  */
-function collectWithinChain(node: Node | null, inline: readonly string[], out: Set<string>): void {
-    if (node === null) return;
-    if (node.type === "scoped_identifier" || node.type === "scoped_type_identifier") collectWithinChain(node.childForFieldName("path"), inline, out);
-    else if (node.type === "generic_type"){
-        collectWithinChain(node.childForFieldName("type"), inline, out);
-        const args = node.childForFieldName("type_arguments");
-        if (args !== null) collectReferences(args, inline, out);
-    } else if (node.type === "bracketed_type") collectReferences(node, inline, out);   // <T as crate::a::Tr>::x: the trait's path
+function withinChain(start: Node | null): Node[] {
+    const found: Node[] = [];   // outermost first, reversed below
+    for (let node = start; node !== null;){
+        if (node.type === "scoped_identifier" || node.type === "scoped_type_identifier") node = node.childForFieldName("path");
+        else if (node.type === "generic_type"){
+            const args = node.childForFieldName("type_arguments");
+            if (args !== null) found.push(args);
+            node = node.childForFieldName("type");
+        } else{
+            if (node.type === "bracketed_type") found.push(node);   // <T as crate::a::Tr>::x: the trait's path
+            node = null;
+        }
+    }
+    return found.reverse();
 }
 
 /** A code path's segments without generic arguments (`Vec::<u8>::new` → Vec, new), "" first for a leading `::`; null for `<T as Tr>::x`. */
@@ -206,7 +226,7 @@ function symbolLines(node: Node): { startLine: number; endLine: number } {
 /** Exported means the item's own visibility is exactly `pub` (not `pub(crate)`, not none). */
 const isPub = (node: Node): boolean => node.namedChildren.some((c) => c.type === "visibility_modifier" && c.text === "pub");
 
-/** A type's base name: `Foo` for Foo, Foo<T>, a::Foo, &Foo, &mut a::Foo<T>; its text without spaces otherwise ([T], dyn Tr). */
+/** A type's base name: `Foo` for Foo, Foo<T>, a::Foo, &Foo, &mut a::Foo<T>; otherwise its text, each run of whitespace one space ([T], dyn Tr). */
 function baseName(node: Node | null): string {
     if (node === null) return "";
     switch (node.type){
@@ -241,7 +261,28 @@ const ITEM_KINDS: Record<string, { symbol: SymbolKind; chunk: ChunkKind }> = {
     macro_definition: { symbol: "function", chunk: "function" },
 };
 
-/** The top-level items' symbols (with their members) and chunk declarations, and the summary's import lines. */
+/** The items an impl block can name as its self type or its trait. */
+const TYPE_ITEMS: ReadonlySet<string> = new Set(["struct_item", "union_item", "enum_item", "trait_item", "type_item"]);
+
+/** The name of a type this file may declare that `node` names (`Foo`, `Foo<T>`, `&mut Foo`), or null for a path (`a::Foo`) and anything else. */
+function plainTypeName(node: Node | null): string | null {
+    let type = node;
+    while (type !== null && (type.type === "reference_type" || type.type === "pointer_type" || type.type === "generic_type")){
+        type = type.childForFieldName("type");
+    }
+    return type !== null && type.type === "type_identifier" ? type.text : null;
+}
+
+/**
+ * The top-level items' symbols (with their members) and chunk declarations, and the summary's import lines.
+ *
+ * Exported follows ADR-065's one rule for every language: a member only when its owner is exported too. A field needs its
+ * own `pub` and its struct's; a trait's fns have no visibility of their own, so they take the trait's. An impl's fns sit
+ * outside their type's body, often in another file, so only an owner this file declares can gate them (the parse sees
+ * one file): an inherent impl's fn needs its own `pub` and, when this file declares the self type, that type's; a trait
+ * impl's fn has no visibility of its own (it is as visible as the type and the trait), so it is exported unless this
+ * file declares the self type or the trait without `pub`.
+ */
 function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declaration[]; summaryImports: string[] } {
     const symbols: SymbolRow[] = [];
     const declarations: Declaration[] = [];
@@ -249,23 +290,42 @@ function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declara
     const symbol = (node: Node, name: string, kind: SymbolKind, exported: boolean, parent: string | null): void => {
         symbols.push({ name, qualifiedName: parent === null ? name : `${parent}.${name}`, kind, ...symbolLines(node), exported, parentQualifiedName: parent });
     };
-    const methods = (body: Node | null, parent: string): void => {
+    const methods = (body: Node | null, parent: string, exported: (member: Node) => boolean): void => {
         for (const member of body?.namedChildren ?? []){
             if (member.type !== "function_item" && member.type !== "function_signature_item") continue;
             const name = member.childForFieldName("name");
-            if (name !== null && !name.isMissing) symbol(member, name.text, "method", isPub(member), parent);
+            if (name !== null && !name.isMissing) symbol(member, name.text, "method", exported(member), parent);
         }
+    };
+
+    // the types this file declares, by name, and whether each is exported: what gates an impl's fns (an impl may come first)
+    const declaredTypes = new Map<string, boolean>();
+    for (const item of root.namedChildren){
+        const name = TYPE_ITEMS.has(item.type) ? item.childForFieldName("name") : null;
+        if (name !== null && !name.isMissing) declaredTypes.set(name.text, isPub(item));
+    }
+    /** An owner's flag when this file declares it; true (no gate) when it doesn't. */
+    const ownerAllows = (node: Node | null): boolean => {
+        const name = plainTypeName(node);
+        return name === null ? true : declaredTypes.get(name) ?? true;
     };
 
     for (const item of root.namedChildren){
         if (item.type === "use_declaration" || item.type === "extern_crate_declaration" || (item.type === "mod_item" && item.childForFieldName("body") === null)){
-            summaryImports.push(item.text.replace(/\r\n/g, "\n").trim());
+            // a malformed use gives no specifier, so no summary line either, as the other languages do (B-M2)
+            if (!(item.type === "use_declaration" && item.hasError)) summaryImports.push(item.text.replace(/\r\n/g, "\n").trim());
             continue;
         }
         if (item.type === "impl_item"){
-            const self = baseName(item.childForFieldName("type"));
+            const selfType = item.childForFieldName("type");
+            const self = baseName(selfType);
             const trait = item.childForFieldName("trait");
-            methods(item.childForFieldName("body"), self);
+            const selfAllows = ownerAllows(selfType);
+            if (trait === null) methods(item.childForFieldName("body"), self, (member) => selfAllows && isPub(member));
+            else{
+                const traitAllows = ownerAllows(trait);
+                methods(item.childForFieldName("body"), self, () => selfAllows && traitAllows);
+            }
             declarations.push({ kind: "class", name: trait === null ? `impl ${self}` : `impl ${baseName(trait)} for ${self}`, ...chunkSpan(item), exported: false });
             continue;
         }
@@ -279,9 +339,9 @@ function collectItems(root: Node): { symbols: SymbolRow[]; declarations: Declara
             const body = item.childForFieldName("body");
             for (const field of body?.type === "field_declaration_list" ? body.namedChildren : []){
                 const fieldName = field.type === "field_declaration" ? field.childForFieldName("name") : null;
-                if (fieldName !== null && !fieldName.isMissing) symbol(field, fieldName.text, "property", isPub(field), name.text);
+                if (fieldName !== null && !fieldName.isMissing) symbol(field, fieldName.text, "property", exported && isPub(field), name.text);
             }
-        } else if (item.type === "trait_item") methods(item.childForFieldName("body"), name.text);
+        } else if (item.type === "trait_item") methods(item.childForFieldName("body"), name.text, () => exported);
         declarations.push({ kind: kinds.chunk, name: name.text, ...chunkSpan(item), exported });
     }
     return { symbols, declarations, summaryImports };

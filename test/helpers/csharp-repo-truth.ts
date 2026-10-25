@@ -29,9 +29,10 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *    static access (`Guard.NotNull(…)` gives type:Guard). An unqualified call `M(…)` gives nothing.
  * 5. "Names the file declares" are the types it declares, nested ones included; type parameters are left out too.
  * 6. Symbols: a constructor is named as written (the type's name: qualifiedName `Order.Order`), an indexer `this`; a
- *    const field is a field (property). Enum members and a positional record's parameters are not symbols. Exported is
- *    the declaration's own `public` (so Guard.NotNull, public in an internal class, is exported); an interface's
- *    members are exported when the interface is public.
+ *    const field is a field (property). Enum members and a positional record's parameters are not symbols. Exported
+ *    (ADR-065's one rule, the final review's B-I2): a top-level type with its own `public`; a member, or a nested type,
+ *    only when its owner is exported and it is `public` itself (so Guard.NotNull, public in an internal class, is not
+ *    exported); an interface's members take the interface's flag.
  * 7. type:N's steps meet no conflict in this fixture (no alias shares a name with a visible type, no two usings hold
  *    the same name), so their order between the alias and the usings doesn't change any edge here.
  * 8. qtype:'s kind: internal when it resolves, or when its qualifier, as written or under an enclosing namespace, is a
@@ -43,7 +44,7 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * 12. An attribute's two lookup names (N and NAttribute): the one that doesn't resolve is context when the other one
  *     resolves, since C# binds the attribute to the one that exists. ReceiptPage.cs's qtype:Core.Auditing.Audited.
  *
- * The controller's rulings of 2026-10-25 (rounds 2 and 3, made for the owner; evidence in progress-csharp.md):
+ * The controller's rulings of 2026-10-25 (rounds 2 and 3, made for the owner; the evidence is in ADR-065):
  * 14. No ext: specifier and no extension method in declares: C# extension-method calls are not linked. Binding one
  *     needs the receiver's and the arguments' types (an applicable instance method or overload always wins), and by name
  *     alone 19 of 30 sampled links on jellyfin were right. Round 1's choices 10 (a predefined type's static call) and 11
@@ -348,7 +349,7 @@ export const csharpRepoTruth: FixtureTruth = {
         ],
         [P.coreGuard]: [
             sym("Guard", "class", 5, 12, false),                                        // internal
-            sym("NotNull", "method", 7, 11, true, "Guard"),                             // public, in an internal class
+            sym("NotNull", "method", 7, 11, false, "Guard"),                            // public, but in an internal class
         ],
         [P.iclock]: [
             sym("IClock", "interface", 5, 8, true),
@@ -405,7 +406,7 @@ export const csharpRepoTruth: FixtureTruth = {
         [P.program]: [],                                                                // top-level statements only
         [P.webGuard]: [
             sym("Guard", "class", 3, 9, false),
-            sym("NotBlank", "method", 5, 8, true, "Guard"),
+            sym("NotBlank", "method", 5, 8, false, "Guard"),                            // public, but its class is internal
         ],
         [P.fakes]: [
             sym("FakeServices", "class", 4, 13, true),

@@ -46,11 +46,11 @@ function stringContent(literal: Node | null): string | null {
 }
 
 /** A node's named children of one type. */
-const childrenOfType = (node: Node, type: string): Node[] => node.namedChildren.filter((c) => c !== null && c.type === type) as Node[];
+const childrenOfType = (node: Node, type: string): Node[] => node.namedChildren.filter((c) => c.type === type);
 
 /** The identifiers a field holds, `_` included (callers decide), MISSING ones left out. */
 function identifiersOf(node: Node, field: string): string[] {
-    return node.childrenForFieldName(field).filter((c): c is Node => c !== null && c.type === "identifier" && !c.isMissing).map((c) => c.text);
+    return node.childrenForFieldName(field).filter((c) => c.type === "identifier" && !c.isMissing).map((c) => c.text);
 }
 
 /** The identifiers directly in an expression list (`a, b :=`), each a plain name. */
@@ -62,17 +62,20 @@ function listIdentifiers(list: Node | null): string[] {
 
 /** Whether a node has an anonymous `:=` token among its children (a range clause or receive that declares). */
 function declaresWithColon(node: Node): boolean {
-    return node.children.some((c) => c !== null && !c.isNamed && c.type === ":=");
+    return node.children.some((c) => !c.isNamed && c.type === ":=");
 }
 
 /**
  * Every name a function binds anywhere inside it (the plan's function-level approximation): parameters, results and
  * the receiver (of nested function literals too), type parameters, `:=`, var and const, range and select receives
  * that declare, a type switch's alias, labels, local types (G-7), and a method receiver's type parameters (G-8).
+ * An explicit stack, not recursion: a long chain of `+` or `else if` nests deeper than the call stack goes (B-I1).
  */
 function bindingsOf(fn: Node): Set<string> {
     const bound = new Set<string>();
-    const visit = (node: Node): void => {
+    const stack: Node[] = [fn];
+    while (stack.length > 0){
+        const node = stack.pop()!;
         switch (node.type){
             case "parameter_declaration":
             case "variadic_parameter_declaration":
@@ -103,15 +106,16 @@ function bindingsOf(fn: Node): Set<string> {
                 break;
             }
         }
-        for (const child of node.namedChildren) if (child !== null) visit(child);
-    };
-    visit(fn);
+        // the order doesn't matter (a set of names), but the walk stays the recursion's pre-order
+        const children = node.namedChildren;
+        for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]);
+    }
 
     // G-8: `func (b Box[T]) …` declares T for the method
     if (fn.type === "method_declaration"){
         const receiverType = receiverTypeNode(fn);
         const args = receiverType?.type === "generic_type" ? receiverType.childForFieldName("type_arguments") : null;
-        if (args !== null) for (const id of args.descendantsOfType("type_identifier")) if (id !== null) bound.add(id.text);
+        if (args !== null) for (const id of args.descendantsOfType("type_identifier")) bound.add(id.text);
     }
     return bound;
 }
@@ -119,7 +123,7 @@ function bindingsOf(fn: Node): Set<string> {
 /** A method's receiver type, without `*` or parentheses (a type_identifier, or a generic_type for `Box[T]`). */
 function receiverTypeNode(method: Node): Node | null {
     const receiver = method.childForFieldName("receiver");
-    const param = receiver?.namedChildren.find((c) => c !== null && (c.type === "parameter_declaration" || c.type === "variadic_parameter_declaration")) ?? null;
+    const param = receiver?.namedChildren.find((c) => c.type === "parameter_declaration" || c.type === "variadic_parameter_declaration") ?? null;
     let type = param?.childForFieldName("type") ?? null;
     while (type !== null && (type.type === "pointer_type" || type.type === "parenthesized_type")) type = type.namedChildren[0] ?? null;
     return type;
@@ -147,10 +151,10 @@ function embeddedName(type: Node | null): string | null {
 
 /** The type specs of a type declaration, and the const/var specs of a const or var declaration, in order. */
 function specsOf(declaration: Node): Node[] {
-    if (declaration.type === "type_declaration") return declaration.namedChildren.filter((c): c is Node => c !== null && (c.type === "type_spec" || c.type === "type_alias"));
+    if (declaration.type === "type_declaration") return declaration.namedChildren.filter((c) => c.type === "type_spec" || c.type === "type_alias");
     if (declaration.type === "const_declaration") return childrenOfType(declaration, "const_spec");
     // a var declaration holds its specs directly, or in a var_spec_list when parenthesized
-    return declaration.namedChildren.flatMap((c) => (c === null ? [] : c.type === "var_spec" ? [c] : c.type === "var_spec_list" ? childrenOfType(c, "var_spec") : []));
+    return declaration.namedChildren.flatMap((c) => (c.type === "var_spec" ? [c] : c.type === "var_spec_list" ? childrenOfType(c, "var_spec") : []));
 }
 
 const specName = (spec: Node): string | null => spec.childForFieldName("name")?.text ?? null;
@@ -169,7 +173,6 @@ const isExported = (name: string): boolean => /^\p{Lu}/u.test(name);
 function topLevelNames(root: Node): string[] {
     const names: string[] = [];
     for (const node of root.namedChildren){
-        if (node === null) continue;
         if (node.type === "function_declaration"){
             const name = node.childForFieldName("name")?.text;
             if (name !== undefined) names.push(name);
@@ -185,9 +188,21 @@ function topLevelNames(root: Node): string[] {
     return names.filter((n) => n !== "_");
 }
 
+/** A node the specifier walk still has to read, with the names bound where it sits (null outside any function). */
+type Visit = { node: Node; bound: ReadonlySet<string> | null };
+
+/** A node's children in the given fields, in order, each to be read under `bound`. */
+function fieldVisits(node: Node, fields: readonly string[], bound: ReadonlySet<string> | null): Visit[] {
+    return fields.flatMap((f) => node.childrenForFieldName(f).map((child) => ({ node: child, bound })));
+}
+
 /**
  * The file's specifiers in source order, each once. A node inside an ERROR is read as nothing: a malformed construct
  * gives no specifier rather than a guess.
+ *
+ * One pre-order walk with an explicit stack, not recursion (B-I1): a long chain of `+`, a long builder chain or a long
+ * `else if` nests deeper than the call stack goes. Each node either records what it is and lists the children to read
+ * next (pushed in reverse, so they pop in source order), or reads what it needs itself and lists none.
  */
 function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers: string[]; importLines: string[] } {
     const specifiers = new Set<string>();
@@ -200,14 +215,15 @@ function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers
         specifiers.add(`name:${text}`);
     };
 
-    const walk = (node: Node, bound: ReadonlySet<string> | null): void => {
-        if (node.isError || node.isMissing) return;
-        const children = (): void => {
-            for (const child of node.namedChildren) if (child !== null) walk(child, bound);
-        };
-        const field = (f: string, scope: ReadonlySet<string> | null = bound): void => {
-            for (const child of node.childrenForFieldName(f)) if (child !== null) walk(child, scope);
-        };
+    const stack: Visit[] = [];
+    const next = (visits: readonly Visit[]): void => {
+        for (let i = visits.length - 1; i >= 0; i--) stack.push(visits[i]);
+    };
+    next(root.namedChildren.map((node) => ({ node, bound: null })));
+
+    while (stack.length > 0){
+        const { node, bound } = stack.pop()!;
+        if (node.isError || node.isMissing) continue;
 
         switch (node.type){
             case "comment":
@@ -215,39 +231,34 @@ function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers
             case "field_identifier":
             case "package_identifier":
             case "label_name":
-                return;
+                continue;
 
             case "import_spec": {
-                if (node.hasError) return;
+                if (node.hasError) continue;
                 const path = stringContent(node.childForFieldName("path"));
-                if (path === null) return;
+                if (path === null) continue;
                 specifiers.add(importSpecifier(path, node.childForFieldName("name")?.text ?? null));
                 importLines.push(`import ${node.text.trim()}`);
-                return;
+                continue;
             }
 
             // the outermost function, method or top-level function literal: its bindings hold for everything in it
             case "function_declaration":
-            case "method_declaration": {
-                const scope = bindingsOf(node);
-                for (const f of ["type_parameters", "receiver", "parameters", "result", "body"]) field(f, scope);
-                return;
-            }
-            case "func_literal": {
-                const scope = bound ?? bindingsOf(node);
-                for (const f of ["parameters", "result", "body"]) field(f, scope);
-                return;
-            }
+            case "method_declaration":
+                next(fieldVisits(node, ["type_parameters", "receiver", "parameters", "result", "body"], bindingsOf(node)));
+                continue;
+            case "func_literal":
+                next(fieldVisits(node, ["parameters", "result", "body"], bound ?? bindingsOf(node)));
+                continue;
 
             // G-8: a generic type's type parameters are bound inside its own spec
             case "type_spec":
             case "type_alias": {
                 const params = node.childForFieldName("type_parameters");
                 const scope = params === null ? bound : new Set([...(bound ?? []), ...params.descendantsOfType("type_parameter_declaration")
-                    .flatMap((d) => (d === null ? [] : identifiersOf(d, "name")))]);
-                field("type_parameters", scope);
-                field("type", scope);
-                return;
+                    .flatMap((d) => identifiersOf(d, "name"))]);
+                next(fieldVisits(node, ["type_parameters", "type"], scope));
+                continue;
             }
 
             case "selector_expression": {
@@ -255,51 +266,46 @@ function readSpecifiers(root: Node, topLevel: ReadonlySet<string>): { specifiers
                 const member = node.childForFieldName("field");
                 if (operand !== null && operand.type === "identifier" && !operand.isMissing && member !== null && !member.isMissing){
                     if (free(operand.text, bound)) specifiers.add(`use:${operand.text}.${member.text}`);
-                    return;   // a bound or top-level operand is no reference, and a free one is read through its use:
+                    continue;   // a bound or top-level operand is no reference, and a free one is read through its use:
                 }
-                if (operand !== null) walk(operand, bound);
-                return;
+                if (operand !== null) next([{ node: operand, bound }]);
+                continue;
             }
             case "qualified_type": {
                 const pkg = node.childForFieldName("package");
                 const member = node.childForFieldName("name");
                 if (pkg !== null && member !== null && !pkg.isMissing && !member.isMissing && free(pkg.text, bound)) specifiers.add(`use:${pkg.text}.${member.text}`);
-                return;
+                continue;
             }
 
             // declaration sites are never names (G-4): walk only the parts that are types or values
             case "parameter_declaration":
             case "variadic_parameter_declaration":
             case "field_declaration":
-                field("type");
-                return;
             case "type_parameter_declaration":
-                field("type");
-                return;
+                next(fieldVisits(node, ["type"], bound));
+                continue;
             case "const_spec":
             case "var_spec":
-                field("type");
-                field("value");
-                return;
+                next(fieldVisits(node, ["type", "value"], bound));
+                continue;
 
             // a keyed element's key is a field name or a map key: a bare identifier there is no reference
             case "keyed_element": {
                 const key = node.childForFieldName("key");
                 const keyExpression = key?.namedChildren[0] ?? null;
-                if (key !== null && !(key.namedChildCount === 1 && keyExpression?.type === "identifier")) walk(key, bound);
-                field("value");
-                return;
+                const readKey = key !== null && !(key.namedChildCount === 1 && keyExpression?.type === "identifier");
+                next([...(readKey ? [{ node: key, bound }] : []), ...fieldVisits(node, ["value"], bound)]);
+                continue;
             }
 
             case "identifier":
             case "type_identifier":
                 name(node, bound);
-                return;
+                continue;
         }
-        children();
-    };
-
-    for (const node of root.namedChildren) if (node !== null) walk(node, null);
+        next(node.namedChildren.map((child) => ({ node: child, bound })));
+    }
     return { specifiers: [...specifiers], importLines };
 }
 
@@ -312,16 +318,29 @@ type GoSymbols = { symbols: SymbolRow[]; declarations: Declaration[] };
 function readDeclarations(root: Node): GoSymbols {
     const symbols: SymbolRow[] = [];
     const declarations: Declaration[] = [];
-    const add = (name: string, kind: SymbolKind, node: Node, parent: string | null): void => {
+    /** `ownerExported`: ADR-065's one export rule, a member is exported only when its owner is too. */
+    const add = (name: string, kind: SymbolKind, node: Node, parent: string | null, ownerExported = true): void => {
         if (name === "_" || name === "") return;
         symbols.push({
             name, qualifiedName: parent === null ? name : `${parent}.${name}`, kind,
-            startLine: startLineOf(node), endLine: endLineOf(node), exported: isExported(name), parentQualifiedName: parent,
+            startLine: startLineOf(node), endLine: endLineOf(node), exported: ownerExported && isExported(name), parentQualifiedName: parent,
         });
     };
 
+    // A method sits outside its type, often in another file of the package, so only a receiver type this file declares
+    // can gate it (the parse sees one file); a field or an interface method always sits inside its type.
+    const declaredTypes = new Set<string>();
     for (const node of root.namedChildren){
-        if (node === null || !TOP_LEVEL_DECLARATIONS.has(node.type)) continue;
+        if (node.type !== "type_declaration") continue;
+        for (const spec of specsOf(node)){
+            const name = specName(spec);
+            if (name !== null) declaredTypes.add(name);
+        }
+    }
+    const receiverAllows = (parent: string | null): boolean => parent === null || !declaredTypes.has(parent) || isExported(parent);
+
+    for (const node of root.namedChildren){
+        if (!TOP_LEVEL_DECLARATIONS.has(node.type)) continue;
         const names: string[] = [];
         let exported = false;
         let chunkKind: Declaration["kind"] = "const";
@@ -334,9 +353,9 @@ function readDeclarations(root: Node): GoSymbols {
         } else if (node.type === "method_declaration"){
             const name = node.childForFieldName("name")?.text ?? "";
             const parent = receiverName(node);
-            add(name, "method", node, parent);
+            add(name, "method", node, parent, receiverAllows(parent));
             names.push(parent === null ? name : `${parent}.${name}`);
-            exported = isExported(name);
+            exported = receiverAllows(parent) && isExported(name);
             chunkKind = "function";
         } else if (node.type === "type_declaration"){
             const kinds = new Set<string>();
@@ -351,13 +370,13 @@ function readDeclarations(root: Node): GoSymbols {
                 if (kind === "struct" && type !== null){
                     for (const fields of childrenOfType(type, "field_declaration_list")){
                         for (const member of childrenOfType(fields, "field_declaration")){
-                            const memberNames = member.childrenForFieldName("name").filter((c): c is Node => c !== null).map((c) => c.text);
+                            const memberNames = member.childrenForFieldName("name").map((c) => c.text);
                             const embedded = memberNames.length === 0 ? embeddedName(member.childForFieldName("type")) : null;
-                            for (const memberName of embedded === null ? memberNames : [embedded]) add(memberName, "property", member, name);
+                            for (const memberName of embedded === null ? memberNames : [embedded]) add(memberName, "property", member, name, isExported(name));
                         }
                     }
                 } else if (kind === "interface" && type !== null){
-                    for (const method of childrenOfType(type, "method_elem")) add(method.childForFieldName("name")?.text ?? "", "method", method, name);
+                    for (const method of childrenOfType(type, "method_elem")) add(method.childForFieldName("name")?.text ?? "", "method", method, name, isExported(name));
                 }
             }
             // the chunk kinds of the plan's common rules: a struct is a class; a group of mixed kinds is a type
@@ -459,7 +478,7 @@ export function parseGo(path: string, text: string, reading: Reading): ParsedFil
         const topLevel = new Set(names);
         const { specifiers, importLines } = readSpecifiers(root, topLevel);
 
-        const packageName = childrenOfType(root, "package_clause")[0]?.namedChildren.find((c) => c !== null && c.type === "package_identifier")?.text ?? null;
+        const packageName = childrenOfType(root, "package_clause")[0]?.namedChildren.find((c) => c.type === "package_identifier")?.text ?? null;
         const declares = [...new Set([...(packageName === null ? [] : [`package:${packageName}`]), ...names.filter((n) => n !== "init")])].sort();
 
         let chunks: CodeChunk[] = [];
@@ -467,7 +486,10 @@ export function parseGo(path: string, text: string, reading: Reading): ParsedFil
         if (reading === "full"){
             const read = readDeclarations(root);
             symbols = read.symbols;
-            const exports = symbols.filter((s) => s.parentQualifiedName === null && s.exported).map((s) => `${s.name} (${s.kind})`);
+            // the summary names kinds as chunks do (the plan's chunk-kind mapping, B-M1): a struct is a class, as in C# and
+            // Rust, and a method whose receiver can't be read (so it has no parent) is a function
+            const exports = symbols.filter((s) => s.parentQualifiedName === null && s.exported)
+                .map((s) => `${s.name} (${s.kind === "struct" ? "class" : s.kind === "method" ? "function" : s.kind})`);
             chunks = assembleChunks(path, text, read.declarations, { imports: importLines, exports });
         }
         return { chunks, symbols, imports: specifiers, declares, calls: emptyCallFacts(), lineCount };

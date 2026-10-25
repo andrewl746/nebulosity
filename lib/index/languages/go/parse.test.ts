@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { k13Texts } from "../../../../test/helpers/adapter-conformance";
 import { goRepoTruth as truth } from "../../../../test/helpers/go-repo-truth";
 import { prepareLanguages } from "../registry";
 import { goAdapter } from "./index";
@@ -66,6 +67,23 @@ describe("the Go parse against the go-repo truth", () => {
             "Exports:",
             "Version (const)",
             "Open (function)",
+        ].join("\n"));
+    });
+
+    it("names a struct in the summary's exports by its chunk kind, class (B-M1), and leaves methods out", () => {
+        const summary = parseGo("internal/store/store.go", read("internal/store/store.go"), "full").chunks.at(-1)!;
+        expect(summary.text).toBe([
+            "File: internal/store/store.go",
+            "",
+            "Imports:",
+            "  (none)",
+            "",
+            "Exports:",
+            "MaxItems (const)",
+            "Key (type)",
+            "Store (class)",
+            "Getter (interface)",
+            "New (function)",
         ].join("\n"));
     });
 });
@@ -171,5 +189,63 @@ describe("the Go parse, case by case", () => {
         const crlf = parseGo("cmd/shop/main.go", lf.replace(/\n/g, "\r\n"), "full");
         expect(crlf.imports).toEqual(truth.specifiers["cmd/shop/main.go"]);
         expect(crlf.symbols).toEqual(truth.symbols["cmd/shop/main.go"]);
+    });
+});
+
+describe("Go's one export rule (ADR-065, the final review's B-I2)", () => {
+    it("exports a field, an interface method or a method only when its owner type is exported too", () => {
+        const parsed = full(go(
+            "package p",
+            "",
+            "type hidden struct {",
+            "\tShown int",
+            "}",
+            "",
+            "type getter interface {",
+            "\tGet() int",
+            "}",
+            "",
+            "type Open struct {",
+            "\tShown int",
+            "\tquiet int",
+            "}",
+            "",
+            "func (h *hidden) Shown2() {}",
+            "func (o Open) Do() {}",
+            "func (e Elsewhere) Run() {}",
+        ));
+        expect(parsed.symbols.map((s) => [s.qualifiedName, s.exported])).toEqual([
+            ["hidden", false], ["hidden.Shown", false],
+            ["getter", false], ["getter.Get", false],
+            ["Open", true], ["Open.Shown", true], ["Open.quiet", false],
+            ["hidden.Shown2", false],   // its receiver's type is declared here, unexported
+            ["Open.Do", true],
+            ["Elsewhere.Run", true],    // its receiver's type isn't declared in this file, so only the case decides
+        ]);
+        expect(parsed.chunks.filter((c) => c.kind === "function").map((c) => [c.name, c.exported])).toEqual([
+            ["hidden.Shown2", false], ["Open.Do", true], ["Elsewhere.Run", true],
+        ]);
+    });
+});
+
+describe("a valid Go file nested deeper than the call stack goes (B-I1)", () => {
+    // `pkg.Deep + x + x + …`: a left-nested chain of 40,000 terms, whose deepest node is the first term
+    const deep = go("package p", "", "import \"example.com/pkg\"", "", "func f(x int) int {", `\treturn pkg.Deep${" + x".repeat(39_999)}`, "}");
+
+    it.each(["full", "parse"] as const)("parses in the %s reading, down to the deepest term", (reading) => {
+        const parsed = parseGo("deep.go", deep, reading);
+        expect(parsed.imports).toEqual(["import:example.com/pkg", "use:pkg.Deep"]);
+        expect(parsed.declares).toEqual(["f", "package:p"]);
+        expect(parsed.lineCount).toBe(7);
+    });
+});
+
+describe("Go's chunks on a CRLF checkout (B-M2)", () => {
+    // K13 compares the specifiers, declares and symbols; this compares every chunk, text included (fileHash hashes the
+    // text as given, so it differs by design)
+    it.each(truth.files.map((f) => f.path))("%s: the CRLF twin's chunks are the LF text's", (rel) => {
+        const { lf, crlf } = k13Texts(read(rel));
+        const chunksOf = (text: string) => parseGo(rel, text, "full").chunks.map((c) => ({ ...c, fileHash: "" }));
+        expect(chunksOf(crlf)).toEqual(chunksOf(lf));
     });
 });

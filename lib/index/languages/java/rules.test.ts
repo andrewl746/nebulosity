@@ -85,3 +85,15 @@ describe("Java's rules", () => {
         expect(exclude("app/target/a.ts")).toBe(false);   // TypeScript's file: Java's rule doesn't reach it
     });
 });
+
+describe("Java's specifiers as written (displaySpecifier, B-I3)", () => {
+    it("shows an import as its statement, and a type name as the code writes it", () => {
+        const shown = (s: string) => javaRules.displaySpecifier!(s);
+        expect(shown("import:com.example.lib.Strings")).toBe("import com.example.lib.Strings");
+        expect(shown("import:com.example.lib.*")).toBe("import com.example.lib.*");
+        expect(shown("static:com.example.lib.Strings")).toBe("import static com.example.lib.Strings");
+        expect(shown("type:Registry")).toBe("Registry");
+        expect(shown("qualified:com.example.lib.Strings")).toBe("com.example.lib.Strings");
+        expect(shown("../not/java")).toBe("../not/java");
+    });
+});

@@ -19,6 +19,14 @@ import { goRules } from "./rules";
 export type GoModule = { path: string; dir: string };
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Adds a value to a key's list in place (copying the list on each add made a big folder's lists quadratic, B-M8). */
+function appendTo<K>(lists: Map<K, string[]>, key: K, value: string): void {
+    const list = lists.get(key);
+    if (list === undefined) lists.set(key, [value]);
+    else list.push(value);
+}
+
 const IS_GO_MANIFEST = /(^|\/)go\.(mod|work)$/;
 const IS_LOCAL_PATH = /^\.\.?(\/|$)/;
 
@@ -131,7 +139,7 @@ export function createGoResolver(ctx: ResolveContext): LanguageResolver {
         for (const fact of facts.declares){
             if (fact.startsWith("package:")) continue;
             const key = `${folder}\0${pkg}\0${fact}`;
-            declarers.set(key, [...(declarers.get(key) ?? []), file]);
+            appendTo(declarers, key, file);
         }
     }
 
@@ -146,7 +154,7 @@ export function createGoResolver(ctx: ResolveContext): LanguageResolver {
     for (const file of [...packageOf.keys()].sort(byText)){
         const folder = dirOf(file);
         if (goRules.isTest(file) || packageOf.get(file) !== folderPackage.get(folder)) continue;
-        packageFiles.set(folder, [...(packageFiles.get(folder) ?? []), file]);
+        appendTo(packageFiles, folder, file);
     }
     /** The package files of `folder` declaring `name`. */
     const declaredIn = (folder: string, name: string): string[] => {

@@ -37,6 +37,13 @@ export type LanguageRules = {
     manifest: RegExp;
     /** The files it leaves out in both discovery modes, given every manifest discovery found (sorted). */
     excluded(manifests: readonly string[]): (path: string) => boolean;
+    /**
+     * One of its specifiers as the source writes it, for answers to show (the final review's B-I3): `use:|a::B` is
+     * `use a::B` in Rust, `.:c` is `from . import c` in Python. A string it didn't write comes back unchanged. Left out
+     * (TypeScript, test adapters), the specifier is shown as it is: TypeScript's is its source text already, the module
+     * path inside the import's quotes. Here, on the pure rules, so the engine reads it without loading a parser.
+     */
+    displaySpecifier?(specifier: string): string;
 };
 
 /** What a resolver sees of one indexed file. */

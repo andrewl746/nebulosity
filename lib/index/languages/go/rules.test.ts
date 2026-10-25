@@ -53,3 +53,15 @@ describe("Go's rules", () => {
         expect(excluded("vendor/github.com/x/y/tool.ts")).toBe(false);
     });
 });
+
+describe("Go's specifiers as written (displaySpecifier, B-I3)", () => {
+    it("shows an import as its spec, and a use or a name as the code writes it", () => {
+        const shown = (s: string) => goRules.displaySpecifier!(s);
+        expect(shown("import:example.com/shop/internal/api")).toBe('import "example.com/shop/internal/api"');
+        expect(shown("import:github.com/other/lib as other")).toBe('import other "github.com/other/lib"');
+        expect(shown("import:example.com/x as .")).toBe('import . "example.com/x"');
+        expect(shown("use:api.Open")).toBe("api.Open");
+        expect(shown("name:DefaultSize")).toBe("DefaultSize");
+        expect(shown("./not/go")).toBe("./not/go");                  // not Go's: unchanged
+    });
+});

@@ -12,8 +12,10 @@ import { parseSpecifier, segmentsOf, unraw } from "./syntax";
  * - The tree: a root's, a mod.rs's or a #[path] file's children sit in its own folder, another x.rs's in x/; an inline
  *   module adds its name as a folder; `mod y;` is y.rs, else y/mod.rs. A file no root reaches is an orphan.
  * - A path from module m: crate:: is m's crate root, self:: m, super:: m's parent; a leading name is a child module of
- *   m, else what the same file's use (same inline level) binds it to, else a crate (a repo crate's library name, or a
- *   rename in the importer's crate), else external. The rest walks down modules; the target is the deepest one's file.
+ *   m, else what the same file's use (same inline level) binds it to, else a repo crate the importer's crate can name
+ *   (Cargo's extern prelude, ADR-065: its dependencies of every kind, a renamed one only by its rename, and its own
+ *   package's library from any target but the library), else external. The rest walks down modules; the target is the
+ *   deepest one's file.
  */
 
 type ModuleNode = {

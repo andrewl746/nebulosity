@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { k13Texts } from "../../../../test/helpers/adapter-conformance";
 import { javaRepoTruth as truth } from "../../../../test/helpers/java-repo-truth";
 import { loadGrammars } from "../treesitter";
 import { importSpecifier, parseJava, scanImports } from "./parse";
@@ -201,5 +202,15 @@ describe("Java's parse, on snippets", () => {
     it("scans import lines with spaces, a BOM, CRLF and two on one line, and nothing in other lines", () => {
         const text = "﻿package a;\r\nimport  java . util . List ;\r\nimport static a.B.*; import c.D;\r\nclass X { String s = \"import e.F;\"; }\r\n";
         expect(scanImports(text)).toEqual(["import:java.util.List", "static:a.B", "import:c.D"]);
+    });
+});
+
+describe("Java's chunks on a CRLF checkout (B-M2)", () => {
+    // K13 compares the specifiers, declares and symbols; this compares every chunk, text included (fileHash hashes the
+    // text as given, so it differs by design)
+    it.each(truth.files.map((f) => f.path))("%s: the CRLF twin's chunks are the LF text's", (rel) => {
+        const { lf, crlf } = k13Texts(read(rel));
+        const chunksOf = (text: string) => parseJava(rel, text, "full").chunks.map((c) => ({ ...c, fileHash: "" }));
+        expect(chunksOf(crlf)).toEqual(chunksOf(lf));
     });
 });

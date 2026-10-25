@@ -85,3 +85,16 @@ describe("python rules", () => {
         expect(exclude(".venv/lib/node_shim.js")).toBe(false);   // TypeScript's file: TypeScript decides
     });
 });
+
+describe("Python's specifiers as written (displaySpecifier, B-I3)", () => {
+    it("shows each form of the plan's table as the statement that makes it", () => {
+        const shown = (s: string) => pythonRules.displaySpecifier!(s);
+        expect(shown("a.b.c")).toBe("import a.b.c");                 // import a.b.c (as d)
+        expect(shown("a.b:c")).toBe("from a.b import c");
+        expect(shown("a.b:*")).toBe("from a.b import *");
+        expect(shown(".:VERSION")).toBe("from . import VERSION");
+        expect(shown(".m:c")).toBe("from .m import c");
+        expect(shown("..m.n:c")).toBe("from ..m.n import c");
+        expect(shown("")).toBe("");
+    });
+});

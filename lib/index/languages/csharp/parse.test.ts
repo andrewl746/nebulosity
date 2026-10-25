@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { k13Texts } from "../../../../test/helpers/adapter-conformance";
 import { csharpRepoTruth as truth } from "../../../../test/helpers/csharp-repo-truth";
 import { loadGrammars } from "../treesitter";
 import { parseCsharp } from "./parse";
@@ -98,5 +99,66 @@ describe("parseCsharp", () => {
     it("scans using lines but not using statements or declarations", () => {
         const text = "using A.B;\nglobal using static C.D;\nusing X = E.F<int>;\nnamespace G.H\n{\n    using (var s = Open()) { }\n    using var t = Open();\n    namespace I;\n}\n";
         expect(parseCsharp("x.cs", text, "scan").imports).toEqual(["using:A.B", "gstatic:C.D", "alias:X=E.F", "ns:G.H", "ns:I"]);
+    });
+});
+
+describe("C#'s one export rule (ADR-065, the final review's B-I2)", () => {
+    beforeAll(async () => {
+        await loadGrammars([{ id: "csharp", grammar: "tree-sitter-c_sharp.wasm" }]);
+    });
+
+    it("exports a member or a nested type only when its owner is exported and it is public; an interface's members take its flag", () => {
+        const parsed = parseCsharp("x.cs", [
+            "internal class Hidden { public void Shown() {} public class Inner {} }",
+            "public class Open { public void Shown() {} void Quiet() {} public class Inner {} class Private {} }",
+            "public interface IThing { void Do(); }",
+            "interface IHidden { void Do(); }",
+        ].join("\n"), "full");
+        expect(parsed.symbols.map((s) => [s.qualifiedName, s.exported])).toEqual([
+            ["Hidden", false], ["Hidden.Shown", false], ["Hidden.Inner", false],
+            ["Open", true], ["Open.Shown", true], ["Open.Quiet", false], ["Open.Inner", true], ["Open.Private", false],
+            ["IThing", true], ["IThing.Do", true],
+            ["IHidden", false], ["IHidden.Do", false],
+        ]);
+    });
+});
+
+describe("C#'s file summary on a CRLF checkout (B-M2)", () => {
+    beforeAll(async () => {
+        await loadGrammars([{ id: "csharp", grammar: "tree-sitter-c_sharp.wasm" }]);
+    });
+    const summaryOf = (text: string): string => parseCsharp("x.cs", text, "full").chunks.at(-1)!.text;
+
+    it("keeps no carriage return from a multi-line using: the CRLF twin (K13's) gives the LF summary", () => {
+        const { lf, crlf } = k13Texts("using Map =\n    System.Text;\nusing static\n    System.Math;\n\nnamespace N;\n\npublic class C { }\n");
+        expect(summaryOf(crlf)).toBe(summaryOf(lf));
+        expect(summaryOf(crlf)).toBe("File: x.cs\n\nImports:\nusing Map =\n    System.Text;\nusing static\n    System.Math;\n\nExports:\nC (class)");
+    });
+
+    it("leaves a malformed using out of the specifiers and the summary, as the other languages do", () => {
+        const parsed = parseCsharp("x.cs", "using ;\nusing X = ;\nusing global::;\nusing A.B;\nclass C {}\n", "full");
+        expect(parsed.imports).toEqual(["using:A.B"]);
+        expect(parsed.chunks.at(-1)!.text).toBe("File: x.cs\n\nImports:\nusing A.B;\n\nExports:\n  (none)");
+    });
+
+    // K13 compares the specifiers, declares and symbols; this compares every chunk, text included (fileHash hashes the
+    // text as given, so it differs by design)
+    it.each(truth.files.map((f) => f.path))("%s: the CRLF twin's chunks are the LF text's", (rel) => {
+        const { lf, crlf } = k13Texts(read(rel));
+        const chunksOf = (text: string) => parseCsharp(rel, text, "full").chunks.map((c) => ({ ...c, fileHash: "" }));
+        expect(chunksOf(crlf)).toEqual(chunksOf(lf));
+    });
+});
+
+describe("C#'s chunk spans (B-M3)", () => {
+    beforeAll(async () => {
+        await loadGrammars([{ id: "csharp", grammar: "tree-sitter-c_sharp.wasm" }]);
+    });
+
+    it("attaches a comment on its own line above a type, never one trailing the code before it", () => {
+        const text = ["namespace N;", "", "public class A", "{", "} // end of A", "[Audited]", "public class B", "{", "}", "", "// C's own comment", "public class C { }", ""].join("\n");
+        expect(parseCsharp("x.cs", text, "full").chunks.map((c) => [c.name, c.startLine, c.endLine])).toEqual([
+            ["A", 3, 5], ["B", 6, 9], ["C", 11, 12], ["(file)", 1, 12],
+        ]);
     });
 });

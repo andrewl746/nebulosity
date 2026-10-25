@@ -9,7 +9,7 @@ import { csharpRules } from "./rules";
  */
 export const csharpAdapter: LanguageAdapter = {
     ...csharpRules,
-    version: 1,
+    version: 2,
     grammar: "tree-sitter-c_sharp.wasm",
     parse: parseCsharp,
     createResolver: createCsharpResolver,

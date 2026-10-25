@@ -25,7 +25,7 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  *   that's the importer's own file.
  * - The crates a crate can name (Cargo's extern prelude): its dependencies of every kind, by library name or by their
  *   rename, plus, from a target that isn't the library (a bin, test, example, bench), its own package's library. The plan
- *   said every repo crate's library name; rust-analyzer's index contradicted it (91 wrong edges, progress-rust.md), so
+ *   said every repo crate's library name; rust-analyzer's index contradicted it (91 wrong edges, ADR-065), so
  *   shop-core's util.rs naming shop_store (no dependency) is external here.
  * - Kinds: mod: and extern: of a nameable crate are internal; use: and path: are internal when their start is crate,
  *   self, super, a child module, a binding to an internal path or a nameable repo crate, else external. A glob binds
@@ -34,7 +34,12 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * Calls this truth pins where the plan's text leaves room (each in progress-rust.md):
  * - a symbol's lines start at its first attached #[…] (doc comments left out); a chunk's start at its first attached
  *   #[…] or outer doc comment (`///`); a plain `//` comment and an inner `//!` doc don't attach;
- * - exported means the declaration's own visibility is exactly `pub` (trait methods and trait-impl methods have none);
+ * - exported (ADR-065's one rule, the final review's B-I2): a top-level item whose own visibility is exactly `pub`; a
+ *   member only when its owner is exported too. A struct's or union's field needs its own `pub` and the type's; a trait's
+ *   fns have no visibility of their own, so they take the trait's. An impl's fns sit outside their type's body, maybe in
+ *   another file, so an owner this file doesn't declare doesn't gate them: an inherent impl's fn needs its own `pub` and
+ *   the self type's (when declared here); a trait impl's fn has none of its own, so it's exported unless the self type or
+ *   the trait is declared here without `pub` (`impl Display for Order`: Order is pub, Display is std's);
  * - an impl chunk is named with base names: `impl Display for Order` for `impl fmt::Display for Order`;
  * - an orphan's `crate::` start is internal (the plan lists crate as an internal start) and resolves to nothing;
  * - the scan reading sees no inline module and no #[path] (it has no tree): `mod:|deep`, `use:|super::*`.
@@ -271,11 +276,13 @@ export const rustRepoTruth: FixtureTruth = {
             member("Order", "note", "property", 19, 19, false),
             member("Order", "new", "method", 23, 25, true),
             member("Order", "widget", "method", 27, 29, false),
-            member("Order", "fmt", "method", 33, 35, false),        // impl fmt::Display for Order: the self type's base name
+            // impl fmt::Display for Order: the self type's base name; Order is pub and Display isn't declared here
+            member("Order", "fmt", "method", 33, 35, true),
             fileSymbol("Priced", "trait", 39, 45, true),            // the plain comment (38) is no attribute
-            member("Priced", "price", "method", 40, 40, false),     // a signature; trait fns carry no visibility
-            member("Priced", "discounted", "method", 42, 44, false),
-            member("Vec", "price", "method", 48, 50, false),        // impl<T: …> Priced for Vec<T>: base name Vec
+            member("Priced", "price", "method", 40, 40, true),      // a signature; a trait fn takes the trait's pub
+            member("Priced", "discounted", "method", 42, 44, true),
+            // impl<T: …> Priced for Vec<T>: base name Vec, declared elsewhere; Priced, declared here, is pub
+            member("Vec", "price", "method", 48, 50, true),
             fileSymbol("Basket", "type", 53, 53, true),
             fileSymbol("MAX_ITEMS", "const", 55, 55, true),
             fileSymbol("GREETING", "const", 57, 57, false),         // static → const

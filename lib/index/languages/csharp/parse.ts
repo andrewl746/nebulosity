@@ -13,7 +13,7 @@
  *
  * Extension-method calls are not read (the controller's ruling of 2026-10-25, amending the plan's ext:): C# binds `x.M(…)`
  * to an applicable instance method or overload first, so linking one needs the receiver's and the arguments' types. By
- * name alone, 19 of 30 sampled links on jellyfin were right (progress-csharp.md, round 2).
+ * name alone, 19 of 30 sampled links on jellyfin were right (ADR-065, "C#: extension-method calls are not linked").
  */
 import type { Node, TreeCursor } from "web-tree-sitter";
 import type { ChunkKind } from "../../../contracts";
@@ -98,6 +98,24 @@ function flattened(nodes: readonly Node[]): Node[] {
 
 const join = (outer: string, name: string): string => (outer === "" ? name : `${outer}.${name}`);
 
+/**
+ * A comment attached above a declaration: one that doesn't share its first line with code before it. `} // end of A`
+ * trails A, so it never starts B's chunk on A's last line (B-M3), as Python, Go and Java read it.
+ */
+function isAttachedComment(previous: Node): boolean {
+    if (previous.type !== "comment") return false;
+    const before = previous.previousSibling;
+    return before === null || before.type === "comment" || endLineOf(before) < startLineOf(previous);
+}
+
+/**
+ * Exported, for a member or a nested type (ADR-065's one rule for every language): only when its owner is exported and
+ * it is `public` itself; an interface's members have no visibility of their own to read, so they take the interface's.
+ */
+function memberExported(member: Node, owner: { isInterface: boolean; exported: boolean }): boolean {
+    return owner.isInterface ? owner.exported : owner.exported && modifiersOf(member).has("public");
+}
+
 type Found = { at: number; seq: number; specifier: string };
 
 /** What the two passes collect. */
@@ -122,6 +140,8 @@ type FileFacts = {
 
 /** The using directive's specifier, or null for a malformed one. */
 export function usingSpecifier(node: Node): string | null {
+    // tree-sitter repairs `using X = ;` into a using of X: a malformed construct gives no specifier rather than a guess
+    if (node.hasError) return null;
     let isGlobal = false;
     let isStatic = false;
     for (let i = 0; i < node.childCount; i++){
@@ -159,8 +179,8 @@ function readStructure(root: Node, facts: FileFacts): void {
         facts.declares.add(`type:${fullName}`);
         facts.declaredTypes.add(name);
 
-        const modifiers = modifiersOf(node);
-        const exported = parent?.isInterface ? parent.exported : modifiers.has("public");
+        // ADR-065's one export rule: a nested type only when its owner is exported too; an interface's members take its flag
+        const exported = parent === null ? modifiersOf(node).has("public") : memberExported(node, parent);
         if (depth <= 1){
             facts.symbols.push({
                 name, qualifiedName: parent === null ? name : `${parent.name}.${name}`, kind,
@@ -168,7 +188,7 @@ function readStructure(root: Node, facts: FileFacts): void {
             });
         }
         if (depth === 0){
-            const span = leadingSpan(node, (previous) => previous.type === "comment");
+            const span = leadingSpan(node, isAttachedComment);
             facts.declarations.push({ kind: CHUNK_KIND[kind], name, startLine: span.startLine, endLine: span.endLine, exported });
             if (exported) facts.exports.push(`${name} (${CHUNK_KIND[kind]})`);
         }
@@ -193,7 +213,7 @@ function readStructure(root: Node, facts: FileFacts): void {
         const add = (name: string, kind: SymbolKind): void => {
             facts.symbols.push({
                 name, qualifiedName: `${owner.name}.${name}`, kind, startLine: startLineOf(member), endLine: endLineOf(member),
-                exported: owner.isInterface ? owner.exported : modifiersOf(member).has("public"), parentQualifiedName: owner.name,
+                exported: memberExported(member, owner), parentQualifiedName: owner.name,
             });
         };
         const named = (): string | null => {
@@ -229,8 +249,10 @@ function readStructure(root: Node, facts: FileFacts): void {
                     if (specifier !== null){
                         emit(child.startIndex, specifier);
                         if (/^(global|gstatic|galias):/.test(specifier)) facts.declares.add(specifier);
+                        // the summary's line, as written, with no "\r" from a multi-line using: a CRLF checkout's summary
+                        // is an LF one's (B-M2); a malformed using is left out, as the other languages leave theirs
+                        facts.usingTexts.push(child.text.replace(/\r/g, "").trim());
                     }
-                    facts.usingTexts.push(child.text.trim());
                     break;
                 }
                 case "file_scoped_namespace_declaration": {

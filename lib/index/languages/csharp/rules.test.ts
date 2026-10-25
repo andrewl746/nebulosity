@@ -64,3 +64,20 @@ describe("csharpRules", () => {
         expect(projectFiles(["Directory.Build.props", "a/A.csproj", "b/Directory.Build.props", "c/C.csproj"])).toEqual(["a/A.csproj", "c/C.csproj"]);
     });
 });
+
+describe("C#'s specifiers as written (displaySpecifier, B-I3)", () => {
+    it("shows a using or a namespace as its statement, and a type name as the code writes it", () => {
+        const shown = (s: string) => csharpRules.displaySpecifier!(s);
+        expect(shown("using:Shop.Core.Models")).toBe("using Shop.Core.Models");
+        expect(shown("global:Shop.Core.Carts")).toBe("global using Shop.Core.Carts");
+        expect(shown("static:Shop.Core.Pricing.PriceMath")).toBe("using static Shop.Core.Pricing.PriceMath");
+        expect(shown("gstatic:Shop.Core.Pricing.PriceMath")).toBe("global using static Shop.Core.Pricing.PriceMath");
+        expect(shown("alias:Clock=Shop.Core.Time.SystemClock")).toBe("using Clock = Shop.Core.Time.SystemClock");
+        expect(shown("galias:Clock=Shop.Core.Time.SystemClock")).toBe("global using Clock = Shop.Core.Time.SystemClock");
+        expect(shown("ns:Shop.Core.Pricing")).toBe("namespace Shop.Core.Pricing");
+        expect(shown("type:Guard")).toBe("Guard");
+        expect(shown("qtype:Core.Auditing.Audited")).toBe("Core.Auditing.Audited");
+        expect(shown("alias:NoEquals")).toBe("alias:NoEquals");      // not one it writes: unchanged
+        expect(shown("constructor:x")).toBe("constructor:x");
+    });
+});
