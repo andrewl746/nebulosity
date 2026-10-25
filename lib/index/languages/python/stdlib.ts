@@ -1,12 +1,17 @@
 /**
- * The top-level names of Python's standard library (the pre-ship pass's Task P, ruling R4). An absolute import whose
- * first segment is one of these never resolves to a repo file (resolve.ts): `import logging` is the standard library's
- * logging even when a repo keeps its own `tests/logging.py` in a root, so that file can't capture every importer's
- * logging (the E4 Python review's M6, second half). It's a fixed list, never read at run time: nothing here runs Python.
+ * The top-level names that are Python's standard library on every Python from 3.10 to 3.14 (the pre-ship pass's Task P,
+ * ruling R13, which amends R4). An absolute import whose first segment is one of these resolves only through the roots
+ * that contain the importing file (resolve.ts), so a repo's `tests/logging.py` is reached by a test beside it but never
+ * captures package code's `import logging` from another root (the E4 Python review's M6, second half). It's a fixed
+ * list, never read at run time: nothing here runs Python.
  *
- * The cost, accepted by R4: a repo whose own top-level module really does shadow a standard-library name at run time
- * (its root first on sys.path) loses those edges. That's rare, because such a repo breaks its own imports of the real
- * module.
+ * Why only names that are standard on every supported Python: a name that isn't the standard library's on one of them
+ * can be the repo's own module there, so the repo's file may be the only thing such an import reaches. On 3.10 a repo
+ * can keep its own `tomllib.py` (a backport), and on 3.12 its own `parser.py`, `imp.py` or `distutils/` shadows nothing
+ * (the standard library has none). So the modules added after 3.10 are left out, and those removed since 3.10 are not
+ * added. An import of a name on the list is still the repo's own when a root containing the importer holds it, as at
+ * run time with that root first on sys.path: a flat script beside its `secrets.py`, CPython's `Lib/`, typeshed's
+ * `stdlib/`.
  */
 
 /**
@@ -51,30 +56,18 @@ const CPYTHON_3_14: readonly string[] = [
 ];
 
 /**
- * The top-level modules removed since 3.10: code written for an older Python still imports them, and they were the
- * standard library's then, never the repo's. 29 names, each group checked against its source on 2026-10-25.
+ * The public top-level modules added after 3.10, from each version's What's New "New Modules" section (checked on
+ * 2026-10-25): 3.11 adds tomllib (and the submodule wsgiref.types); 3.12 lists "None."; 3.13 adds only the submodule
+ * dbm.sqlite3; 3.14 adds annotationlib and compression (and the submodules concurrent.interpreters and
+ * string.templatelib). Private `_` modules added since (`_pyrepl`, `_colorize`, …) stay in: no repo's own module is
+ * reached through them in practice, either way.
  */
-const REMOVED_SINCE_3_10: readonly string[] = [
-    // 3.10: https://docs.python.org/3/whatsnew/3.10.html, "Removed", names formatter and parser. symbol isn't named
-    // there: its removal is bpo-40939 in the 3.10.0a1 changelog ("Remove the remaining files from the old parser and the
-    // symbol module", CPython commit 314858e, 2020-06-20); Lib/symbol.py is on CPython's 3.9 branch, not on 3.10's.
-    "formatter", "parser", "symbol",
-    // 3.11: https://docs.python.org/3/whatsnew/3.11.html, "Removed" ("Removed the binhex module, deprecated in Python 3.9").
-    "binhex",
-    // 3.12: https://docs.python.org/3/whatsnew/3.12.html, "Removed": asynchat, asyncore and smtpd on PEP 594's schedule,
-    // distutils by PEP 632, and imp.
-    "asynchat", "asyncore", "distutils", "imp", "smtpd",
-    // 3.13: https://docs.python.org/3/whatsnew/3.13.html, "Removed Modules And APIs": PEP 594's 19 "dead batteries", and
-    // lib2to3 with the 2to3 program.
-    "aifc", "audioop", "cgi", "cgitb", "chunk", "crypt", "imghdr", "lib2to3", "mailcap", "msilib", "nis", "nntplib",
-    "ossaudiodev", "pipes", "sndhdr", "spwd", "sunau", "telnetlib", "uu", "xdrlib",
-    // 3.14 removed no top-level module (https://docs.python.org/3/whatsnew/3.14.html, "Removed").
-];
+const ADDED_AFTER_3_10: ReadonlySet<string> = new Set(["tomllib", "annotationlib", "compression"]);
 
 const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Every top-level standard-library name: 3.14's and the removed ones, 326 in all, in code-unit order. */
-export const STDLIB_MODULES: ReadonlySet<string> = new Set([...CPYTHON_3_14, ...REMOVED_SINCE_3_10].sort(byCodeUnit));
+/** The standard library's top-level names on every Python from 3.10 to 3.14: 294, in code-unit order. */
+export const STDLIB_MODULES: ReadonlySet<string> = new Set(CPYTHON_3_14.filter((name) => !ADDED_AFTER_3_10.has(name)).sort(byCodeUnit));
 
 /** Whether a dotted module name (`logging`, `logging.handlers`, `email.utils`) starts with a standard-library name. */
 export function isStdlibModule(dotted: string): boolean {

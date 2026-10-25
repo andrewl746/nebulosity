@@ -15,9 +15,12 @@
  *   (so the importer's own package X beats another root's X/name.py); `X:*` and plain `X` are the module `X`.
  * - **Relative:** from F's folder, one folder up per dot after the first; `.:c` is the module `base/c`, else the
  *   package `base/__init__`; `.m:c` is `base/m/c`, else `base/m`.
- * - **The standard library** (stdlib.ts, the pre-ship pass's ruling R4): an absolute specifier whose first segment is a
- *   top-level standard-library name never resolves and is external, from every importer, the shadowing module's own
- *   root included: a repo's `tests/logging.py` never captures `import logging`. Relative specifiers are untouched.
+ * - **The standard library** (stdlib.ts, the pre-ship pass's ruling R13, which amends R4): an absolute specifier whose
+ *   first segment X is a standard-library name resolves only through the roots that contain F, and only those holding
+ *   X itself as a module or a regular package (a namespace folder named X never does: the standard library's regular
+ *   package beats it at run time). The other roots are never tried, so a repo's `tests/logging.py` is reached by a
+ *   test beside it but never captures package code's `import logging`. It's internal when such a root holds X,
+ *   resolved or not, else external. Relative specifiers and entry points are untouched.
  *
  * Manifests inside a virtual environment (the folder of a pyvenv.cfg, which rules.ts leaves out) are ignored.
  */
@@ -25,7 +28,7 @@ import { parse as parseToml } from "smol-toml";
 import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
 import { dirOf, joinRepoPath } from "../../paths";
 import { inVirtualEnvironment, PROJECT_MANIFEST, virtualEnvironments } from "./rules";
-import { isStdlibModule } from "./stdlib";
+import { STDLIB_MODULES } from "./stdlib";
 
 const DOTTED_NAME = /^[^\W\d]\w*(\.[^\W\d]\w*)*$/u;
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -184,6 +187,13 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
         return null;
     };
 
+    /**
+     * Whether a root holds a top-level name as a module or a regular package (`r/X.py`, `r/X/__init__.py`, or their
+     * stubs), never as a namespace folder: for a standard-library name the standard library's own regular package beats
+     * a namespace portion at run time, wherever it sits on sys.path (R13).
+     */
+    const holds = (root: string, name: string): boolean => moduleUnder(root, name) !== null;
+
     /** The roots containing a folder, deepest first, and the others (memoized per folder). */
     const rootsByFolder = new Map<string, { inside: string[]; outside: string[] }>();
     const rootsFor = (folder: string): { inside: string[]; outside: string[] } => {
@@ -202,20 +212,24 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
      * root, the first hit winning: the importer's own package X, which may define `name` as an attribute, beats another
      * root's X/name.py (two services' `app` packages, the Task P review's I1). Only then the other roots, each candidate
      * in turn: exactly one hit resolves, and none or several move on to the next candidate.
+     *
+     * `stdlib` is the candidates' first segment when it's a standard-library name (R13), else null: then only the roots
+     * containing the folder that hold it are tried, and no other root, so another root's module never captures it.
      */
     const absoluteCache = new Map<string, string | null>();
-    const absolute = (folder: string, candidates: readonly string[]): string | null => {
-        const key = `${folder}\0${candidates.join("\0")}`;
+    const absolute = (folder: string, candidates: readonly string[], stdlib: string | null = null): string | null => {
+        const key = `${stdlib === null ? "" : "stdlib"}\0${folder}\0${candidates.join("\0")}`;
         if (absoluteCache.has(key)) return absoluteCache.get(key)!;
         const { inside, outside } = rootsFor(folder);
         let target: string | null = null;
         search: for (const root of inside){
+            if (stdlib !== null && !holds(root, stdlib)) continue;
             for (const dotted of candidates){
                 target = moduleUnder(root, dotted);
                 if (target !== null) break search;
             }
         }
-        for (let i = 0; target === null && i < candidates.length; i++){
+        for (let i = 0; target === null && stdlib === null && i < candidates.length; i++){
             const hits = outside.map((root) => moduleUnder(root, candidates[i])).filter((t): t is string => t !== null);
             if (hits.length === 1) target = hits[0];
         }
@@ -231,10 +245,12 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
 
         const dots = /^\.*/.exec(source)![0].length;
         if (dots === 0){
-            // the standard library's, whatever the repo holds under that name (R4): a module named like it in a root would
-            // otherwise be a unique hit for every importer outside that root, and the first hit inside it
-            if (!DOTTED_NAME.test(source) || isStdlibModule(source)) return null;
-            return absolute(dirOf(importer), name !== null && name !== "*" ? [`${source}.${name}`, source] : [source]);
+            if (!DOTTED_NAME.test(source)) return null;
+            // a standard-library name only through the importer's own roots (R13): a module named like it in another root
+            // would otherwise be a unique hit for every importer outside that root
+            const first = source.split(".", 1)[0];
+            return absolute(dirOf(importer), name !== null && name !== "*" ? [`${source}.${name}`, source] : [source],
+                STDLIB_MODULES.has(first) ? first : null);
         }
 
         let base = dirOf(importer);
@@ -262,11 +278,11 @@ export function createPythonResolver(ctx: ResolveContext): LanguageResolver {
     return {
         resolve,
         kindOf(importer: string, specifier: string): ReferenceKind {
-            if (specifier.startsWith(".")) return "internal";
+            if (specifier.startsWith(".") || target(importer, specifier) !== null) return "internal";
             const first = /^[^.:]*/.exec(specifier)![0];
-            // before the internal names: a root's logging.py puts logging among them, but `import logging` stays external
-            if (isStdlibModule(first)) return "external";
-            if (target(importer, specifier) !== null) return "internal";
+            // a standard-library name is the repo's only where one of the importer's own roots holds it (R13), not wherever
+            // the internal names say: another root's logging.py puts logging among them
+            if (STDLIB_MODULES.has(first)) return rootsFor(dirOf(importer)).inside.some((root) => holds(root, first)) ? "internal" : "external";
             return internalNames.has(first) ? "internal" : "external";
         },
         classOf: (_importer: string, specifier: string): string => (specifier.startsWith(".") ? "relative" : "absolute"),

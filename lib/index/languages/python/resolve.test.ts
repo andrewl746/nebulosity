@@ -223,35 +223,60 @@ describe("python resolver: one rule at a time", () => {
         expect(r.kindOf("a.py", "os.path")).toBe("external");
     });
 
-    it("an absolute import whose first segment is a standard-library name never resolves, from any importer (R4)", () => {
+    it("a standard-library name resolves only through the importer's own roots, those holding it as a module or regular package (R13)", () => {
         const r = createPythonResolver(smallContext({
-            // roots "" and tests (the parent of the package tests/helpers); tests/logging.py and json.py sit directly in them
-            "tests/helpers/__init__.py": [], "tests/logging.py": [], "tests/run.py": [],
+            // roots: "", tests (the parent of the package tests/helpers), lib (of lib/code) and typeshed/stdlib (of os)
+            "tests/helpers/__init__.py": [], "tests/logging.py": [], "tests/parser.py": [], "tests/tomllib.py": [], "tests/run.py": [],
             "pkg/__init__.py": [], "pkg/logging.py": [], "pkg/a.py": [],
+            "lib/code/__init__.py": [], "lib/code/utils.py": [], "lib/main.py": [],
+            "typeshed/stdlib/os/__init__.pyi": [], "typeshed/stdlib/subprocess.pyi": [],
             "json.py": [], "imp/__init__.py": [], "email/templates.py": [], "test/__init__.py": [], "test/support.py": [], "app.py": [],
         }));
-        // another root's module: without the rule, a unique hit among the other roots
+        // another root's module never captures it (without the rule, a unique hit among the other roots); a src-layout
+        // style package named like the standard library loses its other roots' importers (R13's stated cost)
         expect(r.resolve("pkg/a.py", "logging")).toEqual([]);
         expect(r.resolve("pkg/a.py", "logging:getLogger")).toEqual([]);
-        // the importer's own root: without the rule, the first hit (no same-root exception)
-        expect(r.resolve("tests/run.py", "logging")).toEqual([]);
-        expect(r.resolve("app.py", "json")).toEqual([]);
-        // a module removed since 3.10 (imp, 3.12) is still the standard library's, and so is a namespace folder's email
-        expect(r.resolve("app.py", "imp")).toEqual([]);
+        expect(r.resolve("tests/run.py", "code.utils")).toEqual([]);
+        // a root that contains the importer and holds the name resolves it: deepest first, then the shallower ones
+        expect(r.resolve("tests/run.py", "logging")).toEqual(["tests/logging.py"]);
+        expect(r.resolve("tests/run.py", "logging:getLogger")).toEqual(["tests/logging.py"]);
+        expect(r.resolve("tests/run.py", "json")).toEqual(["json.py"]);   // tests holds no json; "" does
+        expect(r.resolve("app.py", "json")).toEqual(["json.py"]);
+        expect(r.resolve("lib/main.py", "code.utils")).toEqual(["lib/code/utils.py"]);
+        expect(r.resolve("typeshed/stdlib/subprocess.pyi", "os")).toEqual(["typeshed/stdlib/os/__init__.pyi"]);
+        // a namespace folder never holds it: the standard library's regular package beats one at run time
         expect(r.resolve("app.py", "email:templates")).toEqual([]);
-        for (const [importer, specifier] of [["pkg/a.py", "logging"], ["tests/run.py", "logging:getLogger"], ["pkg/a.py", "logging.handlers"],
-            ["app.py", "json.decoder"], ["app.py", "imp"], ["app.py", "email:templates"]]){
+        for (const [importer, specifier] of [["pkg/a.py", "logging"], ["pkg/a.py", "logging.handlers"], ["tests/run.py", "code.utils"],
+            ["app.py", "email:templates"]]){
             expect(r.kindOf(importer, specifier), `${importer} ${specifier}`).toBe("external");
         }
+        // internal where an own root holds it, resolved or not (json is a module, so json.decoder is a miss)
+        for (const [importer, specifier] of [["tests/run.py", "logging"], ["app.py", "json"], ["app.py", "json.decoder"], ["lib/main.py", "code.utils"]]){
+            expect(r.kindOf(importer, specifier), `${importer} ${specifier}`).toBe("internal");
+        }
+        // names off the list resolve as any name, from another root too: removed since 3.10 (parser, imp), added after it (tomllib)
+        expect(r.resolve("pkg/a.py", "parser")).toEqual(["tests/parser.py"]);
+        expect(r.resolve("pkg/a.py", "tomllib")).toEqual(["tests/tomllib.py"]);
+        expect(r.resolve("app.py", "imp")).toEqual(["imp/__init__.py"]);
         // relative imports are unchanged, and so are absolute ones whose first segment is the repo's own (test isn't listed)
         expect(r.resolve("pkg/a.py", ".:logging")).toEqual(["pkg/logging.py"]);
         expect(r.resolve("pkg/a.py", ".logging:configure")).toEqual(["pkg/logging.py"]);
         expect(r.resolve("app.py", "pkg.logging")).toEqual(["pkg/logging.py"]);
         expect(r.resolve("app.py", "test.support")).toEqual(["test/support.py"]);
         expect(r.resolve("tests/run.py", "helpers")).toEqual(["tests/helpers/__init__.py"]);
-        for (const [importer, specifier] of [["pkg/a.py", ".:logging"], ["app.py", "pkg.logging"], ["app.py", "test.support"]]){
+        for (const [importer, specifier] of [["pkg/a.py", ".:logging"], ["app.py", "pkg.logging"], ["app.py", "test.support"], ["pkg/a.py", "parser"],
+            ["app.py", "imp"]]){
             expect(r.kindOf(importer, specifier), `${importer} ${specifier}`).toBe("internal");
         }
+    });
+
+    it("entry points don't apply the standard-library rule: a declared script's module is found as before (M2)", () => {
+        const r = createPythonResolver(smallContext(
+            { "tools/logging.py": [] },
+            { "pyproject.toml": "[project.scripts]\nlog = \"logging:main\"\n[tool.pytest.ini_options]\npythonpath = [\"tools\"]\n" },
+        ));
+        // tools is a root (pytest's pythonpath) that the manifest's folder "" doesn't contain: the other roots' unique hit
+        expect(r.entryPoints()).toEqual([{ path: "tools/logging.py", declaredBy: "pyproject.toml [project.scripts] log" }]);
     });
 
     it("entry points: every script kind, __main__.py, the marker; the first declaration of a path wins", () => {
