@@ -322,6 +322,11 @@ export type IndexEventMap = {
     /** Per-file failures: indexing is per-file error-tolerant (ADR-021). */
     errors: Array<{ path: string; error: string }>;
     /**
+     * Files whose parse threw, read by the scan instead: indexed for their imports only, each with the parse's error
+     * (ADR-065, the E4 final review's B-I1). Additive and optional (CONTRACTS_VERSION stays 3); the worker always sends it.
+     */
+    scanned?: Array<{ path: string; error: string }>;
+    /**
      * Files left out: code files over 20 MB, docs over 1 MB, and files that couldn't be read. A code file over 1 MB is
      * indexed for its imports only (ADR-053).
      */

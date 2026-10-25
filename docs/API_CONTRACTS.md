@@ -33,7 +33,7 @@ A full structure run of the active repo, in the background worker (ADR-038), wit
 | event | data | notes |
 |---|---|---|
 | `progress` | `{ stage: "discover" \| "parse" \| "write" \| "resolve" \| "aggregate", done, total }` | at least once per stage, in order |
-| `done` | `{ files, changed, deleted, edges, folders, levelEdges, errors[], skipped, totalMs }` | terminal on success; `errors` are per-file failures (ADR-021) |
+| `done` | `{ files, changed, deleted, edges, folders, levelEdges, errors[], scanned?[], skipped, totalMs }` | terminal on success; `errors` are per-file failures (ADR-021); `scanned` (`{ path, error }[]`, additive since E4's final review, B-I1; `CONTRACTS_VERSION` stays 3) lists the files whose parse threw and that the scan read instead, indexed for their imports only (ADR-065) |
 | `error` | `{ code, message }` | terminal on failure: `INDEX_LOCKED` while another run holds the lock or the worker is still switching to the active repo (ADR-038, amended), `INTERNAL` if the worker stopped |
 
 The run goes on in the worker if the client leaves.

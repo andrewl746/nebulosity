@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { execFileSync } from "child_process";
 import { and, eq } from "drizzle-orm";
 import fs from "fs";
@@ -12,6 +12,7 @@ import { chunks, files, folders, levelEdges, symbols } from "../db/schema";
 import { loadCallsOf } from "../db/store/calls";
 import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
+import { readStages } from "../db/store/stages";
 import { loadImportEdges } from "../db/store/structure";
 import { loadFileFacts, loadFolderFacts, loadSummaries } from "../db/store/summaries";
 import { readIndexVersion } from "../db/store/version";
@@ -446,13 +447,18 @@ describe("the incremental update through the language adapters (ADR-065)", () =>
         expect(tables(repoId).imports).toEqual(["a.toy -> b.toy (use:b)", "a.toy -> c.toy (name:y)"]);
 
         write(root, "a.toy", "use b\nname y\ndeep\n");
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
         expect(applyFileChanges(root, ["a.toy"], { adapters: both })).toMatchObject({
             changed: ["a.toy"], errors: [], scanned: [{ path: "a.toy", error: "Maximum call stack size exceeded" }], edgesAdded: 0, edgesRemoved: 1,
         });
+        expect(warn.mock.calls).toEqual([["[index] the toy parse of a.toy failed (Maximum call stack size exceeded), so the scan read its imports only"]]);
+        // the stage note counts it, as a full run's does
+        expect(readStages(getDb(), repoId).structure).toMatchObject({ state: "ready", note: "1 file read by the scan (their parse failed): a.toy" });
         expect(tables(repoId).imports).toEqual(["a.toy -> b.toy (use:b)"]);   // the scan reads no name:y
         const twin = makeTempDir("neb-twin-");
         fs.cpSync(root, twin, { recursive: true });
         expect(tables(repoId)).toEqual(tables(indexRepository(twin, { adapters: both }).repoId));
+        warn.mockRestore();
     });
 
     it("adds no edge for a TypeScript file's import of itself, as a full run and the pre-E4 code (the E4 final review's m1)", () => {

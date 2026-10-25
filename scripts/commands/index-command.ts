@@ -9,7 +9,7 @@
  */
 import path from "path";
 import { prepareLanguages } from "../../lib/index/languages/registry";
-import { indexRepository, RepoNotFoundError } from "../../lib/index/pipeline";
+import { describeScanned, indexRepository, RepoNotFoundError } from "../../lib/index/pipeline";
 import { repoKey } from "../../lib/index/paths";
 import { IndexLockedError } from "../../lib/db/store/lock";
 import { readConfig, writeConfig } from "../../lib/config";
@@ -61,6 +61,10 @@ export async function runIndex(args: readonly string[]): Promise<number> {
         }
         if (result.errors.length > 0){
             console.log(`[index] ${result.errors.length} file errors (first: ${result.errors[0].path}: ${result.errors[0].error})`);
+        }
+        // a parse that threw, read by the scan instead (ADR-065, the E4 final review's B-I1): indexed, but imports only
+        if (result.scanned.length > 0){
+            console.log(`[index] ${describeScanned(result.scanned)} (first error: ${result.scanned[0].error})`);
         }
 
         // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now

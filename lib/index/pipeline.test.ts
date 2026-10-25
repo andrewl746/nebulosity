@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
@@ -20,7 +20,7 @@ import { ADAPTER_VERSION } from "./languages/typescript";
 import { typescriptAdapter } from "./languages/typescript-adapter";
 import { GrammarNotLoadedError } from "./languages/treesitter";
 import { repoKey } from "./paths";
-import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
+import { describeScanned, indexRepository, RepoNotFoundError, structureNote, type IndexStage } from "./pipeline";
 
 function levelRows(repoId: number, levelPath: string) {
     return getDb()
@@ -536,8 +536,15 @@ describe("indexRepository through the language adapters (ADR-065)", () => {
     };
 
     it("reads a file whose parse throws with the scan instead: its row and imports kept, no declarations (the E4 final review's B-I1)", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
         const { repoId, ...result } = indexRepository(repo({ "a.toy": "use b\nname y\ndeep\ndef x\n", "b.toy": "def y\n", "c.toy": "broken all\n" }),
             { adapters: [typescriptAdapter, throwing] });
+        // never silent: logged once, with the adapter and the error, and counted in the stage note beside the failure
+        expect(warn.mock.calls).toEqual([["[index] the toy parse of a.toy failed (Maximum call stack size exceeded), so the scan read its imports only"]]);
+        warn.mockRestore();
+        expect(readStages(getDb(), repoId).structure).toMatchObject({
+            state: "ready", note: "1 files failed to index; 1 file read by the scan (their parse failed): a.toy",
+        });
         // a.toy is scanned: only use:b, so b.toy by its path and no name:y; c.toy throws in every reading, so it is left out
         expect(result).toMatchObject({
             files: 2, edges: 1,
@@ -555,6 +562,14 @@ describe("indexRepository through the language adapters (ADR-065)", () => {
             .where(eq(files.repoId, repoId)).orderBy(files.path).all()).toEqual([{ path: "b.toy", name: "y" }]);
         expect(db.select({ path: files.path }).from(chunks).innerJoin(files, eq(files.id, chunks.fileId))
             .where(and(eq(files.repoId, repoId), eq(files.path, "a.toy"))).all()).toEqual([]);
+    });
+
+    it("notes the scanned files by count and the first three paths, after the failures, or nothing", () => {
+        const at = (...paths: string[]) => paths.map((p) => ({ path: p, error: "x" }));
+        expect(structureNote([], [])).toBeNull();
+        expect(structureNote(at("e.ts", "f.ts"), [])).toBe("2 files failed to index");
+        expect(describeScanned(at("a", "b", "c", "d", "e"))).toBe("5 files read by the scan (their parse failed): a, b, c, and 2 more");
+        expect(structureNote([], at("a", "b"))).toBe("2 files read by the scan (their parse failed): a, b");
     });
 
     it("never retries a parse that names a grammar not loaded, and never scans a file twice", () => {

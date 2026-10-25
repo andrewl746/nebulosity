@@ -245,11 +245,12 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 : [];
             recordAdapterVersion(db, repoId, adapter.version, unparsed, adapter.id);
         }
+        const note = structureNote(errors, scanned);
         writeStage(db, repoId, "structure", {
             state: "ready",
             done: fileSet.size,
             total: fileSet.size,
-            ...(errors.length > 0 ? { note: `${errors.length} files failed to index` } : {}),
+            ...(note === null ? {} : { note }),
         });
         bumpIndexVersion(db, repoId);   // the Map refetches what it shows (ADR-036)
 
@@ -361,7 +362,9 @@ export function toFileRecord(
  * seam promises a parse throws only for a file it can't read at all. Without this the file got no row, so it vanished
  * from the Map and the tools. The scan reads the imports without a tree, as for a file over the cap: the file keeps its
  * row and its edges, with no declarations or code search. A missing grammar is the guard's to report, never retried;
- * a scan's own error, or a scan that throws in turn, still drops the file into the run's errors.
+ * a scan's own error, or a scan that throws in turn, still drops the file into the run's errors. It applies to every
+ * adapter, TypeScript's too. A fallback is never silent: it is logged here, once, with the adapter and the error, and the
+ * run's `scanned` list reaches the stage note, the CLI, the worker's answer and the language bench (which fails L2 on it).
  */
 function parseOrScan(adapter: LanguageAdapter, filePath: string, text: string, reading: Reading, onScanned?: (error: string) => void): ParsedFile {
     try{
@@ -369,7 +372,33 @@ function parseOrScan(adapter: LanguageAdapter, filePath: string, text: string, r
     } catch (err){
         if (reading === "scan" || err instanceof GrammarNotLoadedError) throw err;
         const scanned = adapter.parse(filePath, text, "scan");
+        console.warn(`[index] the ${adapter.id} parse of ${filePath} failed (${message(err)}), so the scan read its imports only`);
         onScanned?.(message(err));
         return scanned;
     }
+}
+
+/** How many files to name in a note about the scanned ones before counting the rest. */
+const SCANNED_SHOWN = 3;
+
+/**
+ * The files the scan read after their parse failed, counted with the first few paths:
+ * "2 files read by the scan (their parse failed): a.toy, b.toy". The stage note, the CLI and the bench say it so.
+ */
+export function describeScanned(scanned: readonly FileError[]): string {
+    const named = scanned.slice(0, SCANNED_SHOWN).map((s) => s.path).join(", ");
+    const rest = scanned.length > SCANNED_SHOWN ? `, and ${scanned.length - SCANNED_SHOWN} more` : "";
+    return `${scanned.length} ${scanned.length === 1 ? "file" : "files"} read by the scan (their parse failed): ${named}${rest}`;
+}
+
+/**
+ * The structure stage's note: the files that failed to index, and the files the scan read instead of a parse, or null
+ * when there are none. The full run and the incremental update both write it.
+ */
+export function structureNote(errors: readonly FileError[], scanned: readonly FileError[]): string | null {
+    const parts = [
+        ...(errors.length > 0 ? [`${errors.length} files failed to index`] : []),
+        ...(scanned.length > 0 ? [describeScanned(scanned)] : []),
+    ];
+    return parts.length === 0 ? null : parts.join("; ");
 }

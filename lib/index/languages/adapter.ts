@@ -90,7 +90,10 @@ export type LanguageResolver = {
 export type LanguageAdapter = LanguageRules & {
     /** Bump on any change that gives an unchanged file different products: a full run re-parses this adapter's files once. */
     version: number;
-    /** The grammar's file name in lib/index/languages/grammars/, or null (TypeScript's compiler API; test adapters). */
+    /**
+     * The grammar's package file name (`tree-sitter-go.wasm`), committed gzip-compressed as `<grammar>.gz` in
+     * lib/index/languages/grammars/ (treesitter.ts's grammarPath), or null (TypeScript's compiler API; test adapters).
+     */
     grammar: string | null;
     /** One file's products. A syntax error is parsed around; it throws only when the file can't be read at all. */
     parse(path: string, text: string, reading: Reading): ParsedFile;

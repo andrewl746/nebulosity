@@ -20,7 +20,7 @@ import { ADAPTERS, adapterFor } from "./languages/registry";
 import { createResolvers, edgesOf, entryPointsOf, type ResolutionState } from "./languages/resolution";
 import { claimedExtensions, exclusionFor, isManifestPath, RULES } from "./languages/rules";
 import { normalizeSlashes, repoKey } from "./paths";
-import { assertGrammarsLoaded, repoTextReader, toFileRecord } from "./pipeline";
+import { assertGrammarsLoaded, repoTextReader, structureNote, toFileRecord } from "./pipeline";
 
 export type FileChangeResult = {
     repoId: number;
@@ -237,11 +237,12 @@ export function applyFileChanges(
         const anything = changed.length > 0 || deleted.length > 0 || removed.length > 0 || added.length > 0 || entriesChanged;
         if (anything){
             markIndexed(db, repoId, readGitHead(root));
+            const note = structureNote(errors, scanned);
             writeStage(db, repoId, "structure", {
                 state: "ready",
                 done: current.size,
                 total: current.size,
-                ...(errors.length > 0 ? { note: `${errors.length} files failed to index` } : {}),
+                ...(note === null ? {} : { note }),
             });
         }
 

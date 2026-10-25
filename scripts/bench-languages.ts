@@ -6,15 +6,17 @@
  * prepareLanguages(), so the rss printed after each run shows what the grammars and the runs leave in a long-lived
  * process (WebAssembly memory never shrinks). One repo at a time, in the order given; run it on a quiet machine.
  * Prints each run's stage timings, its files by language, edges and rss, then each repo's worst and median structure
- * total. The data folders are made under --data-root (default: the system's temp folder) and removed after each run
- * unless --keep. Free: it never calls Anthropic, and it never touches the owner's database or the active repo.
+ * total, and its L2 verdict ("no crash"): a file that failed to index, or whose parse threw so that the scan read it
+ * instead (the E4 final review's B-I1), fails L2, and the process exits 1. The data folders are made under --data-root
+ * (default: the system's temp folder) and removed after each run unless --keep. Free: it never calls Anthropic, and it
+ * never touches the owner's database or the active repo.
  */
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { closeDb, getDb } from "../lib/db/client";
 import { prepareLanguages } from "../lib/index/languages/registry";
-import { indexRepository, type IndexResult } from "../lib/index/pipeline";
+import { describeScanned, indexRepository, type IndexResult } from "../lib/index/pipeline";
 
 const args = process.argv.slice(2);
 const option = (name: string): string | undefined => {
@@ -47,7 +49,15 @@ function printRun(repo: string, run: number, result: IndexResult, data: string):
         + ` · write ${seconds(t.write)} · resolve ${seconds(t.resolve)} · aggregate ${seconds(t.aggregate)}); code search after it ${seconds(result.searchIndexMs)}`);
     console.log(`[bench]   files ${result.files.toLocaleString("en-US")} (${filesByLanguage(result.repoId)}) · edges ${result.edges.toLocaleString("en-US")}`
         + ` · imports only ${result.importsOnly.length} · skipped ${result.skipped.length} · errors ${result.errors.length}`
+        + ` · scanned ${result.scanned.length}`
         + ` · head ${result.indexedHead ?? "none"} · rss ${megabytes(process.memoryUsage().rss)}${keep ? ` · data ${data}` : ""}`);
+    if (result.errors.length > 0) console.log(`[bench]   errors, first: ${result.errors[0].path}: ${result.errors[0].error}`);
+    if (result.scanned.length > 0) console.log(`[bench]   ${describeScanned(result.scanned)}`);
+}
+
+/** L2, no crash: every claimed file indexed by its parse, none failed and none read by the scan after a throw. */
+function crashes(result: IndexResult): number {
+    return result.errors.length + result.scanned.length;
 }
 
 async function main(): Promise<void> {
@@ -59,12 +69,14 @@ async function main(): Promise<void> {
     for (const target of repos){
         const root = path.resolve(target);
         const totals: number[] = [];
+        let worstCrashes = 0;
         for (let run = 1; run <= runs; run++){
             const data = fs.mkdtempSync(path.join(dataRoot, "neb-bench-"));
             process.env.NEBULOSITY_DATA = data;
             try{
                 const result = indexRepository(root);
                 totals.push(result.totalMs);
+                worstCrashes = Math.max(worstCrashes, crashes(result));
                 printRun(target, run, result, data);
             } finally{
                 closeDb();
@@ -73,7 +85,8 @@ async function main(): Promise<void> {
         }
         const sorted = [...totals].sort((a, b) => a - b);
         summary.push(`[bench] ${target}: worst ${seconds(sorted[sorted.length - 1])}, median ${seconds(sorted[Math.floor(sorted.length / 2)])}`
-            + ` (${totals.map(seconds).join(", ")})`);
+            + ` (${totals.map(seconds).join(", ")}); L2 ${worstCrashes === 0 ? "PASS" : `FAIL (${worstCrashes} files failed or read by the scan in the worst run)`}`);
+        if (worstCrashes > 0) process.exitCode = 1;
     }
     for (const line of summary) console.log(line);
     console.log(`[bench] rss after all of them ${megabytes(process.memoryUsage().rss)}`);
