@@ -24,6 +24,16 @@ import type { FixtureTruth, TruthEdge } from "./fixture-truth";
  * attribute, beats another root's X/name.py (Task P review #1, I1: services/alpha/app/views.py). A relative import
  * counts from F's folder, one folder up per extra dot.
  *
+ * Standard-library names resolve only through F's own roots (the pre-ship pass's Task P, ruling R13, which amends R4):
+ * when an absolute import's first segment X is a standard-library name (every public one standard on every Python
+ * from 3.10 to 3.14, and 3.14's private ones; `test`, `parser` and `tomllib` aren't), only the first (deepest) root
+ * that contains F and holds X itself as a module or a regular package is tried (a namespace folder named X never holds
+ * it: the standard library's regular package beats it at run time); no other root is tried. So tests/logging.py, directly in the root tests, is reached by tests/test_audit.py's
+ * `import logging` (its own root) but never by package code's (the E4 review's M6, second half), and
+ * scripts/release.py's `from secrets import TOKEN` reaches scripts/secrets.py beside it in the root scripts. Relative
+ * imports are unchanged: src/shop/orders.py's `from . import logging` still names src/shop/logging.py, which no root
+ * holds directly.
+ *
  * Readings of points the plan leaves open, used below (each is in progress-python.md):
  * - "module-level" and "top-level" mean the module's own statements: an assignment inside a top-level try or if
  *   (cart.py's and text.py's `fast_* = None`) is neither a symbol nor a chunk;
@@ -45,13 +55,16 @@ const member = (parent: string, name: string, kind: Kind, startLine: number, end
 });
 const edge = (source: string, target: string): TruthEdge => ({ source, target });
 
-/** The 34 edges of a full run, sorted by source then target, each with the specifier and the rule that makes it. */
+/** The 38 edges of a full run, sorted by source then target, each with the specifier and the rule that makes it. */
 const EDGES: TruthEdge[] = [
     // shop.models:Product: no submodule shop.models.Product anywhere; shop.models in no root holding conftest.py
     // (only ""), and in exactly one other root (src)
     edge("conftest.py", "src/shop/models.py"),
     // helpers: the root scripts (pytest's pythonpath) contains the importer and holds scripts/helpers.py
     edge("scripts/deploy.py", "scripts/helpers.py"),
+    // secrets:TOKEN (a standard-library name, a flat script beside its own secrets.py): the root scripts contains the
+    // importer and holds secrets as a module, scripts/secrets.py; no submodule secrets.TOKEN there, so the module secrets
+    edge("scripts/release.py", "scripts/secrets.py"),
     // app:config: the root services/alpha contains the importer, and services/alpha/app/config.py is the submodule
     edge("services/alpha/app/__init__.py", "services/alpha/app/config.py"),
     // app:db: in the root services/alpha, which contains the importer, there's no submodule app.db but there is the
@@ -87,6 +100,8 @@ const EDGES: TruthEdge[] = [
     edge("src/shop/cli.py", "toolkit/text.py"),
     // .cart:Cart: an import under `if TYPE_CHECKING:` counts
     edge("src/shop/models.py", "src/shop/cart.py"),
+    // .:logging (one dot): base src/shop, the module src/shop/logging; relative, so the standard-library rule never applies
+    edge("src/shop/orders.py", "src/shop/logging.py"),
     // .:gateway (one dot in an __init__.py): the module src/shop/payments/gateway
     edge("src/shop/payments/__init__.py", "src/shop/payments/gateway.py"),
     // ..models:Product (two dots): base src/shop, the module src/shop/models
@@ -110,6 +125,12 @@ const EDGES: TruthEdge[] = [
     edge("tests/runtests.py", "src/shop/__init__.py"),
     // cart_tests: the empty package tests/cart_tests/__init__.py under the root tests
     edge("tests/runtests.py", "tests/cart_tests/__init__.py"),
+    // shop.audit:record (an ordinary absolute import of the repo's own package, beside a standard-library one): no
+    // submodule shop.audit.record anywhere; shop.audit in no root holding the importer (tests, ""), in exactly one other (src)
+    edge("tests/test_audit.py", "src/shop/audit.py"),
+    // logging (a standard-library name): the root tests contains the importer and holds logging as a module,
+    // tests/logging.py (the deepest root containing it; "" holds no logging)
+    edge("tests/test_audit.py", "tests/logging.py"),
     // .text:shout: base toolkit; no module toolkit/text/shout, so toolkit/text
     edge("toolkit/__init__.py", "toolkit/text.py"),
     // toolkit:text, above the syntax error: the submodule toolkit.text
@@ -126,9 +147,14 @@ const EDGES: TruthEdge[] = [
     edge("toolkit/text_test.py", "toolkit/text.py"),
     // not edges:
     // - scripts/deploy.py's app:config: app.config is in two other roots (services/alpha, services/beta/src) and so is
-    //   app, so nothing (internal: app is a top-level package's name); its email.utils:formatdate finds no
-    //   email/utils.py (the stray email/ folder has no __init__.py: external); its import_module("toolkit.text")
-    //   calls a local function, not importlib's (no specifier);
+    //   app, so nothing (internal: app is a top-level package's name); its email.utils:formatdate is a standard-library
+    //   name, and neither root containing it (scripts, "") holds email as a module or a regular package (the stray
+    //   email/ folder is a namespace folder, with no utils.py anyway): external; its import_module("toolkit.text") calls
+    //   a local function, not importlib's (no specifier);
+    // - src/shop/audit.py's logging and src/shop/receipts.py's logging:getLogger: the standard library's logging. The
+    //   roots containing them (src, "") hold no logging, and tests/logging.py's root tests doesn't contain them, so it
+    //   never captures them (without the rule, a unique hit among the other roots). Nor src/shop/logging.py, which no
+    //   root holds directly;
     // - src/shop/cart.py's .speedups:fast_total names no file (a relative miss, internal);
     // - src/shop/gui.py's promo:DISCOUNT: no promo anywhere until edit (b) makes extras a root (external);
     // - src/shop/models.pyi beside src/shop/models.py: .py comes first, so nothing reaches the stub;
@@ -181,6 +207,8 @@ export const pythonRepoTruth: FixtureTruth = {
         { path: "extras/promo.py", language: "python", isTest: false, lineCount: 1 },
         { path: "scripts/deploy.py", language: "python", isTest: false, lineCount: 20 },
         { path: "scripts/helpers.py", language: "python", isTest: false, lineCount: 2 },
+        { path: "scripts/release.py", language: "python", isTest: false, lineCount: 5 },
+        { path: "scripts/secrets.py", language: "python", isTest: false, lineCount: 1 },
         { path: "services/alpha/app/__init__.py", language: "python", isTest: false, lineCount: 4 },
         { path: "services/alpha/app/config.py", language: "python", isTest: false, lineCount: 1 },
         { path: "services/alpha/app/views.py", language: "python", isTest: false, lineCount: 5 },
@@ -190,21 +218,27 @@ export const pythonRepoTruth: FixtureTruth = {
         { path: "setup.py", language: "python", isTest: false, lineCount: 3 },                // a manifest and a code file
         { path: "src/shop/__init__.py", language: "python", isTest: false, lineCount: 12 },
         { path: "src/shop/__main__.py", language: "python", isTest: false, lineCount: 4 },
+        { path: "src/shop/audit.py", language: "python", isTest: false, lineCount: 5 },
         { path: "src/shop/cart.py", language: "python", isTest: false, lineCount: 23 },
         { path: "src/shop/cli.py", language: "python", isTest: false, lineCount: 19 },
         { path: "src/shop/gui.py", language: "python", isTest: false, lineCount: 5 },
+        { path: "src/shop/logging.py", language: "python", isTest: false, lineCount: 2 },
         { path: "src/shop/models.py", language: "python", isTest: false, lineCount: 57 },
         { path: "src/shop/models.pyi", language: "python", isTest: false, lineCount: 10 },
+        { path: "src/shop/orders.py", language: "python", isTest: false, lineCount: 6 },
         { path: "src/shop/payments/__init__.py", language: "python", isTest: false, lineCount: 1 },
         { path: "src/shop/payments/gateway.py", language: "python", isTest: false, lineCount: 6 },
         { path: "src/shop/plugins/__init__.py", language: "python", isTest: false, lineCount: 0 },   // empty
         { path: "src/shop/plugins/fancy.py", language: "python", isTest: false, lineCount: 7 },
+        { path: "src/shop/receipts.py", language: "python", isTest: false, lineCount: 5 },
         { path: "src/shop/tests.py", language: "python", isTest: true, lineCount: 8 },          // tests.py
         { path: "src/vendors/acme.py", language: "python", isTest: false, lineCount: 1 },
         { path: "tests/cart_tests/__init__.py", language: "python", isTest: true, lineCount: 0 },   // empty; the tests/ folder
         { path: "tests/cart_tests/factories.py", language: "python", isTest: true, lineCount: 5 },
+        { path: "tests/logging.py", language: "python", isTest: true, lineCount: 5 },          // the tests/ folder
         { path: "tests/model_tests/test_models.py", language: "python", isTest: true, lineCount: 8 },
         { path: "tests/runtests.py", language: "python", isTest: true, lineCount: 8 },
+        { path: "tests/test_audit.py", language: "python", isTest: true, lineCount: 8 },
         { path: "toolkit/__init__.py", language: "python", isTest: false, lineCount: 5 },
         { path: "toolkit/_speedups.pyi", language: "python", isTest: false, lineCount: 1 },
         { path: "toolkit/broken.py", language: "python", isTest: false, lineCount: 10 },
@@ -219,6 +253,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": [],
         "scripts/deploy.py": ["sys", "email.utils:formatdate", "helpers", "app:config"],
         "scripts/helpers.py": [],
+        "scripts/release.py": ["secrets:TOKEN"],
+        "scripts/secrets.py": [],
         "services/alpha/app/__init__.py": ["app:config"],
         "services/alpha/app/config.py": [],
         "services/alpha/app/views.py": ["app:db"],
@@ -228,6 +264,7 @@ export const pythonRepoTruth: FixtureTruth = {
         "setup.py": ["setuptools:setup"],
         "src/shop/__init__.py": [".models:Product"],
         "src/shop/__main__.py": ["shop.cli:main"],                       // the alias run_cli is not part of it
+        "src/shop/audit.py": ["logging"],
         "src/shop/cart.py": [
             // from __future__ gives nothing; the try block and the function's import count
             "shop.payments", "shop.payments.gateway", "vendors:acme", ".models:Product", ".speedups:fast_total", "toolkit.text:shout",
@@ -238,18 +275,23 @@ export const pythonRepoTruth: FixtureTruth = {
             "shop.plugins.fancy", "shop.payments.gateway", "toolkit.text",
         ],
         "src/shop/gui.py": ["promo:DISCOUNT"],
+        "src/shop/logging.py": [],
         "src/shop/models.py": ["typing:TYPE_CHECKING", ".cart:Cart"],
         "src/shop/models.pyi": ["typing:ClassVar"],
+        "src/shop/orders.py": [".:logging"],
         "src/shop/payments/__init__.py": [".:gateway"],
         "src/shop/payments/gateway.py": ["..models:Product"],
         "src/shop/plugins/__init__.py": [],
         "src/shop/plugins/fancy.py": ["..:models", "..payments.gateway:charge"],
+        "src/shop/receipts.py": ["logging:getLogger"],
         "src/shop/tests.py": ["shop.cart:Cart", "shop.cart:checkout"],
         "src/vendors/acme.py": [],
         "tests/cart_tests/__init__.py": [],
         "tests/cart_tests/factories.py": ["shop.cart:Cart"],
+        "tests/logging.py": [],
         "tests/model_tests/test_models.py": ["cart_tests.factories:make_cart", "shop.models:Product"],
         "tests/runtests.py": ["os", "sys", "cart_tests", "shop"],
+        "tests/test_audit.py": ["logging", "shop.audit:record"],
         "toolkit/__init__.py": [".text:shout"],
         "toolkit/_speedups.pyi": [],
         "toolkit/broken.py": ["json", "toolkit:text"],
@@ -263,6 +305,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": [],
         "scripts/deploy.py": ["__main__"],                    // if '__main__' == __name__: (single quotes, operands reversed)
         "scripts/helpers.py": [],
+        "scripts/release.py": [],
+        "scripts/secrets.py": [],
         "services/alpha/app/__init__.py": [],
         "services/alpha/app/config.py": [],
         "services/alpha/app/views.py": [],
@@ -272,21 +316,27 @@ export const pythonRepoTruth: FixtureTruth = {
         "setup.py": [],
         "src/shop/__init__.py": [],
         "src/shop/__main__.py": ["__main__"],                 // if __name__ == "__main__":
+        "src/shop/audit.py": [],
         "src/shop/cart.py": [],
         "src/shop/cli.py": [],
         "src/shop/gui.py": [],
+        "src/shop/logging.py": [],
         "src/shop/models.py": [],
         "src/shop/models.pyi": [],
+        "src/shop/orders.py": [],
         "src/shop/payments/__init__.py": [],
         "src/shop/payments/gateway.py": [],
         "src/shop/plugins/__init__.py": [],
         "src/shop/plugins/fancy.py": [],
+        "src/shop/receipts.py": [],
         "src/shop/tests.py": [],
         "src/vendors/acme.py": [],
         "tests/cart_tests/__init__.py": [],
         "tests/cart_tests/factories.py": [],
+        "tests/logging.py": [],
         "tests/model_tests/test_models.py": [],
         "tests/runtests.py": ["__main__"],                    // if __name__ == '__main__': (single quotes)
+        "tests/test_audit.py": [],
         "toolkit/__init__.py": [],
         "toolkit/_speedups.pyi": [],
         "toolkit/broken.py": [],
@@ -300,6 +350,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": [top("DISCOUNT", "const", 1, 1, true)],
         "scripts/deploy.py": [top("import_module", "function", 9, 11, true), top("main", "function", 14, 16, true)],
         "scripts/helpers.py": [top("banner", "function", 1, 2, true)],
+        "scripts/release.py": [top("publish", "function", 4, 5, true)],
+        "scripts/secrets.py": [top("TOKEN", "const", 1, 1, true)],
         "services/alpha/app/__init__.py": [top("NAME", "const", 3, 3, true), top("db", "const", 4, 4, true)],
         "services/alpha/app/config.py": [top("DEBUG", "const", 1, 1, true)],
         "services/alpha/app/views.py": [top("index", "function", 4, 5, true)],
@@ -315,6 +367,7 @@ export const pythonRepoTruth: FixtureTruth = {
             top("configure", "function", 11, 12, false),
         ],
         "src/shop/__main__.py": [],
+        "src/shop/audit.py": [top("record", "function", 4, 5, true)],
         "src/shop/cart.py": [
             top("Cart", "class", 15, 17, true),
             member("Cart", "__init__", "constructor", 16, 17, true),
@@ -323,6 +376,7 @@ export const pythonRepoTruth: FixtureTruth = {
         ],
         "src/shop/cli.py": [top("main", "function", 12, 19, true)],
         "src/shop/gui.py": [top("run", "function", 4, 5, true)],
+        "src/shop/logging.py": [top("configure", "function", 1, 2, true)],
         "src/shop/models.py": [
             top("CURRENCY", "const", 9, 9, true),
             top("DEFAULT_PRICE", "const", 10, 10, true),                          // an annotated assignment
@@ -350,16 +404,20 @@ export const pythonRepoTruth: FixtureTruth = {
             member("Product", "label", "accessor", 7, 8, true),
             top("register", "function", 10, 10, true),
         ],
+        "src/shop/orders.py": [top("place", "function", 4, 6, true)],
         "src/shop/payments/__init__.py": [],
         "src/shop/payments/gateway.py": [top("charge", "function", 4, 6, true)],
         "src/shop/plugins/__init__.py": [],
         "src/shop/plugins/fancy.py": [top("FancyPlugin", "class", 5, 7, true), member("FancyPlugin", "apply", "method", 6, 7, true)],
+        "src/shop/receipts.py": [top("emit", "function", 4, 5, true)],
         "src/shop/tests.py": [top("test_checkout", "function", 7, 8, true)],
         "src/vendors/acme.py": [top("TAX", "const", 1, 1, true)],
         "tests/cart_tests/__init__.py": [],
         "tests/cart_tests/factories.py": [top("make_cart", "function", 4, 5, true)],
+        "tests/logging.py": [top("captured", "function", 4, 5, true)],                  // the docstring above is no symbol
         "tests/model_tests/test_models.py": [top("test_product_label", "function", 5, 8, true)],
         "tests/runtests.py": [],
+        "tests/test_audit.py": [top("test_record", "function", 6, 8, true)],
         "toolkit/__init__.py": [top("slugify", "function", 4, 5, true)],
         "toolkit/_speedups.pyi": [top("fast_shout", "function", 1, 1, true)],
         "toolkit/broken.py": [top("first", "function", 6, 7, true)],                // above the error
@@ -379,11 +437,13 @@ export const pythonRepoTruth: FixtureTruth = {
         "extras/promo.py": {},
         "scripts/deploy.py": {
             sys: "external",
-            "email.utils:formatdate": "external",   // unresolved, and email is no top-level package (email/ has no __init__.py) or module
+            "email.utils:formatdate": "external",   // email is a standard-library name (and the stray email/ folder is no top-level package)
             helpers: "internal",                    // resolves
             "app:config": "internal",               // unresolved, but app is a top-level package's name
         },
         "scripts/helpers.py": {},
+        "scripts/release.py": { "secrets:TOKEN": "internal" },   // a standard-library name its own root holds: it resolves
+        "scripts/secrets.py": {},
         "services/alpha/app/__init__.py": { "app:config": "internal" },
         "services/alpha/app/config.py": {},
         "services/alpha/app/views.py": { "app:db": "internal" },
@@ -393,6 +453,8 @@ export const pythonRepoTruth: FixtureTruth = {
         "setup.py": { "setuptools:setup": "external" },
         "src/shop/__init__.py": { ".models:Product": "internal" },
         "src/shop/__main__.py": { "shop.cli:main": "internal" },
+        // a standard-library name: external, although tests/logging.py makes logging a root module's name
+        "src/shop/audit.py": { logging: "external" },
         "src/shop/cart.py": {
             "shop.payments": "internal",
             "shop.payments.gateway": "internal",
@@ -414,18 +476,24 @@ export const pythonRepoTruth: FixtureTruth = {
             "toolkit.text": "internal",
         },
         "src/shop/gui.py": { "promo:DISCOUNT": "external" },   // no top-level package or root module promo before edit (b)
+        "src/shop/logging.py": {},
         "src/shop/models.py": { "typing:TYPE_CHECKING": "external", ".cart:Cart": "internal" },
         "src/shop/models.pyi": { "typing:ClassVar": "external" },
+        "src/shop/orders.py": { ".:logging": "internal" },
         "src/shop/payments/__init__.py": { ".:gateway": "internal" },
         "src/shop/payments/gateway.py": { "..models:Product": "internal" },
         "src/shop/plugins/__init__.py": {},
         "src/shop/plugins/fancy.py": { "..:models": "internal", "..payments.gateway:charge": "internal" },
+        "src/shop/receipts.py": { "logging:getLogger": "external" },   // a standard-library name, as audit.py's
         "src/shop/tests.py": { "shop.cart:Cart": "internal", "shop.cart:checkout": "internal" },
         "src/vendors/acme.py": {},
         "tests/cart_tests/__init__.py": {},
         "tests/cart_tests/factories.py": { "shop.cart:Cart": "internal" },
+        "tests/logging.py": {},
         "tests/model_tests/test_models.py": { "cart_tests.factories:make_cart": "internal", "shop.models:Product": "internal" },
         "tests/runtests.py": { os: "external", sys: "external", cart_tests: "internal", shop: "internal" },
+        // logging from inside the root that holds tests/logging.py: it resolves there, so internal
+        "tests/test_audit.py": { logging: "internal", "shop.audit:record": "internal" },
         "toolkit/__init__.py": { ".text:shout": "internal" },
         "toolkit/_speedups.pyi": {},
         "toolkit/broken.py": { json: "external", "toolkit:text": "internal" },
