@@ -14,9 +14,10 @@
  *   Anthropic + this submission + the rest. If that would pass the budget, the run stops
  *   sending but keeps collecting what's already at Anthropic, which is paid for (ADR-035).
  *   Running again with a bigger --budget goes on from there.
- * - A full run first prints its estimate (every request it would send, priced as the cap prices them) and asks before it
- *   spends (S11, ADR-035 amended). Without a terminal it needs --yes. The yes is recorded per repo, which is what lets the
- *   Map's background worker refresh summaries afterwards (ADR-038 amended). --path and a run with nothing to send skip it.
+ * - A full run first prints its estimate (every request it would send, priced as the cap prices them, the folders and the
+ *   repo its new text puts out of date included) and asks before it spends (S11, ADR-035 amended). Without a terminal it
+ *   needs --yes. The yes is recorded per repo with its budget, which is what lets the Map's background worker refresh
+ *   summaries afterwards (ADR-038 amended), up to that budget (R24). --path and a run with nothing to send skip it.
  * - --path summarizes one file or folder right now through the regular API (an empty path
  *   means the repo itself). It's one request, so no budget applies.
  * - --release-batch <batch id> (repeatable) gives up on a batch whose results keep failing to download: its
@@ -229,7 +230,8 @@ async function confirmSpend(options: SummarizeOptions, setting: ResolvedSummaryM
             return false;
         }
     }
-    confirmSummaries(db, repoId);
+    // the yes, with the budget it was given to: the Map's automatic refreshes stop at it (R24)
+    confirmSummaries(db, repoId, options.budgetUsd);
     return true;
 }
 

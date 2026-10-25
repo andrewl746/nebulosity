@@ -12,7 +12,7 @@ import { indexRepository } from "../../index/pipeline";
 import { runSummaries } from "../../index/summarize/run";
 import { upsertRepository } from "./structure";
 import {
-    addUsage, applyTargetUpdates, confirmSummaries, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
+    addUsage, applyTargetUpdates, approvedBudgetUsd, confirmSummaries, countInFlight, inFlightBatches, loadBatchRows, loadFileFacts, loadFileSummaryChunk,
     loadFolderFacts, loadImporters, loadSummaries, loadUsage, markInFlight, pruneSummaries, summariesConfirmed, targetKey, writeResults,
 } from "./summaries";
 import { writeSummaryVectors } from "./summary-vectors";
@@ -276,7 +276,7 @@ describe("summariesConfirmed (S11)", () => {
         const db = getDb();
         const { repoId } = indexRepository(copyFixture());
         expect(summariesConfirmed(db, repoId)).toBe(false);   // the test file's template doesn't count
-        confirmSummaries(db, repoId);
+        confirmSummaries(db, repoId, 15);
         expect(summariesConfirmed(db, repoId)).toBe(true);
 
         const root = copyFixture();
@@ -284,5 +284,23 @@ describe("summariesConfirmed (S11)", () => {
         expect(summariesConfirmed(db, other.repoId)).toBe(false);
         await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
         expect(summariesConfirmed(db, other.repoId)).toBe(true);   // VS Code's existing summaries keep it confirmed
+    });
+
+    // ruling R24: the worker's automatic jobs stop at the budget of the last yes
+    it("keeps the budget of the last yes per repo, and none for a repo confirmed only by its summaries", async () => {
+        const db = getDb();
+        const { repoId } = indexRepository(copyFixture());
+        expect(approvedBudgetUsd(db, repoId)).toBeNull();
+        confirmSummaries(db, repoId, 30);
+        expect(approvedBudgetUsd(db, repoId)).toBe(30);
+        confirmSummaries(db, repoId, 15);   // a later yes at the default replaces it
+        expect(approvedBudgetUsd(db, repoId)).toBe(15);
+
+        const root = copyFixture();
+        const other = indexRepository(root);
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        expect(summariesConfirmed(db, other.repoId)).toBe(true);
+        expect(approvedBudgetUsd(db, other.repoId)).toBeNull();
+        expect(approvedBudgetUsd(db, repoId)).toBe(15);   // one repo's yes isn't another's
     });
 });

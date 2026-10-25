@@ -2,14 +2,14 @@ import path from "path";
 import { getDb } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { findRepository } from "../db/store/structure";
-import { countStaleFolders, loadSummaries, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
+import { approvedBudgetUsd, countStaleFolders, loadSummaries, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
 import { NoActiveRepoError, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "../engine/errors";
 import { commandHint } from "../hints";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository, type IndexOptions, type IndexResult } from "../index/pipeline";
 import { configuredSummaryModels, SummaryModelsError, type SummaryModelsResolution } from "../index/summarize/models";
-import { runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
+import { DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
 import type { PlannedTarget } from "../index/summarize/plan";
 import { snapshotOf } from "../index/summarize/pricing";
 import { refreshSummaryStatus } from "../index/summarize/status";
@@ -34,7 +34,8 @@ export const EMBED_SLICE = 64;
 /**
  * Each refresh or sweep may spend at most this, counting only its own requests (ADR-035, amended). At VS Code's
  * measured means 50 Haiku files cost about $0.03 direct and 20 Sonnet folders $0.11–0.16, so it only stops a run that
- * has gone wrong. The CLI's $15 cap is cumulative, and VS Code's first pass already spent $10.30 of it.
+ * has gone wrong. Beside it, no job takes the repo's cumulative spend past the budget of the last yes (R24): the CLI's
+ * $15 unless that yes was given with another --budget, so after VS Code's $10.30 first pass about $4.70 remains.
  */
 export const INCREMENTAL_BUDGET_USD = 1;
 
@@ -188,6 +189,18 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     }
 
     /**
+     * What the repo's summaries may have cost in all once an automatic job is done (R24): the budget of the last yes
+     * `nebulosity summarize` recorded, else the CLI's default. Past it the jobs send nothing, and the stage's note says
+     * how to approve more; after a model change that keeps the sweep from finishing, unasked, a cascade of folder
+     * re-summaries a capped or --no-wait run left over.
+     */
+    function approvedBudget(repo: string): number {
+        const db = getDb();
+        const repoId = findRepository(db, repoKey(repo));
+        return (repoId === null ? null : approvedBudgetUsd(db, repoId)) ?? DEFAULT_BUDGET_USD;
+    }
+
+    /**
      * What an automatic job (a refresh after a save, the sweep) may send without asking (ADR-066, R17): a target whose
      * stored text the model now in use for its kind wrote (so it's out of date only because its inputs changed), or one
      * no model has written yet. Text another model wrote waits for `nebulosity summarize`'s estimate and yes, "Summarize
@@ -283,6 +296,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
+                repoBudgetUsd: approvedBudget(repo),
                 select: isDue,
                 maxTargets: allowance,
                 onProgress: (message) => log(`summaries: ${message}`),
@@ -328,6 +342,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
+                repoBudgetUsd: approvedBudget(repo),
                 select: (target) => target.kind !== "file" && unasked(target),
                 maxTargets: SWEEP_MAX_FOLDERS,
                 onProgress: (message) => log(`sweep: ${message}`),

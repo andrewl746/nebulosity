@@ -6,10 +6,11 @@ import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../../lib/db/client";
 import { requireRepository } from "../../lib/db/store/structure";
-import { summariesConfirmed } from "../../lib/db/store/summaries";
+import { approvedBudgetUsd, summariesConfirmed } from "../../lib/db/store/summaries";
 import { dataDir } from "../../lib/home";
 import { repoKey } from "../../lib/index/paths";
 import { indexRepository } from "../../lib/index/pipeline";
+import { runSummaries } from "../../lib/index/summarize/run";
 import type { Summarizer } from "../../lib/index/summarize/types";
 import { runSummarize } from "./summarize-command";
 
@@ -75,6 +76,23 @@ describe("nebulosity summarize: an estimate and a yes before any spend (S11)", (
         expect(summariesConfirmed(db, requireRepository(db, repoKey(root)))).toBe(true);
     });
 
+    // R24: the Map's automatic refreshes stop at the budget of the last yes
+    it("records the budget the yes was given to: --budget's, else the default $15", async () => {
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+        const db = getDb();
+
+        const raised = copyFixture();
+        indexRepository(raised);
+        expect(await runSummarize([raised, "--direct", "--yes", "--budget", "30"])).toBe(0);
+        expect(approvedBudgetUsd(db, requireRepository(db, repoKey(raised)))).toBe(30);
+
+        const plain = copyFixture();
+        indexRepository(plain);
+        expect(await runSummarize([plain, "--direct", "--yes"])).toBe(0);
+        expect(approvedBudgetUsd(db, requireRepository(db, repoKey(plain)))).toBe(15);
+    });
+
     it("with no key, says summaries need one and sends nothing", async () => {
         summarizer = null;
         const root = copyFixture();
@@ -119,6 +137,25 @@ describe("nebulosity summarize: the models in summaryModels (ADR-066)", () => {
 
         // at ASSUMED_TOKENS, direct: 7 files × (4,600 × $1 + 260 × $5) / 1M = $0.0413, and 6 × Sonnet's $0.0045 = $0.027: $0.0683
         expect(printed(log)).toContain("about 13 requests (7 files to claude-haiku-6, 5 folders and the repo to claude-sonnet-5-5), about $0.0683 at list prices.");
+        expect(stub.requests).toHaveLength(0);
+    });
+
+    // R24 (the final review's A-I1): before, this estimate was the 7 files alone, about $0.0041
+    it("after a file model change, estimates the folders and the repo the new file summaries put out of date as well", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });   // every summary written at the defaults
+        stub.requests.length = 0;
+        setSummaryModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } });
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await runSummarize([root, "--direct"])).toBe(1);   // the estimate, then nothing sent
+
+        // Direct. The 7 files to Haiku 6, which has no usage yet, at ASSUMED_TOKENS: 7 × (4,600 × $0.10 + 260 × $0.50) / 1M =
+        // $0.00413. The 5 folders and the repo above them at Sonnet 5.5's recorded mean (the stub's 100 in, 20 out):
+        // 6 × (100 × $2 + 20 × $10) / 1M = $0.0024. $0.00653 in all.
+        expect(printed(log)).toContain("about 13 requests (7 files to claude-haiku-6, 5 folders and the repo to claude-sonnet-5-5), about $0.0065 at list prices.");
         expect(stub.requests).toHaveLength(0);
     });
 

@@ -7,6 +7,7 @@ import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
 import { acquireSummaryLock, releaseSummaryLock } from "../db/store/lock";
+import { readStages } from "../db/store/stages";
 import { requireRepository } from "../db/store/structure";
 import { addUsage, confirmSummaries, loadSummaries } from "../db/store/summaries";
 import { countEmbedded } from "../db/store/summary-vectors";
@@ -112,7 +113,7 @@ describe("background service", () => {
         expect(stub.requests).toHaveLength(0);
 
         const db = getDb();
-        confirmSummaries(db, requireRepository(db, repoKey(root)));
+        confirmSummaries(db, requireRepository(db, repoKey(root)), 15);
         fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const more = 2;\n");
         watcher.changed(["src/core/log.ts"]);
         await service.idle();
@@ -264,11 +265,14 @@ describe("background service", () => {
         await service.stop();
     });
 
-    it("still refreshes a repo whose summaries have cost more than the CLI's $15: each refresh has its own cap", async () => {
-        const root = await summarizedFixture();
+    // R24 (the pre-ship pass's final review, A-I1), which replaces "still refreshes a repo past the CLI's $15": each refresh
+    // keeps its own $1 cap, and no automatic job takes the repo past the budget its owner last said yes to
+    it("refreshes nothing on a repo whose summaries have cost more than the budget of its last yes, until a yes raises it", async () => {
+        const root = await summarizedFixture();   // a model wrote its summaries, and no yes recorded a budget: the CLI's $15
         const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
         // 400M Haiku tokens at batch rates: 400 × $0.10 / 2 = $20 already spent, and Haiku's mean stays about 4,000 tokens in
-        addUsage(db, requireRepository(db, repoKey(root)), "claude-haiku-5-5", "batch", { requests: 100_000, inputTokens: 400_000_000, outputTokens: 0 });
+        addUsage(db, repoId, "claude-haiku-5-5", "batch", { requests: 100_000, inputTokens: 400_000_000, outputTokens: 0 });
         const watcher = fakeWatcher();
         const stub = stubSummarizer();
         const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
@@ -279,7 +283,25 @@ describe("background service", () => {
         await service.idle();
         await vi.advanceTimersByTimeAsync(60_000);
         await service.idle();
-        // this refresh alone: one file at about 4,000 × $0.10 / 1M = $0.0004, well under INCREMENTAL_BUDGET_USD
+        // This refresh alone, one file at about 4,000 × $0.10 / 1M = $0.0004, is well under INCREMENTAL_BUDGET_USD. But the
+        // repo has spent $20.00254 (the $20, the first pass's 7 Haiku files at $0.00002 and 6 Sonnet folders at $0.0004),
+        // and $20.00294 is over the $15.
+        expect(stub.requests).toHaveLength(0);
+        expect(rowStatus(root, "src/core/log.ts")).toBe("stale");
+        expect(readStages(db, repoId).summaries).toMatchObject({
+            state: "failed",
+            note: "stopped: the next wave would bring this repo's summary spend to $20.00, over the $15.00 last approved for it"
+                + " (spent $20.00, at Anthropic ≈ $0.0000, this wave ≈ $0.0004, the rest ≈ $0.0000); the rest waits until"
+                + ` nebulosity summarize "${repoKey(root)}" --budget <usd> (in a checkout: npm run summarize -- "${repoKey(root)}" --budget <usd>) approves more`,
+        });
+
+        // a yes given with --budget 30 (nebulosity summarize records it): the next save is refreshed as usual
+        confirmSummaries(db, repoId, 30);
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const more = 2;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
         expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
         await service.stop();
     });
@@ -376,7 +398,7 @@ describe("background service", () => {
         expect(errorResponseFor(await refusal.catch((err: unknown) => err)).error.code).toBe("SUMMARIES_OFF");
 
         const db = getDb();
-        confirmSummaries(db, requireRepository(db, repoKey(root)));
+        confirmSummaries(db, requireRepository(db, repoKey(root)), 15);
         expect(await service.summarizeNow("src/core/log.ts")).toMatchObject({ status: "fresh" });
         expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
         await service.stop();
@@ -487,6 +509,45 @@ describe("background service", () => {
         await vi.advanceTimersByTimeAsync(19 * 60_000);
         await service.idle();
         expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
+        await service.stop();
+    });
+
+    // R24 (the pre-ship pass's final review, A-I1; its probe as a test). A capped or --no-wait run can stop once the files
+    // are rewritten: the folders above them are then out of date, but the folder model still in use wrote them, so R17
+    // lets the sweep redo them. The budget of the last yes is what bounds that.
+    it("after a file model change and a run that redid only the files, the sweep redoes their folders only within the budget of the last yes", async () => {
+        const root = await summarizedFixture();   // $0.00254: 7 Haiku 5.5 files at $0.00002 and 6 Sonnet 5.5 targets at $0.0004
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        fs.writeFileSync(path.join(dataFolder(), "config.json"), JSON.stringify({ summaryModels: { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } } }));
+        const models = resolveSummaryModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } }, "C:/data/config.json");
+        if (!models.ok) throw new Error(models.error);
+        // the files rewritten by Haiku 6 (in words of its own, which change their folders' inputs), $0.00014 more, and nothing above them yet
+        const files = ["src/app/main.ts", "src/app/view.tsx", "src/core/index.ts", "src/core/log.ts", "src/index.ts", "src/util/strings.ts", "scripts/build.js"];
+        const haiku6 = stubSummarizer({ texts: Object.fromEntries(files.map((p) => [p, { tagline: `Haiku 6 on ${p}`, summary: `What ${p} does, by Haiku 6.` }])) });
+        await runSummaries(root, { summarizer: haiku6.summarizer, models, transport: "direct", select: (t) => t.kind === "file" });
+        expect(haiku6.requests).toHaveLength(7);
+        confirmSummaries(db, repoId, 0.003);
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+        expect(rowStatus(root, "src/app")).toBe("stale");
+
+        // The first sweep. Spent $0.00268; this wave, the 4 folders whose children are done, at Sonnet 5.5's mean,
+        // 4 × $0.0004 = $0.0016; the rest, src and the repo, $0.0008. $0.00508 is over the $0.003 said yes to.
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.requests).toHaveLength(0);
+        expect(rowStatus(root, "src/app")).toBe("stale");
+
+        // after a yes for $15, the next sweep redoes all six, deepest first, with the folder model still in use
+        confirmSummaries(db, repoId, 15);
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["Folder: src/app", "Folder: src/core", "Folder: src/util", "Folder: scripts", "Folder: src", `Repository: ${path.basename(root)}`]);
+        expect(stub.requests.every((r) => r.model === "claude-sonnet-5-5")).toBe(true);
         await service.stop();
     });
 

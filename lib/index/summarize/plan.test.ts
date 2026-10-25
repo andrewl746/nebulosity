@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FILES, FOLDERS } from "../../../test/helpers/mini-repo-facts";
 import type { FileFacts, FolderFacts, StoredSummary } from "../../db/store/summaries";
-import { inputHash, planSummaries, writtenByModel, type PlanOptions, type PlannedTarget } from "./plan";
+import { foldersAbove, inputHash, planSummaries, writtenByModel, type PlanOptions, type PlannedTarget } from "./plan";
 import { PROMPT_VERSION, SUMMARY_MODELS } from "./prompts";
 
 const options = (overrides: Partial<PlanOptions> = {}): PlanOptions => ({
@@ -150,6 +150,52 @@ describe("planSummaries — after the first run", () => {
     it("doesn't redo a file because more files import it: its hash covers the path and the bytes, not its importers", () => {
         const moreImported = FILES.map((f) => (f.path === "src/core/log.ts" ? { ...f, importedBy: f.importedBy + 40 } : f));
         expect(planSummaries(moreImported, FOLDERS, allWaves().stored, options()).every((t) => t.state === "current")).toBe(true);
+    });
+});
+
+// R24 (the pre-ship pass's final review, A-I1): what a full run redoes besides what plans as ready
+describe("foldersAbove", () => {
+    const paths = (targets: PlannedTarget[]) => targets.map((t) => t.path);
+
+    it("after a file model change, is every folder and the repo, deepest first, though each plans as current", () => {
+        const plan = planSummaries(FILES, FOLDERS, allWaves().stored, options({ models: { ...SUMMARY_MODELS, file: "claude-haiku-6" } }));
+        const files = plan.filter((t) => t.state === "ready");
+        expect(plan.filter((t) => t.kind !== "file").every((t) => t.state === "current")).toBe(true);
+        // depth 2 (src/app, src/core, src/util: 2 files each, so by path), then depth 1 (src's 7 files before scripts' 1), then the repo
+        expect(paths(foldersAbove(plan, files))).toEqual(["src/app", "src/core", "src/util", "src", "scripts", ""]);
+    });
+
+    it("after an edit, is the edited file's folders up to the repo, and leaves out what's already counted", () => {
+        const edited = FILES.map((f) => (f.path === "src/core/log.ts" ? { ...f, contentHash: "h-log-2" } : f));
+        const plan = planSummaries(edited, FOLDERS, allWaves().stored, options());
+        const log = plan.filter((t) => t.path === "src/core/log.ts");
+        expect(paths(foldersAbove(plan, log))).toEqual(["src/core", "src", ""]);
+        // src/core already counted (waiting or ready, say): only what's above it is new
+        expect(paths(foldersAbove(plan, [...log, plan.find((t) => t.path === "src/core")!]))).toEqual(["src", ""]);
+        expect(foldersAbove(plan, [])).toEqual([]);
+    });
+
+    it("stops at a folder that failed this run: it waits for the next run, so nothing above it changes through it", () => {
+        const edited = FILES.map((f) => (f.path === "src/core/log.ts" || f.path === "scripts/build.js" ? { ...f, contentHash: `${f.contentHash}-2` } : f));
+        const plan = planSummaries(edited, FOLDERS, allWaves().stored, options({ failedThisRun: new Set(["folder:src"]) }));
+        expect(plan.find((t) => t.path === "src")?.state).toBe("failed");
+        const files = plan.filter((t) => t.kind === "file" && t.state === "ready");
+        // log.ts reaches src/core, then src stops it; build.js reaches scripts and the repo
+        expect(paths(foldersAbove(plan, files))).toEqual(["src/core", "scripts", ""]);
+    });
+
+    it("leaves out a test-only folder, which gets a template", () => {
+        const withTests: FileFacts[] = [...FILES, { path: "test/unit/a.test.ts", contentHash: "h-a", lineCount: 4, isTest: true, importedBy: 0, sizeBytes: 50 }];
+        const withTestFolders: FolderFacts[] = [
+            ...FOLDERS.map((f) => (f.path === "" ? { ...f, fileCount: 9 } : f)),
+            { path: "test", parentPath: "", depth: 1, name: "test", fileCount: 1, directFileCount: 0 },
+            { path: "test/unit", parentPath: "test", depth: 2, name: "unit", fileCount: 1, directFileCount: 1 },
+        ];
+        const plan = planSummaries(withTests, withTestFolders, [], options());
+        // the test file stands in for a written target: the walk up from it meets test/unit, a template, and counts nothing
+        const templated = plan.filter((t) => t.path === "test/unit/a.test.ts");
+        expect(plan.filter((t) => t.path.startsWith("test")).map((t) => t.model)).toEqual(["template", "template", "template"]);
+        expect(paths(foldersAbove(plan, templated))).toEqual([]);
     });
 });
 

@@ -16,7 +16,7 @@ import { repoKey } from "../paths";
 import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
 import { DEFAULT_SUMMARY_MODELS, type ResolvedSummaryModels } from "./models";
-import type { PlannedTarget, TargetState } from "./plan";
+import { foldersAbove, type PlannedTarget, type TargetState } from "./plan";
 import { formatUsd } from "./pricing";
 import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
 import { planSnapshot, type Snapshot } from "./snapshot";
@@ -59,6 +59,13 @@ export type SummaryRunOptions = {
      * already sit near the CLI's cap (ADR-035, amended).
      */
     budgetScope?: "repo" | "run";
+    /**
+     * A second cap beside budgetUsd, on everything the repo has ever spent on summaries plus this run (as the "repo"
+     * scope counts it), checked before every submission the same way. The background worker passes the budget the repo's
+     * owner last approved (ruling R24): its jobs run under budgetUsd's per-run cap, and this keeps them from taking the
+     * repo past what was said yes to. Only with budgetUsd.
+     */
+    repoBudgetUsd?: number;
     /**
      * Batches to give up on before the run starts (ADR-033, amended in V1.3). Their requests are marked failed and sent
      * again, and paid for again: for a batch whose results keep failing to download. The stage note names such a batch.
@@ -186,6 +193,8 @@ type Budget = {
     /** "run": usage recorded before the run began is the baseline, left out of what's spent (SummaryRunOptions.budgetScope). */
     scope: "repo" | "run";
     baseline: readonly UsageRow[];
+    /** The repo's cumulative cap beside `usd`, or null (SummaryRunOptions.repoBudgetUsd). */
+    repoUsd: number | null;
 };
 
 type RunContext = {
@@ -207,6 +216,11 @@ type RunContext = {
     /** How many more targets this run may send (SummaryRunOptions.maxTargets). */
     sendLeft: number;
     /**
+     * Whether this run redoes out-of-date folders (SummaryRunOptions.refreshStaleFolders). Then the folders above what it
+     * writes are part of the rest the spend cap projects (foldersAbove); otherwise they turn lazy, and nothing sends them.
+     */
+    refreshStaleFolders: boolean;
+    /**
      * The note of the spend-cap check that failed in this pass; every pass starts with none. While it's set nothing more
      * is sent, but batches at Anthropic are still collected, and the run finishes with it when nothing more can happen.
      */
@@ -221,10 +235,10 @@ type RunContext = {
 
 function newContext(
     db: Db, repoId: number, root: string, models: ResolvedSummaryModels, say: (message: string) => void, budget: Budget | null = null,
-    select: (target: PlannedTarget) => boolean = () => true, sendLeft: number = Infinity
+    select: (target: PlannedTarget) => boolean = () => true, sendLeft: number = Infinity, refreshStaleFolders: boolean = true
 ): RunContext {
     return {
-        db, repoId, root, models, say, budget, select, sendLeft,
+        db, repoId, root, models, say, budget, select, sendLeft, refreshStaleFolders,
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPasses: 0,
@@ -258,8 +272,11 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
         restTransport: transport === "direct" ? "direct" : "batch",
         scope: options.budgetScope ?? "repo",
         baseline: options.budgetScope === "run" ? loadUsage(db, repoId) : [],
+        repoUsd: options.repoBudgetUsd ?? null,
     };
-    const ctx = newContext(db, repoId, root, options.models ?? DEFAULT_SUMMARY_MODELS, options.onProgress ?? (() => {}), budget, options.select, options.maxTargets);
+    const refreshStaleFolders = options.refreshStaleFolders ?? true;
+    const ctx = newContext(db, repoId, root, options.models ?? DEFAULT_SUMMARY_MODELS, options.onProgress ?? (() => {}), budget,
+        options.select, options.maxTargets, refreshStaleFolders);
     let last: PlannedTarget[] = [];
 
     // a mistyped id must fail before anything is locked, released or rewritten
@@ -273,7 +290,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             ctx.say(`released ${batchId}: ${plural(released, "request")} will be sent again`);
         }
         for (;;){
-            const snap = planSnapshot(db, repoId, options.refreshStaleFolders ?? true, ctx.failedThisRun, ctx.models);
+            const snap = planSnapshot(db, repoId, refreshStaleFolders, ctx.failedThisRun, ctx.models);
             last = snap.targets;
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
@@ -346,15 +363,18 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
 
 /**
  * What a full run would send to a model right now (S11): every target still to be written, as the kind and model of its
- * request, planned the way runSummaries' first pass plans (stale folders redone). A template is no request. Reads only.
+ * request, planned the way runSummaries' first pass plans (stale folders redone), and then every folder and the repo
+ * above them, which their new text puts out of date (foldersAbove, R24), and above what's still at Anthropic. A template
+ * is no request. Reads only.
  */
 export function plannedRequests(repoRoot: string, models: ResolvedSummaryModels = DEFAULT_SUMMARY_MODELS): ProjectedRequest[] {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     const toWrite: ReadonlySet<TargetState> = new Set(["ready", "waiting", "lazy", "failed"]);
-    return planSnapshot(db, repoId, true, new Set(), models).targets
-        .filter((t) => toWrite.has(t.state) && t.model !== "template")
-        .map((t) => ({ kind: t.kind, model: t.model }));
+    const targets = planSnapshot(db, repoId, true, new Set(), models).targets;
+    const written = targets.filter((t) => toWrite.has(t.state) && t.model !== "template");
+    const above = foldersAbove(targets, [...written, ...targets.filter((t) => t.state === "in-flight")]);
+    return [...written, ...above].map((t) => ({ kind: t.kind, model: t.model }));
 }
 
 /**
@@ -748,11 +768,14 @@ function checkFailures(ctx: RunContext, errors: readonly string[], total: number
 /**
  * The spend cap (ADR-035), checked before every submission: the one that starts at ready[start], which is one batch of
  * up to MAX_BATCH_REQUESTS or the whole regular-API wave ("direct"). It projects spent + at Anthropic + this submission
- * + the rest (budget.ts), where the rest is every ready target after this submission and everything still waiting.
+ * + the rest (budget.ts), where the rest is every ready target after this submission, everything still waiting, and,
+ * in a run that redoes out-of-date folders, the folders and the repo above all of those and above what's at Anthropic,
+ * which plan as current until the text below them changes (foldersAbove, R24).
  * - Within the budget it says so and returns true: the submission may go.
  * - Over it, it records the note on ctx.overBudget and returns false. The caller sends nothing, so those rows stay
  *   pending (not failed, not claimed); the run goes on collecting what's already at Anthropic, checks again after each
  *   collection, and finishes with the latest note once nothing more can happen.
+ * A repo cap (Budget.repoUsd) is checked the same way after the budget, on the repo's whole spend.
  */
 function withinBudget(
     ctx: RunContext, snap: Snapshot, ready: readonly PlannedTarget[], start: number, transport: "direct" | "batch",
@@ -761,17 +784,18 @@ function withinBudget(
     if (ctx.budget === null) return true;
 
     const end = transport === "batch" ? start + MAX_BATCH_REQUESTS : ready.length;
-    const projection = projectSpend({
+    const waiting = inState(snap, "waiting").filter(ctx.select);
+    const above = ctx.refreshStaleFolders ? foldersAbove(snap.targets, [...ready, ...waiting, ...inState(snap, "in-flight")]).filter(ctx.select) : [];
+    const input = {
         usage: loadUsage(ctx.db, ctx.repoId),
-        baseline: ctx.budget.baseline,
         atAnthropic,
         thisSubmission: ready.slice(start, end),
         thisTransport: transport,
-        rest: [...ready.slice(end), ...inState(snap, "waiting").filter(ctx.select)]
-            .slice(0, Math.max(0, ctx.sendLeft - (Math.min(end, ready.length) - start))),
+        rest: [...ready.slice(end), ...waiting, ...above].slice(0, Math.max(0, ctx.sendLeft - (Math.min(end, ready.length) - start))),
         restTransport: ctx.budget.restTransport,
         prices: ctx.models.prices,
-    });
+    };
+    const projection = projectSpend({ ...input, baseline: ctx.budget.baseline });
     const submission = transport === "batch" ? "batch" : "wave";
     const spentLabel = ctx.budget.scope === "run" ? "spent this run" : "spent";
     const usd = {
@@ -791,6 +815,20 @@ function withinBudget(
             + (ctx.budget.scope === "run" ? " the rest waits for the next run" : " run again with --budget <usd> to go on");
         ctx.say(ctx.overBudget);
         return false;
+    }
+
+    // The repo's cumulative cap (R24): the same projection with all of the repo's spend in it. The worker's jobs stop
+    // here once they'd take the repo past what its owner last approved, and wait for a summarize run with a bigger budget.
+    if (ctx.budget.repoUsd !== null){
+        const repo = projectSpend(input);
+        if (!(repo.total <= ctx.budget.repoUsd)){
+            ctx.overBudget = `stopped: the next ${submission} would bring this repo's summary spend to ${formatUsd(repo.total)}, over the`
+                + ` ${formatUsd(ctx.budget.repoUsd)} last approved for it (spent ${formatUsd(repo.spent)}, at Anthropic ≈ ${formatUsd(repo.atAnthropic)},`
+                + ` this ${submission} ≈ ${formatUsd(repo.thisSubmission)}, the rest ≈ ${formatUsd(repo.rest)}); the rest waits until`
+                + ` ${commandHint("summarize", `"${repoKey(ctx.root)}" --budget <usd>`)} approves more`;
+            ctx.say(ctx.overBudget);
+            return false;
+        }
     }
 
     // a model with no price on file was counted as $0, so the total is only a lower bound: say which
