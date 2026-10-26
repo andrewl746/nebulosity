@@ -1,0 +1,7 @@
+# The .vsix holds only what VS Code runs and the listing shows: everything is left out, then these are let back in.
+**
+!dist/**
+!media/**
+!README.md
+!LICENSE
+!package.json

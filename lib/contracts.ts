@@ -8,8 +8,8 @@
  * rule in docs/ARCHITECTURE.md.
  *
  * Rules:
- *  - Types only. No functions, no logic, no runtime values (the one
- *    exception: CONTRACTS_VERSION).
+ *  - Types only. No functions, no logic, no runtime values (the exceptions:
+ *    the version numbers CONTRACTS_VERSION, DEMO_FORMAT_VERSION and BRIDGE_VERSION).
  *  - Importable from anywhere (core, adapters, UI). Never imports from app/,
  *    and never a renderer's types: the UI maps these shapes onto React Flow
  *    itself (ADR-040).
@@ -25,6 +25,9 @@
  * the database when this moves.
  */
 export const CONTRACTS_VERSION = 3;
+
+/** The editor bridge's version (docs/API_CONTRACTS.md §20): the `version` of its hello and ready, and `server.bridge` of GET /api/repos. */
+export const BRIDGE_VERSION = 1;
 
 /* ─────────────────────────── Index status ────────────────────────── */
 
@@ -147,6 +150,22 @@ export type DescribeResponse = {
   indexVersion: number;
 };
 
+/**
+ * GET /api/imports — docs/API_CONTRACTS.md §19 (added in V1.8): one page of the files that import a file or folder, or that it
+ * imports, nearest first. `total` counts every page (after `transitive`), `direct` the distance-1 files whatever `transitive` is.
+ */
+export type ImportsResponse = {
+  path: string;
+  kind: "folder" | "file";
+  direction: "dependents" | "dependencies";
+  transitive: boolean;
+  files: { path: string; distance: number }[];
+  direct: number;
+  total: number;
+  offset: number;
+  indexVersion: number;
+};
+
 /** GET /api/source — docs/API_CONTRACTS.md §16 (added in V1.3.1): an indexed file's text, for the source viewer. */
 export type SourceResponse = {
   /** The repo's root: absolute, forward slashes. */
@@ -184,8 +203,33 @@ export type RepoSummary = {
   remote?: RepoRemote;
 };
 
-/** GET /api/repos — docs/API_CONTRACTS.md §15 */
-export type RepoList = { active: string | null; repos: RepoSummary[] };
+/** The server itself, on GET /api/repos — docs/API_CONTRACTS.md §15: the package's version and the editor bridge's. */
+export type ServerInfo = { version: string; bridge: number };
+
+/** GET /api/repos — docs/API_CONTRACTS.md §15. `server` is on GET's answer (added in V1.8), not on POST's. */
+export type RepoList = { active: string | null; repos: RepoSummary[]; server?: ServerInfo };
+
+/**
+ * Messages from the VS Code extension's webview to the Map, which is framed in it with `?embed=vscode` —
+ * docs/API_CONTRACTS.md §20 (added in V1.8). They travel by window.postMessage. Paths are repo-relative.
+ */
+export type BridgeToMap =
+  | { type: "nebulosity.hello"; version: 1 }
+  /** The active editor changed: focus on the path, replacing the history entry. */
+  | { type: "nebulosity.follow"; path: string }
+  /** A deliberate jump: focus on the path, pushing a history entry. */
+  | { type: "nebulosity.show"; path: string }
+  | { type: "nebulosity.highlight"; paths: string[] }
+  | { type: "nebulosity.clear" };
+
+/** Messages from the Map to the webview — docs/API_CONTRACTS.md §20. */
+export type BridgeFromMap =
+  /** The answer to hello. */
+  | { type: "nebulosity.ready"; version: 1 }
+  /** A file box or a declaration was picked. */
+  | { type: "nebulosity.open"; path: string; line?: number }
+  /** A new level was drawn, the selection changed on the level drawn, or a `ready` was answered while a level is on screen (the extension's test and benchmarks read it). */
+  | { type: "nebulosity.drawn"; path: string; page: number; selected: string | null };
 
 /* ─────────────────────────── Error envelope ──────────────────────── */
 

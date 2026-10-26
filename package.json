@@ -1,6 +1,6 @@
 {
   "name": "nebulosity",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "private": true,
   "bin": {
@@ -52,6 +52,7 @@
     "bench-update": "tsx scripts/bench-update.ts",
     "bench-search": "tsx scripts/bench-search.ts",
     "bench-calls": "tsx scripts/bench-calls.ts",
+    "check-layout": "node scripts/check-layout.mjs",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
     "eval:run": "tsx scripts/eval/run.ts",
     "eval:probe": "tsx scripts/eval/probe.ts",
@@ -83,7 +84,7 @@
     "chokidar": "^4.0.3",
     "drizzle-orm": "^0.45.2",
     "highlight.js": "11.11.1",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
@@ -99,7 +100,7 @@
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "vitest": "^4.1.10"
   }

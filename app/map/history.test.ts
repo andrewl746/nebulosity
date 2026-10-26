@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { historyStep, mapUrl, placeFromSearch } from "./history";
+import { followStep, historyDepth, historyStep, mapUrl, placeFromSearch } from "./history";
+
+describe("historyDepth (the Back control inside VS Code's panel, owner review 2026-10-25)", () => {
+    it("reads how many of the Map's own steps lie behind the entry", () => {
+        expect(historyDepth({ mapDepth: 2 })).toBe(2);
+        // Next's router keeps its own keys in the same state object
+        expect(historyDepth({ mapDepth: 1, __NA: true })).toBe(1);
+    });
+
+    it("is 0 for an entry the Map didn't write (a fresh load, another page's) or can't read", () => {
+        for (const state of [null, undefined, "x", 3, {}, { mapDepth: 0 }, { mapDepth: -1 }, { mapDepth: 1.5 }, { mapDepth: "2" }, { mapDepth: Number.NaN }]){
+            expect(historyDepth(state)).toBe(0);
+        }
+    });
+});
 
 describe("the Map's place in the address bar (owner review: the browser's Back goes to the previous folder)", () => {
     it("writes the folder, and the page past the first counted from 1, readably", () => {
@@ -45,5 +59,36 @@ describe("the Map's place in the address bar (owner review: the browser's Back g
         expect(historyStep("/?path=src/vs&page=1", { path: "src/vs", page: 0 })).toBe("replace");
         expect(historyStep("/?path=", { path: "", page: 0 })).toBe("replace");
         expect(historyStep("/?page=1&path=src", { path: "src", page: 0 })).toBe("replace");
+    });
+
+    it("keeps embed=vscode last in the address when embedded, so a reload inside the editor's panel stays embedded (P8)", () => {
+        expect(mapUrl("src/vs", 1, true)).toBe("/?path=src/vs&page=2&embed=vscode");
+        expect(mapUrl("", 0, true)).toBe("/?embed=vscode");
+        expect(mapUrl("src", 0, true)).toBe("/?path=src&embed=vscode");
+        expect(mapUrl("src/vs", 1)).toBe("/?path=src/vs&page=2");           // the browser Map never has the flag
+    });
+
+    it("reads the place past the embed flag", () => {
+        expect(placeFromSearch("?path=src&embed=vscode")).toEqual({ path: "src", page: 0 });
+        expect(placeFromSearch("?embed=vscode")).toEqual({ path: "", page: 0 });
+    });
+
+    it("an embedded address that already says where the Map is is left alone; one without the flag is rewritten", () => {
+        expect(historyStep("/?embed=vscode", { path: "", page: 0 }, true)).toBe("none");
+        expect(historyStep("/?path=src&page=2&embed=vscode", { path: "src", page: 1 }, true)).toBe("none");
+        expect(historyStep("/?embed=vscode", { path: "", page: 0 })).toBe("replace");
+        expect(historyStep("/", { path: "", page: 0 }, true)).toBe("replace");
+        expect(historyStep("/?path=src", { path: "src", page: 0 }, true)).toBe("replace");
+        expect(historyStep("/?embed=vscode&path=src", { path: "src", page: 0 }, true)).toBe("replace");
+        expect(historyStep("/?path=src&embed=vscode", { path: "src/vs", page: 0 }, true)).toBe("push");
+    });
+
+    it("followStep: a follow never pushes", () => {
+        expect(followStep("push", "replace")).toBe("replace");
+        expect(followStep("none", "replace")).toBe("none");
+        expect(followStep("replace", "replace")).toBe("replace");
+        expect(followStep("push", "push")).toBe("push");
+        expect(followStep("none", "push")).toBe("none");
+        expect(followStep("replace", "push")).toBe("replace");
     });
 });

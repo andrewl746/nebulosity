@@ -8,13 +8,14 @@ import {
 import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
+import BoxActions from "./BoxActions";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
-import { PANEL_WIDTH } from "./DetailPanel";
 import { lineLabel } from "./labels";
 import Legend from "./Legend";
 import { FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider } from "./levelLayout";
 import MapBox, { type BoxData, type BoxNode } from "./MapBox";
+import { legendMaxHeight } from "./narrow";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
@@ -60,15 +61,31 @@ type MapCanvasProps = {
     onDrawn: () => void;
     /** A busy level: only the hovered or selected box's lines are drawn (emphasis.ts). */
     quietLines: boolean;
+    /** The open panel's width over the canvas's right edge, 0 with none (narrow.ts's panelLayout). */
+    panelWidth: number;
+    /**
+     * The panel covers the whole canvas (a narrow window): the legend and the zoom controls would sit under it, and the
+     * boxes can't be reached by Tab either, until its × brings the canvas back.
+     */
+    covered: boolean;
+    /** How far down the Map's error banner reaches on the canvas, 0 with none: the open legend stops short of it. */
+    bannerBottom: number;
+    /**
+     * The selected box that shows its actions beside it (BoxActions), or null: while the panel would cover the canvas,
+     * a click only selects, and Details asks for the panel.
+     */
+    actionsFor: string | null;
+    onDetails: (path: string) => void;
 };
 
 /**
  * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
- * around the boxes (routes.ts). A click selects; a double click opens a folder, or turns to a portal's page. The selection's lines turn purple and unrelated boxes fade;
+ * around the boxes (routes.ts). A click selects (where the panel would cover the canvas, the selected box shows its
+ * actions beside it: BoxActions); a double click opens a folder, or turns to a portal's page. The selection's lines turn purple and unrelated boxes fade;
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered, bannerBottom, actionsFor, onDetails }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
@@ -210,6 +227,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             maxZoom={2}
             colorMode="dark"
             proOptions={{ hideAttribution: true }}
+            inert={covered}
         >
             {/* a faint dot grid: texture, so a busy level isn't a void with rectangles in it (VISUAL_REFRESH.md §3) */}
             <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid)" />
@@ -218,19 +236,39 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     <LooseDivider divider={divider} />
                 </ViewportPortal>
             )}
-            <Legend quietLines={quietLines} doorways={level.nodes.some((n) => n.kind === "portal")} />
+            {actionsFor !== null && byPath.has(actionsFor) && positions.has(actionsFor) && (
+                <BoxActions
+                    box={byPath.get(actionsFor)!}
+                    position={positions.get(actionsFor)!}
+                    onOpen={onOpen}
+                    onTurnPage={onTurnPage}
+                    onDetails={onDetails}
+                />
+            )}
+            {/* a panel over the whole canvas hides what's under it; its × brings the canvas back */}
+            {!covered && (
+                <Legend
+                    quietLines={quietLines}
+                    doorways={level.nodes.some((n) => n.kind === "portal")}
+                    // a short canvas: the open legend stays below a paged level's pill and the error banner, and
+                    // scrolls inside if it must (narrow.ts)
+                    maxHeight={legendMaxHeight(canvasHeight, pillBand, bannerBottom)}
+                />
+            )}
             {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
-            <Controls
-                position="bottom-right"
-                showInteractive={false}
-                fitViewOptions={FIT}
-                style={selected !== null ? { right: PANEL_WIDTH } : undefined}
-                className="overflow-hidden rounded-lg"
-            >
-                <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
-                    <IconFocusCentered aria-hidden size={16} stroke={1.75} />
-                </ControlButton>
-            </Controls>
+            {!covered && (
+                <Controls
+                    position="bottom-right"
+                    showInteractive={false}
+                    fitViewOptions={FIT}
+                    style={panelWidth > 0 ? { right: panelWidth } : undefined}
+                    className="overflow-hidden rounded-lg"
+                >
+                    <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
+                        <IconFocusCentered aria-hidden size={16} stroke={1.75} />
+                    </ControlButton>
+                </Controls>
+            )}
         </ReactFlow>
     );
 }

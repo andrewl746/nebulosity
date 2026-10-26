@@ -1,4 +1,5 @@
 import type { LevelResponse, LiveEvent } from "@/lib/contracts";
+import { ago } from "./format";
 import { boxFor } from "./paths";
 
 /** The activity bar lists this many of Claude Code's tool calls (VISUAL_REFRESH.md §6). */
@@ -9,6 +10,11 @@ export const AGENT_ACTIVE_MS = 30_000;
 /** The activity after one more tool call: newest first, at most `size`. */
 export function pushActivity(recent: readonly LiveEvent[], event: LiveEvent, size: number = ACTIVITY_SIZE): LiveEvent[] {
     return [event, ...recent].slice(0, size);
+}
+
+/** The activity bar's note on show_on_map's highlights, beside its Clear button: "3 highlighted"; null when there are none. */
+export function highlightedNote(count: number): string | null {
+    return count === 0 ? null : `${count.toLocaleString("en-US")} highlighted`;
 }
 
 /** The prefix Claude Code puts on an MCP server's tools (PIVOT_SPEC.md §6.2: mcp__nebulosity__<name>). */
@@ -42,16 +48,53 @@ export function activityLabel(event: LiveEvent): string {
 }
 
 /**
+ * A tool call's hover title in the activity bar: its label, which a narrow bar cuts short, and every path when the
+ * label names only the first ("src/vs +2"). A label with one path already holds it whole.
+ */
+export function activityTitle(event: LiveEvent): string {
+    const label = activityLabel(event);
+    return event.paths.length > 1 ? [label, ...event.paths].join("\n") : label;
+}
+
+/**
+ * The newest tool call's hover title: its label and time (with its paths, as activityTitle), then each older call's
+ * label and time. A narrow bar drops the older calls and the times while their boxes may still be outlined in orange,
+ * so this is where they can still be read. `now` is the bar's clock; 0, before its first tick, leaves the times out.
+ */
+export function newestTitle(recent: readonly LiveEvent[], now: number): string {
+    const when = (event: LiveEvent): string => now > 0 ? ` · ${ago(Math.max(0, now - Date.parse(event.at)))}` : "";
+    const [newest, ...older] = recent;
+    if (newest === undefined) return "";
+    return [
+        `${activityLabel(newest)}${when(newest)}`,
+        ...(newest.paths.length > 1 ? newest.paths : []),
+        ...older.map((event) => `Earlier: ${activityLabel(event)}${when(event)}`),
+    ].join("\n");
+}
+
+/**
  * The boxes Claude Code is touching right now (VISUAL_REFRESH.md §4, Claude's focus): the boxes on this level that
- * hold what the recent tool calls touched in the last AGENT_ACTIVE_MS, plus show_on_map's highlights. A path on
- * another page lands on that page's portal; a path outside the level outlines nothing.
+ * hold what the recent tool calls touched in the last AGENT_ACTIVE_MS, plus show_on_map's highlights. Inside VS Code's
+ * panel the editor's highlights (What depends' importers, through the bridge) are ringed alike, as the V1.8 design
+ * draws them; they are kept apart from Claude's because they aren't its activity (ADR-062): the activity bar's count,
+ * its Clear and Esc go by Claude's alone. A path on another page lands on that page's portal; a path outside the level
+ * outlines nothing.
  */
 export function agentFocus(
     level: Pick<LevelResponse, "path" | "nodes">,
     recent: readonly LiveEvent[],
     highlights: readonly string[],
     now: number,
+    /** When the user last pressed Clear (or Esc): the calls made before it no longer count. */
+    clearedAt: number = -Infinity,
+    /** The editor's highlights: Clear leaves them, and the What depends pick's closing lets go of them. */
+    editorHighlights: readonly string[] = [],
 ): Set<string> {
-    const touched = recent.filter((e) => now - Date.parse(e.at) < AGENT_ACTIVE_MS).flatMap((e) => e.paths);
-    return new Set([...touched, ...highlights].flatMap((p) => boxFor(level, p) ?? []));
+    const touched = recent
+        .filter((e) => {
+            const at = Date.parse(e.at);
+            return now - at < AGENT_ACTIVE_MS && at > clearedAt;
+        })
+        .flatMap((e) => e.paths);
+    return new Set([...touched, ...highlights, ...editorHighlights].flatMap((p) => boxFor(level, p) ?? []));
 }

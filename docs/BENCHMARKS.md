@@ -1170,3 +1170,95 @@ The eval V1.7 was measured by (ADR-060). The method, the gate, every run's score
 - **Refused commands:** 9 of A's 189 runs and 8 of N's, under V's 5% (Eval #2: 81 and 18 of 135), so the comparison is not confounded by them.
 - **The totals:** $42.78 by Claude Code's estimate. The 5-hour window read 0.49 at the first run and 0.31 at the last, across one reset; the 7-day went from 0.71 to 0.76.
 - **The losses**, named in the results: no faster to the relevant context on the new questions; no faster or cheaper on the call and task questions; 1.36 times A's error on them instead of half (0.983 against 0.988); tools used in 58% of the runs that need them; Theia's direct list (0.87 against 1.00) and what-breaks questions (0.958 against 0.977); and the calls index missing most callers of AFFiNE's drawn methods.
+
+## 2026 10 24 Editor Benchmark #1 — the Map in VS Code: Show Map and follow (V1.8, E1–E2)
+
+- **Why:** V1.8's two bars for the VS Code extension (the V1.8 plan's "The benchmark bars", design §8 step 6). E1 is Show Map, from the command to the first drawn Map. E2 is an editor switch, until the Map shows that file selected.
+- **Target and machine:** VS Code @ `cc3fec88`, opened as the workspace. Its working tree, index and HEAD were not changed. In a draft run before run 1 (below), VS Code's built-in git extension wrote one key into `.git/config`; runs 4 and 5 turned git off and wrote nothing (see "The VS Code" below). The owner's laptop: AMD Ryzen 7 260 (8 cores, 16 threads), 31.3 GB, Windows 11 Home 10.0.26200, on mains power, a 1920 × 1200 display at 144 Hz, Node 24.14.0. The machine was otherwise quiet (13% CPU load before the runs). The owner's VS Code and the servers on ports 3000 and 3200 were running, and none of them was touched.
+- **The VS Code:** 1.143.1, with Electron 43.7.7 and Node 24.21.0 in its extension host.
+  - It's the stable version `@vscode/test-electron` downloaded for Task 9, pinned with `NEB_TEST_VSCODE=1.143.1`, so nothing new was downloaded.
+  - It ran with a fresh user data dir, `--disable-extensions` and the harness's four Chromium flags against throttling. The built-in TypeScript extension ran, as it does in anyone's window. The built-in git extension was on in the draft run and in runs 1–3, and in the draft run it was seen opening the repo (the write below).
+  - **The git extension wrote into `../vscode/.git/config`.** It added `vscode-merge-base = origin/main` to `[branch "main"]` at 01:49:54 −04:00, 3.5 s after the draft run's VS Code started, as it does when it opens a repo. The working tree, `.git/index` and `.git/HEAD` are unchanged. The key was left in place for the owner to keep or remove.
+  - **Since then, the bench's user settings turn git off,** with `"git.enabled": false` and `"git.autoRepositoryDetection": false` (`vscode-extension/test/launch.ts`). Runs 4 and 5 ran that way.
+    - A flag can't do it. The harness passes `--disable-extensions`, and with it VS Code 1.143.1 ignores `--disable-extension <id>` (its `disableExtensions` is then `true`, not the list), so built-in extensions stay on.
+    - With `git.enabled` off, git still activates but opens no repository. Its own API reported `enabled: false` at the start and the end of both runs, and the bench now fails at the start if it doesn't.
+    - `.git/config`'s sha256 (`12939de9…`) and modified time (01:49:54) were the same before and after both runs, and `find ../vscode -newer <marker>` listed nothing.
+    - The key was already there, so an unchanged hash alone couldn't show that git stayed off; git's own `enabled: false` is the check.
+    - The integration tests leave git as it is, since their copy has no `.git`.
+  - Its window stayed in front throughout.
+- **The Map:** the V1.8 sandbox at `76c949c`, a production build (`next build`). The extension started it itself, as `node <sandbox>/bin/nebulosity.mjs map --port 3126` with `NEBULOSITY_WORKER=off`.
+  - Its data folder was a scratch folder under `%TEMP%` (`NEBULOSITY_DATA`).
+  - That folder held a fresh index of `../vscode` made for this benchmark in free mode (no API key, nothing spent): 14,849 files, 87.3 s.
+- **Command** (in `vscode-extension/`, with `NEBULOSITY_HOME` unset): `NEB_BENCH=1 NEB_TEST_WORKSPACE=<…>/vscode NEB_TEST_COMMAND=<sandbox>/bin/nebulosity.mjs NEB_TEST_PORT=3126 NEB_TEST_VSCODE=1.143.1 NEBULOSITY_DATA=<scratch> NEBULOSITY_WORKER=off NEBULOSITY_LIVE=off npm run test:integration`.
+  - `NEB_TEST_WORKSPACE` has to be an absolute path (here `C:/Users/Andrew/Programming/vscode`). `runTest.ts` resolves it against `vscode-extension/`, where `../vscode` names no folder.
+  - With `NEB_BENCH=1`, `runTest.ts` runs `test/bench/bench.test.ts` instead of the integration tests. It refuses a git repo as the integration tests' workspace, since those tests write a file.
+  - Runs 1–3 ran one after another (01:51–01:52), about 24 s each, with git on. Runs 4 and 5 ran at 02:15 and 02:17, with git off and the Map's sandbox and scratch index unchanged.
+- **How it's timed:** in the extension host, with `performance.now()`. Every wait for a `nebulosity.drawn` starts before its action, and a message's time is taken as it arrives. In order:
+  - **Cold (no bar):** nothing on 3126, then Show Map → the first `drawn`. The extension starts the Map, and that server stays up for the rest of the run.
+  - **E1, 5 times:** the panel is closed (`api.closePanel()`, then 1 s), then `nebulosity.showMap` is executed and timed to the first `drawn`.
+    - Nothing was open in the editor, so each Show Map split the editor area and opened the panel in column 2 (Task 9's fix), and each first `drawn` was the one sent after `ready` (P1's case c) for the top level.
+    - So E1 times the top-level draw only. With a file open, the Map then follows it and draws that file's level with a second `drawn`, which E1 doesn't count; that follow is E2's kind of step. "Show Map in 130 ms" means the Map is on screen, not that it shows your file yet.
+  - **E2, the files:** 20 of `src/vs/base/common/event.ts`' 8,586 dependents, from `GET /api/imports?path=src/vs/base/common/event.ts&transitive=true`, in its order (nearest first). The 10 inside the folder the Map draws come first (in `src/vs/base/common`: `async`, `cancellation`, `actions`, `scrollable`, `paging`, `history`, `sequence`, `ime`, `arrays`, `errorMessage`). Then the first 10 in other folders: `platform/log/common/log`, `platform/configuration/common/configuration`, `base/browser/dom`, `platform/contextkey/common/contextkey`, `platform/files/common/files`, `platform/storage/common/storage`, `platform/actions/common/actions`, `platform/commands/common/commands`, `editor/common/model` and `workbench/services/editor/common/editorService`, all under `src/vs/`.
+  - **E2, the timing:** each switch is timed from `showTextDocument(file)` resolved (focused, in the active column, which is column 1) to the `drawn` whose `selected` is that file.
+    - Each pass starts with a switch to `event.ts` that isn't timed, so the 10 switches inside its folder start on that folder.
+    - There are two passes, and the second is the measured one; the first is the cold one.
+    - p50 and p95 are nearest-rank, as `bench-mcp.ts` takes them: of 20, the 10th and the 19th; of 10, p95 is the slowest.
+
+| Run | E1: Show Map → first `drawn`, 5 times | Worst | Cold Show Map (no bar) |
+|---|---|---|---|
+| 1 | 128.0, 119.3, 122.0, 129.9, 117.9 ms | 129.9 ms | 2,115.7 ms |
+| 2 | 122.5, 118.6, 124.2, 126.9, 119.4 ms | 126.9 ms | 2,103.9 ms |
+| 3 | 152.6, 123.6, 132.0, 123.8, 128.2 ms | 152.6 ms | 2,020.8 ms |
+| 4 (git off) | 184.6, 192.7, 193.7, 202.2, 185.8 ms | 202.2 ms | 2,217.8 ms |
+| 5 (git off) | 134.9, 138.6, 151.1, 175.4, 140.8 ms | 175.4 ms | 2,063.8 ms |
+
+**E1 (worst of 5 ≤ 2,000 ms): PASS** in every run. The worst was 202.2 ms (run 4).
+
+| Run | Pass | p50 | p95 | max | Inside `common`: p50 / p95 | Other folders: p50 / p95 |
+|---|---|---|---|---|---|---|
+| 1 | second (E2) | 179.8 ms | 216.5 ms | 227.9 ms | 173.5 / 216.5 ms | 182.5 / 227.9 ms |
+| 2 | second (E2) | 181.6 ms | 216.1 ms | 220.8 ms | 175.9 / 216.1 ms | 183.4 / 220.8 ms |
+| 3 | second (E2) | 181.7 ms | 215.3 ms | 216.7 ms | 176.1 / 215.3 ms | 184.0 / 216.7 ms |
+| 4 (git off) | second (E2) | 188.3 ms | 259.7 ms | 277.5 ms | 173.5 / 277.5 ms | 188.3 / 251.6 ms |
+| 5 (git off) | second (E2) | 184.2 ms | 234.9 ms | 240.0 ms | 172.2 / 234.9 ms | 184.9 / 240.0 ms |
+| 1 | first, cold (no bar) | 186.9 ms | 380.9 ms | 419.3 ms | 167.4 / 244.3 ms | 186.9 / 419.3 ms |
+| 2 | first, cold (no bar) | 195.4 ms | 353.2 ms | 388.2 ms | 162.4 / 246.0 ms | 211.5 / 388.2 ms |
+| 3 | first, cold (no bar) | 186.4 ms | 286.4 ms | 419.7 ms | 169.5 / 246.1 ms | 196.7 / 419.7 ms |
+| 4 (git off) | first, cold (no bar) | 196.4 ms | 477.8 ms | 805.5 ms | 173.1 / 805.5 ms | 196.4 / 280.9 ms |
+| 5 (git off) | first, cold (no bar) | 193.8 ms | 354.8 ms | 568.7 ms | 167.3 / 337.3 ms | 195.0 / 568.7 ms |
+
+**E2 (p95 of 20 switches ≤ 500 ms, the second pass): PASS** in every run. The p95 was 259.7 ms at worst (run 4).
+
+The same switches counted from the `showTextDocument` call, which is the wait a person sees (no bar; the bar counts from resolved):
+
+| Run | Pass | p50 | p95 | max |
+|---|---|---|---|---|
+| 1 | second | 201.1 ms | 241.5 ms | 247.2 ms |
+| 2 | second | 203.4 ms | 237.9 ms | 242.0 ms |
+| 3 | second | 203.1 ms | 239.0 ms | 241.9 ms |
+| 4 (git off) | second | 221.0 ms | 289.9 ms | 309.8 ms |
+| 5 (git off) | second | 211.6 ms | 263.2 ms | 268.0 ms |
+| 1 | first, cold | 235.2 ms | 692.6 ms | 698.5 ms |
+| 2 | first, cold | 244.7 ms | 682.4 ms | 704.4 ms |
+| 3 | first, cold | 236.6 ms | 584.1 ms | 658.3 ms |
+| 4 (git off) | first, cold | 271.8 ms | 1,134.1 ms | 1,667.1 ms |
+| 5 (git off) | first, cold | 250.9 ms | 944.4 ms | 950.0 ms |
+
+From the call, the cold pass goes over 500 ms (p95 584–693 ms in runs 1–3, 944–1,134 ms in runs 4–5), because `showTextDocument` itself took up to 372 ms on a file's first open in runs 1–3 and up to 976 ms in runs 4–5.
+
+To read this with:
+- **Most of E2 is the debounce.** In runs 1–3 every warm switch took 159–228 ms, and 150 ms of that is the follow debounce (`FOLLOW_DEBOUNCE_MS`). The debounce starts at VS Code's editor change, no later than `showTextDocument` resolves, so the rest takes at least 9–78 ms: the follow is posted, the Map draws the level or page and sends `drawn`. Counted from the `showTextDocument` call, the warm passes' slowest switch in runs 1–3 was 247.2 ms (the call itself took at most 32 ms); runs 4–5 reached 309.8 ms (the table above).
+- **Runs 4 and 5 (git off) came out somewhat slower:** E1 worst 202.2 and 175.4 ms against 126.9–152.6, and E2 p95 259.7 and 234.9 ms against 215.3–216.5.
+  - They ran 25 minutes later on a busier machine at moments: a CPU sample just before run 5 read 59%, against 13% before run 1, and Windows Search's indexer was working right after it.
+  - The two differ from each other by as much as from runs 1–3, so nothing ties the change to git being off.
+  - Both bars hold in both runs, by about 10× for E1 and 2× for E2.
+- **What each switch drew:** 14 of the 20 drew a new level or page, and 6 only moved the selection, the same in every pass of every run. `src/vs/base/common` is paged (pages 0–2), so 4 of the 10 switches inside it turned a page. All 10 others drew another folder.
+- **The cold pass:**
+  - Its slowest switches were the first visits to busy folders: `src/vs/base/browser` (388–420 ms), then `platform/contextkey/common` and `platform/configuration/common` (270–381 ms).
+  - There, `showTextDocument` took up to 372 ms itself in runs 1–3 (976 ms in runs 4–5), and VS Code's editor change came before it resolved. So switches timed from resolved can come in under the 150 ms debounce (107–126 ms at the least).
+  - The cold Show Map, 2.0–2.1 s, covers `nebulosity map`'s start through `next start`, the start poll (every 500 ms), the repo step, the page and the first level. The disk cache was warm from the index build, so a first start after a reboot would be slower.
+- **The draft run,** at 01:49 before run 1, with the bench file before a log-only change (the built-in extensions' line), gave the same: cold 2,148.7 ms, E1 worst 148.8 ms, E2 p95 216.5 ms. It isn't in the tables. Its log is in the V1.8 ledger beside the five above (`evidence/task-10/`).
+- **Afterwards:**
+  - After every run, nothing listened on 3126: the bench stops the Map in its teardown, and VS Code's exit would stop it too.
+  - The checkout's `.nebulosity/config.json` was byte-identical to the copy taken before V1.8's runs (`cmp`).
+  - `git --no-optional-locks status` in `../vscode` was unchanged, still at `cc3fec88`, and no data folder was written there. The one write into `../vscode` was the git extension's `.git/config` key in the draft run, above. `git status` doesn't show it, and the review found it from the file's modified time. Runs 4 and 5 left the file's hash and modified time as they were.

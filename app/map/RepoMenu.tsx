@@ -1,22 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
 import type { RepoList, RepoSummary } from "@/lib/contracts";
 import { api, ApiError } from "./api";
+import { placePopover, usePlaceOnResize } from "./popover";
 import { useDismiss } from "./useDismiss";
+
+/** The repo list's width, at normal sizes (narrower only when the Map is). */
+const LIST_WIDTH = 320;
 
 type RepoMenuProps = { repo: string; onSwitched: () => void; /** Go to the repo's top level. */ onHome: () => void };
 
 /** A repo as the top bar names it: "owner / repo" from its origin, or its folder name (VISUAL_REFRESH.md §6). */
 function RepoName({ entry, fallback }: { entry: RepoSummary | undefined; fallback: string }){
     if (!entry?.remote) return <span title={fallback} className="truncate text-[15px] font-medium text-text">{fallback}</span>;
-    // either half can be cut off on a narrow screen, so the whole name is the hover title
+    // on a narrow screen the owner (and its "/") gives way first, down to nothing, so the repo's own name keeps its room;
+    // the name truncates only once it alone is too wide. The whole name is the hover title.
     return (
-        <span title={`${entry.remote.owner} / ${entry.remote.name}`} className="flex min-w-0 items-baseline gap-1 text-[15px]">
-            <span className="truncate text-text-2">{entry.remote.owner}</span>
-            <span aria-hidden className="text-text-2">/</span>
-            <span className="truncate font-medium text-text">{entry.remote.name}</span>
+        <span title={`${entry.remote.owner} / ${entry.remote.name}`} className="flex min-w-0 items-baseline text-[15px]">
+            <span className="truncate pr-1 text-text-2 after:pl-1 after:content-['/']">{entry.remote.owner}</span>
+            <span className="max-w-full shrink-0 truncate font-medium text-text">{entry.remote.name}</span>
         </span>
     );
 }
@@ -29,7 +33,14 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
     const [list, setList] = useState<RepoList | null>(null);
     const [open, setOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // where the list opens, worked out as it opens and as the window resizes: under the name, kept inside a narrow Map
+    // (popover.ts)
+    const [listPlace, setListPlace] = useState<CSSProperties>({ left: 0, width: LIST_WIDTH });
     const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
+    const place = useCallback(() => {
+        if (ref.current) setListPlace(placePopover(ref.current, LIST_WIDTH, "start"));
+    }, [ref]);
+    usePlaceOnResize(open, place);
 
     useEffect(() => {
         api.repos().then(setList, () => {});
@@ -57,7 +68,10 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                 <button
                     type="button"
                     data-testid="repo-menu"
-                    onClick={() => setOpen((o) => !o)}
+                    onClick={() => {
+                        if (!open) place();
+                        setOpen((o) => !o);
+                    }}
                     aria-label="Switch repository"
                     title="Switch repository"
                     className="grid h-7 w-6 shrink-0 place-items-center rounded-md text-text-2 hover:bg-surface hover:text-text"
@@ -66,7 +80,7 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                 </button>
             </div>
             {open && (
-                <ul className="absolute left-0 top-9 z-30 w-[320px] rounded-lg border border-border bg-surface py-1 text-[13px]">
+                <ul data-testid="repo-list" data-covers style={listPlace} className="absolute top-9 z-30 overflow-y-auto rounded-lg border border-border bg-surface py-1 text-[13px]">
                     {list.repos.map((r) => (
                         <li key={r.root}>
                             <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-border">
@@ -77,7 +91,7 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                     ))}
                 </ul>
             )}
-            {error && <span className="ml-2 text-[12px] text-danger">{error}</span>}
+            {error && <span title={error} className="ml-2 block truncate text-[12px] text-danger">{error}</span>}
         </div>
     );
 }

@@ -8,6 +8,7 @@ import { formatCompact, formatCount } from "./format";
 import { noDeclarationsText } from "./labels";
 import { editorLink, githubLink } from "./links";
 import { DEMO } from "./mode";
+import { PANEL_WIDTH } from "./narrow";
 import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
 import { linkedFrom, portalCaption, portalLinks } from "./portals";
@@ -27,10 +28,26 @@ type DetailPanelProps = {
     /** Turn to another page of the level on screen. */
     onTurnPage: (page: number) => void;
     onClose: () => void;
+    /**
+     * Inside VS Code's panel only: a declaration opens at its line in the editor instead of the source viewer, which
+     * "View source" still opens (design §4.4).
+     */
+    onOpenInEditor?: (path: string, line?: number) => void;
+    /**
+     * Covering the whole canvas (narrow.ts's panelLayout): then it fills the Map's width, whatever that is as the window
+     * resizes. Beside the canvas it's PANEL_WIDTH wide, and the canvas's controls move left by as much.
+     */
+    covers: boolean;
+    /** The Map's error line, shown as the panel's last row while the panel covers the canvas it would sit on. */
+    alert?: string;
 };
 
-/** The panel's width: the canvas's controls move left by this much while it's open, so it never covers them. */
-export const PANEL_WIDTH = 400;
+/**
+ * In a short window (under 480 px tall) the whole panel scrolls, its header too, so the body isn't left a few lines
+ * under a header that never moves; the error row stays pinned to the bottom.
+ */
+const SHORT_FRAME = "[@media(height<480px)]:overflow-y-auto";
+const SHORT_BODY = "[@media(height<480px)]:flex-none [@media(height<480px)]:overflow-visible";
 
 /** Chips and rows shown before "+N more" or "View all": enough to act on without scrolling. */
 const PREVIEW = 8;
@@ -54,6 +71,8 @@ export default memo(DetailPanel);
 
 type PanelFrameProps = {
     path: string;
+    covers: boolean;
+    alert?: string;
     kindLabel: string;
     name: string;
     title: string;
@@ -64,10 +83,13 @@ type PanelFrameProps = {
     children: ReactNode;
 };
 
-/** The panel's frame: the kind, the name, the path under it, a close button, then the header's extras and the body. */
-function PanelFrame({ path, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
+/**
+ * The panel's frame: the kind, the name, the path under it, a close button, then the header's extras and the body, and
+ * the Map's error line as its last row while it covers the canvas (so the row never hides the end of the body).
+ */
+function PanelFrame({ path, covers, alert, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
     return (
-        <aside data-panel={path} style={{ width: PANEL_WIDTH }} className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel">
+        <aside data-panel={path} style={{ width: covers ? "100%" : PANEL_WIDTH }} className={`pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel ${SHORT_FRAME}`}>
             <header className="border-b border-hairline px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -82,12 +104,14 @@ function PanelFrame({ path, kindLabel, name, title, subtitle, header, onClose, c
                 {header}
             </header>
             {children}
+            {/* in a short window, where the whole panel scrolls, it stays pinned over the rows scrolling under it */}
+            {alert && <p role="alert" data-covers className="pointer-events-none sticky bottom-0 shrink-0 border-t border-hairline bg-panel px-4 py-2 text-center text-[13px] text-danger [overflow-wrap:anywhere]">{alert}</p>}
         </aside>
     );
 }
 
 /** A file, a folder or the repo: described by the server (GET /api/describe). */
-function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: DetailPanelProps){
+function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOpenInEditor, covers, alert }: DetailPanelProps){
     const target = path;
     const [data, setData] = useState<DescribeResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
@@ -157,14 +181,24 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
     return (
         <PanelFrame
             path={path}
+            alert={alert}
+            covers={covers}
             kindLabel={kindLabel}
             name={name}
             title={target || name}
             subtitle={target || "(repo root)"}
-            header={data && <Stats data={data} github={github} onOpen={onOpen} onViewSource={() => setViewing({})} />}
+            header={data && (
+                <Stats
+                    data={data}
+                    github={github}
+                    onOpen={onOpen}
+                    onViewSource={() => setViewing({})}
+                    onOpenInEditor={onOpenInEditor && (() => onOpenInEditor(data.path))}
+                />
+            )}
             onClose={onClose}
         >
-            <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
+            <div className={`flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text ${SHORT_BODY}`}>
                 {error && <p className="text-danger">{error.message}</p>}
                 {!data && !error && <p className="text-text-2">Loading…</p>}
                 {data && (
@@ -178,11 +212,21 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose }: De
                         onOpen={onOpen}
                         onViewLines={DEMO
                             ? (start, end) => { if (github) window.open(githubLink(github, data.path, { start, end }), "_blank", "noreferrer"); }
-                            : (start, end) => setViewing({ lines: { start, end } })}
+                            : onOpenInEditor
+                                // the real editor is right there (design §4.4)
+                                ? (start) => onOpenInEditor(data.path, start)
+                                : (start, end) => setViewing({ lines: { start, end } })}
                     />
                 )}
             </div>
-            {viewing && data?.kind === "file" && <SourceViewer path={data.path} lines={viewing.lines} onClose={closeViewer} />}
+            {viewing && data?.kind === "file" && (
+                <SourceViewer
+                    path={data.path}
+                    lines={viewing.lines}
+                    onClose={closeViewer}
+                    onOpenInEditor={onOpenInEditor && ((line) => onOpenInEditor(data.path, line))}
+                />
+            )}
         </PanelFrame>
     );
 }
@@ -193,7 +237,7 @@ type Linked = { path: string; count: number };
  * A portal selected: the page (or pages) behind it, a way to go there, and which boxes on this page have lines to it,
  * each a link that selects that box. Everything comes from the level on screen; there's nothing to fetch.
  */
-function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose }: DetailPanelProps & { portal: MapNode }){
+function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, covers, alert }: DetailPanelProps & { portal: MapNode }){
     const links = portalLinks(level.edges, portal.path);
     const linked = linkedFrom(level, portal.path);
     const pages = portal.page !== undefined ? [portal.page] : portal.pages ?? [];
@@ -206,6 +250,8 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose }: Deta
     return (
         <PanelFrame
             path={path}
+            alert={alert}
+            covers={covers}
             kindLabel={pages.length === 1 ? "Page" : "Pages"}
             name={portal.name}
             title={portal.name}
@@ -213,7 +259,7 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose }: Deta
             header={<p className="mt-3 text-[13px] text-text-2">{portalCaption(portal, links)} with this page</p>}
             onClose={onClose}
         >
-            <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text">
+            <div className={`flex-1 space-y-6 overflow-y-auto px-4 py-4 text-[14px] leading-normal text-text ${SHORT_BODY}`}>
                 <section aria-label="Go to">
                     {pages.length > 1 && <SectionTitle title="Pages behind this doorway" count={pages.length} />}
                     <ul className="flex flex-wrap gap-2">
@@ -261,13 +307,20 @@ function BoxIcon({ box }: { box: MapNode | undefined }){
     return <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-folder" : "text-text-2"}`} />;
 }
 
-type StatsProps = { data: DescribeResponse; github: GitHubSource | null; onOpen: (folder: string) => void; onViewSource: () => void };
+type StatsProps = {
+    data: DescribeResponse;
+    github: GitHubSource | null;
+    onOpen: (folder: string) => void;
+    onViewSource: () => void;
+    /** Inside VS Code's panel only: "Open in VS Code" asks the editor over the bridge, since the panel can't follow a vscode:// link. */
+    onOpenInEditor?: () => void;
+};
 
 /**
  * "10,276 files · 3.4M lines", what changed since it was summarized, and the one action that fits the target. For a
  * file, the app offers its source and the editor; the demo has neither, so it links to GitHub at the indexed commit.
  */
-function Stats({ data, github, onOpen, onViewSource }: StatsProps){
+function Stats({ data, github, onOpen, onViewSource, onOpenInEditor }: StatsProps){
     const lines = `${formatCompact(data.stats.lineCount)} ${data.stats.lineCount === 1 ? "line" : "lines"}`;
     const size = data.kind === "file" ? lines : `${formatCount(data.stats.fileCount)} ${data.stats.fileCount === 1 ? "file" : "files"} · ${lines}`;
     return (
@@ -287,7 +340,10 @@ function Stats({ data, github, onOpen, onViewSource }: StatsProps){
                     <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
                         <IconCode aria-hidden size={14} stroke={1.75} />View source
                     </button>
-                    <a href={editorLink(data)} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</a>
+                    {onOpenInEditor
+                        // the webview's sandbox stops a vscode:// link inside the panel, so the editor is asked instead
+                        ? <button type="button" onClick={onOpenInEditor} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</button>
+                        : <a href={editorLink(data)} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</a>}
                 </>
             )}
         </div>
@@ -353,7 +409,9 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
     const failure = failureFor(shown.summaryError, summaryError);
 
     return (
-        <section aria-label="Summary">
+        // a long identifier or path (inline code is one unbroken word) breaks anywhere rather than run past the panel's
+        // edge; wherever a line has a space to break at, it still breaks there
+        <section aria-label="Summary" className="[overflow-wrap:anywhere]">
             {shown.tagline
                 ? <p className="text-[15px] font-medium leading-snug text-title"><Rich text={shown.tagline} /></p>
                 : <p className="text-text-2">{summaryLine(shown.summaryStatus, summaryError)}</p>}
@@ -389,12 +447,13 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
 /**
  * Prose with its `identifiers` as inline code (VISUAL_REFRESH.md §5): the code font and lavender on a chip. The chips
  * were dropped once for an outside critique ("noisy"), and the owner asked for them back: they make names easy to spot.
+ * A chip broken across two lines (Summary breaks a long one anywhere) keeps its rounded padding on both.
  */
 function Rich({ text }: { text: string }){
     return (
         <>
             {inlineCode(text).map((part, i) => part.code
-                ? <code key={i} className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">{part.text}</code>
+                ? <code key={i} className="rounded-md bg-code-bg box-decoration-clone px-1 font-mono text-[13px] text-code">{part.text}</code>
                 : <span key={i}>{part.text}</span>)}
         </>
     );
@@ -413,7 +472,10 @@ function SectionTitle({ title, count, note, large = false }: { title: string; co
 
 type ChipsProps = { title: string; note: string; items: readonly AreaCount[]; empty: string; onFocus: (targetPath: string) => void };
 
-/** "Depends on" / "Used by" as chips (§5): each focuses that area on the Map. The first 8, "+N more", then "Show fewer". */
+/**
+ * "Depends on" / "Used by" as chips (§5): each focuses that area on the Map. The first 8, "+N more", then "Show fewer".
+ * A chip is at most 360 px wide, or the panel's width in a narrow window, and its name truncates (the title has it).
+ */
 function Chips({ title, note, items, empty, onFocus }: ChipsProps){
     const [all, setAll] = useState(false);
     const shown = all ? items : items.slice(0, PREVIEW);
@@ -431,7 +493,7 @@ function Chips({ title, note, items, empty, onFocus }: ChipsProps){
                                     data-chip={area.path}
                                     title={`${area.path}: ${formatCount(area.count)} import${area.count === 1 ? "" : "s"}`}
                                     onClick={() => onFocus(area.path)}
-                                    className="flex max-w-[360px] items-center gap-2 rounded-md border border-border bg-surface px-2 py-1 text-[13px] text-text hover:border-text-2"
+                                    className="flex max-w-[min(360px,100%)] items-center gap-2 rounded-md border border-border bg-surface px-2 py-1 text-[13px] text-text hover:border-text-2"
                                 >
                                     <span className="truncate">{shortPath(area.path)}</span>
                                     <span className="shrink-0 text-text-2">{formatCount(area.count)}</span>

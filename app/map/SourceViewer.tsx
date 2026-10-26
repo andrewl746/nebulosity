@@ -9,6 +9,7 @@ import { formatCount } from "./format";
 import { editorLink } from "./links";
 import { nameOf } from "./paths";
 import { tooLargeToColor } from "./text";
+import { useScrollLock } from "./useScrollLock";
 
 /** Each line's height in px: the gutter, the code and the highlighted range all use it, so they line up. */
 const LINE_HEIGHT = 20;
@@ -18,6 +19,11 @@ type SourceViewerProps = {
     /** The lines to highlight and scroll to: a declaration picked in the panel. */
     lines?: { start: number; end: number };
     onClose: () => void;
+    /**
+     * Inside VS Code's panel only: "Open in VS Code" asks the editor over the bridge (at the highlighted line), since the
+     * panel can't follow a vscode:// link.
+     */
+    onOpenInEditor?: (line?: number) => void;
 };
 
 /**
@@ -25,7 +31,8 @@ type SourceViewerProps = {
  * drawer over the canvas, from the file's panel or one of its declarations, which it scrolls to and highlights.
  * Rendered into the page's body, so the panel it opens from can't clip it. Escape closes it and nothing else.
  */
-export default function SourceViewer({ path, lines, onClose }: SourceViewerProps){
+export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: SourceViewerProps){
+    useScrollLock();
     const [source, setSource] = useState<SourceResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const scroller = useRef<HTMLDivElement>(null);
@@ -75,13 +82,14 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
                 role="dialog"
                 aria-label={`Source of ${path}`}
                 onClick={(event) => event.stopPropagation()}
-                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-hairline bg-panel"
+                // a narrow window (under 600 px) gives it the whole width: 80% of it would leave too little code
+                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-hairline bg-panel max-[600px]:w-full"
             >
                 <header className="flex items-start justify-between gap-3 border-b border-hairline px-4 py-3">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
                             <IconFile aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
-                            <h2 className="truncate text-[15px] font-medium text-text">{nameOf(path, "")}</h2>
+                            <h2 title={path} className="truncate text-[15px] font-medium text-text">{nameOf(path, "")}</h2>
                         </div>
                         <div className="truncate font-mono text-[12px] text-text-2" title={path}>{path}</div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[12px] text-text-2">
@@ -89,18 +97,25 @@ export default function SourceViewer({ path, lines, onClose }: SourceViewerProps
                             {source?.truncated && <span>Only the first 1 MB is shown.</span>}
                             {source && tooLargeToColor(text) && <span data-testid="source-plain">Shown without colors: too large to color quickly.</span>}
                             {lines && <span>Lines {lines.start}–{lines.end} highlighted</span>}
-                            {editorHref && (
-                                <a href={editorHref} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
-                                    Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
-                                </a>
-                            )}
+                            {editorHref && (onOpenInEditor
+                                ? (
+                                    <button type="button" onClick={() => onOpenInEditor(lines?.start)} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                                        Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
+                                    </button>
+                                )
+                                : (
+                                    <a href={editorHref} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                                        Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
+                                    </a>
+                                ))}
                         </div>
                     </div>
                     <button type="button" onClick={onClose} aria-label="Close the source" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">
                         <IconX aria-hidden size={16} stroke={1.75} />
                     </button>
                 </header>
-                <div ref={scroller} className="flex-1 overflow-auto">
+                {/* long lines scroll sideways here, as in an editor (data-scroll-x: the layout check expects it) */}
+                <div ref={scroller} data-scroll-x className="flex-1 overflow-auto">
                     {error && <p className="px-4 py-3 text-[13px] text-danger">{error.message}</p>}
                     {!source && !error && <p className="px-4 py-3 text-[13px] text-text-2">Loading…</p>}
                     {source && (

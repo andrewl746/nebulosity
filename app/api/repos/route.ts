@@ -4,12 +4,13 @@ import { workerOn } from "@/lib/background/start";
 import { listRepos, setActiveRepo } from "@/lib/engine/repos";
 import { isLocalRequest } from "@/lib/live/local";
 import { errorJson, forbidden, jsonError } from "../_lib/respond";
+import { serverInfo } from "../_lib/server";
 
 export const runtime = "nodejs";
 
-// GET /api/repos — the indexed repos and the active one; POST { root } switches (API_CONTRACTS.md §15)
+// GET /api/repos — the indexed repos and the active one, and which server answers; POST { root } switches (API_CONTRACTS.md §15)
 export function GET(){
-    return NextResponse.json<RepoList>(listRepos());
+    return NextResponse.json<RepoList>({ ...listRepos(), server: serverInfo() });
 }
 
 export async function POST(request: NextRequest){

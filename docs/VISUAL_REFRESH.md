@@ -23,6 +23,7 @@
 - **A readable opening size (§4), 2026-10-13:** every level opens at 75% or larger (names at least 11 px); a busy one opens from its top, and the fit button still shows it whole. Measured: every VS Code level checked opens at 0.75–1.0 on 1907 × 998 and 1440 × 900 screens. The owner chose to leave the details panel covering the Map's right edge as it is: moving the Map when the panel opens would be more confusing.
 - **A second outside critique (§4), 2026-10-13:** the owner ran the Map past another critique and picked from options rendered on the real Map. A level too big to fit now opens as wide as the canvas allows instead of at the 75% floor. The big page arrows at the canvas's sides are gone: the page pill's buttons, now 36 px, are the one way to turn the page with the mouse. Doorways read "Lines to page 2", unfilled, instead of "Page 2". The boxes with no line on the page sit under a divider, "Not linked to anything on this page" (§4).
 - **Signed off** by the owner, 2026-10-13.
+- **Narrow windows (§10), 2026-10-24:** the Map works at any window size, down to 200 × 260, for VS Code's panel. Below a floor of 360 × 320 it stops shrinking and the page scrolls; between the floor and normal sizes each surface drops secondary text first. At 1100 × 700 and up it looks exactly as before (screenshots compared byte for byte), except the error banner while the details panel is open, which now keeps to the canvas beside the panel and clear of the page pill. ADR-064.
 
 ## 1. Principle
 
@@ -124,6 +125,7 @@ It's actionable and structured, not a static card. From top to bottom:
 
 - **Top bar, left to right:** a small Nebulosity mark and name, the repo as `owner / repo` (prominent), the view title "Dependency map", then a wide search field ("Search files and concepts", `Ctrl K`). A green status dot sits on the right.
 - **Activity bar:** a slim bar along the bottom that's always visible. It shows Claude Code's **last 3 actions** ("Reading build/gulpfile.js"), each with an `--agent` dot. It stays slim so the Map remains the focus, and it's never hidden: live activity is the demo's differentiator.
+  - *Since 2026-10-24 (owner's pick from two rendered options):* while `show_on_map` has highlighted something, the bar's right end says how many ("3 highlighted") with a cyan **Clear** text button. Esc does the same once nothing is selected: it lets go of the selection first, then the highlights. Clearing also drops the orange outlines left by the tool calls before it (they would otherwise stay for 30 s); a later call outlines its boxes as usual. Before, a highlight stayed until Claude cleared it, the page reloaded or the repo changed. *(2026-10-24, PR #10's review:)* inside VS Code's panel, What depends' highlights are ringed the same way but are the editor's, not Claude's: the count, Clear and Esc leave them, and they go when the pick closes (ADR-062).
   - *(Added in the V1.3.1 build; the `imports` and `architecture` rows since V1.6, which replaced `dependents`, `dependencies` and `path`, ADR-056.)* Each tool call reads as a phrase (`app/map/activity.ts`). A leading `mcp__nebulosity__` is dropped, "+N" counts further paths, and `""` reads "the repo":
 
     | Tool | Phrase |
@@ -189,3 +191,61 @@ Opening the panel for a large folder (`src`) took about 5 s in V1.3. Profile `de
 
   **Not changed:** knowing to start in `src` takes programming knowledge; the hover summaries are the in-scope help. Folder names already count in search since the owner's own try at task 1 the same day (ADR-027, amended).
 - The owner signs off visually before merging.
+
+## 10. Narrow windows (2026-10-24)
+
+The owner, on the Map in VS Code's panel at about 415 px wide: "FIX ALL compression issues in the entire project so no matter how miuch i compress it u can still see the stuff. this can include adding a horizontal scroll bar, etc. etc. make sure no ui breaks either". The panel was cut off on its left (a fixed 400 px pinned to the right of a narrower area), and the top bar's search, help and status sat on each other. ADR-064 records the decision.
+
+**The rule.** At any window size, down to 200 × 260, everything the Map shows stays reachable and readable: nothing is cut off out of reach, no control sits on another, and no text is clipped without a way to read it (an ellipsis and the whole text in a hover title). Surfaces adapt first; sideways and downward scrolling is the floor.
+
+**Normal sizes are unchanged, but for one state.** At 1100 × 700 and up nothing below applies, and every state the layout check walks, at 1440 × 900 and 1100 × 800, gives a screenshot byte-identical to the one taken before the change, except the error banner while the details panel is open. That banner used to run under the panel and the page pill; it now keeps to the canvas beside the panel and clear of the pill (below). With no panel open, the banner is byte-identical to before.
+
+**The floor: 360 × 320** (`MIN_WIDTH`, `MIN_HEIGHT` in `app/map/narrow.ts`). Below it the Map keeps that size and the page scrolls, with the theme's thin scrollbars (§7). 360 px holds the top bar's essentials and a canvas as wide as the floor; 320 px leaves a 200 px canvas under the three bars (48 + 40 + 32 px), which stacks a paged level's pill over the zoom controls with about 20 px between them. The Map fills the body's column rather than `100dvh`, so a sideways scrollbar doesn't add a downward scroll of its own height. VS Code's bottom panel is often shorter than 320 px; there the page scrolls down.
+
+**What gives way, in order, as the window narrows:**
+
+| Surface | Under 1100 px | Under 900 | Under 768 | Under 640 | Under 520 | Under 440 |
+|---|---|---|---|---|---|---|
+| Top bar | "Dependency map" goes | | the search's Ctrl K hint goes (sooner if the field can't hold it and its words whole) | the search becomes an icon beside the help | the status pill keeps its dot (title and menu say the rest) | the "Nebulosity" name goes, the mark stays |
+| Breadcrumb row | | | the busy folder's note keeps only its toggle ("Show all lines"; its title says the rest) | | | |
+| Activity bar | | the oldest of the 3 actions goes; the newest keeps the room it needs, the other what's left | | the second goes | the time and the "Claude Code" word go (the dot's title keeps it) | |
+
+"Dependency map" goes under 1100 px rather than 900 so that it always goes first: in free mode the status pill reads "Summaries off (no API key)", about 90 px longer than "Up to date", and under 1100 the search's words would otherwise be cut while it still showed.
+
+Between the steps: the search's words truncate first (and go once only a sliver would be left), then the status pill's words and the repo's owner, and the repo's own name last ("micro… vscode"), each whole in its title. The newest action's title lists the older ones with their times. The highlights' count and Clear always stay.
+
+**Measured, not by breakpoint:**
+- **The details panel** is 400 px beside the canvas while that leaves 360 px of canvas. With less, it covers the whole canvas (its × brings the canvas back), and the legend, the zoom controls and the page pill under it are hidden, and its boxes can't be reached by Tab.
+  - **There, a click only selects** (owner review, 2026-10-25). In VS Code's panel the panel over the whole canvas hid the box a double click was aimed at, so folders couldn't be opened, and every editor follow covered the Map.
+  - The selected box now shows its actions beside it, at screen size whatever the zoom: Open (a folder), "Go to page N" (a doorway) and Details. They sit under the box when its middle is in the canvas's top half, clear of the page pill's band, and over it lower down, clear of the legend and the zoom controls. They're centred on the box but kept 8 px inside the canvas's sides, so a box hanging off an edge doesn't take them past it (narrow.ts's `actionsSide` and `actionsPlace`).
+  - Details opens the panel over the canvas. Its ×, or Escape, comes back to the Map with the box still selected.
+  - A window narrowed while the panel is open beside the canvas keeps it, now over the canvas.
+  - The layout check walks the actions as a state of their own (`actions`), and asks for Details in every state with a panel. The page pill and the zoom controls move left by the panel's width, never a fixed 400. Chips are at most 360 px or the panel's width; every row truncates with its title, and a long identifier or path in a summary breaks anywhere rather than run past the panel's edge. In a window under 480 px tall the whole panel scrolls, its header too, so the body isn't left a few lines.
+- **The breadcrumb** truncates from its start: the first steps fold into one "…", which goes up to the last of them and names them all in its title, so the current folder always shows. It's measured before the new trail is painted, so the whole trail never shows for a frame.
+- **The page pill** says "Page 2 of 5 · 44 of 182 folders and files" on a canvas 440 px or wider, "Page 2 of 5" from 240 px, "2 / 5" below, with the whole note as its title when shortened.
+- **The legend** is at most as tall as the canvas allows: it stops below the pill's band on a paged level, and 8 px under the error banner; its rows scroll inside.
+- **The repo list and the status menu** open where they always did, moved in only as far as it takes to keep 16 px from the Map's sides, narrowed only when the Map is narrower than they are, and no taller than the Map leaves above the activity bar. They're placed again if the window resizes while one is open (VS Code's panel dragged).
+
+**The error banner** (a failed jump, a level that wouldn't load) takes no clicks in any form, so it never stands between the pointer and what's under it.
+- **At normal sizes it's where it always was:** 24 px down, in the page pill's band, centred. It's now centred over the canvas beside the panel rather than the whole Map, so it no longer runs under an open panel. It keeps the pill's width clear, moving left of centre and then wrapping rather than touch the pill.
+- **Where that band can't hold it in two lines** (a narrow canvas, a long message), it's a solid card in the canvas's top-left corner, clear of the pill and of the zoom controls. The open legend stops short of whichever form shows.
+- **Over a panel that covers the canvas** it's the panel's last row, pinned to its bottom, so it never hides the end of the panel's list.
+
+**Overlays in the page's body** are fixed to the window, outside the floor's scroll, so each fits the window itself, and while one is open the page under it doesn't scroll. The help narrows and scrolls: under 360 px its padding tightens and its keyboard list puts each key above what it does. Search is at most 92% of the window, its results truncating with titles and scrolling; the list never runs below the window, since a note (free mode, the demo) or an error shortens it. The source viewer takes the whole width under 600 px, its header wraps, and long lines scroll inside the code. The loading note and the empty state wrap with side padding.
+
+**The check.** `npm run check-layout -- http://127.0.0.1:<port>` (`scripts/check-layout.mjs`, plain Node and headless Chrome; it refuses port 3000, and the Map must be showing the VS Code demo repo) walks 18 states at 20 sizes from 1440 × 900 to 200 × 260:
+- the top level, a deep folder, a paged level and a busy folder;
+- a file, a folder and the source root selected, and a summary with a 51-character name in inline code;
+- the source viewer, search, help, both popovers and the legend;
+- the activity bar with three tool calls and highlights;
+- a failed jump's banner with the panel open, with nothing selected, and over the open legend.
+
+Then it resizes one tab live through 11 sizes with a file's panel and the repo list open. It fails on:
+- anything cut off out of reach;
+- a control covered at its centre or at an edge's middle (hit-tested with React Flow's pane where a person can leave it);
+- clipped text without an ellipsis and a title, text running out of its box, or text cut to a lone "…";
+- text on text, or text on a control it isn't part of;
+- a page that scrolls at a normal size or past the floor;
+- a console error.
+
+`--shots <dir>` saves screenshots.

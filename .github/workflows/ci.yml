@@ -4,7 +4,9 @@
 # through the installed launcher (scripts/mcp-smoke.mjs, which turns live events off), and the Map on port 3123 with its
 # worker off. Then, on a temp copy of arch-repo: setup against a real Claude Code (installed with no key; only its mcp
 # commands run), the installed Map's background worker picking up a saved file (port 3124), and summarize's refusals
-# without a key and without a terminal. Everything the installed copy writes goes to a scratch data folder (NEBULOSITY_DATA).
+# without a key and without a terminal. Last, the VS Code extension: its check, its build, and its integration tests in a
+# downloaded VS Code against the installed Map on port 3125, which must stop when VS Code closes. Everything the installed
+# copy writes goes to a scratch data folder (NEBULOSITY_DATA).
 #
 # How it runs: never by itself, on pull requests or on the working branches. The repo is private and macOS minutes count
 # ten times, so each run is asked for. GitHub offers "Run workflow" only for a workflow on the default branch, and main
@@ -44,6 +46,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vscode-extension/package-lock.json
       - name: npm ci
         id: deps
         run: npm ci
@@ -258,3 +263,66 @@ jobs:
           [ "$code" -eq 1 ] || { echo "with a key and no terminal: exit $code, not 1"; failed=yes; }
           grep -qF "Nothing was sent" <<< "$out" || { echo "with a key and no terminal: no \"Nothing was sent\""; failed=yes; }
           test -z "$failed"
+      # The VS Code extension (V1.8): its own install, type check and build, then its integration tests (mocha in a VS Code
+      # that @vscode/test-electron downloads) against a Map the extension starts from the installed package, found on PATH
+      # the way a user's install is. These come last, so the repo step's switch to the extension's copy can't move the
+      # active repo under the worker step, which watches the arch-repo copy.
+      - name: The extension's npm ci
+        id: extdeps
+        if: ${{ !cancelled() && steps.index.outcome == 'success' }}
+        timeout-minutes: 15
+        working-directory: vscode-extension
+        run: npm ci
+      - name: The extension's check
+        if: ${{ !cancelled() && steps.index.outcome == 'success' && steps.extdeps.outcome == 'success' }}
+        timeout-minutes: 15
+        working-directory: vscode-extension
+        run: npm run check
+      - name: The extension's build
+        if: ${{ !cancelled() && steps.index.outcome == 'success' && steps.extdeps.outcome == 'success' }}
+        timeout-minutes: 15
+        working-directory: vscode-extension
+        run: npm run build
+      - name: Index a temp copy of mini-repo for the extension
+        id: extcopy
+        if: ${{ !cancelled() && steps.index.outcome == 'success' }}
+        timeout-minutes: 15
+        run: |
+          export NEBULOSITY_DATA="$SCRATCH/nebulosity-data"
+          cp -R test/fixtures/mini-repo "$SCRATCH/ext-repo"
+          # --no-activate: Show Map's repo step has to switch the Map to it (from $COPY, the active repo)
+          "$BIN/nebulosity" index "$SCRATCH/ext-repo" --no-activate
+          echo "EXT_COPY=$SCRATCH/ext-repo" >> "$GITHUB_ENV"
+      - name: The extension's integration tests, against the installed Map on port 3125
+        id: extint
+        if: ${{ !cancelled() && steps.index.outcome == 'success' && steps.extdeps.outcome == 'success' && steps.extcopy.outcome == 'success' }}
+        timeout-minutes: 15
+        working-directory: vscode-extension
+        env:
+          NEB_TEST_PORT: "3125"
+          NEBULOSITY_WORKER: "off"
+        run: |
+          export NEB_TEST_WORKSPACE="$EXT_COPY"
+          export NEBULOSITY_DATA="$SCRATCH/nebulosity-data"
+          # no NEB_TEST_COMMAND: the extension finds nebulosity on PATH (on Windows the .cmd shim, run through a shell).
+          # Git Bash takes a Unix spelling of the entry: a D:/… one would split at its colon
+          unset NEB_TEST_COMMAND
+          if [ "$RUNNER_OS" = "Windows" ]; then export PATH="$(cygpath -u "$BIN"):$PATH"; else export PATH="$BIN:$PATH"; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a npm run test:integration; else npm run test:integration; fi
+      # The last test leaves the Map running: closing VS Code has to stop it (the extension's deactivate), checked here
+      # before the cleanup below could hide it. Only after the tests passed: skipped or failed, they may never have
+      # started that Map, and the check would pass on nothing
+      - name: The Map the extension started stopped with VS Code
+        if: ${{ !cancelled() && steps.extint.outcome == 'success' }}
+        timeout-minutes: 15
+        run: |
+          sleep 10
+          if curl -s -o /dev/null http://127.0.0.1:3125/api/repos; then echo "the Map outlived VS Code"; exit 1; fi
+      - name: Stop anything left on port 3125
+        if: ${{ always() }}
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3125 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id \$_.OwningProcess -Force }" || true
+          else
+            for pid in $(lsof -t -iTCP:3125 -sTCP:LISTEN 2> /dev/null); do kill "$pid" 2> /dev/null || true; done
+          fi

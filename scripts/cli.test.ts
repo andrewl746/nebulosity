@@ -7,7 +7,7 @@ import { DatabaseMissingError, getDb, useReadOnlyDatabase } from "../lib/db/clie
 import { indexRepository } from "../lib/index/pipeline";
 import { copyFixture } from "../test/helpers/fixture";
 import { makeTempDir } from "../test/helpers/temp";
-import { main, parseCli, parseRegistration, runDoctor, runSetup, setupCommand, SNIPPET } from "./cli";
+import { main, parseCli, parseMapArgs, parseRegistration, runDoctor, runSetup, setupCommand, SNIPPET } from "./cli";
 
 // No test starts claude, git or npm (the plan's global constraints): the CLI's child processes are stubbed. Everything
 // else in child_process stays real (the indexer's own git calls only run in a folder with a .git, which no copy here has).
@@ -129,7 +129,25 @@ describe("main", () => {
         expect(await main(["serve"])).toBe(1);
         expect(printed(errors)).toBe('nebulosity has no command "serve". Commands: index, summarize, map, mcp, setup, doctor.');
         expect(await main(["--version"])).toBe(0);
-        expect(printed(logs)).toBe("0.2.0");
+        expect(printed(logs)).toBe("0.3.0");
+    });
+});
+
+describe("parseMapArgs", () => {
+    it("starts the Map on the default port, or on --port <n> (1 to 65535)", () => {
+        expect(parseMapArgs([])).toEqual({ kind: "start", port: 3000 });
+        expect(parseMapArgs(["--port", "3125"])).toEqual({ kind: "start", port: 3125 });
+    });
+
+    it("reads --print-port alone as a request to print the saved port", () => {
+        expect(parseMapArgs(["--print-port"])).toEqual({ kind: "print-port" });
+    });
+
+    it("refuses a port out of range, a flag with a stray argument, and a flag with no value", () => {
+        expect(parseMapArgs(["--port", "0"])).toBeNull();
+        expect(parseMapArgs(["--port", "65536"])).toBeNull();
+        expect(parseMapArgs(["--print-port", "x"])).toBeNull();
+        expect(parseMapArgs(["--port"])).toBeNull();
     });
 });
 
@@ -189,6 +207,33 @@ describe("nebulosity map (final review, C-M2)", () => {
         expect(await main(["map", "--port", "70000"])).toBe(1);
         expect(spawn).toHaveBeenCalledTimes(2);
         expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: "/r/app", port: 3000 });
+    });
+
+    it("map --print-port prints the saved port", async () => {
+        // a copy with no built Map: print-port answers before the BUILD_ID check, and starts and saves nothing
+        const home = makeTempDir("neb-print-port-");
+        process.env.NEBULOSITY_HOME = home;
+        process.env.NEBULOSITY_DATA = path.join(home, "data");
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await main(["map", "--print-port"])).toBe(0);
+        expect(printed(logs)).toBe("3000");   // no config.json yet: the default
+
+        fs.mkdirSync(process.env.NEBULOSITY_DATA);
+        const configFile = path.join(process.env.NEBULOSITY_DATA, "config.json");
+        fs.writeFileSync(configFile, JSON.stringify({ activeRepo: null, port: 3125 }));
+        logs.mockClear();
+        expect(await main(["map", "--print-port"])).toBe(0);
+        expect(printed(logs)).toBe("3125");
+
+        expect(spawn).not.toHaveBeenCalled();
+        expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: null, port: 3125 });
+    });
+
+    it("refuses --print-port with anything after it, in the usage line", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        expect(await main(["map", "--print-port", "x"])).toBe(1);
+        expect(printed(errors)).toBe("usage: nebulosity map [--port <n> | --print-port]");
     });
 });
 

@@ -1,0 +1,156 @@
+{
+  "name": "nebulosity-vscode",
+  "displayName": "Nebulosity",
+  "description": "The Nebulosity Map beside your code: the repo's folders, files and imports, following the editor. Needs the nebulosity package (npm install -g nebulosity).",
+  "publisher": "andrewl746",
+  "version": "0.3.0",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andrewl746/Nebulosity"
+  },
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "nebulosity.showMap",
+        "title": "Nebulosity: Show Map",
+        "icon": "$(map)"
+      },
+      {
+        "command": "nebulosity.showFile",
+        "title": "Nebulosity: Show this file on the Map"
+      },
+      {
+        "command": "nebulosity.whatDepends",
+        "title": "Nebulosity: What depends on this file?"
+      },
+      {
+        "command": "nebulosity.followOn",
+        "title": "Nebulosity: Follow editor",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "nebulosity.followOff",
+        "title": "Nebulosity: Follow editor",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "nebulosity.indexRepo",
+        "title": "Nebulosity: Index this repo"
+      },
+      {
+        "command": "nebulosity.stopMap",
+        "title": "Nebulosity: Stop Map"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "nebulosity.showMap",
+          "group": "navigation",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "nebulosity.followOn",
+          "group": "navigation",
+          "when": "activeWebviewPanelId == 'nebulosity.map' && !nebulosity.following"
+        },
+        {
+          "command": "nebulosity.followOff",
+          "group": "navigation",
+          "when": "activeWebviewPanelId == 'nebulosity.map' && nebulosity.following"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "nebulosity.showFile",
+          "group": "nebulosity@1",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "nebulosity.whatDepends",
+          "group": "nebulosity@2",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "nebulosity.showFile",
+          "group": "nebulosity@1",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "nebulosity.whatDepends",
+          "group": "nebulosity@2",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "nebulosity.followOn",
+          "when": "false"
+        },
+        {
+          "command": "nebulosity.followOff",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Nebulosity",
+      "properties": {
+        "nebulosity.command": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "The `nebulosity` command to run: the installed command's path, or a checkout's `bin/nebulosity.mjs` (run with `node`). Empty finds `nebulosity` on PATH. Read only from your user settings (or a remote machine's), never from a folder's `.vscode/settings.json`."
+        },
+        "nebulosity.port": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 1,
+          "maximum": 65535,
+          "scope": "machine",
+          "markdownDescription": "The Map's port. Empty uses the port the Map was last started on (`nebulosity map --print-port`), else 3000. Read only from your user settings (or a remote machine's), never from a folder's `.vscode/settings.json`."
+        },
+        "nebulosity.followEditor": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "The Map moves to the file in the active editor. The button in the Map's title bar turns this off or on for one window."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "build:test": "node esbuild.mjs --tests",
+    "check": "tsc --noEmit && tsc -p test --noEmit",
+    "test:integration": "npm run build && npm run build:test && node ./out/test/runTest.js",
+    "package": "vsce package"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/mocha": "10.0.10",
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.105.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "mocha": "12.0.3",
+    "ovsx": "1.2.0",
+    "typescript": "5.9.3"
+  }
+}
