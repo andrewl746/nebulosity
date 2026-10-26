@@ -2,6 +2,8 @@
 
 The Nebulosity Map in an editor panel beside your code: your repo one folder at a time, with lines for imports, a panel with what each file uses and what uses it, and Claude Code's activity on it as it works. The Map follows the file you're in, and a file you pick on the Map opens in the editor.
 
+To see the Map before installing anything, try the [Live Demo](https://demo.nebulosity.ca) on VS Code's own source. More at [nebulosity.ca](https://nebulosity.ca).
+
 Everything here works in Nebulosity's free mode, with no API key. The extension never writes summaries and never asks for a key.
 
 ## Getting started
