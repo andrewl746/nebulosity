@@ -34,6 +34,7 @@ body {
   font: 400 17px/1.6 "IBM Plex Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
 }
 img { max-width: 100%; height: auto; }
+figure { margin: 0; }
 a { color: var(--control); text-decoration: none; transition: color 120ms ease-out; }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--control); outline-offset: 3px; border-radius: 6px; }
 button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -77,30 +78,38 @@ a.frame:focus-visible { border-radius: 12px; }
 .frame img { display: block; width: 100%; }
 .shot figcaption { margin-top: 14px; font-size: 14px; line-height: 1.5; color: var(--text-2); }
 
-/* the sections below: a heading on the left, its opening text on the right */
+/* the sections below: a heading, its one line just under it, then the section's panels */
 section.part { padding-top: clamp(80px, 9vw, 120px); }
 h2 {
   margin: 0; max-width: 20em; color: var(--text); font-weight: 500;
   font-size: clamp(1.75rem, 1.3rem + 1.2vw, 2.375rem); line-height: 1.15; letter-spacing: -0.015em;
 }
 h3 { margin: 0; color: var(--text); font-size: 18px; font-weight: 500; line-height: 1.35; }
-.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: start; }
-.head p { max-width: 36em; margin: 0; }
-.head .cta { margin-top: 24px; }
-@media (max-width: 960px) { .split { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+.section-head { display: grid; gap: 14px; max-width: 46em; margin-bottom: 32px; }
+.section-head p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.2vw, 1.15rem); }
+
+/* a panel around a screenshot, with what to do about it along the bottom */
+.shot-card { border-color: var(--border); }
+.shot-card .frame { border: 0; border-radius: 0; background: none; }
+.shot-card:has(a.frame:focus-visible) { outline: 2px solid var(--control); outline-offset: 3px; }
+.shot-card a.frame:focus-visible { outline: none; }
+.demo-foot { align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; }
+.demo-foot strong { font-weight: 500; }
 
 /* the evaluation: one row per kind of question, a bar per codebase, longer is faster */
-.chart { margin: 56px 0 0; }
-.chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px 32px; margin-bottom: 16px; }
+.chart { margin: 0; }
+.chart-head { flex-wrap: wrap; row-gap: 10px; }
+.chart-head .legend { margin-left: auto; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 0; padding: 0; list-style: none; font-size: 14px; color: var(--text-2); }
 .key { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 2px; }
 .key.a, .bar.a .fill { background: var(--series-a); }
 .key.b, .bar.b .fill { background: var(--series-b); }
-.speeds { margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--hairline); }
+.speeds { margin: 0; padding: 0; list-style: none; }
 .speeds li {
-  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 10px 64px; align-items: center;
-  padding: 18px 0; border-top: 1px solid var(--hairline);
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 10px 40px; align-items: center;
+  padding: 18px 24px;
 }
+.speeds li + li { border-top: 1px solid var(--hairline); }
 .speeds .q { color: var(--text); line-height: 1.4; }
 .bars { display: grid; gap: 6px; padding: 2px 0; border-left: 1px solid var(--border); }
 .bar { display: flex; align-items: center; gap: 10px; min-height: 18px; }
@@ -108,16 +117,24 @@ h3 { margin: 0; color: var(--text); font-size: 18px; font-weight: 500; line-heig
 .fill { width: calc((100% - 4.5em) * var(--x) / 5); height: 10px; border-radius: 0 4px 4px 0; }
 .val { font-size: 14.5px; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 .bar.none .val { padding-left: 2px; font-size: 13.5px; color: var(--text-2); }
-.chart figcaption { max-width: 52em; margin-top: 20px; font-size: 15px; color: var(--text-2); }
-@media (max-width: 760px) { .speeds li { grid-template-columns: minmax(0, 1fr); } }
+.chart-foot { flex-direction: column; gap: 8px; }
+.chart-foot p { margin: 0; }
+.chart-foot .score { display: flex; align-items: flex-start; gap: 12px; color: var(--text); font-size: 16px; }
+.chart-foot .fine { max-width: 56em; padding-left: 34px; font-size: 14.5px; color: var(--text-2); }
+@media (max-width: 760px) {
+  .card-head.chart-head { display: grid; grid-template-columns: 22px minmax(0, 1fr); }
+  .card-head.chart-head .legend { grid-column: 1 / -1; margin-left: 0; }
+  .speeds li { grid-template-columns: minmax(0, 1fr); padding: 16px 18px; }
+  .chart-foot .fine { padding-left: 0; }
+}
 
 /* install: what it needs beside the heading, then one panel per part, each step's name on the left and its command on the right */
-.needs { display: flex; flex-wrap: wrap; align-items: center; align-self: center; gap: 10px 12px; }
+.needs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
 .needs > span { font-size: 15px; color: var(--text-2); }
 .needs ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .needs li { padding: 3px 12px; border: 1px solid var(--overlay-line); border-radius: 999px; font-size: 14.5px; color: var(--text-body); }
-.cards { display: grid; gap: 20px; margin-top: 48px; }
-.card { overflow: hidden; border: 1px solid var(--hairline); border-radius: 16px; background: var(--panel); }
+.cards { display: grid; gap: 20px; }
+.card { overflow: hidden; border: 1px solid var(--hairline); border-radius: 16px; background: var(--panel); transition: border-color 120ms ease-out; }
 .card-head { display: flex; align-items: center; gap: 12px; padding: 18px 24px; border-bottom: 1px solid var(--hairline); }
 .card-head svg, .card-foot svg { flex: none; width: 22px; height: 22px; color: var(--folder); }
 .card-note { margin-left: auto; font-size: 14px; color: var(--text-2); }
@@ -197,7 +214,7 @@ footer p { margin: 20px 0 0; max-width: 60em; }
   .brand:hover { color: var(--text); }
   .button.primary:hover { background: var(--control-hover); color: var(--canvas); }
   .button.secondary:hover { background: var(--overlay); }
-  a.frame:hover { border-color: var(--control); }
+  a.frame:hover, .shot-card:has(a.frame:hover) { border-color: var(--control); }
   .copy:hover { background: var(--overlay); }
   .lightbox .close:hover { background: var(--overlay-line); }
 }

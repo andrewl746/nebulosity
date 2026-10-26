@@ -53,34 +53,30 @@
   </section>
 
   <section class="wrap part" id="map">
-    <div class="split head">
+    <div class="section-head">
       <h2>See the same imports on the Map</h2>
-      <div>
-        <p>One folder at a time, with lines for what imports what. Click any box to see what it uses and what uses it, or press Ctrl K to search.</p>
-        <div class="cta">
-          <div class="actions"><a class="button secondary" href="https://demo.nebulosity.ca">Try the live demo</a></div>
-          <p class="note">VS Code's own repo, all 15,040 files, nothing to install.</p>
-        </div>
-      </div>
+      <p>One folder at a time, with lines for what imports what. Click any box to see what it uses and what uses it, or press Ctrl K to search.</p>
     </div>
-    <figure class="shot">
+    <figure class="card shot-card">
       <a class="frame" href="images/map-vscode-1907.webp" title="Show the screenshot full size">
         <img src="images/map-vscode-1907.webp" srcset="images/map-vscode-960.webp 960w, images/map-vscode-1907.webp 1907w" sizes="(min-width: 1240px) 1120px, 100vw" width="1907" height="998" loading="lazy" alt="The Map on VS Code's src/vs/platform folder: boxes for its folders with their file counts, the first of three pages">
       </a>
-      <figcaption>VS Code's <code>src/vs/platform</code> folder on the Map.</figcaption>
+      <figcaption class="card-foot demo-foot">
+        <span><strong>The live demo</strong> is the Map on VS Code's own repo, all 15,040 files, with nothing to install.</span>
+        <a class="button secondary" href="https://demo.nebulosity.ca">Try the live demo</a>
+      </figcaption>
     </figure>
   </section>
 
   <section class="wrap part" id="evaluation">
-    <div class="split head">
+    <div class="section-head">
       <h2>Tested against Claude Code on its own</h2>
-      <div>
-        <p>The same questions, with and without Nebulosity, on three large TypeScript codebases: 378 runs, each checked against a reference answer. On the questions below, Claude Code got all 42 answers fully right with Nebulosity, and 29 alone.</p>
-      </div>
+      <p>The same questions, with and without Nebulosity, on three large TypeScript codebases: 378 runs, each checked against a reference answer.</p>
     </div>
 
-    <figure class="chart">
-      <div class="chart-head">
+    <figure class="card chart">
+      <div class="card-head chart-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/><path d="M15 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/><path d="M9 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/></svg>
         <h3 id="chart-title">How many times faster, by question</h3>
         <ul class="legend" aria-hidden="true">
           <li><span class="key a"></span>VS Code and AFFiNE</li>
@@ -124,12 +120,18 @@
           </span>
         </li>
       </ul>
-      <figcaption>Medians of 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. The question types were grouped after the runs; simpler ones, like listing a file's direct importers, came out about even. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></figcaption>
+      <figcaption class="card-foot chart-foot">
+        <p class="score">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg>
+          <span>With Nebulosity, all 42 answers to these questions were fully right. Alone, 29 were.</span>
+        </p>
+        <p class="fine">Medians of 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. The question types were grouped after the runs; simpler ones, like listing a file's direct importers, came out about even. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
+      </figcaption>
     </figure>
   </section>
 
   <section class="wrap part" id="install">
-    <div class="split head">
+    <div class="section-head">
       <h2>Install</h2>
       <div class="needs">
         <span>You'll need</span>
