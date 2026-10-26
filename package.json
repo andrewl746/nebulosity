@@ -59,6 +59,7 @@
     "!.next/cache/",
     "!.next/dev/",
     "!.next/**/*.map",
+    "!.next/**/*.nft.json",
     "!**/*.test.ts",
     "LICENSE",
     "README.md"
