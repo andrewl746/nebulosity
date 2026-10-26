@@ -4,6 +4,7 @@ import type { SourceResponse } from "../contracts";
 import { getDb } from "../db/client";
 import { loadFileInfo } from "../db/store/map";
 import { requireRepository } from "../db/store/structure";
+import { rulesFor } from "../index/languages/rules";
 import { repoKey } from "../index/paths";
 import { PathNotFoundError } from "./level";
 
@@ -16,11 +17,13 @@ export function insideRoot(resolved: string, root: string): boolean {
     return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-/** What the viewer highlights the text as. */
+/**
+ * What the viewer highlights the text as: the language of the rules claiming the file (E4, ADR-065), the one stored in
+ * files.language, so a language reaches the viewer exactly when the index reads it. The rules are pure: reading them
+ * loads no grammar.
+ */
 function languageOf(filePath: string): string {
-    if (/\.(ts|tsx|mts|cts)$/.test(filePath)) return "typescript";
-    if (/\.(js|jsx|mjs|cjs)$/.test(filePath)) return "javascript";
-    return "text";
+    return rulesFor(filePath)?.languageOf(filePath) ?? "text";
 }
 
 /**

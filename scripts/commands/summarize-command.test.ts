@@ -1,13 +1,16 @@
+import fs from "fs";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { isolateDataFolder } from "../../test/helpers/data-folder";
 import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { getDb } from "../../lib/db/client";
 import { requireRepository } from "../../lib/db/store/structure";
-import { summariesConfirmed } from "../../lib/db/store/summaries";
+import { approvedBudgetUsd, summariesConfirmed } from "../../lib/db/store/summaries";
 import { dataDir } from "../../lib/home";
 import { repoKey } from "../../lib/index/paths";
 import { indexRepository } from "../../lib/index/pipeline";
+import { runSummaries } from "../../lib/index/summarize/run";
 import type { Summarizer } from "../../lib/index/summarize/types";
 import { runSummarize } from "./summarize-command";
 
@@ -21,6 +24,9 @@ vi.mock("../../lib/index/embed", () => ({ embedSummaries: async () => ({ embedde
 
 const printed = (spy: { mock: { calls: unknown[][] } }): string => spy.mock.calls.map((call) => String(call[0])).join("\n");
 
+// Each test has a data folder of its own, so the config.json it reads (summaryModels) is only ever the one it writes
+const dataFolder = isolateDataFolder();
+
 beforeEach(() => {
     summarizer = stub.summarizer;
     stub.requests.length = 0;
@@ -31,6 +37,13 @@ afterEach(() => {
     delete (process.stdin as { isTTY?: boolean }).isTTY;
     vi.restoreAllMocks();
 });
+
+/** Writes this test's config.json with the given summaryModels. */
+function setSummaryModels(summaryModels: unknown): string {
+    const file = path.join(dataFolder(), "config.json");
+    fs.writeFileSync(file, JSON.stringify({ activeRepo: null, port: 3000, summaryModels }));
+    return file;
+}
 
 describe("nebulosity summarize: an estimate and a yes before any spend (S11)", () => {
     it("with a key and no terminal, prints the estimate, refuses without --yes, and sends nothing", async () => {
@@ -63,6 +76,47 @@ describe("nebulosity summarize: an estimate and a yes before any spend (S11)", (
         expect(summariesConfirmed(db, requireRepository(db, repoKey(root)))).toBe(true);
     });
 
+    // R24: the Map's automatic refreshes stop at the budget of the last yes
+    it("records the budget the yes was given to: --budget's, else the default $15", async () => {
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+        const db = getDb();
+
+        const raised = copyFixture();
+        indexRepository(raised);
+        expect(await runSummarize([raised, "--direct", "--yes", "--budget", "30"])).toBe(0);
+        expect(approvedBudgetUsd(db, requireRepository(db, repoKey(raised)))).toBe(30);
+
+        const plain = copyFixture();
+        indexRepository(plain);
+        expect(await runSummarize([plain, "--direct", "--yes"])).toBe(0);
+        expect(approvedBudgetUsd(db, requireRepository(db, repoKey(plain)))).toBe(15);
+    });
+
+    // Final Review #2, minor 3 (ruling R30): the worker's stop note says "--budget <usd> approves more", and the run that
+    // follows it may find nothing waiting (the out-of-date summaries were opened on the Map meanwhile)
+    it("with nothing waiting to be sent, still records the run's budget for a repo already said yes to", async () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+        const db = getDb();
+        const root = copyFixture();
+        indexRepository(root);
+        expect(await runSummarize([root, "--direct", "--yes"])).toBe(0);
+        const repoId = requireRepository(db, repoKey(root));
+        expect(approvedBudgetUsd(db, repoId)).toBe(15);
+        stub.requests.length = 0;
+
+        // no --yes and no terminal: there's no spend to say yes to, only the budget the Map's refreshes keep to
+        expect(await runSummarize([root, "--direct", "--budget", "25"])).toBe(0);
+        expect(stub.requests).toHaveLength(0);
+        expect(approvedBudgetUsd(db, repoId)).toBe(25);
+        expect(printed(log)).toContain("[summarize] Nothing to send. The Map's automatic refreshes may now take this repo's summary spend up to $25.00 in all.");
+
+        // a re-run without --budget records the default again (R24's "the last --budget a confirmed run used")
+        expect(await runSummarize([root, "--direct"])).toBe(0);
+        expect(approvedBudgetUsd(db, repoId)).toBe(15);
+    });
+
     it("with no key, says summaries need one and sends nothing", async () => {
         summarizer = null;
         const root = copyFixture();
@@ -75,5 +129,86 @@ describe("nebulosity summarize: an estimate and a yes before any spend (S11)", (
         expect(printed(log)).toContain(`ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key: set it in the environment, or put it in ${path.join(dataDir(), ".env.local")}).`);
         expect(printed(log)).not.toContain("at list prices");
         expect(stub.requests).toHaveLength(0);
+    });
+});
+
+describe("nebulosity summarize: the models in summaryModels (ADR-066)", () => {
+    it("refuses a model the table doesn't price when its prices are missing, before the estimate, and sends nothing (Review Focus 3)", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        const file = setSummaryModels({ file: { model: "claude-zeta-1" } });
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await runSummarize([root, "--direct", "--yes"])).toBe(1);
+
+        expect(printed(error)).toContain("summaryModels.file.inputPerMTok");
+        expect(printed(error)).toContain(file);
+        expect(printed(log)).not.toContain("at list prices");
+        expect(stub.requests).toHaveLength(0);
+        const db = getDb();
+        expect(summariesConfirmed(db, requireRepository(db, repoKey(root)))).toBe(false);
+    });
+
+    it("estimates with the set model and its prices", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        setSummaryModels({ file: { model: "claude-haiku-6", inputPerMTok: 1, outputPerMTok: 5 } });
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await runSummarize([root, "--direct"])).toBe(1);   // no terminal and no --yes: the estimate, then nothing sent
+
+        // at ASSUMED_TOKENS, direct: 7 files × (4,600 × $1 + 260 × $5) / 1M = $0.0413, and 6 × Sonnet's $0.0045 = $0.027: $0.0683
+        expect(printed(log)).toContain("about 13 requests (7 files to claude-haiku-6, 5 folders and the repo to claude-sonnet-5-5), about $0.0683 at list prices.");
+        expect(stub.requests).toHaveLength(0);
+    });
+
+    // R24 (the final review's A-I1): before, this estimate was the 7 files alone, about $0.0041
+    it("after a file model change, estimates the folders and the repo the new file summaries put out of date as well", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" });   // every summary written at the defaults
+        stub.requests.length = 0;
+        setSummaryModels({ file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } });
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await runSummarize([root, "--direct"])).toBe(1);   // the estimate, then nothing sent
+
+        // Direct. The 7 files to Haiku 6, which has no usage yet, at ASSUMED_TOKENS: 7 × (4,600 × $0.10 + 260 × $0.50) / 1M =
+        // $0.00413. The 5 folders and the repo above them at Sonnet 5.5's recorded mean (the stub's 100 in, 20 out):
+        // 6 × (100 × $2 + 20 × $10) / 1M = $0.0024. $0.00653 in all.
+        expect(printed(log)).toContain("about 13 requests (7 files to claude-haiku-6, 5 folders and the repo to claude-sonnet-5-5), about $0.0065 at list prices.");
+        expect(stub.requests).toHaveLength(0);
+    });
+
+    it("stops at a model the API no longer serves with one message: the model, the config file and the README's section", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        const sent: string[] = [];
+        summarizer = {
+            ...stub.summarizer,
+            // what createClaudeSummarizer makes of the API's 404 "model: <id>"
+            async summarize(request){
+                sent.push(request.model);
+                return {
+                    customId: request.customId, ok: false, error: `API error 404: model: ${request.model}`, model: null, usage: null,
+                    modelUnavailable: { model: request.model, reason: `model: ${request.model}` },
+                };
+            },
+        };
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await runSummarize([root, "--direct", "--yes"])).toBe(1);
+
+        const message = printed(error);
+        expect(message).toContain("claude-haiku-5-5");
+        expect(message).toContain(path.join(dataFolder(), "config.json"));
+        expect(message).toContain("Summary models");
+        expect(error).toHaveBeenCalledTimes(1);
+        expect(sent).toHaveLength(4);   // the four already on their way at once; the other three files never go
     });
 });

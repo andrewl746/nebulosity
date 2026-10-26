@@ -4,7 +4,9 @@ import fs from "fs";
 import path from "path";
 import { FIXTURE } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
-import { discoverFiles, gitIgnored, isExcludedPath, isTestPath, readGitHead, readingFor } from "./discover";
+import { toyRules } from "../../test/helpers/toy-adapter";
+import { discoverFiles, gitIgnored, isExcludedPath, isTestPath, listManifests, readGitHead, readingFor } from "./discover";
+import { typescriptRules } from "./languages/typescript-rules";
 
 const TS_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
@@ -180,6 +182,63 @@ describe("gitIgnored", () => {
         expect([...gitIgnored(dir, ["out/a.ts", "src/b.gen.ts", "src/c.ts"])].sort()).toEqual(["out/a.ts", "src/b.gen.ts"]);
         expect(gitIgnored(dir, ["src/c.ts"]).size).toBe(0);
         expect(gitIgnored(dir, []).size).toBe(0);
+    });
+});
+
+describe("discovery through the language rules (ADR-065)", () => {
+    const rules = [typescriptRules, toyRules];
+
+    /** A repo of these files, each holding a line, in a git repo or a plain folder. */
+    function repo(files: string[], git: boolean): string {
+        const dir = makeTempDir("neb-discover-rules-");
+        if (git) execFileSync("git", ["init", "-q", dir]);
+        for (const rel of files){
+            fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+            fs.writeFileSync(path.join(dir, rel), "x\n");
+        }
+        return dir;
+    }
+
+    it("lists a toy.json as a manifest, and setup.toy as a manifest and a code file both", () => {
+        const dir = repo(["toy.json", "setup.toy", "src/a.toy", "src/b.ts"], false);
+        const found = discoverFiles(dir, { rules });
+        expect(found.manifests).toEqual(["setup.toy", "toy.json"]);
+        expect(found.files.map((f) => f.path)).toEqual(["setup.toy", "src/a.toy", "src/b.ts"]);
+    });
+
+    it.each([["git", true], ["walk", false]] as const)("leaves out deps/*.toy beside a toy.json, keeping TypeScript's files there (%s mode)", (_mode, git) => {
+        const dir = repo(["pkg/toy.json", "pkg/deps/x.toy", "pkg/deps/x.ts", "pkg/src/y.toy", "other/deps/z.toy"], git);
+        const found = discoverFiles(dir, { rules });
+        expect(found.usedGit).toBe(git);
+        expect(found.files.map((f) => f.path)).toEqual(["other/deps/z.toy", "pkg/deps/x.ts", "pkg/src/y.toy"]);
+        expect(found.skipped).toEqual([]);   // left out silently, as node_modules is
+    });
+
+    it("claims every rules' extensions when none are given", () => {
+        const dir = repo(["a.toy", "b.ts", "c.txt"], false);
+        expect(discoverFiles(dir, { rules }).files.map((f) => f.path)).toEqual(["a.toy", "b.ts"]);
+        expect(discoverFiles(dir, { rules: [typescriptRules] }).files.map((f) => f.path)).toEqual(["b.ts"]);
+    });
+
+    it("lists the same manifests listManifests does", () => {
+        const dir = repo(["toy.json", "setup.toy", "package.json", "sub/tsconfig.json", "a.toy"], false);
+        expect(listManifests(dir, rules)).toEqual(discoverFiles(dir, { rules }).manifests);
+        expect(listManifests(dir, rules)).toEqual(["package.json", "setup.toy", "sub/tsconfig.json", "toy.json"]);
+    });
+
+    it("counts a language's own test files on top of the shared folder rule", () => {
+        expect(isTestPath("lib/a_test.toy", rules)).toBe(true);
+        expect(isTestPath("lib/a_test.toy")).toBe(false);   // no registry language claims .toy
+        expect(isTestPath("tests/a.toy", rules)).toBe(true);
+        expect(isTestPath("lib/a.toy", rules)).toBe(false);
+        expect(isTestPath("lib/a.test.ts", rules)).toBe(true);
+    });
+
+    it("isExcludedPath takes the manifests' exclusion", () => {
+        const exclude = (rel: string): boolean => rel.startsWith("pkg/deps/");
+        expect(isExcludedPath("pkg/deps/x.toy", { extensions: [".toy"], usedGit: true, exclude })).toBe(true);
+        expect(isExcludedPath("pkg/src/x.toy", { extensions: [".toy"], usedGit: true, exclude })).toBe(false);
+        expect(isExcludedPath("pkg/deps/x.toy", { extensions: [".toy"], usedGit: true })).toBe(false);
     });
 });
 

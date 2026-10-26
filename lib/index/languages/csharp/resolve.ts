@@ -1,0 +1,344 @@
+/**
+ * Resolving C# references to files (the E4 plan's Task C, design §6.4): by name, as the compiler looks names up, read
+ * from the syntax and the project files with no build run.
+ *
+ * - A file's project is the folder of the nearest .csproj above it, else the repo root. A project's usings are its files'
+ *   `global using`s (stored as declares: global:, gstatic:, galias:) plus its .csproj's and the Directory.Build.props'
+ *   `<Using Include="…" />` items; a file's own using:, static: and alias: apply to that file only.
+ * - type:N: each enclosing namespace from the innermost out (the global namespace last), the first that holds N; else an
+ *   alias named N (the file's, then the project's), its target; else every visible using's U.N together, the types
+ *   nested in static: and gstatic: types counting too.
+ * - Generic arity (the pre-ship pass, Task C; the controller's rulings R5 and R23): names carry it (arity.ts:
+ *   type:Box`1), and the whole lookup is tried with it first, so `Box<int>` reaches Box<T>'s file and not Box's or
+ *   Box<T, U>'s, as C# binds it. Only when that finds nothing, and only for a name written without type arguments, does
+ *   the lookup run again by name at any arity, as before the pass: the parser can drop type arguments (a named tuple's),
+ *   but it never invents them. A name written with them (or reached through an alias's or a using static's target
+ *   written with them) that no file declares at that arity resolves to nothing, since C# can't bind X<T> to a type of
+ *   another arity (CS0308): an outside ILogger<T> never links to a repo's own non-generic ILogger. Kinds follow: a
+ *   type:N`n is a repo name only when a repo type is N with arity n; a type:N, at any arity.
+ * - Every file declaring a chosen name gets the edge (partial types); when files of several projects declare it, the
+ *   importer's own project's win.
+ * - qtype:A.B.N: under each enclosing namespace, as written, through an alias for A, then under each visible using.
+ * - static:/gstatic: name their type's files.
+ * - Extension-method calls make no specifier, so nothing here resolves them (the controller's ruling of 2026-10-25).
+ * - using:, global:, alias:, galias: and ns: make no edge (context).
+ */
+import type { LanguageResolver, ReferenceKind, ResolveContext } from "../adapter";
+import { dirOf } from "../../paths";
+import { hasArity, splitArity, withoutArity } from "./arity";
+import { CSHARP_MANIFEST, csharpRules, projectFiles } from "./rules";
+
+type Usings = { namespaces: string[]; statics: string[]; aliases: Map<string, string> };
+/** Declared full names to the files declaring them, sorted by path. */
+type Index = Map<string, string[]>;
+type FileView = Usings & {
+    project: string;
+    /** The file's namespaces and their parents, innermost first, then "" (the global namespace). */
+    enclosing: string[];
+};
+
+const join = (outer: string, name: string): string => (outer === "" ? name : `${outer}.${name}`);
+const byPath = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const PROPS = /(^|\/)Directory\.Build\.props$/;
+
+/** A specifier's text after its class prefix (`type:Order` → Order). */
+function body(specifier: string): string {
+    return specifier.slice(specifier.indexOf(":") + 1);
+}
+
+/** An alias specifier's two halves (`alias:X=A.B.C` → X, A.B.C), or null. */
+function aliasOf(text: string): [string, string] | null {
+    const eq = text.indexOf("=");
+    return eq <= 0 ? null : [text.slice(0, eq), text.slice(eq + 1)];
+}
+
+/**
+ * The `<Using>` items of one project file or Directory.Build.props: Include="X" (a namespace), with Alias="Y" (an alias)
+ * or Static="true" (a static type). Items whose name needs an MSBuild property ($(…)) are left out, as is Remove="…"
+ * (it only takes away the SDK's implicit usings, which are all outside the repo).
+ */
+export function usingItems(xml: string): Usings {
+    const out: Usings = { namespaces: [], statics: [], aliases: new Map() };
+    for (const tag of xml.match(/<Using\b[^>]*>/g) ?? []){
+        const attributes = new Map<string, string>();
+        for (const [, key, value] of tag.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) attributes.set(key, value.trim());
+        const include = attributes.get("Include");
+        if (include === undefined || include === "" || include.includes("$(")) continue;
+        const name = include.replace(/^global::/, "");
+        const alias = attributes.get("Alias");
+        if (alias !== undefined && alias !== "") out.aliases.set(alias, name);
+        else if ((attributes.get("Static") ?? "").toLowerCase() === "true") out.statics.push(name);
+        else out.namespaces.push(name);
+    }
+    return out;
+}
+
+export function createCsharpResolver(ctx: ResolveContext): LanguageResolver {
+    // manifests under a folder C# itself leaves out (a .csproj copied into bin/) are not read
+    const excluded = csharpRules.excluded(ctx.manifests);
+    const manifests = ctx.manifests.filter((m) => CSHARP_MANIFEST.test(m) && !excluded(m));
+    const projectFolders = new Set(projectFiles(manifests).map(dirOf));
+    const projectOfFile = new Map<string, string>();
+    const projectOf = (file: string): string => {
+        let found = projectOfFile.get(file);
+        if (found === undefined){
+            found = "";
+            for (let folder = dirOf(file); ; folder = dirOf(folder)){
+                if (projectFolders.has(folder)){
+                    found = folder;
+                    break;
+                }
+                if (folder === "") break;
+            }
+            projectOfFile.set(file, found);
+        }
+        return found;
+    };
+
+    // every declared type, by its full name as declared (arity included: Box`1) and by that name at any arity (Box), the
+    // lookup's second pass; and every namespace. Files are visited sorted, so each list is sorted and a file declaring
+    // two arities of one name (Box and Box`1) is listed once by name.
+    const exactFiles: Index = new Map();
+    const nameFiles: Index = new Map();
+    const add = (index: Index, fullName: string, file: string): void => {
+        const files = index.get(fullName);
+        if (files === undefined) index.set(fullName, [file]);
+        else if (files.at(-1) !== file) files.push(file);
+    };
+    const simpleNames = new Set<string>();   // at any arity
+    const declaredSimpleNames = new Set<string>();   // with the arity they're declared with (Box`1): the kinds of type:N`n
+    const qualifiers = new Set<string>();   // declared namespaces, their parents, and declared types (at any arity): what a qualified name may start from
+    const projectDeclares = new Map<string, Usings>();
+    const sortedFiles = [...ctx.files.keys()].sort(byPath);
+    for (const file of sortedFiles){
+        const facts = ctx.files.get(file)!;
+        for (const fact of facts.declares){
+            if (fact.startsWith("type:")){
+                const fullName = body(fact);
+                const byName = withoutArity(fullName);
+                add(exactFiles, fullName, file);
+                add(nameFiles, byName, file);
+                simpleNames.add(byName.slice(byName.lastIndexOf(".") + 1));
+                declaredSimpleNames.add(fullName.slice(fullName.lastIndexOf(".") + 1));   // no arity holds a dot
+                qualifiers.add(byName);
+            } else if (/^(global|gstatic|galias):/.test(fact)){
+                const project = projectOf(file);
+                let usings = projectDeclares.get(project);
+                if (usings === undefined){
+                    usings = { namespaces: [], statics: [], aliases: new Map() };
+                    projectDeclares.set(project, usings);
+                }
+                const text = body(fact);
+                if (fact.startsWith("global:")) usings.namespaces.push(text);
+                else if (fact.startsWith("gstatic:")) usings.statics.push(text);
+                else{
+                    const alias = aliasOf(text);
+                    if (alias !== null && !usings.aliases.has(alias[0])) usings.aliases.set(alias[0], alias[1]);
+                }
+            }
+        }
+        for (const specifier of facts.importSpecifiers){
+            if (!specifier.startsWith("ns:")) continue;
+            const parts = body(specifier).split(".");
+            for (let i = 1; i <= parts.length; i++) qualifiers.add(parts.slice(0, i).join("."));
+        }
+    }
+
+    // the project files' and Directory.Build.props' <Using> items, read once per manifest list (the cache is emptied
+    // whenever a manifest changes)
+    const itemsKey = "csharp:using-items";
+    let items = ctx.cache.get(itemsKey) as Map<string, Usings> | undefined;
+    if (items === undefined){
+        items = new Map();
+        for (const manifest of manifests){
+            const text = ctx.readText(manifest);
+            if (text !== null) items.set(manifest, usingItems(text));
+        }
+        ctx.cache.set(itemsKey, items);
+    }
+    const projectUsingsCache = new Map<string, Usings>();
+    const projectUsings = (project: string): Usings => {
+        let usings = projectUsingsCache.get(project);
+        if (usings !== undefined) return usings;
+        usings = { namespaces: [], statics: [], aliases: new Map() };
+        const sources: Usings[] = [];
+        const own = projectDeclares.get(project);
+        if (own !== undefined) sources.push(own);
+        for (const [manifest, found] of items!){
+            const folder = dirOf(manifest);
+            const applies = manifest.endsWith(".csproj")
+                ? folder === project
+                : PROPS.test(manifest) && (folder === "" || folder === project || project.startsWith(`${folder}/`));
+            if (applies) sources.push(found);
+        }
+        for (const source of sources){
+            usings.namespaces.push(...source.namespaces);
+            usings.statics.push(...source.statics);
+            for (const [alias, target] of source.aliases) if (!usings.aliases.has(alias)) usings.aliases.set(alias, target);
+        }
+        projectUsingsCache.set(project, usings);
+        return usings;
+    };
+
+    const views = new Map<string, FileView>();
+    const viewOf = (file: string): FileView => {
+        let view = views.get(file);
+        if (view !== undefined) return view;
+        const namespaces: string[][] = [];
+        const own: Usings = { namespaces: [], statics: [], aliases: new Map() };
+        for (const specifier of ctx.files.get(file)?.importSpecifiers ?? []){
+            if (specifier.startsWith("ns:")){
+                const parts = body(specifier).split(".");
+                for (let i = parts.length; i >= 1; i--) namespaces.push(parts.slice(0, i));
+            } else if (specifier.startsWith("using:")) own.namespaces.push(body(specifier));
+            else if (specifier.startsWith("static:")) own.statics.push(body(specifier));
+            else if (specifier.startsWith("alias:")){
+                const alias = aliasOf(body(specifier));
+                if (alias !== null && !own.aliases.has(alias[0])) own.aliases.set(alias[0], alias[1]);
+            }
+        }
+        // innermost first: deeper namespaces before their parents, then the global namespace
+        const enclosing = [...new Set(namespaces.sort((a, b) => b.length - a.length).map((p) => p.join(".")))];
+        enclosing.push("");
+        const project = projectOf(file);
+        const shared = projectUsings(project);
+        view = {
+            project, enclosing,
+            namespaces: [...own.namespaces, ...shared.namespaces],
+            statics: [...own.statics, ...shared.statics],
+            aliases: new Map([...shared.aliases, ...own.aliases]),   // the file's own alias wins over a project one
+        };
+        views.set(file, view);
+        return view;
+    };
+
+    /** The files declaring one full name in `index`: the importer's project's when several projects declare it. */
+    const filesFor = (index: Index, fullName: string, project: string): readonly string[] => {
+        const files = index.get(fullName) ?? [];
+        if (files.length < 2) return files;
+        const own = files.filter((f) => projectOf(f) === project);
+        return own.length > 0 && own.length < files.length ? own : files;
+    };
+    const union = (lists: readonly (readonly string[])[]): string[] => [...new Set(lists.flat())].sort(byPath);
+
+    /**
+     * The lookup's two passes (R5, amended by R23): with the arity as written, over the names as declared; then by name,
+     * over the names at any arity, for a full name written without type arguments only. `form` gives the full name a
+     * pass looks for, or null when that pass can't take it: in the second, a name, an alias's target or a using static's
+     * type written with type arguments, which C# binds only at their arity.
+     */
+    const PASSES: readonly { index: Index; form: (name: string) => string | null }[] = [
+        { index: exactFiles, form: (name) => name },
+        { index: nameFiles, form: (name) => (hasArity(name) ? null : name) },
+    ];
+
+    /**
+     * A (possibly dotted) name as C# looks it up from `view`, in one pass: enclosing namespaces, then an alias, then the
+     * usings. An alias never takes type arguments, so a name with an arity on its first segment never finds one.
+     */
+    const lookUpIn = ({ index, form }: (typeof PASSES)[number], view: FileView, written: string): readonly string[] => {
+        const name = form(written);
+        if (name === null) return [];
+        for (const outer of view.enclosing){
+            const fullName = join(outer, name);   // a namespace carries no arity
+            if (index.has(fullName)) return filesFor(index, fullName, view.project);
+        }
+        const dot = name.indexOf(".");
+        const first = dot === -1 ? name : name.slice(0, dot);
+        const target = view.aliases.get(first);
+        if (target !== undefined){
+            // the alias hides the usings, so a target this pass can't take ends the lookup
+            const fullName = form(dot === -1 ? target : `${target}${name.slice(dot)}`);
+            return fullName !== null && index.has(fullName) ? filesFor(index, fullName, view.project) : [];
+        }
+        const found: (readonly string[])[] = [];
+        for (const scope of [...view.namespaces, ...view.statics]){
+            const fullName = form(join(scope, name));
+            if (fullName !== null && index.has(fullName)) found.push(filesFor(index, fullName, view.project));
+        }
+        return union(found);
+    };
+
+    /**
+     * A name's files: those declaring it with its arity, when the whole lookup finds any (so a using's Box<T> beats an
+     * enclosing namespace's Box for `Box<int>`, as C# binds it); else, for a name written without type arguments, by
+     * name at any arity, as before the pass; else none.
+     */
+    const lookUp = (view: FileView, name: string): readonly string[] => {
+        const exact = lookUpIn(PASSES[0], view, name);
+        return exact.length > 0 ? exact : lookUpIn(PASSES[1], view, name);
+    };
+
+    /**
+     * A using static's type's files: as written, then under each enclosing namespace; its arity first, else by name when
+     * it's written without type arguments.
+     */
+    const staticFiles = (view: FileView, written: string): readonly string[] => {
+        for (const { index, form } of PASSES){
+            const name = form(written);
+            if (name === null) continue;
+            for (const outer of ["", ...view.enclosing]){
+                const fullName = join(outer, name);
+                if (index.has(fullName)) return filesFor(index, fullName, view.project);
+            }
+        }
+        return [];
+    };
+
+    /**
+     * An attribute [N] is looked up as N and as NAttribute (both specifiers are written); C# binds it to the one that
+     * exists, so the other one is only a lookup aid when its twin resolves. A generic attribute's arity stays at the end
+     * of both: Marker`1 and MarkerAttribute`1.
+     */
+    const twinResolves = (importer: string, specifier: string): boolean => {
+        const cls = specifier.slice(0, specifier.indexOf(":") + 1);
+        const [name, arity] = splitArity(body(specifier));
+        const twinName = name.endsWith("Attribute") ? name.slice(0, -"Attribute".length) : `${name}Attribute`;
+        const twin = `${cls}${twinName}${arity}`;
+        return (ctx.files.get(importer)?.importSpecifiers.includes(twin) ?? false) && resolve(importer, twin).length > 0;
+    };
+
+    const resolved = new Map<string, string[]>();
+    const resolve = (importer: string, specifier: string): string[] => {
+        const key = `${importer}\0${specifier}`;
+        const cached = resolved.get(key);
+        if (cached !== undefined) return cached;
+        let files: readonly string[];
+        const view = viewOf(importer);
+        const text = body(specifier);
+        if (specifier.startsWith("type:") || specifier.startsWith("qtype:")) files = lookUp(view, text);
+        else if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")) files = staticFiles(view, text);
+        else files = [];
+        const sorted = [...files].sort(byPath);
+        resolved.set(key, sorted);
+        return sorted;
+    };
+
+    return {
+        resolve,
+        kindOf(importer, specifier): ReferenceKind {
+            if (resolve(importer, specifier).length > 0) return "internal";
+            const written = body(specifier);
+            const text = withoutArity(written);   // by name, at any arity
+            if (specifier.startsWith("type:") || specifier.startsWith("qtype:")){
+                // type:N`n names a repo type only at its arity, as it resolves (R23); type:N, and a qualifier, at any arity
+                const named = specifier.startsWith("type:")
+                    ? (hasArity(written) ? declaredSimpleNames.has(written) : simpleNames.has(text))
+                    : viewOf(importer).enclosing.some((outer) => qualifiers.has(join(outer, text.slice(0, text.lastIndexOf(".")))));
+                if (!named) return "external";
+                return twinResolves(importer, specifier) ? "context" : "internal";
+            }
+            if (specifier.startsWith("static:") || specifier.startsWith("gstatic:")) return "external";
+            return "context";
+        },
+        entryPoints(){
+            const out: { path: string; declaredBy: string }[] = [];
+            for (const file of sortedFiles){
+                const declares = ctx.files.get(file)!.declares;
+                if (declares.includes("main:static")) out.push({ path: file, declaredBy: "static Main" });
+                else if (declares.includes("main:top-level")) out.push({ path: file, declaredBy: "top-level statements" });
+            }
+            return out;
+        },
+    };
+}

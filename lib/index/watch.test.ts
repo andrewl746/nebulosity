@@ -3,7 +3,10 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { makeTempDir } from "../../test/helpers/temp";
+import { toyRules } from "../../test/helpers/toy-adapter";
 import type { FSWatcher } from "chokidar";
+import { isManifestPath, RULES } from "./languages/rules";
+import { typescriptRules } from "./languages/typescript-rules";
 import { createBatcher, createFolderFilter, isWatchedFile, watchRepository } from "./watch";
 
 // the real chokidar, wrapped only to keep each watcher it makes, so a test can make one report an error
@@ -84,6 +87,30 @@ describe("isWatchedFile", () => {
         expect(isWatchedFile("packages/p/pnpm-workspace.yaml")).toBe(false);
         expect(isWatchedFile("packages/p/lerna.json")).toBe(false);
     });
+
+    it("reports every language's code files and manifests (ADR-065)", () => {
+        for (const rules of RULES){
+            for (const ext of rules.extensions) expect(isWatchedFile(`src/a${ext}`), `${rules.id} ${ext}`).toBe(true);
+        }
+        // names some language's rules may call a manifest: each one isManifestPath accepts is watched
+        const candidates = [
+            "package.json", "tsconfig.json", "go.mod", "go.work", "Cargo.toml", "pyproject.toml", "setup.cfg", "setup.py", "pyvenv.cfg",
+            "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "src/App/App.csproj", "Directory.Build.props",
+        ];
+        for (const name of candidates) for (const rel of [name, `sub/dir/${name}`]){
+            if (isManifestPath(rel)) expect(isWatchedFile(rel), rel).toBe(true);
+        }
+    });
+
+    it("reports a test language's code files and manifests when given its rules", () => {
+        const rules = [typescriptRules, toyRules];
+        expect(isWatchedFile("lib/a.toy", rules)).toBe(true);
+        expect(isWatchedFile("pkg/toy.json", rules)).toBe(true);
+        expect(isWatchedFile("setup.toy", rules)).toBe(true);
+        expect(isWatchedFile("lib/a.toy")).toBe(false);   // no registry language claims .toy
+        expect(isWatchedFile("src/a.ts", rules)).toBe(true);
+        expect(isWatchedFile("package.json", rules)).toBe(true);
+    });
 });
 
 /** A git repo in the temp folder whose .gitignore leaves out the top-level out/ and .build/, and every dist/. */
@@ -117,6 +144,20 @@ describe("createFolderFilter", () => {
     });
 });
 
+/**
+ * Writes, then waits for what the test expects, writing again every half second until the watcher has reported anything
+ * at all. On macOS, FSEvents can lose what's written in the moment after chokidar says it's ready: CI's macOS runs lost
+ * a whole first write, in a different test each time. So the first report, not a fixed wait, says the watcher is live.
+ * Writing a file again is harmless here, since every test checks which paths were reported, not how often.
+ */
+async function writeUntilReported(write: () => void, batches: string[][], expected: () => void): Promise<void> {
+    write();
+    await vi.waitFor(() => {
+        if (batches.length === 0) write();
+        expected();
+    }, { timeout: 10_000, interval: 500 });
+}
+
 describe("watchRepository", () => {
     it("reports a new source file, and nothing from node_modules or non-source files", { timeout: 20_000 }, async () => {
         const root = makeTempDir("neb-watch-");
@@ -127,10 +168,11 @@ describe("watchRepository", () => {
 
         try{
             await watcher.ready;
-            fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
-            fs.writeFileSync(path.join(root, "node_modules", "x", "b.ts"), "export const b = 1;\n");
-            fs.writeFileSync(path.join(root, "README.md"), "# hi\n");
-            await vi.waitFor(() => expect(batches.flat()).toContain("src/a.ts"), { timeout: 10_000, interval: 50 });
+            await writeUntilReported(() => {
+                fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
+                fs.writeFileSync(path.join(root, "node_modules", "x", "b.ts"), "export const b = 1;\n");
+                fs.writeFileSync(path.join(root, "README.md"), "# hi\n");
+            }, batches, () => expect(batches.flat()).toContain("src/a.ts"));
             expect(batches.flat().filter((p) => p !== "src/a.ts")).toEqual([]);
         } finally{
             await watcher.close();
@@ -151,8 +193,8 @@ describe("watchRepository", () => {
             expect(() => chokidarWatchers.at(-1)!.emit("error", failure)).not.toThrow();
             expect(errors).toEqual([failure]);
 
-            fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
-            await vi.waitFor(() => expect(batches.flat()).toContain("src/a.ts"), { timeout: 10_000, interval: 50 });
+            await writeUntilReported(() => fs.writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n"), batches,
+                () => expect(batches.flat()).toContain("src/a.ts"));
         } finally{
             await watcher.close();
         }
@@ -166,11 +208,12 @@ describe("watchRepository", () => {
 
         try{
             await watcher.ready;
-            for (const rel of ["out/b.ts", ".build/c.ts", "packages/p/dist/e.ts", "build/d.ts", "src/a.ts"]){
-                fs.writeFileSync(path.join(root, rel), "export const x = 1;\n");
-            }
-            await vi.waitFor(() => expect(batches.flat()).toEqual(expect.arrayContaining(["build/d.ts", "src/a.ts"])), { timeout: 10_000, interval: 50 });
-            expect(batches.flat().sort()).toEqual(["build/d.ts", "src/a.ts"]);
+            await writeUntilReported(() => {
+                for (const rel of ["out/b.ts", ".build/c.ts", "packages/p/dist/e.ts", "build/d.ts", "src/a.ts"]){
+                    fs.writeFileSync(path.join(root, rel), "export const x = 1;\n");
+                }
+            }, batches, () => expect(batches.flat()).toEqual(expect.arrayContaining(["build/d.ts", "src/a.ts"])));
+            expect([...new Set(batches.flat())].sort()).toEqual(["build/d.ts", "src/a.ts"]);
         } finally{
             await watcher.close();
         }

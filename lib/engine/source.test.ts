@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 import { copyFixture } from "../../test/helpers/fixture";
+import { pythonAdapter } from "../index/languages/python";
+import { prepareLanguages } from "../index/languages/registry";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
 import { PathNotFoundError } from "./level";
@@ -16,6 +18,14 @@ describe("readSource (owner review: view a file's source on the Map)", () => {
         expect(source).toMatchObject({ repo: repoKey(root), path: "src/core/log.ts", lineCount: 9, truncated: false, language: "typescript" });
         expect(source.content.split(/\r?\n/)[0]).toBe("/** Writes a message. */");
         expect(source.content).toContain("export class Logger {");
+    });
+
+    it("names an E4 language's file by the rules that read it (C10): a .py file is python", async () => {
+        await prepareLanguages([pythonAdapter]);
+        const root = copyFixture();
+        fs.writeFileSync(path.join(root, "scripts.py"), "import os\n\nprint(os.getcwd())\n");
+        indexRepository(root);
+        expect(readSource(root, "scripts.py")).toMatchObject({ path: "scripts.py", lineCount: 3, truncated: false, language: "python" });
     });
 
     it("cuts a file past the size limit and says so", () => {

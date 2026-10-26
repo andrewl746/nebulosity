@@ -3,6 +3,7 @@ import { getDb, type Db } from "../db/client";
 import { loadFileInfo, loadFolderInfo } from "../db/store/map";
 import { loadImportEdgesFrom, requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
+import { rulesFor } from "../index/languages/rules";
 import { repoKey } from "../index/paths";
 import { BadInputError } from "./errors";
 import { importGraphFor, rangeOf, type ImportGraph, type TargetKind } from "./graph";
@@ -36,7 +37,10 @@ export type ChainAnswer = {
     found: "forward" | "reverse" | "none";
     /** The chain in import order, importer first; empty when none. */
     files: string[];
-    /** specifiers[i] is how files[i] imports files[i + 1], as written in its source. */
+    /**
+     * specifiers[i] is how files[i] imports files[i + 1], as written in its source: its language's displaySpecifier
+     * (`use shop_core::model::Order` for Rust, `from . import c` for Python), or TypeScript's module path as it is.
+     */
     specifiers: string[];
 };
 
@@ -216,12 +220,21 @@ export function importChain(repoRoot: string, fromPath: string, toPath: string):
     });
 }
 
-/** How each file of a chain imports the next, as written in its source. */
+/**
+ * How each file of a chain imports the next, as written in its source. An edge stores the specifier in its language's
+ * own syntax (`use:|shop_core::model::Order`), so the importer's language shows it as its source writes it (B-I3);
+ * TypeScript's needs nothing, its specifier is the module path as written.
+ */
 export function specifiersAlong(db: Db, repoId: number, files: readonly string[]): string[] {
     const specifiers: string[] = [];
     for (let i = 0; i + 1 < files.length; i++){
         const edge = loadImportEdgesFrom(db, repoId, [files[i]]).find((e) => e.target === files[i + 1]);
-        specifiers.push(edge?.specifier ?? "");
+        specifiers.push(edge === undefined ? "" : asWritten(files[i], edge.specifier));
     }
     return specifiers;
+}
+
+/** A stored specifier as its importer's language writes it (the pure rules: no parser loaded). */
+export function asWritten(importer: string, specifier: string): string {
+    return rulesFor(importer)?.displaySpecifier?.(specifier) ?? specifier;
 }

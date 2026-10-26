@@ -2,19 +2,21 @@ import path from "path";
 import { getDb } from "../db/client";
 import { IndexLockedError } from "../db/store/lock";
 import { findRepository } from "../db/store/structure";
-import { countStaleFolders, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
+import { approvedBudgetUsd, countStaleFolders, loadSummaries, summariesConfirmed, targetKey, type StoredSummary } from "../db/store/summaries";
 import { NoActiveRepoError, RepoSwitchingError, SummariesNotConfirmedError, SummariesOffError } from "../engine/errors";
 import { commandHint } from "../hints";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository, type IndexOptions, type IndexResult } from "../index/pipeline";
-import { runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
+import { configuredSummaryModels, SummaryModelsError, type SummaryModelsResolution } from "../index/summarize/models";
+import { DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
 import type { PlannedTarget } from "../index/summarize/plan";
+import { snapshotOf } from "../index/summarize/pricing";
 import { refreshSummaryStatus } from "../index/summarize/status";
 import type { Summarizer } from "../index/summarize/types";
 import { applyFileChanges } from "../index/update";
 import { watchRepository, type RepoWatcher } from "../index/watch";
-import type { Workspace } from "../index/workspace";
+import type { ResolutionState } from "../index/languages/resolution";
 
 /** More changed paths than this at once (a branch switch, a big pull), and one full run is cheaper than an update. */
 export const MAX_INCREMENTAL_PATHS = 500;
@@ -32,7 +34,8 @@ export const EMBED_SLICE = 64;
 /**
  * Each refresh or sweep may spend at most this, counting only its own requests (ADR-035, amended). At VS Code's
  * measured means 50 Haiku files cost about $0.03 direct and 20 Sonnet folders $0.11–0.16, so it only stops a run that
- * has gone wrong. The CLI's $15 cap is cumulative, and VS Code's first pass already spent $10.30 of it.
+ * has gone wrong. Beside it, no job takes the repo's cumulative spend past the budget of the last yes (R24): the CLI's
+ * $15 unless that yes was given with another --budget, so after VS Code's $10.30 first pass about $4.70 remains.
  */
 export const INCREMENTAL_BUDGET_USD = 1;
 
@@ -60,6 +63,11 @@ export type BackgroundDeps = {
     watch?: (repoRoot: string, onChanges: (paths: string[]) => void) => RepoWatcher;
     /** The embedding model; tests pass a fake. */
     embed?: EmbedFn;
+    /**
+     * The summary models setting (ADR-066), read at each job, so a changed setting applies to the next job without a
+     * restart. Default: summaryModels in config.json, through readConfig. Tests pass their own.
+     */
+    summaryModels?: () => SummaryModelsResolution;
     log?: (message: string) => void;
     timings?: Partial<ServiceTimings>;
 };
@@ -91,6 +99,9 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     const watchFn = deps.watch ?? ((repoRoot: string, onChanges: (paths: string[]) => void) =>
         watchRepository(repoRoot, onChanges, { onError: (err) => log(`the file watcher reported an error and goes on: ${err.message}`) }));
     const summarizerAvailable = deps.summarizer !== null;
+    const settingNow = deps.summaryModels ?? configuredSummaryModels;
+    /** The summaries stage after a change, planned with the setting as this job read it (a broken one leaves it as it was). */
+    const refreshStatus = (repo: string, models: SummaryModelsResolution = settingNow()) => refreshSummaryStatus(repo, { summarizerAvailable, models });
 
     let root: string | null = null;
     let watcher: RepoWatcher | null = null;
@@ -101,8 +112,11 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     const pendingUpdate = new Set<string>();
     const pendingRefresh = new Set<string>();
     let embedQueued = false;
-    /** The workspace the last update resolved with (ADR-053, amended): kept until a full run or a repo switch, since a full run may have seen a new manifest. */
-    let workspace: Workspace | undefined;
+    /**
+     * What the last update resolved with (ADR-053 amended, ADR-065): the manifests and the adapters' cache (TypeScript's
+     * workspace). Kept until a full run or a repo switch, since a full run may have seen a new manifest.
+     */
+    let resolution: ResolutionState | undefined;
     /** Files refreshed automatically in the last AUTO_REFRESH_WINDOW_MS: each refresh's count leaves it when its window ends. */
     let refreshedInWindow = 0;
     const lanes: Record<Lane, Promise<unknown>> = { structure: Promise.resolve(), maintenance: Promise.resolve() };
@@ -145,17 +159,17 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         try{
             if (paths.length > MAX_INCREMENTAL_PATHS || paths.some((p) => p === ".gitignore" || p.endsWith("/.gitignore"))){
                 log(`re-indexing the whole repo (${paths.length} paths changed)`);
-                workspace = undefined;
+                resolution = undefined;
                 indexRepository(repo);
                 // too many to refresh one by one: they stay out of date until opened, swept, or npm run summarize
             } else{
-                const result = applyFileChanges(repo, paths, { workspace });
-                workspace = result.workspace;
+                const result = applyFileChanges(repo, paths, { resolution });
+                resolution = result.resolution;
                 log(`updated ${result.changed.length} changed and ${result.deleted.length} deleted files in ${Math.round(result.totalMs)} ms`);
                 if (deps.summarizer !== null && mayRefresh(repo)) armSummaryTimers(result.changed);
                 for (const p of result.deleted) cancelSummaryTimer(p);
             }
-            refreshSummaryStatus(repo, { summarizerAvailable });
+            refreshStatus(repo);
         } catch (err){
             if (!(err instanceof IndexLockedError)) throw err;
             log(`another index run holds the lock; trying again in ${timings.retryLockedMs / 1000} s`);
@@ -172,6 +186,36 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         const db = getDb();
         const repoId = findRepository(db, repoKey(repo));
         return repoId !== null && summariesConfirmed(db, repoId);
+    }
+
+    /**
+     * What the repo's summaries may have cost in all once an automatic job is done (R24): the budget of the last yes
+     * `nebulosity summarize` recorded, else the CLI's default. Past it the jobs send nothing, and the stage's note says
+     * how to approve more; after a model change that keeps the sweep from finishing, unasked, a cascade of folder
+     * re-summaries a capped or --no-wait run left over.
+     */
+    function approvedBudget(repo: string): number {
+        const db = getDb();
+        const repoId = findRepository(db, repoKey(repo));
+        return (repoId === null ? null : approvedBudgetUsd(db, repoId)) ?? DEFAULT_BUDGET_USD;
+    }
+
+    /**
+     * What an automatic job (a refresh after a save, the sweep) may send without asking (ADR-066, R17): a target whose
+     * stored text the model now in use for its kind wrote (so it's out of date only because its inputs changed), or one
+     * no model has written yet. Text another model wrote waits for `nebulosity summarize`'s estimate and yes, "Summarize
+     * now", or a panel being opened: redoing it is a model change, and only a yes pays for that. A dated snapshot the API
+     * reported (`<model>-20261001`) counts as its model, and nothing else does: claude-sonnet-5-5 isn't claude-sonnet-5
+     * (snapshotOf). Read once per job, from the rows as the job starts.
+     */
+    function sentUnasked(repo: string): (target: PlannedTarget) => boolean {
+        const db = getDb();
+        const repoId = findRepository(db, repoKey(repo));
+        const writtenBy = new Map(repoId === null ? [] : loadSummaries(db, repoId).map((s) => [targetKey(s.kind, s.path), s.model]));
+        return (target) => {
+            const model = writtenBy.get(targetKey(target.kind, target.path));
+            return !model || model === "template" || model === target.model || snapshotOf(model) === target.model;
+        };
     }
 
     /**
@@ -213,6 +257,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
      * MAX_AUTO_REFRESH_FILES per AUTO_REFRESH_WINDOW_MS, through the regular API, under a cap on this refresh's own spend
      * (INCREMENTAL_BUDGET_USD).
      * Their folders turn stale and wait to be opened or swept, so a pull can't set off hundreds of Sonnet calls.
+     * Only files the model now in use wrote, or that no model has written, go (sentUnasked).
      */
     async function runRefresh(): Promise<void> {
         const repo = root;
@@ -224,26 +269,34 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             log(`${paths.length} changed files keep their old summaries: ${MAX_AUTO_REFRESH_FILES} were refreshed in the last ${AUTO_REFRESH_WINDOW_MS / 60_000} minutes; they're redone when opened, or by ${commandHint("summarize", `"${repo}"`)}`);
             return;
         }
+        const models = settingNow();
+        if (!models.ok){
+            log(`summaries: ${paths.length} changed files keep their old summaries until the setting is fixed: ${models.error}`);
+            return;
+        }
 
         const wanted = new Set(paths.map((p) => targetKey("file", p)));
+        const unasked = sentUnasked(repo);
         // The content whose quiet minute is up: each file's input hash as this run first plans it. A file saved again
         // mid-refresh (structure updates don't wait for refreshes) plans with a new hash and isn't sent again here: its
         // update restarted its own minute. Otherwise every save during a wave would be paid for at once.
         const dueHash = new Map<string, string>();
         const isDue = (target: PlannedTarget): boolean => {
             const key = targetKey(target.kind, target.path);
-            if (!wanted.has(key)) return false;
+            if (!wanted.has(key) || !unasked(target)) return false;
             if (!dueHash.has(key)) dueHash.set(key, target.inputHash);
             return dueHash.get(key) === target.inputHash;
         };
         try{
             const result = await runSummaries(repo, {
                 summarizer: deps.summarizer,
+                models,
                 transport: "direct",
                 refreshStaleFolders: false,
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
+                repoBudgetUsd: approvedBudget(repo),
                 select: isDue,
                 maxTargets: allowance,
                 onProgress: (message) => log(`summaries: ${message}`),
@@ -262,28 +315,40 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         }
     }
 
-    /** Out-of-date folders whose children are settled, deepest first, at most SWEEP_MAX_FOLDERS (PIVOT_SPEC.md §5.6). */
+    /**
+     * Out-of-date folders whose children are settled, deepest first, at most SWEEP_MAX_FOLDERS (PIVOT_SPEC.md §5.6): only
+     * those the model now in use wrote, or that no model has written (sentUnasked). After a folder or repo model change
+     * the rest wait for a yes, instead of being redone 20 every 10 minutes with no estimate (R17).
+     */
     async function runSweep(): Promise<void> {
         const repo = root;
         if (repo === null || deps.summarizer === null || !mayRefresh(repo)) return;
         const db = getDb();
         const repoId = findRepository(db, repoKey(repo));
         if (repoId === null || countStaleFolders(db, repoId) === 0) return;
+        const models = settingNow();
+        if (!models.ok){
+            log(`sweep: out-of-date folders wait until the setting is fixed: ${models.error}`);
+            return;
+        }
 
+        const unasked = sentUnasked(repo);
         try{
             const result = await runSummaries(repo, {
                 summarizer: deps.summarizer,
+                models,
                 transport: "direct",
                 refreshStaleFolders: true,
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
-                select: (target) => target.kind !== "file",
+                repoBudgetUsd: approvedBudget(repo),
+                select: (target) => target.kind !== "file" && unasked(target),
                 maxTargets: SWEEP_MAX_FOLDERS,
                 onProgress: (message) => log(`sweep: ${message}`),
             });
             // the run planned with stale folders as work; between runs they read as lazy again (ADR-032)
-            refreshSummaryStatus(repo, { summarizerAvailable });
+            refreshStatus(repo, models);
             if (result.summarized > 0) queueEmbed();
         } catch (err){
             if (!(err instanceof IndexLockedError) && !(err instanceof StructureNotReadyError)) throw err;
@@ -317,7 +382,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         refreshedInWindow = 0;   // its timers just went with retryTimers: another repo starts a fresh window
         pendingUpdate.clear();
         pendingRefresh.clear();
-        workspace = undefined;
+        resolution = undefined;
         const current = watcher;
         watcher = null;
         await current?.close();
@@ -356,14 +421,14 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
 
         // the startup check (PIVOT_SPEC.md §5.6): one warm full run catches what changed while nothing watched
         await serial("structure", () => {
-            workspace = undefined;
+            resolution = undefined;
             try{
                 indexRepository(repo);
             } catch (err){
                 if (!(err instanceof IndexLockedError)) throw err;
                 log("another index run holds the lock; watching without the startup check");
             }
-            refreshSummaryStatus(repo, { summarizerAvailable });
+            refreshStatus(repo);
         });
         if (root !== repo) return;   // switched again meanwhile
 
@@ -396,7 +461,10 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             const repo = rootFor(expectedRoot);
             // the Map asks on opening a panel; on a repo nobody said yes for, that would spend unasked (S11)
             if (!mayRefresh(repo)) throw new SummariesNotConfirmedError(repo);
-            const row = await summarizeNow(repo, targetPath, deps.summarizer);
+            // read now, so a setting changed while the Map is open applies to this click (ADR-066)
+            const models = settingNow();
+            if (!models.ok) throw new SummaryModelsError(models.error);
+            const row = await summarizeNow(repo, targetPath, deps.summarizer, models);
             queueEmbed();
             return row;
         },
@@ -409,9 +477,9 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 return Promise.reject(err);
             }
             return serial("structure", () => {
-                workspace = undefined;
+                resolution = undefined;
                 const result = indexRepository(repo, { onProgress });
-                refreshSummaryStatus(repo, { summarizerAvailable });
+                refreshStatus(repo);
                 return result;
             });
         },

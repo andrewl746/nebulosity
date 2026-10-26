@@ -1,10 +1,13 @@
 import path from "path";
 import { getDb, type Db } from "../db/client";
-import { loadCallBindings, loadCallsOf, loadInjectionSites, loadTypeDecls, type StoredBinding, type StoredCall, type StoredTypeDecl } from "../db/store/calls";
+import {
+    loadCallBindings, loadCallsOf, loadInjectionSites, loadTypeDecls, loadTypeSymbolPaths, type StoredBinding, type StoredCall, type StoredTypeDecl,
+} from "../db/store/calls";
 import { loadFolderInfo } from "../db/store/map";
 import { loadImportEdges, requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
 import type { CallRule } from "../db/schema";
+import { rulesFor } from "../index/languages/rules";
 import { repoKey } from "../index/paths";
 import { BadInputError } from "./errors";
 import { importGraphFor, type ImportGraph } from "./graph";
@@ -269,6 +272,54 @@ export type AmbiguousAnswer = { kind: "ambiguous"; name: string; candidates: { k
 export type CallsAnswer = MemberAnswer | TypeAnswer | AmbiguousAnswer;
 
 const SYMBOL = /^([A-Za-z_$][\w$]*)(?:\.(#?[A-Za-z_$][\w$]*))?$/;
+
+/**
+ * How a refusal names a language the index reads but the calls index doesn't (E4, C4: calls stays TypeScript and
+ * JavaScript), by files.language. One row per merged language; a test holds every language the rules claim to a row.
+ */
+export const CALLS_LANGUAGE_NAMES: Readonly<Record<string, string>> = {
+    python: "Python",
+    go: "Go",
+    java: "Java",
+    csharp: "C#",
+    rust: "Rust",
+};
+
+/** A file's language, named for a refusal, when calls doesn't read it; null for TypeScript, JavaScript or a path no language claims. */
+function otherLanguageName(filePath: string): string | null {
+    const rules = rulesFor(filePath);
+    if (rules === null || rules.id === "typescript") return null;
+    const language = rules.languageOf(filePath);
+    return CALLS_LANGUAGE_NAMES[language] ?? language;
+}
+
+const NOT_READ = "Calls are indexed for TypeScript and JavaScript only;";
+
+/** The refusal for a `path` in a language calls doesn't read, or null for TypeScript, JavaScript or a path no language claims. */
+function otherLanguage(filePath: string): string | null {
+    const language = otherLanguageName(filePath);
+    return language === null ? null : `${NOT_READ} ${filePath} is ${language}.`;
+}
+
+/** How many files the refusal below names before it counts the rest. */
+const MAX_NAMED = 5;
+
+/**
+ * The refusal for a name without a `path` that the calls index doesn't hold but another language's file declares as a
+ * type (the E4 final review's A-I3), or null. Without it, on a Java or Python repo, calls said "No class or interface
+ * named X is indexed" for a class whose symbols are indexed, and an agent could take it to mean the type doesn't exist.
+ * The same sentence as a `path` in that language, for each file declaring it, by path.
+ */
+function declaredInOtherLanguage(db: Db, repoId: number, name: string): string | null {
+    const named = loadTypeSymbolPaths(db, repoId, name).flatMap((p) => {
+        const language = otherLanguageName(p);
+        return language === null ? [] : [`${p} is ${language}`];
+    });
+    if (named.length === 0) return null;
+    const rest = named.length > MAX_NAMED ? `, and ${named.length - MAX_NAMED} more` : "";
+    return `${NOT_READ} ${named.slice(0, MAX_NAMED).join(", ")}${rest}.`;
+}
+
 const HOW_WORDS: Partial<Record<CallRule, string>> = { "ctor-param": "constructor", "inject-field": "@inject field", provider: "accessor or hook" };
 
 /** Who calls a type's member, or where a type is injected, with its implementations (ADR-059). */
@@ -276,6 +327,9 @@ export function calls(repoRoot: string, query: { symbol: string; path?: string }
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     return db.transaction(() => {
+        // before the symbol: a file in another language has no calls to find, whatever the name
+        const elsewhere = query.path === undefined ? null : otherLanguage(query.path);
+        if (elsewhere !== null) throw new BadInputError(elsewhere);
         const parsed = SYMBOL.exec(query.symbol.trim());
         if (parsed === null) throw new BadInputError('symbol takes a class or interface ("IFooService") or one of its members ("IFooService.save").');
         const [, name, member] = parsed;
@@ -291,9 +345,9 @@ export function calls(repoRoot: string, query: { symbol: string; path?: string }
         const index = callIndexFor(db, repoId, readIndexVersion(db, repoId));
         const candidates = (index.byName.get(name) ?? []).filter((k) => query.path === undefined || index.types.get(k)!.file === query.path);
         if (candidates.length === 0){
-            throw new BadInputError(query.path === undefined
-                ? `No class or interface named ${name} is indexed. calls finds a type by its declared name; a type alias, an enum or a type from outside the repo has none.`
-                : `${query.path} declares no class or interface named ${name}.`);
+            if (query.path !== undefined) throw new BadInputError(`${query.path} declares no class or interface named ${name}.`);
+            throw new BadInputError(declaredInOtherLanguage(db, repoId, name)
+                ?? `No class or interface named ${name} is indexed. calls finds a type by its declared name; a type alias, an enum or a type from outside the repo has none.`);
         }
         if (candidates.length > 1){
             const found = candidates.map((k) => index.types.get(k)!).map((t) => ({ kind: t.kind, path: t.file, line: t.line }));

@@ -3,7 +3,8 @@
 # the tarball into a scratch prefix and uses the installed copy: --version, doctor, two fixtures indexed, an MCP session
 # through the installed launcher (scripts/mcp-smoke.mjs, which turns live events off), and the Map on port 3123 with its
 # worker off. Then, on a temp copy of arch-repo: setup against a real Claude Code (installed with no key; only its mcp
-# commands run), the installed Map's background worker picking up a saved file (port 3124), and summarize's refusals
+# commands run), setup --json's block registered with claude mcp add-json, the installed Map's background worker picking
+# up a saved file (port 3124), and summarize's refusals
 # without a key and without a terminal. Last, the VS Code extension: its check, its build, and its integration tests in a
 # downloaded VS Code against the installed Map on port 3125, which must stop when VS Code closes. Everything the installed
 # copy writes goes to a scratch data folder (NEBULOSITY_DATA).
@@ -178,16 +179,70 @@ jobs:
           "$BIN/nebulosity" setup || { echo "nebulosity setup failed"; failed=yes; }
           got=$(claude mcp get nebulosity) || { echo "claude mcp get nebulosity failed"; failed=yes; }
           echo "$got"
-          # the registration as Claude Code holds it: this repo's local scope, node and the installed launcher, the data
-          # folder an installed copy always passes, and the health check's answer (the server started and listed its tools)
-          for want in "Scope: Local config" "Command: node" "Args: $LAUNCHER" "NEBULOSITY_DATA=$NEBULOSITY_DATA" "Connected"; do
+          # the registration as Claude Code holds it: this repo's local scope, node and the installed launcher, and the data
+          # folder an installed copy always passes
+          for want in "Scope: Local config" "Command: node" "Args: $LAUNCHER" "NEBULOSITY_DATA=$NEBULOSITY_DATA"; do
             grep -qF -- "$want" <<< "$got" || { echo "claude mcp get doesn't show: $want"; failed=yes; }
           done
+          # and the health check's answer: the server started and listed its tools. The tick may print as √ on Windows; a
+          # status starting "!" ("! Connected · tools fetch failed", "! Needs authentication") or a cross isn't connected
+          tr -d '\r' <<< "$got" | grep -E -- '^  Status: [^ !]+ Connected$' > /dev/null || { echo "claude mcp get doesn't show the server connected"; failed=yes; }
           printed=$("$BIN/nebulosity" setup --print) || { echo "nebulosity setup --print failed"; failed=yes; }
           echo "$printed"
           # a registration exists now, so --print gives the remove line before the add line
           grep -qF -- "  claude mcp remove --scope local nebulosity" <<< "$printed" || { echo "setup --print has no remove line"; failed=yes; }
           grep -qF -- "  $ADD" <<< "$printed" || { echo "setup --print doesn't print: $ADD"; failed=yes; }
+          after=$(find . | sort)
+          if [ "$before" != "$after" ]; then
+            echo "the repo gained or lost a file:"; diff <(echo "$before") <(echo "$after") || true; failed=yes
+          fi
+          test -z "$failed"
+      # The same registration as a plain mcpServers block (ADR-048, amended 2026-10-25): setup --json prints it, and Claude
+      # Code's own add-json registers the block's "nebulosity" object under a second name, nebulosity-json, which has to
+      # connect with setup's command, launcher and data folder. It's removed at the end of the step whatever happened, and
+      # checked gone.
+      - name: nebulosity setup --json with the real Claude Code
+        if: ${{ !cancelled() && steps.claude.outcome == 'success' && steps.copy.outcome == 'success' }}
+        timeout-minutes: 5
+        env:
+          DISABLE_AUTOUPDATER: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+          # Git Bash on Windows rewrites a Windows program's arguments that look like POSIX paths: the JSON goes as it is
+          MSYS_NO_PATHCONV: "1"
+        run: |
+          export NEBULOSITY_DATA="$SCRATCH/nebulosity-data"
+          LAUNCHER="$PKG/mcp/launch.mjs"
+          cd "$COPY"
+          before=$(find . | sort)
+          failed=""
+          added=""
+          # stdout has to be the block and nothing else: node parses all of it, then prints its "nebulosity" object on one line
+          server=$("$BIN/nebulosity" setup --json | node -e "const block = JSON.parse(require('fs').readFileSync(0, 'utf8')); const server = block.mcpServers && block.mcpServers.nebulosity; if (!server) { console.error('the block has no mcpServers.nebulosity'); process.exit(1); } process.stdout.write(JSON.stringify(server));") || { echo "nebulosity setup --json didn't print an mcpServers block"; failed=yes; }
+          echo "$server"
+          if [ -n "$server" ]; then
+            # one bash word in double quotes, so the JSON's own quotes reach claude unchanged. On Windows, bash runs npm's sh
+            # shim, which execs claude.exe with the arguments as given: no cmd.exe in between, so nothing more to quote
+            claude mcp add-json nebulosity-json "$server" --scope local && added=yes || { echo "claude mcp add-json failed"; failed=yes; }
+          fi
+          if [ -n "$added" ]; then
+            list=$(claude mcp list) || { echo "claude mcp list failed"; failed=yes; }
+            echo "$list"
+            # its row is "nebulosity-json: node <launcher> - <tick> Connected"; a status starting "!" ("! Connected · tools
+            # fetch failed") or a cross isn't connected. Read as one line, so a row wrapped at the terminal's width matches
+            flat=$(tr -s '\r\n' '  ' <<< "$list")
+            grep -qE -- 'nebulosity-json: node [^ ]+ - [^ !]+ Connected( |$)' <<< "$flat" || { echo "claude mcp list doesn't show nebulosity-json connected"; failed=yes; }
+            # what Claude Code holds for it is setup's registration, checked as the step above checks setup's own
+            got=$(claude mcp get nebulosity-json) || { echo "claude mcp get nebulosity-json failed"; failed=yes; }
+            echo "$got"
+            for want in "Scope: Local config" "Type: stdio" "Command: node" "Args: $LAUNCHER" "NEBULOSITY_DATA=$NEBULOSITY_DATA"; do
+              grep -qF -- "$want" <<< "$got" || { echo "claude mcp get nebulosity-json doesn't show: $want"; failed=yes; }
+            done
+            claude mcp remove nebulosity-json --scope local || { echo "claude mcp remove nebulosity-json failed"; failed=yes; }
+          fi
+          # an add that failed may still have written the entry: removed quietly here too, then checked gone either way
+          [ -n "$added" ] || claude mcp remove nebulosity-json --scope local > /dev/null 2>&1 || true
+          left=$(claude mcp get nebulosity-json 2>&1 || true)
+          if grep -qF "Command: node" <<< "$left"; then echo "nebulosity-json is still registered"; failed=yes; fi
           after=$(find . | sort)
           if [ "$before" != "$after" ]; then
             echo "the repo gained or lost a file:"; diff <(echo "$before") <(echo "$after") || true; failed=yes

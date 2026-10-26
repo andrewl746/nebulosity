@@ -26,6 +26,7 @@ export function toIndexDone(result: IndexResult): IndexEventMap["done"] {
         folders: result.folders,
         levelEdges: result.levelEdges,
         errors: result.errors,
+        scanned: result.scanned,   // a parse that threw, read by the scan: indexed, imports only (B-I1)
         skipped: result.skipped.length,
         totalMs: Math.round(result.totalMs),
     };

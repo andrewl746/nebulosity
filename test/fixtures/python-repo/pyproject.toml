@@ -1,0 +1,20 @@
+[project]
+name = "shop"
+version = "1.0.0"
+dependencies = ["requests"]
+
+[project.scripts]
+shop = "shop.cli:main"
+ghost = "shop.ghost:main"
+
+[project.gui-scripts]
+shop-gui = "shop.gui:run"
+
+[project.entry-points."shop.plugins"]
+fancy = "shop.plugins.fancy:FancyPlugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]

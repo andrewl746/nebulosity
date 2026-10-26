@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { execFileSync } from "child_process";
 import { and, eq } from "drizzle-orm";
 import fs from "fs";
@@ -6,14 +6,20 @@ import path from "path";
 import { ARCH_FIXTURE, copyFixture, DI_FIXTURE } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
+import { toyAdapter } from "../../test/helpers/toy-adapter";
 import { getDb } from "../db/client";
 import { chunks, files, folders, levelEdges, symbols } from "../db/schema";
 import { loadCallsOf } from "../db/store/calls";
 import { loadEntryPoints } from "../db/store/entries";
 import { acquireIndexLock, IndexLockedError, releaseIndexLock } from "../db/store/lock";
+import { readStages } from "../db/store/stages";
 import { loadImportEdges } from "../db/store/structure";
 import { loadFileFacts, loadFolderFacts, loadSummaries } from "../db/store/summaries";
 import { readIndexVersion } from "../db/store/version";
+import type { LanguageAdapter } from "./languages/adapter";
+import type { ResolutionState } from "./languages/resolution";
+import { GrammarNotLoadedError } from "./languages/treesitter";
+import { typescriptAdapter } from "./languages/typescript-adapter";
 import { indexRepository } from "./pipeline";
 import { runSummaries } from "./summarize/run";
 import { applyFileChanges, resolvesEverything } from "./update";
@@ -294,19 +300,22 @@ describe("what re-resolves every file, and the workspace on every update (ADR-05
     });
 });
 
-describe("the workspace kept between updates (ADR-053, amended)", () => {
+describe("the resolution state kept between updates (ADR-053 amended, ADR-065)", () => {
     const FILE = "src/platform/node/storageFile.ts";
+    const workspaceOf = (r: { resolution: ResolutionState }) => r.resolution.cache.get("typescript:workspace");
 
-    it("reuses the workspace it is given when nothing re-resolves", () => {
+    it("reuses the state it is given when nothing re-resolves: the same cache, the same workspace", () => {
         const root = copyFixture(ARCH_FIXTURE);
         const { repoId } = indexRepository(root);
         fs.appendFileSync(path.join(root, FILE), "// one\n");
         const first = applyFileChanges(root, [FILE]);
         fs.appendFileSync(path.join(root, FILE), "// two\n");
-        const second = applyFileChanges(root, [FILE], { workspace: first.workspace });
+        const second = applyFileChanges(root, [FILE], { resolution: first.resolution });
 
         expect(second.changed).toEqual([FILE]);
-        expect(second.workspace).toBe(first.workspace);
+        expect(second.resolution).toBe(first.resolution);
+        expect(workspaceOf(second)).toBeDefined();
+        expect(workspaceOf(second)).toBe(workspaceOf(first));
         expect(tables(repoId).imports).toContain(`${FILE} -> packages/core/src/index.ts (@arch/core)`);
     });
 
@@ -315,9 +324,10 @@ describe("the workspace kept between updates (ADR-053, amended)", () => {
         indexRepository(root);
         fs.appendFileSync(path.join(root, FILE), "// one\n");
         const first = applyFileChanges(root, [FILE]);
-        const second = applyFileChanges(root, ["packages/core/package.json"], { workspace: first.workspace });
+        const second = applyFileChanges(root, ["packages/core/package.json"], { resolution: first.resolution });
         expect(second.resolvedAll).toBe(true);
-        expect(second.workspace).not.toBe(first.workspace);
+        expect(second.resolution.cache).not.toBe(first.resolution.cache);
+        expect(workspaceOf(second)).not.toBe(workspaceOf(first));
     });
 
     it("reads it again when the file set changes", () => {
@@ -326,7 +336,155 @@ describe("the workspace kept between updates (ADR-053, amended)", () => {
         fs.appendFileSync(path.join(root, FILE), "// one\n");
         const first = applyFileChanges(root, [FILE]);
         write(root, "src/base/common/extra.ts", "export const extra = 1;\n");
-        const second = applyFileChanges(root, ["src/base/common/extra.ts"], { workspace: first.workspace });
-        expect(second.workspace).not.toBe(first.workspace);
+        const second = applyFileChanges(root, ["src/base/common/extra.ts"], { resolution: first.resolution });
+        expect(second.resolution.cache).not.toBe(first.resolution.cache);
+        expect(workspaceOf(second)).not.toBe(workspaceOf(first));
+    });
+});
+
+describe("the incremental update through the language adapters (ADR-065)", () => {
+    const adapters = [typescriptAdapter, toyAdapter];
+
+    function repo(files: Record<string, string>): string {
+        const dir = makeTempDir("neb-update-adapters-");
+        for (const [rel, text] of Object.entries(files)) write(dir, rel, text);
+        return dir;
+    }
+    /** What a full run with the same adapters makes of the same tree, in a twin copy. */
+    function fullRunWithAdapters(root: string){
+        const twin = makeTempDir("neb-twin-");
+        fs.cpSync(root, twin, { recursive: true });
+        const { repoId } = indexRepository(twin, { adapters });
+        return { ...tables(repoId), entries: [...loadEntryPoints(getDb(), repoId)].sort() };
+    }
+    const now = (repoId: number) => ({ ...tables(repoId), entries: [...loadEntryPoints(getDb(), repoId)].sort() });
+
+    it("moves an edge when the name it reads moves to another file of the folder, though the importer didn't change", () => {
+        // by the toy's rules, name:x reads the other files of a.toy's folder that define x
+        const root = repo({ "a.toy": "name x\n", "b.toy": "def x\n", "c.toy": "def y\n" });
+        const { repoId } = indexRepository(root, { adapters });
+        expect(tables(repoId).imports).toEqual(["a.toy -> b.toy (name:x)"]);
+
+        write(root, "b.toy", "def other\n");
+        expect(applyFileChanges(root, ["b.toy"], { adapters })).toMatchObject({ changed: ["b.toy"], resolvedAll: false, edgesRemoved: 1, edgesAdded: 0 });
+        expect(tables(repoId).imports).toEqual([]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+
+        write(root, "c.toy", "def y\ndef x\n");
+        expect(applyFileChanges(root, ["c.toy"], { adapters })).toMatchObject({ changed: ["c.toy"], resolvedAll: false, edgesAdded: 1 });
+        expect(tables(repoId).imports).toEqual(["a.toy -> c.toy (name:x)"]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+    });
+
+    it("computes the entry points again when a file's declares change", () => {
+        const root = repo({ "a.toy": "def a\n" });
+        const { repoId } = indexRepository(root, { adapters });
+        expect(now(repoId).entries).toEqual([]);
+        write(root, "a.toy", "def a\nmain\n");
+        applyFileChanges(root, ["a.toy"], { adapters });
+        expect(now(repoId).entries).toEqual(["a.toy"]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+    });
+
+    it.each([["walk", false], ["git", true]] as const)("re-applies a manifest's exclusion both ways when it is added or deleted (%s mode)", (_mode, git) => {
+        const root = repo({ "a.toy": "use deps/d\n", "deps/d.toy": "def d\n", "deps/e.ts": "export {};\n" });
+        if (git) execFileSync("git", ["init", "-q", root]);
+        const { repoId } = indexRepository(root, { adapters });
+        expect(tables(repoId).imports).toEqual(["a.toy -> deps/d.toy (use:deps/d)"]);
+
+        // a toy.json leaves out every .toy file under the deps/ folder beside it; TypeScript's deps/e.ts stays
+        write(root, "toy.json", "{}\n");
+        expect(applyFileChanges(root, ["toy.json"], { adapters })).toMatchObject({ deleted: ["deps/d.toy"], resolvedAll: true });
+        expect(tables(repoId).files.map((f) => f[0])).toEqual(["a.toy", "deps/e.ts"]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+
+        // deleted again: deps/d.toy is found by listing the repo again, as a full run would find it
+        fs.rmSync(path.join(root, "toy.json"));
+        expect(applyFileChanges(root, ["toy.json"], { adapters })).toMatchObject({ changed: ["deps/d.toy"], resolvedAll: true });
+        expect(tables(repoId).imports).toEqual(["a.toy -> deps/d.toy (use:deps/d)"]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+    });
+
+    it("reads a manifest again when it changes, dropping what the cache held", () => {
+        // a toy.json's root is a folder `use` paths are read in too, cached under toy:roots
+        const root = repo({ "toy.json": "{ \"root\": \"one\" }\n", "a.toy": "use m\n", "one/m.toy": "def m\n", "two/m.toy": "def m\n" });
+        const { repoId } = indexRepository(root, { adapters });
+        expect(tables(repoId).imports).toEqual(["a.toy -> one/m.toy (use:m)"]);
+        write(root, "a.toy", "use m\n# warm\n");
+        const warm = applyFileChanges(root, ["a.toy"], { adapters });
+        expect(warm.resolution.cache.get("toy:roots")).toEqual(["one"]);
+
+        write(root, "toy.json", "{ \"root\": \"two\" }\n");
+        const after = applyFileChanges(root, ["toy.json"], { adapters, resolution: warm.resolution });
+        expect(after.resolution.cache.get("toy:roots")).toEqual(["two"]);
+        expect(tables(repoId).imports).toEqual(["a.toy -> two/m.toy (use:m)"]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+    });
+
+    it("refuses to parse a file whose grammar this process hasn't loaded", () => {
+        const root = repo({ "a.ts": "export {};\n", "b.toy": "def b\n" });
+        indexRepository(root, { adapters });
+        const unprepared = { ...toyAdapter, grammar: "missing.wasm" };
+        write(root, "b.toy", "def c\n");
+        expect(() => applyFileChanges(root, ["b.toy"], { adapters: [typescriptAdapter, unprepared] })).toThrow(GrammarNotLoadedError);
+        write(root, "a.ts", "export const a = 1;\n");
+        expect(applyFileChanges(root, ["a.ts"], { adapters: [typescriptAdapter, unprepared] }).changed).toEqual(["a.ts"]);
+    });
+
+    it("reads an edited file whose parse now throws with the scan, keeping its row and its imports (the E4 final review's B-I1)", () => {
+        // a toy whose full and parse readings throw on a line `deep` (a recursive walk's overflow); its scan reads only `use` lines
+        const throwing: LanguageAdapter = {
+            ...toyAdapter,
+            parse(p, text, reading){
+                if (reading !== "scan" && text.includes("deep")) throw new RangeError("Maximum call stack size exceeded");
+                return toyAdapter.parse(p, text, reading);
+            },
+        };
+        const both = [typescriptAdapter, throwing];
+        // by the toy's rules: use:b names b.toy; name:y names the other file of the folder that defines y, c.toy
+        const root = repo({ "a.toy": "use b\nname y\n", "b.toy": "def b\n", "c.toy": "def y\n" });
+        const { repoId } = indexRepository(root, { adapters: both });
+        expect(tables(repoId).imports).toEqual(["a.toy -> b.toy (use:b)", "a.toy -> c.toy (name:y)"]);
+
+        write(root, "a.toy", "use b\nname y\ndeep\n");
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        expect(applyFileChanges(root, ["a.toy"], { adapters: both })).toMatchObject({
+            changed: ["a.toy"], errors: [], scanned: [{ path: "a.toy", error: "Maximum call stack size exceeded" }], edgesAdded: 0, edgesRemoved: 1,
+        });
+        expect(warn.mock.calls).toEqual([["[index] the toy parse of a.toy failed (Maximum call stack size exceeded), so the scan read its imports only"]]);
+        // the stage note counts it, as a full run's does
+        expect(readStages(getDb(), repoId).structure).toMatchObject({ state: "ready", note: "1 file read by the scan (their parse failed): a.toy" });
+        expect(tables(repoId).imports).toEqual(["a.toy -> b.toy (use:b)"]);   // the scan reads no name:y
+        const twin = makeTempDir("neb-twin-");
+        fs.cpSync(root, twin, { recursive: true });
+        expect(tables(repoId)).toEqual(tables(indexRepository(twin, { adapters: both }).repoId));
+        warn.mockRestore();
+    });
+
+    it("adds no edge for a TypeScript file's import of itself, as a full run and the pre-E4 code (the E4 final review's m1)", () => {
+        const root = repo({ "a.ts": "export const a = 1;\n", "b.toy": "use b\n" });
+        const { repoId } = indexRepository(root, { adapters });
+        expect(tables(repoId).imports).toEqual([]);   // b.toy's use:b names itself: placed, no edge
+
+        write(root, "a.ts", "import * as self from \"./a\";\nexport const a = self;\n");
+        expect(applyFileChanges(root, ["a.ts"], { adapters })).toMatchObject({ changed: ["a.ts"], edgesAdded: 0, edgesRemoved: 0 });
+        expect(tables(repoId).imports).toEqual([]);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
+    });
+
+    it("starts the resolution state again when a folder holding only a manifest is deleted (the E4 final review's m6)", () => {
+        // sub/ holds a toy.json and no indexed file, so deleting it moves the manifest list but not the file set
+        const root = repo({ "a.toy": "def a\n", "sub/toy.json": "{}\n" });
+        const { repoId } = indexRepository(root, { adapters });
+        write(root, "a.toy", "def a\n# one\n");
+        const first = applyFileChanges(root, ["a.toy"], { adapters });
+        expect(first.resolution.manifests).toEqual(["sub/toy.json"]);
+
+        fs.rmSync(path.join(root, "sub"), { recursive: true });
+        const second = applyFileChanges(root, ["sub"], { adapters, resolution: first.resolution });
+        expect(second).toMatchObject({ changed: [], deleted: [], resolvedAll: true, edgesAdded: 0, edgesRemoved: 0 });
+        expect(second.resolution.manifests).toEqual([]);
+        expect(second.resolution.cache).not.toBe(first.resolution.cache);
+        expect(now(repoId)).toEqual(fullRunWithAdapters(root));
     });
 });

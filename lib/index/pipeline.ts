@@ -18,12 +18,11 @@ import { buildFolders, buildLevelEdges } from "./aggregate";
 import { docLinks, folderSuffixes, type KnownPaths } from "./docs";
 import { discoverFiles, isTestPath, readGitHead, type DiscoveredFile, type SkippedFile } from "./discover";
 import { splitIdentifier } from "./identifiers";
-import {
-    ADAPTER_VERSION, languageOf, TYPESCRIPT_EXTENSIONS, parseTypeScriptFile, parseTypeScriptImportsOnly, scanTypeScriptImports,
-} from "./languages/typescript";
+import type { LanguageAdapter, ParsedFile, Reading } from "./languages/adapter";
+import { ADAPTERS, adapterFor } from "./languages/registry";
+import { createResolvers, edgesOf, entryPointsOf } from "./languages/resolution";
+import { GrammarNotLoadedError, isPrepared } from "./languages/treesitter";
 import { repoKey } from "./paths";
-import { createResolver, createSourceFinder, edgesFrom } from "./resolve";
-import { declaredEntries, readWorkspace } from "./workspace";
 
 export type { IndexStage };
 
@@ -46,6 +45,8 @@ export type IndexOptions = {
      * structure stage instead of by a trigger per chunk (ADR-031, amended). Default 2,000.
      */
     bulkSearchThreshold?: number;
+    /** The language adapters, in the registry's order. Default ADAPTERS; tests pass their own (a toy language), as they shrink maxFileBytes. */
+    adapters?: readonly LanguageAdapter[];
 };
 
 export type IndexResult = {
@@ -59,6 +60,12 @@ export type IndexResult = {
     folders: number;
     levelEdges: number;
     errors: FileError[];
+    /**
+     * Files whose adapter's parse threw, each with the error, read by the scan instead (the E4 final review's B-I1): in the
+     * index with their imports, as a file over the cap is, but with no declarations or code search. Not in `errors`, which
+     * lists files left out.
+     */
+    scanned: FileError[];
     /** Files left out: over the hard bound, unreadable, or a doc over the cap. */
     skipped: SkippedFile[];
     /** Code files over the size cap, in the index for their imports only: no declarations, code search or summary (ADR-053). */
@@ -99,6 +106,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
     const started = performance.now();
     const timingsMs: Record<IndexStage, number> = { discover: 0, parse: 0, write: 0, resolve: 0, aggregate: 0 };
     const batchSize = options.batchSize ?? 500;
+    const adapters = options.adapters ?? ADAPTERS;
 
     acquireIndexLock(db);
     let stageRepoId: number | null = null;   // set once the repo row exists, so a failure can be reported on it
@@ -114,7 +122,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         // ---- discover ---------------------------------------------------------
         let t = performance.now();
         const discovered = discoverFiles(root, {
-            extensions: TYPESCRIPT_EXTENSIONS,
+            rules: adapters,
             maxBytes: options.maxFileBytes, parseMaxBytes: options.parseMaxFileBytes, hardMaxBytes: options.hardMaxFileBytes,
         });
         const stored = loadStoredFiles(db, repoId);
@@ -122,14 +130,21 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         options.onProgress?.("discover", discovered.files.length, discovered.files.length);
         writeStage(db, repoId, "structure", { state: "running", done: 0, total: discovered.files.length });
 
-        // files an older adapter parsed are parsed again whatever their hash: what it stored may lack what this one reads
-        const reparseAll = readAdapterVersion(db, repoId) !== ADAPTER_VERSION;
-        const toParse = reparseAll ? discovered.files.length : discovered.files.filter((f) => (stored.get(f.path)?.contentHash ?? "") === "").length;
+        // every discovered file is claimed by exactly one adapter: discovery listed only their extensions
+        const adapterOf = new Map(discovered.files.map((f) => [f.path, adapterFor(f.path, adapters)!]));
+        assertGrammarsLoaded(new Set(adapterOf.values()));
+
+        // files an older version of their adapter parsed are parsed again whatever their hash: what it stored may lack
+        // what this one reads. Each adapter has its own version (ADR-065), so bumping one language re-parses only its files.
+        const reparse = new Set(adapters.filter((a) => readAdapterVersion(db, repoId, a.id) !== a.version));
+        const reparsed = (filePath: string): boolean => reparse.has(adapterOf.get(filePath)!);
+        const toParse = discovered.files.filter((f) => reparsed(f.path) || (stored.get(f.path)?.contentHash ?? "") === "").length;
         const deferred = toParse >= (options.bulkSearchThreshold ?? 2_000);
         if (deferred) deferCodeSearch(db);
 
         // ---- parse + write, one batch of files at a time (bounded memory) ------
         const errors: FileError[] = [];
+        const scanned: FileError[] = [];
         const skipped: SkippedFile[] = [...discovered.skipped];   // the docs read below add theirs
         let changed = 0;
         let unchanged = 0;
@@ -152,13 +167,15 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
                 const contentHash = createHash("sha256").update(text).digest("hex");
 
                 // ADR-022: the hash means "the indexer last processed exactly these bytes" (with this adapter, ADR-053)
-                if (!reparseAll && stored.get(file.path)?.contentHash === contentHash){
+                if (!reparsed(file.path) && stored.get(file.path)?.contentHash === contentHash){
                     unchanged++;
                     continue;
                 }
 
                 try{
-                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, { importsOnly: file.importsOnly }));
+                    records.push(toFileRecord(file.path, text, contentHash, file.sizeBytes, {
+                        importsOnly: file.importsOnly, adapters, onScanned: (error) => scanned.push({ path: file.path, error }),
+                    }));
                 } catch (err){
                     errors.push({ path: file.path, error: message(err) });
                 }
@@ -181,14 +198,17 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         const deleted = deleteFilesNotIn(db, repoId, new Set(discovered.files.map((f) => f.path)));
         const current = loadStoredFiles(db, repoId);
         const fileSet = new Set(current.keys());
-        const workspace = readWorkspace(root, discovered.manifests);
-        const resolve = createResolver(root, fileSet, { workspace });
+        // one resolver per language for the run, each over its own files' stored facts (ADR-065)
+        const resolvers = createResolvers(adapters, { root, fileSet, manifests: discovered.manifests, readText: repoTextReader(root), cache: new Map() }, current);
         const edges: ImportEdge[] = [];
 
-        for (const [source, file] of current) edges.push(...edgesFrom(resolve, source, file.importSpecifiers));
+        for (const [source, file] of current){
+            const resolver = resolvers.get(adapterFor(source, adapters)?.id ?? "");
+            if (resolver !== undefined) edges.push(...edgesOf(resolver, source, file.importSpecifiers));
+        }
 
         const edgeCount = replaceImports(db, repoId, edges);
-        replaceEntryPoints(db, repoId, declaredEntries(workspace, createSourceFinder(fileSet, workspace)));
+        replaceEntryPoints(db, repoId, entryPointsOf(resolvers));
         timingsMs.resolve = performance.now() - t;
         options.onProgress?.("resolve", fileSet.size, fileSet.size);
 
@@ -218,14 +238,19 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
         markIndexed(db, repoId, indexedHead);
         // A file that failed keeps its previous row (ADR-022). After a forced re-parse that row is the older adapter's, and
         // its hash still matches the bytes, so it would stay as it is for good. Its hash is cleared as this version is
-        // recorded, so the next full run parses that file again, and no other.
-        const unparsed = reparseAll ? errors.map((e) => e.path).filter((p) => stored.has(p)) : [];
-        recordAdapterVersion(db, repoId, ADAPTER_VERSION, unparsed);
+        // recorded, so the next full run parses that file again, and no other. Each adapter records its own version.
+        for (const adapter of adapters){
+            const unparsed = reparse.has(adapter)
+                ? errors.map((e) => e.path).filter((p) => stored.has(p) && adapterOf.get(p) === adapter)
+                : [];
+            recordAdapterVersion(db, repoId, adapter.version, unparsed, adapter.id);
+        }
+        const note = structureNote(errors, scanned);
         writeStage(db, repoId, "structure", {
             state: "ready",
             done: fileSet.size,
             total: fileSet.size,
-            ...(errors.length > 0 ? { note: `${errors.length} files failed to index` } : {}),
+            ...(note === null ? {} : { note }),
         });
         bumpIndexVersion(db, repoId);   // the Map refetches what it shows (ADR-036)
 
@@ -244,6 +269,7 @@ export function indexRepository(repoRoot: string, options: IndexOptions = {}): I
             folders: folderRows.length,
             levelEdges: levelRows.length,
             errors,
+            scanned,
             skipped,
             importsOnly: discovered.files.filter((f) => f.importsOnly),
             timingsMs,
@@ -272,6 +298,26 @@ function reportStructureFailure(db: Db, repoId: number, err: unknown): void {
     }
 }
 
+/**
+ * The guard (ADR-065): a run that meets a file whose grammar this process hasn't loaded stops, naming the grammars,
+ * rather than index nothing for them. prepareLanguages() loads every grammar; a test adapter without one never trips it.
+ */
+export function assertGrammarsLoaded(needed: Iterable<LanguageAdapter>): void {
+    const missing = [...needed].filter((a) => a.grammar !== null && !isPrepared(a.id)).map((a) => a.id);
+    if (missing.length > 0) throw new GrammarNotLoadedError(missing);
+}
+
+/** A repo file's text for a resolver (a manifest), or null when it can't be read. */
+export function repoTextReader(root: string): (rel: string) => string | null {
+    return (rel) => {
+        try{
+            return fs.readFileSync(path.join(root, rel), "utf8");
+        } catch{
+            return null;
+        }
+    };
+}
+
 function isDirectory(p: string): boolean {
     try{
         return fs.statSync(p).isDirectory();
@@ -283,25 +329,76 @@ function isDirectory(p: string): boolean {
 /**
  * One file's row as the structure store writes it, from its bytes (PIVOT_SPEC.md §5.2). Throws if the file can't be parsed.
  * A file over the size cap is read for its imports only, parsed or token-scanned by size: no declarations and no chunks,
- * so no code search (ADR-053).
+ * so no code search (ADR-053). The adapter claiming the path parses it (ADR-065); a path no adapter claims throws. A
+ * parse that throws is tried again as a scan (parseOrScan), and `onScanned` hears why.
  */
 export function toFileRecord(
-    filePath: string, text: string, contentHash: string, sizeBytes: number, opts: { importsOnly?: "parse" | "scan" } = {}
+    filePath: string, text: string, contentHash: string, sizeBytes: number,
+    opts: { importsOnly?: "parse" | "scan"; adapters?: readonly LanguageAdapter[]; onScanned?: (error: string) => void } = {}
 ): FileRecord {
-    const parsed = opts.importsOnly === "scan" ? scanTypeScriptImports(filePath, text)
-        : opts.importsOnly === "parse" ? parseTypeScriptImportsOnly(filePath, text)
-        : parseTypeScriptFile(filePath, text);
+    const adapters = opts.adapters ?? ADAPTERS;
+    const adapter = adapterFor(filePath, adapters);
+    if (adapter === null) throw new Error(`No language adapter claims ${filePath}`);
+    const parsed = parseOrScan(adapter, filePath, text, opts.importsOnly ?? "full", opts.onScanned);
     return {
         path: filePath,
-        kind: /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",
+        kind: adapter.id === "typescript" && /\.(tsx|jsx)$/.test(filePath) ? "component" : "module",
         contentHash,
-        language: languageOf(filePath),
+        language: adapter.languageOf(filePath),
         sizeBytes,
         lineCount: parsed.lineCount,
-        isTest: isTestPath(filePath),
+        isTest: isTestPath(filePath, adapters),
         importSpecifiers: parsed.imports,
+        declares: parsed.declares,
         chunks: parsed.chunks.map((c) => ({ ...c, nameSplit: splitIdentifier(c.name) })),
         symbols: parsed.symbols,
         calls: parsed.calls,
     };
+}
+
+/**
+ * An adapter's parse, or, when the parse throws, its scan (the E4 final review's B-I1). A recursive walk can overflow
+ * the stack on a deep but valid file (a long `else if` chain, a generated concatenation of thousands of terms), and the
+ * seam promises a parse throws only for a file it can't read at all. Without this the file got no row, so it vanished
+ * from the Map and the tools. The scan reads the imports without a tree, as for a file over the cap: the file keeps its
+ * row and its edges, with no declarations or code search. A missing grammar is the guard's to report, never retried;
+ * a scan's own error, or a scan that throws in turn, still drops the file into the run's errors. It applies to every
+ * adapter, TypeScript's too. A fallback is never silent: it is logged here, once, with the adapter and the error, and the
+ * run's `scanned` list reaches the stage note, the CLI, the worker's answer and the language bench (which fails L2 on it).
+ */
+function parseOrScan(adapter: LanguageAdapter, filePath: string, text: string, reading: Reading, onScanned?: (error: string) => void): ParsedFile {
+    try{
+        return adapter.parse(filePath, text, reading);
+    } catch (err){
+        if (reading === "scan" || err instanceof GrammarNotLoadedError) throw err;
+        const scanned = adapter.parse(filePath, text, "scan");
+        console.warn(`[index] the ${adapter.id} parse of ${filePath} failed (${message(err)}), so the scan read its imports only`);
+        onScanned?.(message(err));
+        return scanned;
+    }
+}
+
+/** How many files to name in a note about the scanned ones before counting the rest. */
+const SCANNED_SHOWN = 3;
+
+/**
+ * The files the scan read after their parse failed, counted with the first few paths:
+ * "2 files read by the scan (their parse failed): a.toy, b.toy". The stage note, the CLI and the bench say it so.
+ */
+export function describeScanned(scanned: readonly FileError[]): string {
+    const named = scanned.slice(0, SCANNED_SHOWN).map((s) => s.path).join(", ");
+    const rest = scanned.length > SCANNED_SHOWN ? `, and ${scanned.length - SCANNED_SHOWN} more` : "";
+    return `${scanned.length} ${scanned.length === 1 ? "file" : "files"} read by the scan (their parse failed): ${named}${rest}`;
+}
+
+/**
+ * The structure stage's note: the files that failed to index, and the files the scan read instead of a parse, or null
+ * when there are none. The full run and the incremental update both write it.
+ */
+export function structureNote(errors: readonly FileError[], scanned: readonly FileError[]): string | null {
+    const parts = [
+        ...(errors.length > 0 ? [`${errors.length} files failed to index`] : []),
+        ...(scanned.length > 0 ? [describeScanned(scanned)] : []),
+    ];
+    return parts.length === 0 ? null : parts.join("; ");
 }

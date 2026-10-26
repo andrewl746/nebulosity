@@ -27,7 +27,11 @@ export const files = sqliteTable("files", {
     // Raw import specifiers as a JSON array. Every run re-resolves every file's imports
     // (a new or deleted file changes what "../core" points at) without re-parsing the
     // files whose content hash is unchanged.
-    importSpecifiers: text("import_specifiers").notNull().default("[]")
+    importSpecifiers: text("import_specifiers").notNull().default("[]"),
+    // What other files' resolution reads from this one, as a sorted JSON array (ADR-065): a Go file's package and
+    // package-level names, a Java or C# file's types, a Rust file's mod lines. A changed file is re-parsed; its
+    // neighbours are re-resolved from what is stored here, as they are from import_specifiers. [] for TypeScript.
+    declares: text("declares").notNull().default("[]")
 }, (t) => [
     uniqueIndex("files_repo_path_unique").on(t.repoId, t.path)
 ]);
@@ -72,9 +76,10 @@ export const meta = sqliteTable("meta", {
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()).$onUpdateFn(() => new Date())
 });
 
+/** struct (Go, C#, Rust) and trait (Rust) arrived with E4 (ADR-065, the design's C5), appended: SQLite has no CHECK on the column. */
 export const SYMBOL_KINDS = [
     "function", "class", "method", "property", "accessor", "constructor",
-    "interface", "type", "enum", "const", "namespace"
+    "interface", "type", "enum", "const", "namespace", "struct", "trait"
 ] as const;
 export type SymbolKind = (typeof SYMBOL_KINDS)[number];
 

@@ -110,6 +110,15 @@ export function useReadOnlyDatabase(): void {
     globalForDb.readOnly = true;
 }
 
+/**
+ * Closes the process's database and forgets it, so the next getDb() opens the file under NEBULOSITY_DATA afresh: a
+ * benchmark that indexes each run into its own fresh data folder in one process (scripts/bench-languages.ts, E4).
+ */
+export function closeDb(): void {
+    globalForDb.db?.$client.close();
+    globalForDb.db = undefined;
+}
+
 export function getDb(): Db {
     if (!globalForDb.db){
         // Vitest gets a throwaway in-memory database, whatever the mode: a test never opens a real file through here.

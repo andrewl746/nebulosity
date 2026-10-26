@@ -7,12 +7,13 @@
  *   nebulosity map --print-port               print the port the Map was last started on (the VS Code extension reads it)
  *   nebulosity mcp                            the MCP server Claude Code starts (stdio)
  *   nebulosity setup [--print]                register the server with Claude Code for the repo in this folder
+ *   nebulosity setup --json                   print the same registration as an mcpServers block, for other MCP clients
  *   nebulosity doctor                         check Node, the data folder, the database, git and claude
  */
 import { spawn, spawnSync, type SpawnSyncReturns, type StdioOptions } from "child_process";
 import fs from "fs";
 import { createRequire } from "module";
-import { DEFAULT_PORT, readConfig, writeConfig } from "../lib/config";
+import { ConfigUnreadableError, configPath, DEFAULT_PORT, movedAsideConfigs, readConfig, readConfigFile, updateConfig } from "../lib/config";
 import { dataDir, dataPath, nebulosityHome, nebulosityPath } from "../lib/home";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
@@ -28,6 +29,7 @@ const USAGE = [
     "  nebulosity map --print-port               print the port the Map was last started on",
     "  nebulosity mcp                            the MCP server Claude Code starts (stdio)",
     "  nebulosity setup [--print]                register the server with Claude Code for the repo in this folder",
+    "  nebulosity setup --json                   print the same registration as an mcpServers block, for other MCP clients",
     "  nebulosity doctor                         check Node, the data folder, the database, git and claude",
     "  nebulosity --version",
 ].join("\n");
@@ -66,15 +68,36 @@ export function addCommand(registration: Registration, platform: NodeJS.Platform
 }
 
 /**
- * How `setup` registers the MCP server for a repo (ADR-048's line, per repo with --scope local): node and the launcher,
- * written with forward slashes. A custom data folder (NEBULOSITY_DATA, absolute) goes with it, so the server Claude Code
- * starts reads the index this copy wrote, not the default folder's.
+ * The registration `setup` makes for a repo (ADR-048's line, per repo with --scope local): node and the launcher. A custom
+ * data folder (NEBULOSITY_DATA, absolute) goes with it, so the server a client starts reads the index this copy wrote, not
+ * the default folder's. On Windows the paths are written with forward slashes, which node, claude and JSON all take
+ * as they are; elsewhere a backslash is part of a file's name, so it stays. Both routes use it: `setup`'s claude mcp
+ * add line and `setup --json`'s block.
  */
+export function setupRegistration(launcher: string, platform: NodeJS.Platform = process.platform, dataFolder?: string): Registration {
+    const slashed = (p: string): string => (platform === "win32" ? p.replace(/\\/g, "/") : p);
+    return { scope: "local", command: "node", args: [slashed(launcher)], env: dataFolder === undefined ? {} : { NEBULOSITY_DATA: slashed(dataFolder) } };
+}
+
+/** How `setup` registers the MCP server with Claude Code: setupRegistration's registration as a claude mcp add line. */
 export function setupCommand(launcher: string, platform: NodeJS.Platform = process.platform, dataFolder?: string): ClaudeCommand {
-    const slashed = (p: string): string => p.replace(/\\/g, "/");
-    return addCommand({
-        scope: "local", command: "node", args: [slashed(launcher)], env: dataFolder === undefined ? {} : { NEBULOSITY_DATA: slashed(dataFolder) },
-    }, platform);
+    return addCommand(setupRegistration(launcher, platform, dataFolder), platform);
+}
+
+/**
+ * A registration as the plain `mcpServers` block that other MCP clients read, and that `claude mcp add-json` takes the
+ * inner object of (ADR-048, amended 2026-10-25): the server named nebulosity with its command and arguments, and `env`
+ * only when the registration has an environment. The scope is Claude Code's own and isn't in it. There's no "type"
+ * key: a client takes a server with a command for a stdio one. Two-space indent and a closing newline, so
+ * `nebulosity setup --json > file.json` writes a file as you'd write it by hand.
+ */
+export function mcpJson(registration: Registration): string {
+    const server = {
+        command: registration.command,
+        args: registration.args,
+        ...(Object.keys(registration.env).length > 0 ? { env: registration.env } : {}),
+    };
+    return `${JSON.stringify({ mcpServers: { nebulosity: server } }, null, 2)}\n`;
 }
 
 const SCOPES: Record<string, string> = { Local: "local", Project: "project", User: "user" };
@@ -133,7 +156,7 @@ export async function main(argv: readonly string[]): Promise<number> {
             return 0;
         // each command loads what it needs when it runs, so --version or the MCP server's start never loads the indexer
         case "index":
-            return (await import("./commands/index-command")).runIndex(args);
+            return await (await import("./commands/index-command")).runIndex(args);
         case "summarize":
             return (await import("./commands/summarize-command")).runSummarize(args);
         case "map":
@@ -199,8 +222,16 @@ async function runMap(args: readonly string[]): Promise<number> {
         return 1;
     }
 
-    const config = readConfig();
-    if (config.port !== port) writeConfig({ ...config, port });
+    // a config.json it can't read: the Map would start on the defaults without a word (Final Review #2, R30)
+    const { problem } = readConfigFile();
+    if (problem !== null) console.error(`[map] ${problem}: the Map starts without its settings (no active repo) until it's fixed; nebulosity doctor says more`);
+    try{
+        updateConfig((current) => (current.port === port ? null : { ...current, port }));
+    } catch (err){
+        if (!(err instanceof ConfigUnreadableError)) throw err;
+        console.error(`[map] the port couldn't be saved, so live events wouldn't reach this Map: ${err.message}`);
+        return 1;
+    }
 
     // next resolves from this copy's own node_modules, whatever the working folder
     const next = createRequire(nebulosityPath("package.json")).resolve("next/dist/bin/next");
@@ -235,11 +266,21 @@ function runClaude(command: ClaudeCommand, cwd: string, stdio: StdioOptions): Sp
  * alwaysLoad (R4). It only reads the index (ADR-044's read-only open) and writes no file in the repo (R5). It first reads
  * any registration Claude Code already has (`claude mcp get`, which changes nothing), so a different one is shown before
  * it is replaced, and can be restored if the new one fails.
+ *
+ * `nebulosity setup --json` (alone) prints the same registration as an mcpServers block on stdout and nothing else, for
+ * other MCP clients and for `claude mcp add-json`. It starts no command, reads no index and writes no file: the block is
+ * the same in every folder (a client that starts the server outside a repo gets the Map's repo, ADR-046).
  */
 export async function runSetup(args: readonly string[], cwd: string = process.cwd()): Promise<number> {
-    if (args.some((arg) => arg !== "--print")){
-        console.error("usage: nebulosity setup [--print]");
+    const json = args.length === 1 && args[0] === "--json";
+    if (!json && args.some((arg) => arg !== "--print")){
+        console.error("usage: nebulosity setup [--print | --json]");
         return 1;
+    }
+    const registration = setupRegistration(nebulosityPath("mcp", "launch.mjs"), process.platform, process.env.NEBULOSITY_DATA ? dataDir() : undefined);
+    if (json){
+        process.stdout.write(mcpJson(registration));
+        return 0;
     }
 
     const client = await import("../lib/db/client");
@@ -264,7 +305,8 @@ export async function runSetup(args: readonly string[], cwd: string = process.cw
     // --scope local files the registration under the folder claude runs in: the repo's root, wherever inside it setup ran
     const root = choice.root;
 
-    const add = setupCommand(nebulosityPath("mcp", "launch.mjs"), process.platform, process.env.NEBULOSITY_DATA ? dataDir() : undefined);
+    // setupCommand's line (addCommand over setupRegistration), from the registration --json prints
+    const add = addCommand(registration);
     const remove: ClaudeCommand = { ...add, args: ["mcp", "remove", "--scope", "local", "nebulosity"] };
     const got = runClaude({ ...add, args: ["mcp", "get", "nebulosity"] }, root, "pipe");
     const earlier = got.error || got.status !== 0 ? null : parseRegistration(String(got.stdout ?? ""));
@@ -321,8 +363,9 @@ function claudeVersion(): SpawnSyncReturns<string> {
 }
 
 /**
- * `nebulosity doctor`: one line per check, in order: Node, the data folder, the database, the Map, git, claude, the key.
- * Returns 1 when any check FAILs; a WARN (no built Map, no claude, no key) leaves the rest working.
+ * `nebulosity doctor`: one line per check, in order: Node, the data folder, the database, the Map, git, claude, the key,
+ * the summary models, then a WARN for each config.json moved aside (R25). Returns 1 when any check FAILs; a WARN (no
+ * built Map, no claude, no key, a moved-aside file) leaves the rest working.
  */
 export async function runDoctor(): Promise<number> {
     const checks: Check[] = [];
@@ -375,6 +418,18 @@ export async function runDoctor(): Promise<number> {
     checks.push(hasAnthropicKey()
         ? { level: "OK", text: "ANTHROPIC_API_KEY set: summaries and meaning search are available" }
         : { level: "WARN", text: "ANTHROPIC_API_KEY not set: free mode (the index, code search, imports and the Map; summaries and meaning search need a key)" });
+
+    // the models in use and which are set (ADR-066); a setting that can't be used is a FAIL, since summarize refuses it
+    const { configuredSummaryModels, describeSummaryModels } = await import("../lib/index/summarize/models");
+    const models = configuredSummaryModels();
+    checks.push(models.ok
+        ? { level: "OK", text: `summary models: ${describeSummaryModels(models)}` }
+        : { level: "FAIL", text: `summary models: ${models.error}` });
+
+    // a config.json that couldn't be read is moved aside when the settings are written again (R25): a hand edit may wait in it
+    for (const aside of movedAsideConfigs()){
+        checks.push({ level: "WARN", text: `${aside} is a config.json that couldn't be read, moved aside when the settings were written again: copy what you need from it into ${configPath()}, then delete it` });
+    }
 
     for (const check of checks) console.log(`${check.level.padEnd(5)}${check.text}`);
     return checks.some((check) => check.level === "FAIL") ? 1 : 0;

@@ -8,15 +8,20 @@
  * Free: it never calls Anthropic (the summaries stage's status is only re-derived).
  */
 import path from "path";
-import { indexRepository, RepoNotFoundError } from "../../lib/index/pipeline";
+import { prepareLanguages } from "../../lib/index/languages/registry";
+import { describeScanned, indexRepository, RepoNotFoundError } from "../../lib/index/pipeline";
 import { repoKey } from "../../lib/index/paths";
 import { IndexLockedError } from "../../lib/db/store/lock";
-import { readConfig, writeConfig } from "../../lib/config";
+import { ConfigUnreadableError, updateConfig } from "../../lib/config";
+import { configuredSummaryModels } from "../../lib/index/summarize/models";
 import { refreshSummaryStatus } from "../../lib/index/summarize/status";
 import { hasAnthropicKey, loadLocalEnv } from "../env";
 
-/** Indexes the repo the arguments name. Returns the exit code: 0 done, 1 bad arguments or no such repo, 2 the index is locked. */
-export function runIndex(args: readonly string[]): number {
+/**
+ * Indexes the repo the arguments name. Resolves to the exit code: 0 done, 1 bad arguments or no such repo, 2 the index
+ * is locked. Async because the tree-sitter grammars load first (prepareLanguages, ADR-065); the run itself is synchronous.
+ */
+export async function runIndex(args: readonly string[]): Promise<number> {
     loadLocalEnv();
 
     const [target, ...extra] = args;
@@ -31,6 +36,9 @@ export function runIndex(args: readonly string[]): number {
     const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
     console.log(`[index] ${root}`);
+
+    // the grammars load once, asynchronously (WebAssembly can't start synchronously); the run is then synchronous
+    await prepareLanguages();
 
     try{
         const result = indexRepository(root, {
@@ -55,15 +63,35 @@ export function runIndex(args: readonly string[]): number {
         if (result.errors.length > 0){
             console.log(`[index] ${result.errors.length} file errors (first: ${result.errors[0].path}: ${result.errors[0].error})`);
         }
+        // a parse that threw, read by the scan instead (ADR-065, the E4 final review's B-I1): indexed, but imports only
+        if (result.scanned.length > 0){
+            console.log(`[index] ${describeScanned(result.scanned)} (first error: ${result.scanned[0].error})`);
+        }
 
-        // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now
-        const summaries = refreshSummaryStatus(root, { summarizerAvailable: hasAnthropicKey() });
+        // the summaries stage depends on what was just indexed (ADR-032, amended): re-derive it now, with the summary
+        // models setting, since every inputHash holds its model (ADR-066). A setting that can't be used leaves the rows as
+        // they were, and the stage too with a key; without one the stage still reads as free mode (refreshSummaryStatus).
+        const models = configuredSummaryModels();
+        const key = hasAnthropicKey();
+        if (!models.ok){
+            console.log(key
+                ? `[index] summaries: not re-derived until the setting is fixed: ${models.error}`
+                : `[index] summaries: summarize refuses the summary models setting until it's fixed: ${models.error}`);
+        }
+        const summaries = refreshSummaryStatus(root, { summarizerAvailable: key, models });
         if (summaries){
             console.log(`[index] summaries: ${summaries.state} ${summaries.done}/${summaries.total}${summaries.note ? ` (${summaries.note})` : ""}`);
         }
 
         if (activate){
-            writeConfig({ ...readConfig(), activeRepo: repoKey(root) });
+            // one read-modify-write: the file's other settings are kept from the read that checks it (R30)
+            try{
+                updateConfig((current) => ({ ...current, activeRepo: repoKey(root) }));
+            } catch (err){
+                if (!(err instanceof ConfigUnreadableError)) throw err;
+                console.error(`[index] the index is done, but the active repo is unchanged: ${err.message}`);
+                return 1;
+            }
             console.log(`[index] active repo → ${repoKey(root)}`);
         } else{
             console.log(`[index] active repo unchanged (--no-activate)`);
@@ -71,7 +99,7 @@ export function runIndex(args: readonly string[]): number {
         return 0;
     } catch (err){
         if (err instanceof RepoNotFoundError){
-            // returns before writeConfig, so a typo never becomes the active repo
+            // returns before updateConfig, so a typo never becomes the active repo
             console.error(`[index] ${err.message}. Pass the path to a repository folder.`);
             return 1;
         }

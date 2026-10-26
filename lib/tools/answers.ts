@@ -5,6 +5,7 @@ import type { Impact, Roots } from "../engine/impact";
 import type { Overview } from "../engine/overview";
 import { FILE_CHUNK } from "../engine/rank";
 import type { ChainAnswer, ReachAnswer } from "../engine/reach";
+import { rulesFor } from "../index/languages/rules";
 import { plural } from "../index/summarize/prompts";
 import { fitting, formatCount, MAX_ANSWER_CHARS, moreLine, shownPath, summaryLine, type AnswerParts } from "./text";
 
@@ -195,7 +196,9 @@ function listBlock(header: string, paths: readonly string[]): string[] {
 export function rootLines(tests: number, roots: Roots | null): string[] {
     const lines: string[] = [];
     if (tests > 0) lines.push(`Tests among them: ${formatCount(tests)}.`);
-    if (roots && roots.declared.length > 0) lines.push(...listBlock(`Entry points a package.json names that load it (${formatCount(roots.declared.length)}):`, roots.declared));
+    // "a package.json" only when every entry point came from one, as before E4; else a language's build file named them (ADR-065)
+    const declaredBy = roots?.manifestOnly === false ? "Entry points that load it" : "Entry points a package.json names that load it";
+    if (roots && roots.declared.length > 0) lines.push(...listBlock(`${declaredBy} (${formatCount(roots.declared.length)}):`, roots.declared));
     if (roots && roots.others.length > 0) lines.push(...listBlock(`Other files nothing imports that load it (${formatCount(roots.others.length)}):`, roots.others));
     return lines;
 }
@@ -212,6 +215,15 @@ export function impactAnswer(i: Impact): AnswerParts {
     return { body };
 }
 
+/**
+ * A chain step's import, shown after the file it reaches (B-I3). The engine gives each specifier as written
+ * (specifiersAlong): TypeScript's is a module path, shown in its import's quotes, `(import "./b")`; another language's is
+ * already its statement or its name as written, `(use shop_core::model::Order)`, `(api.Open)`.
+ */
+export function importNote(importer: string, specifier: string): string {
+    return rulesFor(importer)?.displaySpecifier === undefined ? `(import "${specifier}")` : `(${specifier})`;
+}
+
 export function chainAnswer(c: ChainAnswer): AnswerParts {
     const from = shownPath(c.from, c.fromKind);
     const to = shownPath(c.to, c.toKind);
@@ -222,7 +234,7 @@ export function chainAnswer(c: ChainAnswer): AnswerParts {
         ? `${from} reaches ${to} in ${steps}:`
         : `${from} doesn't reach ${to} through imports; the other way round, ${to} reaches ${from} in ${steps}:`];
     body.push(`  ${c.files[0]}`);
-    for (let i = 1; i < c.files.length; i++) body.push(`  → ${c.files[i]}  (import "${c.specifiers[i - 1]}")`);
+    for (let i = 1; i < c.files.length; i++) body.push(`  → ${c.files[i]}  ${importNote(c.files[i - 1], c.specifiers[i - 1])}`);
     return { body };
 }
 
@@ -308,7 +320,7 @@ function cycleLines(a: ArchitectureAnswer, page: { limit: number; offset: number
         const t = a.through;
         if (t.cycle === null) return [`${t.file} is in no import cycle.`];
         const lines = [`The shortest import cycle through ${t.file} (${plural(t.cycle.length - 1, "step")}):`, `  ${t.cycle[0]}`];
-        const step = (i: number): string => `  → ${t.cycle![i]}  (import "${t.specifiers[i - 1]}")`;
+        const step = (i: number): string => `  → ${t.cycle![i]}  ${importNote(t.cycle![i - 1], t.specifiers[i - 1])}`;
         const last = t.cycle.length - 1;
         if (last <= 2 * CYCLE_STEPS) for (let i = 1; i <= last; i++) lines.push(step(i));
         else {
@@ -340,7 +352,8 @@ function unusedLines(a: ArchitectureAnswer, u: Unused, page: { limit: number; of
     const head = `Files in ${whereOf(a)} that no indexed file imports: `;
     if (total === 0) return { lines: [`${head}none${tests}.`], notes: [] };
     const lines = [`${head}${formatCount(total)}${tests}.`];
-    if (u.declared.length > 0) lines.push(...listBlock(`Named as entry points by a package.json (${formatCount(u.declared.length)}):`, u.declared));
+    const declaredBy = u.manifestOnly ? "Named as entry points by a package.json" : "Entry points";   // ADR-065, as rootLines
+    if (u.declared.length > 0) lines.push(...listBlock(`${declaredBy} (${formatCount(u.declared.length)}):`, u.declared));
     if (u.others.length > 0){
         lines.push(`Not named anywhere (${formatCount(u.others.length)}):`);
         if (page.offset >= u.others.length) return { lines: [...lines, `Nothing at offset ${page.offset}: the list has ${formatCount(u.others.length)}.`], notes: [UNUSED_NOTE] };
@@ -368,7 +381,8 @@ function summaryLines(a: ArchitectureAnswer): string[] {
     const u = a.unused!;
     const total = u.declared.length + u.others.length;
     lines.push(total === 0 ? "Files nothing imports: none, not counting tests"
-        : `Files nothing imports: ${formatCount(total)}, not counting tests${u.declared.length > 0 ? ` (${plural(u.declared.length, "entry point")} named by a package.json)` : ""}`);
+        : `Files nothing imports: ${formatCount(total)}, not counting tests${u.declared.length > 0
+            ? ` (${plural(u.declared.length, "entry point")}${u.manifestOnly ? " named by a package.json" : ""})` : ""}`);
     lines.push('For details, ask again with report "layers", "conventions", "cycles" or "unused".');
     return lines;
 }

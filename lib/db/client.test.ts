@@ -2,10 +2,29 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../../test/helpers/temp";
-import { DatabaseMissingError, DatabaseOutdatedError, openDb, type Db } from "./client";
+import { closeDb, DatabaseMissingError, DatabaseOutdatedError, getDb, openDb, type Db } from "./client";
 import { meta } from "./schema";
+
+describe("closeDb (E4's bench-languages: a fresh data folder per run, in one process)", () => {
+    it("closes the process's database, and the next getDb opens another", () => {
+        const first = getDb();
+        closeDb();
+        expect(first.$client.open).toBe(false);
+        const second = getDb();
+        expect(second).not.toBe(first);
+        expect(second.$client.open).toBe(true);
+        expect(getDb()).toBe(second);
+    });
+
+    it("does nothing when no database is open", () => {
+        closeDb();
+        expect(() => closeDb()).not.toThrow();
+    });
+});
 
 const tempDatabase = (): string => path.join(makeTempDir("neb-db-"), "nebulosity.db");
 const row = (key: string, value: string) => ({ key, value, updatedAt: new Date() });
@@ -18,6 +37,34 @@ function withOpen<T>(handles: Db[], body: () => T): T {
         for (const handle of handles) handle.$client.close();
     }
 }
+
+describe("migration 0010 (files.declares, ADR-065)", () => {
+    it("gives every file of a database at migration 0009 the declares []", () => {
+        // a copy of the migrations up to 0009: the folder drizzle reads, its journal cut after 0009's entry
+        const upTo9 = makeTempDir("neb-migrations-");
+        fs.cpSync(path.resolve("lib/db/migrations"), upTo9, { recursive: true });
+        for (const name of fs.readdirSync(upTo9)) if (name.startsWith("0010_")) fs.rmSync(path.join(upTo9, name));
+        fs.rmSync(path.join(upTo9, "meta", "0010_snapshot.json"));
+        const journalFile = path.join(upTo9, "meta", "_journal.json");
+        const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as { entries: { idx: number }[] };
+        journal.entries = journal.entries.filter((e) => e.idx <= 9);
+        fs.writeFileSync(journalFile, JSON.stringify(journal));
+
+        const file = tempDatabase();
+        const old = new Database(file);
+        migrate(drizzle(old), { migrationsFolder: upTo9 });
+        expect((old.prepare("select name from pragma_table_info('files')").all() as { name: string }[]).map((c) => c.name)).not.toContain("declares");
+        const repoId = Number(old.prepare("insert into repositories (root_path) values ('/migrate/0009')").run().lastInsertRowid);
+        old.prepare("insert into files (repo_id, path, kind, content_hash) values (?, 'a.ts', 'module', 'h'), (?, 'b.ts', 'module', 'h')").run(repoId, repoId);
+        old.close();
+
+        const migrated = openDb(file);
+        withOpen([migrated], () => {
+            expect(migrated.all<{ path: string; declares: string }>(sql`select path, declares from files order by path`))
+                .toEqual([{ path: "a.ts", declares: "[]" }, { path: "b.ts", declares: "[]" }]);
+        });
+    });
+});
 
 describe("openDb, read-only (ADR-044)", () => {
     it("reads what a writer commits, even after it opened, and refuses to write", () => {

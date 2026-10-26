@@ -185,6 +185,37 @@ export function planSummaries(
     });
 }
 
+/**
+ * The folders and the repo that writing `below` will put out of date (ruling R24, the pre-ship pass's final review A-I1):
+ * every model-written folder above one of them, and the repo, that isn't in `below` itself. Pure.
+ *
+ * A folder's prompt is built from its children's stored text, so while they wait to be rewritten it plans as current.
+ * Once they are, its input changes and a full run redoes it. After a file model change that's every folder in the repo,
+ * so the estimate and the spend cap have to count them before the files go. Left out:
+ * - test-only folders, which get a template;
+ * - a folder that failed this run, which waits for the next; nothing above it changes through it.
+ */
+export function foldersAbove(targets: readonly PlannedTarget[], below: readonly PlannedTarget[]): PlannedTarget[] {
+    const byKey = new Map(targets.map((t) => [targetKey(t.kind, t.path), t]));
+    const seen = new Set(below.map((t) => targetKey(t.kind, t.path)));
+    const above = new Set<string>();
+
+    for (const target of below){
+        if (target.kind === "repo") continue;
+        for (let dir: string | null = dirOf(target.path); dir !== null; dir = dir === "" ? null : dirOf(dir)){
+            const key = targetKey(dir === "" ? "repo" : "folder", dir);
+            // already counted, with what's above it: below's own walk, or an earlier one, covers the rest of the way up
+            if (seen.has(key)) break;
+            seen.add(key);
+            const folder = byKey.get(key);
+            if (!folder || folder.model === "template" || folder.state === "failed") break;
+            above.add(key);
+        }
+    }
+    // in queue order: deepest first, the repo last
+    return targets.filter((t) => above.has(targetKey(t.kind, t.path)));
+}
+
 /** The state of one model-written target, given its stored row and whether its children are settled. */
 function decide(
     kind: SummaryTargetKind,

@@ -1,11 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
+import { toyAdapter } from "../../test/helpers/toy-adapter";
 import { getDb } from "../db/client";
-import { chunks, files, folders, levelEdges, repositories, symbols } from "../db/schema";
+import { chunks, entryPoints, files, folders, levelEdges, repositories, symbols } from "../db/schema";
 import { loadAllDocLinks, loadDocs } from "../db/store/docs";
 import { loadCallBindings, loadCallsOf, loadInjectionSites, loadTypeDecls } from "../db/store/calls";
 import { loadEntryPoints } from "../db/store/entries";
@@ -14,9 +15,12 @@ import { deferCodeSearch, isCodeSearchDeferred, searchCode } from "../db/store/s
 import { readStages, type StoredStage } from "../db/store/stages";
 import { findRepository, loadImportEdges, upsertRepository, writeFileRecords } from "../db/store/structure";
 import { readAdapterVersion, writeAdapterVersion } from "../db/store/version";
+import type { LanguageAdapter } from "./languages/adapter";
 import { ADAPTER_VERSION } from "./languages/typescript";
+import { typescriptAdapter } from "./languages/typescript-adapter";
+import { GrammarNotLoadedError } from "./languages/treesitter";
 import { repoKey } from "./paths";
-import { indexRepository, RepoNotFoundError, type IndexStage } from "./pipeline";
+import { describeScanned, indexRepository, RepoNotFoundError, structureNote, type IndexStage } from "./pipeline";
 
 function levelRows(repoId: number, levelPath: string) {
     return getDb()
@@ -294,7 +298,7 @@ describe("indexRepository — code search deferred for a bulk run (ADR-031, amen
         deferCodeSearch(db);   // a bulk run began…
         writeFileRecords(db, crashed, [{
             path: "crashed.ts", kind: "module", contentHash: "h", language: "typescript", sizeBytes: 10, lineCount: 1, isTest: false,
-            importSpecifiers: [], symbols: [], calls: { types: [], bindings: [], calls: [] },
+            importSpecifiers: [], declares: [], symbols: [], calls: { types: [], bindings: [], calls: [] },
             chunks: [{ id: "crashed.ts#a#0", filePath: "crashed.ts", kind: "function", name: "a", nameSplit: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: "h" }],
         }]);                  // …wrote its chunks, and died before filling
         expect(searchCode(db, crashed, '"crashed"', 10)).toEqual([]);
@@ -431,5 +435,184 @@ describe("indexRepository on the calls fixture (ADR-059)", () => {
         expect(ofFile(loadCallBindings(db, result.repoId)).map((b) => b.local)).toEqual(["IFileService", "IWatchingFileService", "Disposable"]);
         expect(ofFile(loadCallsOf(db, result.repoId, "readFile")).map((c) => c.line)).toEqual([15, 15]);
         expect(ofFile(loadInjectionSites(db, result.repoId, "IFileService")).map((c) => c.line)).toEqual([6]);
+    });
+});
+
+describe("indexRepository through the language adapters (ADR-065)", () => {
+    const adapters = [typescriptAdapter, toyAdapter];
+
+    /** A folder holding these files (no git: discovery walks it). */
+    function repo(files: Record<string, string>): string {
+        const dir = makeTempDir("neb-adapters-");
+        for (const [rel, text] of Object.entries(files)){
+            fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+            fs.writeFileSync(path.join(dir, rel), text);
+        }
+        return dir;
+    }
+
+    const edgesOfRepo = (repoId: number) => loadImportEdges(getDb(), repoId)
+        .sort((a, b) => (a.source + a.target < b.source + b.target ? -1 : 1));
+
+    // by the toy's rules (test/helpers/toy-adapter.ts): use:lib/y names lib/y.toy; name:helper names the other file of
+    // lib/ that defines helper (lib/z.toy); use:lib/self names the importer itself, placed with no edge
+    const TOY_REPO = {
+        "a.ts": "import \"./b\";\n",
+        "b.ts": "export {};\n",
+        "lib/x.toy": "use lib/y\nname helper\n",
+        "lib/y.toy": "def thing\n",
+        "lib/z.toy": "def helper\nmain\n",
+        "lib/self.toy": "use lib/self\n",
+    };
+
+    it("stores both languages' files and edges, a name resolved within its folder, and no self edge", () => {
+        const { repoId, files: count } = indexRepository(repo(TOY_REPO), { adapters });
+        expect(count).toBe(6);
+        expect(edgesOfRepo(repoId)).toEqual([
+            { source: "a.ts", target: "b.ts", specifier: "./b" },
+            { source: "lib/x.toy", target: "lib/y.toy", specifier: "use:lib/y" },
+            { source: "lib/x.toy", target: "lib/z.toy", specifier: "name:helper" },
+        ]);
+        const db = getDb();
+        const rows = db.select({ path: files.path, language: files.language, kind: files.kind, declares: files.declares }).from(files)
+            .where(eq(files.repoId, repoId)).orderBy(files.path).all();
+        expect(rows).toEqual([
+            { path: "a.ts", language: "typescript", kind: "module", declares: "[]" },
+            { path: "b.ts", language: "typescript", kind: "module", declares: "[]" },
+            { path: "lib/self.toy", language: "toy", kind: "module", declares: "[]" },
+            { path: "lib/x.toy", language: "toy", kind: "module", declares: "[]" },
+            { path: "lib/y.toy", language: "toy", kind: "module", declares: "[\"def:thing\"]" },
+            { path: "lib/z.toy", language: "toy", kind: "module", declares: "[\"def:helper\",\"main\"]" },
+        ]);
+    });
+
+    it("stores the entry points each adapter names", () => {
+        const { repoId } = indexRepository(repo(TOY_REPO), { adapters });
+        expect(getDb().select({ path: entryPoints.path, declaredBy: entryPoints.declaredBy }).from(entryPoints)
+            .where(eq(entryPoints.repoId, repoId)).all()).toEqual([{ path: "lib/z.toy", declaredBy: "toy main" }]);
+    });
+
+    it("re-parses only the files of an adapter whose version moved", () => {
+        const root = repo(TOY_REPO);
+        const { repoId } = indexRepository(root, { adapters });
+        expect(indexRepository(root, { adapters })).toMatchObject({ changed: 0, unchanged: 6 });
+
+        const bumped = { ...toyAdapter, version: 2 };
+        expect(indexRepository(root, { adapters: [typescriptAdapter, bumped] })).toMatchObject({ changed: 4, unchanged: 2 });
+        expect(readAdapterVersion(getDb(), repoId, "toy")).toBe(2);
+        expect(readAdapterVersion(getDb(), repoId)).toBe(ADAPTER_VERSION);
+        expect(indexRepository(root, { adapters: [typescriptAdapter, bumped] })).toMatchObject({ changed: 0, unchanged: 6 });
+    });
+
+    it("makes no edge of a TypeScript file's import of itself, as before E4 (the E4 final review's m1)", () => {
+        // TypeScript's resolver has refused a file importing itself since V1.1 (resolve.ts: "a file importing itself is
+        // no edge"), so edgesOf's self rule changes nothing for it: the pre-E4 code (75b4774) indexed this repo's self.ts
+        // with its one edge, to b.ts (checked 2026-10-25 by running it)
+        const { repoId } = indexRepository(repo({
+            "self.ts": "import * as self from \"./self\";\nimport \"./self.js\";\nimport { b } from \"./b\";\nexport const a = [self, b];\n",
+            "b.ts": "export const b = 1;\n",
+        }), { adapters });
+        expect(edgesOfRepo(repoId)).toEqual([{ source: "self.ts", target: "b.ts", specifier: "./b" }]);
+    });
+
+    it("refuses to index a file whose grammar this process hasn't loaded", () => {
+        const unprepared = { ...toyAdapter, grammar: "missing.wasm" };
+        expect(() => indexRepository(repo(TOY_REPO), { adapters: [typescriptAdapter, unprepared] })).toThrow(GrammarNotLoadedError);
+        // with none of its files discovered, nothing needs it
+        expect(indexRepository(repo({ "a.ts": "export {};\n" }), { adapters: [typescriptAdapter, unprepared] }).files).toBe(1);
+    });
+
+    /**
+     * A toy whose full and parse readings throw on a file holding the line `deep`, as a recursive walk overflows on a deep
+     * file, and whose readings all throw on `broken all`; its scan reads only the `use` lines (test/helpers/toy-adapter.ts).
+     */
+    const throwing: LanguageAdapter = {
+        ...toyAdapter,
+        parse(p, text, reading){
+            if (text.includes("broken all")) throw new Error("unreadable");
+            if (reading !== "scan" && text.includes("deep")) throw new RangeError("Maximum call stack size exceeded");
+            return toyAdapter.parse(p, text, reading);
+        },
+    };
+
+    it("reads a file whose parse throws with the scan instead: its row and imports kept, no declarations (the E4 final review's B-I1)", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const { repoId, ...result } = indexRepository(repo({ "a.toy": "use b\nname y\ndeep\ndef x\n", "b.toy": "def y\n", "c.toy": "broken all\n" }),
+            { adapters: [typescriptAdapter, throwing] });
+        // never silent: logged once, with the adapter and the error, and counted in the stage note beside the failure
+        expect(warn.mock.calls).toEqual([["[index] the toy parse of a.toy failed (Maximum call stack size exceeded), so the scan read its imports only"]]);
+        warn.mockRestore();
+        expect(readStages(getDb(), repoId).structure).toMatchObject({
+            state: "ready", note: "1 files failed to index; 1 file read by the scan (their parse failed): a.toy",
+        });
+        // a.toy is scanned: only use:b, so b.toy by its path and no name:y; c.toy throws in every reading, so it is left out
+        expect(result).toMatchObject({
+            files: 2, edges: 1,
+            scanned: [{ path: "a.toy", error: "Maximum call stack size exceeded" }],
+            errors: [{ path: "c.toy", error: "unreadable" }],
+        });
+        expect(edgesOfRepo(repoId)).toEqual([{ source: "a.toy", target: "b.toy", specifier: "use:b" }]);
+        const db = getDb();
+        expect(db.select({ path: files.path, declares: files.declares, lineCount: files.lineCount }).from(files)
+            .where(eq(files.repoId, repoId)).orderBy(files.path).all()).toEqual([
+            { path: "a.toy", declares: "[]", lineCount: 4 },        // the scan declares nothing (K7), but counts the lines
+            { path: "b.toy", declares: "[\"def:y\"]", lineCount: 1 },
+        ]);
+        expect(db.select({ path: files.path, name: symbols.name }).from(symbols).innerJoin(files, eq(files.id, symbols.fileId))
+            .where(eq(files.repoId, repoId)).orderBy(files.path).all()).toEqual([{ path: "b.toy", name: "y" }]);
+        expect(db.select({ path: files.path }).from(chunks).innerJoin(files, eq(files.id, chunks.fileId))
+            .where(and(eq(files.repoId, repoId), eq(files.path, "a.toy"))).all()).toEqual([]);
+    });
+
+    it("notes the scanned files by count and the first three paths, after the failures, or nothing", () => {
+        const at = (...paths: string[]) => paths.map((p) => ({ path: p, error: "x" }));
+        expect(structureNote([], [])).toBeNull();
+        expect(structureNote(at("e.ts", "f.ts"), [])).toBe("2 files failed to index");
+        expect(describeScanned(at("a", "b", "c", "d", "e"))).toBe("5 files read by the scan (their parse failed): a, b, c, and 2 more");
+        expect(structureNote([], at("a", "b"))).toBe("2 files read by the scan (their parse failed): a, b");
+    });
+
+    it("never retries a parse that names a grammar not loaded, and never scans a file twice", () => {
+        const scans: string[] = [];
+        const grammarless: LanguageAdapter = {
+            ...toyAdapter,
+            parse(p, text, reading){
+                if (reading === "scan") scans.push(p);
+                if (p === "g.toy") throw new GrammarNotLoadedError(["toy"]);
+                if (reading === "scan") throw new RangeError("the scan overflows too");
+                throw new RangeError("Maximum call stack size exceeded");
+            },
+        };
+        const result = indexRepository(repo({ "g.toy": "def g\n", "s.toy": "def s\n" }), { adapters: [typescriptAdapter, grammarless] });
+        expect(result).toMatchObject({ files: 0, scanned: [] });
+        expect(result.errors.map((e) => e.path)).toEqual(["g.toy", "s.toy"]);
+        expect(result.errors[1].error).toBe("the scan overflows too");
+        expect(scans).toEqual(["s.toy"]);
+    });
+
+    it("leaves TypeScript's edges as they were beside another language's manifest", () => {
+        const root = copyFixture();
+        // read as a tsconfig, src/toy.json would make src/ a module-id root, and "util/strings" would name src/util/strings.ts
+        fs.writeFileSync(path.join(root, "src/toy.json"), "{}\n");
+        fs.writeFileSync(path.join(root, "src/extra.ts"), "import \"util/strings\";\n");
+        const { repoId, edges } = indexRepository(root, { adapters });
+        expect(edges).toBe(11);   // the V1.1 plan's 11 edges, and none from extra.ts
+        expect(edgesOfRepo(repoId).filter((e) => e.source === "src/extra.ts")).toEqual([]);
+    });
+
+    it("indexes a repo whose every absolute path is longer than 260 characters as it does a short one", () => {
+        const plain = copyFixture();
+        let deep = makeTempDir("neb-long-");
+        while (deep.length < 250) deep = path.join(deep, "a-folder-name-of-forty-characters-long-x");
+        fs.cpSync(plain, deep, { recursive: true });
+        expect(path.join(deep, "src/index.ts").length).toBeGreaterThan(260);
+
+        const short = indexRepository(plain);
+        const long = indexRepository(deep);
+        expect(long).toMatchObject({ files: short.files, edges: short.edges, errors: [], skipped: [] });
+        const pairs = (repoId: number) => edgesOfRepo(repoId);
+        expect(pairs(long.repoId)).toEqual(pairs(short.repoId));
+        const paths = (repoId: number) => getDb().select({ p: files.path }).from(files).where(eq(files.repoId, repoId)).orderBy(files.path).all();
+        expect(paths(long.repoId)).toEqual(paths(short.repoId));
     });
 });

@@ -1,7 +1,11 @@
+import fs from "fs";
 import path from "path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { copyFixture } from "../../test/helpers/fixture";
+import { prepareLanguages } from "../index/languages/registry";
+import { RULES } from "../index/languages/rules";
 import { indexRepository } from "../index/pipeline";
-import { buildCallIndex, calls, hierarchyOf } from "./calls";
+import { buildCallIndex, calls, CALLS_LANGUAGE_NAMES, hierarchyOf } from "./calls";
 
 const root = path.join(__dirname, "..", "..", "test", "fixtures", "di-repo");
 indexRepository(root);
@@ -145,6 +149,65 @@ describe("calls: names and errors", () => {
         expect(() => calls(root, { symbol: "Logger", path: "src/app/dialogs/index.ts" })).toThrow("src/app/dialogs/index.ts declares no class or interface named Logger.");
         expect(() => calls(root, { symbol: "a.b.c" })).toThrow('symbol takes a class or interface ("IFooService") or one of its members ("IFooService.save").');
         expect(() => calls(root, { symbol: "IFileService" }, { groupBy: null, within: "src/workbench/editor/textEditor.ts" })).toThrow("within takes a folder.");
+    });
+
+    it("says a file of another language the index reads isn't in the calls index (E4, C4), whatever the symbol", () => {
+        const refusal = (p: string, language: string) => `Calls are indexed for TypeScript and JavaScript only; ${p} is ${language}.`;
+        expect(() => calls(root, { symbol: "OrderService.save", path: "shop/services.py" })).toThrow(refusal("shop/services.py", "Python"));
+        expect(() => calls(root, { symbol: "Order", path: "typings/shop.pyi" })).toThrow(refusal("typings/shop.pyi", "Python"));
+        expect(() => calls(root, { symbol: "Store.Get", path: "internal/store/store.go" })).toThrow(refusal("internal/store/store.go", "Go"));
+        expect(() => calls(root, { symbol: "OrderRepository", path: "src/main/java/shop/OrderRepository.java" }))
+            .toThrow(refusal("src/main/java/shop/OrderRepository.java", "Java"));
+        expect(() => calls(root, { symbol: "IOrderService.Place", path: "src/Shop/Logger.cs" })).toThrow(refusal("src/Shop/Logger.cs", "C#"));
+        expect(() => calls(root, { symbol: "a.b.c", path: "crates/core/src/lib.rs" })).toThrow(refusal("crates/core/src/lib.rs", "Rust"));
+        // TypeScript and JavaScript paths, and a path no language claims, keep the answers they had
+        expect(() => calls(root, { symbol: "Logger", path: "src/app/dialogs/index.js" })).toThrow("src/app/dialogs/index.js declares no class or interface named Logger.");
+        expect(() => calls(root, { symbol: "Logger", path: "docs/logger.md" })).toThrow("docs/logger.md declares no class or interface named Logger.");
+    });
+
+    it("names every language the index's rules claim, other than TypeScript's, for that refusal", () => {
+        const others = RULES.filter((r) => r.id !== "typescript" && r.extensions.length > 0);
+        expect(others.map((r) => r.id)).toEqual(["python", "go", "java", "csharp", "rust"]);
+        for (const r of others) expect(CALLS_LANGUAGE_NAMES[r.languageOf(`a${r.extensions[0]}`)], r.id).toBeDefined();
+    });
+});
+
+describe("calls without a path names another language's type, never \"not indexed\" (the E4 final review's A-I3)", () => {
+    const refusal = (...files: string[]) => `Calls are indexed for TypeScript and JavaScript only; ${files.join(", ")}.`;
+    const fixture = (id: string) => path.resolve("test", "fixtures", `${id}-repo`);
+    beforeAll(async () => {
+        await prepareLanguages();
+    });
+
+    it("names each file declaring the type, by path, with its language", () => {
+        // the declarations are the truths' symbols (test/helpers/<id>-repo-truth.ts)
+        const py = copyFixture(fixture("python"));
+        indexRepository(py);
+        // Product: a class in models.py and in its stub models.pyi; Meta: a class nested in models.py's Product
+        expect(() => calls(py, { symbol: "Product" })).toThrow(refusal("src/shop/models.py is Python", "src/shop/models.pyi is Python"));
+        expect(() => calls(py, { symbol: "Product.label" })).toThrow(refusal("src/shop/models.py is Python", "src/shop/models.pyi is Python"));
+        expect(() => calls(py, { symbol: "Meta" })).toThrow(refusal("src/shop/models.py is Python"));
+        // a name nothing declares as a type keeps the old answer: checkout is a function, Nope is nothing
+        expect(() => calls(py, { symbol: "checkout" })).toThrow("No class or interface named checkout is indexed.");
+        expect(() => calls(py, { symbol: "Nope" })).toThrow("No class or interface named Nope is indexed.");
+
+        const java = copyFixture(fixture("java"));
+        indexRepository(java);
+        expect(() => calls(java, { symbol: "Greeter" })).toThrow(refusal("lib/src/main/java/com/example/lib/Greeter.java is Java"));   // an interface
+
+        const go = copyFixture(fixture("go"));
+        indexRepository(go);
+        // a struct; handler.go's Store is a field (a property), not a type
+        expect(() => calls(go, { symbol: "Store.Get" })).toThrow(refusal("internal/store/store.go is Go"));
+    });
+
+    it("on a TypeScript repo, answers its own types as before and names another language's, at most five files", () => {
+        const root = copyFixture();
+        fs.mkdirSync(path.join(root, "extra"));
+        for (let i = 1; i <= 7; i++) fs.writeFileSync(path.join(root, "extra", `t${i}.py`), "class Thing:\n    pass\n");
+        indexRepository(root);
+        expect(calls(root, { symbol: "Logger" })).toMatchObject({ kind: "type", type: { name: "Logger", kind: "class", path: "src/core/log.ts" } });
+        expect(() => calls(root, { symbol: "Thing" })).toThrow(`${refusal(...[1, 2, 3, 4, 5].map((i) => `extra/t${i}.py is Python`)).slice(0, -1)}, and 2 more.`);
     });
 });
 

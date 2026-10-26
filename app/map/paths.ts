@@ -20,11 +20,24 @@ export function shortPath(targetPath: string): string {
     return targetPath.split("/").slice(-2).join("/");
 }
 
+/**
+ * The extensions of each language the index reads, named as GET /api/source and highlight.js name them (E4, ADR-065).
+ * The UI can't import lib/index/languages/rules.ts (ARCHITECTURE.md §3 rule 3), so this mirrors it, one row per
+ * language; syntax.test.ts holds the two equal for every extension the rules claim.
+ */
+const LANGUAGES: readonly (readonly [extension: RegExp, language: string])[] = [
+    [/\.(ts|tsx|mts|cts)$/, "typescript"],
+    [/\.(js|jsx|mjs|cjs)$/, "javascript"],
+    [/\.pyi?$/, "python"],
+    [/\.go$/, "go"],
+    [/\.java$/, "java"],
+    [/\.cs$/, "csharp"],
+    [/\.rs$/, "rust"],
+];
+
 /** The language a path's extension implies, the way GET /api/source names it (the UI can't import lib's copy). */
 export function languageFor(filePath: string): string {
-    if (/\.(ts|tsx|mts|cts)$/.test(filePath)) return "typescript";
-    if (/\.(js|jsx|mjs|cjs)$/.test(filePath)) return "javascript";
-    return "text";
+    return LANGUAGES.find(([extension]) => extension.test(filePath))?.[1] ?? "text";
 }
 
 /** Whether `targetPath` is strictly inside `folder` ("" holds everything but itself). */

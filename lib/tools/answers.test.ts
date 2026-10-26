@@ -1,11 +1,13 @@
 import path from "path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { copyFixture } from "../../test/helpers/fixture";
 import type { DescribeResponse, MapNode, SearchResult } from "../contracts";
 import { architecture } from "../engine/architecture";
 import { layersOf } from "../engine/architecture";
+import { prepareLanguages } from "../index/languages/registry";
 import { indexRepository } from "../index/pipeline";
 import type { Overview } from "../engine/overview";
-import type { ChainAnswer, ReachAnswer } from "../engine/reach";
+import { importChain, type ChainAnswer, type ReachAnswer } from "../engine/reach";
 import type { MemberAnswer, TypeAnswer } from "../engine/calls";
 import { architectureAnswer, callsAnswer, chainAnswer, describeAnswer, impactAnswer, overviewAnswer, reachAnswer, rootLines, searchAnswer } from "./answers";
 import { answerText, MAX_ANSWER_CHARS, SUMMARIES_OFF_LINE as S } from "./text";
@@ -312,7 +314,7 @@ describe("impact and root lines (ADR-055)", () => {
             ["src/app/loader.ts", 4],
         ].map(([p, d]) => ({ path: p as string, distance: d as number })),
     };
-    const roots = { declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts", "tools/fixtures/legacy-ids.ts"] };
+    const roots = { declared: ["src/app/loader.ts"], others: ["src/app/legacy.ts", "tools/fixtures/legacy-ids.ts"], manifestOnly: true };
 
     it("impact counts by area, then tests and the files nothing imports that load it (ADR-055)", () => {
         const text = answerText(impactAnswer({
@@ -353,6 +355,11 @@ describe("impact and root lines (ADR-055)", () => {
         ]);
     });
 
+    it("names no package.json when an entry point among them came from another language's build file (ADR-065)", () => {
+        const cargo = { declared: ["crates/core/src/lib.rs"], others: [], manifestOnly: false };
+        expect(rootLines(0, cargo)).toEqual(["Entry points that load it (1):", "  crates/core/src/lib.rs"]);
+    });
+
     it("a list within a folder says so in its first line", () => {
         const text = answerText(reachAnswer({
             path: "src/editor", kind: "folder", direction: "dependents", direct: 1, indexVersion: 1, within: "src/platform",
@@ -372,7 +379,7 @@ describe("impact and root lines (ADR-055)", () => {
     it("a page whose root lines are long still fits the answer limit (F24)", () => {
         // 100 root paths of about 150 characters: about 15,000 characters after the list, which the list's budget must leave room for
         const long = (tag: string): string[] => Array.from({ length: 50 }, (_, i) => `${tag.repeat(145)}${String(i).padStart(3, "0")}.ts`);
-        const after = rootLines(0, { declared: long("d"), others: long("o") });
+        const after = rootLines(0, { declared: long("d"), others: long("o"), manifestOnly: true });
         expect(after.join("\n").length).toBeGreaterThan(15_000);
         // 400 reached files of about 310 characters: the list alone would be about 125,000, so it must be cut
         const reached = Array.from({ length: 400 }, (_, i) => ({ path: `${"p".repeat(300)}${String(i).padStart(3, "0")}.ts`, distance: 1 }));
@@ -547,6 +554,19 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         ]);
     });
 
+    it("names no package.json when an entry point came from another language's build file, in the unused report and the summary (ADR-065)", () => {
+        const unused = { declared: ["crates/core/src/lib.rs"], others: [], tests: 0, manifestOnly: false };
+        expect(answerText(architectureAnswer({ path: "crates", kind: "folder", report: "unused", unused }, page)).split("\n")).toEqual([
+            "Files in crates/ that no indexed file imports: 1.",
+            "Entry points (1):",
+            "  crates/core/src/lib.rs",
+            "Note: a file nothing imports may still be loaded by name (a build script, a worker, an HTML page, a test runner), so check before deleting it.",
+        ]);
+        const rest = { layers: { levels: [], against: [], tangled: [], circles: [], unlinked: [] }, conventions: { minFolders: 3, names: [], pairs: [] }, cycles: [], unused };
+        expect(answerText(architectureAnswer({ path: "crates", kind: "folder", report: "summary", ...rest }, page)).split("\n"))
+            .toContain("Files nothing imports: 1, not counting tests (1 entry point)");
+    });
+
     it("keeps a huge conventions report and a huge cycles report under the answer limit", () => {
         // 150 recurring names, each importing every name: 22,500 pairs, of which 150 are rare
         const names = Array.from({ length: 150 }, (_, i) => ({ name: `env${String(i).padStart(3, "0")}`, folders: 3 }));
@@ -577,7 +597,7 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
         expect(cycleText.split("\n").slice(-6, -5)).toEqual(["Docs to read before answering how this is organized or why:"]);
         const others = Array.from({ length: 3_000 }, (_, i) => `src/${"u".repeat(150)}${i}.ts`);
         const declared = Array.from({ length: 60 }, (_, i) => `src/${"e".repeat(150)}${i}.ts`);
-        const unusedText = answerText(architectureAnswer({ path: "src", kind: "folder", report: "unused", unused: { declared, others, tests: 0 }, docs }, { limit: 500, offset: 0 }));
+        const unusedText = answerText(architectureAnswer({ path: "src", kind: "folder", report: "unused", unused: { declared, others, tests: 0, manifestOnly: true }, docs }, { limit: 500, offset: 0 }));
         expect(unusedText.length).toBeLessThanOrEqual(MAX_ANSWER_CHARS);
         expect(unusedText).toContain("(next page: offset ");
     });
@@ -600,7 +620,7 @@ describe("architectureAnswer, against the arch-repo ground truth", () => {
     it("keeps layers, the summary and a long cycle under the limit, and says how many were left out", () => {
         const part = (p: string) => ({ path: p, kind: "file" as const });
         const none = (): [string, string][] => [];
-        const rest = { conventions: { minFolders: 3, names: [], pairs: [] }, cycles: [], unused: { declared: [], others: [], tests: 0 } };
+        const rest = { conventions: { minFolders: 3, names: [], pairs: [] }, cycles: [], unused: { declared: [], others: [], tests: 0, manifestOnly: true } };
         // a flat folder of 3,001 files each importing one helper: two levels, the second with 3,000 names
         const flatParts = [part("helper.ts"), ...Array.from({ length: 3_000 }, (_, i) => part(`file${String(i).padStart(4, "0")}.ts`))];
         const flat = layersOf(flatParts, flatParts.slice(1).map((p) => ({ source: p.path, target: "helper.ts", count: 1 })), none);
@@ -719,5 +739,51 @@ describe("callsAnswer with one file whose row is longer than a whole page (V1.7 
         expect(row).not.toBeNull();
         expect(row!.shown.length + row!.hidden).toBe(20_000);
         expect(lines).toContain("… 1 more (next page: offset 1)");
+    });
+});
+
+describe("chain and cycle answers show another language's import as written (B-I3)", () => {
+    // Each step's import, derived by hand from the fixtures' truths: an edge is named by the first of the importer's
+    // specifiers that reaches the target (resolution.ts's edgesOf), and its language's displaySpecifier writes it as the
+    // source does. TypeScript keeps its quoted module path: the chainAnswer and architecture tests above.
+    const fixtures = path.join(__dirname, "..", "..", "test", "fixtures");
+    const indexed = (fixture: string): string => {
+        const root = copyFixture(path.join(fixtures, fixture));
+        indexRepository(root);
+        return root;
+    };
+    beforeAll(async () => {
+        await prepareLanguages();
+    });
+
+    it.each([
+        // the first specifier reaching model.rs (extern:shop_core reaches lib.rs, mod:|commands commands.rs)
+        ["rust-repo", "crates/cli/src/main.rs", "crates/core/src/model.rs", "(use shop_core::model::Order)"],
+        // import:…/internal/api is placed (its uses resolve), use:api.Handler reaches handler.go, then use:api.Open
+        ["go-repo", "cmd/shop/main.go", "internal/api/api.go", "(api.Open)"],
+        // the dot import reaches every non-test file of internal/text
+        ["go-repo", "cmd/shop/main.go", "internal/text/text.go", '(import . "example.com/shop/internal/text")'],
+        // importlib, os, importlib:import_module and requests reach no file; .:VERSION is the package's __init__.py
+        ["python-repo", "src/shop/cli.py", "src/shop/__init__.py", "(from . import VERSION)"],
+        // static:com.example.lib.Constants reaches Constants.java, then static:com.example.lib.Strings
+        ["java-repo", "app/src/main/java/com/example/app/App.java", "lib/src/main/java/com/example/lib/Strings.java", "(import static com.example.lib.Strings)"],
+        // the usings are context (no edge); type:Guard, by static access, is Shop.Web's own Guard
+        ["csharp-repo", "src/Shop.Web/Pages/CheckoutPage.cs", "src/Shop.Web/Shared/Guard.cs", "(Guard)"],
+    ])("imports … to on %s: %s to %s", (fixture, from, to, note) => {
+        const root = indexed(fixture);
+        expect(chainAnswer(importChain(root, from, to)).body).toEqual([`${from} reaches ${to} in 1 step:`, `  ${from}`, `  → ${to}  ${note}`]);
+    });
+
+    it("architecture's cycle through a Rust file", () => {
+        // a.rs ↔ a/inner.rs and a.rs ↔ a/tests.rs are both 2 steps; neighbours in path order put a/inner.rs first.
+        // a.rs reaches it by mod:|inner (before use:|self::inner::Y), and inner.rs reaches a.rs by use:|super::Thing
+        const root = indexed("rust-repo");
+        const lines = answerText(architectureAnswer(architecture(root, "crates/core/src/a.rs", "cycles"), { limit: 50, offset: 0 })).split("\n");
+        expect(lines.slice(0, 4)).toEqual([
+            "The shortest import cycle through crates/core/src/a.rs (2 steps):",
+            "  crates/core/src/a.rs",
+            "  → crates/core/src/a/inner.rs  (mod inner)",
+            "  → crates/core/src/a.rs  (use super::Thing)",
+        ]);
     });
 });

@@ -1,6 +1,9 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import type { LanguageRules } from "./languages/adapter";
+import { claimedExtensions, exclusionFor, isManifestPath, RULES, rulesFor } from "./languages/rules";
+import { MANIFEST } from "./languages/typescript-rules";
 import { normalizeSlashes } from "./paths";
 
 export type DiscoveredFile = {
@@ -17,14 +20,17 @@ export type DiscoveryResult = {
     files: DiscoveredFile[];
     skipped: SkippedFile[];
     usedGit: boolean;
-    /** package.json and tsconfig*.json files: what resolving bare specifiers reads (ADR-053). Sorted. */
+    /**
+     * Every language's manifests (a package.json, a tsconfig*.json, and what each language's rules name): what resolution
+     * reads (ADR-053) and what decides which files a language leaves out (ADR-065). Sorted.
+     */
     manifests: string[];
     /** Markdown docs under the size cap: what the docs pointers read (ADR-054). Sorted. */
     docs: DiscoveredFile[];
 };
 
-/** A package.json or a tsconfig*.json (tsconfig.json, tsconfig.base.json, …). */
-export const MANIFEST = /(^|\/)(package\.json|tsconfig[^/]*\.json)$/;
+/** A package.json or a tsconfig*.json (tsconfig.json, tsconfig.base.json, …): TypeScript's manifests, now in its rules (ADR-065). */
+export { MANIFEST };
 
 /** The docs' extensions: Markdown, MDX, and Cursor's rule files. */
 export const DOC_EXTENSIONS: readonly string[] = [".md", ".mdx", ".mdc"];
@@ -92,35 +98,44 @@ export const WALK_ONLY_IGNORED_DIRS: ReadonlySet<string> = new Set(["dist", "out
  *
  * A code file over `maxBytes` is listed with `importsOnly` set to how its imports are read, and one over `hardMaxBytes`
  * is skipped (readingFor, ADR-053).
+ *
+ * The languages come from `rules` (every language's, RULES, by default; ADR-065). A path any language counts as a
+ * manifest is listed in `manifests`, and is a code file too when a language claims its extension (Python's setup.py).
+ * A code file the manifests leave out (exclusionFor: a virtual environment, vendor/ beside a go.mod, target/ beside a
+ * Cargo.toml…) is dropped silently, in both modes, as node_modules is. `extensions` defaults to every rules' claimed
+ * extensions.
  */
 export function discoverFiles(
     repoRoot: string,
-    opts: { extensions: readonly string[]; maxBytes?: number; parseMaxBytes?: number; hardMaxBytes?: number }
+    opts: { extensions?: readonly string[]; rules?: readonly LanguageRules[]; maxBytes?: number; parseMaxBytes?: number; hardMaxBytes?: number } = {}
 ): DiscoveryResult {
     const usedGit = fs.existsSync(path.join(repoRoot, ".git"));
     const skipped: SkippedFile[] = [];
     const candidates = usedGit ? listWithGit(repoRoot) : listByWalking(repoRoot, skipped);
     const maxBytes = opts.maxBytes ?? DEFAULT_MAX_FILE_BYTES;
+    const rules = opts.rules ?? RULES;
+    const extensions = opts.extensions ?? claimedExtensions(rules);
     const files: DiscoveredFile[] = [];
-    const manifests: string[] = [];
     const docs: DiscoveredFile[] = [];
 
-    for (const rel of candidates){
-        const base = rel.slice(rel.lastIndexOf("/") + 1);
+    // the manifests first: which code files a language leaves out depends on all of them (a go.mod anywhere above)
+    const manifests = candidates.filter((rel) => !baseOf(rel).startsWith(".env") && isManifestPath(rel, rules)).sort();
+    const manifestSet = new Set(manifests);
+    const excluded = exclusionFor(manifests, rules);
 
-        if (base.startsWith(".env")) continue; // never index secrets, whatever the extension
-        if (MANIFEST.test(rel)){
-            manifests.push(rel);
-            continue;
-        }
-        if (DOC_EXTENSIONS.some((ext) => rel.toLowerCase().endsWith(ext))){
+    for (const rel of candidates){
+        if (baseOf(rel).startsWith(".env")) continue; // never index secrets, whatever the extension
+        const isCode = extensions.some((ext) => rel.endsWith(ext));
+        if (manifestSet.has(rel)){
+            if (!isCode) continue;
+        } else if (DOC_EXTENSIONS.some((ext) => rel.toLowerCase().endsWith(ext))){
             const docSize = sizeOf(path.join(repoRoot, rel));
             if (docSize === null) skipped.push({ path: rel, reason: "unreadable: no size" });
             else if (docSize > maxBytes) skipped.push({ path: rel, reason: `too large (${docSize} bytes)` });
             else docs.push({ path: rel, sizeBytes: docSize });
             continue;
         }
-        if (!opts.extensions.some((ext) => rel.endsWith(ext))) continue;
+        if (!isCode || excluded(rel)) continue;
 
         let size: number;
         try{
@@ -142,14 +157,18 @@ export function discoverFiles(
 
     // plain code-unit order: deterministic on every OS and locale
     files.sort(byPath);
-    return { files, skipped, usedGit, manifests: manifests.sort(), docs: docs.sort(byPath) };
+    return { files, skipped, usedGit, manifests, docs: docs.sort(byPath) };
 }
 
-/** The repo's package.json and tsconfig*.json files now, as discoverFiles lists them (one git call or one walk). */
-export function listManifests(repoRoot: string): string[] {
+function baseOf(rel: string): string {
+    return rel.slice(rel.lastIndexOf("/") + 1);
+}
+
+/** The repo's manifests now, every language's (RULES by default), as discoverFiles lists them (one git call or one walk). */
+export function listManifests(repoRoot: string, rules: readonly LanguageRules[] = RULES): string[] {
     const usedGit = fs.existsSync(path.join(repoRoot, ".git"));
     const candidates = usedGit ? listWithGit(repoRoot) : listByWalking(repoRoot, []);
-    return candidates.filter((rel) => MANIFEST.test(rel)).sort();
+    return candidates.filter((rel) => !baseOf(rel).startsWith(".env") && isManifestPath(rel, rules)).sort();
 }
 
 function sizeOf(absolute: string): number | null {
@@ -208,9 +227,13 @@ function listByWalking(repoRoot: string, skipped: SkippedFile[]): string[] {
     return out;
 }
 
-/** Test code is indexed, but later stages treat it differently (e.g. no LLM summary). */
-export function isTestPath(relPath: string): boolean {
-    return /(^|\/)(test|tests|__tests__)\//.test(relPath) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(relPath);
+/**
+ * Test code is indexed, but later stages treat it differently (e.g. no LLM summary). A file in a test/, tests/ or
+ * __tests__/ folder is a test in every language; on top of that, each language's own rule for the files it claims
+ * (TypeScript's *.test.ts and *.spec.tsx, ADR-065).
+ */
+export function isTestPath(relPath: string, rules: readonly LanguageRules[] = RULES): boolean {
+    return /(^|\/)(test|tests|__tests__)\//.test(relPath) || (rulesFor(relPath, rules)?.isTest(relPath) ?? false);
 }
 
 /** The commit the working tree is on, or null outside git or before the first commit. */
@@ -229,13 +252,17 @@ export function readGitHead(repoRoot: string): string | null {
 
 /**
  * Whether discoverFiles would leave this path out whatever its contents: a .env file, an extension no adapter claims,
- * or a folder it never enters (plus build output when walking). The incremental update (update.ts) asks this of every
- * path a watcher reports, so a file is in the index exactly when a full run would put it there.
+ * a file the manifests leave out (`exclude`, from exclusionFor), or a folder it never enters (plus build output when
+ * walking). The incremental update (update.ts) asks this of every path a watcher reports, so a file is in the index
+ * exactly when a full run would put it there.
  */
-export function isExcludedPath(rel: string, opts: { extensions: readonly string[]; usedGit: boolean }): boolean {
+export function isExcludedPath(
+    rel: string, opts: { extensions: readonly string[]; usedGit: boolean; exclude?: (rel: string) => boolean }
+): boolean {
     const segments = rel.split("/");
     const base = segments[segments.length - 1];
     if (base.startsWith(".env") || !opts.extensions.some((ext) => rel.endsWith(ext))) return true;
+    if (opts.exclude?.(rel) === true) return true;
 
     const parents = segments.slice(0, -1);
     if (parents.some((segment) => IGNORED_DIRS.has(segment))) return true;

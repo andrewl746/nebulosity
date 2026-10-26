@@ -176,7 +176,7 @@ export type SourceResponse = {
   lineCount: number;
   /** The file was longer than the limit (1 MB) and `content` stops there. */
   truncated: boolean;
-  /** "typescript", "javascript" or "text". */
+  /** "typescript", "javascript", "python", "go", "java", "csharp", "rust" (E4, ADR-065), or "text". */
   language: string;
 };
 
@@ -322,6 +322,11 @@ export type IndexEventMap = {
     /** Per-file failures: indexing is per-file error-tolerant (ADR-021). */
     errors: Array<{ path: string; error: string }>;
     /**
+     * Files whose parse threw, read by the scan instead: indexed for their imports only, each with the parse's error
+     * (ADR-065, the E4 final review's B-I1). Additive and optional (CONTRACTS_VERSION stays 3); the worker always sends it.
+     */
+    scanned?: Array<{ path: string; error: string }>;
+    /**
      * Files left out: code files over 20 MB, docs over 1 MB, and files that couldn't be read. A code file over 1 MB is
      * indexed for its imports only (ADR-053).
      */
@@ -447,6 +452,18 @@ export type DemoSearchIndex = {
   /** [name, position in files] for every exported top-level declaration, by file, then line. */
   declarations: [string, number][];
 };
+
+/* ──────────────────────── The settings file ──────────────────────── */
+
+/**
+ * One kind's entry under `summaryModels` in config.json — docs/API_CONTRACTS.md §21 (ADR-066): the model that writes
+ * that kind's summaries, and its list prices in US dollars per million tokens. The prices may be left out only for a
+ * model the built-in price table has; given prices win over the table's.
+ */
+export type SummaryModelSetting = { model: string; inputPerMTok?: number; outputPerMTok?: number };
+
+/** `summaryModels` in config.json — docs/API_CONTRACTS.md §21. A kind left out keeps its default model (ADR-028). */
+export type SummaryModelsSetting = Partial<Record<"file" | "folder" | "repo", SummaryModelSetting>>;
 
 /* ──────────────────────────── Persistence ────────────────────────── */
 

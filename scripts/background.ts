@@ -5,7 +5,8 @@
  */
 import { handleParentMessage } from "../lib/background/child";
 import type { ChildMessage, ParentMessage } from "../lib/background/protocol";
-import { createBackgroundService } from "../lib/background/service";
+import { createBackgroundService, type BackgroundService } from "../lib/background/service";
+import { prepareLanguages } from "../lib/index/languages/registry";
 import { summarizerFromEnv } from "../lib/index/summarize/claude";
 import { loadLocalEnv } from "./env";
 
@@ -17,17 +18,26 @@ if (!send){
     process.exit(1);
 }
 
-const service = createBackgroundService({
-    summarizer: summarizerFromEnv(),
-    log: (message) => console.log(`[background] ${message}`),
+// The tree-sitter grammars load first, asynchronously (ADR-065): every update and full run after that is synchronous.
+// The script is CommonJS, so no top-level await: the service is a promise, and every message waits for it, in order.
+const ready: Promise<BackgroundService> = (async () => {
+    await prepareLanguages();
+    return createBackgroundService({
+        summarizer: summarizerFromEnv(),
+        log: (message) => console.log(`[background] ${message}`),
+    });
+})();
+ready.catch((err: unknown) => {
+    console.error("[background] the tree-sitter grammars failed to load:", err);
+    process.exit(1);
 });
 
 process.on("message", (message: unknown) => {
-    handleParentMessage(service, message as ParentMessage, (reply: ChildMessage) => { send(reply); })
+    ready.then((service) => handleParentMessage(service, message as ParentMessage, (reply: ChildMessage) => { send(reply); }))
         .catch((err: unknown) => console.error("[background]", err));
 });
 
 // the server is gone (stopped, crashed, restarted): stop watching and exit, so no orphan keeps writing
 process.on("disconnect", () => {
-    void service.stop().finally(() => process.exit(0));
+    void ready.then((service) => service.stop()).finally(() => process.exit(0));
 });

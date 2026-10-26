@@ -6,8 +6,48 @@ import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { getDb } from "../client";
 import { indexRepository } from "../../index/pipeline";
 import { runSummaries } from "../../index/summarize/run";
-import { upsertRepository } from "./structure";
-import { bumpIndexVersion, readIndexVersion } from "./version";
+import { eq } from "drizzle-orm";
+import { meta } from "../schema";
+import { loadStoredFiles, upsertRepository, writeFileRecords, type FileRecord } from "./structure";
+import { bumpIndexVersion, readAdapterVersion, readIndexVersion, recordAdapterVersion, writeAdapterVersion } from "./version";
+
+const record = (p: string): FileRecord => ({
+    path: p, kind: "module", contentHash: `hash-${p}`, language: "typescript", sizeBytes: 1, lineCount: 1, isTest: false,
+    importSpecifiers: [], declares: [], chunks: [], symbols: [], calls: { types: [], bindings: [], calls: [] },
+});
+
+describe("adapter versions, one per adapter (ADR-065, the design's C16)", () => {
+    const metaValue = (key: string): string | undefined => getDb().select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value;
+
+    it("keeps TypeScript's under the key it always had, and every other adapter's under its own", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/version-test/adapters");
+        writeAdapterVersion(db, repoId, 7);
+        expect(metaValue(`adapterVersion:${repoId}`)).toBe("7");
+        expect(readAdapterVersion(db, repoId)).toBe(7);
+        expect(readAdapterVersion(db, repoId, "typescript")).toBe(7);
+
+        expect(readAdapterVersion(db, repoId, "python")).toBe(0);
+        writeAdapterVersion(db, repoId, 3, "python");
+        expect(metaValue(`adapterVersion:${repoId}:python`)).toBe("3");
+        expect(readAdapterVersion(db, repoId, "python")).toBe(3);
+        expect(readAdapterVersion(db, repoId)).toBe(7);
+    });
+
+    it("records one adapter's version and clears only the hashes it is given", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/version-test/record");
+        writeFileRecords(db, repoId, [record("a.go"), record("b.go"), record("c.ts")]);
+        recordAdapterVersion(db, repoId, 7, []);
+        recordAdapterVersion(db, repoId, 2, ["b.go"], "go");
+
+        expect(readAdapterVersion(db, repoId, "go")).toBe(2);
+        expect(metaValue(`adapterVersion:${repoId}:go`)).toBe("2");
+        expect(readAdapterVersion(db, repoId)).toBe(7);
+        const stored = loadStoredFiles(db, repoId);
+        expect([...stored].map(([p, f]) => [p, f.contentHash])).toEqual([["a.go", "hash-a.go"], ["b.go", ""], ["c.ts", "hash-c.ts"]]);
+    });
+});
 
 describe("index version", () => {
     it("is 0 for a repo nothing has written yet, and counts up by one per bump", () => {

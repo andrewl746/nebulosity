@@ -6,7 +6,10 @@ import { dirOf } from "../paths";
 /** Part of every inputHash. Bump it to redo every summary on purpose (a better prompt, new settings). Version 2: ADR-034. */
 export const PROMPT_VERSION = 2;
 
-/** Who writes what (ADR-028): Haiku for the many files, Sonnet for the folders and the repo people read first. */
+/**
+ * Who writes what by default (ADR-028): Haiku for the many files, Sonnet for the folders and the repo people read first.
+ * summaryModels in config.json overrides any kind (ADR-066); every reader takes the models resolved from it (models.ts).
+ */
 export const SUMMARY_MODELS = {
     file: "claude-haiku-5-5",
     folder: "claude-sonnet-5-5",
@@ -181,10 +184,39 @@ export function truncateSource(source: string, maxChars: number = MAX_SOURCE_CHA
     return `${kept}\n… (truncated: ${plural(countLines(rest), "more line")})`;
 }
 
+/**
+ * The other languages' test-file names (E4, C9), one row per merged language, matching its rules' isTest: the
+ * extension, the marker the name's stem loses (`test_views.py` → views, `server_test.go` → server, `OrderIT.java` →
+ * Order, `OrderTests.cs` → Order), and the stems that stand for their folder: a file that is only a marker (`tests.py`, `tests.rs`), pytest's
+ * per-folder `conftest.py`, and a module's own file (`__init__.py`, `mod.rs`), so `tests/admin_views/tests.py` tests
+ * admin_views. A `src` folder names nothing: `crates/hir-ty/src/tests.rs` tests hir-ty. TypeScript's and JavaScript's
+ * names keep their own rule, unchanged.
+ */
+const TEST_NAMES: readonly { extension: RegExp; marker: RegExp; folder?: RegExp }[] = [
+    { extension: /\.pyi?$/, marker: /^test_|_test$/, folder: /^(tests|conftest|__init__)$/ },
+    { extension: /\.go$/, marker: /_test$/ },
+    { extension: /\.java$/, marker: /(Test|Tests|IT|TestCase)$/ },
+    { extension: /\.cs$/, marker: /Tests?$/ },
+    { extension: /\.rs$/, marker: /_tests?$/, folder: /^(tests|mod)$/ },
+];
+
+/** What a test file tests, from its path: its name without its language's extension and test marker. */
+function testSubject(filePath: string): string {
+    const slash = filePath.lastIndexOf("/");
+    const base = filePath.slice(slash + 1);
+    const names = TEST_NAMES.find((n) => n.extension.test(base));
+    if (!names) return base.replace(/\.(test|spec)(?=\.[cm]?[jt]sx?$)/, "").replace(/\.[cm]?[jt]sx?$/, "");
+    const stem = base.replace(names.extension, "");
+    const subject = stem.replace(names.marker, "");
+    const folder = filePath.split("/").slice(0, -1).filter((segment) => segment !== "src").at(-1) ?? "";
+    // nothing left, or a name that stands for its folder: the folder's name, when there is one
+    if ((subject === "" || names.folder?.test(stem)) && folder !== "") return folder;
+    return subject || stem;
+}
+
 /** Test files skip the model (PIVOT_SPEC.md §5.3). This template says what they are from the path alone. */
 export function testFileSummary(filePath: string, lineCount: number): SummaryText {
-    const base = filePath.slice(filePath.lastIndexOf("/") + 1);
-    const subject = base.replace(/\.(test|spec)(?=\.[cm]?[jt]sx?$)/, "").replace(/\.[cm]?[jt]sx?$/, "");
+    const subject = testSubject(filePath);
     return {
         tagline: `Tests for ${subject}`,
         summary: `Test code (${plural(lineCount, "line")}) for ${subject}. Test files get this template instead of a model-written summary.`,

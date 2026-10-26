@@ -1,0 +1,10 @@
+[package]
+name = "shop-store"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/store.rs"
+
+[dependencies]
+shop-core = { path = "../core" }

@@ -1,0 +1,1 @@
+DISCOUNT = 10

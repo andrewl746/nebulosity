@@ -7,7 +7,7 @@
 import path from "path";
 import type { DocPointer } from "../contracts";
 import { getDb } from "../db/client";
-import { loadEntryPoints } from "../db/store/entries";
+import { loadEntryPointsDeclaredBy } from "../db/store/entries";
 import { loadChildFiles, loadChildFolders, loadLevelEdgeRows } from "../db/store/map";
 import { requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
@@ -16,6 +16,7 @@ import { dirOf, repoKey } from "../index/paths";
 import { docsAbout, docsToReadFirst } from "./docs";
 import { BadInputError } from "./errors";
 import { rangeOf } from "./graph";
+import { declaredByPackageJson } from "./impact";
 import { importIndexFor, requireKind, specifiersAlong, type ImportIndex } from "./reach";
 
 export type Part = { path: string; kind: "folder" | "file" };
@@ -35,7 +36,8 @@ export type Conventions = {
     /** examples only for pairs of 3 imports or fewer */
     pairs: { from: string; to: string; count: number; examples: [string, string][] }[];
 };
-export type Unused = { declared: string[]; others: string[]; tests: number };
+/** manifestOnly: every declared entry point came from a package.json, so the answer can say "a package.json" (ADR-065). */
+export type Unused = { declared: string[]; others: string[]; tests: number; manifestOnly: boolean };
 export type CycleGroup = { size: number; files: string[] };
 export type ArchitectureReport = "summary" | "layers" | "conventions" | "cycles" | "unused";
 export type ArchitectureAnswer = {
@@ -286,16 +288,20 @@ export function conventionsOf(index: ImportIndex, folderPath: string, minFolders
     };
 }
 
-/** The files under the place that nothing imports: tests counted apart, the rest split by whether a package.json names them. */
-export function unusedIn(index: ImportIndex, range: [number, number], declared: ReadonlySet<string>): Unused {
-    const out: Unused = { declared: [], others: [], tests: 0 };
+/**
+ * The files under the place that nothing imports: tests counted apart, the rest split by whether an entry point's
+ * declaration names them (`entries`: path → declaredBy).
+ */
+export function unusedIn(index: ImportIndex, range: [number, number], entries: ReadonlyMap<string, string>): Unused {
+    const out: Unused = { declared: [], others: [], tests: 0, manifestOnly: true };
     for (let i = range[0]; i < range[1]; i++){
         if (index.inDegree[i] !== 0) continue;
         const p = index.paths[i];
         if (isTestPath(p)) out.tests++;
-        else if (declared.has(p)) out.declared.push(p);
+        else if (entries.has(p)) out.declared.push(p);
         else out.others.push(p);
     }
+    out.manifestOnly = declaredByPackageJson(out.declared, entries);
     return out;
 }
 
@@ -366,7 +372,7 @@ export function architecture(repoRoot: string, targetPath: string, report: Archi
                 answer.through = { file: through, cycle, specifiers: cycle ? specifiersAlong(db, repoId, cycle) : [] };
             } else answer.cycles = groupsTouching(index, range);
         }
-        if (all || effective === "unused") answer.unused = unusedIn(index, range, loadEntryPoints(db, repoId));
+        if (all || effective === "unused") answer.unused = unusedIn(index, range, loadEntryPointsDeclaredBy(db, repoId));
         return answer;
     });
 }

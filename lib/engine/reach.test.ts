@@ -9,7 +9,7 @@ import { applyFileChanges } from "../index/update";
 import { BadInputError } from "./errors";
 import { buildImportGraph, rangeOf } from "./graph";
 import { PathNotFoundError } from "./level";
-import { buildImportIndex, importChain, reach, reachFrom, shortestChain } from "./reach";
+import { asWritten, buildImportIndex, importChain, reach, reachFrom, shortestChain } from "./reach";
 
 /** The fixture's import graph, ready to walk: 8 files, 11 imports. */
 function fixtureIndex(){
@@ -171,5 +171,17 @@ describe("reach within a folder (ADR-045, amended)", () => {
 
     it("refuses a file as the folder", () => {
         expect(() => reach(root, "src/editor", "dependents", { within: "src/app/main.ts" })).toThrow("within takes a folder.");
+    });
+});
+
+describe("asWritten (B-I3)", () => {
+    it("shows a stored specifier as its importer's language writes it, and TypeScript's and an unclaimed file's as they are", () => {
+        expect(asWritten("crates/cli/src/main.rs", "use:|shop_core::model::Order")).toBe("use shop_core::model::Order");
+        expect(asWritten("src/shop/cli.py", ".:VERSION")).toBe("from . import VERSION");
+        expect(asWritten("cmd/shop/main.go", "use:api.Open")).toBe("api.Open");
+        expect(asWritten("App.java", "static:com.example.lib.Strings")).toBe("import static com.example.lib.Strings");
+        expect(asWritten("Page.cs", "type:Guard")).toBe("Guard");
+        expect(asWritten("src/app/main.ts", "../core/log")).toBe("../core/log");
+        expect(asWritten("README.md", "x:y")).toBe("x:y");
     });
 });

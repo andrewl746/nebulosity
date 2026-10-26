@@ -4,7 +4,10 @@ import type { SummaryText } from "../../db/store/summaries";
 import { mapLimit } from "./concurrency";
 import { summariesEnabled } from "./env";
 import { MAX_OUTPUT_TOKENS, RETRY_MAX_OUTPUT_TOKENS, SUMMARY_EFFORT } from "./prompts";
-import { BatchGoneError, SummarizerAuthError, type ModelUsage, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
+import {
+    BatchGoneError, ModelUnavailableError, SummarizerAuthError, type ModelUsage, type Summarizer, type SummaryOutcome, type SummaryRequest,
+    type UnavailableModel,
+} from "./types";
 
 /** The reply we ask for, enforced by structured outputs (output_config.format). */
 export const SUMMARY_SCHEMA = {
@@ -63,9 +66,55 @@ type Effort = "low" | "medium" | "high";
 /**
  * Sonnet 5.5 on the regular API: if a safety classifier declines a request, the API runs
  * it again on a fallback model it picks by category. The Batches API rejects this
- * parameter, and Haiku 5.5 has no server-side fallback.
+ * parameter, and Haiku 5.5 has no server-side fallback. It goes only with a kind left at its
+ * default (ADR-066, R3): a model set in summaryModels may not know this beta.
  */
 const SONNET_FALLBACK = { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const };
+
+/** Whether a request gets SONNET_FALLBACK: a default Sonnet model, never a set one. */
+function withFallback(request: SummaryRequest): boolean {
+    return !request.customModel && request.model.startsWith("claude-sonnet");
+}
+
+/**
+ * The model a 404 says the API doesn't serve, or null when the 404 is about something else (a batch past retention,
+ * another workspace's batch). The API answers an unknown model with a not_found_error whose message names it
+ * ("model: claude-haiku-5-5"). When the request's model is known, the message has to name that model whole (not as
+ * the start of a longer id: claude-sonnet-5-5 isn't claude-sonnet-5); when it isn't (a batch another process
+ * submitted), the model is read from that wording.
+ */
+export function unavailableModel(type: string | null | undefined, message: string, model?: string): string | null {
+    if (type !== "not_found_error") return null;
+    if (model !== undefined) return namesWhole(message, model) ? model : null;
+    // a model id's characters (letters, digits, - _ . : @), less a sentence's closing . or :, which no id ends with
+    return /\bmodel: ([\w.:@-]+)/.exec(message)?.[1].replace(/[.:]+$/, "") || null;
+}
+
+/** Whether `message` holds `model` as a whole id: no id character just before it, nor a letter, digit, - or _ just after. */
+function namesWhole(message: string, model: string): boolean {
+    for (let at = message.indexOf(model); at !== -1; at = message.indexOf(model, at + 1)){
+        const before = message[at - 1] ?? "";
+        const after = message[at + model.length] ?? "";
+        if (!/[\w.:@-]/.test(before) && !/[\w-]/.test(after)) return true;
+    }
+    return false;
+}
+
+/** The API's own words in an SDK error (its body's error.message) and its error.type, which the SDK reads from that body too. */
+function apiError(err: InstanceType<typeof Anthropic.APIError>): { type: string | null; message: string } {
+    const body = err.error as { error?: { type?: unknown; message?: unknown } } | undefined;
+    const message = typeof body?.error?.message === "string" ? body.error.message : err.message;
+    const type = err.type ?? (typeof body?.error?.type === "string" ? body.error.type : null);
+    return { type, message };
+}
+
+/** A request's model as gone, if the error is the API's 404 for it. */
+function goneFrom(err: unknown, model: string): UnavailableModel | null {
+    if (!(err instanceof Anthropic.NotFoundError)) return null;
+    const { type, message } = apiError(err);
+    const gone = unavailableModel(type, message, model);
+    return gone ? { model: gone, reason: message } : null;
+}
 
 /** One attempt in a BetaMessage's usage.iterations (the SDK's BetaIterationsUsage entries). */
 type Attempt = { model?: string | null; input_tokens: number; output_tokens: number };
@@ -182,14 +231,21 @@ export function outcomeFromReply(customId: string, reply: Reply): SummaryOutcome
     }
 }
 
-export function outcomeFromBatchItem(item: Anthropic.Messages.MessageBatchIndividualResponse): SummaryOutcome {
+/** One batch result as an outcome. `model` is the request's, when this process sent it: it decides whether a 404 names it. */
+export function outcomeFromBatchItem(item: Anthropic.Messages.MessageBatchIndividualResponse, model?: string): SummaryOutcome {
     const { custom_id: customId, result } = item;
 
     switch (result.type){
         case "succeeded":
             return outcomeFromReply(customId, result.message);
-        case "errored":
-            return { customId, ok: false, error: `batch request errored: ${result.error.error.message}`, model: null, usage: null };
+        case "errored": {
+            const { type, message } = result.error.error;
+            const gone = unavailableModel(type, message, model);
+            return {
+                customId, ok: false, error: `batch request errored: ${message}`, model: null, usage: null,
+                ...(gone ? { modelUnavailable: { model: gone, reason: message } } : {}),
+            };
+        }
         case "expired":
             return { customId, ok: false, error: "the batch expired before this request ran", model: null, usage: null };
         case "canceled":
@@ -213,16 +269,17 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
     // so its cut-off answers stay failed, and the next run resends them.
     const submitted = new Map<string, Map<string, SummaryRequest>>();
 
-    /** One request on the regular API. Never throws: a failure is an outcome. */
+    /** One request on the regular API. Never throws: a failure is an outcome, marked when it's the model that's gone. */
     async function send(request: SummaryRequest, maxTokens: number): Promise<SummaryOutcome> {
         try{
             const params = requestParams(request, effort, maxTokens);
-            const reply = request.model.startsWith("claude-sonnet")
+            const reply = withFallback(request)
                 ? await client.beta.messages.create({ ...params, ...SONNET_FALLBACK })
                 : await client.messages.create(params);
             return outcomeFromReply(request.customId, reply);
         } catch (err){
-            return { customId: request.customId, ok: false, error: messageOf(err), model: null, usage: null };
+            const gone = goneFrom(err, request.model);
+            return { customId: request.customId, ok: false, error: messageOf(err), model: null, usage: null, ...(gone ? { modelUnavailable: gone } : {}) };
         }
     }
 
@@ -241,11 +298,21 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
         },
 
         async submitBatch(requests){
-            const batch = await client.messages.batches.create(
-                { requests: requests.map((r) => ({ custom_id: r.customId, params: requestParams(r, effort) })) },
-                // never retried: after a lost reply, a retry would create a second batch that's billed and never collected
-                { maxRetries: 0 },
-            );
+            let batch: { id: string };
+            try{
+                batch = await client.messages.batches.create(
+                    { requests: requests.map((r) => ({ custom_id: r.customId, params: requestParams(r, effort) })) },
+                    // never retried: after a lost reply, a retry would create a second batch that's billed and never collected
+                    { maxRetries: 0 },
+                );
+            } catch (err){
+                // refused because a model in it is gone: the runner stops on this rather than resending it every run
+                for (const model of new Set(requests.map((r) => r.model))){
+                    const gone = goneFrom(err, model);
+                    if (gone) throw new ModelUnavailableError(gone.model, gone.reason);
+                }
+                throw err;
+            }
             submitted.set(batch.id, new Map(requests.map((r) => [r.customId, r])));
             return batch.id;
         },
@@ -258,8 +325,9 @@ export function createClaudeSummarizer(client: Anthropic, effort: Effort = SUMMA
 
                 // results arrive in any order: they're matched by custom_id, never by position
                 outcomes = [];
+                const sent = submitted.get(batchId);
                 for await (const item of await client.messages.batches.results(batchId)){
-                    outcomes.push(outcomeFromBatchItem(item));
+                    outcomes.push(outcomeFromBatchItem(item, sent?.get(item.custom_id)?.model));
                 }
             } catch (err){
                 // A 404 is permanent (results past retention, or another workspace's key), and so is a rejected key.

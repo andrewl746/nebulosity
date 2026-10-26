@@ -10,7 +10,7 @@ import {
 
 const record = (p: string, overrides: Partial<FileRecord> = {}): FileRecord => ({
     path: p, kind: "module", contentHash: `hash-${p}`, language: "typescript", sizeBytes: 10, lineCount: 1, isTest: false,
-    importSpecifiers: [],
+    importSpecifiers: [], declares: [],
     chunks: [{ id: `${p}#a#0`, filePath: p, kind: "function", name: "a", nameSplit: "a", startLine: 1, endLine: 1, exported: true, partIndex: 0, text: "function a() {}", fileHash: `hash-${p}` }],
     symbols: [{ name: "a", qualifiedName: "a", kind: "function", startLine: 1, endLine: 1, exported: true, parentQualifiedName: null }],
     calls: { types: [], bindings: [], calls: [] },
@@ -64,6 +64,18 @@ describe("structure store", () => {
         const xId = stored.get("x.ts")!.id;
         expect(db.select().from(chunks).where(eq(chunks.fileId, xId)).all()).toHaveLength(1);
         expect(db.select().from(symbols).where(eq(symbols.fileId, xId)).all()).toHaveLength(1);
+    });
+
+    it("writes a file's declares and reads them back (ADR-065), [] when it declares nothing", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/store/declares");
+        writeFileRecords(db, repoId, [record("a.go", { language: "go", declares: ["package:x"] }), record("b.ts")]);
+        const stored = loadStoredFiles(db, repoId);
+        expect(stored.get("a.go")?.declares).toEqual(["package:x"]);
+        expect(stored.get("b.ts")?.declares).toEqual([]);
+
+        writeFileRecords(db, repoId, [record("a.go", { language: "go", contentHash: "new", declares: ["package:x", "type:T"] })]);
+        expect(loadStoredFiles(db, repoId).get("a.go")?.declares).toEqual(["package:x", "type:T"]);
     });
 
     it("isolates a file that fails to write, so the rest of its batch still lands", () => {

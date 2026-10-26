@@ -71,6 +71,13 @@
       "when": 1792102273000,
       "tag": "0009_v1_7_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792890069157,
+      "tag": "0010_e4_declares",
+      "breakpoints": true
     }
   ]
 }

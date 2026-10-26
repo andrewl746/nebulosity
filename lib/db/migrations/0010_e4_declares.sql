@@ -1,0 +1,1 @@
+ALTER TABLE `files` ADD `declares` text DEFAULT '[]' NOT NULL;

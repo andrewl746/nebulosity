@@ -117,10 +117,16 @@ export type FileFact = { path: string; importedBy: number };
 /** An exported top-level declaration and the file declaring it. */
 export type Declared = { name: string; path: string };
 
-/** A file's name as a word: no folder, no extension, no .test/.spec marker ("lifecycle" for lifecycle.ts). */
+/**
+ * A file's name as a word: no folder, no extension, no .test/.spec marker ("lifecycle" for lifecycle.ts, "Order" for
+ * Order.java, "views" for views.pyi). The extension is whatever follows the last dot, in every language (the E4 final
+ * review's A-I2: a TypeScript-only list left "Order.java" as the stem, so "order" never found it). Only files with a
+ * claimed extension are indexed, so every TypeScript file keeps the stem the old list gave it; and this module, which
+ * the browser bundles, needs no copy of the languages' rules.
+ */
 export function fileStem(filePath: string): string {
     const base = filePath.slice(filePath.lastIndexOf("/") + 1);
-    return base.replace(/\.(test|spec)(?=\.[cm]?[jt]sx?$)/, "").replace(/\.[cm]?[jt]sx?$/, "");
+    return base.replace(/\.(test|spec)(?=\.[cm]?[jt]sx?$)/, "").replace(/\.[^.]+$/, "");
 }
 
 /**
@@ -202,12 +208,20 @@ export function dampTests<T extends { key: string; score: number }>(fused: reado
 export const FILE_CHUNK = "(file)";
 
 /**
+ * The listing's path: a word ending in a claimed extension, one alternative per language (TypeScript and JavaScript,
+ * Python, Go, Java, C#, Rust; rank.test.ts holds it to the rules' claimed extensions). A list rather than any extension,
+ * so a snippet cut just before an import's last word ("…os.path Exports:") keeps that word.
+ */
+const LISTING_PATH = /(^|…)\s*(?:File:\s*)?[^\s…]+\.(?:[cm]?[jt]sx?|pyi?|go|java|cs|rs)\s+(?=Imports:|Exports:)/;
+
+/**
  * An imports listing's snippet without the listing's scaffolding: the "File: <path>" line and the "Imports:" and
- * "Exports:" labels (ADR-052). The snippet is already on one line.
+ * "Exports:" labels (ADR-052), for a file of any indexed language (the E4 final review's A-I2). The snippet is already
+ * on one line.
  */
 export function cleanFileChunkSnippet(snippet: string): string {
     return snippet
-        .replace(/(^|…)\s*(?:File:\s*)?[^\s…]+\.[cm]?[jt]sx?\s+(?=Imports:|Exports:)/, "$1")   // a path never holds "…", so a leading one survives
+        .replace(LISTING_PATH, "$1")   // a path never holds "…", so a leading one survives
         .replace(/\b(?:Imports|Exports):\s*/g, "")
         .replace(/\s+/g, " ")
         .trim();

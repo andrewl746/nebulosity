@@ -7,7 +7,7 @@ import { DatabaseMissingError, getDb, useReadOnlyDatabase } from "../lib/db/clie
 import { indexRepository } from "../lib/index/pipeline";
 import { copyFixture } from "../test/helpers/fixture";
 import { makeTempDir } from "../test/helpers/temp";
-import { main, parseCli, parseMapArgs, parseRegistration, runDoctor, runSetup, setupCommand, SNIPPET } from "./cli";
+import { addCommand, main, mcpJson, parseCli, parseMapArgs, parseRegistration, runDoctor, runSetup, setupCommand, setupRegistration, SNIPPET } from "./cli";
 
 // No test starts claude, git or npm (the plan's global constraints): the CLI's child processes are stubbed. Everything
 // else in child_process stays real (the indexer's own git calls only run in a folder with a .git, which no copy here has).
@@ -88,6 +88,89 @@ describe("setupCommand (Review Focus 5)", () => {
         expect(setupCommand("/pkg/mcp/launch.mjs", "linux", "/home/ann lee/neb-data").args).toEqual([
             "mcp", "add", "--scope", "local", "--transport", "stdio", "nebulosity", "-e", "NEBULOSITY_DATA=/home/ann lee/neb-data", "--", "node", "/pkg/mcp/launch.mjs",
         ]);
+    });
+});
+
+describe("setupRegistration (pre-ship pass, Task J)", () => {
+    it("is the registration setup's add line is built from: local scope, node and the launcher, the data folder only when given", () => {
+        expect(setupRegistration("/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs", "linux")).toEqual({
+            scope: "local", command: "node", args: ["/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs"], env: {},
+        });
+        expect(setupRegistration("C:\\Users\\Ann Lee\\pkg\\mcp\\launch.mjs", "win32", "C:\\Users\\Ann Lee\\neb-data")).toEqual({
+            scope: "local", command: "node", args: ["C:/Users/Ann Lee/pkg/mcp/launch.mjs"], env: { NEBULOSITY_DATA: "C:/Users/Ann Lee/neb-data" },
+        });
+        // claude mcp add's line for it is setupCommand's (the quoting is addCommand's, per platform)
+        expect(addCommand(setupRegistration("C:\\pkg\\mcp\\launch.mjs", "win32", "C:\\data"), "win32")).toEqual(setupCommand("C:\\pkg\\mcp\\launch.mjs", "win32", "C:\\data"));
+    });
+
+    it("turns backslashes into forward slashes only on Windows: elsewhere a backslash is a character of the file's name", () => {
+        expect(setupCommand("/srv/odd\\name/mcp/launch.mjs", "darwin").args.at(-1)).toBe("/srv/odd\\name/mcp/launch.mjs");
+        expect(setupRegistration("/srv/odd\\name/mcp/launch.mjs", "linux", "/srv/odd\\data")).toEqual({
+            scope: "local", command: "node", args: ["/srv/odd\\name/mcp/launch.mjs"], env: { NEBULOSITY_DATA: "/srv/odd\\data" },
+        });
+    });
+});
+
+describe("mcpJson (pre-ship pass, Task J; Review Focus 4)", () => {
+    /** The block's keys, level by level: exactly mcpServers > nebulosity > command, args (and env when given). */
+    function shape(text: string): string[][] {
+        const block = JSON.parse(text) as { mcpServers: { nebulosity: Record<string, unknown> } };
+        return [Object.keys(block), Object.keys(block.mcpServers), Object.keys(block.mcpServers.nebulosity)];
+    }
+
+    it("prints a POSIX launcher as an mcpServers block: two-space indent, a closing newline, no env and no type", () => {
+        const text = mcpJson(setupRegistration("/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs", "linux"));
+        expect(text).toBe([
+            "{",
+            '  "mcpServers": {',
+            '    "nebulosity": {',
+            '      "command": "node",',
+            '      "args": [',
+            '        "/home/ann lee/.npm/lib/node_modules/nebulosity/mcp/launch.mjs"',
+            "      ]",
+            "    }",
+            "  }",
+            "}",
+            "",
+        ].join("\n"));
+        expect(shape(text)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args"]]);
+    });
+
+    it("adds env with a custom data folder, and only then", () => {
+        const text = mcpJson(setupRegistration("/pkg/mcp/launch.mjs", "linux", "/home/ann lee/neb-data"));
+        expect(text).toBe([
+            "{",
+            '  "mcpServers": {',
+            '    "nebulosity": {',
+            '      "command": "node",',
+            '      "args": [',
+            '        "/pkg/mcp/launch.mjs"',
+            "      ],",
+            '      "env": {',
+            '        "NEBULOSITY_DATA": "/home/ann lee/neb-data"',
+            "      }",
+            "    }",
+            "  }",
+            "}",
+            "",
+        ].join("\n"));
+        expect(shape(text)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args", "env"]]);
+    });
+
+    it("writes a Windows launcher and data folder with forward slashes, unquoted (JSON is no shell line), as valid JSON", () => {
+        const launcher = "C:\\Users\\Ann Lee\\AppData\\Roaming\\npm\\node_modules\\nebulosity\\mcp\\launch.mjs";
+        const bare = mcpJson(setupRegistration(launcher, "win32"));
+        expect(JSON.parse(bare)).toEqual({ mcpServers: { nebulosity: { command: "node", args: ["C:/Users/Ann Lee/AppData/Roaming/npm/node_modules/nebulosity/mcp/launch.mjs"] } } });
+        expect(shape(bare)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args"]]);
+        expect(bare).not.toContain("\\");
+
+        const withData = mcpJson(setupRegistration(launcher, "win32", "C:\\Users\\Ann Lee\\neb-data"));
+        expect(JSON.parse(withData)).toEqual({ mcpServers: { nebulosity: {
+            command: "node", args: ["C:/Users/Ann Lee/AppData/Roaming/npm/node_modules/nebulosity/mcp/launch.mjs"], env: { NEBULOSITY_DATA: "C:/Users/Ann Lee/neb-data" },
+        } } });
+        expect(shape(withData)).toEqual([["mcpServers"], ["nebulosity"], ["command", "args", "env"]]);
+        expect(withData).not.toContain("\\");
+        expect(withData.endsWith("}\n")).toBe(true);
     });
 });
 
@@ -207,6 +290,27 @@ describe("nebulosity map (final review, C-M2)", () => {
         expect(await main(["map", "--port", "70000"])).toBe(1);
         expect(spawn).toHaveBeenCalledTimes(2);
         expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: "/r/app", port: 3000 });
+    });
+
+    // Final Review #2, out of scope (ruling R30): the Map used to start on the defaults without a word
+    it("warns in one line, naming the file and doctor, when config.json can't be read, and still starts", async () => {
+        const { configFile } = builtCopy();
+        const broken = '{ "activeRepo": "/r/app", }';
+        fs.writeFileSync(configFile, broken);
+        vi.mocked(spawn).mockImplementation((() => {
+            const child = new EventEmitter();
+            setImmediate(() => child.emit("exit", 0));
+            return child;
+        }) as unknown as typeof spawn);
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await main(["map"])).toBe(0);
+        const lines = errors.mock.calls.map((call) => String(call[0]));
+        expect(lines).toHaveLength(1);
+        expect(lines[0].startsWith(`[map] ${configFile} isn't valid JSON (`)).toBe(true);
+        expect(lines[0].endsWith("): the Map starts without its settings (no active repo) until it's fixed; nebulosity doctor says more")).toBe(true);
+        // the default port needs no save, so the hand edit stays where it is
+        expect(fs.readFileSync(configFile, "utf8")).toBe(broken);
     });
 
     it("map --print-port prints the saved port", async () => {
@@ -333,6 +437,58 @@ describe("runSetup (ADR-058: R4's registration, R5's snippet)", () => {
         expect(printed(logs)).toContain(`Run these in ${root}:\n  ${REMOVE}\n  ${ADD}`);
     });
 
+    /** Everything written to stdout through process.stdout.write, and the spy (console.log goes to its own spy). */
+    function stdoutSpy(): { written: () => string; spy: { mock: { calls: unknown[][] } } } {
+        const spy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+        return { written: () => spy.mock.calls.map((call) => String(call[0])).join(""), spy };
+    }
+
+    it("with --json prints only the mcpServers block, starts no command, reads no index and writes no file (pre-ship pass, Task J)", async () => {
+        stubClaude(null);
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const out = stdoutSpy();
+        // a folder no indexed repo holds: the block names no repo, so it needs none
+        const folder = makeTempDir("neb-json-");
+
+        expect(await runSetup(["--json"], folder)).toBe(0);
+        expect(out.spy.mock.calls).toHaveLength(1);
+        expect(JSON.parse(out.written())).toEqual({ mcpServers: { nebulosity: { command: "node", args: [forward(launcher)] } } });
+        expect(out.written().endsWith("}\n")).toBe(true);
+        expect(logs).not.toHaveBeenCalled();
+        expect(errors).not.toHaveBeenCalled();
+        expect(spawnSync).not.toHaveBeenCalled();
+        expect(getDb).not.toHaveBeenCalled();
+        expect(fs.readdirSync(folder)).toEqual([]);
+    });
+
+    it("with --json carries a custom NEBULOSITY_DATA as env, the absolute path setup registers (pre-ship pass, Task J)", async () => {
+        const out = stdoutSpy();
+        process.env.NEBULOSITY_DATA = "neb-data-elsewhere";
+
+        expect(await runSetup(["--json"], makeTempDir("neb-json-data-"))).toBe(0);
+        expect(JSON.parse(out.written())).toEqual({ mcpServers: { nebulosity: {
+            command: "node", args: [forward(launcher)], env: { NEBULOSITY_DATA: forward(path.resolve("neb-data-elsewhere")) },
+        } } });
+        expect(spawnSync).not.toHaveBeenCalled();
+    });
+
+    it("refuses --json with --print or with anything else, in the usage line, and prints and starts nothing (pre-ship pass, Task J)", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+        const out = stdoutSpy();
+        const folder = makeTempDir("neb-json-usage-");
+
+        for (const args of [["--json", "--print"], ["--print", "--json"], ["--json", "--json"], ["--json", "x"]]){
+            errors.mockClear();
+            expect(await runSetup(args, folder)).toBe(1);
+            expect(printed(errors)).toBe("usage: nebulosity setup [--print | --json]");
+        }
+        expect(out.spy.mock.calls).toHaveLength(0);
+        expect(logs).not.toHaveBeenCalled();
+        expect(spawnSync).not.toHaveBeenCalled();
+    });
+
     it("registers in the repo's root when run in a folder inside it, and says where sessions start (sweep B, item 15)", async () => {
         stubClaude(null);
         const logs = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -413,14 +569,17 @@ describe("runDoctor", () => {
 
     const levels = (spy: { mock: { calls: unknown[][] } }): string[] => spy.mock.calls.map((call) => String(call[0]).split(" ")[0]);
 
-    it("prints one line per check: Node, the data folder, the database, the Map, git, claude, the key; a WARN is no failure", async () => {
+    it("prints one line per check: Node, the data folder, the database, the Map, git, claude, the key, the summary models; a WARN is no failure", async () => {
         const home = freshInstall();
         stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
         const logs = vi.spyOn(console, "log").mockImplementation(() => {});
 
         expect(await runDoctor()).toBe(0);
-        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN"]);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "OK"]);
         expect(printed(logs)).toContain("git version 2.50.1");
+        // nothing set: the defaults (ADR-028), and where to change them
+        expect(printed(logs)).toContain("summary models: files claude-haiku-5-5, folders claude-sonnet-5-5, the repo claude-sonnet-5-5 (the defaults;");
+        expect(printed(logs)).toContain(path.join(home, "data", "config.json"));
         expect(fs.existsSync(path.join(home, "data", "nebulosity.db"))).toBe(true);   // it opened (and so migrated) a database there
     });
 
@@ -430,6 +589,59 @@ describe("runDoctor", () => {
         const logs = vi.spyOn(console, "log").mockImplementation(() => {});
 
         expect(await runDoctor()).toBe(1);
-        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "FAIL", "WARN", "WARN"]);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "FAIL", "WARN", "WARN", "OK"]);
+    });
+
+    it("says which summary models are set in config.json (ADR-066)", async () => {
+        const home = freshInstall();
+        fs.mkdirSync(path.join(home, "data"), { recursive: true });
+        fs.writeFileSync(path.join(home, "data", "config.json"), JSON.stringify({ summaryModels: { file: { model: "claude-haiku-6", inputPerMTok: 0.1, outputPerMTok: 0.5 } } }));
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(0);
+        expect(levels(logs).at(-1)).toBe("OK");
+        expect(printed(logs)).toContain(`summary models: files claude-haiku-6 (set in ${path.join(home, "data", "config.json")}), folders claude-sonnet-5-5, the repo claude-sonnet-5-5`);
+    });
+
+    it("fails on a summary-models setting it can't use, saying what's wrong", async () => {
+        const home = freshInstall();
+        fs.mkdirSync(path.join(home, "data"), { recursive: true });
+        fs.writeFileSync(path.join(home, "data", "config.json"), JSON.stringify({ summaryModels: { file: { model: "claude-zeta-1" } } }));
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(1);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "FAIL"]);
+        expect(printed(logs)).toContain("summaryModels.file.inputPerMTok");
+    });
+
+    // the pre-ship pass's final review, A-I2 (R25): a hand edit's trailing comma used to read as "the defaults", OK
+    it("fails on a config.json it can't read, naming the file and the parse error, instead of reporting the defaults", async () => {
+        const home = freshInstall();
+        const file = path.join(home, "data", "config.json");
+        fs.mkdirSync(path.join(home, "data"), { recursive: true });
+        fs.writeFileSync(file, '{\n  "summaryModels": { "file": { "model": "claude-haiku-6", "inputPerMTok": 0.1, "outputPerMTok": 0.5 } },\n}\n');
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(1);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "FAIL"]);
+        expect(printed(logs)).toContain(`FAIL summary models: The summary models can't be read: ${file} isn't valid JSON (`);
+        expect(printed(logs)).not.toContain("the defaults");
+    });
+
+    it("lists each config.json moved aside, as a WARN after the summary models", async () => {
+        const home = freshInstall();
+        const data = path.join(home, "data");
+        fs.mkdirSync(data, { recursive: true });
+        const aside = path.join(data, "config.json.invalid-2026-10-25T13-50-12-345Z");
+        fs.writeFileSync(aside, '{ "port": 4000, }');
+        stubTools({ status: 0, stdout: "git version 2.50.1\n", stderr: "" });
+        const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(await runDoctor()).toBe(0);
+        expect(levels(logs)).toEqual(["OK", "OK", "OK", "WARN", "OK", "WARN", "WARN", "OK", "WARN"]);
+        expect(printed(logs)).toContain(`WARN ${aside} is a config.json that couldn't be read, moved aside when the settings were written again: copy what you need from it into ${path.join(data, "config.json")}, then delete it`);
     });
 });

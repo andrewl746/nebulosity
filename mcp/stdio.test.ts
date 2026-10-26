@@ -16,13 +16,14 @@ const S = "Summary: none — summaries are off (no ANTHROPIC_API_KEY); a key add
 
 /**
  * This process's environment for a child, minus what would change its behaviour: Vitest's markers (a child that sees
- * VITEST opens an in-memory database), an API key, live settings, and Claude Code's own project folder. Then the home
+ * VITEST opens an in-memory database), an API key, live settings, Claude Code's own project folder, and a data folder
+ * set in the shell (NEBULOSITY_DATA would move the child's index away from the home this test chose). Then the home
  * and the project folder this test chose.
  */
 function childEnv(home: string, projectDir: string): Record<string, string> & NodeJS.ProcessEnv {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)){
-        if (value === undefined || key.startsWith("VITEST") || ["ANTHROPIC_API_KEY", "NEBULOSITY_LIVE", "CLAUDE_PROJECT_DIR", "NEBULOSITY_HOME"].includes(key)) continue;
+        if (value === undefined || key.startsWith("VITEST") || ["ANTHROPIC_API_KEY", "NEBULOSITY_LIVE", "CLAUDE_PROJECT_DIR", "NEBULOSITY_HOME", "NEBULOSITY_DATA"].includes(key)) continue;
         env[key] = value;
     }
     // Next's types make NODE_ENV a required key of ProcessEnv; the StdioClientTransport wants a plain string record, so
@@ -32,10 +33,11 @@ function childEnv(home: string, projectDir: string): Record<string, string> & No
     return env as Record<string, string> & NodeJS.ProcessEnv;
 }
 
-/** A Nebulosity home of its own: this checkout's migrations, and no database yet. */
+/** A Nebulosity home of its own: this checkout's migrations and tree-sitter grammars (ADR-065), and no database yet. */
 function freshHome(): string {
     const home = makeTempDir("neb-mcp-home-");
     fs.cpSync(path.join(CHECKOUT, "lib", "db", "migrations"), path.join(home, "lib", "db", "migrations"), { recursive: true });
+    fs.cpSync(path.join(CHECKOUT, "lib", "index", "languages", "grammars"), path.join(home, "lib", "index", "languages", "grammars"), { recursive: true });
     return home;
 }
 

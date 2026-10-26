@@ -1,7 +1,7 @@
 import type { FileFacts } from "../../db/store/summaries";
 import { ASSUMED_TOKENS } from "./budget";
 import { writtenByModel } from "./plan";
-import { costUsd, formatUsd, pricePerMTok } from "./pricing";
+import { costUsd, formatUsd, pricePerMTok, type PriceTable } from "./pricing";
 import { plural, PROMPT_VERSION } from "./prompts";
 import type { SummaryOutcome } from "./types";
 
@@ -32,8 +32,10 @@ export type ComparisonReport = {
     title: string;
     repo: string;
     effort: string;
-    /** [the file model, the folder model], as in SUMMARY_MODELS. */
+    /** [the file model, the folder model], as the summary models setting resolves them (ADR-066). */
     models: [string, string];
+    /** The setting's prices, checked before the built-in table (ADR-066). */
+    prices?: PriceTable;
     rows: ComparisonRow[];
     /** What the real first pass will send: model-written files, and folders plus the repo. */
     fullPass: { files: number; folders: number };
@@ -62,7 +64,7 @@ export function pickSample(files: readonly FileFacts[], count: number): FileFact
 
 export function renderComparison(report: ComparisonReport): string {
     const [fileModel, folderModel] = report.models;
-    const stats = report.models.map((model) => usageStats(model, report.rows.map((row) => row.outcomes[model])));
+    const stats = report.models.map((model) => usageStats(model, report.rows.map((row) => row.outcomes[model]), report.prices));
     const [fileStats, folderStats] = stats;
     const central = Math.ceil(report.rows.length / 2);
 
@@ -71,7 +73,7 @@ export function renderComparison(report: ComparisonReport): string {
     const folderModelFilePrice = perRequestPrice(folderStats.meanCost);
 
     const filesTotal = (report.fullPass.files * filePrice.value) / 2;
-    const folderPrice = pricePerMTok(folderModel) ?? { input: 0, output: 0 };
+    const folderPrice = pricePerMTok(folderModel, report.prices) ?? { input: 0, output: 0 };
     const meanFolderOutput = Math.round(folderStats.meanOutputTokens);
     const perFolder = (ASSUMED_FOLDER_INPUT_TOKENS * folderPrice.input + meanFolderOutput * folderPrice.output) / 1_000_000;
     const foldersTotal = (report.fullPass.folders * perFolder) / 2;
@@ -133,9 +135,10 @@ export type UsageStats = {
 
 /**
  * Adds up the answers one model was asked for (undefined: it wasn't asked). An answer that came with usage is a
- * request, failed or not; one that got no reply at all (usage null) isn't, and costs nothing.
+ * request, failed or not; one that got no reply at all (usage null) isn't, and costs nothing. `prices`: the summary
+ * models setting's, checked before the built-in table (ADR-066).
  */
-export function usageStats(model: string, outcomes: readonly (SummaryOutcome | undefined)[]): UsageStats {
+export function usageStats(model: string, outcomes: readonly (SummaryOutcome | undefined)[], prices?: PriceTable): UsageStats {
     let requests = 0;
     let inputTokens = 0;
     let outputTokens = 0;
@@ -153,7 +156,7 @@ export function usageStats(model: string, outcomes: readonly (SummaryOutcome | u
             outputTokens += entry.outputTokens;
 
             // A model with no price on file isn't $0: the total is then only a lower bound.
-            const entryCost = costUsd(entry.model, entry, "direct");
+            const entryCost = costUsd(entry.model, entry, "direct", prices);
             if (entryCost === null) unpriced = true;
             else cost += entryCost;
         }

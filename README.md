@@ -1,6 +1,6 @@
 # Nebulosity
 
-**Nebulosity is the dependency-structure layer for Claude Code.** It indexes every import in a big TypeScript or JavaScript repo, keeps that index current as files change, and answers in one call the questions that take many steps over those imports. What would a change to this file affect, directly, through other files and in which areas? How does this entry point come to load that file? Which entry points load it? Where are the import cycles? In Eval #3, on those questions, Claude Code with Nebulosity answered 2.3–4.4 times as fast as Claude Code alone on VS Code and AFFiNE, and 1.5–3.2 times as fast on Theia, a repo held out from all tuning, at the same or a higher score. It cost 1.4–2.6 times less on VS Code and AFFiNE, and 1.0–1.3 times less on Theia.
+**Nebulosity is the dependency-structure layer for Claude Code.** It indexes every import in a big repo (TypeScript and JavaScript, and since E4 also Python, Go, Java, C# and Rust: [Languages](#languages)), keeps that index current as files change, and answers in one call the questions that take many steps over those imports. What would a change to this file affect, directly, through other files and in which areas? How does this entry point come to load that file? Which entry points load it? Where are the import cycles? In Eval #3, on those questions, Claude Code with Nebulosity answered 2.3–4.4 times as fast as Claude Code alone on VS Code and AFFiNE, and 1.5–3.2 times as fast on Theia, a repo held out from all tuning, at the same or a higher score. It cost 1.4–2.6 times less on VS Code and AFFiNE, and 1.0–1.3 times less on Theia. All three are TypeScript repos: for the five languages added since, only the index itself was measured.
 
 **Elsewhere the gains were small or none.** Listing a method's callers took 0.57–0.66 of the time on VS Code and Theia, where the `calls` tool found nearly all of them, and 0.88–0.93 on AFFiNE, where it missed most of them. What a signature change touches, lists of direct importers, planning a change and questions about how a repo is designed came out about even, and some cost more. Eval #3's ship gate was set before its first run and aimed at the call questions; it failed on four of seven conditions. The question kinds above were grouped after the runs. How they were grouped, and every loss: [How it compares with Claude Code alone](docs/EVAL_RESULTS.md).
 
@@ -16,6 +16,7 @@ Some questions about a big repo are walks over its import graph, many steps long
 
 - **The Map**: one folder at a time, at most 50 boxes, lines for imports between them; big folders split into pages of related boxes; a panel with each box's summary, contents, what it uses and what uses it; a read-only source viewer; search with Ctrl K.
 - **Seven MCP tools for Claude Code**: `overview`, `describe` (with the docs about a place), `search`, `imports` (dependents, dependencies, what a change affects, import chains), `architecture` (layers, conventions, cycles, files nothing imports), `calls` (who calls a method, even through injected services, and what changing it touches) and `show_on_map`.
+- **Seven languages**: TypeScript and JavaScript through TypeScript's own compiler; Python, Go, Java, C# and Rust through tree-sitter, each resolved by its own language's rules ([Languages](#languages)). `calls` reads TypeScript and JavaScript only.
 - **Fresh**: while the Map runs, a background worker reflects a saved file in 1.5 s at worst once warm (Update Benchmark #3) and, with a key, refreshes its summary after a quiet minute.
 - **In VS Code**: an extension shows the Map in a panel beside the code, following the file you're in; a file picked on the Map opens in the editor ([below](#in-vs-code); not yet published).
 
@@ -131,7 +132,7 @@ Big-picture questions ask how the code is organized, complete-list questions ask
 
 ## Try it on your repo
 
-**Who it's for:** you're new to a big TypeScript or JavaScript codebase, and you use Claude Code. Nebulosity gives Claude Code the repo's whole import graph and a map of its parts, and gives you the Map to look at while it explains.
+**Who it's for:** you're new to a big codebase in one of the [languages](#languages) it reads, and you use Claude Code. Nebulosity gives Claude Code the repo's whole import graph and a map of its parts, and gives you the Map to look at while it explains.
 
 ### Install
 
@@ -153,7 +154,7 @@ npm run build    # builds the Map
 npm link         # puts the nebulosity command on your PATH
 ```
 
-`nebulosity doctor` checks Node, git, Claude Code and Nebulosity's data folder, and says what's missing.
+`nebulosity doctor` checks Node, git, Claude Code, Nebulosity's data folder and the [summary models](#summary-models), and says what's missing.
 
 ### Three commands
 
@@ -169,12 +170,13 @@ nebulosity setup      # connect Claude Code to this repo
 - **`map`** uses port 3000. `nebulosity map --port <n>` picks another and saves it, so Claude Code's activity and `show_on_map` reach that Map. `nebulosity map --print-port` prints the saved port and starts nothing (the VS Code extension asks it where the Map is).
 - **`setup`** registers Nebulosity's MCP server with Claude Code for this repo only (`claude mcp add --scope local`). Do it once per repo. Afterwards `claude mcp list` shows `nebulosity` as connected.
   - `nebulosity setup --print` shows the commands instead of running them: the add line, and before it a remove line when the repo already has a registration.
+  - `nebulosity setup --json` prints the registration as a JSON block for other MCP clients and runs nothing: see [Other MCP clients, or by hand](#other-mcp-clients-or-by-hand).
   - Running `nebulosity setup` again replaces the registration. That drops anything you added to it by hand, such as an `-e` setting.
 - **Where the index lives:** in your user data folder (`%LOCALAPPDATA%\Nebulosity` on Windows, `~/Library/Application Support/Nebulosity` on macOS, `~/.local/share/nebulosity` on Linux), or in `.nebulosity/` inside a checkout. Nothing is written into your repo.
 
 ### Without an API key (free mode)
 
-Everything except summaries works without a key, and without one nothing is sent to Anthropic:
+Everything except summaries works without a key, in every language, and without one nothing is sent to Anthropic:
 - the index, and the Map with its folders, files, import lines, panels and source viewer;
 - search over code, declarations, file names and folder names;
 - all seven tools in Claude Code.
@@ -186,10 +188,33 @@ Where a summary would go, Nebulosity says summaries are off and what a key would
 With an Anthropic API key, `nebulosity summarize .` writes a short summary of every file and folder. Summaries make the Map's panels, `overview` and `describe` read like a guide, and let search match by meaning, not only by words.
 - **Your code goes to Anthropic:** each file's code is sent to write its summary.
 - **It costs about $1 per 1,000 files, or a little less:** $10.30 for VS Code, $6.02 for AFFiNE.
-- **It asks first:** the command prints its estimate and spends nothing until you say yes (`--yes` for scripts). A repo's spend is capped at $15 unless you raise it with `--budget`.
+- **It asks first:** the command prints its estimate and spends nothing until you say yes (`--yes` for scripts). A repo's spend is capped at $15 unless you raise it with `--budget`. The cap counts everything the repo has ever spent on summaries, not one run, and the Map's automatic refreshes stop at the budget your last run recorded too. Each run that goes ahead records its budget, one with nothing to send included, and a re-run without `--budget` records $15 again, so repeat `--budget` on re-runs.
 - **The key** goes in your environment as `ANTHROPIC_API_KEY`, or in a `.env.local` file in the data folder above (in a checkout, in the checkout's folder).
 
 A big first run goes through Anthropic's Batch API at half price, so it can take a while; `--no-wait` returns at once, and running the command again picks up where it left off.
+
+#### Summary models
+
+By default Haiku 5.5 (`claude-haiku-5-5`) summarizes files, and Sonnet 5.5 (`claude-sonnet-5-5`) summarizes folders and the repo. When Anthropic retires those, or you'd rather use others, set `summaryModels` in `config.json` in the data folder above (`.nebulosity/config.json` in a checkout). Any of `file`, `folder` and `repo`; a kind you leave out keeps its default:
+
+```json
+{
+  "summaryModels": {
+    "file": { "model": "claude-haiku-6", "inputPerMTok": 0.1, "outputPerMTok": 0.5 }
+  }
+}
+```
+
+- **Prices** are the model's list prices in US dollars per million input and output tokens, for the estimate and the spend cap. Nebulosity knows the two defaults' prices; for any other model both are required, and `nebulosity summarize` refuses to estimate or send anything without them. Prices you give win over the ones it knows.
+- **The model has to accept the same requests:** structured output (a JSON schema for the answer) and the effort setting. A model you set goes on the plain Messages API, without the server-side fallback the default Sonnet gets.
+- **Changing a model re-summarizes** everything that model writes, since the model is part of what makes a summary current, and then every folder above what it rewrote, since a folder's summary is written from its contents' (a new file model redoes every folder and the repo). `nebulosity summarize` shows the estimate, all of that included, and asks first, as always.
+  - **The $15 cap is per repo and cumulative**, so on a repo that has already spent more than about half of it (VS Code's first pass was $10.30), re-summarizing stops at the cap before it sends anything. Run it again with a higher budget, such as `--budget 25`.
+  - **The Map never redoes another model's summaries on its own.** While it runs, it redoes by itself only summaries written by the model now in use for their kind, once what they describe changes. After a file model change that includes the folders above the files the new model rewrote, since the folder model that wrote them hasn't changed. It sends those only within the budget your last run recorded. Everything else shows as out of date until you run `nebulosity summarize`, or open it on the Map.
+- **It's read at each run,** so the Map picks up a change without a restart. Leave the file's other keys as they are: the Map keeps `activeRepo` and `port` there. `nebulosity doctor` shows the models in use, which are set, and what's wrong with a setting it can't use.
+- **The file has to be one JSON object.** A byte-order mark or UTF-16, as Windows PowerShell and Notepad save it, is fine. A mistake such as a trailing comma makes it a setting that can't be used (below): `nebulosity doctor` fails, naming the file and where the JSON breaks. Nebulosity never writes over such a file: the next time it saves its own settings (`nebulosity index`, a repo picked on the Map), it first moves yours to `config.json.invalid-<time>` beside it and says so, and doctor lists it until you delete it.
+- **A setting that can't be used stops summaries until it's fixed,** even without a key. `nebulosity summarize` refuses it and writes no test templates, and with a key the summaries' status isn't updated after `nebulosity index` or a save. The index, search, the Map and the tools work as usual, and without a key they say summaries are off, as in free mode.
+- **When a model is retired** (or your key can't use it), the first answer that says so stops the run with one message naming the model and this file. Every summary already written is kept. Choose another model, and the next run picks up where it stopped.
+- **If the default Sonnet's fallback is ever refused.** Folder and repo requests at the defaults carry Anthropic's `server-side-fallback-2026-07-01` beta. If every folder request starts failing over that beta, set `claude-sonnet-5-5` itself for `folder` and `repo`: a model you name goes on the plain Messages API, without the beta, at the price Nebulosity already knows.
 
 ### The seven tools Claude Code gets
 
@@ -198,13 +223,43 @@ A big first run goes through Anthropic's Batch API at half price, so it can take
 - **`search`**: where a feature or concept lives, across code, summaries, file and folder names, and declarations.
 - **`imports`**: exact answers from the whole import graph in one call: what imports a file or folder, what it imports, what a change would affect, and the shortest import chain between two places.
 - **`architecture`**: how a folder's code is organized, computed from its imports: its layers and the imports that go against them, recurring folder conventions, import cycles, and files nothing imports.
-- **`calls`**: who calls a method of a class or interface through declared types (injected services, fields, parameters, base classes): its callers, its implementations, what a change to its signature touches, and where a type is injected.
+- **`calls`**: who calls a method of a class or interface through declared types (injected services, fields, parameters, base classes): its callers, its implementations, what a change to its signature touches, and where a type is injected. TypeScript and JavaScript only; asked about another language's file, it says so.
 - **`show_on_map`**: points at files or folders on the Map while Claude Code explains them.
 
 Good to know:
 - The server answers about the indexed repo that holds the folder Claude Code runs in. It only reads the index, so keep `nebulosity map` running to have changes picked up as you edit.
 - The six tools that answer questions load at the start of every session, with no setting to change; their definitions and instructions take about 2,400 tokens. `show_on_map` loads when Claude Code needs it.
 - To keep tool calls off the Map, run `nebulosity setup --print`, add `-e NEBULOSITY_LIVE=off` right after the name `nebulosity` in the add line it prints, and run what it prints. A later plain `nebulosity setup` drops that setting again.
+
+### Other MCP clients, or by hand
+
+`nebulosity setup --json` prints the registration `nebulosity setup` makes, as a plain `mcpServers` block, and nothing else. It runs nothing and writes nothing, so `nebulosity setup --json > nebulosity.json` saves it (from bash, zsh or cmd: Windows PowerShell 5.1's `>` writes UTF-16). From an installed copy on Windows it looks like this (the paths have forward slashes there too):
+
+```json
+{
+  "mcpServers": {
+    "nebulosity": {
+      "command": "node",
+      "args": [
+        "C:/Users/you/AppData/Roaming/npm/node_modules/nebulosity/mcp/launch.mjs"
+      ],
+      "env": {
+        "NEBULOSITY_DATA": "C:/Users/you/AppData/Local/Nebulosity"
+      }
+    }
+  }
+}
+```
+
+- **In Claude Code, without `nebulosity setup`:** in your repo's root, run `claude mcp add-json nebulosity '<the "nebulosity" object>' --scope local`, where the object is everything from the `{` after `"nebulosity":` to its closing `}`. Run it from bash or zsh (on Windows, Git Bash): Windows PowerShell 5.1 drops the double quotes inside an argument it passes to a program, and cmd doesn't treat single quotes as quotes.
+- **Clients that read an `mcpServers` block,** such as Cursor and Claude Desktop, take the block as it is: as the whole file, or add its `"nebulosity"` entry to the `mcpServers` already there.
+  - Cursor: `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for every project ([Cursor's docs](https://cursor.com/docs/context/mcp)).
+  - Claude Desktop: `claude_desktop_config.json`, which Settings > Developer > Edit Config opens if your version has it. Quit and restart Claude Desktop after saving it ([the MCP guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers)).
+  - Any other client: your client's MCP settings.
+  - The block has no `"type"`, since a server with a `command` is a stdio server. Add `"type": "stdio"` if your client asks for one.
+  - If the client can't start `node` (an app opened from the desktop may not get your shell's PATH), put node's full path in `"command"`: `which node` prints it, or `where node` on Windows.
+- **Settings** go in `env`: for example `"NEBULOSITY_LIVE": "off"` keeps tool calls off the Map.
+- **Which repo it answers about:** Claude Code tells the server which folder its session is in; other clients don't. So outside Claude Code the server answers about the indexed repo holding the folder the client starts it in, else about the Map's repo (the one last indexed with `nebulosity index`, without `--no-activate`, or picked on the Map), and then each answer's first line says so. Run `nebulosity index` in your repo first.
 
 ### In VS Code
 
@@ -229,7 +284,7 @@ The extension uses a Map that's already running, or starts one, and stops the on
 
 ### Windows, macOS and Linux
 
-Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. It also runs `nebulosity setup` against a real Claude Code, checks that the installed Map's background worker picks up a saved file, and checks that `summarize` refuses to spend without a key or a yes.
+Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. It also runs `nebulosity setup` against a real Claude Code, registers the block `nebulosity setup --json` prints with `claude mcp add-json`, checks that the installed Map's background worker picks up a saved file, and checks that `summarize` refuses to spend without a key or a yes.
 
 The Map works at any window size, down to a narrow VS Code panel ([docs/VISUAL_REFRESH.md](docs/VISUAL_REFRESH.md) §10). From a checkout, `npm run check-layout -- http://127.0.0.1:<port>` checks a running Map in headless Chrome at 20 window sizes, from 1440 × 900 to 200 × 260 (the Map must be showing the VS Code demo repo, whose folders its states visit).
 
@@ -247,11 +302,29 @@ Five real repos of different shapes, each indexed from a fresh clone ([Variety B
 
 Imports of style sheets, images, fonts and JSON aren't counted: the index reads code. Imports of npm packages stay outside the graph on purpose. A monorepo's imports of its own packages by name are linked, with one known gap: a package whose entry file exists only after a build, like vite's own `vite`.
 
+### Languages
+
+Besides TypeScript and JavaScript, Nebulosity reads Python, Go, Java, C# and Rust, each through a tree-sitter grammar that ships with it (nothing to install, no build of your repo). Each was measured on one real repo, indexed cold, with 30 of its links drawn at random and read in the source by someone other than its builder ([Language Benchmark #1](docs/BENCHMARKS.md)):
+
+| Language | Repo | Its files indexed | The whole repo's index, worst of 3 | References to the repo's own code resolved | Sampled links right |
+|---|---|---|---|---|---|
+| Python | [django](https://github.com/django/django) | 2,937 | 9.2 s | 99.98% of absolute imports, 99.97% of relative ones | 30 of 30 |
+| Go | [prometheus](https://github.com/prometheus/prometheus) | 747 | 10.4 s | 100% of imports, 99.96% of same-package names, 99.7% of qualified uses | 30 of 30 |
+| Java | [spring-boot](https://github.com/spring-projects/spring-boot) | 8,705 | 21.8 s | 100% of imports, 99.7% of type names | 30 of 30 |
+| C# | [jellyfin](https://github.com/jellyfin/jellyfin) | 2,251 | 7.9 s | 99.2% of type names, 100% of qualified and static ones | 29 of 30 (30 by the rules' own reading; the strict miss, a generic twin, is fixed since) |
+| Rust | [rust-analyzer](https://github.com/rust-lang/rust-analyzer) | 1,498 | 7.8 s | 100%, which the rules make certain, so the 30 links read in the source and a check of every link across crates are the real test | 30 of 30 |
+
+- **Each language links files by its own rules,** read from the code and its manifests: Python's package roots (`__init__.py`, `src/` layouts, `pyproject.toml`), Go's `go.mod` and packages, Java's packages and type names, C#'s namespaces, usings and projects, Rust's `Cargo.toml` and `mod` tree. A link means the same everywhere: A → B when A's code names something B declares. Each leaves out its own dependency and build folders by the manifest beside them (a virtual environment, `vendor/` by a `go.mod`, `target/` by a `Cargo.toml` or `pom.xml`, `build/` by a Gradle file, `bin/` and `obj/` by a `.csproj`). In Python, an import of a standard-library name (`import logging`) reaches a repo file only when one of the importer's own roots holds it, so a repo's `tests/logging.py` is found from beside it, never from the package's code.
+- **What isn't read:** `calls` is TypeScript and JavaScript only. C# extension-method calls aren't linked, since binding one needs the receiver's and arguments' types. Member types inherited from a supertype aren't followed (Java, C#), Python paths added to `sys.path` at run time aren't read, and Rust's `use super::*` globs carry no links to their siblings. Test files, entry points (`[project.scripts]` and `__main__`, Go's `func main`, Java's `public static void main`, C#'s `static Main` and top-level statements, Cargo's targets) and the Map's source colors work in every language.
+- **TypeScript and JavaScript are unchanged:** their stored files, links, declarations and code chunks in VS Code's and AFFiNE's indexes are byte for byte what they were before, in every field the comparison (`npm run dump-index`) reads; it leaves out the call facts and a few columns of files and chunks, whose code E4 didn't change ([Index Benchmark #8](docs/BENCHMARKS.md)). One behavior is new for every language, TypeScript's included: a file whose parse throws (a stack overflow on very deep nesting, say) is no longer dropped. It is indexed for its imports only, by the same scan that reads a file over the size cap, and `nebulosity index` and the Map's status say which files that was. No file of VS Code or AFFiNE throws, so their indexes don't move. The new languages add 191 files to VS Code (85 of them its Rust `cli/`) and 355 to AFFiNE (353 Rust).
+- **Free mode** covers all of it. Summaries of the new languages use the same prompt, and haven't been reviewed yet.
+- **Not measured:** no eval has compared Claude Code with and without Nebulosity on these languages, so nothing here claims it's faster on them.
+
 ## How it works
 
 ```
 your repo
-   │  nebulosity index: discover → parse (TypeScript's compiler) → resolve imports → aggregate folders
+   │  nebulosity index: discover → parse (TypeScript's compiler; tree-sitter for the other five) → resolve imports → aggregate folders
    │  nebulosity summarize (optional): summaries of files and folders, then local embeddings of them
    ▼
 SQLite in WAL mode: files, imports, folders, summaries, full-text search, vectors
@@ -266,7 +339,7 @@ engine (lib/): level · describe · search · imports · architecture · calls
 
 Core logic in `lib/` never imports the UI framework. The MCP server, the Map's API routes and the static exporter are thin adapters over the same engine.
 
-Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index in under a minute (S1: 56.7 s at worst of three and 50.2 s median with the call facts, Index Benchmark #7), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 177 ms at worst, MCP Benchmark #5, and the first `calls` answer in a fresh process 902 ms at worst), and a saved file reflected in 1,501 ms at worst once warm, Update Benchmark #3, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Measured on VS Code (20,342 files, 14,849 of them indexed before E4, 15,040 since): the structure index in under a minute on 2026-10-15 (S1: 56.7 s at worst of three and 50.2 s median with the call facts, Index Benchmark #7; on 2026-10-25 the same laptop took 75–77 s, for the code before the five new languages as for the code after, Index Benchmark #8), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 177 ms at worst, MCP Benchmark #5, and the first `calls` answer in a fresh process 902 ms at worst), and a saved file reflected in 1,501 ms at worst once warm, Update Benchmark #3, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Decisions worth reading
 
@@ -282,10 +355,26 @@ Measured on VS Code (20,342 files, 14,849 of them indexed): the structure index 
 - [ADR-060](docs/ENGINEERING_DECISIONS.md): Eval #3, with time to relevant context and a gate fixed before the first run.
 - [ADR-061](docs/ENGINEERING_DECISIONS.md): the pitch narrowed to what three evals measured, with every feature kept.
 - [ADR-062](docs/ENGINEERING_DECISIONS.md): the Map in a VS Code panel, as an iframe that passes the server's localhost guards unchanged, with a `postMessage` bridge for the editor sync.
+- [ADR-065](docs/ENGINEERING_DECISIONS.md): five more languages behind one seam, each resolved by its own rules with no build, a conformance kit that holds every adapter to a hand-derived truth, and what was left unlinked rather than guessed.
 
 ## Status
 
-V1.8 adds the VS Code extension ([In VS Code](#in-vs-code)), built and not yet published: the owner's check of it comes first. V1.7 is built: the `calls` tool, over calls read from declared types, on top of V1.6's single `nebulosity` command for Windows, macOS and Linux, its free mode with no API key and its five tested repos. It reads TypeScript and JavaScript only. Its eval, Eval #3, failed the ship gate set before it ran, on conditions 1, 2, 3 and 5 ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)), as Eval #2 failed its own. Going public was on hold until Eval #3's verdict. By the owner's call of 2026-10-15, the hold lifts after that verdict whatever it is, and the gate decides what this README claims: since it failed, the results above are stated as measured, with the failed conditions named, and nothing is claimed beyond them. Since 2026-10-22 it is described as the dependency-structure layer for Claude Code ([ADR-061](docs/ENGINEERING_DECISIONS.md)): the pitch is narrowed to what three evals measured, and every feature stays. Deploying the demo, making the repo public, publishing the package and recording the video are the owner's. What comes next is the owner's decision; the plan has Python support, clustering and an in-Map guide. The plan: [docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md).
+**Complete.** This is Nebulosity's last release. It isn't maintained after it, so issues and pull requests may go unanswered ([ADR-067](docs/ENGINEERING_DECISIONS.md)).
+
+- **What's here:**
+  - the seven tools Claude Code gets, the Map and the VS Code extension;
+  - free mode with no API key, and summaries as the paid upgrade;
+  - TypeScript and JavaScript, plus Python, Go, Java, C# and Rust ([Languages](#languages)).
+- **What was measured:** three evals against Claude Code on its own, given above along with what didn't improve ([docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)).
+- **Tested with** (Claude Code 2.1.300 or later is needed):
+  - locally, on Windows 11: Node 24.14, Claude Code 2.1.310, and VS Code 1.143.1 and 1.105.0, the extension's oldest supported version;
+  - in CI, on Windows, macOS and Linux: Node 24.21 and 24.22 (the newest 24 each runner had), Claude Code 2.1.300, and the extension's tests in VS Code's stable release of the day.
+
+  If a later version breaks something, these are the ones that worked.
+- **If something it depends on changes:**
+  - When the summary models are retired, name new ones in a setting ([Summary models](#summary-models)).
+  - If Claude Code's `mcp add` changes, `nebulosity setup --json` prints the plain config, which `claude mcp add-json` or another client takes ([Other MCP clients, or by hand](#other-mcp-clients-or-by-hand)).
+- **Not built:** the plan's remaining extras: clustering, an in-Map guide, git-history overlays and the rest of the call graph ([docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md)).
 
 ## Why I built this
 

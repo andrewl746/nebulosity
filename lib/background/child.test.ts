@@ -41,7 +41,9 @@ describe("handleParentMessage", () => {
     });
 
     it("forwards a re-index's progress, then its result", async () => {
-        const result = { files: 8, changed: 1, deleted: ["x.ts"], edges: 11, folders: 6, levelEdges: 10, errors: [], skipped: [], totalMs: 12.4 } as unknown as IndexResult;
+        // a file whose parse threw is forwarded as scanned (the E4 final review's B-I1), beside the errors
+        const scanned = [{ path: "deep.ts", error: "Maximum call stack size exceeded" }];
+        const result = { files: 8, changed: 1, deleted: ["x.ts"], edges: 11, folders: 6, levelEdges: 10, errors: [], scanned, skipped: [], totalMs: 12.4 } as unknown as IndexResult;
         const service = fakeService({
             indexNow: async (onProgress) => {
                 onProgress?.("parse", 4, 8);
@@ -54,7 +56,7 @@ describe("handleParentMessage", () => {
         expect(sent).toEqual([
             { type: "index-progress", id: 3, progress: { stage: "parse", done: 4, total: 8 } },
             { type: "index-progress", id: 3, progress: { stage: "parse", done: 8, total: 8 } },
-            { type: "indexed", id: 3, outcome: { ok: true, result: { files: 8, changed: 1, deleted: 1, edges: 11, folders: 6, levelEdges: 10, errors: [], skipped: 0, totalMs: 12 } } },
+            { type: "indexed", id: 3, outcome: { ok: true, result: { files: 8, changed: 1, deleted: 1, edges: 11, folders: 6, levelEdges: 10, errors: [], scanned, skipped: 0, totalMs: 12 } } },
         ]);
     });
 
