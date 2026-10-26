@@ -32,6 +32,36 @@ export function panelLayout(mainWidth: number | null): { covers: boolean } {
 }
 
 /**
+ * Where a selected box's actions go while the panel would cover the canvas (owner review, 2026-10-25). A click then only
+ * selects, so a double click still reaches the box and the Map stays in sight, and the box shows Open and Details beside
+ * it. They go under a box whose middle is in the canvas's top half, clear of the page pill's band, and over one lower
+ * down, clear of the legend and the zoom controls. `boxTop` and `boxHeight` are the box's on screen, in canvas px.
+ */
+export function actionsSide(boxTop: number, boxHeight: number, canvasHeight: number): "top" | "bottom" {
+    return boxTop + boxHeight / 2 < canvasHeight / 2 ? "bottom" : "top";
+}
+
+/** The gap between a box and its actions, and the least room they keep from the canvas's sides. */
+const ACTIONS_GAP = 8;
+
+/**
+ * Where the selected box's actions go on the canvas (their top-left corner, canvas px), given the box and the actions'
+ * size on screen: on actionsSide's side, 8 px off the box, centred on it, but kept 8 px inside the canvas's sides, so a
+ * box hanging off an edge (a level opened from its top at 75%) never takes them past it. Each axis is its own rule.
+ */
+export function actionsPlace(
+    box: { left: number; top: number; width: number; height: number },
+    actions: { width: number; height: number },
+    canvasWidth: number,
+    canvasHeight: number,
+): { left: number; top: number } {
+    const top = actionsSide(box.top, box.height, canvasHeight) === "bottom" ? box.top + box.height + ACTIONS_GAP : box.top - ACTIONS_GAP - actions.height;
+    const centred = box.left + box.width / 2 - actions.width / 2;
+    const left = Math.min(Math.max(centred, ACTIONS_GAP), canvasWidth - ACTIONS_GAP - actions.width);
+    return { left, top };
+}
+
+/**
  * How much the page pill says, by the canvas width it sits in (`null`: not measured yet, the normal case):
  * "Page 2 of 5 · 44 of 182 folders and files", "Page 2 of 5", or "2 / 5". The whole note is about 350 px, 370 at
  * most with four-digit counts; with its 16 px inset on the right and as much again on its left that's about 400 px,

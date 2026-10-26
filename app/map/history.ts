@@ -48,3 +48,14 @@ export function historyStep(address: string, place: MapPlace, embedded = false):
 export function followStep(step: "none" | "replace" | "push", mode: "push" | "replace"): "none" | "replace" | "push" {
     return step === "push" && mode === "replace" ? "replace" : step;
 }
+
+/**
+ * How many of the Map's own steps lie behind a history entry: the `mapDepth` the Map writes into `history.state` with
+ * each push (and keeps with each rewrite). VS Code's panel has no browser Back, so the Map's own Back control is enabled
+ * only above 0: going back past the Map's first entry would take the webview off the Map (owner review, 2026-10-25).
+ * An entry the Map didn't write, a fresh load's or another page's, is 0, and so is anything that isn't a whole number.
+ */
+export function historyDepth(state: unknown): number {
+    const depth = typeof state === "object" && state !== null ? (state as { mapDepth?: unknown }).mapDepth : undefined;
+    return typeof depth === "number" && Number.isInteger(depth) && depth > 0 ? depth : 0;
+}

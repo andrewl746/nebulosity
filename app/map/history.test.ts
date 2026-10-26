@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { followStep, historyStep, mapUrl, placeFromSearch } from "./history";
+import { followStep, historyDepth, historyStep, mapUrl, placeFromSearch } from "./history";
+
+describe("historyDepth (the Back control inside VS Code's panel, owner review 2026-10-25)", () => {
+    it("reads how many of the Map's own steps lie behind the entry", () => {
+        expect(historyDepth({ mapDepth: 2 })).toBe(2);
+        // Next's router keeps its own keys in the same state object
+        expect(historyDepth({ mapDepth: 1, __NA: true })).toBe(1);
+    });
+
+    it("is 0 for an entry the Map didn't write (a fresh load, another page's) or can't read", () => {
+        for (const state of [null, undefined, "x", 3, {}, { mapDepth: 0 }, { mapDepth: -1 }, { mapDepth: 1.5 }, { mapDepth: "2" }, { mapDepth: Number.NaN }]){
+            expect(historyDepth(state)).toBe(0);
+        }
+    });
+});
 
 describe("the Map's place in the address bar (owner review: the browser's Back goes to the previous folder)", () => {
     it("writes the folder, and the page past the first counted from 1, readably", () => {

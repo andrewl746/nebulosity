@@ -223,6 +223,8 @@ The Nebulosity extension shows the Map in a panel beside your code, with Claude 
 
 3. Open your repo in VS Code and run **Nebulosity: Show Map** from the Command Palette, or click the map button in the editor's title bar.
 
+In the panel the Map has its own Back button, since a webview has no browser Back. In a narrow panel a click selects a box and shows Open and Details beside it, so the Map stays in sight; double-click still opens a folder.
+
 The extension uses a Map that's already running, or starts one, and stops the one it started when its window closes. A folder that isn't indexed yet gets an "Index this repo (free)" button. Its settings: `nebulosity.command` (the `nebulosity` command to run, if it isn't on your PATH), `nebulosity.port` (else the port `nebulosity map` last used, else 3000) and `nebulosity.followEditor`. It's checked on desktop VS Code on Windows, macOS and Linux. Remote windows (WSL, Remote SSH, Dev Containers) aren't checked yet, and browser-hosted VS Code (vscode.dev, Codespaces in the browser) isn't supported. More: [vscode-extension/README.md](vscode-extension/README.md).
 
 ### Windows, macOS and Linux

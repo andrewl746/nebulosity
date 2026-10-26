@@ -3,8 +3,9 @@
 // and checks that nothing is cut off out of reach, nothing covers a control, no text is clipped unreadably, and the
 // page scrolls only below the floor. Plain Node 24 (its global WebSocket and fetch), no dependency.
 //
-//   npm run check-layout -- http://127.0.0.1:3002 [--shots <dir>] [--all-shots] [--sizes 1440x900,200x260] [--states top,file]
+//   npm run check-layout -- http://127.0.0.1:3002 [--shots <dir>] [--all-shots] [--sizes 1440x900,200x260] [--states top,file] [--embed]
 //
+// --embed walks the Map as VS Code's panel shows it (`embed=vscode` in every address), with its Back button.
 // It never touches port 3000 (the owner's Map), and it posts its live events only to the server it was given. The Map
 // must be showing the VS Code demo repo: the states are VS Code's own folders and files.
 // Each size gets a fresh tab, and the states inside it are reached in-app (pushState + popstate), as the Map's own
@@ -15,7 +16,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import os from "node:os";
 import path from "node:path";
 
-const USAGE = "usage: npm run check-layout -- <base-url> [--shots <dir>] [--all-shots] [--sizes WxH,...] [--states name,...] [--resize]";
+const USAGE = "usage: npm run check-layout -- <base-url> [--shots <dir>] [--all-shots] [--sizes WxH,...] [--states name,...] [--resize] [--embed]";
+/** Every address ends with `embed=vscode` (--embed): the Map as VS Code's panel shows it, Back button and all. */
+let EMBED = false;
 
 /** Normal sizes, in between, the floor and around it, below it, and short windows; 200 × 260 is the smallest asked for. */
 const SIZES = [
@@ -44,6 +47,9 @@ const STATES = [
     // a file with many declarations, on a paged level, so the pill moves aside for the panel
     { name: "file", place: "src/vs/base/common", select: FILE },
     { name: "folder", place: "src/vs", select: "src/vs/workbench" },
+    // where the panel would cover the canvas, a click only selects: the box's actions beside it (owner review,
+    // 2026-10-25); the folder state then asks for its Details. At the other sizes this is the folder state's panel.
+    { name: "actions", place: "src/vs", select: "src/vs/workbench", details: false },
     // the source root's panel, the one the owner saw cut off in VS Code's panel
     { name: "root", place: "", select: "src" },
     // a summary whose lead holds a 51-character setting name in inline code, wider than the panel at any size
@@ -80,6 +86,7 @@ function parseArgs(argv){
         if (arg === "--shots") options.shots = path.resolve(argv[++i] ?? "");
         else if (arg === "--all-shots") options.allShots = true;
         else if (arg === "--resize") options.resize = true;
+        else if (arg === "--embed") EMBED = true;
         else if (arg === "--sizes"){
             options.sizes = (argv[++i] ?? "").split(",").filter(Boolean);
             options.resize ??= false;
@@ -249,7 +256,11 @@ async function openTab(cdp, width, height){
 
 /** The Map's address for a place (app/map/history.ts's mapUrl, which the browser can't import here). */
 function mapUrl(folder, page = 0){
-    const params = [...(folder === "" ? [] : [`path=${encodeURIComponent(folder).replaceAll("%2F", "/")}`]), ...(page > 0 ? [`page=${page + 1}`] : [])];
+    const params = [
+        ...(folder === "" ? [] : [`path=${encodeURIComponent(folder).replaceAll("%2F", "/")}`]),
+        ...(page > 0 ? [`page=${page + 1}`] : []),
+        ...(EMBED ? ["embed=vscode"] : []),
+    ];
     return params.length === 0 ? "/" : `/?${params.join("&")}`;
 }
 
@@ -272,9 +283,12 @@ async function press(tab, key, code, keyCode){
     await tab.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: keyCode });
 }
 
-/** Back to a plain Map: Escape closes a dialog, a popover, the selection, then Claude's highlights, one press each. */
+/**
+ * Back to a plain Map: Escape closes a dialog, a popover, the details over a narrow canvas, the selection, then Claude's
+ * highlights, one press each.
+ */
 async function reset(tab){
-    for (let i = 0; i < 4; i++){
+    for (let i = 0; i < 5; i++){
         await press(tab, "Escape", "Escape", 27);
         await sleep(60);
     }
@@ -300,7 +314,16 @@ async function goTo(tab, folder, page){
     await tab.evaluate(QUIET);
 }
 
-async function selectBox(tab, box){
+/** The box's panel is up and loaded. */
+const panelReady = (box) => `(() => { const p = document.querySelector('[data-panel=${JSON.stringify(box)}]'); return !!p && !p.innerText.includes("Loading…"); })()`;
+/** The box's actions beside it, where the panel would cover the canvas (BoxActions). */
+const actionsShown = (box) => `!!document.querySelector('[data-box-actions=${JSON.stringify(box)}]')`;
+
+/**
+ * Clicks a box. Where the panel fits beside the canvas, the click opens it. Where it would cover the canvas, the click
+ * shows the box's actions, and their Details opens the panel, unless `details` is false (the actions state).
+ */
+async function selectBox(tab, box, { details = true } = {}){
     const found = await tab.evaluate(`(() => {
         const node = document.querySelector('.react-flow__node[data-id=${JSON.stringify(box)}]');
         if (!node) return false;
@@ -308,7 +331,15 @@ async function selectBox(tab, box){
         return true;
     })()`);
     if (!found) throw new Error(`no box ${box} on the level`);
-    await tab.waitFor(`(() => { const p = document.querySelector('[data-panel=${JSON.stringify(box)}]'); return !!p && !p.innerText.includes("Loading…"); })()`, `the panel of ${box}`);
+    await tab.waitFor(`${panelReady(box)} || ${actionsShown(box)}`, `the panel or the actions of ${box}`);
+    if (!details || !(await tab.evaluate(actionsShown(box)))) return;
+    await tab.evaluate(`(() => {
+        const button = [...document.querySelectorAll('[data-box-actions=${JSON.stringify(box)}] button')].find((b) => b.textContent.trim() === "Details");
+        if (!button) throw new Error("no Details button");
+        button.click();
+        return true;
+    })()`);
+    await tab.waitFor(panelReady(box), `the panel of ${box}`);
 }
 
 const click = (tab, selector, what) => tab.evaluate(`(() => {
@@ -410,7 +441,7 @@ const STEP_MARKERS = {
  */
 const stateShown = (state) => [
     atLevel(state.place),
-    ...(state.select ? [`(() => { const p = document.querySelector('[data-panel=${JSON.stringify(state.select)}]'); return !!p && !p.innerText.includes("Loading…"); })()`] : []),
+    ...(state.select ? [state.details === false ? `(${panelReady(state.select)} || ${actionsShown(state.select)})` : panelReady(state.select)] : []),
     ...actsOf(state).map((step) => STEP_MARKERS[step] ?? "true"),
 ].join(" && ");
 
@@ -771,7 +802,7 @@ async function main(){
                     try{
                         await reset(tab);
                         await goTo(tab, state.place, state.page ?? 0);
-                        if (state.select) await selectBox(tab, state.select);
+                        if (state.select) await selectBox(tab, state.select, { details: state.details !== false });
                         await act(tab, state, options.base);
                         await tab.evaluate(QUIET);
                         if (options.shots && (options.allShots || SHOT_SIZES.has(size))) await shoot(tab, options.shots, `${state.name}-${size}`);

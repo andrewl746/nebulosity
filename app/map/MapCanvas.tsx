@@ -8,6 +8,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
+import BoxActions from "./BoxActions";
 import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
 import { lineLabel } from "./labels";
@@ -69,15 +70,22 @@ type MapCanvasProps = {
     covered: boolean;
     /** How far down the Map's error banner reaches on the canvas, 0 with none: the open legend stops short of it. */
     bannerBottom: number;
+    /**
+     * The selected box that shows its actions beside it (BoxActions), or null: while the panel would cover the canvas,
+     * a click only selects, and Details asks for the panel.
+     */
+    actionsFor: string | null;
+    onDetails: (path: string) => void;
 };
 
 /**
  * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
- * around the boxes (routes.ts). A click selects; a double click opens a folder, or turns to a portal's page. The selection's lines turn purple and unrelated boxes fade;
+ * around the boxes (routes.ts). A click selects (where the panel would cover the canvas, the selected box shows its
+ * actions beside it: BoxActions); a double click opens a folder, or turns to a portal's page. The selection's lines turn purple and unrelated boxes fade;
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered, bannerBottom }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered, bannerBottom, actionsFor, onDetails }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
@@ -227,6 +235,15 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 <ViewportPortal>
                     <LooseDivider divider={divider} />
                 </ViewportPortal>
+            )}
+            {actionsFor !== null && byPath.has(actionsFor) && positions.has(actionsFor) && (
+                <BoxActions
+                    box={byPath.get(actionsFor)!}
+                    position={positions.get(actionsFor)!}
+                    onOpen={onOpen}
+                    onTurnPage={onTurnPage}
+                    onDetails={onDetails}
+                />
             )}
             {/* a panel over the whole canvas hides what's under it; its × brings the canvas back */}
             {!covered && (
