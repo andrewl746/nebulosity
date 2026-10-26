@@ -73,9 +73,19 @@ There's more in [vscode-extension/README.md](vscode-extension/README.md).
 
 ## AI summaries (optional)
 
-If you have an Anthropic API key (`ANTHROPIC_API_KEY`), `nebulosity summarize .` writes a short summary of every file and folder. You'll see them in the Map's details panel and in the answers Nebulosity gives Claude Code. They also let search find files by what they do, not just by the words in them.
+With an Anthropic API key ([how to add one](#adding-your-api-key)), `nebulosity summarize .` writes a short summary of every file and folder. You'll see them in the Map's details panel and in the answers Nebulosity gives Claude Code. They also let search find files by what they do, not just by the words in them.
 
 This does send your code to Anthropic, since that's how the summaries get written. It costs about $1 per 1,000 files ($10.30 for all of VS Code). It always shows you an estimate and waits for a yes before spending anything. Each repo is also capped at $15 in total, unless you raise the limit with `--budget`.
+
+### Adding your API key
+
+1. Create a key in the [Claude Console](https://platform.claude.com/) ([how](https://platform.claude.com/docs/en/get-api-key)).
+2. Give it to Nebulosity in one of two ways:
+   - **For the current terminal:** `export ANTHROPIC_API_KEY="sk-ant-..."` on macOS and Linux, or `$env:ANTHROPIC_API_KEY = "sk-ant-..."` in Windows PowerShell.
+   - **Once, for every terminal:** save the line `ANTHROPIC_API_KEY=sk-ant-...` in a file named `.env.local` in Nebulosity's data folder. That's `%LOCALAPPDATA%\Nebulosity` on Windows, `~/Library/Application Support/Nebulosity` on macOS, and `~/.local/share/nebulosity` on Linux. If the folder doesn't exist yet, create it.
+3. Run `nebulosity doctor`. Once it finds the key, it says "ANTHROPIC_API_KEY set". Then run `nebulosity summarize .` from your repo. If the Map is already open, restart it so it picks up the key.
+
+Keep the key private, and never commit it to a repository.
 
 ### Summary models
 
