@@ -111,45 +111,51 @@ h3 { margin: 0; color: var(--text); font-size: 18px; font-weight: 500; line-heig
 .chart figcaption { max-width: 52em; margin-top: 20px; font-size: 15px; color: var(--text-2); }
 @media (max-width: 760px) { .speeds li { grid-template-columns: minmax(0, 1fr); } }
 
-/* install */
-.steps { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; margin-top: 48px; }
-@media (max-width: 960px) { .steps { grid-template-columns: minmax(0, 1fr); gap: 44px; } }
-.steps ol { margin: 20px 0 0; padding: 0; list-style: none; counter-reset: step; }
-.steps ol > li { position: relative; margin-bottom: 22px; padding-left: 36px; counter-increment: step; }
-.steps ol > li::before {
-  content: counter(step); position: absolute; left: 0; top: 1px; width: 24px; height: 24px; border: 1px solid var(--overlay-line);
-  border-radius: 50%; font-size: 13px; line-height: 22px; text-align: center; color: var(--text-2);
+/* install: what it needs beside the heading, then one panel per part, each step's name on the left and its command on the right */
+.needs { display: flex; flex-wrap: wrap; align-items: center; align-self: center; gap: 10px 12px; }
+.needs > span { font-size: 15px; color: var(--text-2); }
+.needs ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.needs li { padding: 3px 12px; border: 1px solid var(--overlay-line); border-radius: 999px; font-size: 14.5px; color: var(--text-body); }
+.cards { display: grid; gap: 20px; margin-top: 48px; }
+.card { overflow: hidden; border: 1px solid var(--hairline); border-radius: 16px; background: var(--panel); }
+.card-head { display: flex; align-items: center; gap: 12px; padding: 18px 24px; border-bottom: 1px solid var(--hairline); }
+.card-head svg, .card-foot svg { flex: none; width: 22px; height: 22px; color: var(--folder); }
+.card-note { margin-left: auto; font-size: 14px; color: var(--text-2); }
+.rows { margin: 0; padding: 0; list-style: none; }
+.item { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px 40px; align-items: center; padding: 18px 24px; }
+.item + .item { border-top: 1px solid var(--hairline); }
+.step { display: flex; align-items: flex-start; gap: 14px; }
+.num {
+  flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin-top: -1px;
+  border: 1px solid var(--overlay-line); border-radius: 50%; font-size: 13px; color: var(--text-2);
 }
-.steps p { margin: 0; }
-.commands { container-type: inline-size; margin: 10px 0 0; padding: 0; list-style: none; border: 1px solid var(--hairline); border-radius: 10px; background: var(--panel); }
-.commands li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; align-items: center; padding: 11px 12px 11px 16px; }
-.commands li + li { border-top: 1px solid var(--hairline); }
+.title { margin: 0; color: var(--text); font-weight: 500; line-height: 1.45; }
+.hint { margin: 2px 0 0; font-size: 14.5px; line-height: 1.45; color: var(--text-2); }
+.cmd {
+  display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 8px 10px 8px 16px;
+  border: 1px solid var(--hairline); border-radius: 10px; background: var(--canvas);
+}
 /* a long command wraps rather than hiding its end */
-.commands pre { margin: 0; font: 400 14.5px/1.5 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
-.commands .what { grid-column: 1; font-size: 13.5px; line-height: 1.4; color: var(--text-2); }
+.cmd pre { flex: 1; margin: 0; font: 400 14.5px/1.5 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd.static { color: var(--text); font-size: 15px; }
+.cmd .label { padding: 1px 8px; border-radius: 6px; background: var(--code-bg); font-size: 13px; color: var(--code); }
 .copy {
-  grid-column: -2 / -1; grid-row: 1; padding: 0 8px; border: 0; border-radius: 6px;
-  background: none; color: var(--control); font-size: 13.5px; line-height: 21.75px; transition: background-color 120ms ease-out;
+  flex: none; padding: 0 8px; border: 0; border-radius: 6px; background: none;
+  color: var(--control); font-size: 13.5px; line-height: 28px; transition: background-color 120ms ease-out;
 }
-.commands li:has(.what) .copy { grid-row: 1 / span 2; }
-/* where there's room, the note sits beside its command */
-@container (min-width: 440px) {
-  .commands li:has(.what) { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .commands .what { grid-column: 2; grid-row: 1; }
-  .commands li:has(.what) .copy { grid-row: 1; }
-}
-.aside { margin-top: 14px; font-size: 15px; color: var(--text-2); }
-
-/* what to ask once it's set up */
-.ask { margin-top: 56px; }
-.asks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; padding: 0; list-style: none; }
-.asks li { padding: 14px 18px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--panel); color: var(--text); line-height: 1.5; }
+.card-foot { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 16px 24px; border-top: 1px solid var(--hairline); font-size: 15px; color: var(--text-2); }
+.asks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 20px 24px 24px; list-style: none; }
+.asks li { padding: 14px 18px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--canvas); color: var(--text); line-height: 1.5; }
 .asks li::before { content: ">"; margin-right: 10px; font-family: var(--mono); color: var(--text-2); }
-@media (max-width: 760px) { .asks { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .item { grid-template-columns: minmax(0, 1fr); padding: 16px 18px; }
+  .card-head, .card-foot { padding-left: 18px; padding-right: 18px; }
+  .asks { grid-template-columns: minmax(0, 1fr); padding: 16px 18px 18px; }
+}
 
 /* two short facts, side by side */
-.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 56px; margin-top: 56px; }
-.facts > div { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px 14px; padding-top: 20px; border-top: 1px solid var(--hairline); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 56px; margin-top: 48px; }
+.facts > div { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: start; gap: 6px 14px; padding-top: 20px; border-top: 1px solid var(--hairline); }
 .facts svg { grid-row: 1 / span 2; width: 22px; height: 22px; margin-top: 2px; color: var(--folder); }
 .facts p { margin: 0; font-size: 15.5px; }
 @media (max-width: 760px) { .facts { grid-template-columns: minmax(0, 1fr); } }
