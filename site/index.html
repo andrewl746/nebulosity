@@ -26,8 +26,8 @@
   <nav aria-label="Main">
     <ul>
       <li><a href="https://demo.nebulosity.ca">Live Demo</a></li>
+      <li class="wide"><a href="#evaluation">Evaluation</a></li>
       <li class="wide"><a href="#install">Install</a></li>
-      <li class="wide"><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Evaluation</a></li>
       <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
     </ul>
   </nav>
@@ -36,7 +36,7 @@
 <main>
   <section class="wrap hero">
     <h1>A live map of how a big codebase fits together, for Claude Code and for you.</h1>
-    <p class="lede">Nebulosity indexes every import in a repository ahead of time, so Claude Code can answer a question that follows imports through many files with one tool call. In tests, Claude Code with Nebulosity answered questions like this <strong>up to 4.4× faster</strong>, and <strong>up to 3.2× faster</strong> on Theia, a codebase Nebulosity was never adjusted for. It got every one of them right.</p>
+    <p class="lede">Nebulosity indexes every import in a repository ahead of time, so Claude Code can answer questions that follow imports through many files with one tool call. In tests, Claude Code with Nebulosity answered them <strong>up to 4.4× faster</strong>, and <strong>up to 3.2× faster</strong> on Theia, a codebase Nebulosity was never adjusted for. It got every one of them right.</p>
     <div class="cta">
       <div class="actions">
         <a class="button primary" href="https://demo.nebulosity.ca">Try the live demo</a>
@@ -52,39 +52,22 @@
     </figure>
   </section>
 
-  <section class="wrap part" id="questions">
-    <div class="split">
-      <div>
-        <h2>Questions that cross many files, answered in one call</h2>
-        <p>In a large codebase, some questions take many steps to answer. To find out what a change to one file could affect, you need every file that imports it, then every file that imports those, and so on. Claude Code normally works this out with one search after another, and VS Code alone has about 15,000 files and over 140,000 imports.</p>
-        <p>Nebulosity reads every import once, ahead of time, and keeps the index current as you work. Claude Code then answers the whole question with a single tool call.</p>
-      </div>
-      <div>
-        <ul class="asks" aria-label="Questions to ask Claude Code">
-          <li>What could break if <code>src/vs/base/common/event.ts</code> changes?</li>
-          <li>How does <code>main.ts</code> end up loading <code>terminal.ts</code>?</li>
-          <li>Which entry points load this file?</li>
-          <li>Are there import cycles in <code>src/vs/platform</code>?</li>
-        </ul>
-        <p>Claude Code uses Nebulosity's tools when they help, and can point things out on the Map while it explains.</p>
-      </div>
-    </div>
-  </section>
-
   <section class="wrap part" id="map">
     <div class="split head">
       <h2>See the same imports on the Map</h2>
       <div>
-        <p>The Map shows a codebase one folder at a time, with at most 50 boxes on screen and lines for what imports what. Click a box to see what it imports and what imports it, read its source, or search with Ctrl K. It keeps up as you save files, in your browser or in a VS Code panel beside your code.</p>
-        <p>The live demo is the Map on VS Code's own repository, all 15,040 files, with nothing to install.</p>
-        <div class="actions"><a class="button secondary" href="https://demo.nebulosity.ca">Try the live demo</a></div>
+        <p>One folder at a time, with lines for what imports what. Click any box to see what it uses and what uses it, or press Ctrl K to search.</p>
+        <div class="cta">
+          <div class="actions"><a class="button secondary" href="https://demo.nebulosity.ca">Try the live demo</a></div>
+          <p class="note">VS Code's own repo, all 15,040 files, nothing to install.</p>
+        </div>
       </div>
     </div>
     <figure class="shot">
       <a class="frame" href="images/map-vscode-1907.webp" title="Show the screenshot full size">
         <img src="images/map-vscode-1907.webp" srcset="images/map-vscode-960.webp 960w, images/map-vscode-1907.webp 1907w" sizes="(min-width: 1240px) 1120px, 100vw" width="1907" height="998" loading="lazy" alt="The Map on VS Code's src/vs/platform folder: boxes for its folders with their file counts, the first of three pages">
       </a>
-      <figcaption>The Map on VS Code's <code>src/vs/platform</code> folder, the first of three pages.</figcaption>
+      <figcaption>VS Code's <code>src/vs/platform</code> folder on the Map.</figcaption>
     </figure>
   </section>
 
@@ -92,34 +75,64 @@
     <div class="split head">
       <h2>Tested against Claude Code on its own</h2>
       <div>
-        <p>Claude Code got the same questions with and without Nebulosity, on three large open-source TypeScript codebases: VS Code, AFFiNE and Theia. Nebulosity was never adjusted for Theia, which makes it the fairest test of the three. Every answer was checked against a reference answer prepared without Nebulosity, across 378 runs.</p>
+        <p>The same questions, with and without Nebulosity, on three large TypeScript codebases: 378 runs, each checked against a reference answer. On the questions below, Claude Code got all 42 answers fully right with Nebulosity, and 29 alone.</p>
       </div>
     </div>
-    <table class="results">
-      <caption>On questions that follow imports through several files, Claude Code with Nebulosity was:</caption>
-      <thead>
-        <tr><th scope="col">Question</th><th scope="col">VS Code and AFFiNE</th><th scope="col">Theia</th></tr>
-      </thead>
-      <tbody>
-        <tr><th scope="row">What could changing this file affect?</th><td data-label="VS Code and AFFiNE">4.3× faster, 2.1× cheaper</td><td data-label="Theia" class="quiet">not asked</td></tr>
-        <tr><th scope="row">How does this entry point end up loading that file?</th><td data-label="VS Code and AFFiNE">4.4× faster, 2.6× cheaper</td><td data-label="Theia">3.2× faster, 1.2× cheaper</td></tr>
-        <tr><th scope="row">Which entry points end up loading this file?</th><td data-label="VS Code and AFFiNE">4.2× faster, 1.6× cheaper</td><td data-label="Theia">2.8× faster, about the same cost</td></tr>
-        <tr><th scope="row">Which files depend on this one, directly or not?</th><td data-label="VS Code and AFFiNE">2.3× faster, 1.4× cheaper</td><td data-label="Theia">2.0× faster, 1.3× cheaper</td></tr>
-        <tr><th scope="row">Is this file part of an import cycle?</th><td data-label="VS Code and AFFiNE">2.3× faster, 1.5× cheaper</td><td data-label="Theia">1.5× faster, 1.1× cheaper</td></tr>
-      </tbody>
-    </table>
-    <div class="notes">
-      <p>Each figure compares medians: 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. With Nebulosity, Claude Code got all 42 of these answers fully right. Alone, it got 29 fully right and the other 13 partly right.</p>
-      <p>On simpler questions, such as listing the files that import a given file directly, Nebulosity made little difference, because one search already answers them. The questions were sorted into multi-step and simpler ones after the runs, the samples are small, and only TypeScript was tested.</p>
-    </div>
-    <p><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a>: how the test worked, how answers were scored, every caveat and the data behind each number.</p>
+
+    <figure class="chart">
+      <div class="chart-head">
+        <h3 id="chart-title">How many times faster, by question</h3>
+        <ul class="legend" aria-hidden="true">
+          <li><span class="key a"></span>VS Code and AFFiNE</li>
+          <li><span class="key b"></span>Theia, never adjusted for</li>
+        </ul>
+      </div>
+      <ul class="speeds" aria-labelledby="chart-title">
+        <li>
+          <span class="q">What could changing this file affect?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 4.3" title="VS Code and AFFiNE: 4.3× faster, 2.1× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">4.3×</span></span>
+            <span class="bar b none" title="Theia: not asked"><span class="sr-only">Theia:</span><span class="val">not asked</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">How does this entry point end up loading that file?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 4.4" title="VS Code and AFFiNE: 4.4× faster, 2.6× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">4.4×</span></span>
+            <span class="bar b" style="--x: 3.2" title="Theia: 3.2× faster, 1.2× cheaper"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">3.2×</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">Which entry points end up loading this file?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 4.2" title="VS Code and AFFiNE: 4.2× faster, 1.6× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">4.2×</span></span>
+            <span class="bar b" style="--x: 2.8" title="Theia: 2.8× faster, about the same cost"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">2.8×</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">Which files depend on this one, directly or not?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 2.3" title="VS Code and AFFiNE: 2.3× faster, 1.4× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">2.3×</span></span>
+            <span class="bar b" style="--x: 2.0" title="Theia: 2.0× faster, 1.3× cheaper"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">2.0×</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">Is this file part of an import cycle?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 2.3" title="VS Code and AFFiNE: 2.3× faster, 1.5× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">2.3×</span></span>
+            <span class="bar b" style="--x: 1.5" title="Theia: 1.5× faster, 1.1× cheaper"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">1.5×</span></span>
+          </span>
+        </li>
+      </ul>
+      <figcaption>Medians of 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. The question types were grouped after the runs; simpler ones, like listing a file's direct importers, came out about even. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></figcaption>
+    </figure>
   </section>
 
   <section class="wrap part" id="install">
     <div class="split head">
       <h2>Install</h2>
       <div>
-        <p>You'll need Node 24 or later and git, plus Claude Code 2.1.300 or later for the tools.</p>
+        <p>Needs Node 24 or later, git, and Claude Code 2.1.300 or later.</p>
       </div>
     </div>
     <div class="steps">
@@ -127,44 +140,53 @@
         <h3>In your terminal</h3>
         <ol>
           <li>
-            <p>Install the package:</p>
+            <p>Install the package</p>
             <ul class="commands"><li><pre>npm install -g nebulosity</pre></li></ul>
           </li>
           <li>
-            <p>From your repo's root folder:</p>
+            <p>In your repo's root folder</p>
             <ul class="commands">
-              <li><pre>nebulosity index .</pre><span class="what">Reads the repo's files and imports. Free, and a minute or two for VS Code.</span></li>
-              <li><pre>nebulosity map</pre><span class="what">Opens the Map at http://localhost:3000. It keeps running, so use a second terminal for the next command.</span></li>
-              <li><pre>nebulosity setup</pre><span class="what">Connects Claude Code to this repo.</span></li>
+              <li><pre>nebulosity index .</pre><span class="what">reads the repo, free</span></li>
+              <li><pre>nebulosity map</pre><span class="what">opens the Map, keeps running</span></li>
+              <li><pre>nebulosity setup</pre><span class="what">in a new terminal: connects Claude Code</span></li>
             </ul>
           </li>
         </ol>
-        <p class="aside">If something seems off, <code>nebulosity doctor</code> says what's missing. Every command and setting is in <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">the guide</a>.</p>
+        <p class="aside"><code>nebulosity doctor</code> says what's missing, and <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">the guide</a> has every command.</p>
       </div>
       <div>
         <h3>In VS Code</h3>
         <ol>
-          <li><p>Install the package and index your repo, as in your terminal.</p></li>
+          <li><p>Install the package and index your repo</p></li>
           <li>
-            <p>Install the <a href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Nebulosity extension</a>, or from a terminal:</p>
+            <p>Install the <a href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Nebulosity extension</a></p>
             <ul class="commands"><li><pre>code --install-extension andrewl746.nebulosity-vscode</pre></li></ul>
           </li>
-          <li><p>Run <strong>Nebulosity: Show Map</strong> from the Command Palette. The Map opens beside your code and follows the file you have open.</p></li>
+          <li><p>Run <strong>Nebulosity: Show Map</strong> from the Command Palette</p></li>
         </ol>
       </div>
     </div>
+
+    <div class="ask">
+      <h3>Then ask Claude Code</h3>
+      <ul class="asks">
+        <li>What could break if <code>src/vs/base/common/event.ts</code> changes?</li>
+        <li>How does <code>main.ts</code> end up loading <code>terminal.ts</code>?</li>
+        <li>Which entry points load this file?</li>
+        <li>Are there import cycles in <code>src/vs/platform</code>?</li>
+      </ul>
+    </div>
+
     <div class="facts">
       <div>
-        <h3>Free</h3>
-        <p>Everything above works without an API key: the index, the Map, search and all seven of Claude Code's tools. Without a key, none of your code leaves your machine.</p>
-      </div>
-      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 8l-4 4l4 4"/><path d="M17 8l4 4l-4 4"/><path d="M14 4l-4 16"/></svg>
         <h3>Seven languages</h3>
-        <p>TypeScript and JavaScript through TypeScript's own compiler, plus Python, Go, Java, C# and Rust. The tests above were on TypeScript only.</p>
+        <p>TypeScript, JavaScript, Python, Go, Java, C# and Rust.</p>
       </div>
       <div>
-        <h3>AI summaries, if you want them</h3>
-        <p>With an Anthropic API key, <code>nebulosity summarize .</code> writes a short summary of every file and folder. It sends your code to Anthropic, costs about $1 per 1,000 files, and shows an estimate and waits for a yes before spending anything.</p>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"/></svg>
+        <h3>AI summaries, optional</h3>
+        <p>With an Anthropic API key, a summary of every file and folder for about $1 per 1,000 files. It sends your code to Anthropic, and asks before spending.</p>
       </div>
     </div>
   </section>
