@@ -1,6 +1,6 @@
 # Nebulosity: the full guide
 
-Everything the [README](../README.md) leaves out: every command, flag and setting, the seven tools, other MCP clients, the VS Code extension's details, and what it was tested on. How it compares with Claude Code on its own, losses included, is in [EVAL_RESULTS.md](EVAL_RESULTS.md).
+Everything the [README](../README.md) leaves out: every command, flag and setting, the seven tools, other MCP clients, the VS Code extension's details, and what it was tested on. How it compares with Claude Code on its own, caveats included, is in [EVALUATION.md](EVALUATION.md).
 
 ## Install
 

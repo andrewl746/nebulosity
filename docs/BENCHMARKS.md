@@ -430,7 +430,7 @@ Two things to read this with:
 
 ## 2026 10 14 Eval #1 — Claude Code with and without Nebulosity's MCP server on VS Code (S7)
 
-This is the evaluation `PIVOT_SPEC.md` §9 asks for. The method, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
+The first evaluation. Every run's transcript and score are in `eval/`.
 - **Target and machine:** VS Code @ `cc3fec88` (`../vscode`), with Nebulosity's engine at `EVAL_ENGINE` (`8d7d485`) and index version 135. It ran on the owner's laptop on 2026-10-14, 17:01–17:47 UTC, with the machine kept quiet.
 - **How:** `npm run eval:run -- --pilot`, then `-- --repeat 1` and `-- --repeat 2`: 15 questions, twice each, in three arms, 90 runs in all. A is Claude Code alone. B adds Nebulosity's MCP server at Claude Code's default tool search, and A against B is the headline. U loads Nebulosity's tools up front. Every run used Claude Code 2.1.299 headless, `claude-sonnet-5-5` at medium effort, and read-only tools. `npm run eval:score` scored the runs; the big-picture answers were graded blind (`eval/grading/`).
 - **Result:** Nebulosity raised no family's score; it lowered big-picture's (0.82 against 0.91) and, through one run, the complete lists' (0.94 against 0.97). Its tools were used in 12 of 30 B runs, never on a big-picture question. Where they were used, the connection answers cost about a third of A's estimate and time, at the same score. **S7: done.**
@@ -831,7 +831,7 @@ Eval #3's held-out repo, indexed once so its resolution share is known before an
 
 ## 2026 10 15 Eval #2 — Claude Code with and without Nebulosity's MCP server on VS Code and AFFiNE (S12)
 
-This is the re-measured eval that ADR-051 waits for (ADR-057). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`.
+The second evaluation. Every run's transcript and score are in `eval2/`.
 - **Targets and machine:** VS Code @ `cc3fec88` and AFFiNE @ `0b69a6da`, with Nebulosity's engine frozen at `EVAL2_ENGINE` (`90f9f63`) and index versions 152 and 131. It ran on the owner's laptop on 2026-10-15, 08:36–10:57 UTC, with the machine otherwise kept quiet: this build session's own runaway `python -` command (Index Benchmark #5) used one of the 16 logical processors fully throughout, in both arms alike.
 - **How:**
   - `npm run eval:run -- --eval eval2 --pilot` and `-- --eval eval2 --sessions --pilot`, then the full schedules (`--eval eval2` and `--eval eval2 --sessions`).
@@ -1150,7 +1150,7 @@ About 6,548 characters is about 2,380 tokens, so the README's "about 2,400 token
 
 ## 2026 10 16 Eval #3 — Claude Code with and without Nebulosity's MCP server on VS Code, AFFiNE and Theia (S13)
 
-The eval V1.7 was measured by (ADR-060). The method, the gate, every run's score, what happened per question and the losses are in `docs/EVAL_RESULTS.md`, Eval #3.
+The latest evaluation, summarized in [EVALUATION.md](EVALUATION.md). Every run's transcript and score are in `eval3/`.
 - **Targets and machine:** VS Code @ `cc3fec88`, AFFiNE @ `0b69a6da` and Theia @ `81ea5f93` (held out, free mode), with Nebulosity's engine frozen at `EVAL3_ENGINE` (`2f913ad`) and index versions 155, 134 and 2. It ran on the owner's laptop on 2026-10-16, 06:58–10:17 UTC.
 - **How:** `npm run eval:run -- --eval eval3 --pilot` (and `--sessions --pilot`), then the full schedules in batches. 61 single questions and 2 four-question task sessions, three repeats, in two arms: A, Claude Code alone, and N, with Nebulosity. 378 runs in all (384 planned; AFFiNE drew no adopt question and 2 tasks, not 3). Claude Code 2.1.301 headless, `claude-sonnet-5-5` at medium effort, Node.js scripts allowed in both arms, and the same rules sentence at the end of every prompt. `npm run eval:score -- --eval eval3` scored them and computed the gate; the big-picture answers were graded blind (`eval3/grading/`).
 - **Result: the ship gate failed** on conditions 1, 2, 3 and 5; V, 4 and 6 passed. **S13: not met.**

@@ -18,7 +18,7 @@ Nebulosity helped most on questions that require following imports through sever
 
 For example, to trace how one file ends up loading another, Claude Code with Nebulosity used one tool call every time, with a median of 5–6 seconds on each codebase. Without Nebulosity, it used three to six tool calls and took a median of 16–24 seconds.
 
-On simpler questions, such as listing the files that import a given file directly, Nebulosity made little difference, because a single search already answers them. The full method, every run and the per-question results are in [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md), which also notes that I split the questions into multi-step and simpler ones after the runs.
+On simpler questions, such as listing the files that import a given file directly, Nebulosity made little difference, because a single search already answers them. The method, the caveats and the data behind every number are in [docs/EVALUATION.md](docs/EVALUATION.md), which also notes that I split the questions into multi-step and simpler ones after the runs.
 
 ## Quick start
 

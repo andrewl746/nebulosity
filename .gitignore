@@ -59,6 +59,6 @@ eval3/dev/runs/*.tmp
 /docs/*.md
 !/docs/GUIDE.md
 !/docs/BENCHMARKS.md
-!/docs/EVAL_RESULTS.md
+!/docs/EVALUATION.md
 /docs/plans/
 /docs/screenshots/v1-3-1/
