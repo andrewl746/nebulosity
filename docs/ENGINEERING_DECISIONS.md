@@ -1686,7 +1686,7 @@ Still in force: no figure without its held-out counterpart, no "better answers" 
 - Anyone who picks the project up later starts from these docs, and nothing in them is promised.
 
 **Amended (2026-10-26): the README drops its status section.** The owner (2026-10-26): "remove the status section. cuz i might work on nebulosity if it gains real users". So the README no longer says the project is finished and unmaintained.
-- Its test count and CI systems move to "How it works".
+- Its test count and CI systems move to "Architecture" (then named "How it works").
 - The tested versions stay in docs/GUIDE.md ("Tested with").
 - The two ways around changes outside Nebulosity's control stay where they're documented: the README's "Summary models" and the guide's "Other MCP clients, or by hand".
 
