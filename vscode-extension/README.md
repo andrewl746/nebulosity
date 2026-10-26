@@ -1,4 +1,4 @@
-**Nebulosity for VS Code needs the `nebulosity` package, which serves the Map: [install it first](https://github.com/andrewl746/Nebulosity#install).** The extension is a window onto `nebulosity map`, not a copy of the engine.
+**Nebulosity for VS Code needs the `nebulosity` package, which serves the Map: [install it first](https://github.com/andrewl746/Nebulosity#quick-start).** The extension is a window onto `nebulosity map`, not a copy of the engine.
 
 The Nebulosity Map in an editor panel beside your code: your repo one folder at a time, with lines for imports, a panel with what each file uses and what uses it, and Claude Code's activity on it as it works. The Map follows the file you're in, and a file you pick on the Map opens in the editor.
 
@@ -6,7 +6,7 @@ Everything here works in Nebulosity's free mode, with no API key. The extension 
 
 ## Getting started
 
-1. Install the package (`npm install -g nebulosity`, or from a checkout as [its README](https://github.com/andrewl746/Nebulosity#install) says).
+1. Install the package (`npm install -g nebulosity`, or from a checkout as [the guide](https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md#install) says).
 2. Open your repo in VS Code and run **Nebulosity: Show Map** from the Command Palette, or click the map button in an editor's title bar.
 3. If the repo isn't indexed yet, the panel offers **Index this repo (free)**, which runs `nebulosity index` in a terminal and then shows the Map.
 

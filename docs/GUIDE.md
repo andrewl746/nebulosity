@@ -6,13 +6,11 @@ Everything the [README](../README.md) leaves out: every command, flag and settin
 
 You need Node 24 or later and git, and Claude Code 2.1.300 or later for the MCP server.
 
-Once Nebulosity is published to npm:
-
 ```bash
 npm install -g nebulosity
 ```
 
-Until then, install it from a checkout:
+To work on Nebulosity itself, install it from a checkout instead:
 
 ```bash
 git clone https://github.com/andrewl746/Nebulosity
@@ -134,7 +132,7 @@ Good to know:
 The Nebulosity extension shows the Map in a panel beside your code, with Claude Code's activity on it. The Map follows the file you're in, a file you click on the Map opens in the editor, and "What depends on this file?" lists a file's importers and lights them on the Map. It's a window onto `nebulosity map`, so it needs the package above, and like the package it works without an API key.
 
 1. Install the `nebulosity` package and index your repo (above).
-2. Install the extension. Until it's on the Marketplace and Open VSX, build it from a checkout and install the file:
+2. Install the extension, `andrewl746.nebulosity-vscode`, from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode) or [Open VSX](https://open-vsx.org/extension/andrewl746/nebulosity-vscode), or with `code --install-extension andrewl746.nebulosity-vscode`. To build it from a checkout instead and install the file:
 
    ```bash
    cd vscode-extension

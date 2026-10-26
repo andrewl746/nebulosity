@@ -26,8 +26,6 @@ On simpler questions, such as listing the files that import a given file directl
 
 You'll need Node 24 or later and git, plus Claude Code 2.1.300 or later if you want the tools.
 
-> **Not on npm yet.** Until it is, [install from a checkout](docs/GUIDE.md#install) instead of running the first command.
-
 ```bash
 npm install -g nebulosity
 ```
@@ -70,7 +68,7 @@ The extension shows the Map beside your code. It follows whatever file you have 
 ![The Nebulosity extension in VS Code: editor.main.ts is open in the editor and selected on the Map beside it, with lines to the files it imports and its summary open](docs/screenshots/vscode-extension.png)
 
 1. Install the `nebulosity` package and index your repo (see above).
-2. Install the **Nebulosity** extension. Until it's on the Marketplace and Open VSX, you can [build it from a checkout](docs/GUIDE.md#in-vs-code).
+2. Install the **Nebulosity** extension from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode) or [Open VSX](https://open-vsx.org/extension/andrewl746/nebulosity-vscode), or in a terminal: `code --install-extension andrewl746.nebulosity-vscode`.
 3. Run **Nebulosity: Show Map** from the Command Palette.
 
 There's more in [vscode-extension/README.md](vscode-extension/README.md).
