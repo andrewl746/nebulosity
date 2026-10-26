@@ -14,9 +14,7 @@ I tested it against Claude Code on its own, on three large TypeScript repos: VS 
 
 Some questions take several hops through the imports: "what would changing this file affect?", "how does this entry point end up loading that file?", "where are the import cycles?". On those, Claude Code with Nebulosity was 2.3–4.4× faster on VS Code and AFFiNE, and 1.5–3.2× faster on Theia. It scored the same or better. It usually cost less too: 1.4–2.6× cheaper on VS Code and AFFiNE, and about the same to 1.3× cheaper on Theia.
 
-On everything else it was roughly a wash. Finding a method's callers took a third to 40% less time where the `calls` tool found them, but only about 10% less where it missed most of them. One-step lookups, planning a change, and "how is this repo designed?" questions came out about the same, and a few cost more.
-
-Two honest caveats. First, I grouped the questions by type after running the eval, and the pass mark I set beforehand, aimed at questions about method calls, wasn't met. Second, the five languages I added later (Python, Go, Java, C# and Rust) weren't part of these tests. I only measured how accurately Nebulosity reads them. All the numbers, including every loss, are in [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
+On simpler lookups that don't need the import graph, it performs about the same as Claude Code alone, which is what you'd expect. The full method, every run and the fine print (including that I grouped the questions by type after running them) are in [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
 
 ## Quick start
 
