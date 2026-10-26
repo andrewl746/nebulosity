@@ -1,10 +1,12 @@
 import { spawn, spawnSync } from "child_process";
 import { EventEmitter } from "events";
 import fs from "fs";
+import net from "net";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DatabaseMissingError, getDb, useReadOnlyDatabase } from "../lib/db/client";
 import { indexRepository } from "../lib/index/pipeline";
+import { listenError } from "../lib/port";
 import { copyFixture } from "../test/helpers/fixture";
 import { makeTempDir } from "../test/helpers/temp";
 import { addCommand, main, mcpJson, parseCli, parseMapArgs, parseRegistration, runDoctor, runSetup, setupCommand, setupRegistration, SNIPPET } from "./cli";
@@ -22,6 +24,13 @@ vi.mock("child_process", async (importOriginal) => ({
 vi.mock("../lib/db/client", async (importOriginal) => {
     const real = await importOriginal<typeof import("../lib/db/client")>();
     return { ...real, useReadOnlyDatabase: vi.fn(), getDb: vi.fn(real.getDb) };
+});
+
+// nebulosity map checks its port before saving it: free here unless a test says otherwise, so no test depends on what
+// holds this machine's port 3000 (a running Map often does)
+vi.mock("../lib/port", async (importOriginal) => {
+    const real = await importOriginal<typeof import("../lib/port")>();
+    return { ...real, listenError: vi.fn(async () => null) };
 });
 
 type SpawnResult = ReturnType<typeof spawnSync>;
@@ -289,6 +298,36 @@ describe("nebulosity map (final review, C-M2)", () => {
 
         expect(await main(["map", "--port", "70000"])).toBe(1);
         expect(spawn).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: "/r/app", port: 3000 });
+    });
+
+    // the release rehearsal (2026-10-26): next start failed with EADDRINUSE after the port was saved, so live events,
+    // show_on_map and the extension's --print-port went to the other app, away from the Map already running
+    it("refuses a port another app listens on, saving and starting nothing", async () => {
+        const { configFile } = builtCopy();
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const other = net.createServer();
+        await new Promise<void>((resolve) => other.listen(0, "127.0.0.1", () => resolve()));
+        const port = (other.address() as net.AddressInfo).port;
+        const real = await vi.importActual<typeof import("../lib/port")>("../lib/port");
+        vi.mocked(listenError).mockImplementationOnce(real.listenError);
+        try{
+            expect(await main(["map", "--port", String(port)])).toBe(1);
+        } finally{
+            await new Promise<void>((resolve) => other.close(() => resolve()));
+        }
+        expect(printed(errors)).toBe(`[map] port ${port} is already in use (another app, or a Map that's already running): start the Map on another port with nebulosity map --port <n>`);
+        expect(spawn).not.toHaveBeenCalled();
+        expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: "/r/app", port: 3000 });
+    });
+
+    it("refuses a port it can't listen on for another reason, with the reason, saving nothing", async () => {
+        const { configFile } = builtCopy();
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        vi.mocked(listenError).mockResolvedValueOnce(Object.assign(new Error("listen EACCES: permission denied 127.0.0.1:3123"), { code: "EACCES" }));
+        expect(await main(["map", "--port", "3123"])).toBe(1);
+        expect(printed(errors)).toBe("[map] the Map can't listen on 127.0.0.1:3123: listen EACCES: permission denied 127.0.0.1:3123");
+        expect(spawn).not.toHaveBeenCalled();
         expect(JSON.parse(fs.readFileSync(configFile, "utf8"))).toEqual({ activeRepo: "/r/app", port: 3000 });
     });
 

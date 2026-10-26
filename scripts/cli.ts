@@ -15,6 +15,7 @@ import fs from "fs";
 import { createRequire } from "module";
 import { ConfigUnreadableError, configPath, DEFAULT_PORT, movedAsideConfigs, readConfig, readConfigFile, updateConfig } from "../lib/config";
 import { dataDir, dataPath, nebulosityHome, nebulosityPath } from "../lib/home";
+import { listenError } from "../lib/port";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
 export type Command = "index" | "summarize" | "map" | "mcp" | "setup" | "doctor" | "version" | "help";
@@ -202,7 +203,9 @@ export function parseMapArgs(args: readonly string[]): { kind: "start"; port: nu
  * The Map: `next start` on this copy's prebuilt `.next`, on 127.0.0.1 only (proxy.ts refuses other hosts anyway).
  * The background worker starts with it (instrumentation.ts) unless NEBULOSITY_WORKER=off. Its port is saved in the
  * config first, because the MCP server posts live events and show_on_map to the config's port (lib/live/client.ts):
- * a Map on --port <n> gets them, and they never go to a port the user didn't start the Map on.
+ * a Map on --port <n> gets them, and they never go to a port the user didn't start the Map on. A port it can't listen
+ * on (another app's, or a Map already running there) is refused before that save, so a start that can't succeed never
+ * takes them away from the Map that's running.
  * `--print-port` starts nothing and writes nothing: it prints that saved port, for the VS Code extension (and a script)
  * to find the Map this copy last started.
  */
@@ -219,6 +222,13 @@ async function runMap(args: readonly string[]): Promise<number> {
     const { port } = parsed;
     if (!fs.existsSync(nebulosityPath(".next", "BUILD_ID"))){
         console.error("This copy of Nebulosity has no built Map. In a checkout, run npm run build first.");
+        return 1;
+    }
+    const refused = await listenError(port);
+    if (refused !== null){
+        console.error(refused.code === "EADDRINUSE"
+            ? `[map] port ${port} is already in use (another app, or a Map that's already running): start the Map on another port with nebulosity map --port <n>`
+            : `[map] the Map can't listen on 127.0.0.1:${port}: ${refused.message}`);
         return 1;
     }
 
