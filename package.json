@@ -1,8 +1,32 @@
 {
   "name": "nebulosity",
-  "version": "0.3.0",
+  "version": "1.0.0",
+  "description": "A live map of how a big codebase fits together, for Claude Code and for you: a local import index, an MCP server and the Map.",
+  "keywords": [
+    "claude-code",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "codebase",
+    "code-map",
+    "import-graph",
+    "dependency-graph",
+    "code-search",
+    "monorepo",
+    "typescript",
+    "javascript",
+    "python",
+    "go",
+    "java",
+    "csharp",
+    "rust"
+  ],
+  "homepage": "https://nebulosity.ca",
+  "bugs": {
+    "url": "https://github.com/andrewl746/nebulosity/issues"
+  },
   "license": "MIT",
-  "private": true,
+  "author": "Andrew Li",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/andrewl746/nebulosity.git"

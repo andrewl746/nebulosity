@@ -140,8 +140,8 @@ The Nebulosity extension shows the Map in a panel beside your code, with Claude 
    cd vscode-extension
    npm ci
    npm run build
-   npx vsce package    # writes nebulosity-vscode-0.3.0.vsix
-   code --install-extension nebulosity-vscode-0.3.0.vsix
+   npx vsce package    # writes nebulosity-vscode-1.0.0.vsix
+   code --install-extension nebulosity-vscode-1.0.0.vsix
    ```
 
 3. Open your repo in VS Code and run **Nebulosity: Show Map** from the Command Palette, or click the map button in the editor's title bar.
