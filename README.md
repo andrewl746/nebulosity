@@ -4,7 +4,7 @@
 
 In a large codebase, some questions take many steps to answer. To find out what a change to one file could affect, you need every file that imports it, then every file that imports those, and so on. Claude Code normally works this out with one search after another. The VS Code repository has 14,849 files and over 140,000 imports, so a question like this can take a lot of searches.
 
-Nebulosity indexes all of a repository's imports ahead of time and keeps the index up to date as you work. Claude Code can then answer the whole question with a single tool call. In my tests, Claude Code with Nebulosity answered questions like this **up to 4.4× faster**, and up to 3.2× faster on a codebase I never adjusted Nebulosity for. It got every one of them right.
+Nebulosity indexes all of a repository's imports ahead of time and keeps the index up to date as you work. Claude Code can then answer the whole question with a single tool call. In my tests, Claude Code with Nebulosity answered questions like this **up to 4.4× faster**, and up to 3.7× faster\* on a codebase I never adjusted Nebulosity for. It got every one of them right.
 
 You can also explore these imports yourself on the Map, which shows your codebase one folder at a time, with lines showing what imports what. The Map opens in your browser or in a VS Code panel.
 
@@ -14,11 +14,13 @@ You can also explore these imports yourself on the Map, which shows your codebas
 
 I tested Nebulosity by giving Claude Code the same questions with and without it, on three large open-source TypeScript codebases: VS Code, AFFiNE and Theia. Across 378 runs, every answer was checked against a reference answer prepared without Nebulosity. I never adjusted Nebulosity for Theia, so Theia is the fairest test of the three.
 
-Nebulosity helped most on questions that require following imports through several files, like "what would changing this file affect?", "how does this entry point end up loading that file?" and "is this file part of an import cycle?". On those, depending on the type of question, Claude Code with Nebulosity was **2.3–4.4× faster** on VS Code and AFFiNE, and **1.5–3.2× faster** on Theia. It was usually cheaper too: 1.4–2.6× cheaper on VS Code and AFFiNE, and up to 1.3× cheaper on Theia. There were 14 of these questions, each asked 3 times with Nebulosity and 3 times without. With Nebulosity, Claude Code got all 42 answers fully right. Without it, Claude Code got 29 fully right and the rest partly right.
+Nebulosity helped most on questions that require following imports through several files, like "what would changing this file affect?", "how does this entry point end up loading that file?" and "is this file part of an import cycle?". On those, depending on the type of question, Claude Code with Nebulosity was **2.3–4.4× faster** on VS Code and AFFiNE, and **1.5–3.7× faster**\* on Theia. It was usually cheaper too: 1.4–2.6× cheaper on VS Code and AFFiNE, and up to 1.3× cheaper on Theia. There were 14 of these questions, each asked 3 times with Nebulosity and 3 times without. With Nebulosity, Claude Code got all 42 answers fully right. Without it, Claude Code got 29 fully right and the rest partly right.
 
 For example, to trace how one file ends up loading another, Claude Code with Nebulosity used one tool call every time, with a median of 5–6 seconds on each codebase. Without Nebulosity, it used three to six tool calls and took a median of 16–24 seconds.
 
 On simpler questions, such as listing the files that import a given file directly, Nebulosity made little difference, because a single search already answers them. The method, the caveats and the data behind every number are in [docs/EVALUATION.md](docs/EVALUATION.md), which also notes that I split the questions into multi-step and simpler ones after the runs.
+
+\* The test didn't ask "what would changing this file affect?" on Theia, so I measured it later, on 26 October 2026, with the same setup. It came out 3.7× faster, with all 3 answers fully right with Nebulosity and none of 3 without. Those 6 runs aren't among the 14 questions and 42 answers above. Their data is in [eval3-theia-impact/](eval3-theia-impact/).
 
 ## Quick start
 
