@@ -36,7 +36,7 @@
 <main>
   <section class="wrap hero">
     <h1>A live map of your codebase, for you and Claude Code.</h1>
-    <p class="lede">Nebulosity indexes every import in your repo, so Claude Code can answer questions that span many files in one call. In tests, that made it <strong>up to 4.4× faster</strong>, and <strong>up to 3.2× faster</strong> on Theia, a codebase Nebulosity was never adjusted for. Every answer was right.</p>
+    <p class="lede">Nebulosity indexes every import in your repo, so Claude Code can answer questions that span many files in one call. In tests, that made it <strong>up to 4.4× faster</strong>, and <strong>up to 3.7× faster<a class="note-mark" href="#later" aria-label="measured later: see the note under the chart">*</a></strong> on Theia, a codebase Nebulosity was never adjusted for. Every answer was right.</p>
     <div class="cta">
       <div class="actions">
         <a class="button primary" href="https://demo.nebulosity.ca">Try the live demo</a>
@@ -124,7 +124,7 @@
           In the main test, <strong>42 of 42</strong> answers to these questions were fully right with Nebulosity, and 29 of 42 alone.
         </p>
         <p class="fine">Medians of 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. The question types were grouped after the runs; simpler ones, like listing a file's direct importers, came out about even. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
-        <p class="fine">* Measured later (26 October 2026) with the same setup: 3 of 3 answers fully right with Nebulosity, 0 of 3 alone.</p>
+        <p class="fine" id="later">* Theia's 3.7×, for what a change could affect, was measured later (26 October 2026) with the same setup. 3 of 3 answers were fully right with Nebulosity, 0 of 3 alone.</p>
       </figcaption>
     </figure>
   </section>

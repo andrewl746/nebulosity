@@ -121,6 +121,10 @@ h3 { margin: 0; color: var(--text); font-size: 17px; font-weight: 500; line-heig
 .fill { width: calc((100% - 4.5em) * var(--x) / 5); height: 10px; }
 .val { font-size: 14.5px; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 .val .mark { margin-left: 1px; color: var(--text-2); }
+/* the hero's marker jumps to the note under the chart, which shows it was the one asked for */
+.note-mark { margin-left: 1px; font-weight: 400; }
+#later { scroll-margin-top: 24px; transition: color 120ms ease-out; }
+#later:target { color: var(--text); }
 .chart-foot { flex-direction: column; gap: 6px; }
 .chart-foot p { margin: 0; }
 .chart-foot .score { color: var(--text-body); font-size: 16px; }
