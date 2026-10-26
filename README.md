@@ -49,6 +49,8 @@ That's it. Now ask Claude Code things like:
 
 It'll use Nebulosity's tools when they help, and it can point things out on the Map while it explains. If something seems off, `nebulosity doctor` will tell you what's missing.
 
+![Claude Code in VS Code's terminal, asked which folders inside src/vs import terminal.ts: it answers that five do, and the Map above highlights those five, workbench, platform, sessions, server and code, while base and editor stay plain](docs/screenshots/claude-map.png)
+
 ## Features
 
 The **Map** shows your repo one folder at a time, with at most 50 boxes on screen, so it stays readable. Click a box to see what it imports and what imports it, open its source, or search with Ctrl K. It updates as you save files.
