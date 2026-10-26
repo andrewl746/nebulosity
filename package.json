@@ -3,6 +3,10 @@
   "version": "0.3.0",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewl746/nebulosity.git"
+  },
   "bin": {
     "nebulosity": "bin/nebulosity.mjs"
   },
