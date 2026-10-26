@@ -1,5 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { bandClear, bannerForm, cardClear, fitPopover, legendMaxHeight, MIN_HEIGHT, MIN_WIDTH, PANEL_WIDTH, panelLayout, pillForm, trailStart } from "./narrow";
+import { actionsPlace, actionsSide, bandClear, bannerForm, cardClear, fitPopover, legendMaxHeight, MIN_HEIGHT, MIN_WIDTH, PANEL_WIDTH, panelLayout, pillForm, trailStart } from "./narrow";
+
+describe("actionsSide (a selected box's actions, while the panel would cover the canvas: owner review 2026-10-25)", () => {
+    it("goes under a box whose middle is in the canvas's top half, clear of the page pill's band", () => {
+        expect(actionsSide(64, 56, 600)).toBe("bottom");
+        expect(actionsSide(240, 56, 600)).toBe("bottom");   // its middle at 268, above 300
+    });
+
+    it("goes over a box whose middle is at or below the canvas's middle, clear of the legend and the zoom controls", () => {
+        expect(actionsSide(272, 56, 600)).toBe("top");   // its middle exactly at 300
+        expect(actionsSide(500, 56, 600)).toBe("top");
+    });
+
+    it("goes by the box's size on screen: zoomed out to 75%, a box's middle is higher", () => {
+        expect(actionsSide(270, 42, 600)).toBe("bottom");   // its middle at 291
+    });
+});
+
+describe("actionsPlace (the actions' corner on the canvas)", () => {
+    const actions = { width: 150, height: 36 };
+
+    it("centres them on the box, 8 px under it in the canvas's top half and 8 px over it lower down", () => {
+        // a 232 × 56 box at (100, 64): its middle at x 216, so the actions start at 216 - 75
+        expect(actionsPlace({ left: 100, top: 64, width: 232, height: 56 }, actions, 440, 600)).toEqual({ left: 141, top: 128 });
+        expect(actionsPlace({ left: 100, top: 400, width: 232, height: 56 }, actions, 440, 600)).toEqual({ left: 141, top: 356 });
+    });
+
+    it("keeps them 8 px inside the canvas's sides when the box hangs off one (the layout check's 360 px floor)", () => {
+        // a 174 px box (75%) starting 14 px off the left edge would put centred actions 2 px off it
+        expect(actionsPlace({ left: -14, top: 64, width: 174, height: 42 }, actions, 360, 600).left).toBe(8);
+        expect(actionsPlace({ left: 300, top: 64, width: 174, height: 42 }, actions, 360, 600).left).toBe(360 - 8 - 150);
+    });
+});
 
 describe("the floor (VISUAL_REFRESH.md, Narrow windows)", () => {
     it("is 360 × 320, and the panel's widest is 400", () => {

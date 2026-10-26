@@ -1315,6 +1315,11 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 **Alternatives:** (a) A VS Code-native Map (a tree view or a rewrite in the webview): a second UI to keep in step with a design that's complete. (b) Editor → Map over `POST /api/live`: it would move every open Map and look like Claude's activity. (c) The webview proxying the Map's requests: it works in browser-hosted VS Code too, but moves ADR-039's guard into the extension; deferred until that's needed. (d) VS Code's language servers as the index: only alive while VS Code is open, slow at 10,000 files, and absent for Claude Code's tools.
 **Consequences:** The browser Map is unchanged; embedded, file picks open the editor. Browser-hosted VS Code (vscode.dev, Codespaces in the browser) is out: its forwarded host isn't localhost. Two windows on two repos share one server, and the last focused wins. The ship moves later by V1.8 and E4.
 **Revisit when:** browser-hosted VS Code matters (then a token or the webview proxy, ADR-039's revisit), or two-repo use is common (a server per repo).
+**Amended (2026-10-25, the owner's look): Back inside the panel.**
+- **Why:** the webview has no browser Back, though the Map's moves go into its history as in a browser tab.
+- **The control:** the embedded Map (`embed=vscode`) shows a Back button at the start of its breadcrumb bar, which goes back one of those moves.
+- **When it's enabled:** each history entry the Map writes carries how many of its own steps lie behind it (`mapDepth` in `history.state`, history.ts's `historyDepth`). The button is disabled at 0, because going back past the Map's first entry would take the webview off the Map.
+- **In a browser tab:** no button. The browser keeps its own Back, and the browser Map is unchanged.
 
 > *(Amended 2026-10-25 by ADR-065, built: E4's five languages are built on `pivot/e4`, in parallel rather than in waves (one task per language, all merged). The extension needed no change: it works by path, and the Map it shows now colors the new languages' source. The ship list still waits on the owner's check of the extension, as this decision's order says.)*
 
@@ -1397,6 +1402,19 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 **Alternatives:** (a) Scaling the whole Map down (CSS zoom) under a width: everything stays in place but text drops below a readable size, and the canvas's zoom already does that job. (b) Horizontal scrolling alone, from the normal size down: simplest, but a 415 px panel would show a third of a 1100 px layout at a time. (c) Measuring every surface's overflow in JavaScript and collapsing until it fits: adapts to any text length, but lays the bar out several times per resize; the fixed order plus truncation already guarantees no overlap. (d) A lower floor (260 px tall, VS Code's short bottom panel): the zoom controls would reach the page pill, and the canvas would be 140 px.
 **Consequences:** Normal sizes look exactly as before, but for the error banner while the details panel is open: it used to run under the panel and the page pill, and now keeps to the canvas beside the panel, clear of the pill (with no panel open it's byte-identical to before). In a narrow panel the Map is usable without scrolling down to 360 px wide; below the floor, or in a bottom panel under 320 px tall, the page scrolls, and over the canvas a vertical wheel still zooms the Map, so scrolling down is by the scrollbar or over the bars. A surface added later must take its place in the order and pass the check.
 **Revisit when:** the check fails for a new surface, the owner finds a step's order wrong in use, or VS Code's bottom panel becomes the main place people use the Map (then the floor's height, or a compact layout for the bars, is the question).
+**Amended (2026-10-25, the owner's look): where the panel would cover the canvas, a click only selects.**
+- **Why:** in VS Code's panel, the panel over the whole canvas hid the box a double click was aimed at, so folders couldn't be opened, and every editor follow covered the Map.
+- **The change** (VISUAL_REFRESH.md §10):
+  - The selected box shows Open (a folder), "Go to page N" (a doorway) and Details beside it, at screen size.
+  - They sit under the box in the canvas's top half and over it lower down, centred on it but kept 8 px inside the canvas's sides (narrow.ts's `actionsSide` and `actionsPlace`). React Flow's NodeToolbar was tried first: a box hanging off an edge at the 360 px floor took it 2 px past the canvas, which the layout check caught.
+  - Details opens the panel over the canvas, and its × or Escape comes back to the Map with the box still selected.
+  - A window narrowed while the panel is beside the canvas keeps it open, now over the canvas.
+- **Unchanged:** normal sizes, and every window where the panel fits beside the canvas.
+- **Alternatives:**
+  - (e) Delaying the panel until a double click had had its time: the panel would still cover the Map, and the system's double-click time is unknown to a page.
+  - (f) A bottom sheet over half the canvas: it covers the boxes in the lower half, and collides with the legend, the zoom controls and the short windows' 320 px floor.
+  - (g) The actions inside the box: they would shrink with the zoom to small targets.
+- **The check:** the layout check walks the actions (`actions`) and asks for Details in every state with a panel; `--embed` walks the Map as VS Code's panel shows it.
 
 ## ADR-065 — Five more languages (Python, Go, Java, C#, Rust) through tree-sitter adapters behind one seam (2026-10-24) — proposed, built 2026-10-25; amends ADR-026, ADR-043, ADR-053 and ADR-062
 

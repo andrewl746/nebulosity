@@ -5,6 +5,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import type { BridgeFromMap, BridgeToMap, LevelResponse, LiveEvent } from "@/lib/contracts";
 import { api, ApiError } from "./api";
+import BackButton from "./BackButton";
 import Breadcrumb from "./Breadcrumb";
 import DetailPanel from "./DetailPanel";
 import HelpDialog from "./HelpDialog";
@@ -13,7 +14,7 @@ import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
 import { isBusyLevel } from "./emphasis";
 import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
-import { followStep, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
+import { followStep, historyDepth, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { BANNER_TOP, bandClear, bannerForm, CARD_TOP, cardClear, PANEL_WIDTH, panelLayout, pillForm, type BannerForm, type PillForm } from "./narrow";
 import { boxFor, parentOf } from "./paths";
 import { clearStart, markStart, measureAfterPaint } from "./perf";
@@ -84,6 +85,21 @@ function MapScreen(){
     // a jump that failed (search, a chip, focus_node), kept with where the Map was, so it shows only until the Map moves
     const [focusError, setFocusError] = useState<{ error: ApiError; place: string; selected: string | null } | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
+    // While the panel would cover the canvas, a click only selects: the box shows Open and Details beside it
+    // (BoxActions), so a double click still reaches it and the Map stays in sight (owner review, 2026-10-25). This is
+    // the box whose Details asked for the panel over the canvas; its × gives it back to null with the box still
+    // selected. Any other selection starts with its details closed, reset as the selection changes (React's way to
+    // reset state when what it belongs to changes, during render, so no frame shows the old panel over the new one).
+    const [detailsFor, setDetailsFor] = useState<string | null>(null);
+    const [detailsSelection, setDetailsSelection] = useState(selected);
+    if (detailsSelection !== selected){
+        setDetailsSelection(selected);
+        setDetailsFor(null);
+    }
+    // Whether the history entry on screen has one of the Map's own steps behind it, for Back inside VS Code's panel
+    // (BackButton, history.ts's historyDepth). It shows only once a level is drawn, in the browser, so reading the
+    // history here can't make the server's render and the browser's differ.
+    const [canGoBack, setCanGoBack] = useState(() => typeof window !== "undefined" && historyDepth(window.history.state) > 0);
     // a path to show that may be on another page: the server says which page holds it (focus(), below)
     const [focusing, setFocusing] = useState<Focusing | null>(null);
     const [paletteOpen, setPaletteOpen] = useState(false);
@@ -146,7 +162,7 @@ function MapScreen(){
                 const at = { path: place.path, page: next.page };
                 setCache((c) => cacheWith(c, at, next));
                 if (next.page !== place.page){
-                    window.history.replaceState(null, "", mapUrl(at.path, at.page, EMBEDDED));
+                    window.history.replaceState({ mapDepth: historyDepth(window.history.state) }, "", mapUrl(at.path, at.page, EMBEDDED));
                     setPlace(at);
                 }
                 setLevelError(null);
@@ -202,12 +218,16 @@ function MapScreen(){
     // (owner review). Back itself only reads the address bar: the place it sets already matches, so nothing is pushed.
     // A link that names the same place another way (?path=src%2Fvs, ?page=1) is rewritten instead, so Back needs one
     // press (history.ts). Inside VS Code's panel the address keeps `embed=vscode` (P8), and a move an editor's follow
-    // made rewrites the entry instead of pushing one, so switching tabs doesn't fill Back (followStep).
+    // made rewrites the entry instead of pushing one, so switching tabs doesn't fill Back (followStep). Each entry carries
+    // how many of the Map's own steps lie behind it (historyDepth), for the Back button there.
     useEffect(() => {
         const step = followStep(historyStep(window.location.pathname + window.location.search, place, EMBEDDED), historyMode.current);
         historyMode.current = "push";
-        if (step === "push") window.history.pushState(null, "", mapUrl(place.path, place.page, EMBEDDED));
-        else if (step === "replace") window.history.replaceState(null, "", mapUrl(place.path, place.page, EMBEDDED));
+        const depth = historyDepth(window.history.state);
+        if (step === "push"){
+            window.history.pushState({ mapDepth: depth + 1 }, "", mapUrl(place.path, place.page, EMBEDDED));
+            setCanGoBack(true);
+        } else if (step === "replace") window.history.replaceState({ mapDepth: depth }, "", mapUrl(place.path, place.page, EMBEDDED));
     }, [place]);
     useEffect(() => {
         const onPop = (): void => {
@@ -215,6 +235,7 @@ function MapScreen(){
             setPlace(placeFromSearch(window.location.search));
             setSelected(null);
             setFocusing(null);   // a jump still on its way would otherwise land after Back and undo it
+            setCanGoBack(historyDepth(window.history.state) > 0);
         };
         window.addEventListener("popstate", onPop);
         return () => window.removeEventListener("popstate", onPop);
@@ -386,6 +407,9 @@ function MapScreen(){
         return () => clearTimeout(timer);
     }, []);
     const closePanel = useCallback(() => setSelected(null), []);
+    // over the canvas, the panel's × closes the details and leaves the box selected, with its actions (BoxActions)
+    const closeDetails = useCallback(() => setDetailsFor(null), []);
+    const showDetails = useCallback((path: string) => setDetailsFor(path), []);
 
     // Escape lets go of the selection, then of Claude Code's highlights; Backspace goes up a level, the arrow keys turn the page, unless the user is typing
     // or a dialog is open over the Map (shortcuts.ts)
@@ -397,6 +421,14 @@ function MapScreen(){
     const hasSelection = shownSelected !== null;
     // Claude's alone: the editor's go when What depends' pick closes
     const hasHighlights = highlights.length > 0;
+    // the panel: 400 px beside the canvas, or over all of it when too little canvas would be left (narrow.ts); over it,
+    // only once the box's Details asks for it
+    const panel = panelLayout(mainWidth);
+    // Beside the canvas the panel is the selection's details, so they count as asked for: a window narrowed while they're
+    // open keeps them, now over the canvas, rather than swapping them for the box's actions (as the reset above, during
+    // render, and once per selection).
+    if (!panel.covers && shownSelected !== null && detailsFor !== shownSelected) setDetailsFor(shownSelected);
+    const detailsOverCanvas = panel.covers && shownSelected !== null && detailsFor === shownSelected;
     useEffect(() => {
         const onKey = (event: KeyboardEvent): void => {
             const shortcut = mapShortcut(event, {
@@ -414,22 +446,25 @@ function MapScreen(){
                 event.preventDefault();
                 setPaletteOpen(true);
             } else if (shortcut.type === "help") setHelpOpen(true);
-            else if (shortcut.type === "deselect") setSelected(null);
-            else if (shortcut.type === "clear-highlights") clearHighlights();
+            // over the canvas, Escape closes the details first, as the panel's × does, and the box stays selected
+            else if (shortcut.type === "deselect"){
+                if (detailsOverCanvas) setDetailsFor(null);
+                else setSelected(null);
+            } else if (shortcut.type === "clear-highlights") clearHighlights();
             else if (shortcut.type === "up") open(parentOf(levelPath));
             else turnPage(shortcut.page);
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [levelPath, open, page, pageCount, turnPage, hasSelection, hasHighlights, clearHighlights]);
+    }, [levelPath, open, page, pageCount, turnPage, hasSelection, hasHighlights, clearHighlights, detailsOverCanvas]);
 
     const jumpError = focusError !== null && focusError.place === cacheKey(place) && focusError.selected === selected ? focusError.error : null;
     const banner = levelError ?? jumpError;
 
-    // the panel: 400 px beside the canvas, or over all of it when too little canvas would be left (narrow.ts)
-    const panelOpen = shownSelected !== null && level !== null;
-    const panel = panelLayout(mainWidth);
+    const panelOpen = shownSelected !== null && level !== null && (!panel.covers || detailsOverCanvas);
     const covered = panelOpen && panel.covers;
+    // the selected box's actions, while the panel would cover the canvas and its details aren't asked for yet
+    const actionsFor = panel.covers && !panelOpen ? shownSelected : null;
     const panelWidth = panelOpen && !covered ? PANEL_WIDTH : 0;
     const pill = level !== null && pageCount > 1 && !covered;
     // the error banner over the canvas: a line in the pill's band, or a card where that can't hold it; over a covering
@@ -450,7 +485,15 @@ function MapScreen(){
                 onHelp={() => setHelpOpen(true)}
             />
             <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-hairline bg-canvas px-4">
-                {level && repo ? <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} /> : <span />}
+                {level && repo ? (
+                    EMBEDDED ? (
+                        // inside VS Code's panel, Back comes first (BackButton): the webview has no browser Back
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <BackButton enabled={canGoBack} />
+                            <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} />
+                        </div>
+                    ) : <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} />
+                ) : <span />}
                 <div className="flex shrink-0 items-center gap-4 text-[12px] text-text-2">
                     {level && isBusyLevel(level.edges.length) && (
                         <span data-testid="lines-note">
@@ -487,6 +530,8 @@ function MapScreen(){
                         panelWidth={panelWidth}
                         covered={covered}
                         bannerBottom={bannerBottom}
+                        actionsFor={actionsFor}
+                        onDetails={showDetails}
                     />
                 )}
                 {level && pill && (
@@ -496,7 +541,7 @@ function MapScreen(){
                 {banner && bannerOnCanvas && (
                     <ErrorBanner message={banner.message} form={bannerAs} panelWidth={panelWidth} pillWidth={pillWidth} bandRef={bandRef} cardRef={cardRef} />
                 )}
-                {shownSelected !== null && level && (
+                {panelOpen && shownSelected !== null && level && (
                     <DetailPanel
                         key={shownSelected}
                         path={shownSelected}
@@ -505,7 +550,7 @@ function MapScreen(){
                         onFocus={focus}
                         onOpen={open}
                         onTurnPage={turnPage}
-                        onClose={closePanel}
+                        onClose={panel.covers ? closeDetails : closePanel}
                         onOpenInEditor={editor === null ? undefined : openInEditor}
                         covers={panel.covers}
                         alert={covered ? banner?.message : undefined}
