@@ -105,7 +105,6 @@ If you want to dig deeper:
 
 - [docs/GUIDE.md](docs/GUIDE.md) covers every command and setting.
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the speed, accuracy and cost measurements.
-- [docs/ENGINEERING_DECISIONS.md](docs/ENGINEERING_DECISIONS.md) explains why it's built the way it is.
 
 ## Background
 

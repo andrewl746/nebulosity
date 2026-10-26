@@ -54,3 +54,11 @@ eval2/runs/*.tmp
 eval2/dev/runs/*.tmp
 eval3/runs/*.tmp
 eval3/dev/runs/*.tmp
+
+# working notes, design records and plans: kept locally, not published
+/docs/*.md
+!/docs/GUIDE.md
+!/docs/BENCHMARKS.md
+!/docs/EVAL_RESULTS.md
+/docs/plans/
+/docs/screenshots/v1-3-1/

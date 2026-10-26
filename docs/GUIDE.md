@@ -154,7 +154,7 @@ The extension uses a Map that's already running, or starts one, and stops the on
 
 Nebulosity runs on all three. CI installs the package on each of them, indexes test repos with it, asks its MCP server questions and opens the Map. It also runs `nebulosity setup` against a real Claude Code, registers the block `nebulosity setup --json` prints with `claude mcp add-json`, checks that the installed Map's background worker picks up a saved file, and checks that `summarize` refuses to spend without a key or a yes.
 
-The Map works at any window size, down to a narrow VS Code panel ([VISUAL_REFRESH.md](VISUAL_REFRESH.md) §10). From a checkout, `npm run check-layout -- http://127.0.0.1:<port>` checks a running Map in headless Chrome at 20 window sizes, from 1440 × 900 to 200 × 260 (the Map must be showing the VS Code demo repo, whose folders its states visit).
+The Map works at any window size, down to a narrow VS Code panel. From a checkout, `npm run check-layout -- http://127.0.0.1:<port>` checks a running Map in headless Chrome at 20 window sizes, from 1440 × 900 to 200 × 260 (the Map must be showing the VS Code demo repo, whose folders its states visit).
 
 ## Tested with
 
@@ -199,19 +199,3 @@ Besides TypeScript and JavaScript, Nebulosity reads Python, Go, Java, C# and Rus
 ## Speed
 
 Measured on VS Code (20,342 files, 14,849 of them indexed before E4, 15,040 since): the structure index in under a minute on 2026-10-15 (S1: 56.7 s at worst of three and 50.2 s median with the call facts, Index Benchmark #7; on 2026-10-25 the same laptop took 75–77 s, for the code before the five new languages as for the code after, Index Benchmark #8), every summary for $10.30 (S2), Map interactions within 100 ms (S3: 78 ms at worst on the production build, 97 ms on the static demo), every warm MCP call under 500 ms (S5: 177 ms at worst, MCP Benchmark #5, and the first `calls` answer in a fresh process 902 ms at worst), and a saved file reflected in 1,501 ms at worst once warm, Update Benchmark #3, 1 s of it the watcher's debounce (S6 allows 2 s). The numbers and how they were taken: [BENCHMARKS.md](BENCHMARKS.md).
-
-## Decisions worth reading
-
-- [ADR-027](ENGINEERING_DECISIONS.md) and [ADR-052](ENGINEERING_DECISIONS.md): search that fuses five ranked lists with Reciprocal Rank Fusion.
-- [ADR-029](ENGINEERING_DECISIONS.md): the Map's 50-box levels and pre-aggregated import counts.
-- [ADR-035](ENGINEERING_DECISIONS.md): a spend cap on summary runs.
-- [ADR-038](ENGINEERING_DECISIONS.md): a background worker that owns every write while the Map is open.
-- [ADR-044](ENGINEERING_DECISIONS.md): an MCP server that reads the database read-only beside a writer.
-- [ADR-045](ENGINEERING_DECISIONS.md): the compressed import index behind `imports`.
-- [ADR-049](ENGINEERING_DECISIONS.md) and [ADR-050](ENGINEERING_DECISIONS.md): the static demo, and how the eval was kept honest.
-- [ADR-057](ENGINEERING_DECISIONS.md): Eval #2 and its ship gate, fixed before the first run.
-- [ADR-059](ENGINEERING_DECISIONS.md): calls through declared types, without a type checker in the product.
-- [ADR-060](ENGINEERING_DECISIONS.md): Eval #3, with time to relevant context and a gate fixed before the first run.
-- [ADR-061](ENGINEERING_DECISIONS.md): the pitch narrowed to what three evals measured, with every feature kept.
-- [ADR-062](ENGINEERING_DECISIONS.md): the Map in a VS Code panel, as an iframe that passes the server's localhost guards unchanged, with a `postMessage` bridge for the editor sync.
-- [ADR-065](ENGINEERING_DECISIONS.md): five more languages behind one seam, each resolved by its own rules with no build, a conformance kit that holds every adapter to a hand-derived truth, and what was left unlinked rather than guessed.
