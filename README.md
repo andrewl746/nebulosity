@@ -1,20 +1,22 @@
 # Nebulosity
 
-**A map of how a big codebase fits together, for you and for Claude Code.**
+**A live map of how a big codebase fits together, for Claude Code and for you.**
 
-Open a large repository you've never seen, and the first questions are always the same. What are the main parts? Which files matter? What breaks if I touch this one? The answers are spread across thousands of imports, so no single file tells you.
+Ask Claude Code what would break if you changed a file in VS Code, and it has to work it out from scratch: grep for the file, then for every file that turned up, and keep going, across 14,849 files and over 140,000 imports. Nebulosity reads all of those imports once, keeps them current as you edit, and answers that question in a single tool call. In my eval, that made Claude Code **up to 4.4× faster** on questions like it (up to 3.2× on a repo I never tuned on), with a **perfect score in all 42 runs**.
 
-Nebulosity reads all of those imports once and keeps them up to date while you work. You get a Map you can zoom around, one folder at a time, with lines showing what imports what. Claude Code gets seven tools that answer dependency questions in a single call, instead of grepping its way through the repo.
+You get the same graph as a Map: zoom from the whole repo down to a single folder and see what imports what, in your browser or right inside VS Code.
 
 ![The Map on VS Code's src/vs/platform folder](docs/screenshots/map-vscode.png)
 
 ## Does it actually help?
 
-I tested it against Claude Code on its own, on three large TypeScript repos: VS Code, AFFiNE and Theia. I kept Theia out of all tuning, so it's the fairest test of the three.
+Yes, by a wide margin on questions that hop through the imports. I ran Claude Code with and without Nebulosity on three big open-source TypeScript repos, VS Code, AFFiNE and Theia: 378 runs in all, with every answer checked against a ground truth built without Nebulosity, and blind graders for the open-ended ones. I kept Theia out of all tuning, so it's the fairest test of the three.
 
-Some questions take several hops through the imports: "what would changing this file affect?", "how does this entry point end up loading that file?", "where are the import cycles?". On those, Claude Code with Nebulosity was 2.3–4.4× faster on VS Code and AFFiNE, and 1.5–3.2× faster on Theia. It scored the same or better. It usually cost less too: 1.4–2.6× cheaper on VS Code and AFFiNE, and about the same to 1.3× cheaper on Theia.
+Those questions are things like "what would changing this file affect?", "how does this entry point end up loading that file?" and "is this file part of an import cycle?". On them, Claude Code with Nebulosity was **2.3–4.4× faster** on VS Code and AFFiNE, and **1.5–3.2× faster** on Theia. It answered every one perfectly, in all 42 runs, where Claude Code on its own was perfect in 29. It was usually cheaper too: 1.4–2.6× on VS Code and AFFiNE, and up to 1.3× on Theia.
 
-On simpler lookups that don't need the import graph, it performs about the same as Claude Code alone, which is what you'd expect. The full method, every run and the fine print (including that I grouped the questions by type after running them) are in [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
+Tracing how one file ends up loading another shows the difference best. On all three repos, Claude Code with Nebulosity did it in a single tool call every time, in a median of 5–6 seconds. On its own, it took three to six calls and a median of 16–24 seconds.
+
+On simpler questions that grep already handles well, it performs about the same as Claude Code alone, which is what you'd expect. The full method, every run and the fine print (including that I grouped the questions by type after running them) are in [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
 
 ## Quick start
 
@@ -105,13 +107,13 @@ If you want to dig deeper:
 
 Nebulosity is **finished**. This is the last release, and I'm not maintaining it, so issues and pull requests may not get a reply.
 
-It's been tested on Windows, macOS and Linux, with Node 24 and Claude Code 2.1.300–2.1.310 ([details](docs/GUIDE.md#tested-with)).
+It has over 2,600 automated tests, which CI runs on Windows, macOS and Linux, and it's been tested with Node 24 and Claude Code 2.1.300–2.1.310 ([details](docs/GUIDE.md#tested-with)).
 
 Two things outside its control could change over time, and both have a way around them. If Anthropic retires the summary models, you can [set new ones](#summary-models). If Claude Code's `mcp add` command changes, `nebulosity setup --json` prints a plain config that any MCP client can use ([details](docs/GUIDE.md#other-mcp-clients-or-by-hand)).
 
 ## Why I built this
 
-I wanted to understand how AI agents and retrieval actually work, so I built every layer myself: a parser, an import graph that stays current, summaries, embeddings, search, and an MCP server for Claude Code to call. Then I wanted to find out honestly whether any of it helps. That's why there's an eval, with its losses written down.
+I wanted to understand how AI agents and retrieval actually work, so I built every layer a tool like this needs: an indexer for seven languages, an import graph that stays current as you edit, AI-written summaries, local embeddings, hybrid search, an MCP server for Claude Code to call, and the Map and the VS Code extension on top. Then I put it to the test: three evals and 738 runs of Claude Code with and without it, with every transcript in the repo.
 
 I also kept running into the problem myself. Every time I opened a big unfamiliar repo, my first questions had answers that weren't in any one file.
 

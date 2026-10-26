@@ -861,6 +861,8 @@ Now an absolute path inside the repo becomes a repo-relative one (`repoPathFrom`
 
 Nothing is rewritten and nothing is force-pushed.
 
+**Amended (2026-10-26): what the README names.** The README no longer names each failed condition of Eval #3's gate. That was the owner's call, recorded in ADR-061's amendment of 2026-10-26. docs/EVAL_RESULTS.md keeps the gate, every condition and the losses in full, and the README links to it.
+
 ## ADR-052 — Search finds files by their names and declarations, damps tests, and shows declarations before imports (2026-10-14) — amends ADR-027
 
 **Context:** ADR-027 fused code keywords, summary keywords and meaning; V1.3.1 added folder names. V1.2 and V1.3 left ranking cases for V1.5's query set: "lifecycle" ranked `src/vs/base/common/lifecycle.ts` 6th then, and by V1.5's planning probe it was outside the top 8, as it was for "Disposable", though it's the most imported file in VS Code. "registerSingleton" ranked its own file 2nd; "terminal" put a smoke-test folder 2nd; a file's snippet was often its imports listing with a `File: <path> Imports:` header.
@@ -1299,6 +1301,13 @@ It called a tool in all 42 of those runs. Elsewhere the gains were small or none
 - Optional, the owner's call: a confirmatory eval (Eval #4). It would ask only multi-step and one-step questions, new ones drawn with a fixed seed on the three repos, with more runs per kind, and add setup's CLAUDE.md note to the with-Nebulosity arm. Its bars are set before its first run, and Eval #3 stays reported as is.
 
 **Revisit when:** a confirmatory eval misses its bars on the multi-step kinds, or Claude Code gains its own import graph, which would close the gap.
+
+**Amended (2026-10-26, the owner's README): the lead is the multi-step result.** The owner's calls on the README (2026-10-26): it should make the strongest case the results support, for a reader who skims it as much as for an engineer who checks it. The small gains, the ties and the failed gate move out of its lead into docs/EVAL_RESULTS.md, where they stay in full. So the README:
+- opens with what the question costs Claude Code on VS Code (14,849 files and 140,583 imports at index version 143, BENCHMARKS.md) and Eval #3's multi-step result: up to 4.4× as fast on VS Code and AFFiNE beside up to 3.2× on the held-out Theia, and a perfect score in all 42 of the with-Nebulosity runs on those kinds (`eval3/results.json`; Claude Code alone was perfect in 29 of 42);
+- gives the ranges by repo with Theia's beside them, the cost ranges, and one example that holds on all three repos: the chain question, one tool call in each of its 9 runs and medians of 5.1–5.7 s, against 3–6 calls and medians of 16.2–23.9 s alone;
+- says in one sentence that simpler questions came out about even, and links docs/EVAL_RESULTS.md for the method, every run, the failed gate and the grouping, which it says was made after the runs.
+
+Still in force: no figure without its held-out counterpart, no "better answers" or "faster at finding callers" in general, and the grouping labelled as made after the runs. This replaces the decision's "the small gains, the ties and the failed gate, in the lead" and ADR-051's "each failed condition named".
 
 ## ADR-062 — A VS Code extension shows the running Map in an editor panel, as slice V1.8, before E4 and the ship (2026-10-23) — amends ADR-043
 
