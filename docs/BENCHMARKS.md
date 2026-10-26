@@ -1410,3 +1410,19 @@ TypeScript's own edges, symbols and chunks are the F1 rows above; the new edges 
 - **R29 leaves them out** of `package.json`'s `files`, as `!.next/cache/` already did for the build cache. The package then drops to 3.03 MB packed and 9.23 MB unpacked, both bars met with room. An installed copy's server stack traces now point into the bundled code. The installed-copy checks in CI (the Map, its worker, the MCP server and the extension, all run from the tarball) are what prove nothing needed the maps.
 - `prepack`'s check passed every time: no links, no machine paths, no untracked files.
 - **For the ship:** run `npm run build:package` again right before `npm publish`. `prepack` checks the build but doesn't redo it, so a stale `.next` would ship.
+
+## 2026 10 26 Index Benchmark #10 — the 1.0.0 package's size
+
+- **Code:** `pivot/release-1.0` at `7ff6d93`, the Map built by `npm run build:package` in `../Nebulosity-build`. That folder also holds the static demo's `out/` (7,876 files) and its export `demo-export/` (7,826 files), neither of which the package ships.
+- **How:** `npm pack --dry-run --json --ignore-scripts` on the prepared build, once with `package.json`'s `files` as it was and once with the build traces left out. Node 24.14.0, npm 11.9.0, Windows 11.
+
+### The package (`npm pack --dry-run --json`, against ADR-058's 6.6 MB packed and 25.0 MB unpacked): packed FAIL as built in that folder, then PASS once the build traces stopped shipping
+
+| `files` | Packed | Unpacked | Files | Verdict |
+|---|---|---|---|---|
+| as in `dce9b03`: the build traces (`.next/**/*.nft.json`) ship | **6,711,974** | 23,016,935 | 542 | **packed FAIL, 111,974 bytes over** |
+| `7ff6d93`: `!.next/**/*.nft.json` beside R29's `!.next/**/*.map` | **2,307,149** | **6,504,478** | 522 | **PASS, both** |
+
+- **The 20 traces were 16,512,633 bytes unpacked.** Turbopack traced the whole build folder (its build warning names `lib/home.ts`, `scripts/env.ts` and `instrumentation.ts`), so each route's trace listed every file in it, 18,251 in this folder: the demo's two folders, the eval transcripts, the tests and the extension by name. The package's size depended on what sat in the folder it was built in. Index Benchmark #9's 9.23 MB was built where neither demo folder was.
+- **Nothing at run time reads them.** `next start` doesn't read them; they're for standalone output and hosted deploys. An installed copy with all 20 deleted served the page and every API route, the two POSTs included, and its worker watched the repo.
+- `prepack`'s check passed both times: no links, no machine paths, no untracked files.
