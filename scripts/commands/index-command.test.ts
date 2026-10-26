@@ -16,6 +16,9 @@ import { runIndex } from "./index-command";
 
 // index re-derives the summaries stage with the summary models in config.json (ADR-066): only this test's own, never the developer's
 const dataFolder = isolateDataFolder();
+// nor the developer's key: runIndex loads .env.local from the checkout's own folder (scripts/env.ts), where a developer keeps
+// ANTHROPIC_API_KEY, which would take the free-mode test out of free mode and leave the key in this process (summarize-command.test.ts does the same)
+vi.mock("../env", async (importOriginal) => ({ ...(await importOriginal<typeof import("../env")>()), loadLocalEnv: () => {} }));
 
 describe("runIndex (nebulosity index)", () => {
     it("loads the grammars, then indexes the mini-repo and resolves to 0", async () => {
