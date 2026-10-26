@@ -1,22 +1,24 @@
 # Nebulosity
 
-**A live map of how a big codebase fits together, for Claude Code and for you.**
+**A dependency graph of your codebase that Claude Code can query, and a map of it you can explore.**
 
-Ask Claude Code what would break if you changed a file in VS Code, and it has to work it out from scratch: grep for the file, then for every file that turned up, and keep going, across 14,849 files and over 140,000 imports. Nebulosity reads all of those imports once, keeps them current as you edit, and answers that question in a single tool call. In my eval, that made Claude Code **up to 4.4× faster** on questions like it (up to 3.2× on a repo I never tuned on), with a **perfect score in all 42 runs**.
+In a large codebase, some questions take many steps to answer. To find out what a change to one file could affect, you need every file that imports it, then every file that imports those, and so on. Claude Code normally works this out with one search after another. The VS Code repository has 14,849 files and over 140,000 imports, so a question like this can take a lot of searches.
 
-You get the same graph as a Map: zoom from the whole repo down to a single folder and see what imports what, in your browser or right inside VS Code.
+Nebulosity indexes all of a repository's imports ahead of time and keeps the index up to date as you work. Claude Code can then answer the whole question with a single tool call. In my tests, Claude Code with Nebulosity answered questions like this **up to 4.4× faster**, and up to 3.2× faster on a codebase I never used to tune Nebulosity. It **got every one of them right**.
+
+You can also explore these imports yourself on the Map, which shows your codebase one folder at a time, with lines showing what imports what. The Map opens in your browser or in a VS Code panel.
 
 ![The Map on VS Code's src/vs/platform folder](docs/screenshots/map-vscode.png)
 
 ## Does it actually help?
 
-Yes, by a wide margin on questions that hop through the imports. I ran Claude Code with and without Nebulosity on three big open-source TypeScript repos, VS Code, AFFiNE and Theia: 378 runs in all, with every answer checked against a ground truth built without Nebulosity, and blind graders for the open-ended ones. I kept Theia out of all tuning, so it's the fairest test of the three.
+I tested it by giving Claude Code the same questions with and without Nebulosity, on three large open-source TypeScript codebases: VS Code, AFFiNE and Theia. Across 378 runs, every answer was checked against a reference answer prepared without Nebulosity. I never used Theia to tune Nebulosity, so Theia is the fairest test of the three.
 
-Those questions are things like "what would changing this file affect?", "how does this entry point end up loading that file?" and "is this file part of an import cycle?". On them, Claude Code with Nebulosity was **2.3–4.4× faster** on VS Code and AFFiNE, and **1.5–3.2× faster** on Theia. It answered every one perfectly, in all 42 runs, where Claude Code on its own was perfect in 29. It was usually cheaper too: 1.4–2.6× on VS Code and AFFiNE, and up to 1.3× on Theia.
+Nebulosity helped most on questions that require following imports through several files, like "what would changing this file affect?", "how does this entry point end up loading that file?" and "is this file part of an import cycle?". On those, depending on the type of question, Claude Code with Nebulosity was **2.3–4.4× faster** on VS Code and AFFiNE, and **1.5–3.2× faster** on Theia. It was usually cheaper too: 1.4–2.6× cheaper on VS Code and AFFiNE, and up to 1.3× cheaper on Theia. There were 14 of these questions, each asked 3 times with Nebulosity and 3 times without. With Nebulosity, Claude Code got all 42 answers fully right. Without it, Claude Code got 29 fully right and the rest partly right.
 
-Tracing how one file ends up loading another shows the difference best. On all three repos, Claude Code with Nebulosity did it in a single tool call every time, in a median of 5–6 seconds. On its own, it took three to six calls and a median of 16–24 seconds.
+For example, to trace how one file ends up loading another, Claude Code with Nebulosity used one tool call every time, with a median of 5–6 seconds on each codebase. Without Nebulosity, it used three to six tool calls and took a median of 16–24 seconds.
 
-On simpler questions that grep already handles well, it performs about the same as Claude Code alone, which is what you'd expect. The full method, every run and the fine print (including that I grouped the questions by type after running them) are in [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
+On simpler questions, such as listing the files that import a given file directly, Nebulosity made little difference, because a single search already answers them. The full method, every run and the per-question results are in [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md), which also notes that I split the questions into multi-step and simpler ones after the runs.
 
 ## Quick start
 
