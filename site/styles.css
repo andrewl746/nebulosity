@@ -120,7 +120,7 @@ h3 { margin: 0; color: var(--text); font-size: 17px; font-weight: 500; line-heig
 /* 5× fills the space the value's label leaves; the bar starts on the baseline */
 .fill { width: calc((100% - 4.5em) * var(--x) / 5); height: 10px; }
 .val { font-size: 14.5px; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
-.bar.none .val { padding-left: 2px; font-size: 13.5px; color: var(--text-2); }
+.val .mark { margin-left: 1px; color: var(--text-2); }
 .chart-foot { flex-direction: column; gap: 6px; }
 .chart-foot p { margin: 0; }
 .chart-foot .score { color: var(--text-body); font-size: 16px; }
