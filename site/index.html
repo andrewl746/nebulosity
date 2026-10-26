@@ -45,7 +45,7 @@
       <p class="note">Free and open source. Without an API key, none of your code leaves your machine.</p>
     </div>
     <figure class="shot">
-      <a class="frame" href="images/vscode-extension-1917.webp" title="Open the screenshot full size">
+      <a class="frame" href="images/vscode-extension-1917.webp" title="Show the screenshot full size">
         <img src="images/vscode-extension-1917.webp" srcset="images/vscode-extension-960.webp 960w, images/vscode-extension-1917.webp 1917w" sizes="(min-width: 1240px) 1120px, 100vw" width="1917" height="1140" fetchpriority="high" alt="The Nebulosity extension in VS Code: editor.main.ts is open in the editor and selected on the Map beside it, with lines to the files it imports and its summary open">
       </a>
       <figcaption>The Map in a VS Code panel, following the file you have open.</figcaption>
@@ -81,7 +81,7 @@
       </div>
     </div>
     <figure class="shot">
-      <a class="frame" href="images/map-vscode-1907.webp" title="Open the screenshot full size">
+      <a class="frame" href="images/map-vscode-1907.webp" title="Show the screenshot full size">
         <img src="images/map-vscode-1907.webp" srcset="images/map-vscode-960.webp 960w, images/map-vscode-1907.webp 1907w" sizes="(min-width: 1240px) 1120px, 100vw" width="1907" height="998" loading="lazy" alt="The Map on VS Code's src/vs/platform folder: boxes for its folders with their file counts, the first of three pages">
       </a>
       <figcaption>The Map on VS Code's <code>src/vs/platform</code> folder, the first of three pages.</figcaption>
@@ -185,7 +185,34 @@
   </div>
 </footer>
 
+<dialog class="lightbox" aria-label="Screenshot, full size">
+  <button class="close" type="button" aria-label="Close">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+  <img alt="">
+</dialog>
+
 <script>
+  // A screenshot opens full size over the page, not as a page of its own; the ×, Escape or a click outside the image
+  // closes it. A Ctrl-click or a middle click still opens it in a new tab, and without scripts the link opens it as before.
+  const viewer = document.querySelector(".lightbox");
+  const viewerImage = viewer.querySelector("img");
+  for (const link of document.querySelectorAll("a.frame")) {
+    link.addEventListener("click", (event) => {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      viewerImage.src = link.href;
+      viewerImage.alt = link.querySelector("img").alt;
+      viewer.showModal();
+      // where it's wider than the screen (a phone), start from its middle
+      viewer.scrollTo(0, 0);
+      viewerImage.decode().catch(() => {}).then(() => { viewer.scrollLeft = (viewer.scrollWidth - viewer.clientWidth) / 2; });
+    });
+  }
+  viewer.addEventListener("click", (event) => {
+    if (event.target !== viewerImage) viewer.close();
+  });
+
   // A Copy button on each command (added here, so a page without scripts shows none): it copies that one line. Where the
   // browser refuses the clipboard, the line is selected instead, so it can be copied by hand.
   for (const item of document.querySelectorAll(".commands li")) {

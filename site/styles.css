@@ -148,9 +148,37 @@ h3 { margin: 0; color: var(--text); font-size: 18px; font-weight: 500; line-heig
 .facts > div { padding-top: 20px; border-top: 1px solid var(--hairline); }
 .facts p { margin: 10px 0 0; font-size: 15.5px; }
 
+/* a screenshot full size, over the page: the ×, Escape or a click outside the image closes it */
+.lightbox {
+  width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; border: 0; background: transparent;
+  padding: 76px var(--gutter) var(--gutter); overscroll-behavior: contain;
+}
+.lightbox[open] { display: grid; place-items: center; }
+.lightbox::backdrop { background: rgb(14 10 28 / 0.94); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.lightbox img {
+  max-width: 100%; max-height: calc(100dvh - 76px - var(--gutter)); width: auto; height: auto;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+}
+.lightbox[open] img { animation: enlarge 160ms ease-out; }
+@keyframes enlarge { from { opacity: 0; transform: scale(0.98); } }
+.lightbox .close {
+  position: fixed; top: 16px; right: var(--gutter); display: grid; place-items: center; width: 44px; height: 44px;
+  border: 1px solid var(--overlay-line); border-radius: 10px; background: var(--overlay); color: var(--control);
+  transition: background-color 120ms ease-out;
+}
+.lightbox .close:hover { background: var(--overlay-line); }
+.lightbox .close svg { width: 22px; height: 22px; }
+html:has(.lightbox[open]) { overflow: hidden; }
+/* on a phone the page already shows the screenshot at the screen's width, so full size is wider than the screen: swipe around it */
+@media (max-width: 700px) {
+  .lightbox { padding: 76px 16px 16px; overflow: auto; }
+  .lightbox[open] { justify-items: start; }
+  .lightbox img { width: 1000px; max-width: none; max-height: none; }
+}
+
 footer { margin-top: clamp(96px, 10vw, 140px); padding: 32px 0 48px; border-top: 1px solid var(--hairline); font-size: 14.5px; color: var(--text-2); }
 footer .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; }
 footer ul { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 0; padding: 0; list-style: none; }
 footer p { margin: 20px 0 0; max-width: 60em; }
 
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
