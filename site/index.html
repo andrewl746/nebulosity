@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nebulosity: a live map of how a big codebase fits together</title>
+<meta name="description" content="Nebulosity indexes every import in a repository so Claude Code can answer questions that follow imports through many files with one tool call, and shows you the same structure on a Map.">
+<link rel="canonical" href="https://nebulosity.ca/">
+<meta name="theme-color" content="#0E0A1C">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nebulosity.ca/">
+<meta property="og:title" content="Nebulosity">
+<meta property="og:description" content="A live map of how a big codebase fits together, for Claude Code and for you.">
+<meta property="og:image" content="https://nebulosity.ca/images/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="images/icon-180.png">
+<link rel="preload" href="fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="wrap nav">
+  <a class="brand" href="./"><img src="icon.svg" alt="" width="26" height="26">Nebulosity</a>
+  <nav aria-label="Main">
+    <ul>
+      <li><a href="https://demo.nebulosity.ca">Live Demo</a></li>
+      <li class="wide"><a href="#install">Install</a></li>
+      <li class="wide"><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Evaluation</a></li>
+      <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <h1>A live map of how a big codebase fits together, for Claude Code and for you.</h1>
+    <p class="lede">Nebulosity indexes every import in a repository ahead of time, so Claude Code can answer a question that follows imports through many files with one tool call. In tests, Claude Code with Nebulosity answered questions like this <strong>up to 4.4× faster</strong>, and <strong>up to 3.2× faster</strong> on Theia, a codebase Nebulosity was never adjusted for. It got every one of them right.</p>
+    <div class="cta">
+      <div class="actions">
+        <a class="button primary" href="https://demo.nebulosity.ca">Try the live demo</a>
+        <a class="button secondary" href="https://github.com/andrewl746/Nebulosity">View on GitHub</a>
+      </div>
+      <p class="note">Free and open source. Without an API key, none of your code leaves your machine.</p>
+    </div>
+    <figure class="shot">
+      <a class="frame" href="images/vscode-extension-1917.webp" title="Open the screenshot full size">
+        <img src="images/vscode-extension-1917.webp" srcset="images/vscode-extension-960.webp 960w, images/vscode-extension-1917.webp 1917w" sizes="(min-width: 1240px) 1120px, 100vw" width="1917" height="1140" fetchpriority="high" alt="The Nebulosity extension in VS Code: editor.main.ts is open in the editor and selected on the Map beside it, with lines to the files it imports and its summary open">
+      </a>
+      <figcaption>The Map in a VS Code panel, following the file you have open.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap part" id="questions">
+    <div class="split">
+      <div>
+        <h2>Questions that cross many files, answered in one call</h2>
+        <p>In a large codebase, some questions take many steps to answer. To find out what a change to one file could affect, you need every file that imports it, then every file that imports those, and so on. Claude Code normally works this out with one search after another, and VS Code alone has about 15,000 files and over 140,000 imports.</p>
+        <p>Nebulosity reads every import once, ahead of time, and keeps the index current as you work. Claude Code then answers the whole question with a single tool call.</p>
+      </div>
+      <div>
+        <ul class="asks" aria-label="Questions to ask Claude Code">
+          <li>What could break if <code>src/vs/base/common/event.ts</code> changes?</li>
+          <li>How does <code>main.ts</code> end up loading <code>terminal.ts</code>?</li>
+          <li>Which entry points load this file?</li>
+          <li>Are there import cycles in <code>src/vs/platform</code>?</li>
+        </ul>
+        <p>Claude Code uses Nebulosity's tools when they help, and can point things out on the Map while it explains.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap part" id="map">
+    <div class="split head">
+      <h2>See the same imports on the Map</h2>
+      <div>
+        <p>The Map shows a codebase one folder at a time, with at most 50 boxes on screen and lines for what imports what. Click a box to see what it imports and what imports it, read its source, or search with Ctrl K. It keeps up as you save files, in your browser or in a VS Code panel beside your code.</p>
+        <p>The live demo is the Map on VS Code's own repository, all 15,040 files, with nothing to install.</p>
+        <div class="actions"><a class="button secondary" href="https://demo.nebulosity.ca">Try the live demo</a></div>
+      </div>
+    </div>
+    <figure class="shot">
+      <a class="frame" href="images/map-vscode-1907.webp" title="Open the screenshot full size">
+        <img src="images/map-vscode-1907.webp" srcset="images/map-vscode-960.webp 960w, images/map-vscode-1907.webp 1907w" sizes="(min-width: 1240px) 1120px, 100vw" width="1907" height="998" loading="lazy" alt="The Map on VS Code's src/vs/platform folder: boxes for its folders with their file counts, the first of three pages">
+      </a>
+      <figcaption>The Map on VS Code's <code>src/vs/platform</code> folder, the first of three pages.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap part" id="evaluation">
+    <div class="split head">
+      <h2>Tested against Claude Code on its own</h2>
+      <div>
+        <p>Claude Code got the same questions with and without Nebulosity, on three large open-source TypeScript codebases: VS Code, AFFiNE and Theia. Nebulosity was never adjusted for Theia, which makes it the fairest test of the three. Every answer was checked against a reference answer prepared without Nebulosity, across 378 runs.</p>
+      </div>
+    </div>
+    <table class="results">
+      <caption>On questions that follow imports through several files, Claude Code with Nebulosity was:</caption>
+      <thead>
+        <tr><th scope="col">Question</th><th scope="col">VS Code and AFFiNE</th><th scope="col">Theia</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">What could changing this file affect?</th><td data-label="VS Code and AFFiNE">4.3× faster, 2.1× cheaper</td><td data-label="Theia" class="quiet">not asked</td></tr>
+        <tr><th scope="row">How does this entry point end up loading that file?</th><td data-label="VS Code and AFFiNE">4.4× faster, 2.6× cheaper</td><td data-label="Theia">3.2× faster, 1.2× cheaper</td></tr>
+        <tr><th scope="row">Which entry points end up loading this file?</th><td data-label="VS Code and AFFiNE">4.2× faster, 1.6× cheaper</td><td data-label="Theia">2.8× faster, about the same cost</td></tr>
+        <tr><th scope="row">Which files depend on this one, directly or not?</th><td data-label="VS Code and AFFiNE">2.3× faster, 1.4× cheaper</td><td data-label="Theia">2.0× faster, 1.3× cheaper</td></tr>
+        <tr><th scope="row">Is this file part of an import cycle?</th><td data-label="VS Code and AFFiNE">2.3× faster, 1.5× cheaper</td><td data-label="Theia">1.5× faster, 1.1× cheaper</td></tr>
+      </tbody>
+    </table>
+    <div class="notes">
+      <p>Each figure compares medians: 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. With Nebulosity, Claude Code got all 42 of these answers fully right. Alone, it got 29 fully right and the other 13 partly right.</p>
+      <p>On simpler questions, such as listing the files that import a given file directly, Nebulosity made little difference, because one search already answers them. The questions were sorted into multi-step and simpler ones after the runs, the samples are small, and only TypeScript was tested.</p>
+    </div>
+    <p><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a>: how the test worked, how answers were scored, every caveat and the data behind each number.</p>
+  </section>
+
+  <section class="wrap part" id="install">
+    <div class="split head">
+      <h2>Install</h2>
+      <div>
+        <p>You'll need Node 24 or later and git, plus Claude Code 2.1.300 or later for the tools.</p>
+      </div>
+    </div>
+    <div class="steps">
+      <div>
+        <h3>In your terminal</h3>
+        <ol>
+          <li>
+            <p>Install the package:</p>
+            <ul class="commands"><li><pre>npm install -g nebulosity</pre></li></ul>
+          </li>
+          <li>
+            <p>From your repo's root folder:</p>
+            <ul class="commands">
+              <li><pre>nebulosity index .</pre><span class="what">Reads the repo's files and imports. Free, and a minute or two for VS Code.</span></li>
+              <li><pre>nebulosity map</pre><span class="what">Opens the Map at http://localhost:3000. It keeps running, so use a second terminal for the next command.</span></li>
+              <li><pre>nebulosity setup</pre><span class="what">Connects Claude Code to this repo.</span></li>
+            </ul>
+          </li>
+        </ol>
+        <p class="aside">If something seems off, <code>nebulosity doctor</code> says what's missing. Every command and setting is in <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">the guide</a>.</p>
+      </div>
+      <div>
+        <h3>In VS Code</h3>
+        <ol>
+          <li><p>Install the package and index your repo, as in your terminal.</p></li>
+          <li>
+            <p>Install the <a href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Nebulosity extension</a>, or from a terminal:</p>
+            <ul class="commands"><li><pre>code --install-extension andrewl746.nebulosity-vscode</pre></li></ul>
+          </li>
+          <li><p>Run <strong>Nebulosity: Show Map</strong> from the Command Palette. The Map opens beside your code and follows the file you have open.</p></li>
+        </ol>
+      </div>
+    </div>
+    <div class="facts">
+      <div>
+        <h3>Free</h3>
+        <p>Everything above works without an API key: the index, the Map, search and all seven of Claude Code's tools. Without a key, none of your code leaves your machine.</p>
+      </div>
+      <div>
+        <h3>Seven languages</h3>
+        <p>TypeScript and JavaScript through TypeScript's own compiler, plus Python, Go, Java, C# and Rust. The tests above were on TypeScript only.</p>
+      </div>
+      <div>
+        <h3>AI summaries, if you want them</h3>
+        <p>With an Anthropic API key, <code>nebulosity summarize .</code> writes a short summary of every file and folder. It sends your code to Anthropic, costs about $1 per 1,000 files, and shows an estimate and waits for a yes before spending anything.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <a class="brand" href="./"><img src="icon.svg" alt="" width="26" height="26">Nebulosity</a>
+      <ul>
+        <li><a href="https://demo.nebulosity.ca">Live Demo</a></li>
+        <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
+        <li><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Evaluation</a></li>
+        <li><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">Guide</a></li>
+      </ul>
+    </div>
+    <p>MIT License. Built by Andrew Li. The demo's data comes from VS Code at commit <code>cc3fec88</code> (MIT, © Microsoft Corporation).</p>
+  </div>
+</footer>
+
+<script>
+  // A Copy button on each command (added here, so a page without scripts shows none): it copies that one line. Where the
+  // browser refuses the clipboard, the line is selected instead, so it can be copied by hand.
+  for (const item of document.querySelectorAll(".commands li")) {
+    const pre = item.querySelector("pre");
+    const button = document.createElement("button");
+    button.className = "copy";
+    button.type = "button";
+    button.textContent = "Copy";
+    button.setAttribute("aria-label", "Copy " + pre.textContent);
+    button.addEventListener("click", async () => {
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(pre.textContent);
+        copied = true;
+      } catch {
+        getSelection().selectAllChildren(pre);
+        try { copied = document.execCommand("copy"); } catch { copied = false; }
+      }
+      button.textContent = copied ? "Copied" : "Selected";
+      setTimeout(() => { button.textContent = "Copy"; }, 1600);
+    });
+    item.append(button);
+  }
+</script>
+</body>
+</html>
