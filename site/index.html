@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nebulosity: a live map of how a big codebase fits together</title>
+<title>Nebulosity: a live map of your codebase</title>
 <meta name="description" content="Nebulosity indexes every import in a repository so Claude Code can answer questions that follow imports through many files with one tool call, and shows you the same structure on a Map.">
 <link rel="canonical" href="https://nebulosity.ca/">
 <meta name="theme-color" content="#0E0A1C">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://nebulosity.ca/">
 <meta property="og:title" content="Nebulosity">
-<meta property="og:description" content="A live map of how a big codebase fits together, for Claude Code and for you.">
+<meta property="og:description" content="A live map of your codebase, for you and Claude Code.">
 <meta property="og:image" content="https://nebulosity.ca/images/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -35,8 +35,8 @@
 
 <main>
   <section class="wrap hero">
-    <h1>A live map of how a big codebase fits together, for Claude Code and for you.</h1>
-    <p class="lede">Nebulosity indexes every import in a repository ahead of time, so Claude Code can answer questions that follow imports through many files with one tool call. In tests, Claude Code with Nebulosity answered them <strong>up to 4.4× faster</strong>, and <strong>up to 3.2× faster</strong> on Theia, a codebase Nebulosity was never adjusted for. It got every one of them right.</p>
+    <h1>A live map of your codebase, for you and Claude Code.</h1>
+    <p class="lede">Nebulosity indexes every import in your repo, so Claude Code can answer questions that span many files in one call. In tests, that made it <strong>up to 4.4× faster</strong>, and <strong>up to 3.2× faster</strong> on Theia, a codebase Nebulosity was never adjusted for. Every answer was right.</p>
     <div class="cta">
       <div class="actions">
         <a class="button primary" href="https://demo.nebulosity.ca">Try the live demo</a>
@@ -76,7 +76,6 @@
 
     <figure class="card chart">
       <div class="card-head chart-head">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/><path d="M15 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/><path d="M9 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/></svg>
         <h3 id="chart-title">How many times faster, by question</h3>
         <ul class="legend" aria-hidden="true">
           <li><span class="key a"></span>VS Code and AFFiNE</li>
@@ -122,8 +121,7 @@
       </ul>
       <figcaption class="card-foot chart-foot">
         <p class="score">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 12l2 2l4 -4"/></svg>
-          <span>With Nebulosity, all 42 answers to these questions were fully right. Alone, 29 were.</span>
+          <strong>42 of 42</strong> answers to these questions were fully right with Nebulosity, and 29 of 42 alone.
         </p>
         <p class="fine">Medians of 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. The question types were grouped after the runs; simpler ones, like listing a file's direct importers, came out about even. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
       </figcaption>
@@ -146,10 +144,10 @@
     <div class="cards">
       <article class="card">
         <header class="card-head">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 9l3 3l-3 3"/><path d="M13 15h3"/><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/></svg>
           <h3>In your terminal</h3>
+          <span class="card-note">4 steps</span>
         </header>
-        <ol class="rows">
+        <ol class="rows chain">
           <li class="item">
             <div class="step"><span class="num">1</span><div><p class="title">Install the package</p></div></div>
             <div class="cmd"><pre>npm install -g nebulosity</pre></div>
@@ -168,18 +166,16 @@
           </li>
         </ol>
         <p class="card-foot">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 17v.01"/><path d="M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4"/></svg>
           <span>If something seems off, <code>nebulosity doctor</code> says what's missing. Every command is in <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">the guide</a>.</span>
         </p>
       </article>
 
       <article class="card">
         <header class="card-head">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"/><path d="M15 4v16"/></svg>
           <h3>In VS Code</h3>
-          <span class="card-note">after steps 1 and 2</span>
+          <span class="card-note">2 steps, after the first two above</span>
         </header>
-        <ol class="rows">
+        <ol class="rows chain">
           <li class="item">
             <div class="step"><span class="num">1</span><div><p class="title">Install the extension</p><p class="hint">From the <a href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Marketplace</a>, or in a terminal.</p></div></div>
             <div class="cmd"><pre>code --install-extension andrewl746.nebulosity-vscode</pre></div>
@@ -193,8 +189,8 @@
 
       <article class="card">
         <header class="card-head">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 9h8"/><path d="M8 13h6"/><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"/></svg>
           <h3>Then ask Claude Code</h3>
+          <span class="card-note">4 examples</span>
         </header>
         <ul class="asks">
           <li>What could break if <code>src/vs/base/common/event.ts</code> changes?</li>
@@ -205,14 +201,12 @@
       </article>
     </div>
 
-    <div class="facts">
+    <div class="card facts">
       <div>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 8l-4 4l4 4"/><path d="M17 8l4 4l-4 4"/><path d="M14 4l-4 16"/></svg>
         <h3>Seven languages</h3>
         <p>TypeScript, JavaScript, Python, Go, Java, C# and Rust.</p>
       </div>
       <div>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"/></svg>
         <h3>AI summaries, optional</h3>
         <p>With an Anthropic API key, a summary of every file and folder for about $1 per 1,000 files. It sends your code to Anthropic, and asks before spending.</p>
       </div>
@@ -236,9 +230,7 @@
 </footer>
 
 <dialog class="lightbox" aria-label="Screenshot, full size">
-  <button class="close" type="button" aria-label="Close">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-  </button>
+  <button class="close" type="button" aria-label="Close">×</button>
   <img alt="">
 </dialog>
 
