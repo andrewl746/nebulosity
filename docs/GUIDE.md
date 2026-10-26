@@ -28,12 +28,12 @@ Run them in your repo's root folder:
 
 ```bash
 nebulosity index .    # read the repo: its folders, files and every import between them (free)
-nebulosity map        # open the Map at http://localhost:3000
-nebulosity setup      # connect Claude Code to this repo
+nebulosity map        # open the Map at http://localhost:3000 (it keeps running)
+nebulosity setup      # in a second terminal, same folder: connect Claude Code to this repo
 ```
 
 - **`index`** takes about a minute for VS Code's 15,000 files and a few seconds for most repos. Run it again whenever you like; it only re-reads files that changed. While the Map runs, it keeps the index up to date as you save files.
-- **`map`** uses port 3000. `nebulosity map --port <n>` picks another and saves it, so Claude Code's activity and `show_on_map` reach that Map. `nebulosity map --print-port` prints the saved port and starts nothing (the VS Code extension asks it where the Map is).
+- **`map`** uses port 3000 and keeps running until you stop it. `nebulosity map --port <n>` picks another and saves it, so Claude Code's activity and `show_on_map` reach that Map. A port that's already in use, by another app or a Map that's already running, is refused and nothing is saved. `nebulosity map --print-port` prints the saved port and starts nothing (the VS Code extension asks it where the Map is).
 - **`setup`** registers Nebulosity's MCP server with Claude Code for this repo only (`claude mcp add --scope local`). Do it once per repo. Afterwards `claude mcp list` shows `nebulosity` as connected.
   - `nebulosity setup --print` shows the commands instead of running them: the add line, and before it a remove line when the repo already has a registration.
   - `nebulosity setup --json` prints the registration as a JSON block for other MCP clients and runs nothing: see [Other MCP clients, or by hand](#other-mcp-clients-or-by-hand).
