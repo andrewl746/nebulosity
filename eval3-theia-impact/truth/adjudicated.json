@@ -1,0 +1,266 @@
+[
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/electron-shared/fix-path/index.js",
+    "decision": "out",
+    "why": "L56 `(await require('@theia/core/electron-shared/fix-path')).default();` is inside the template literal returned by the generator (L36-113): the text of the backend entry file it writes, not a require of backend-generator.ts itself."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/shared/express/index.js",
+    "decision": "out",
+    "why": "L134 `const express = require('@theia/core/shared/express');` is inside a template literal (L117-194): generated code, not an import of this file."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/shared/inversify/index.js",
+    "decision": "out",
+    "why": "L63 and L135 `const { Container } = require('@theia/core/shared/inversify');` sit inside template literals (L36-113, L117-194): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/shared/reflect-metadata/index.js",
+    "decision": "out",
+    "why": "L38 `require('@theia/core/shared/reflect-metadata');` is inside the template literal opening at L36: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/electron-main/electron-main-application-module.ts",
+    "decision": "out",
+    "why": "L61 `require('@theia/core/lib/electron-main/electron-main-application-module')` is inside a template literal (L36-113): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/electron-main/electron-main-application.ts",
+    "decision": "out",
+    "why": "L62 `require('@theia/core/lib/electron-main/electron-main-application')` is inside a template literal (L36-113): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/node/backend-application-config-provider.ts",
+    "decision": "out",
+    "why": "L201 `require('@theia/core/lib/node/backend-application-config-provider')` is inside the template literal L198-218: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/node/backend-application-module.ts",
+    "decision": "out",
+    "why": "L137 `require('@theia/core/lib/node/backend-application-module')` is inside the template literal L117-194: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/node/index.ts",
+    "decision": "out",
+    "why": "L136 `require('@theia/core/lib/node')` is inside the template literal L117-194: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/node/logger-backend-module.ts",
+    "decision": "out",
+    "why": "L139 `require('@theia/core/lib/node/logger-backend-module')` is inside the template literal L117-194: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/node/main.ts",
+    "decision": "out",
+    "why": "L202 `const main = require('@theia/core/lib/node/main');` is inside the template literal L198-218: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/backend-generator.ts",
+    "to": "packages/core/src/node/messaging/messaging-backend-module.ts",
+    "decision": "out",
+    "why": "L138 `require('@theia/core/lib/node/messaging/messaging-backend-module')` is inside the template literal L117-194: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/bundler-generator.ts",
+    "to": "dev-packages/bundle-plugin/src/index.ts",
+    "decision": "out",
+    "why": "L84, L203 and L323 `import { ... } from '@theia/bundle-plugin';` are inside template literals (L78-195, L199-267, L319-346) that emit esbuild config files; bundler-generator.ts has no such import statement itself."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/shared/inversify/index.js",
+    "decision": "out",
+    "why": "L86 and L221 `const { Container } = require('@theia/core/shared/inversify');` are inside template literals (L81-173, L218-230): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser-only/frontend-only-application-module.ts",
+    "decision": "out",
+    "why": "L141 is inside the template literal passed to this.pck.ifBrowserOnly(`...`) (L141-142): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser-only/logger-frontend-only-module.ts",
+    "decision": "out",
+    "why": "L145 is inside the template literal passed to this.ifBrowserOnly(`...`) (L145-146): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser-only/messaging/messaging-frontend-only-module.ts",
+    "decision": "out",
+    "why": "L124 is inside the template literal passed to this.ifBrowserOnly(`...`) (L124-125): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser/frontend-application-config-provider.ts",
+    "decision": "out",
+    "why": "L87 `require('@theia/core/lib/browser/frontend-application-config-provider')` is inside the template literal L81-173: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser/frontend-application-module.ts",
+    "decision": "out",
+    "why": "L137 and L224 `require('@theia/core/lib/browser/frontend-application-module')` are inside template literals (L81-173, L218-230): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser/index.ts",
+    "decision": "out",
+    "why": "L136 `require('@theia/core/lib/browser')` is inside the template literal L81-173: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser/logger-frontend-module.ts",
+    "decision": "out",
+    "why": "L138 `require('@theia/core/lib/browser/logger-frontend-module')` is inside the template literal L81-173: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/core/src/browser/preload/preloader.ts",
+    "decision": "out",
+    "why": "L107 `require('@theia/core/lib/browser/preload/preloader')` is inside the template literal L81-173: generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "dev-packages/application-manager/src/generator/frontend-generator.ts",
+    "to": "packages/monaco/src/browser/monaco-init.ts",
+    "decision": "out",
+    "why": "L133 `require('@theia/monaco/lib/browser/monaco-init')` is inside the template literal passed to this.ifMonaco (L132-134): generated code."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/keybindings.spec.js",
+    "to": "packages/terminal/src/browser/terminal-widget-impl.ts",
+    "decision": "out",
+    "why": "L49 `const terminal = /** @type {import('@theia/terminal/lib/browser/terminal-widget-impl').TerminalWidgetImpl} */`: the import(...) is a JSDoc type inside a /** */ comment, not a statement; no live import of terminal-widget-impl in the file."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/launch-preferences.spec.js",
+    "to": "packages/monaco/src/browser/monaco-editor-model.ts",
+    "decision": "out",
+    "why": "L546 `/** @typedef {import('@theia/monaco-editor-core/...').IReference<import('@theia/monaco/lib/browser/monaco-editor-model').MonacoEditorModel>} ConfigModelReference */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/launch-preferences.spec.js",
+    "to": "packages/preferences/src/browser/folders-preferences-provider.ts",
+    "decision": "out",
+    "why": "L49 `/** @type {import('@theia/preferences/lib/browser/folders-preferences-provider').FoldersPreferencesProvider} */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/launch-preferences.spec.js",
+    "to": "packages/preferences/src/browser/workspace-preference-provider.ts",
+    "decision": "out",
+    "why": "L47 `/** @type {import('@theia/preferences/lib/browser/workspace-preference-provider').WorkspacePreferenceProvider} */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/output-focus.spec.js",
+    "to": "packages/editor/src/browser/editor-widget.ts",
+    "decision": "out",
+    "why": "L45 `/** @type {import('@theia/editor/lib/browser/editor-widget').EditorWidget} */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/preferences.spec.js",
+    "to": "packages/core/src/common/preferences/preference-service.ts",
+    "decision": "out",
+    "why": "L29 `/** @type {import ('@theia/core/lib/common/preferences/preference-service').PreferenceService} */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/preferences.spec.js",
+    "to": "packages/core/src/common/uri.ts",
+    "decision": "out",
+    "why": "L34 `/** @type {import ('@theia/core/lib/common/uri').default} */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/preferences.spec.js",
+    "to": "packages/preferences/src/browser/folder-preference-provider.ts",
+    "decision": "out",
+    "why": "L82 `/** @type {import ('@theia/preferences/lib/browser/folder-preference-provider').FolderPreferenceProvider} */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "examples/api-tests/src/preferences.spec.js",
+    "to": "packages/preferences/src/browser/folders-preferences-provider.ts",
+    "decision": "out",
+    "why": "L36 `/** @type {import('@theia/preferences/lib/browser/folders-preferences-provider').FoldersPreferencesProvider} */`: JSDoc comment, not an import statement."
+  },
+  {
+    "repo": "theia",
+    "from": "packages/ai-claude-code/src/node/claude-code-service-impl.ts",
+    "line": 237,
+    "to": null,
+    "decision": "out",
+    "why": "L237 `const dynamicImport = new Function('path', 'return import(path)');` called at L238 with importPath = `file://${sdkPath}` (L232), sdkPath being the globally installed @anthropic-ai/claude-agent-sdk found with `npm root -g` (L225-ff, resolveClaudeCodePath): an npm package on the user's machine, not a file of the repo."
+  },
+  {
+    "repo": "theia",
+    "from": "packages/ai-codex/src/node/codex-service-impl.ts",
+    "line": 52,
+    "to": null,
+    "decision": "out",
+    "why": "L52-53 `new Function('specifier', 'return import(specifier)')` called as dynamicImport('@openai/codex-sdk'): an npm package, not a file of the repo."
+  },
+  {
+    "repo": "theia",
+    "from": "packages/ai-copilot/src/node/copilot-sdk-loader.ts",
+    "line": 128,
+    "to": null,
+    "decision": "out",
+    "why": "L128 `new Function('url', 'return import(url)')(url)` in dynamicImport(url): a parameter pins down no file (ADR-053); what callers pass is the Copilot CLI's SDK resolved on the user's machine at run time (the loader's doc comment: resolved on the machine running the backend), not a file of the repo."
+  },
+  {
+    "repo": "theia",
+    "from": "packages/plugin-ext/src/hosted/node/plugin-host-rpc.ts",
+    "line": 82,
+    "to": null,
+    "decision": "out",
+    "why": "L82 `importESMPlugin = new Function('url', 'return import(url)')`, used at L209 as importESMPlugin(pathToFileURL(plugin.pluginPath).href): loads an installed plugin's entry point chosen at run time, not a file of the repo."
+  },
+  {
+    "repo": "theia",
+    "from": "packages/plugin-ext/src/main/browser/notebooks/renderers/cell-output-webview.tsx",
+    "line": 616,
+    "to": null,
+    "decision": "out",
+    "why": "L616 `const __import = (x) => import(x);` sits inside the template literal the method returns (L615-617), the notebook webview's script text, whose x is a renderer URL at run time. No import runs in this file (same as VS Code's webviewPreloads.ts)."
+  }
+]

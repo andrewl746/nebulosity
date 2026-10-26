@@ -1,0 +1,15 @@
+[
+  {
+    "id": "theia-impact",
+    "repo": "theia",
+    "kind": "impact",
+    "target": "packages/core/src/browser/tree/tree-navigation.ts",
+    "folders": [
+      "packages/ai-ide",
+      "packages/plugin-ext",
+      "packages/ai-chat-ui",
+      "packages/debug"
+    ],
+    "why": "Eval #3's Theia addendum (2026-10-26), drawn by eval3-theia-impact/draw-impact.ts: theia-impact-101 of 312 candidates (non-test files with 378–1886 dependents, 10–50% of 3772), mulberry32(1); its folders are the four packages holding the most of its dependents."
+  }
+]

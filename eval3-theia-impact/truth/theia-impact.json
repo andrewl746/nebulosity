@@ -1,0 +1,32 @@
+{
+  "id": "theia-impact",
+  "kind": "impact",
+  "target": "packages/core/src/browser/tree/tree-navigation.ts",
+  "counts": [
+    [
+      "packages/ai-ide",
+      116
+    ],
+    [
+      "packages/plugin-ext",
+      111
+    ],
+    [
+      "packages/ai-chat-ui",
+      81
+    ],
+    [
+      "packages/debug",
+      65
+    ]
+  ],
+  "elsewhere": 930,
+  "total": 1303,
+  "verified": true,
+  "notes": [
+    {
+      "check": "Built by npm run eval:truth (scanner + Eval #3's 37 Theia verdicts): 1,303. preProcessFile's graph gives the same five lines (both extractors agree on all 19,976 edges after the verdicts, the graph Eval #3's Theia truths rest on). Nebulosity's own index, consulted as a check only, gives the same five lines. The hub read at its lines: packages/core/src/browser/index.ts L27 `export * from './tree';` and tree/index.ts L20 `export * from './tree-navigation';`. Ten dependents drawn with mulberry32(1) were traced to the target along a shortest chain, every import line read (eval3-theia-impact/check-truth.ts): all hold.",
+      "decision": "Truth kept: 1,303 files (packages/ai-ide 116, packages/plugin-ext 111, packages/ai-chat-ui 81, packages/debug 65, elsewhere 930)."
+    }
+  ]
+}
