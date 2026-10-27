@@ -35,7 +35,7 @@ Then run these from your repo's root folder.
 ```bash
 nebulosity index .    # read the repo's files and imports (free; a minute or two for VS Code)
 nebulosity map        # open the Map at http://localhost:3000 (it keeps running)
-nebulosity setup      # in a second terminal, same folder: connect Claude Code to this repo
+nebulosity setup      # in a second terminal in the same folder, connect Claude Code to this repo
 ```
 
 That's it. Here are some things to ask Claude Code.
