@@ -71,8 +71,13 @@ const QUIET = "mt-1 rounded-[5px] px-2 py-1 text-[12.5px] text-text-2 hover:text
  * least 720 px wide, two columns side by side that each scroll (the summary and actions, then the tabs), as collapse
  * option C's render at 820 × 900 has it. The queries go by the panel's own width (@container on the frame), not the
  * window's, since the explorer and the canvas share the window with it.
+ *
+ * In a short window (under 480 px tall) the whole panel scrolls, its header too (SHORT_FRAME), so the body isn't left a
+ * few lines, or none under the Map's error row, beneath a header that never moves; the error row stays pinned to the
+ * bottom. Under the canvas the window is at least 640 px tall (shell.ts), so the two columns never meet this.
  */
-const BODY = "min-h-0 flex-1 overflow-y-auto pb-4";
+const BODY = "min-h-0 flex-1 overflow-y-auto pb-4 [@media(height<480px)]:flex-none [@media(height<480px)]:overflow-visible";
+const SHORT_FRAME = "[@media(height<480px)]:overflow-y-auto";
 // one row as tall as the body (grid-rows-1 is minmax(0, 1fr)), so each column scrolls instead of the body
 const BODY_TWO = "@min-[720px]:grid @min-[720px]:grid-cols-2 @min-[720px]:grid-rows-1 @min-[720px]:pb-0";
 const COLUMN_TWO = "@min-[720px]:min-h-0 @min-[720px]:overflow-y-auto @min-[720px]:pb-4";
@@ -118,7 +123,7 @@ function PanelFrame({ path, placement, onScreenFolder = false, alert, name, titl
             data-panel={path}
             data-placement={placement}
             data-on-screen={onScreenFolder || undefined}
-            className={`@container pointer-events-auto flex h-full min-h-0 w-full min-w-0 flex-col border-divider bg-panel ${placement === "below" ? "border-t" : "border-l"}`}
+            className={`@container pointer-events-auto flex h-full min-h-0 w-full min-w-0 flex-col border-divider bg-panel ${SHORT_FRAME} ${placement === "below" ? "border-t" : "border-l"}`}
         >
             <header className="flex shrink-0 items-start justify-between gap-2 px-4 pb-3 pt-4">
                 <div className="min-w-0">
@@ -133,7 +138,7 @@ function PanelFrame({ path, placement, onScreenFolder = false, alert, name, titl
                 )}
             </header>
             {children}
-            {alert && <p role="alert" data-covers className="pointer-events-none shrink-0 border-t border-divider bg-panel px-4 py-2 text-center text-[13px] text-danger [overflow-wrap:anywhere]">{alert}</p>}
+            {alert && <p role="alert" data-covers className="pointer-events-none sticky bottom-0 shrink-0 border-t border-divider bg-panel px-4 py-2 text-center text-[13px] text-danger [overflow-wrap:anywhere]">{alert}</p>}
         </aside>
     );
 }

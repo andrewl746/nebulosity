@@ -15,11 +15,12 @@ type RepoMenuProps = { repo: string; onSwitched: () => void; /** Go to the repo'
 /** A repo as the breadcrumb names it, in mono: "owner/repo" from its origin, or its folder name (ADR-070). */
 function RepoName({ entry, fallback }: { entry: RepoSummary | undefined; fallback: string }){
     if (!entry?.remote) return <span title={fallback} className="truncate text-text">{fallback}</span>;
-    // in a narrow window the owner gives way first, down to nothing, so the repo's own name keeps its room; the name
+    // in a narrow window the owner gives way first, whole (the breadcrumb says when, by data-owner, and narrows it to
+    // nothing so it can still be measured; under 360 px it's gone), so the repo's own name keeps its room; the name
     // truncates only once it alone is too wide. The whole name is the hover title.
     return (
         <span title={`${entry.remote.owner}/${entry.remote.name}`} className="flex min-w-0 items-baseline text-text">
-            <span className="truncate after:content-['/']">{entry.remote.owner}</span>
+            <span data-repo-owner className="truncate after:content-['/'] group-data-[owner=hidden]/crumb:max-w-0 max-[360px]:hidden">{entry.remote.owner}</span>
             <span className="max-w-full shrink-0 truncate">{entry.remote.name}</span>
         </span>
     );

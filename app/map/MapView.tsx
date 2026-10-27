@@ -41,6 +41,8 @@ type LevelCache = { repo: string; version: number; levels: ReadonlyMap<string, L
 const cacheKey = (place: MapPlace): string => `${place.path}\0${place.page}`;
 /** How long a failed jump's message stays up when nothing else moves the Map. */
 const FOCUS_ERROR_MS = 6_000;
+/** The inspector as a drawer over the canvas's right side: 320 px, leaving at least 56 px of canvas beside it. */
+const DRAWER_WIDTH = "min(320px, calc(100% - 56px))";
 
 /**
  * A jump to a path (focus(), below), and how it was asked for. The editor's `follow` rewrites the history entry rather
@@ -473,6 +475,7 @@ function MapScreen(){
     // the selected box's actions, while the inspector would cover the canvas and its details aren't asked for yet
     const actionsFor = covers && !inspectorOpen ? shownSelected : null;
     const bannerOnCanvas = banner !== null && !covered;
+    const drawerOpen = inspectorOpen && shell.inspector === "drawer";
     const bannerAs = bannerForm(bandSize?.height ?? null);
     const busy = level !== null && isBusyLevel(level.edges.length);
     const quietLines = !showAllLines && busy;
@@ -491,8 +494,12 @@ function MapScreen(){
             onTurnPage={turnPage}
             canvasWidth={shell.canvasWidth}
             inHeader={shell.toolbarInHeader}
+            narrow={windowSize.width < 480}
             helpInMenu={embedded || windowSize.width < 480}
             onHelp={() => setHelpOpen(true)}
+            // the header hides its search icon under 360 px while the toolbar shares it (Header)
+            searchInMenu={shell.toolbarInHeader && windowSize.width < 360}
+            onSearch={() => setPaletteOpen(true)}
         />
     );
     const statusBar = (dots: boolean) => (
@@ -531,7 +538,7 @@ function MapScreen(){
         <div data-testid="map-shell" style={{ minHeight: shell.minHeight }} className="flex h-dvh flex-col">
             <Header
                 crumb={level && repo
-                    ? <Breadcrumb repo={<RepoMenu repo={repo} onSwitched={onSwitched} onHome={goHome} />} repoRoot={repo} trail={level.breadcrumb} onOpen={open} />
+                    ? <Breadcrumb repo={<RepoMenu repo={repo} onSwitched={onSwitched} onHome={goHome} />} repoRoot={repo} trail={level.breadcrumb} onOpen={open} compact={windowSize.width < 360} />
                     : <span className="min-w-0 flex-1" />}
                 onSearch={() => setPaletteOpen(true)}
                 onHelp={() => setHelpOpen(true)}
@@ -567,12 +574,16 @@ function MapScreen(){
                             />
                         )}
                         {!level && !levelError && <p className="absolute inset-0 grid place-items-center px-4 text-center text-[13px] text-text-2">Loading the map…</p>}
+                        {/* left of a drawer, which would cover the line's end: centred in what's left, and measured there, so
+                            a line that needs more than two lines there becomes the card */}
                         {banner && bannerOnCanvas && (
-                            <ErrorBanner message={banner.message} form={bannerAs} bandRef={bandRef} cardRef={cardRef} />
+                            <div style={{ right: drawerOpen ? DRAWER_WIDTH : 0 }} className="pointer-events-none absolute inset-y-0 left-0">
+                                <ErrorBanner message={banner.message} form={bannerAs} bandRef={bandRef} cardRef={cardRef} />
+                            </div>
                         )}
                         {/* over the canvas: a drawer on its right, or the whole of it */}
                         {(shell.inspector === "drawer" || shell.inspector === "cover") && inspector && (
-                            <div data-inspector-place={shell.inspector} className={`absolute inset-y-0 right-0 z-10 ${shell.inspector === "drawer" ? "w-[min(320px,calc(100%-56px))]" : "w-full"}`}>
+                            <div data-inspector-place={shell.inspector} style={{ width: shell.inspector === "drawer" ? DRAWER_WIDTH : "100%" }} className="absolute inset-y-0 right-0 z-10">
                                 {inspector}
                             </div>
                         )}

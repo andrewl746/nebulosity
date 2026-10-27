@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type { IndexStatus, LiveEvent, StageName } from "@/lib/contracts";
 import { api, ApiError } from "./api";
 import { activityLabel, highlightedNote, newestTitle } from "./activity";
 import { ago, formatCount, headline, stageLabel, type Tone } from "./format";
 import { DEMO } from "./mode";
+import { placePopover, usePlaceOnResize } from "./popover";
 import { useDismiss } from "./useDismiss";
 
 type StatusBarProps = {
@@ -103,6 +104,13 @@ function IndexCell({ status, compact }: { status: IndexStatus | null; compact: b
     const [open, setOpen] = useState(false);
     const [reindex, setReindex] = useState<string | null>(null);
     const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
+    // at the header's end (a very short window) it opens downward, placed inside the window as it opens and as the
+    // window resizes, like the header's other popovers (popover.ts); in the bar it opens upward from the bar's start
+    const [place, setPlace] = useState<CSSProperties>({ right: 0, width: MENU_WIDTH });
+    const placeMenu = useCallback(() => {
+        if (ref.current) setPlace(placePopover(ref.current, MENU_WIDTH, "end"));
+    }, [ref]);
+    usePlaceOnResize(open && compact, placeMenu);
     if (status === null) return null;
     const head = headline(status);
     const runReindex = (): void => {
@@ -117,7 +125,10 @@ function IndexCell({ status, compact }: { status: IndexStatus | null; compact: b
             <button
                 type="button"
                 data-testid="status-pill"
-                onClick={() => setOpen((o) => !o)}
+                onClick={() => {
+                    if (!open && compact) placeMenu();
+                    setOpen((o) => !o);
+                }}
                 aria-expanded={open}
                 title={`${head.text}. ${DEMO ? "The index status" : "The index status, and Re-index"}`}
                 className="flex min-w-0 items-center gap-1.5 rounded-[4px] px-0.5 hover:text-text"
@@ -129,8 +140,8 @@ function IndexCell({ status, compact }: { status: IndexStatus | null; compact: b
                 <div
                     data-testid="status-menu"
                     data-covers
-                    style={{ width: `min(${MENU_WIDTH}px, calc(100vw - 24px))`, maxHeight: "calc(100vh - 80px)" }}
-                    className={`absolute z-30 space-y-3 overflow-y-auto rounded-md border border-border bg-panel p-3 text-[12px] text-text-2 ${compact ? "right-0 top-7" : "bottom-6 left-0"}`}
+                    style={compact ? place : { width: `min(${MENU_WIDTH}px, calc(100vw - 24px))`, maxHeight: "calc(100vh - 80px)" }}
+                    className={`absolute z-30 space-y-3 overflow-y-auto rounded-md border border-border bg-panel p-3 text-[12px] text-text-2 ${compact ? "top-7" : "bottom-6 left-0"}`}
                 >
                     {STAGES.map((name) => (
                         <div key={name}>
