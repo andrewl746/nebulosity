@@ -99,7 +99,6 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         n.path,
         { direction: portalDirection(n, level.page), title: portalTitle(n), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
     ])), [level]);
-    const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
     // dots and lines are scaled against the page's largest folder and heaviest line (weights.ts)
     const maxFiles = useMemo(() => maxFilesOf(level.nodes), [level]);
     const maxImports = useMemo(() => maxImportsOf(level.edges), [level]);
@@ -120,6 +119,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines }),
         [level, selected, hoveredBox, quietLines],
     );
+    // Only the lines drawn are routed, so they share the ports and tracks out among themselves (routes.ts). Kept by
+    // content: a hover that draws the same lines keeps every route, and on a level that draws them all, nothing moves.
+    const drawnKey = level.edges.map(edgeKey).filter((id) => emphasis.edges.get(id) !== "hidden").join("\n");
+    const routes = useMemo(() => routeEdges(positions, level.edges, new Set(drawnKey === "" ? [] : drawnKey.split("\n"))), [positions, level, drawnKey]);
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
     const { setViewport } = useReactFlow();
