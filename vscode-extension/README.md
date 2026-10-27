@@ -1,6 +1,6 @@
-**Nebulosity for VS Code needs the `nebulosity` package, which serves the Map: [install it first](https://github.com/andrewl746/Nebulosity#quick-start).** The extension is a window onto `nebulosity map`, not a copy of the engine.
+**Nebulosity for VS Code needs the `nebulosity` package, which serves the Map, so [install it first](https://github.com/andrewl746/Nebulosity#quick-start).** The extension is a window onto `nebulosity map`, not a copy of the engine.
 
-The Nebulosity Map in an editor panel beside your code: your repo one folder at a time, with lines for imports, a panel with what each file uses and what uses it, and Claude Code's activity on it as it works. The Map follows the file you're in, and a file you pick on the Map opens in the editor.
+The Nebulosity Map in an editor panel beside your code. It shows your repo one folder at a time, with lines for imports, a panel with what each file uses and what uses it, and Claude Code's activity on it as it works. The Map follows the file you're in, and a file you pick on the Map opens in the editor.
 
 To see the Map before installing anything, try the [Live Demo](https://demo.nebulosity.ca) on VS Code's own source. More at [nebulosity.ca](https://nebulosity.ca).
 
@@ -20,7 +20,7 @@ The extension uses a Map that's already running, on the port `nebulosity map` la
 |---|---|---|
 | Nebulosity: Show Map | Command Palette, editor title bar | Opens the Map beside the editor, starting it if needed, on this workspace's repo |
 | Nebulosity: Show this file on the Map | Command Palette, editor and Explorer context menus | Moves the Map to the file and selects it |
-| Nebulosity: What depends on this file? | Command Palette, editor and Explorer context menus | Lists the files that import it (up to 500), lights them on the Map, and opens the one you pick; when some files import it through others, "Show all, including indirect" adds them |
+| Nebulosity: What depends on this file? | Command Palette, editor and Explorer context menus | Lists the files that import it (up to 500), lights them on the Map, and opens the one you pick. When some files import it through others, "Show all, including indirect" adds them |
 | Nebulosity: Follow editor | The Map panel's title bar | Turns following the active editor off or on, for this window |
 | Nebulosity: Index this repo | Command Palette, the not-indexed panel | Indexes the workspace's repo, free |
 | Nebulosity: Stop Map | Command Palette | Stops the Map this window started |
@@ -29,24 +29,24 @@ The extension uses a Map that's already running, on the port `nebulosity map` la
 
 | Setting | Default | What it does |
 |---|---|---|
-| `nebulosity.command` | empty | The `nebulosity` command to run: the installed command's path, or a checkout's `bin/nebulosity.mjs` (run with `node`). Empty finds `nebulosity` on your PATH. |
+| `nebulosity.command` | empty | The `nebulosity` command to run, either the installed command's path or a checkout's `bin/nebulosity.mjs` (run with `node`). Empty finds `nebulosity` on your PATH. |
 | `nebulosity.port` | empty | The Map's port. Empty uses the port the Map was last started on (`nebulosity map --print-port`), else 3000. |
 | `nebulosity.followEditor` | `true` | Whether the Map follows the active editor when a window opens. The title-bar button changes it for one window and never edits your settings. |
 
-**`nebulosity.command` and `nebulosity.port` are read only from your user settings (or a remote machine's settings).** A folder's `.vscode/settings.json` can't set them: `nebulosity.command` names a program the extension runs, and a repository you've just cloned shouldn't get to choose it. Set them in your own settings (Preferences: Open User Settings).
+**`nebulosity.command` and `nebulosity.port` are read only from your user settings (or a remote machine's settings).** A folder's `.vscode/settings.json` can't set them, because `nebulosity.command` names a program the extension runs, and a repository you've just cloned shouldn't get to choose it. Set them in your own settings (Preferences: Open User Settings).
 
 ## Good to know
 
 - **One Map, one repo at a time.** Two windows on two repos share the Map, and the window you last focused shows its repo.
-- **What the panel says when it can't show the Map:** "Nebulosity isn't installed" (with the install line), "The Map stopped" (with Start), "Update Nebulosity: `npm install -g nebulosity`" (a Map older than the extension), or that another app holds the port (set `nebulosity.port`). "Show log" opens the Nebulosity output.
+- **When the panel can't show the Map,** it says "Nebulosity isn't installed" (with the install line), "The Map stopped" (with Start), "Update Nebulosity: `npm install -g nebulosity`" (a Map older than the extension), or that another app holds the port (set `nebulosity.port`). "Show log" opens the Nebulosity output.
 - **Only VS Code can frame the Map.** The Map's pages allow only themselves and VS Code's webviews as frames, so another web page can't put the Map in a frame.
 - **Checked on** desktop VS Code on Windows, macOS and Linux (VS Code 1.143), and on 1.105, the oldest version it supports, on Windows.
 
 ## Not yet
 
-- **Browser-hosted VS Code** (vscode.dev, GitHub Codespaces in the browser): the Map answers only on your own machine.
+- **Browser-hosted VS Code** (vscode.dev, GitHub Codespaces in the browser), since the Map answers only on your own machine.
 - **Remote windows** (WSL, Remote SSH, Dev Containers) aren't checked yet with this version.
 
 ## License
 
-MIT. Source and docs: [github.com/andrewl746/Nebulosity](https://github.com/andrewl746/Nebulosity).
+MIT. The source and docs are at [github.com/andrewl746/Nebulosity](https://github.com/andrewl746/Nebulosity).
