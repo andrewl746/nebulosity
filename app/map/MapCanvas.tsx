@@ -2,39 +2,30 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ControlButton, Controls, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
+    ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
     type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import BoxActions from "./BoxActions";
 import { edgeKey, mapEmphasis, type BoxTone, type EdgeTone } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
 import { formatCount } from "./format";
 import { lineLabel } from "./labels";
-import Legend from "./Legend";
-import { BOX_HEIGHT, BOX_WIDTH, FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider, type Position } from "./levelLayout";
+import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, looseDivider, perRowFor, type Divider, type Position } from "./levelLayout";
 import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
-import { legendMaxHeight } from "./narrow";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { routeEdges } from "./routes";
 import { isLightKind } from "./theme";
 import { useThemeKind } from "./useThemeKind";
-import { boundsOf, initialViewport, TOP_INSET } from "./viewport";
+import { boundsOf, initialViewport } from "./viewport";
 import { dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
 const edgeTypes: EdgeTypes = { routed: RoutedEdge };
-
-/**
- * The fit button's fit: the whole level with room around it, never past 100% (VISUAL_REFRESH.md §4). A level opens by
- * viewport.ts's rule instead, which fits the same way unless that would make it unreadable.
- */
-const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
 
 /**
  * Each line's color per tone (the Workbench redesign, ADR-070), its width going by its imports whatever the tone: the
@@ -65,15 +56,11 @@ type MapCanvasProps = {
     quietLines: boolean;
     /** Strong links only: a weak line is drawn only when it touches the selection, the hovered box or a lit box (emphasis.ts). */
     strongOnly: boolean;
-    /** The open panel's width over the canvas's right edge, 0 with none (narrow.ts's panelLayout). */
-    panelWidth: number;
     /**
-     * The panel covers the whole canvas (a narrow window): the legend and the zoom controls would sit under it, and the
-     * boxes can't be reached by Tab either, until its × brings the canvas back.
+     * The inspector covers the whole canvas (a window both narrow and short, shell.ts): the boxes can't be reached by Tab
+     * then, until its × brings the canvas back.
      */
     covered: boolean;
-    /** How far down the Map's error banner reaches on the canvas, 0 with none: the open legend stops short of it. */
-    bannerBottom: number;
     /**
      * The selected box that shows its actions beside it (BoxActions), or null: while the panel would cover the canvas,
      * a click only selects, and Details asks for the panel.
@@ -89,7 +76,7 @@ type MapCanvasProps = {
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, strongOnly, panelWidth, covered, bannerBottom, actionsFor, onDetails }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, strongOnly, covered, actionsFor, onDetails }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     // React Flow's own parts follow a light VS Code theme (theme.ts)
@@ -129,16 +116,16 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const routes = useMemo(() => routeEdges(positions, level.edges, new Set(drawnKey === "" ? [] : drawnKey.split("\n"))), [positions, level, drawnKey]);
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
-    const { setViewport } = useReactFlow();
+    const { setViewport, getViewport } = useReactFlow();
     const canvasWidth = useStore((s) => s.width);
     const canvasHeight = useStore((s) => s.height);
-    // a paged level keeps clear of the page pill at the canvas's top right (viewport.ts)
-    const pillBand = level.pageCount > 1 ? TOP_INSET : 0;
     // the latest of each, for the opening view below: it runs when the level changes, not when they do
-    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight }, pillBand });
+    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } });
     useEffect(() => {
-        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight }, pillBand };
-    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight, pillBand]);
+        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } };
+    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight]);
+    // whether the person has panned or zoomed since the level opened (a programmatic move has no event)
+    const moved = useRef(false);
 
     useEffect(() => {
         // with their size and attach points given, the lines never wait for React Flow to measure (flowNodes.ts); a box
@@ -200,12 +187,29 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         if (!arrived) return;
         const frame = requestAnimationFrame(() => {
             fittedKey.current = levelKey;
+            moved.current = false;
             const open = openRef.current;
-            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas, open.pillBand), { duration: 0 });
+            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas), { duration: 0 });
             open.onDrawn();
         });
         return () => cancelAnimationFrame(frame);
     }, [levelKey, nodes, level.nodes]);
+
+    // The canvas resized (the window or VS Code's panel dragged, the inspector moving under or beside it): a level nobody
+    // has moved since it opened opens again for the new size, and one the person has moved keeps its middle where it
+    // was, at the same zoom, so the view stays steady and the selection stays in sight (the owner, 2026-10-27).
+    const lastSize = useRef<{ width: number; height: number } | null>(null);
+    useEffect(() => {
+        const last = lastSize.current;
+        lastSize.current = { width: canvasWidth, height: canvasHeight };
+        if (last === null || canvasWidth === 0 || canvasHeight === 0 || fittedKey.current !== levelKey) return;
+        if (last.width === canvasWidth && last.height === canvasHeight) return;
+        if (!moved.current) void setViewport(initialViewport(boundsOf(positions), { width: canvasWidth, height: canvasHeight }), { duration: 0 });
+        else {
+            const view = getViewport();
+            void setViewport({ x: view.x + (canvasWidth - last.width) / 2, y: view.y + (canvasHeight - last.height) / 2, zoom: view.zoom }, { duration: 0 });
+        }
+    }, [canvasWidth, canvasHeight, levelKey, positions, setViewport, getViewport]);
 
     const onNodeClick: NodeMouseHandler<BoxNode> = (_, node) => onSelect(node.id);
     const onNodeDoubleClick: NodeMouseHandler<BoxNode> = (_, node) => {
@@ -218,11 +222,6 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const onNodeMouseLeave: NodeMouseHandler<BoxNode> = () => setHoveredBox(null);
     const onEdgeMouseEnter: EdgeMouseHandler = (_, edge) => setHoveredEdge(edge.id);
     const onEdgeMouseLeave: EdgeMouseHandler = () => setHoveredEdge(null);
-    /** Reset focus (§4): let go of the selection and the fade it brings. */
-    const resetFocus = (): void => {
-        setHoveredBox(null);
-        onSelect(null);
-    };
 
     return (
         <ReactFlow
@@ -237,6 +236,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
             onPaneClick={() => onSelect(null)}
+            onMoveStart={(event) => { if (event !== null) moved.current = true; }}
             onEdgeMouseEnter={onEdgeMouseEnter}
             onEdgeMouseLeave={onEdgeMouseLeave}
             nodesDraggable={false}
@@ -261,30 +261,6 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     onTurnPage={onTurnPage}
                     onDetails={onDetails}
                 />
-            )}
-            {/* a panel over the whole canvas hides what's under it; its × brings the canvas back */}
-            {!covered && (
-                <Legend
-                    quietLines={quietLines}
-                    doorways={level.nodes.some((n) => n.kind === "portal")}
-                    // a short canvas: the open legend stays below a paged level's pill and the error banner, and
-                    // scrolls inside if it must (narrow.ts)
-                    maxHeight={legendMaxHeight(canvasHeight, pillBand, bannerBottom)}
-                />
-            )}
-            {/* while the panel is open it covers the canvas's right edge, so the controls move left of it (final review I1) */}
-            {!covered && (
-                <Controls
-                    position="bottom-right"
-                    showInteractive={false}
-                    fitViewOptions={FIT}
-                    style={panelWidth > 0 ? { right: panelWidth } : undefined}
-                    className="overflow-hidden rounded-lg"
-                >
-                    <ControlButton onClick={resetFocus} title="Reset focus" aria-label="Reset focus">
-                        <IconFocusCentered aria-hidden size={16} stroke={1.75} />
-                    </ControlButton>
-                </Controls>
             )}
         </ReactFlow>
     );
@@ -326,9 +302,10 @@ function BackCards({ nodes, positions, tones }: {
 }
 
 /**
- * The line over a level's loose boxes with "Not linked to anything on this page" in its middle (levelLayout.ts's
- * looseDivider; owner's design, 2026-10-13). It lives in the Map's own coordinates, so it pans and zooms with the boxes.
- * A hairline in the box border's colour, dimmer than the lines and never ending in an arrow, so it can't be read as one.
+ * The label over a level's loose boxes, "Not linked to anything here", on a hairline (levelLayout.ts's looseDivider;
+ * owner's design, 2026-10-13, restyled quiet by the Workbench redesign, ADR-070). It lives in the Map's own
+ * coordinates, so it pans and zooms with the boxes. A hairline in the divider's color, never ending in an arrow, so it
+ * can't be read as a line between boxes.
  */
 function LooseDivider({ divider }: { divider: Divider }){
     return (
@@ -336,11 +313,11 @@ function LooseDivider({ divider }: { divider: Divider }){
             data-testid="loose-divider"
             aria-hidden
             style={{ position: "absolute", left: divider.x, top: divider.y - 11, width: divider.width, height: 22 }}
-            className="pointer-events-none flex items-center gap-3.5"
+            className="pointer-events-none flex items-center gap-3"
         >
-            <span className="h-px flex-1 bg-border" />
-            <span className="whitespace-nowrap text-[15px] text-text-2">Not linked to anything on this page</span>
-            <span className="h-px flex-1 bg-border" />
+            <span className="h-px flex-1 bg-divider" />
+            <span className="whitespace-nowrap text-[12px] text-text-3">Not linked to anything here</span>
+            <span className="h-px flex-1 bg-divider" />
         </div>
     );
 }

@@ -2,42 +2,41 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import type { BridgeFromMap, BridgeToMap, LevelResponse, LiveEvent } from "@/lib/contracts";
 import { api, ApiError } from "./api";
-import BackButton from "./BackButton";
 import Breadcrumb from "./Breadcrumb";
 import DetailPanel from "./DetailPanel";
 import HelpDialog from "./HelpDialog";
-import ActivityBar from "./ActivityBar";
 import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
 import { isBusyLevel, weakLinesHidden } from "./emphasis";
-import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
 import { followStep, historyDepth, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
-import { BANNER_TOP, bandClear, bannerForm, CARD_TOP, cardClear, PANEL_WIDTH, panelLayout, pillForm, type BannerForm, type PillForm } from "./narrow";
+import { bannerForm, CARD_CLEAR, type BannerForm } from "./narrow";
 import { boxFor, parentOf } from "./paths";
 import { clearStart, markStart, measureAfterPaint } from "./perf";
-import { pageNote, selectionShown } from "./portals";
+import { selectionShown } from "./portals";
 import { mapShortcut } from "./shortcuts";
 import { nextPulses, type Pulse } from "./pulses";
 import RepoMenu from "./RepoMenu";
 import SearchPalette from "./SearchPalette";
-import StatusPill from "./StatusPill";
 import { applyTheme, themeInputOf } from "./theme";
-import TopBar from "./TopBar";
-import { EMBEDDED, useEditorBridge } from "./useEditorBridge";
+import Explorer from "./Explorer";
+import Header from "./Header";
+import Legend from "./Legend";
+import MapToolbar from "./MapToolbar";
+import { BELOW_SHARE, EXPLORER_WIDTH, INSPECTOR_WIDTH, RAIL_WIDTH, shellLayout } from "./shell";
+import StatusBar from "./StatusBar";
+import { EMBEDDED, useEditorBridge, useEmbedded } from "./useEditorBridge";
 import { useIndexStatus } from "./useIndexStatus";
 import { useLive } from "./useLive";
 import { useSize } from "./useSize";
+import { useWindowSize } from "./useWindowSize";
 
 /**
  * Levels fetched for one repo and index version (ADR-036), by folder and page: going back up a level is instant until
  * the index moves.
  */
 type LevelCache = { repo: string; version: number; levels: ReadonlyMap<string, LevelResponse> };
-/** Set once the help has opened by itself, so it does so only on a first visit. */
-const HELP_SEEN = "nebulosity.helpSeen";
 
 const cacheKey = (place: MapPlace): string => `${place.path}\0${place.page}`;
 /** How long a failed jump's message stays up when nothing else moves the Map. */
@@ -124,11 +123,13 @@ function MapScreen(){
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
     // the Map area's width: whether the panel covers the canvas and the page pill's wording go by it (narrow.ts); the
     // pill's width and the banner's height decide where the banner goes
-    const [mainRef, mainSize] = useSize<HTMLElement>();
-    const mainWidth = mainSize?.width ?? null;
-    const [pillRef, pillSize] = useSize<HTMLDivElement>();
+    // the window's size, which the layout goes by (shell.ts), and the error banner's, which picks its form (narrow.ts)
+    const windowSize = useWindowSize();
+    // inside VS Code's panel, as the page draws it (hydration-safe)
+    const embedded = useEmbedded();
+    const [mainRef] = useSize<HTMLElement>();
     const [bandRef, bandSize] = useSize<HTMLDivElement>();
-    const [cardRef, cardSize] = useSize<HTMLDivElement>();
+    const [cardRef] = useSize<HTMLDivElement>();
 
     // the focus effect's failure handler reads where the Map is when the answer comes back, not when it was asked, and
     // the editor's `drawn` reads it when it is posted
@@ -364,6 +365,10 @@ function MapScreen(){
     // tick.
     const agentKey = level === null ? "" : [...agentFocus(level, live.recent, highlights, now, clearedAt, editorHighlights)].sort().join("\0");
     const agent = useMemo(() => new Set(agentKey === "" ? [] : agentKey.split("\0")), [agentKey]);
+    // the boxes joined to the selection by a line, which the explorer lights as the canvas does
+    const selectedOnLevel = selectionShown(level, selected);
+    const linked = useMemo(() => new Set(level === null || selectedOnLevel === null ? [] : level.edges
+        .filter((e) => e.source === selectedOnLevel || e.target === selectedOnLevel).flatMap((e) => [e.source, e.target])), [level, selectedOnLevel]);
 
     const onSwitched = useCallback(() => {
         setPlace({ path: "", page: 0 });
@@ -397,26 +402,13 @@ function MapScreen(){
             if (drawn !== null) editor.post(drawn);
         });
     }, [selected, editor, drawnNow]);
-    /** The repo's name in the top bar goes back to the top level, like a site's name goes home (three-task test). */
+    /** The repo's name in the breadcrumb goes back to the top level, like a site's name goes home (three-task test). */
     const goHome = useCallback(() => open(""), [open]);
     const closeHelp = useCallback(() => setHelpOpen(false), []);
-
-    // The help opens by itself the first time this browser opens the Map (owner review). A browser that keeps no
-    // storage (a private window) just doesn't get it unasked; the ? button still works.
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            try{
-                if (window.localStorage.getItem(HELP_SEEN) !== null) return;
-                window.localStorage.setItem(HELP_SEEN, "1");
-                setHelpOpen(true);
-            } catch{
-                // no storage: nothing to remember the first visit by
-            }
-        }, 0);
-        return () => clearTimeout(timer);
-    }, []);
+    // The help no longer opens by itself on a first visit: the legend sentence under the canvas says what the marks mean,
+    // and the full help stays behind ? (the Workbench redesign, ADR-070).
     const closePanel = useCallback(() => setSelected(null), []);
-    // over the canvas, the panel's × closes the details and leaves the box selected, with its actions (BoxActions)
+    // over the canvas, the inspector's × closes the details and leaves the box selected, with its actions (BoxActions)
     const closeDetails = useCallback(() => setDetailsFor(null), []);
     const showDetails = useCallback((path: string) => setDetailsFor(path), []);
 
@@ -430,14 +422,15 @@ function MapScreen(){
     const hasSelection = shownSelected !== null;
     // Claude's alone: the editor's go when What depends' pick closes
     const hasHighlights = highlights.length > 0;
-    // the panel: 400 px beside the canvas, or over all of it when too little canvas would be left (narrow.ts); over it,
-    // only once the box's Details asks for it
-    const panel = panelLayout(mainWidth);
-    // Beside the canvas the panel is the selection's details, so they count as asked for: a window narrowed while they're
-    // open keeps them, now over the canvas, rather than swapping them for the box's actions (as the reset above, during
-    // render, and once per selection).
-    if (!panel.covers && shownSelected !== null && detailsFor !== shownSelected) setDetailsFor(shownSelected);
-    const detailsOverCanvas = panel.covers && shownSelected !== null && detailsFor === shownSelected;
+    // The layout at this window's size (shell.ts): where the explorer and the inspector go, what the bars keep, and the
+    // least height before the page scrolls down. Where the inspector would cover the whole canvas, a click only selects
+    // and the box offers Open and Details beside it (BoxActions); everywhere else the inspector shows the selection.
+    const shell = shellLayout({ width: windowSize.width, height: windowSize.height, embedded, selected: shownSelected !== null });
+    const covers = shell.inspector === "cover";
+    // Anywhere but over the whole canvas the inspector is the selection's details, so they count as asked for: a window
+    // narrowed while they're open keeps them, now over the canvas, rather than swapping them for the box's actions.
+    if (!covers && shownSelected !== null && detailsFor !== shownSelected) setDetailsFor(shownSelected);
+    const detailsOverCanvas = covers && shownSelected !== null && detailsFor === shownSelected;
     useEffect(() => {
         const onKey = (event: KeyboardEvent): void => {
             const shortcut = mapShortcut(event, {
@@ -455,7 +448,7 @@ function MapScreen(){
                 event.preventDefault();
                 setPaletteOpen(true);
             } else if (shortcut.type === "help") setHelpOpen(true);
-            // over the canvas, Escape closes the details first, as the panel's × does, and the box stays selected
+            // over the canvas, Escape closes the details first, as the inspector's × does, and the box stays selected
             else if (shortcut.type === "deselect"){
                 if (detailsOverCanvas) setDetailsFor(null);
                 else setSelected(null);
@@ -472,111 +465,130 @@ function MapScreen(){
     const jumpError = focusError !== null && focusError.place === cacheKey(place) && focusError.selected === selected ? focusError.error : null;
     const banner = levelError ?? jumpError;
 
-    const panelOpen = shownSelected !== null && level !== null && (!panel.covers || detailsOverCanvas);
-    const covered = panelOpen && panel.covers;
-    // the selected box's actions, while the panel would cover the canvas and its details aren't asked for yet
-    const actionsFor = panel.covers && !panelOpen ? shownSelected : null;
-    const panelWidth = panelOpen && !covered ? PANEL_WIDTH : 0;
-    const pill = level !== null && pageCount > 1 && !covered;
-    // the error banner over the canvas: a line in the pill's band, or a card where that can't hold it; over a covering
-    // panel it's the panel's last row instead (narrow.ts)
-    const pillWidth = pill ? pillSize?.width ?? null : null;
+    // the inspector shows the selection, or beside the canvas with nothing selected the folder on screen; over the whole
+    // canvas only once the box's Details asks for it
+    const inspectorPath = shownSelected ?? (shell.inspector === "beside" && level !== null ? level.path : null);
+    const inspectorOpen = level !== null && inspectorPath !== null && shell.inspector !== "none" && (!covers || detailsOverCanvas);
+    const covered = inspectorOpen && covers;
+    // the selected box's actions, while the inspector would cover the canvas and its details aren't asked for yet
+    const actionsFor = covers && !inspectorOpen ? shownSelected : null;
     const bannerOnCanvas = banner !== null && !covered;
     const bannerAs = bannerForm(bandSize?.height ?? null);
-    const bannerBottom = !bannerOnCanvas ? 0 : bannerAs === "band" ? BANNER_TOP + (bandSize?.height ?? 0) : CARD_TOP + (cardSize?.height ?? 0);
+    const busy = level !== null && isBusyLevel(level.edges.length);
+    const quietLines = !showAllLines && busy;
+    const items = level === null ? 0 : level.nodes.filter((n) => n.kind !== "portal").length;
 
     if (statusError?.code === "INDEX_EMPTY") return <EmptyState />;
 
+    const toolbar = level && (
+        <MapToolbar
+            level={level}
+            strongOnly={strongOnly}
+            onStrongOnly={setStrongOnly}
+            busy={busy}
+            showAllLines={showAllLines}
+            onShowAllLines={setShowAllLines}
+            onTurnPage={turnPage}
+            canvasWidth={shell.canvasWidth}
+            inHeader={shell.toolbarInHeader}
+            helpInMenu={embedded || windowSize.width < 480}
+            onHelp={() => setHelpOpen(true)}
+        />
+    );
+    const statusBar = (dots: boolean) => (
+        <StatusBar
+            status={status}
+            recent={live.recent}
+            connected={live.connected}
+            highlightCount={highlights.length}
+            onClear={clearHighlights}
+            items={items}
+            weakHidden={weakHidden}
+            embedded={embedded}
+            dots={dots}
+        />
+    );
+    const inspector = inspectorOpen && inspectorPath !== null && level && shell.inspector !== "none" && (
+        <DetailPanel
+            key={inspectorPath}
+            path={inspectorPath}
+            level={level}
+            indexVersion={version ?? 0}
+            onFocus={focus}
+            onOpen={open}
+            onTurnPage={turnPage}
+            onClose={covers ? closeDetails : closePanel}
+            onOpenInEditor={editor === null ? undefined : openInEditor}
+            placement={shell.inspector}
+            onScreenFolder={shownSelected === null}
+            alert={covered ? banner?.message : undefined}
+        />
+    );
+
+    // The page fills the window; below the layout's least height it keeps that height and scrolls down, never sideways
+    // (shell.ts). Header, then the explorer, the canvas's column and the inspector beside it, then the status bar.
     return (
-        <div className="absolute inset-0 flex flex-col">
-            <TopBar
-                repo={repo ? <RepoMenu repo={repo} onSwitched={onSwitched} onHome={goHome} /> : null}
+        <div data-testid="map-shell" style={{ minHeight: shell.minHeight }} className="flex h-dvh flex-col">
+            <Header
+                crumb={level && repo
+                    ? <Breadcrumb repo={<RepoMenu repo={repo} onSwitched={onSwitched} onHome={goHome} />} repoRoot={repo} trail={level.breadcrumb} onOpen={open} />
+                    : <span className="min-w-0 flex-1" />}
                 onSearch={() => setPaletteOpen(true)}
-                status={<StatusPill status={status} />}
                 onHelp={() => setHelpOpen(true)}
+                embedded={embedded}
+                canGoBack={canGoBack}
+                toolbar={shell.toolbarInHeader ? toolbar : undefined}
+                status={shell.status === "inHeader" ? statusBar(true) : undefined}
             />
-            <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-divider bg-canvas px-4">
-                {level && repo ? (
-                    EMBEDDED ? (
-                        // inside VS Code's panel, Back comes first (BackButton): the webview has no browser Back
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                            <BackButton enabled={canGoBack} />
-                            <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} />
-                        </div>
-                    ) : <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} />
-                ) : <span />}
-                <div className="flex shrink-0 items-center gap-4 text-[12px] text-text-2">
-                    {level && (
-                        <label className="flex cursor-pointer items-center gap-2" title="Draw only the lines with at least 2% of the heaviest line's imports, and every line of the box you select or hover">
-                            <input type="checkbox" data-testid="strong-only" checked={strongOnly} onChange={(e) => setStrongOnly(e.target.checked)} className="accent-accent" />
-                            Strong links only
-                            {strongOnly && weakHidden > 0 && <span data-testid="weak-hidden" className="text-text-3">{formatCount(weakHidden)} weak {weakHidden === 1 ? "link" : "links"} hidden</span>}
-                        </label>
+            <div className="flex min-h-0 flex-1">
+                {level && shell.explorer !== "none" && (
+                    <div style={{ width: shell.explorer === "full" ? EXPLORER_WIDTH : RAIL_WIDTH }} className="relative z-10 shrink-0">
+                        <Explorer level={level} selected={shownSelected} linked={linked} form={shell.explorer} onSelect={select} onOpen={open} />
+                    </div>
+                )}
+                <div className="flex min-w-0 flex-1 flex-col">
+                    {!shell.toolbarInHeader && toolbar}
+                    <main ref={mainRef} className="relative min-h-0 flex-1 overflow-hidden">
+                        {level && (
+                            <MapCanvas
+                                level={level}
+                                selected={shownSelected}
+                                agent={agent}
+                                pulses={pulses}
+                                onSelect={select}
+                                onOpen={open}
+                                onTurnPage={turnPage}
+                                onDrawn={onDrawn}
+                                quietLines={quietLines}
+                                strongOnly={strongOnly}
+                                covered={covered}
+                                actionsFor={actionsFor}
+                                onDetails={showDetails}
+                            />
+                        )}
+                        {!level && !levelError && <p className="absolute inset-0 grid place-items-center px-4 text-center text-[13px] text-text-2">Loading the map…</p>}
+                        {banner && bannerOnCanvas && (
+                            <ErrorBanner message={banner.message} form={bannerAs} bandRef={bandRef} cardRef={cardRef} />
+                        )}
+                        {/* over the canvas: a drawer on its right, or the whole of it */}
+                        {(shell.inspector === "drawer" || shell.inspector === "cover") && inspector && (
+                            <div data-inspector-place={shell.inspector} className={`absolute inset-y-0 right-0 z-10 ${shell.inspector === "drawer" ? "w-[min(320px,calc(100%-56px))]" : "w-full"}`}>
+                                {inspector}
+                            </div>
+                        )}
+                    </main>
+                    {level && shell.legend && (
+                        <Legend doorways={level.nodes.some((n) => n.kind === "portal")} agent={agent.size > 0} quiet={quietLines} />
                     )}
-                    {level && isBusyLevel(level.edges.length) && (
-                        <span data-testid="lines-note">
-                            {/* a narrow window keeps the toggle alone (its title says the rest), so the path keeps its room */}
-                            <span className="max-[768px]:hidden">
-                                {showAllLines ? `All ${formatCount(level.edges.length)} lines shown` : "Busy folder: lines show on hover"}
-                                {" · "}
-                            </span>
-                            <button
-                                type="button"
-                                data-testid="lines-toggle"
-                                onClick={() => setShowAllLines((all) => !all)}
-                                title={showAllLines ? `All ${formatCount(level.edges.length)} lines are shown` : "A busy folder: a box's lines show when you hover or select it"}
-                                className="text-text underline underline-offset-2 hover:text-text"
-                            >
-                                {showAllLines ? "Show on hover only" : "Show all lines"}
-                            </button>
-                        </span>
+                    {shell.inspector === "below" && inspector && (
+                        <div data-inspector-place="below" style={{ height: `${BELOW_SHARE * 100}%` }} className="min-h-0 shrink-0">{inspector}</div>
                     )}
                 </div>
+                {shell.inspector === "beside" && inspector && (
+                    <div data-inspector-place="beside" style={{ width: INSPECTOR_WIDTH }} className="min-h-0 shrink-0">{inspector}</div>
+                )}
             </div>
-            <main ref={mainRef} className="relative flex-1">
-                {level && (
-                    <MapCanvas
-                        level={level}
-                        selected={shownSelected}
-                        agent={agent}
-                        pulses={pulses}
-                        onSelect={select}
-                        onOpen={open}
-                        onTurnPage={turnPage}
-                        onDrawn={onDrawn}
-                        quietLines={!showAllLines && isBusyLevel(level.edges.length)}
-                        strongOnly={strongOnly}
-                        panelWidth={panelWidth}
-                        covered={covered}
-                        bannerBottom={bannerBottom}
-                        actionsFor={actionsFor}
-                        onDetails={showDetails}
-                    />
-                )}
-                {level && pill && (
-                    <PagePill sizeRef={pillRef} level={level} onTurn={turnPage} panelWidth={panelWidth} form={pillForm(mainWidth === null ? null : mainWidth - panelWidth)} />
-                )}
-                {!level && !levelError && <p className="absolute inset-0 grid place-items-center px-4 text-center text-[13px] text-text-2">Loading the map…</p>}
-                {banner && bannerOnCanvas && (
-                    <ErrorBanner message={banner.message} form={bannerAs} panelWidth={panelWidth} pillWidth={pillWidth} bandRef={bandRef} cardRef={cardRef} />
-                )}
-                {panelOpen && shownSelected !== null && level && (
-                    <DetailPanel
-                        key={shownSelected}
-                        path={shownSelected}
-                        level={level}
-                        indexVersion={version ?? 0}
-                        onFocus={focus}
-                        onOpen={open}
-                        onTurnPage={turnPage}
-                        onClose={panel.covers ? closeDetails : closePanel}
-                        onOpenInEditor={editor === null ? undefined : openInEditor}
-                        covers={panel.covers}
-                        alert={covered ? banner?.message : undefined}
-                    />
-                )}
-            </main>
-            <ActivityBar recent={live.recent} connected={live.connected} highlightCount={highlights.length} onClear={clearHighlights} />
+            {shell.status === "bar" && statusBar(false)}
             {helpOpen && <HelpDialog onClose={closeHelp} />}
             {paletteOpen && (
                 <SearchPalette
@@ -592,98 +604,34 @@ function MapScreen(){
 }
 
 /**
- * Which page of a big folder is on screen, in the canvas's top-right corner with a button either side: the one place to
- * turn the page with the mouse (← and → turn it too). The three-task test found the top bar's note went unseen; a bar at
- * the bottom of the canvas then read as loud and, in the boxes' colour, blended in (owner review). Big arrows at the
- * canvas's sides went too, after a second critique: two ways to do one thing, and the right one sat on a box when the
- * panel was open. Like the other overlays it's a solid card in the logo's violet with no outline, so it reads as neither
- * a box nor a line, its buttons cyan; it moves left of the panel when the panel opens, by the panel's own width. On a
- * narrow canvas it says less (narrow.ts's pillForm): "Page 2 of 5", then "2 / 5", with the whole note as its title.
- */
-function PagePill({ sizeRef, level, onTurn, panelWidth, form }: {
-    /** Measures the pill, which the error banner keeps clear of. */
-    sizeRef: (element: HTMLDivElement | null) => void;
-    level: LevelResponse;
-    onTurn: (page: number) => void;
-    panelWidth: number;
-    form: PillForm;
-}){
-    const step = (side: "left" | "right") => {
-        const next = side === "left" ? level.page - 1 : level.page + 1;
-        const Icon = side === "left" ? IconChevronLeft : IconChevronRight;
-        const off = next < 0 || next >= level.pageCount;
-        return (
-            <button
-                type="button"
-                data-testid={`page-${side === "left" ? "previous" : "next"}`}
-                disabled={off}
-                onClick={() => onTurn(next)}
-                aria-label={`${side === "left" ? "Previous" : "Next"} page`}
-                title={`${side === "left" ? "Previous" : "Next"} page (${side === "left" ? "←" : "→"})`}
-                className="grid h-9 w-9 place-items-center rounded-md text-text hover:bg-node disabled:opacity-35 disabled:hover:bg-transparent"
-            >
-                <Icon aria-hidden size={22} stroke={2} />
-            </button>
-        );
-    };
-    // "Page 2 of 5 · 44 of 182 folders and files": the page in the text color, the count quieter
-    const note = pageNote(level);
-    const [pagePart, ...rest] = note.split(" · ");
-    return (
-        <div
-            ref={sizeRef}
-            style={{ right: panelWidth + 16 }}
-            className="absolute top-4 z-[7] flex items-center gap-1.5 rounded-lg bg-panel p-1"
-        >
-            {step("left")}
-            <span data-testid="page-note" title={form === "full" ? undefined : note} className="whitespace-nowrap px-1 text-[14px] text-text">
-                {form === "numbers" ? `${level.page + 1} / ${level.pageCount}` : pagePart}
-                {form === "full" && rest.length > 0 && <span className="text-text-2"> · {rest.join(" · ")}</span>}
-            </span>
-            {step("right")}
-        </div>
-    );
-}
-
-/**
  * The Map's error line over the canvas (a failed jump, a level that wouldn't load: VISUAL_REFRESH.md §10). It takes no
- * clicks, so it never stands between the pointer and the boxes or controls under it.
- * - **band** (its place at normal sizes): 24 px down in the page pill's band, centred over the canvas beside the panel.
- *   It keeps the pill's width clear on its right, and as much on its left so it stays centred; with less room the left
- *   side gives way first, so the line moves left, then wraps.
- * - **card**, where the band would need more than its two lines: a solid card in the canvas's top-left corner that reads
- *   over the boxes, its right edge clear of the pill and of the zoom controls.
+ * clicks, so it never stands between the pointer and the boxes under it.
+ * - **band** (its place at normal sizes): 24 px down, centred over the canvas, wrapping as it must.
+ * - **card**, where the band would need more than its two lines: a solid card in the canvas's top-left corner.
  * The band is always laid out, unseen while the card shows, so its height (which picks the form) is always known.
  */
-function ErrorBanner({ message, form, panelWidth, pillWidth, bandRef, cardRef }: {
+function ErrorBanner({ message, form, bandRef, cardRef }: {
     message: string;
     form: BannerForm;
-    panelWidth: number;
-    pillWidth: number | null;
     bandRef: (element: HTMLDivElement | null) => void;
     cardRef: (element: HTMLDivElement | null) => void;
 }){
-    const clear = bandClear(pillWidth);
     return (
         <>
             <div
                 ref={bandRef}
                 role={form === "band" ? "alert" : undefined}
                 aria-hidden={form === "band" ? undefined : true}
-                style={{ right: panelWidth }}
-                className={`pointer-events-none absolute left-0 top-6 flex justify-center px-4 text-[13px] text-danger ${form === "band" ? "" : "invisible"}`}
+                className={`pointer-events-none absolute inset-x-0 top-6 z-[7] flex justify-center px-4 text-[13px] text-danger ${form === "band" ? "" : "invisible"}`}
             >
-                {/* the left side gives way before the line does; the right side never does */}
-                <span aria-hidden style={{ flex: `0 1 ${clear}px` }} />
-                <p style={{ maxWidth: `calc(100% - ${clear}px)` }} className="shrink-0 text-center [overflow-wrap:anywhere]">{message}</p>
-                <span aria-hidden style={{ width: clear }} className="shrink-0" />
+                <p className="max-w-full rounded-[5px] bg-canvas px-2 text-center [overflow-wrap:anywhere]">{message}</p>
             </div>
             {form === "card" && (
                 <div
                     ref={cardRef}
                     role="alert"
-                    style={{ maxWidth: `calc(100% - ${CARD_TOP + panelWidth + cardClear(pillWidth)}px)` }}
-                    className="pointer-events-none absolute left-4 top-4 z-[7] rounded-lg border border-divider bg-panel px-3 py-2 text-[13px] text-danger [overflow-wrap:anywhere]"
+                    style={{ maxWidth: `calc(100% - ${CARD_CLEAR}px)` }}
+                    className="pointer-events-none absolute left-4 top-4 z-[7] rounded-md border border-divider bg-panel px-3 py-2 text-[13px] text-danger [overflow-wrap:anywhere]"
                 >
                     {message}
                 </div>
@@ -694,11 +642,11 @@ function ErrorBanner({ message, form, panelWidth, pillWidth, bandRef, cardRef }:
 
 function EmptyState(){
     return (
-        <div className="absolute inset-0 grid place-items-center px-4">
-            <div className="max-w-md space-y-2 text-center text-[14px] text-text-2">
+        <div className="grid h-dvh place-items-center px-4">
+            <div className="max-w-md space-y-2 text-center text-[14px] text-text-2 [overflow-wrap:anywhere]">
                 <p className="text-[15px] font-medium text-text">No repository indexed yet.</p>
-                <p>Index one from a terminal, then reload: <code className="rounded-md bg-node px-1 font-mono text-[13px] text-text">nebulosity index &lt;path-to-repo&gt;</code></p>
-                <p>In a checkout of Nebulosity: <code className="rounded-md bg-node px-1 font-mono text-[13px] text-text">npm run index -- &lt;path-to-repo&gt;</code></p>
+                <p>Index one from a terminal with <code className="rounded-md bg-node px-1 font-mono text-[13px] text-text">nebulosity index &lt;path-to-repo&gt;</code>, then reload.</p>
+                <p>In a checkout of Nebulosity it&apos;s <code className="rounded-md bg-node px-1 font-mono text-[13px] text-text">npm run index -- &lt;path-to-repo&gt;</code>.</p>
             </div>
         </div>
     );

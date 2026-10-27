@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionsPlace, actionsSide, bandClear, bannerForm, cardClear, fitPopover, legendMaxHeight, MIN_HEIGHT, MIN_WIDTH, PANEL_WIDTH, panelLayout, pillForm, trailStart } from "./narrow";
+import { actionsPlace, actionsSide, bannerForm, fitPopover, trailStart } from "./narrow";
 
 describe("actionsSide (a selected box's actions, while the panel would cover the canvas: owner review 2026-10-25)", () => {
     it("goes under a box whose middle is in the canvas's top half, clear of the page pill's band", () => {
@@ -33,33 +33,6 @@ describe("actionsPlace (the actions' corner on the canvas)", () => {
     });
 });
 
-describe("the floor (VISUAL_REFRESH.md, Narrow windows)", () => {
-    it("is 360 × 320, and the panel's widest is 400", () => {
-        expect(MIN_WIDTH).toBe(360);
-        expect(MIN_HEIGHT).toBe(320);
-        expect(PANEL_WIDTH).toBe(400);
-    });
-});
-
-describe("panelLayout", () => {
-    it("is the 400 px panel beside the canvas before the Map has been measured", () => {
-        expect(panelLayout(null)).toEqual({ covers: false });
-    });
-
-    it("stays beside the canvas while 360 px of canvas is left beside it", () => {
-        // 1440: 1040 left; 760: exactly 360 left
-        expect(panelLayout(1440)).toEqual({ covers: false });
-        expect(panelLayout(760)).toEqual({ covers: false });
-    });
-
-    it("covers the whole canvas once less than 360 px would be left", () => {
-        // 759: 359 left beside a 400 px panel; 400: none; 360: the floor
-        expect(panelLayout(759)).toEqual({ covers: true });
-        expect(panelLayout(400)).toEqual({ covers: true });
-        expect(panelLayout(360)).toEqual({ covers: true });
-    });
-});
-
 describe("bannerForm", () => {
     it("is a line in the pill's band while it stays inside it: 24 px down, at most 64 - 24 = 40 px tall", () => {
         expect(bannerForm(null)).toBe("band");
@@ -73,62 +46,6 @@ describe("bannerForm", () => {
         // three lines: 58.5 px, ending at 82.5
         expect(bannerForm(40.5)).toBe("card");
         expect(bannerForm(58.5)).toBe("card");
-    });
-});
-
-describe("bandClear", () => {
-    it("keeps the line clear of the pill: its width and an 8 px gap, past the band's own 16 px padding", () => {
-        expect(bandClear(null)).toBe(0);
-        expect(bandClear(177)).toBe(185);
-        expect(bandClear(346)).toBe(354);
-    });
-});
-
-describe("cardClear", () => {
-    it("keeps the card clear of the zoom controls' column with no pill: 15 + 26 px, and 8 px", () => {
-        expect(cardClear(null)).toBe(49);
-    });
-
-    it("keeps it clear of the pill: its 16 px inset, its width and 8 px", () => {
-        expect(cardClear(177)).toBe(201);
-        // a pill narrower than the zoom column's clearance still leaves the column
-        expect(cardClear(20)).toBe(49);
-    });
-});
-
-describe("legendMaxHeight", () => {
-    it("leaves the legend alone before the canvas is measured", () => {
-        expect(legendMaxHeight(0, 64, 0)).toBeUndefined();
-    });
-
-    it("keeps 16 px from the canvas's bottom and its top, or the pill's 64 px band", () => {
-        // 680 - 16 - 16; 680 - 16 - 64
-        expect(legendMaxHeight(680, 0, 0)).toBe(648);
-        expect(legendMaxHeight(680, 64, 0)).toBe(600);
-    });
-
-    it("stops 8 px under the error banner when that reaches lower", () => {
-        // a two-line band ending at 63, inside the pill's band: 200 - 16 - 71
-        expect(legendMaxHeight(200, 64, 63)).toBe(113);
-        // a card ending at 131.5 on an unpaged level: 200 - 16 - 139.5
-        expect(legendMaxHeight(200, 0, 131.5)).toBe(44.5);
-        // a one-line band ending at 44 on an unpaged level: 280 - 16 - 52
-        expect(legendMaxHeight(280, 0, 44)).toBe(212);
-    });
-});
-
-describe("pillForm", () => {
-    it("says it all with 440 px of canvas or more", () => {
-        expect(pillForm(null)).toBe("full");
-        expect(pillForm(1040)).toBe("full");
-        expect(pillForm(440)).toBe("full");
-    });
-
-    it("keeps the page alone from 240 px, then the bare numbers", () => {
-        expect(pillForm(439)).toBe("page");
-        expect(pillForm(360)).toBe("page");
-        expect(pillForm(240)).toBe("page");
-        expect(pillForm(239)).toBe("numbers");
     });
 });
 

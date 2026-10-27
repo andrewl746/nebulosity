@@ -30,5 +30,18 @@ export function boxTitle(box: Pick<MapNode, "path" | "name" | "tagline">): strin
 
 /** The detail panel's words for a file with no declarations: a file over the size cap had them left unread (ADR-053). */
 export function noDeclarationsText(file: Pick<DescribeResponse, "importsOnly">): string {
-    return file.importsOnly ? "Not read (over the 1 MB size cap; imports only)." : "None found.";
+    return file.importsOnly ? "Not read, since it's over the 1 MB size cap. Only its imports were." : "None found.";
+}
+
+/**
+ * The toolbar's one-line finding about a level (the Workbench redesign, ADR-070): its heaviest line, by the two boxes'
+ * names, with how many of the level's imports it carries, "Heaviest link is extensions → src, 665 of 708 imports".
+ * Null for a level with no lines. Ties go to the first by source, then target, so a level always says the same.
+ */
+export function heaviestLink(level: { nodes: readonly MapNode[]; edges: readonly { source: string; target: string; count: number }[] }): { from: string; to: string; count: number; total: number } | null {
+    const lines = level.edges.filter((e) => e.source !== e.target);
+    if (lines.length === 0) return null;
+    const heaviest = [...lines].sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0) || (a.target < b.target ? -1 : a.target > b.target ? 1 : 0))[0];
+    const name = (path: string): string => level.nodes.find((n) => n.path === path)?.name ?? path;
+    return { from: name(heaviest.source), to: name(heaviest.target), count: heaviest.count, total: lines.reduce((sum, e) => sum + e.count, 0) };
 }

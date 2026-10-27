@@ -7,9 +7,11 @@ import { DEMO } from "./mode";
 import { useScrollLock } from "./useScrollLock";
 
 /**
- * How to use the Map (owner review: "it's kinda confusing at first as to what all of this does"). Opens from the top
- * bar's "?" button or the ? key, and by itself on a first visit. Rendered into the page's body, above everything;
- * Escape or a click outside closes it. In the static demo it opens with what the demo can't do (ADR-049).
+ * How to use the Map (owner review: "it's kinda confusing at first as to what all of this does"). Opens from the
+ * header's "?" button, the toolbar's … menu where there's no room for it, or the ? key. It no longer opens by itself on
+ * a first visit, since the legend sentence under the canvas says what the marks mean (ADR-070). Rendered into the
+ * page's body, above everything; Escape or a click outside closes it. In the static demo it opens with what the demo
+ * can't do (ADR-049).
  */
 export default function HelpDialog({ onClose }: { onClose: () => void }){
     useScrollLock();
@@ -57,48 +59,46 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
 
                 <div className="mt-6 grid gap-x-8 gap-y-6 text-[14px] leading-normal text-text sm:grid-cols-2">
                     <Section title="Getting around">
-                        <li><b>Click</b> a box to see what it is, in the panel on the right.</li>
-                        <li><b>Double-click</b> a folder to go inside it.</li>
-                        <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button. The repo&apos;s name at the very top goes back to the start.</li>
-                        <li>Big folders are split into pages of related boxes: turn the page with the arrows at the top right, or <Key>←</Key> <Key>→</Key>.</li>
-                        <li>A busy folder opens at a readable size, from its top: drag to see the rest, or press the fit button at the bottom right to see it all.</li>
+                        <li><b>Click</b> a box to see what it is, in the inspector beside or under the Map.</li>
+                        <li><b>Double-click</b> a folder to go inside it, or click a folder in the explorer on the left.</li>
+                        <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button. The repo&apos;s name at its start goes back to the top.</li>
+                        <li>Big folders are split into pages of related boxes. Turn the page with the arrows in the toolbar, or <Key>←</Key> <Key>→</Key>.</li>
+                        <li>A busy folder opens at a readable size, from its top. Drag to see the rest, or press <b>Fit</b> in the toolbar to see it all.</li>
                         <li>Search files and concepts with <Key>Ctrl K</Key> (<Key>⌘K</Key> on a Mac).</li>
                     </Section>
                     <Section title="Reading the Map">
-                        <li>A box is a folder (with how many files it holds) or a file.</li>
-                        <li>A line from A to B means A uses code from B: the arrow points at what&apos;s being used. A box&apos;s panel lists both sides: <b>Depends on</b> (what it uses) and <b>Used by</b> (what uses it).</li>
-                        <li>Hover a box to see its summary and preview its lines. Hover a line to read it as a sentence, like &quot;editor uses base · 12 imports&quot;.</li>
-                        <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select. <b>Show all lines</b>, at the top right, brings back the rest.</li>
-                        <li>Boxes with no lines on the page sit under a line that says &quot;Not linked to anything on this page&quot;.</li>
-                        <li>Lines to other pages end at a doorway, a dashed box like &quot;Lines to page 2&quot;; double-click it to go there.</li>
+                        <li>A box is a folder or a file. A folder&apos;s dot grows with how many files it holds, and it has a second card behind it. A file has a page.</li>
+                        <li>A line from A to B means A uses code from B, and the arrow points at what&apos;s being used. Its weight shows how many imports it carries.</li>
+                        <li>Hover a box to bring its lines forward. Hover a line to read it as a sentence, like &quot;editor uses base, 12 imports&quot;.</li>
+                        <li><b>Strong links only</b>, in the toolbar, hides the lines under 2% of the heaviest line&apos;s imports. Every line of the box you select or hover still shows.</li>
+                        <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select, until you ask for <b>Show all lines</b>.</li>
+                        <li>Boxes with no lines on the page sit under a line that says &quot;Not linked to anything here&quot;. Lines to other pages end at a doorway, a dashed box like &quot;Lines to page 2&quot;, and double-clicking it goes there.</li>
                     </Section>
                     <Section title="Colors">
-                        <li><Swatch className="border-2 border-accent bg-node-sel" /> Purple: the box you selected and its lines. Everything else fades.</li>
-                        <li><Swatch className="outline-2 outline-offset-1 outline-agent" /> Orange: what Claude Code is touching right now.</li>
-                        <li><Swatch className="rounded-full bg-text" /> Cyan: something you can click, like a link or the Map&apos;s buttons.</li>
-                        <li><Swatch className="rounded-full bg-ok" /> Green: the index is up to date.</li>
-                        <li><Swatch className="rounded-full bg-danger" /> Red: something failed.</li>
+                        <li><Swatch className="border-2 border-accent bg-node-sel" /> Purple is the box you selected, its lines and what they join. Everything else fades.</li>
+                        <li><Swatch className="outline-2 outline-offset-1 outline-agent" /> Orange is what Claude Code is touching right now.</li>
+                        <li><Swatch className="rounded-full bg-ok" /> The cyan dot at the bottom left says the index is up to date.</li>
+                        <li><Swatch className="rounded-full bg-danger" /> Red means something failed.</li>
                     </Section>
-                    <Section title="The details panel">
-                        <li>A short summary; <b>Read full summary</b> shows the rest.</li>
-                        <li><b>Depends on</b> and <b>Used by</b>: click one to jump to it on the Map.</li>
-                        <li><b>Contents</b>: click a folder to go in, or a file to select it.</li>
+                    <Section title="The inspector">
+                        <li>A short summary, and <b>Full summary</b> for the rest.</li>
+                        <li><b>Uses</b>, <b>Used by</b> and <b>Contents</b> are tabs. Click a row to jump to it on the Map.</li>
                         {DEMO
-                            ? <li>For a file, <b>View on GitHub</b> opens its code at the indexed commit; click a declaration to open it there.</li>
-                            : <li>For a file, <b>View source</b> shows its code; click a declaration to jump to it there.</li>}
+                            ? <li>For a file, <b>View on GitHub</b> opens its code at the indexed commit, and a declaration opens there too.</li>
+                            : <li>For a file, <b>View source</b> shows its code, and a declaration jumps to its line there.</li>}
                     </Section>
                     <Section title="Claude Code">
                         {DEMO
-                            ? <li>In the app, the bar along the bottom shows Claude Code&apos;s last 3 tool calls, and the boxes they touched get an orange ring.</li>
+                            ? <li>In the app, the status bar along the bottom shows Claude Code&apos;s newest tool call as it works, and the boxes it touched get an orange ring.</li>
                             : (
                                 <>
-                                    <li>The bar along the bottom shows Claude Code&apos;s last 3 tool calls, newest first.</li>
+                                    <li>The status bar along the bottom shows Claude Code&apos;s newest tool call as it works.</li>
                                     <li>Boxes holding what it touched get an orange ring for 30 seconds.</li>
                                 </>
                             )}
                     </Section>
                     <Section title="The index">
-                        <li>The status at the top right says whether the index is up to date. Click it for each stage{DEMO ? "." : ", and to re-index."}</li>
+                        <li>The status bar&apos;s first cell says whether the index is up to date. Click it for each stage{DEMO ? "." : ", and to re-index."}</li>
                     </Section>
                 </div>
 

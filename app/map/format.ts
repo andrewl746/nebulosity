@@ -38,9 +38,9 @@ const ORDER: readonly StageName[] = ["structure", "summaries", "embeddings"];
 
 const progress = (stage: StageStatus): string => (stage.total > 0 ? ` ${formatCount(stage.done)} / ${formatCount(stage.total)}` : "");
 
-/** One stage as the status menu lists it: "Summaries 12,340 / 18,637 · ready". */
+/** One stage as the status menu lists it: "Summaries 12,340 / 18,637, ready". */
 export function stageLabel(name: StageName, stage: StageStatus): string {
-    return `${TITLES[name]}${progress(stage)} · ${stage.state}`;
+    return `${TITLES[name]}${progress(stage)}, ${stage.state}`;
 }
 
 export type Tone = "ok" | "busy" | "warn" | "off";

@@ -93,7 +93,7 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
     return (
         <div className="pointer-events-auto fixed inset-0 z-30 bg-canvas/70" onClick={onClose}>
             <div role="dialog" aria-label="Search" onClick={(event) => event.stopPropagation()}
-                className="mx-auto mt-[12vh] w-[640px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-panel">
+                className="mx-auto mt-[12vh] w-[640px] max-w-[92vw] overflow-hidden rounded-[6px] border border-border bg-panel">
                 <div ref={aboveRef}>
                     <div className="flex items-center gap-3 border-b border-divider px-4">
                         <IconSearch aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
@@ -126,7 +126,7 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                                     data-hit={hit.path}
                                     onMouseEnter={() => setActive(i)}
                                     onClick={() => onPick(hit)}
-                                    className={`flex w-full gap-3 px-4 py-2 text-left ${i === current ? "bg-node" : ""}`}
+                                    className={`flex w-full gap-3 px-4 py-2 text-left ${i === current ? "bg-row-sel" : "hover:bg-node"}`}
                                 >
                                     {hit.kind === "folder"
                                         ? <IconFolder aria-hidden size={16} stroke={1.75} className="mt-0.5 shrink-0 text-glyph-dim" />
@@ -135,7 +135,7 @@ export default function SearchPalette({ onPick, onClose }: SearchPaletteProps){
                                         <span title={hit.path} className="block truncate font-mono text-[13px] text-text">{hit.path}</span>
                                         {hit.tagline && <span title={hit.tagline} className="block truncate text-[13px] text-text-2">{hit.tagline}</span>}
                                         {hit.code && (
-                                            <span title={`${codeLabel(hit.code)}: ${hit.code.snippet}`} className="block truncate font-mono text-[12px] text-text-2">
+                                            <span title={`${codeLabel(hit.code)}, ${hit.code.snippet}`} className="block truncate font-mono text-[12px] text-text-2">
                                                 {codeLabel(hit.code)}:{" "}
                                                 {highlight
                                                     // highlightCode escapes the snippet, so this HTML is only its spans (syntax.ts)

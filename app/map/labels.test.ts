@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapNode } from "@/lib/contracts";
-import { boxTitle, lineLabel, noDeclarationsText } from "./labels";
+import { boxTitle, heaviestLink, lineLabel, noDeclarationsText } from "./labels";
 
 const box = (path: string, extra: Partial<MapNode> = {}): MapNode =>
     ({ path, name: path.slice(path.lastIndexOf("/") + 1), kind: "folder", fileCount: 3, summaryStatus: "fresh", ...extra });
@@ -38,7 +38,27 @@ describe("boxTitle", () => {
 
 describe("noDeclarationsText (ADR-053, amended)", () => {
     it("says a file over the size cap had its declarations left unread, and otherwise that none were found", () => {
-        expect(noDeclarationsText({ importsOnly: true })).toBe("Not read (over the 1 MB size cap; imports only).");
+        expect(noDeclarationsText({ importsOnly: true })).toBe("Not read, since it's over the 1 MB size cap. Only its imports were.");
         expect(noDeclarationsText({})).toBe("None found.");
+    });
+});
+
+describe("heaviestLink (the toolbar's finding)", () => {
+    const named = (path: string) => box(path);
+    it("names VS Code's root's heaviest line and the share of the level's imports it carries", () => {
+        // the root's eleven lines add up to 2 + 2 + 2 + 16 + 1 + 1 + 1 + 665 + 16 + 1 + 1 = 708
+        const nodes = ["src", "extensions", "build", "test", ".github", ".eslint-plugin-local", "eslint.config.js", "gulpfile.mjs"].map(named);
+        const edges = [
+            [".eslint-plugin-local", "src", 2], [".github", "src", 2], ["build", ".eslint-plugin-local", 2], ["build", "src", 16],
+            ["eslint.config.js", ".eslint-plugin-local", 1], ["eslint.config.js", "extensions", 1], ["extensions", "build", 1],
+            ["extensions", "src", 665], ["extensions", "test", 16], ["gulpfile.mjs", "build", 1], ["test", "build", 1],
+        ].map(([source, target, count]) => ({ source: source as string, target: target as string, count: count as number }));
+        expect(heaviestLink({ nodes, edges })).toEqual({ from: "extensions", to: "src", count: 665, total: 708 });
+    });
+
+    it("breaks a tie by source then target, and is null with no lines", () => {
+        const nodes = ["a", "b", "c"].map(named);
+        expect(heaviestLink({ nodes, edges: [{ source: "b", target: "c", count: 3 }, { source: "a", target: "c", count: 3 }] })).toEqual({ from: "a", to: "c", count: 3, total: 6 });
+        expect(heaviestLink({ nodes, edges: [] })).toBeNull();
     });
 });
