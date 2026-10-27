@@ -6,7 +6,7 @@ import { BOX_HEIGHT, BOX_WIDTH } from "./levelLayout";
 import { actionsPlace } from "./narrow";
 import { useSize } from "./useSize";
 
-const BUTTON = "rounded-md px-2.5 py-1 text-[14px] text-control hover:bg-overlay-line";
+const BUTTON = "rounded-md px-2.5 py-1 text-[14px] text-text hover:bg-node";
 
 /**
  * A selected box's actions while the panel would cover the canvas (owner review, 2026-10-25). In a narrow window, VS
@@ -39,7 +39,7 @@ export default function BoxActions({ box, position, onOpen, onTurnPage, onDetail
             ref={sizeRef}
             data-box-actions={box.path}
             style={{ left: place.left, top: place.top, visibility: size === null ? "hidden" : undefined }}
-            className="absolute z-[6] flex items-center gap-1 rounded-lg bg-overlay p-1"
+            className="absolute z-[6] flex items-center gap-1 rounded-lg bg-panel p-1"
         >
             {box.kind === "folder" && (
                 <button type="button" onClick={() => onOpen(box.path)} title="Open this folder (or double-click it)" className={BUTTON}>Open</button>

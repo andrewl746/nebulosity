@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frameOrigin, mapFrameUrl, panelHtml, type PanelState } from "./panelHtml";
+import { frameKindOf, frameOrigin, mapFrameUrl, panelHtml, type PanelState } from "./panelHtml";
 
 const RELAY = "https://file+.vscode-resource.vscode-cdn.net/c%3A/ext/dist/relay.js";
 const opts = { nonce: "n1", relayUri: RELAY };
@@ -157,9 +157,10 @@ describe("panelHtml: narrow widths (the owner's 'no matter how much I compress i
         expect(css).not.toMatch(/overflow\s*:\s*hidden/);
     });
 
-    it("themes whatever scrolls in the Map's thin scrollbar, with no browser default", () => {
-        // the same two properties, and the --border color, as app/globals.css
-        expect(styleOf(panelHtml({ kind: "failed", message: longMessage }, opts))).toContain("*{scrollbar-width:thin;scrollbar-color:#4B3B85 transparent}");
+    it("themes whatever scrolls in a thin scrollbar of the theme's own color, with no browser default", () => {
+        // the same two properties as app/globals.css, in VS Code's scrollbar color (Dark 2026's box border without one)
+        expect(styleOf(panelHtml({ kind: "failed", message: longMessage }, opts)))
+            .toContain("*{scrollbar-width:thin;scrollbar-color:var(--vscode-scrollbarSlider-background,#464747) transparent}");
     });
 
     it("gives every state the same style, so each narrow rule reaches all of them", () => {
@@ -168,10 +169,36 @@ describe("panelHtml: narrow widths (the owner's 'no matter how much I compress i
     });
 });
 
+describe("panelHtml: the person's theme (ADR-070)", () => {
+    it("takes the page's background, text and code from VS Code's variables, with Dark 2026's values to fall back on", () => {
+        const css = styleOf(panelHtml({ kind: "stopped" }, opts));
+        expect(css).toContain("html,body{margin:0;padding:0;height:100%;background:var(--vscode-editor-background,#121314);color:var(--vscode-foreground,#BFBFBF)}");
+        expect(css).toMatch(/code\{[^}]*background:var\(--vscode-textCodeBlock-background,#222223\)/);
+        expect(css).toMatch(/\.detail\{[^}]*color:var\(--vscode-descriptionForeground,#8C8C8C\)/);
+    });
+
+    it("draws the one button in the Map's purple, a step darker with white text on light themes", () => {
+        const css = styleOf(panelHtml({ kind: "stopped" }, opts));
+        expect(css).toMatch(/button\{[^}]*background:#A855F7;color:#120C1C/);
+        expect(css).toContain("body.vscode-light button,body.vscode-high-contrast-light button{background:#9333EA;color:#FFFFFF}");
+        expect(css).toContain(":focus-visible{outline:2px solid var(--vscode-focusBorder,#67E8F9);outline-offset:2px}");
+    });
+});
+
 describe("mapFrameUrl and frameOrigin", () => {
     it("puts one slash, then ?embed=vscode, after the external URL", () => {
         expect(mapFrameUrl("http://localhost:3125/")).toBe("http://localhost:3125/?embed=vscode");
         expect(mapFrameUrl("http://localhost:41234")).toBe("http://localhost:41234/?embed=vscode");
+    });
+
+    it("names a theme kind other than dark, so the Map's first paint is in it", () => {
+        expect(mapFrameUrl("http://localhost:3125/", "dark")).toBe("http://localhost:3125/?embed=vscode");
+        expect(mapFrameUrl("http://localhost:3125/", "light")).toBe("http://localhost:3125/?embed=vscode&kind=light");
+        expect(mapFrameUrl("http://localhost:3125", "hc-light")).toBe("http://localhost:3125/?embed=vscode&kind=hc-light");
+    });
+
+    it("reads VS Code's ColorThemeKind (Light 1, Dark 2, HighContrast 3, HighContrastLight 4)", () => {
+        expect([1, 2, 3, 4, 0, 5].map(frameKindOf)).toEqual(["light", "dark", "hc", "hc-light", "dark", "dark"]);
     });
 
     it("reads the frame URL's origin", () => {

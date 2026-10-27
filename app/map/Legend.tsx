@@ -1,82 +1,26 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
-
-/** Remembers in this browser whether the legend was left open. */
-const LEGEND_OPEN = "nebulosity.legendOpen";
-
-function readOpen(): boolean {
-    try{
-        return window.localStorage.getItem(LEGEND_OPEN) === "1";
-    } catch{
-        return false;   // no storage (a private window): start closed
-    }
-}
-
 /**
- * What the lines and colors mean (VISUAL_REFRESH.md §4: "label the relationship"), said once in a corner instead of on
- * every line. Closed, it's a small "Legend" button; open, a narrow card of short rows (owner review, 2026-10-13: the wide
- * block ran into the boxes). Like the other overlays it's a solid card in the logo's violet with no outline: lines are
- * never filled, so it can't be mistaken for one (a light outline was), and no box is that colour. Its button is cyan, the
- * color of everything you click.
- * The canvas only renders in the browser, so reading storage on the first render is safe. On a short canvas (a narrow
- * window's floor), it's at most `maxHeight` tall, its rows scrolling inside, so it never reaches the page pill.
+ * What the Map's marks mean, in a sentence under the canvas (the Workbench redesign, ADR-070). It replaces both the
+ * legend card in the canvas's corner and the help that opened by itself on a first visit: the full help stays behind
+ * the ? button and key. The doorways, Claude Code's rings and a busy folder's hidden lines get a sentence of their own
+ * only where they appear. In a short window or over a narrow canvas it goes (shell.ts), the help still having it.
  */
-export default function Legend({ quietLines, doorways, maxHeight }: { quietLines: boolean; doorways: boolean; maxHeight?: number }){
-    const [open, setOpen] = useState(readOpen);
-    const toggle = (): void => {
-        const next = !open;
-        setOpen(next);
-        try{
-            window.localStorage.setItem(LEGEND_OPEN, next ? "1" : "0");
-        } catch{
-            // nothing to remember it in
-        }
-    };
-    const Chevron = open ? IconChevronDown : IconChevronUp;
-
+export default function Legend({ doorways, agent, quiet }: {
+    /** The level has doorways to its other pages. */
+    doorways: boolean;
+    /** Claude Code is touching boxes on screen. */
+    agent: boolean;
+    /** A busy level, whose lines show on hover. */
+    quiet: boolean;
+}){
     return (
-        <div aria-label="Legend" style={{ maxHeight }} className={`nopan nodrag nowheel absolute bottom-4 left-4 z-[5] flex flex-col ${open ? "w-[252px]" : ""} rounded-lg bg-overlay text-[12px] text-overlay-text-2`}>
-            {open && (
-                <div className="min-h-0 space-y-1.5 overflow-y-auto border-b border-overlay-line px-3 py-2">
-                    {/* one sentence for direction: "arrows out / arrows in" rows read as abstract, even to the owner */}
-                    <Row glyph={<Arrow color="var(--text-2)" />}>A → B: A uses B. The arrow points at what&apos;s being used.</Row>
-                    <Row glyph={<Arrow color="var(--select)" />}>Selected box and its lines</Row>
-                    <Row glyph={<span className="block h-3 w-3 rounded-sm outline-2 outline-agent" />}>What Claude Code is touching</Row>
-                    {/* only where there are doorways: a page of a big folder (deferred minor: the legend had no row for them) */}
-                    {doorways && <Row glyph={<span className="block h-3 w-5 rounded-sm border border-dashed border-text-2" />}>Dashed box: a doorway to another page</Row>}
-                    {quietLines && <Row glyph={<span aria-hidden className="text-[14px] leading-none">⋯</span>}>Busy folder: hover a box to see its lines</Row>}
-                </div>
-            )}
-            <button
-                type="button"
-                data-testid="legend-toggle"
-                onClick={toggle}
-                aria-expanded={open}
-                className="flex w-full shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-1.5 text-[12px] font-medium text-control hover:bg-overlay-line"
-            >
-                Legend
-                <Chevron aria-hidden size={16} stroke={1.75} />
-            </button>
-        </div>
-    );
-}
-
-function Row({ glyph, children }: { glyph: ReactNode; children: ReactNode }){
-    return (
-        <div className="flex items-start gap-2">
-            <span aria-hidden className="flex h-4 w-6 shrink-0 items-center justify-center">{glyph}</span>
-            <span className="leading-4">{children}</span>
-        </div>
-    );
-}
-
-function Arrow({ color }: { color: string }){
-    return (
-        <svg width="24" height="8" viewBox="0 0 24 8" style={{ color }}>
-            <line x1="0" y1="4" x2="18" y2="4" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M17 0.5 L24 4 L17 7.5 Z" fill="currentColor" />
-        </svg>
+        <p data-testid="legend" className="shrink-0 border-t border-divider px-3.5 py-2.5 text-[12px] leading-[1.45] text-text-3">
+            Dot size shows how many files a folder has. Line weight shows how many imports. Arrows point at the code being used.
+            Folders are stacked cards, and a page marks a single file.
+            {doorways && " A dashed box is a doorway to another page of this folder."}
+            {agent && " An orange ring is what Claude Code is touching right now."}
+            {quiet && " In a busy folder, hover a box to see its lines."}
+        </p>
     );
 }

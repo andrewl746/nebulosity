@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge } from "@/lib/contracts";
-import { edgeKey, isBusyLevel, mapEmphasis, type BoxTone, type EdgeTone } from "./emphasis";
+import { edgeKey, isBusyLevel, mapEmphasis, STRONG_SHARE, strongThreshold, weakLinesHidden, type BoxTone, type EdgeTone } from "./emphasis";
 
 // boxes a, b, c, d; lines a→b, b→c, d→c (the plan's Task 5 vectors)
 const BOXES = ["a", "b", "c", "d"];
@@ -81,5 +81,71 @@ describe("mapEmphasis (VISUAL_REFRESH.md §4)", () => {
         expect([...result.boxes]).toEqual([["src/a", "selected"], ["src/b", "faded"], ["src//page-2", "linked"]]);
         expect([...result.edges]).toEqual([["src/a->src//page-2", "selected"]]);
         expect([...mapEmphasis(boxes, edges, "src//page-2", null).boxes]).toEqual([["src/a", "linked"], ["src/b", "faded"], ["src//page-2", "selected"]]);
+    });
+});
+
+describe("Strong links only (ADR-070)", () => {
+    // VS Code's root (the demo's level file): its heaviest line carries 665 imports, so a strong line carries at least
+    // 2% × 665 = 13.3, which leaves extensions → src (665), build → src (16) and extensions → test (16)
+    const ROOT_BOXES = ["eslint.config.js", "extensions", "gulpfile.mjs", "test", "build", ".github", ".eslint-plugin-local", "src"];
+    const ROOT: MapEdge[] = [
+        { source: ".eslint-plugin-local", target: "src", count: 2 }, { source: ".github", target: "src", count: 2 },
+        { source: "build", target: ".eslint-plugin-local", count: 2 }, { source: "build", target: "src", count: 16 },
+        { source: "eslint.config.js", target: ".eslint-plugin-local", count: 1 }, { source: "eslint.config.js", target: "extensions", count: 1 },
+        { source: "extensions", target: "build", count: 1 }, { source: "extensions", target: "src", count: 665 },
+        { source: "extensions", target: "test", count: 16 }, { source: "gulpfile.mjs", target: "build", count: 1 }, { source: "test", target: "build", count: 1 },
+    ];
+    const drawn = (selected: string | null, hovered: string | null, pinned?: Set<string>): string[] => {
+        const tones = mapEmphasis(ROOT_BOXES, ROOT, selected, hovered, { strongOnly: true, pinned }).edges;
+        return [...tones].filter(([, tone]) => tone !== "hidden").map(([key]) => key).sort();
+    };
+
+    it("puts the threshold at 2% of the heaviest line, with no floor (the owner's pick, 2026-10-27)", () => {
+        expect(strongThreshold(665)).toBeCloseTo(13.3, 10);
+        expect(strongThreshold(100)).toBe(2);
+        expect(strongThreshold(0)).toBe(0);
+        expect(STRONG_SHARE).toBe(0.02);
+    });
+
+    it("hides nothing in a folder of files whose lines are 1 or 2 imports", () => {
+        // the heaviest is 2, so a strong line needs 0.04 imports: every line shows
+        const files: MapEdge[] = [{ source: "a.ts", target: "b.ts", count: 1 }, { source: "b.ts", target: "c.ts", count: 2 }, { source: "a.ts", target: "c.ts", count: 1 }];
+        const tones = mapEmphasis(["a.ts", "b.ts", "c.ts"], files, null, null, { strongOnly: true }).edges;
+        expect([...tones.values()]).toEqual(["normal", "normal", "normal"]);
+        expect(weakLinesHidden(files, null)).toBe(0);
+    });
+
+    it("draws only the strong lines when nothing is selected", () => {
+        expect(drawn(null, null)).toEqual(["build->src", "extensions->src", "extensions->test"]);
+    });
+
+    it("adds every line of the selected box, as the approved mockup draws src", () => {
+        expect(drawn("src", null)).toEqual([".eslint-plugin-local->src", ".github->src", "build->src", "extensions->src", "extensions->test"]);
+    });
+
+    it("adds the hovered box's lines", () => {
+        expect(drawn(null, "gulpfile.mjs")).toEqual(["build->src", "extensions->src", "extensions->test", "gulpfile.mjs->build"]);
+    });
+
+    it("always draws the lines of a box Claude Code or the editor has lit", () => {
+        expect(drawn(null, null, new Set(["test"]))).toEqual(["build->src", "extensions->src", "extensions->test", "test->build"]);
+    });
+
+    it("counts the lines it hides, before any hover", () => {
+        // eleven lines, three strong: eight hidden; with src selected its two weak lines show, so six
+        expect(weakLinesHidden(ROOT, null)).toBe(8);
+        expect(weakLinesHidden(ROOT, "src")).toBe(6);
+        // test → build is lit as well
+        expect(weakLinesHidden(ROOT, "src", new Set(["test"]))).toBe(5);
+    });
+
+    it("draws every line with it off", () => {
+        const tones = mapEmphasis(ROOT_BOXES, ROOT, null, null, { strongOnly: false }).edges;
+        expect([...tones.values()].every((tone) => tone === "normal")).toBe(true);
+    });
+
+    it("on a busy level, still draws a lit box's lines", () => {
+        const tones = mapEmphasis(ROOT_BOXES, ROOT, null, null, { quietLines: true, pinned: new Set(["test"]) }).edges;
+        expect([...tones].filter(([, t]) => t !== "hidden").map(([k]) => k).sort()).toEqual(["extensions->test", "test->build"]);
     });
 });

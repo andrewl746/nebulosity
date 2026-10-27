@@ -5,7 +5,7 @@ import type { BoxData } from "./MapBox";
 import type { RoutedEdgeType } from "./RoutedEdge";
 
 const box: MapNode = { path: "src/vs", name: "vs", kind: "folder", fileCount: 10073, summaryStatus: "fresh" };
-const data = { box, tone: "normal" as const, agent: false, pulseKey: 0 };
+const data: BoxData = { box, tone: "normal", agent: false, pulseKey: 0, dot: 12 };
 
 describe("toBoxNode (owner review: lines sometimes missing)", () => {
     it("carries its connection points, so its lines never wait for React Flow to measure the box", () => {
@@ -56,12 +56,13 @@ describe("reuseUnchanged (deferred minor: every hover rebuilt every box and line
 describe("sameBoxNode: whether a box would draw the same", () => {
     const node = (fields: Partial<BoxData> = {}, at = { x: 10, y: 20 }) => toBoxNode(box, at, { ...data, ...fields });
 
-    it("is the same with the same box, place, tone, ring, pulse and doorway", () => {
+    it("is the same with the same box, place, tone, ring, pulse, dot and doorway", () => {
         expect(sameBoxNode(node(), node())).toBe(true);
     });
 
-    it("differs when its tone, Claude's ring, a pulse or its place changes", () => {
+    it("differs when its tone, Claude's ring, a pulse, its dot or its place changes", () => {
         expect(sameBoxNode(node(), node({ tone: "faded" }))).toBe(false);
+        expect(sameBoxNode(node(), node({ dot: 14 }))).toBe(false);
         expect(sameBoxNode(node(), node({ agent: true }))).toBe(false);
         expect(sameBoxNode(node(), node({ pulseKey: 3 }))).toBe(false);
         expect(sameBoxNode(node(), node({}, { x: 10, y: 21 }))).toBe(false);
@@ -71,20 +72,20 @@ describe("sameBoxNode: whether a box would draw the same", () => {
 describe("sameRoutedEdge: whether a line would draw the same", () => {
     const points = [{ x: 0, y: 0 }, { x: 0, y: 40 }];
     const line = (fields: Partial<RoutedEdgeType> = {}): RoutedEdgeType => ({
-        id: "a->b", type: "routed", source: "a", target: "b", data: { points },
-        style: { stroke: "var(--neutral-edge)", strokeWidth: 1, opacity: 1 },
-        markerEnd: { type: "arrowclosed" as never, color: "var(--text-2)" },
+        id: "a->b", type: "routed", source: "a", target: "b", data: { points, width: 1, color: "var(--text-3)" },
         ...fields,
     });
 
-    it("is the same with the same ends, route, label, stroke and arrowhead", () => {
+    it("is the same with the same ends, route, width, color, count and label", () => {
         expect(sameRoutedEdge(line(), line())).toBe(true);
     });
 
-    it("differs when it's hovered (a label), recolored, rerouted or its arrowhead changes", () => {
-        expect(sameRoutedEdge(line(), line({ label: "a uses b · 3 imports" }))).toBe(false);
-        expect(sameRoutedEdge(line(), line({ style: { stroke: "var(--select)", strokeWidth: 1.5, opacity: 1 } }))).toBe(false);
-        expect(sameRoutedEdge(line(), line({ data: { points: [{ x: 0, y: 0 }, { x: 0, y: 40 }] } }))).toBe(false);
-        expect(sameRoutedEdge(line(), line({ markerEnd: { type: "arrowclosed" as never, color: "var(--select)" } }))).toBe(false);
+    it("differs when it's hovered (a label), recolored, rerouted, widened or its count changes", () => {
+        expect(sameRoutedEdge(line(), line({ label: "a uses b, 3 imports" }))).toBe(false);
+        expect(sameRoutedEdge(line(), line({ data: { points, width: 1, color: "var(--edge-strong)" } }))).toBe(false);
+        expect(sameRoutedEdge(line(), line({ data: { points: [{ x: 0, y: 0 }, { x: 0, y: 40 }], width: 1, color: "var(--text-3)" } }))).toBe(false);
+        expect(sameRoutedEdge(line(), line({ data: { points, width: 4, color: "var(--text-3)" } }))).toBe(false);
+        expect(sameRoutedEdge(line(), line({ data: { points, width: 1, color: "var(--text-3)", count: "16" } }))).toBe(false);
+        expect(sameRoutedEdge(line(), line({ data: { points, width: 1, color: "var(--text-3)", countStrong: true } }))).toBe(false);
     });
 });

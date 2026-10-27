@@ -4,7 +4,7 @@ import type { RepoList } from "../../lib/contracts";
 import { errorText, getJson, mapUrl, postJson, RefusedError } from "./http";
 import { MapServer, PROBE_TIMEOUT_MS, StoppedError } from "./mapServer";
 import { MapPanel } from "./panel";
-import { mapFrameUrl, type PanelState } from "./panelHtml";
+import { frameKindOf, mapFrameUrl, type PanelState } from "./panelHtml";
 import { repoFor, upperCaseDrive } from "./repoMatch";
 import { classifyRepos, type ServerCheck } from "./serverCheck";
 import { EditorSync, type NebulosityApi, type ShownMap } from "./sync";
@@ -122,7 +122,7 @@ async function openMap(panel: MapPanel, mapServer: MapServer, reloadAnyway: bool
         shown = { port, root: step.root };
         const external = await vscode.env.asExternalUri(vscode.Uri.parse(`http://localhost:${port}`));
         if (!current()) return;
-        const frameUrl = mapFrameUrl(external.toString());
+        const frameUrl = mapFrameUrl(external.toString(), frameKindOf(vscode.window.activeColorTheme.kind));
         const now = panel.state;
         if (now.kind !== "map" || now.frameUrl !== frameUrl) panel.setState({ kind: "map", frameUrl });
         else if (step.switched || reloadAnyway) panel.reload();

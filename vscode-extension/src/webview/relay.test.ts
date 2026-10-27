@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commandOf, HELLO_INTERVAL_MS, HELLO_TIMEOUT_MS, startRelay } from "./relay";
+import { commandOf, HELLO_INTERVAL_MS, HELLO_TIMEOUT_MS, startRelay, themeKindOf, themeMessageOf, type RelayEnv } from "./relay";
 
 /**
  * The webview's relay (V1.8 plan P9, P18, Review Focus 2), driven with fake timers and stand-ins for the iframe, the
@@ -30,7 +30,7 @@ function windowTimers(): { setInterval: typeof setInterval; clearInterval: typeo
 }
 
 /** Starts a relay on stand-ins and gives the handles a test drives it with. */
-function harness(withFrame = true){
+function harness(withFrame = true, theme: RelayEnv["theme"] = null){
     const contentWindow = { postMessage: vi.fn<(m: unknown, origin: string) => void>() };
     const host = { name: "the webview's host frame (window.parent)" };
     const vscode = { postMessage: vi.fn<(m: unknown) => void>() };
@@ -48,6 +48,7 @@ function harness(withFrame = true){
         vscode,
         mapOrigin: withFrame ? MAP : null,
         ...windowTimers(),
+        theme,
     });
 
     const calls = (): Call[] => contentWindow.postMessage.mock.calls;
@@ -314,5 +315,117 @@ describe("a state without the Map", () => {
         expect(relay.toMap()).toEqual([]);
         relay.click(inside("start"));
         expect(relay.vscode.postMessage.mock.calls).toEqual([[{ command: "start" }]]);
+    });
+});
+
+describe("the theme (ADR-070)", () => {
+    const DARK = { type: "nebulosity.theme", kind: "dark", colors: { editor: "#121314", side: "#191a1b", fg: "#bfbfbf" } };
+    const LIGHT = { type: "nebulosity.theme", kind: "light", colors: { editor: "#ffffff", side: "#fafafd", fg: "#202020" } };
+
+    /** A page whose theme the test changes, as VS Code does when the person picks another. */
+    function themed(){
+        let current: unknown = DARK;
+        let onChange: (() => void) | null = null;
+        const relay = harness(true, { read: () => current, watch: (fn) => { onChange = fn; } });
+        return { relay, change: (next: unknown) => { current = next; onChange?.(); } };
+    }
+    const themesSent = (calls: [unknown, string][]): unknown[] => calls.map(([m]) => m).filter((m) => (m as { type?: string }).type === "nebulosity.theme");
+
+    it("sends the theme right after the ready, after the messages held for it, and never before", () => {
+        const { relay } = themed();
+        relay.load();
+        relay.fromExtension(follow("src/a.ts"));
+        expect(themesSent(relay.toMap())).toEqual([]);
+        const before = relay.toMap().length;
+        relay.fromMap(READY);
+        expect(relay.toMap().slice(before)).toEqual([[follow("src/a.ts"), MAP], [DARK, MAP]]);
+    });
+
+    it("sends it again when VS Code changes the theme, once for each real change", () => {
+        const { relay, change } = themed();
+        relay.load();
+        relay.fromMap(READY);
+        change(LIGHT);
+        change(LIGHT);
+        change(DARK);
+        expect(themesSent(relay.toMap())).toEqual([DARK, LIGHT, DARK]);
+    });
+
+    it("holds a change made before the Map is ready, and sends the newest at the ready", () => {
+        const { relay, change } = themed();
+        relay.load();
+        change(LIGHT);
+        expect(themesSent(relay.toMap())).toEqual([]);
+        relay.fromMap(READY);
+        expect(themesSent(relay.toMap())).toEqual([LIGHT]);
+    });
+
+    it("sends it again to a Map that loaded again, even when the theme is the same", () => {
+        const { relay } = themed();
+        relay.load();
+        relay.fromMap(READY);
+        relay.load();
+        relay.fromMap(READY);
+        expect(themesSent(relay.toMap())).toEqual([DARK, DARK]);
+    });
+
+    it("sends nothing while the page has no theme to read", () => {
+        const relay = harness(true, { read: () => null, watch: () => {} });
+        relay.load();
+        relay.fromMap(READY);
+        expect(themesSent(relay.toMap())).toEqual([]);
+    });
+});
+
+describe("themeKindOf", () => {
+    it("reads VS Code's data-vscode-theme-kind first, then the body's class", () => {
+        expect(themeKindOf("vscode-light", "")).toBe("light");
+        expect(themeKindOf("vscode-dark", "vscode-light")).toBe("dark");
+        expect(themeKindOf("vscode-high-contrast", "")).toBe("hc");
+        expect(themeKindOf("vscode-high-contrast-light", "")).toBe("hc-light");
+        expect(themeKindOf(null, "vscode-light")).toBe("light");
+        // a high contrast light body carries both classes
+        expect(themeKindOf(null, "vscode-high-contrast vscode-high-contrast-light")).toBe("hc-light");
+        expect(themeKindOf(null, "vscode-high-contrast")).toBe("hc");
+        expect(themeKindOf(null, "")).toBe("dark");
+    });
+});
+
+describe("themeMessageOf", () => {
+    /** A page's --vscode-* variables, as getComputedStyle reads them (with the spaces it may leave in). */
+    const page = (vars: Record<string, string>) => (name: string): string => vars[name] ?? "";
+
+    it("reads the colors the Map takes, and leaves out the ones the theme doesn't set", () => {
+        const read = page({
+            "--vscode-editor-background": " #121314", "--vscode-sideBar-background": "#191a1b", "--vscode-foreground": "#bfbfbf",
+            "--vscode-widget-border": "#2a2b2c", "--vscode-panel-border": "#333333", "--vscode-descriptionForeground": "#8c8c8c",
+        });
+        expect(themeMessageOf(read, "dark")).toEqual({
+            type: "nebulosity.theme", kind: "dark",
+            colors: { editor: "#121314", side: "#191a1b", fg: "#bfbfbf", border: "#2a2b2c", desc: "#8c8c8c" },
+        });
+    });
+
+    it("takes the panel's border, then the side bar's, when a widget's isn't set", () => {
+        const base = { "--vscode-editor-background": "#002b36", "--vscode-sideBar-background": "#00212b", "--vscode-foreground": "#cccccc" };
+        expect(themeMessageOf(page({ ...base, "--vscode-panel-border": "rgba(128, 128, 128, 0.35)", "--vscode-sideBar-border": "#111111" }), "dark")?.colors.border)
+            .toBe("rgba(128, 128, 128, 0.35)");
+        expect(themeMessageOf(page({ ...base, "--vscode-sideBar-border": "#111111" }), "dark")?.colors.border).toBe("#111111");
+        expect(themeMessageOf(page(base), "dark")?.colors.border).toBeUndefined();
+    });
+
+    it("takes the high contrast border first on a high contrast theme, and only there", () => {
+        const vars = { "--vscode-editor-background": "#000000", "--vscode-sideBar-background": "#000000", "--vscode-foreground": "#ffffff",
+            "--vscode-contrastBorder": "#6fc3df", "--vscode-widget-border": "#222222" };
+        expect(themeMessageOf(page(vars), "hc")?.colors.border).toBe("#6fc3df");
+        expect(themeMessageOf(page(vars), "dark")?.colors.border).toBe("#222222");
+    });
+
+    it("gives null without the editor's, the side bar's or the text's color", () => {
+        const full = { "--vscode-editor-background": "#000000", "--vscode-sideBar-background": "#000000", "--vscode-foreground": "#ffffff" };
+        for (const missing of Object.keys(full)){
+            const vars: Record<string, string> = { ...full, [missing]: "  " };
+            expect(themeMessageOf(page(vars), "dark"), missing).toBeNull();
+        }
     });
 });

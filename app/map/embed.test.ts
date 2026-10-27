@@ -89,6 +89,27 @@ describe("parseToMap (API_CONTRACTS §20: every field's type is checked)", () =>
             .toEqual({ type: "nebulosity.highlight", paths: sixty.slice(0, 50) });
     });
 
+    it("reads a theme with its three colors, and keeps the optional ones only when they're short strings (ADR-070)", () => {
+        const colors = { editor: "#121314", side: "#191a1b", fg: "#bfbfbf" };
+        expect(parseToMap({ type: "nebulosity.theme", kind: "dark", colors })).toEqual({ type: "nebulosity.theme", kind: "dark", colors });
+        const full = { ...colors, border: "rgba(128, 128, 128, 0.35)", desc: "#8c8c8c", focus: "#3994bcb3" };
+        expect(parseToMap({ type: "nebulosity.theme", kind: "hc-light", colors: full })).toEqual({ type: "nebulosity.theme", kind: "hc-light", colors: full });
+        // an optional color that isn't a short string is dropped, and nothing outside the six is carried
+        expect(parseToMap({ type: "nebulosity.theme", kind: "light", colors: { ...colors, border: 3, desc: "x".repeat(65), extra: "#fff" } }))
+            .toEqual({ type: "nebulosity.theme", kind: "light", colors });
+    });
+
+    it("refuses a theme without a known kind or one of its three colors", () => {
+        const colors = { editor: "#121314", side: "#191a1b", fg: "#bfbfbf" };
+        expect(parseToMap({ type: "nebulosity.theme", kind: "sepia", colors })).toBeNull();
+        expect(parseToMap({ type: "nebulosity.theme", colors })).toBeNull();
+        expect(parseToMap({ type: "nebulosity.theme", kind: "dark" })).toBeNull();
+        expect(parseToMap({ type: "nebulosity.theme", kind: "dark", colors: "#121314" })).toBeNull();
+        expect(parseToMap({ type: "nebulosity.theme", kind: "dark", colors: { ...colors, fg: undefined } })).toBeNull();
+        expect(parseToMap({ type: "nebulosity.theme", kind: "dark", colors: { ...colors, editor: "" } })).toBeNull();
+        expect(parseToMap({ type: "nebulosity.theme", kind: "dark", colors: { ...colors, side: "x".repeat(65) } })).toBeNull();
+    });
+
     it("a highlight in a huge sparse array keeps its first 50 paths, quickly (the loop stops at 50 kept)", () => {
         // length 2^32 - 1 survives structured clone, and only the entries set are real (Task 4 review, Minor 2)
         const huge: unknown[] = new Array(2 ** 32 - 1);

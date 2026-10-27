@@ -18,7 +18,7 @@ export function wantsSummary(status: SummaryStatus): boolean {
 /** What the panel says in place of a summary it doesn't have. */
 export function placeholderFor(status: SummaryStatus): string {
     switch (status){
-        case "off": return "Summaries are off: ANTHROPIC_API_KEY isn't set. With a key, each file and folder gets a short plain-language summary here, and search can match by meaning.";
+        case "off": return "Summaries are off, since ANTHROPIC_API_KEY isn't set. With a key, each file and folder gets a short plain-language summary here, and search can match by meaning.";
         case "failed": return "The last attempt to summarize this failed.";
         case "pending": return "Summarizing…";
         default: return "";

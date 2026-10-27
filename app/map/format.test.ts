@@ -12,7 +12,7 @@ describe("format", () => {
         expect(ago(1_000)).toBe("just now");
         expect(ago(12_400)).toBe("12 s ago");
         expect(ago(185_000)).toBe("3 min ago");
-        expect(stageLabel("summaries", stage("ready", 12340, 18637))).toBe("Summaries 12,340 / 18,637 · ready");
+        expect(stageLabel("summaries", stage("ready", 12340, 18637))).toBe("Summaries 12,340 / 18,637, ready");
     });
 
     it("writes big counts compactly: one decimal, K, M or B by size (VISUAL_REFRESH.md §5: \"3.4M lines\")", () => {

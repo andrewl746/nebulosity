@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { BridgeFromMap, BridgeToMap } from "@/lib/contracts";
 import { createBridge, isEmbedded, type BridgeWindow } from "./embed";
 import { DEMO } from "./mode";
@@ -11,6 +11,17 @@ import { DEMO } from "./mode";
  * server, which has no address, and never in the static demo, which has no editor to talk to.
  */
 export const EMBEDDED = !DEMO && typeof window !== "undefined" && isEmbedded(window.location.search);
+
+const noSubscription = () => () => {};
+
+/**
+ * EMBEDDED for what the page draws: false on the server and while the page hydrates (the server can't know it's in VS
+ * Code's panel), then the real value. Reading EMBEDDED itself in a render made the panel's first client render differ
+ * from the server's, and React threw the page away and drew it again.
+ */
+export function useEmbedded(): boolean {
+    return useSyncExternalStore(noSubscription, () => EMBEDDED, () => false);
+}
 
 type Handlers = { onMessage: (message: BridgeToMap) => void; onReady: () => BridgeFromMap | null };
 

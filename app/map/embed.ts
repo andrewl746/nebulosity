@@ -1,4 +1,4 @@
-import { BRIDGE_VERSION, type BridgeFromMap, type BridgeToMap } from "@/lib/contracts";
+import { BRIDGE_VERSION, type BridgeFromMap, type BridgeThemeColors, type BridgeToMap, type ThemeKind } from "@/lib/contracts";
 
 /**
  * The Map's side of the editor bridge (docs/API_CONTRACTS.md §20): when the Map is framed in a VS Code webview
@@ -24,6 +24,10 @@ export function isEmbedded(search: string): boolean {
 }
 
 const isPath = (value: unknown): value is string => typeof value === "string" && value.length <= MAX_PATH_LENGTH;
+
+const THEME_KINDS: ReadonlySet<string> = new Set<ThemeKind>(["dark", "light", "hc", "hc-light"]);
+/** A color as VS Code writes one (`#1f1f1f`, `rgba(128, 128, 128, 0.35)`): a short string. theme.ts reads it, or drops it. */
+const isColorText = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 64;
 /** A path to jump to, never "": the repo is no editor's file, and focus("") would push the top level onto the history. */
 const isTarget = (value: unknown): value is string => isPath(value) && value !== "";
 
@@ -32,7 +36,8 @@ const isTarget = (value: unknown): value is string => isPath(value) && value !==
  * null, and a result carries only the fields checked. A `follow` or `show` with an empty path is null. A `highlight`
  * keeps its first 50 paths and drops entries that are not paths (not strings, or over 1,024 characters) rather than
  * refusing the message; it reads no further than its first 1,000 entries. A hello of another bridge version is null: a
- * Map that gets another version ignores the hello.
+ * Map that gets another version ignores the hello. A `theme` needs one of the four kinds and its editor, side and fg
+ * colors as strings of at most 64 characters; its border, desc and focus are kept only when they're such strings too.
  */
 export function parseToMap(data: unknown): BridgeToMap | null {
     if (typeof data !== "object" || data === null) return null;
@@ -57,6 +62,21 @@ export function parseToMap(data: unknown): BridgeToMap | null {
         }
         case "nebulosity.clear":
             return { type: "nebulosity.clear" };
+        case "nebulosity.theme": {
+            if (typeof message.kind !== "string" || !THEME_KINDS.has(message.kind)) return null;
+            if (typeof message.colors !== "object" || message.colors === null) return null;
+            const given = message.colors as Record<string, unknown>;
+            const colors: Partial<BridgeThemeColors> = {};
+            // the three every theme has are required, the rest are kept only when they're short strings
+            for (const name of ["editor", "side", "fg"] as const){
+                if (!isColorText(given[name])) return null;
+                colors[name] = given[name];
+            }
+            for (const name of ["border", "desc", "focus"] as const){
+                if (isColorText(given[name])) colors[name] = given[name];
+            }
+            return { type: "nebulosity.theme", kind: message.kind as ThemeKind, colors: colors as BridgeThemeColors };
+        }
         default:
             return null;
     }

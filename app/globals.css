@@ -1,75 +1,82 @@
 @import "tailwindcss";
 
 /*
- * The Map's colors (VISUAL_REFRESH.md §2): each token is defined once here and means one thing. Components use the
- * tokens (bg-surface, text-text-2, border-select, …), never a raw value. The owner's pick of 2026-10-13, "night violet +
- * cyan", taken from the logo (app/icon.svg): night-violet surfaces instead of violet-grey, lavender names, the selection
- * still vivid purple, the logo's violet for the overlays and its cyan for everything you click.
+ * The Map's colors (the Workbench redesign, 2026-10-27): each token is defined once here and means one thing, and
+ * components use the tokens (bg-node, text-text-2, border-accent, …), never a raw value. These are app/map/theme.ts's
+ * fromTheme for VS Code's Dark 2026, the browser's and the demo's palette (theme.test.ts checks they agree). Inside VS
+ * Code's panel the same tokens are set from the person's own theme (useTheme.ts), over these. Neutral grays, and purple
+ * only where it means something, in the logo's own colors.
  */
 :root {
-  --canvas: #0E0A1C;       /* page and Map background, one flat night violet (the logo tile's dark end) */
-  --surface: #22193F;      /* boxes, inputs, cards: one step brighter than the canvas, so the content leads */
-  --panel: #140E28;        /* the details panel, drawers, dialogs */
-  --hairline: #261B45;     /* dividers */
-  --border: #4B3B85;       /* box and input borders, defined enough that boxes read as objects */
-  --text: #F1EEF8;         /* primary text: names, headings */
-  --text-body: #D3C7EE;    /* paragraphs: summaries, help */
-  --text-2: #B9A9DE;       /* secondary text, counts, labels */
-  --title: #C7B3FF;        /* lavender: a description's title (a summary's tagline, help headings) */
-  --code: #D8CAFF;         /* lavender: code identifiers in text */
-  --code-bg: #2A1B52;      /* the chip behind them */
-  --folder: #A98BEA;       /* lavender: the folder icon, so folders and files part at a glance */
-  --neutral-edge: #7262A6; /* ordinary connections, bright enough to follow on the canvas (3.7:1) */
-  --select: #B58AFF;        /* purple: the selected box, its direct links, its path. Nothing else */
-  --select-fill: #3A2178;  /* the selected box's fill: strong enough that the box, not its lines, is seen first */
+  --canvas: #121314;        /* under the Map: the editor's background */
+  --panel: #191A1B;         /* the header, explorer, inspector, status bar and dialogs: the side bar's background */
+  --node: #222223;          /* a box, an input, a chip */
+  --node-sel: #2A1E38;      /* the selected box */
+  --row-sel: #332543;       /* the selected row in the explorer and the inspector */
+  --divider: #2A2B2C;       /* lines between areas */
+  --border: #464747;        /* a box's, an input's and a button's border */
+  --linked-border: #8345BE; /* the border of a box linked to the selection */
+  --text: #BFBFBF;          /* names and headings: the theme's own text */
+  --text-2: #999999;        /* secondary text, counts, summaries */
+  --text-3: #8C8C8C;        /* the quietest text: labels, the legend, the status bar */
+  --edge-dim: #464747;      /* a line that isn't the selection's */
+  --edge-strong: #E9D5FF;   /* the selection's lines: the logo's spoke color */
+  --glyph-dim: #606061;     /* a dot or a page icon that isn't linked to the selection */
+  --linked-glyph: #C084FC;  /* the dots and bars of what's linked to the selection: the logo's outer dots */
+  --accent: #A855F7;        /* the selection's border, the selected dot's ring, the active tab, the one primary button */
+  --on-accent: #120C1C;     /* text on the accent */
+  --core: #F0FDFF;          /* the selected dot's core: the logo's own */
   --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
-  --ok: #4CC38A;            /* green: indexing status only */
   --danger: #F07A7A;        /* errors and a failed stage */
-  --control: #67E8F9;       /* cyan (the logo's glow): something you click — links, text buttons, the overlays' buttons. Nothing else */
-  --overlay: #2A1F52;       /* raised night violet: every control on the Map (legend, page pill, zoom) */
-  --overlay-line: #3A2D6B;  /* dividers inside an overlay, and a control's hover */
-  --overlay-text-2: #C9BCEB; /* secondary text on an overlay */
-  --grid: #262039;          /* the canvas's faint dot grid, so the Map has texture without competing with boxes */
+  --ok: #5FC9D9;            /* the indexed dot. Nothing else */
+  --focus: #67E8F9;         /* the keyboard focus ring */
+  --fade: 50%;              /* how much of its color a box away from the selection keeps, mixed with the background */
+  color-scheme: dark;
+}
+
+/* a light VS Code theme: native scrollbars and form controls go light too (useTheme.ts sets the kind) */
+:root[data-kind="light"], :root[data-kind="hc-light"] {
+  color-scheme: light;
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
-  --color-surface: var(--surface);
   --color-panel: var(--panel);
-  --color-hairline: var(--hairline);
+  --color-node: var(--node);
+  --color-node-sel: var(--node-sel);
+  --color-row-sel: var(--row-sel);
+  --color-divider: var(--divider);
   --color-border: var(--border);
+  --color-linked-border: var(--linked-border);
   --color-text: var(--text);
-  --color-text-body: var(--text-body);
   --color-text-2: var(--text-2);
-  --color-title: var(--title);
-  --color-code: var(--code);
-  --color-code-bg: var(--code-bg);
-  --color-folder: var(--folder);
-  --color-neutral-edge: var(--neutral-edge);
-  --color-select: var(--select);
-  --color-select-fill: var(--select-fill);
+  --color-text-3: var(--text-3);
+  --color-edge-dim: var(--edge-dim);
+  --color-edge-strong: var(--edge-strong);
+  --color-glyph-dim: var(--glyph-dim);
+  --color-linked-glyph: var(--linked-glyph);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-core: var(--core);
   --color-agent: var(--agent);
-  --color-ok: var(--ok);
   --color-danger: var(--danger);
-  --color-control: var(--control);
-  --color-overlay: var(--overlay);
-  --color-overlay-line: var(--overlay-line);
-  --color-overlay-text-2: var(--overlay-text-2);
-  --color-grid: var(--grid);
-  --font-sans: var(--font-plex-sans);
-  --font-mono: var(--font-plex-mono);
+  --color-ok: var(--ok);
+  --color-focus: var(--focus);
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 body {
   background: var(--canvas);
   color: var(--text);
-  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 /*
  * Syntax colors, for code only: the source viewer and search's code lines (VISUAL_REFRESH.md §2). They're VS Code's
- * Dark+ palette, so code reads the way it does in the editor (owner review). Inside code they mean token kinds and
- * nothing else; nothing on the Map uses them.
+ * Dark+ palette, so code reads the way it does in the editor (owner review), and its Light+ palette under a light VS
+ * Code theme. Inside code they mean token kinds and nothing else; nothing on the Map uses them.
  */
 :root {
   --syn-text: #D4D4D4;
@@ -83,6 +90,20 @@ body {
   --syn-variable: #9CDCFE;   /* parameters, properties */
   --syn-constant: #4FC1FF;
   --syn-regexp: #D16969;
+}
+
+:root[data-kind="light"], :root[data-kind="hc-light"] {
+  --syn-text: #000000;
+  --syn-keyword: #0000FF;
+  --syn-control: #AF00DB;
+  --syn-string: #A31515;
+  --syn-number: #098658;
+  --syn-comment: #008000;
+  --syn-type: #267F99;
+  --syn-function: #795E26;
+  --syn-variable: #001080;
+  --syn-constant: #0070C1;
+  --syn-regexp: #811F3F;
 }
 
 .syntax { color: var(--syn-text); }
@@ -117,20 +138,25 @@ body {
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
+
+  /* a visible ring for the keyboard only, in the theme's focus color */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
 }
 
 /* React Flow's own parts (controls, edge labels) take the same tokens */
 .react-flow {
   --xy-background-color: var(--canvas);
-  --xy-edge-stroke: var(--neutral-edge);
-  --xy-edge-label-background-color: var(--surface);
+  --xy-edge-stroke: var(--edge-dim);
+  --xy-edge-label-background-color: var(--node);
   --xy-edge-label-color: var(--text);
-  /* the zoom controls share the one control style: raised night violet, cyan icons (owner review) */
-  --xy-controls-button-background-color: var(--overlay);
-  --xy-controls-button-background-color-hover: var(--overlay-line);
-  --xy-controls-button-color: var(--control);
-  --xy-controls-button-color-hover: var(--control);
-  --xy-controls-button-border-color: var(--overlay-line);
+  --xy-controls-button-background-color: var(--panel);
+  --xy-controls-button-background-color-hover: var(--node);
+  --xy-controls-button-color: var(--text-2);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--divider);
   --xy-controls-box-shadow: none;
 }
 
@@ -155,4 +181,12 @@ body {
   button, a, [role="button"] {
     transition: none;
   }
+}
+
+/*
+ * React Flow paints its viewport's own layer (ViewportPortal) above the boxes. The Map's holds what belongs under the
+ * lines, the folders' back cards and the loose boxes' divider (MapCanvas), so it goes beneath every line and box.
+ */
+.react-flow__viewport-portal {
+  z-index: -1;
 }

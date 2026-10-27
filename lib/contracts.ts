@@ -220,7 +220,23 @@ export type BridgeToMap =
   /** A deliberate jump: focus on the path, pushing a history entry. */
   | { type: "nebulosity.show"; path: string }
   | { type: "nebulosity.highlight"; paths: string[] }
-  | { type: "nebulosity.clear" };
+  | { type: "nebulosity.clear" }
+  /**
+   * The editor's color theme, sent by the webview itself after the handshake and again whenever the theme changes, so
+   * the Map takes its grays from it (the Workbench redesign, ADR-070). Added without a version change: an older Map
+   * ignores it, and an older webview never sends it, so the Map keeps its own palette.
+   */
+  | { type: "nebulosity.theme"; kind: ThemeKind; colors: BridgeThemeColors };
+
+/** Which kind of theme VS Code has on: its webview's `vscode-light`, `vscode-dark` and two high contrast kinds. */
+export type ThemeKind = "dark" | "light" | "hc" | "hc-light";
+
+/**
+ * A theme's colors as the webview reads them from VS Code's `--vscode-*` variables, raw CSS colors (`#1f1f1f`,
+ * `rgba(…)`): editor.background, sideBar.background, a border (the high contrast border, else a widget's, the
+ * panel's or the side bar's), foreground, descriptionForeground and focusBorder. A theme may leave out the optional ones.
+ */
+export type BridgeThemeColors = { editor: string; side: string; fg: string; border?: string; desc?: string; focus?: string };
 
 /** Messages from the Map to the webview — docs/API_CONTRACTS.md §20. */
 export type BridgeFromMap =

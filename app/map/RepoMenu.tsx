@@ -12,15 +12,16 @@ const LIST_WIDTH = 320;
 
 type RepoMenuProps = { repo: string; onSwitched: () => void; /** Go to the repo's top level. */ onHome: () => void };
 
-/** A repo as the top bar names it: "owner / repo" from its origin, or its folder name (VISUAL_REFRESH.md §6). */
+/** A repo as the breadcrumb names it, in mono: "owner/repo" from its origin, or its folder name (ADR-070). */
 function RepoName({ entry, fallback }: { entry: RepoSummary | undefined; fallback: string }){
-    if (!entry?.remote) return <span title={fallback} className="truncate text-[15px] font-medium text-text">{fallback}</span>;
-    // on a narrow screen the owner (and its "/") gives way first, down to nothing, so the repo's own name keeps its room;
-    // the name truncates only once it alone is too wide. The whole name is the hover title.
+    if (!entry?.remote) return <span title={fallback} className="truncate text-text">{fallback}</span>;
+    // in a narrow window the owner gives way first, whole (the breadcrumb says when, by data-owner, and narrows it to
+    // nothing so it can still be measured; under 360 px it's gone), so the repo's own name keeps its room; the name
+    // truncates only once it alone is too wide. The whole name is the hover title.
     return (
-        <span title={`${entry.remote.owner} / ${entry.remote.name}`} className="flex min-w-0 items-baseline text-[15px]">
-            <span className="truncate pr-1 text-text-2 after:pl-1 after:content-['/']">{entry.remote.owner}</span>
-            <span className="max-w-full shrink-0 truncate font-medium text-text">{entry.remote.name}</span>
+        <span title={`${entry.remote.owner}/${entry.remote.name}`} className="flex min-w-0 items-baseline text-text">
+            <span data-repo-owner className="truncate after:content-['/'] group-data-[owner=hidden]/crumb:max-w-0 max-[360px]:hidden">{entry.remote.owner}</span>
+            <span className="max-w-full shrink-0 truncate">{entry.remote.name}</span>
         </span>
     );
 }
@@ -49,7 +50,7 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
     const name = repo.slice(repo.lastIndexOf("/") + 1);
     const label = <RepoName entry={list?.repos.find((r) => r.root === repo)} fallback={name} />;
     const home = (
-        <button type="button" data-testid="repo-name" onClick={onHome} title="Go to the top level" className="flex min-w-0 rounded-md px-1 hover:bg-surface">
+        <button type="button" data-testid="repo-name" onClick={onHome} title="Go to the top level" className="flex min-w-0 rounded-[4px] px-0.5 hover:bg-node">
             {label}
         </button>
     );
@@ -74,18 +75,18 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                     }}
                     aria-label="Switch repository"
                     title="Switch repository"
-                    className="grid h-7 w-6 shrink-0 place-items-center rounded-md text-text-2 hover:bg-surface hover:text-text"
+                    className="grid h-6 w-5 shrink-0 place-items-center rounded-[4px] text-text-3 hover:bg-node hover:text-text"
                 >
                     <IconChevronDown aria-hidden size={14} stroke={1.75} />
                 </button>
             </div>
             {open && (
-                <ul data-testid="repo-list" data-covers style={listPlace} className="absolute top-9 z-30 overflow-y-auto rounded-lg border border-border bg-surface py-1 text-[13px]">
+                <ul data-testid="repo-list" data-covers style={listPlace} className="absolute top-8 z-30 overflow-y-auto rounded-md border border-border bg-panel py-1 font-sans text-[13px]">
                     {list.repos.map((r) => (
                         <li key={r.root}>
-                            <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-border">
+                            <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-node">
                                 <span className={r.root === repo ? "font-medium text-text" : "text-text"}>{r.remote ? `${r.remote.owner} / ${r.remote.name}` : r.name}</span>
-                                <span title={r.root} className="block truncate font-mono text-[12px] text-text-2">{r.root}</span>
+                                <span title={r.root} className="block truncate font-mono text-[12px] text-text-3">{r.root}</span>
                             </button>
                         </li>
                     ))}

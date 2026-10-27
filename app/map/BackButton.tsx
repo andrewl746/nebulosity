@@ -17,7 +17,7 @@ export default function BackButton({ enabled }: { enabled: boolean }){
             onClick={() => window.history.back()}
             aria-label="Back"
             title={enabled ? "Back to where you were" : "Back (nothing to go back to yet)"}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-control hover:bg-surface disabled:opacity-35 disabled:hover:bg-transparent"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-text hover:bg-node disabled:opacity-35 disabled:hover:bg-transparent"
         >
             <IconArrowLeft aria-hidden size={18} stroke={2} />
         </button>
