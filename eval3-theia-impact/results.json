@@ -1,0 +1,765 @@
+{
+  "truthsVerified": true,
+  "uncheckedPoints": 0,
+  "runs": [
+    {
+      "score": 0.9981572714744303,
+      "pending": null,
+      "none": false,
+      "files": [],
+      "notFiles": [
+        "packages/ai-ide",
+        "packages/plugin-ext",
+        "packages/ai-chat-ui",
+        "packages/debug"
+      ],
+      "recall": null,
+      "precision": null,
+      "hits": null,
+      "missed": [],
+      "extra": [],
+      "steps": null,
+      "valid": null,
+      "problem": null,
+      "unknown": null,
+      "flags": [],
+      "name": "theia-impact-baseline-1",
+      "question": "theia-impact",
+      "family": "grepHard",
+      "arm": "baseline",
+      "repeat": 1,
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 53656,
+        "cacheRead": 157059,
+        "output": 2968,
+        "total": 213691
+      },
+      "mainTokens": {
+        "input": 8,
+        "cacheWrite": 53656,
+        "cacheRead": 157059,
+        "output": 2968,
+        "total": 213691
+      },
+      "costUsd": 0.26002590000000003,
+      "wallMs": 26719,
+      "toolCalls": 3,
+      "nebulosityCalls": 0,
+      "turns": 4,
+      "resultNotes": [],
+      "summary": {
+        "model": "claude-sonnet-5-5",
+        "claudeVersion": "2.1.301",
+        "apiKeySource": "none",
+        "permissionMode": "dontAsk",
+        "tools": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "Glob",
+          "Grep",
+          "ListAgents",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "TaskStop",
+          "ToolSearch",
+          "Workflow",
+          "Write"
+        ],
+        "mcpServers": [],
+        "plugins": [
+          "cc-plugin-agents-md",
+          "cc-plugin-telemetry",
+          "cc-plugin-plugin-authoring"
+        ],
+        "skills": 19,
+        "subtype": "success",
+        "isError": false,
+        "turns": 4,
+        "durationMs": 24156,
+        "apiMs": 20607,
+        "costUsd": 0.26002590000000003,
+        "usage": {
+          "input": 8,
+          "cacheWrite": 53656,
+          "cacheRead": 157059,
+          "output": 2968
+        },
+        "firstCallContext": 50625,
+        "models": {
+          "claude-sonnet-5-5": {
+            "costUsd": 0.26002590000000003,
+            "input": 8,
+            "output": 2968,
+            "cacheRead": 157059,
+            "cacheWrite": 53656
+          }
+        },
+        "toolCalls": {
+          "Write": 1,
+          "Bash": 2
+        },
+        "nestedToolCalls": {},
+        "toolErrors": 0,
+        "toolSearchCalls": 0,
+        "nebulosityCalls": 0,
+        "utilization": {
+          "fiveHour": 0.11,
+          "sevenDay": 0.63
+        }
+      },
+      "kind": "impact",
+      "repo": "theia",
+      "firstCallContext": 50625
+    },
+    {
+      "score": 0.4662122455962418,
+      "pending": null,
+      "none": false,
+      "files": [],
+      "notFiles": [
+        "packages/ai-ide",
+        "packages/plugin-ext",
+        "packages/ai-chat-ui",
+        "packages/debug"
+      ],
+      "recall": null,
+      "precision": null,
+      "hits": null,
+      "missed": [],
+      "extra": [],
+      "steps": null,
+      "valid": null,
+      "problem": null,
+      "unknown": null,
+      "flags": [],
+      "name": "theia-impact-baseline-2",
+      "question": "theia-impact",
+      "family": "grepHard",
+      "arm": "baseline",
+      "repeat": 2,
+      "tokens": {
+        "input": 6,
+        "cacheWrite": 33946,
+        "cacheRead": 122844,
+        "output": 2818,
+        "total": 159614
+      },
+      "mainTokens": {
+        "input": 6,
+        "cacheWrite": 33946,
+        "cacheRead": 122844,
+        "output": 2818,
+        "total": 159614
+      },
+      "costUsd": 0.17626039999999998,
+      "wallMs": 23808,
+      "toolCalls": 2,
+      "nebulosityCalls": 0,
+      "turns": 3,
+      "resultNotes": [],
+      "summary": {
+        "model": "claude-sonnet-5-5",
+        "claudeVersion": "2.1.301",
+        "apiKeySource": "none",
+        "permissionMode": "dontAsk",
+        "tools": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "Glob",
+          "Grep",
+          "ListAgents",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "TaskStop",
+          "ToolSearch",
+          "Workflow",
+          "Write"
+        ],
+        "mcpServers": [],
+        "plugins": [
+          "cc-plugin-agents-md",
+          "cc-plugin-telemetry",
+          "cc-plugin-plugin-authoring"
+        ],
+        "skills": 19,
+        "subtype": "success",
+        "isError": false,
+        "turns": 3,
+        "durationMs": 22220,
+        "apiMs": 19060,
+        "costUsd": 0.17626039999999998,
+        "usage": {
+          "input": 6,
+          "cacheWrite": 33946,
+          "cacheRead": 122844,
+          "output": 2818
+        },
+        "firstCallContext": 50624,
+        "models": {
+          "claude-sonnet-5-5": {
+            "costUsd": 0.17626039999999998,
+            "input": 6,
+            "output": 2818,
+            "cacheRead": 122844,
+            "cacheWrite": 33946
+          }
+        },
+        "toolCalls": {
+          "Write": 1,
+          "Bash": 1
+        },
+        "nestedToolCalls": {},
+        "toolErrors": 0,
+        "toolSearchCalls": 0,
+        "nebulosityCalls": 0,
+        "utilization": {
+          "fiveHour": 0.13,
+          "sevenDay": 0.63
+        }
+      },
+      "kind": "impact",
+      "repo": "theia",
+      "firstCallContext": 50624
+    },
+    {
+      "score": 0.9981572714744303,
+      "pending": null,
+      "none": false,
+      "files": [],
+      "notFiles": [
+        "packages/ai-ide",
+        "packages/plugin-ext",
+        "packages/ai-chat-ui",
+        "packages/debug"
+      ],
+      "recall": null,
+      "precision": null,
+      "hits": null,
+      "missed": [],
+      "extra": [],
+      "steps": null,
+      "valid": null,
+      "problem": null,
+      "unknown": null,
+      "flags": [],
+      "name": "theia-impact-baseline-3",
+      "question": "theia-impact",
+      "family": "grepHard",
+      "arm": "baseline",
+      "repeat": 3,
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 34003,
+        "cacheRead": 173999,
+        "output": 2579,
+        "total": 210589
+      },
+      "mainTokens": {
+        "input": 8,
+        "cacheWrite": 34003,
+        "cacheRead": 173999,
+        "output": 2579,
+        "total": 210589
+      },
+      "costUsd": 0.1792179,
+      "wallMs": 25753,
+      "toolCalls": 3,
+      "nebulosityCalls": 0,
+      "turns": 4,
+      "resultNotes": [],
+      "summary": {
+        "model": "claude-sonnet-5-5",
+        "claudeVersion": "2.1.301",
+        "apiKeySource": "none",
+        "permissionMode": "dontAsk",
+        "tools": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "Glob",
+          "Grep",
+          "ListAgents",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "TaskStop",
+          "ToolSearch",
+          "Workflow",
+          "Write"
+        ],
+        "mcpServers": [],
+        "plugins": [
+          "cc-plugin-agents-md",
+          "cc-plugin-telemetry",
+          "cc-plugin-plugin-authoring"
+        ],
+        "skills": 19,
+        "subtype": "success",
+        "isError": false,
+        "turns": 4,
+        "durationMs": 24334,
+        "apiMs": 20503,
+        "costUsd": 0.1792179,
+        "usage": {
+          "input": 8,
+          "cacheWrite": 34003,
+          "cacheRead": 173999,
+          "output": 2579
+        },
+        "firstCallContext": 50621,
+        "models": {
+          "claude-sonnet-5-5": {
+            "costUsd": 0.1792179,
+            "input": 8,
+            "output": 2579,
+            "cacheRead": 173999,
+            "cacheWrite": 34003
+          }
+        },
+        "toolCalls": {
+          "Bash": 2,
+          "Write": 1
+        },
+        "nestedToolCalls": {},
+        "toolErrors": 0,
+        "toolSearchCalls": 0,
+        "nebulosityCalls": 0,
+        "utilization": {
+          "fiveHour": 0.13,
+          "sevenDay": 0.63
+        }
+      },
+      "kind": "impact",
+      "repo": "theia",
+      "firstCallContext": 50621
+    },
+    {
+      "score": 1,
+      "pending": null,
+      "none": false,
+      "files": [],
+      "notFiles": [
+        "packages/ai-ide",
+        "packages/plugin-ext",
+        "packages/ai-chat-ui",
+        "packages/debug"
+      ],
+      "recall": null,
+      "precision": null,
+      "hits": null,
+      "missed": [],
+      "extra": [],
+      "steps": null,
+      "valid": null,
+      "problem": null,
+      "unknown": null,
+      "flags": [],
+      "name": "theia-impact-nebulosity-1",
+      "question": "theia-impact",
+      "family": "grepHard",
+      "arm": "nebulosity",
+      "repeat": 1,
+      "tokens": {
+        "input": 4,
+        "cacheWrite": 55325,
+        "cacheRead": 52994,
+        "output": 476,
+        "total": 108799
+      },
+      "mainTokens": {
+        "input": 4,
+        "cacheWrite": 55325,
+        "cacheRead": 52994,
+        "output": 476,
+        "total": 108799
+      },
+      "costUsd": 0.2313674,
+      "wallMs": 9449,
+      "toolCalls": 1,
+      "nebulosityCalls": 1,
+      "turns": 2,
+      "resultNotes": [],
+      "summary": {
+        "model": "claude-sonnet-5-5",
+        "claudeVersion": "2.1.301",
+        "apiKeySource": "none",
+        "permissionMode": "dontAsk",
+        "tools": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "Glob",
+          "Grep",
+          "ListAgents",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "TaskStop",
+          "ToolSearch",
+          "Workflow",
+          "Write",
+          "mcp__nebulosity__architecture",
+          "mcp__nebulosity__calls",
+          "mcp__nebulosity__describe",
+          "mcp__nebulosity__imports",
+          "mcp__nebulosity__overview",
+          "mcp__nebulosity__search",
+          "mcp__nebulosity__show_on_map"
+        ],
+        "mcpServers": [
+          {
+            "name": "nebulosity",
+            "status": "connected"
+          }
+        ],
+        "plugins": [
+          "cc-plugin-agents-md",
+          "cc-plugin-telemetry",
+          "cc-plugin-plugin-authoring"
+        ],
+        "skills": 19,
+        "subtype": "success",
+        "isError": false,
+        "turns": 2,
+        "durationMs": 6891,
+        "apiMs": 6754,
+        "costUsd": 0.2313674,
+        "usage": {
+          "input": 4,
+          "cacheWrite": 55325,
+          "cacheRead": 52994,
+          "output": 476
+        },
+        "firstCallContext": 52996,
+        "models": {
+          "claude-sonnet-5-5": {
+            "costUsd": 0.2313674,
+            "input": 4,
+            "output": 476,
+            "cacheRead": 52994,
+            "cacheWrite": 55325
+          }
+        },
+        "toolCalls": {
+          "mcp__nebulosity__imports": 1
+        },
+        "nestedToolCalls": {},
+        "toolErrors": 0,
+        "toolSearchCalls": 0,
+        "nebulosityCalls": 1,
+        "utilization": {
+          "fiveHour": 0.12,
+          "sevenDay": 0.63
+        }
+      },
+      "kind": "impact",
+      "repo": "theia",
+      "firstCallContext": 52996
+    },
+    {
+      "score": 1,
+      "pending": null,
+      "none": false,
+      "files": [],
+      "notFiles": [
+        "packages/ai-ide",
+        "packages/plugin-ext",
+        "packages/ai-chat-ui",
+        "packages/debug"
+      ],
+      "recall": null,
+      "precision": null,
+      "hits": null,
+      "missed": [],
+      "extra": [],
+      "steps": null,
+      "valid": null,
+      "problem": null,
+      "unknown": null,
+      "flags": [],
+      "name": "theia-impact-nebulosity-2",
+      "question": "theia-impact",
+      "family": "grepHard",
+      "arm": "nebulosity",
+      "repeat": 2,
+      "tokens": {
+        "input": 4,
+        "cacheWrite": 34121,
+        "cacheRead": 74225,
+        "output": 548,
+        "total": 108898
+      },
+      "mainTokens": {
+        "input": 4,
+        "cacheWrite": 34121,
+        "cacheRead": 74225,
+        "output": 548,
+        "total": 108898
+      },
+      "costUsd": 0.14939449999999999,
+      "wallMs": 7505,
+      "toolCalls": 1,
+      "nebulosityCalls": 1,
+      "turns": 2,
+      "resultNotes": [],
+      "summary": {
+        "model": "claude-sonnet-5-5",
+        "claudeVersion": "2.1.301",
+        "apiKeySource": "none",
+        "permissionMode": "dontAsk",
+        "tools": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "Glob",
+          "Grep",
+          "ListAgents",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "TaskStop",
+          "ToolSearch",
+          "Workflow",
+          "Write",
+          "mcp__nebulosity__architecture",
+          "mcp__nebulosity__calls",
+          "mcp__nebulosity__describe",
+          "mcp__nebulosity__imports",
+          "mcp__nebulosity__overview",
+          "mcp__nebulosity__search",
+          "mcp__nebulosity__show_on_map"
+        ],
+        "mcpServers": [
+          {
+            "name": "nebulosity",
+            "status": "connected"
+          }
+        ],
+        "plugins": [
+          "cc-plugin-agents-md",
+          "cc-plugin-telemetry",
+          "cc-plugin-plugin-authoring"
+        ],
+        "skills": 19,
+        "subtype": "success",
+        "isError": false,
+        "turns": 2,
+        "durationMs": 5294,
+        "apiMs": 5161,
+        "costUsd": 0.14939449999999999,
+        "usage": {
+          "input": 4,
+          "cacheWrite": 34121,
+          "cacheRead": 74225,
+          "output": 548
+        },
+        "firstCallContext": 52998,
+        "models": {
+          "claude-sonnet-5-5": {
+            "costUsd": 0.14939449999999999,
+            "input": 4,
+            "output": 548,
+            "cacheRead": 74225,
+            "cacheWrite": 34121
+          }
+        },
+        "toolCalls": {
+          "mcp__nebulosity__imports": 1
+        },
+        "nestedToolCalls": {},
+        "toolErrors": 0,
+        "toolSearchCalls": 0,
+        "nebulosityCalls": 1,
+        "utilization": {
+          "fiveHour": 0.12,
+          "sevenDay": 0.63
+        }
+      },
+      "kind": "impact",
+      "repo": "theia",
+      "firstCallContext": 52998
+    },
+    {
+      "score": 1,
+      "pending": null,
+      "none": false,
+      "files": [],
+      "notFiles": [
+        "packages/ai-ide",
+        "packages/plugin-ext",
+        "packages/ai-chat-ui",
+        "packages/debug"
+      ],
+      "recall": null,
+      "precision": null,
+      "hits": null,
+      "missed": [],
+      "extra": [],
+      "steps": null,
+      "valid": null,
+      "problem": null,
+      "unknown": null,
+      "flags": [],
+      "name": "theia-impact-nebulosity-3",
+      "question": "theia-impact",
+      "family": "grepHard",
+      "arm": "nebulosity",
+      "repeat": 3,
+      "tokens": {
+        "input": 4,
+        "cacheWrite": 34118,
+        "cacheRead": 74222,
+        "output": 585,
+        "total": 108929
+      },
+      "mainTokens": {
+        "input": 4,
+        "cacheWrite": 34118,
+        "cacheRead": 74222,
+        "output": 585,
+        "total": 108929
+      },
+      "costUsd": 0.1497522,
+      "wallMs": 8743,
+      "toolCalls": 1,
+      "nebulosityCalls": 1,
+      "turns": 2,
+      "resultNotes": [],
+      "summary": {
+        "model": "claude-sonnet-5-5",
+        "claudeVersion": "2.1.301",
+        "apiKeySource": "none",
+        "permissionMode": "dontAsk",
+        "tools": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "Glob",
+          "Grep",
+          "ListAgents",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "TaskStop",
+          "ToolSearch",
+          "Workflow",
+          "Write",
+          "mcp__nebulosity__architecture",
+          "mcp__nebulosity__calls",
+          "mcp__nebulosity__describe",
+          "mcp__nebulosity__imports",
+          "mcp__nebulosity__overview",
+          "mcp__nebulosity__search",
+          "mcp__nebulosity__show_on_map"
+        ],
+        "mcpServers": [
+          {
+            "name": "nebulosity",
+            "status": "connected"
+          }
+        ],
+        "plugins": [
+          "cc-plugin-agents-md",
+          "cc-plugin-telemetry",
+          "cc-plugin-plugin-authoring"
+        ],
+        "skills": 19,
+        "subtype": "success",
+        "isError": false,
+        "turns": 2,
+        "durationMs": 6593,
+        "apiMs": 6445,
+        "costUsd": 0.1497522,
+        "usage": {
+          "input": 4,
+          "cacheWrite": 34118,
+          "cacheRead": 74222,
+          "output": 585
+        },
+        "firstCallContext": 52995,
+        "models": {
+          "claude-sonnet-5-5": {
+            "costUsd": 0.1497522,
+            "input": 4,
+            "output": 585,
+            "cacheRead": 74222,
+            "cacheWrite": 34118
+          }
+        },
+        "toolCalls": {
+          "mcp__nebulosity__imports": 1
+        },
+        "nestedToolCalls": {},
+        "toolErrors": 0,
+        "toolSearchCalls": 0,
+        "nebulosityCalls": 1,
+        "utilization": {
+          "fiveHour": 0.13,
+          "sevenDay": 0.63
+        }
+      },
+      "kind": "impact",
+      "repo": "theia",
+      "firstCallContext": 52995
+    }
+  ]
+}

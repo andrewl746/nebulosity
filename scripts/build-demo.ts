@@ -85,4 +85,5 @@ if (reasons.length > 0){
     console.error("[build-demo] out/ must not be deployed.");
     process.exit(1);
 }
-console.log("[build-demo] ready. Look at it: npm run serve-demo. Deploy it (the owner): npx vercel deploy out --prod");
+// one archive, not one upload per file: Hobby allows 5,000 file uploads a day, and the export alone is about 7,800 files
+console.log("[build-demo] ready. Look at it: npm run serve-demo. Deploy it (the owner): npx vercel deploy out --prod --archive=tgz");

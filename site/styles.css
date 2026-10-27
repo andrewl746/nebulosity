@@ -1,0 +1,232 @@
+/*
+ * nebulosity.ca, drawn in the Map's own language (app/globals.css): its dot-grid canvas under the page, its boxes for
+ * panels and steps, its import lines between steps, and its overlay controls for buttons. Square corners throughout.
+ * Night-violet surfaces, lavender text, cyan for anything you click and nothing else. IBM Plex, the Map's typeface.
+ */
+@font-face { font-family: "IBM Plex Sans"; src: url("fonts/ibm-plex-sans-latin.woff2") format("woff2"); font-weight: 100 700; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("fonts/ibm-plex-mono-400-latin.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+
+:root {
+  color-scheme: dark;
+  --canvas: #0E0A1C;        /* the page: the Map's background */
+  --grid: #262039;          /* the canvas's faint dot grid */
+  --surface: #22193F;       /* a box's fill: panel headers, step numbers */
+  --panel: #140E28;         /* a panel's body */
+  --hairline: #261B45;      /* dividers inside a panel */
+  --border: #4B3B85;        /* a box's border: panels, screenshots, the chart's baseline */
+  --neutral-edge: #7262A6;  /* an import line: the steps' chain */
+  --text: #F1EEF8;          /* headings, names */
+  --text-body: #D3C7EE;     /* paragraphs */
+  --text-2: #B9A9DE;        /* secondary text, captions, notes */
+  --code: #D8CAFF;          /* code in a sentence */
+  --code-bg: #2A1B52;       /* its chip */
+  --control: #67E8F9;       /* cyan: links and buttons */
+  --control-hover: #A5F3FC;
+  --overlay: #2A1F52;       /* the Map's controls: secondary buttons, tags, the viewer's close */
+  --overlay-line: #3A2D6B;
+  --series-a: #9D7CF0;      /* the chart's two series, checked together with the dataviz palette validator (dark) */
+  --series-b: #685CA0;
+  --gutter: clamp(16px, 4vw, 40px);
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html { scrollbar-width: thin; scrollbar-color: var(--border) transparent; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; color: var(--text-body);
+  background: var(--canvas) radial-gradient(circle, var(--grid) 1.2px, transparent 1.6px) 0 0 / 24px 24px;
+  font: 400 17px/1.6 "IBM Plex Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; height: auto; }
+figure { margin: 0; }
+a { color: var(--control); text-decoration: none; transition: color 120ms ease-out; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--control); outline-offset: 3px; }
+button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+p { text-wrap: pretty; }
+code { font-family: var(--mono); font-size: 0.9em; color: var(--code); background: var(--code-bg); padding: 0.1em 0.3em; white-space: nowrap; }
+strong { color: var(--text); font-weight: 500; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 var(--gutter); }
+
+/* the bar along the top */
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 17px; font-weight: 500; }
+.brand img { width: 26px; height: 26px; }
+.nav ul { display: flex; gap: 28px; margin: 0; padding: 0; list-style: none; font-size: 15px; }
+@media (max-width: 640px) { .nav .wide { display: none; } .nav ul { gap: 20px; } }
+
+/* the first screen */
+.hero { padding-top: 64px; }
+h1, h2 { text-wrap: balance; }
+h1 {
+  margin: 0; max-width: 15em; color: var(--text); font-weight: 500;
+  font-size: clamp(2.25rem, 1.2rem + 3vw, 4rem); line-height: 1.06; letter-spacing: -0.025em;
+}
+.lede { margin: 28px 0 0; max-width: 38em; font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem); }
+.lede strong { white-space: nowrap; }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; margin-top: 36px; }
+.note { margin: 0; font-size: 14.5px; color: var(--text-2); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.button {
+  display: inline-flex; align-items: center; height: 46px; padding: 0 20px; border: 1px solid transparent; font-size: 16px; font-weight: 500;
+  transition-property: background-color, color, scale; transition-duration: 120ms, 120ms, 150ms; transition-timing-function: ease-out;
+}
+.button.primary { background: var(--control); color: var(--canvas); }
+.button.secondary { border-color: var(--overlay-line); background: var(--overlay); color: var(--control); }
+
+/* a screenshot in its frame */
+.shot { margin: 56px 0 0; }
+.frame { display: block; overflow: hidden; border: 1px solid var(--border); background: var(--panel); line-height: 0; transition: border-color 120ms ease-out; }
+.frame img { display: block; width: 100%; }
+.shot figcaption { margin-top: 14px; font-size: 14px; line-height: 1.5; color: var(--text-2); }
+
+/* the sections below: a heading, its one line just under it, then the section's panels */
+section.part { padding-top: clamp(80px, 9vw, 120px); }
+h2 {
+  margin: 0; max-width: 20em; color: var(--text); font-weight: 500;
+  font-size: clamp(1.75rem, 1.3rem + 1.2vw, 2.375rem); line-height: 1.15; letter-spacing: -0.015em;
+}
+h3 { margin: 0; color: var(--text); font-size: 17px; font-weight: 500; line-height: 1.35; }
+.section-head { display: grid; gap: 14px; max-width: 46em; margin-bottom: 32px; }
+.section-head p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.2vw, 1.15rem); }
+
+/* a panel is a box on the Map: its border, a header band in a box's fill with a count at its right, as a box shows its files */
+.cards { display: grid; gap: 20px; }
+.card { overflow: hidden; border: 1px solid var(--border); background: var(--panel); transition: border-color 120ms ease-out; }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.card-note { margin-left: auto; font-size: 14px; color: var(--text-2); }
+.card-foot { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 16px 24px; border-top: 1px solid var(--hairline); font-size: 15px; color: var(--text-2); }
+@media (max-width: 760px) { .card-head, .card-foot { padding-left: 18px; padding-right: 18px; } }
+
+/* the Map's screenshot, with the live demo along its bottom */
+.shot-card .frame { border: 0; background: none; }
+.shot-card:has(a.frame:focus-visible) { outline: 2px solid var(--control); outline-offset: 3px; }
+.shot-card a.frame:focus-visible { outline: none; }
+.demo-foot { align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; border-top-color: var(--border); }
+
+/* the evaluation: one row per kind of question, a bar per codebase, longer is faster */
+.chart-head .legend { margin-left: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 0; padding: 0; list-style: none; font-size: 14px; color: var(--text-2); }
+.key { display: inline-block; width: 10px; height: 10px; margin-right: 8px; }
+.key.a, .bar.a .fill { background: var(--series-a); }
+.key.b, .bar.b .fill { background: var(--series-b); }
+.speeds { margin: 0; padding: 0; list-style: none; }
+.speeds li { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 10px 40px; align-items: center; padding: 18px 24px; }
+.speeds li + li { border-top: 1px solid var(--hairline); }
+.speeds .q { color: var(--text); line-height: 1.4; }
+.bars { display: grid; gap: 6px; padding: 2px 0; border-left: 1px solid var(--border); }
+.bar { display: flex; align-items: center; gap: 10px; min-height: 18px; }
+/* 5× fills the space the value's label leaves; the bar starts on the baseline */
+.fill { width: calc((100% - 4.5em) * var(--x) / 5); height: 10px; }
+.val { font-size: 14.5px; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.val .mark { margin-left: 1px; color: var(--text-2); }
+/* the hero's marker jumps to the note under the chart, which shows it was the one asked for */
+.note-mark { margin-left: 1px; font-weight: 400; }
+#later { scroll-margin-top: 24px; transition: color 120ms ease-out; }
+#later:target { color: var(--text); }
+.chart-foot { flex-direction: column; gap: 6px; }
+.chart-foot p { margin: 0; }
+.chart-foot .score { color: var(--text-body); font-size: 16px; }
+.chart-foot .fine { max-width: 56em; font-size: 14.5px; color: var(--text-2); }
+@media (max-width: 760px) {
+  .card-head.chart-head .legend { width: 100%; margin-left: 0; }
+  .speeds li { grid-template-columns: minmax(0, 1fr); padding: 16px 18px; }
+}
+
+/* install: what it needs, then a panel per part, each step's name on the left and its command on the right */
+.needs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.needs > span { font-size: 15px; color: var(--text-2); }
+.needs ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.needs li { padding: 3px 12px; border: 1px solid var(--overlay-line); background: var(--overlay); font-size: 14.5px; color: var(--text-body); }
+.rows { margin: 0; padding: 0; list-style: none; }
+.item { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px 40px; align-items: start; padding: 18px 24px; }
+.item + .item { border-top: 1px solid var(--hairline); }
+.step { display: flex; align-items: flex-start; gap: 14px; }
+/* each step's number is a box, and an import line with its arrowhead runs from one to the next, as on the Map */
+.num {
+  position: relative; flex: none; display: grid; place-items: center; width: 26px; height: 26px;
+  border: 1px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 500; color: var(--text);
+}
+.chain .item { position: relative; }
+.chain .item:not(:last-child)::after {
+  content: ""; position: absolute; left: 36px; top: 44px; bottom: -13px; width: 1.5px; background: var(--neutral-edge);
+}
+.chain .item + .item .num::before {
+  content: ""; position: absolute; top: -7px; left: 50%; translate: -50% 0;
+  border: 4.5px solid transparent; border-top: 6px solid var(--neutral-edge); border-bottom: 0;
+}
+.title { margin: 0; color: var(--text); font-weight: 500; line-height: 1.5; }
+.hint { margin: 2px 0 0; font-size: 14.5px; line-height: 1.45; color: var(--text-2); }
+.cmd { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 8px 10px 8px 16px; border: 1px solid var(--hairline); background: var(--canvas); }
+/* a long command wraps rather than hiding its end */
+.cmd pre { flex: 1; margin: 0; font: 400 14.5px/1.5 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd.static { flex-wrap: wrap; row-gap: 6px; padding-top: 10px; padding-bottom: 10px; color: var(--text); font-size: 15px; }
+.cmd .label { padding: 1px 8px; background: var(--code-bg); font-size: 13px; color: var(--code); white-space: nowrap; }
+.copy { flex: none; padding: 0 8px; border: 0; background: none; color: var(--control); font-size: 13.5px; line-height: 28px; transition: background-color 120ms ease-out; }
+.asks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 20px 24px 24px; list-style: none; }
+.asks li { padding: 14px 18px; border: 1px solid var(--hairline); background: var(--canvas); color: var(--text); line-height: 1.5; }
+.asks li::before { content: ">"; margin-right: 10px; font-family: var(--mono); color: var(--text-2); }
+@media (max-width: 760px) {
+  .item { grid-template-columns: minmax(0, 1fr); padding: 16px 18px; }
+  /* the command sits under its step's name, so the chain's line runs clear of it */
+  .chain .cmd { margin-left: 26px; }
+  .chain .item:not(:last-child)::after { left: 30px; top: 42px; bottom: -11px; }
+  .asks { grid-template-columns: minmax(0, 1fr); padding: 16px 18px 18px; }
+}
+
+/* two short facts, side by side in one panel */
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; }
+.facts > div { padding: 20px 24px; }
+.facts > div + div { border-left: 1px solid var(--hairline); }
+.facts p { margin: 6px 0 0; font-size: 15.5px; }
+@media (max-width: 760px) {
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts > div { padding: 18px; }
+  .facts > div + div { border-left: 0; border-top: 1px solid var(--hairline); }
+}
+
+/* a screenshot full size, over the page: the ×, Escape or a click outside the image closes it */
+.lightbox {
+  width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; border: 0; background: transparent;
+  padding: 76px var(--gutter) var(--gutter); overscroll-behavior: contain;
+}
+.lightbox[open] { display: grid; place-items: center; }
+.lightbox::backdrop { background: rgb(14 10 28 / 0.94); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.lightbox img {
+  max-width: 100%; max-height: calc(100dvh - 76px - var(--gutter)); width: auto; height: auto;
+  border: 1px solid var(--border); background: var(--panel); transition: opacity 160ms ease-out;
+}
+@starting-style { .lightbox[open] img { opacity: 0; scale: 0.98; } }
+.lightbox .close {
+  position: fixed; top: 16px; right: var(--gutter); display: grid; place-items: center; width: 44px; height: 44px; padding: 0 0 3px;
+  border: 1px solid var(--overlay-line); background: var(--overlay); color: var(--control); font-size: 28px; line-height: 1;
+  transition: background-color 120ms ease-out;
+}
+html:has(.lightbox[open]) { overflow: hidden; }
+/* on a phone the page already shows the screenshot at the screen's width, so full size is wider than the screen: swipe around it */
+@media (max-width: 700px) {
+  .lightbox { padding: 76px 16px 16px; overflow: auto; }
+  .lightbox[open] { justify-items: start; }
+  .lightbox img { width: 1000px; max-width: none; max-height: none; }
+}
+
+footer { margin-top: clamp(96px, 10vw, 140px); padding: 32px 0 48px; border-top: 1px solid var(--border); background: var(--canvas); font-size: 14.5px; color: var(--text-2); }
+footer .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; }
+footer ul { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 0; padding: 0; list-style: none; }
+footer p { margin: 20px 0 0; max-width: 60em; }
+
+/* hover only where there's a pointer to hover with, so a tap never leaves a control looking held */
+@media (hover: hover) {
+  a:hover { color: var(--control-hover); }
+  .brand:hover { color: var(--text); }
+  .button.primary:hover { background: var(--control-hover); color: var(--canvas); }
+  .button.secondary:hover, .copy:hover, .lightbox .close:hover { background: var(--overlay-line); }
+  a.frame:hover, .shot-card:has(a.frame:hover) { border-color: var(--control); }
+}
+
+/* movement only for people who haven't asked for less; a fade stays */
+@media (prefers-reduced-motion: no-preference) {
+  .button:active { scale: 0.96; }
+  .lightbox img { transition: opacity 160ms ease-out, scale 160ms ease-out; }
+}

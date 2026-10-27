@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 680">
+<title>Nebulosity</title>
+<defs>
+<linearGradient id="tile" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="#4c1d95"/>
+<stop offset="55%" stop-color="#1e0a3c"/>
+<stop offset="100%" stop-color="#0a0616"/>
+</linearGradient>
+<radialGradient id="wash" cx="38%" cy="34%" r="60%">
+<stop offset="0%" stop-color="#a855f7" stop-opacity="0.65"/>
+<stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+</radialGradient>
+</defs>
+
+<rect x="0" y="0" width="680" height="680" rx="150" fill="url(#tile)"/>
+<rect x="0" y="0" width="680" height="680" rx="150" fill="url(#wash)"/>
+
+<circle cx="425" cy="193" r="90" fill="#22d3ee" opacity="0.16"/>
+
+<line x1="340" y1="340" x2="425" y2="193" stroke="#e9d5ff" stroke-width="9" stroke-linecap="round" opacity="0.9"/>
+<line x1="340" y1="340" x2="425" y2="487" stroke="#e9d5ff" stroke-width="9" stroke-linecap="round" opacity="0.9"/>
+<line x1="340" y1="340" x2="170" y2="340" stroke="#e9d5ff" stroke-width="9" stroke-linecap="round" opacity="0.9"/>
+
+<circle cx="425" cy="193" r="30" fill="#c084fc"/>
+<circle cx="425" cy="487" r="30" fill="#c084fc"/>
+<circle cx="170" cy="340" r="26" fill="#c084fc"/>
+
+<circle cx="340" cy="340" r="95" fill="#67e8f9" opacity="0.3"/>
+<circle cx="340" cy="340" r="62" fill="#f0fdff"/>
+<circle cx="340" cy="340" r="62" fill="none" stroke="#a855f7" stroke-width="6"/>
+</svg>

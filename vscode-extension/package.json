@@ -3,13 +3,29 @@
   "displayName": "Nebulosity",
   "description": "The Nebulosity Map beside your code: the repo's folders, files and imports, following the editor. Needs the nebulosity package (npm install -g nebulosity).",
   "publisher": "andrewl746",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "license": "MIT",
+  "author": "Andrew Li",
   "private": true,
   "repository": {
     "type": "git",
     "url": "https://github.com/andrewl746/Nebulosity"
   },
+  "homepage": "https://nebulosity.ca",
+  "bugs": {
+    "url": "https://github.com/andrewl746/nebulosity/issues"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "keywords": [
+    "claude-code",
+    "mcp",
+    "codebase",
+    "code-map",
+    "imports",
+    "dependency-graph"
+  ],
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.105.0"

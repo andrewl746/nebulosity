@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nebulosity: a live map of your codebase</title>
+<meta name="description" content="Nebulosity indexes every import in a repository so Claude Code can answer questions that follow imports through many files with one tool call, and shows you the same structure on a Map.">
+<link rel="canonical" href="https://nebulosity.ca/">
+<meta name="theme-color" content="#0E0A1C">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nebulosity.ca/">
+<meta property="og:title" content="Nebulosity">
+<meta property="og:description" content="A live map of your codebase, for you and Claude Code.">
+<meta property="og:image" content="https://nebulosity.ca/images/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="images/icon-180.png">
+<link rel="preload" href="fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="wrap nav">
+  <a class="brand" href="./"><img src="icon.svg" alt="" width="26" height="26">Nebulosity</a>
+  <nav aria-label="Main">
+    <ul>
+      <li><a href="https://demo.nebulosity.ca">Live Demo</a></li>
+      <li class="wide"><a href="#evaluation">Evaluation</a></li>
+      <li class="wide"><a href="#install">Install</a></li>
+      <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <h1>A live map of your codebase, for you and Claude Code.</h1>
+    <p class="lede">Nebulosity indexes every import in your repo, so Claude Code can answer questions that span many files in one call. In tests, that made it <strong>up to 4.4× faster</strong>, and <strong>up to 3.7× faster<a class="note-mark" href="#later" aria-label="measured later: see the note under the chart">*</a></strong> on Theia, a codebase Nebulosity was never adjusted for. Every answer was right.</p>
+    <div class="cta">
+      <div class="actions">
+        <a class="button primary" href="https://demo.nebulosity.ca">Try the live demo</a>
+        <a class="button secondary" href="https://github.com/andrewl746/Nebulosity">View on GitHub</a>
+      </div>
+      <p class="note">Free and open source. Without an API key, none of your code leaves your machine.</p>
+    </div>
+    <figure class="shot">
+      <a class="frame" href="images/claude-map-1598.webp" title="Show the screenshot full size">
+        <img src="images/claude-map-1598.webp" srcset="images/claude-map-960.webp 960w, images/claude-map-1598.webp 1598w" sizes="(min-width: 1240px) 1120px, 100vw" width="1598" height="945" fetchpriority="high" alt="In VS Code, Claude Code is asked which folders inside src/vs import src/vs/platform/terminal/common/terminal.ts. It answers in the terminal, and the Map above highlights the five folders that do, workbench, platform, sessions, server and code, while base and editor stay plain">
+      </a>
+      <figcaption>Ask Claude Code a question, and it points at the answer on the Map.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap part" id="map">
+    <div class="section-head">
+      <h2>See the same imports on the Map</h2>
+      <p>One folder at a time, with lines for what imports what. Click any box to see what it uses and what uses it, or press Ctrl K to search.</p>
+    </div>
+    <figure class="card shot-card">
+      <a class="frame" href="images/map-vscode-1907.webp" title="Show the screenshot full size">
+        <img src="images/map-vscode-1907.webp" srcset="images/map-vscode-960.webp 960w, images/map-vscode-1907.webp 1907w" sizes="(min-width: 1240px) 1120px, 100vw" width="1907" height="998" loading="lazy" alt="The Map on VS Code's src/vs/platform folder: boxes for its folders with their file counts, the first of three pages">
+      </a>
+      <figcaption class="card-foot demo-foot">
+        <span><strong>The live demo</strong> is the Map on VS Code's own repo, all 15,040 files, with nothing to install.</span>
+        <a class="button secondary" href="https://demo.nebulosity.ca">Try the live demo</a>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap part" id="evaluation">
+    <div class="section-head">
+      <h2>Tested against Claude Code on its own</h2>
+      <p>The same questions, with and without Nebulosity, on three large TypeScript codebases: 378 runs, each checked against a reference answer.</p>
+    </div>
+
+    <figure class="card chart">
+      <div class="card-head chart-head">
+        <h3 id="chart-title">How many times faster, by question</h3>
+        <ul class="legend" aria-hidden="true">
+          <li><span class="key a"></span>VS Code and AFFiNE</li>
+          <li><span class="key b"></span>Theia, never adjusted for</li>
+        </ul>
+      </div>
+      <ul class="speeds" aria-labelledby="chart-title">
+        <li>
+          <span class="q">What could changing this file affect?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 4.3" title="VS Code and AFFiNE: 4.3× faster, 2.1× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">4.3×</span></span>
+            <span class="bar b" style="--x: 3.7" title="Theia: 3.7× faster, 1.2× cheaper, measured later with the same setup"><span class="sr-only">Theia, measured later:</span><span class="fill"></span><span class="val">3.7×<span class="mark" aria-hidden="true">*</span></span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">How does this entry point end up loading that file?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 4.4" title="VS Code and AFFiNE: 4.4× faster, 2.6× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">4.4×</span></span>
+            <span class="bar b" style="--x: 3.2" title="Theia: 3.2× faster, 1.2× cheaper"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">3.2×</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">Which entry points end up loading this file?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 4.2" title="VS Code and AFFiNE: 4.2× faster, 1.6× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">4.2×</span></span>
+            <span class="bar b" style="--x: 2.8" title="Theia: 2.8× faster, about the same cost"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">2.8×</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">Which files depend on this one, directly or not?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 2.3" title="VS Code and AFFiNE: 2.3× faster, 1.4× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">2.3×</span></span>
+            <span class="bar b" style="--x: 2.0" title="Theia: 2.0× faster, 1.3× cheaper"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">2.0×</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="q">Is this file part of an import cycle?</span>
+          <span class="bars">
+            <span class="bar a" style="--x: 2.3" title="VS Code and AFFiNE: 2.3× faster, 1.5× cheaper"><span class="sr-only">VS Code and AFFiNE:</span><span class="fill"></span><span class="val">2.3×</span></span>
+            <span class="bar b" style="--x: 1.5" title="Theia: 1.5× faster, 1.1× cheaper"><span class="sr-only">Theia:</span><span class="fill"></span><span class="val">1.5×</span></span>
+          </span>
+        </li>
+      </ul>
+      <figcaption class="card-foot chart-foot">
+        <p class="score">
+          In the main test, <strong>42 of 42</strong> answers to these questions were fully right with Nebulosity, and 29 of 42 alone.
+        </p>
+        <p class="fine">Medians of 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. The question types were grouped after the runs; simpler ones, like listing a file's direct importers, came out about even. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
+        <p class="fine" id="later">* Theia's 3.7×, for what a change could affect, was measured later (26 October 2026) with the same setup. 3 of 3 answers were fully right with Nebulosity, 0 of 3 alone.</p>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap part" id="install">
+    <div class="section-head">
+      <h2>Install</h2>
+      <div class="needs">
+        <span>You'll need</span>
+        <ul>
+          <li>Node 24 or later</li>
+          <li>git</li>
+          <li>Claude Code 2.1.300 or later</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <header class="card-head">
+          <h3>In your terminal</h3>
+          <span class="card-note">4 steps</span>
+        </header>
+        <ol class="rows chain">
+          <li class="item">
+            <div class="step"><span class="num">1</span><div><p class="title">Install the package</p></div></div>
+            <div class="cmd"><pre>npm install -g nebulosity</pre></div>
+          </li>
+          <li class="item">
+            <div class="step"><span class="num">2</span><div><p class="title">Index your repo</p><p class="hint">From its root folder. Free.</p></div></div>
+            <div class="cmd"><pre>nebulosity index .</pre></div>
+          </li>
+          <li class="item">
+            <div class="step"><span class="num">3</span><div><p class="title">Open the Map</p><p class="hint">It keeps running, at localhost:3000.</p></div></div>
+            <div class="cmd"><pre>nebulosity map</pre></div>
+          </li>
+          <li class="item">
+            <div class="step"><span class="num">4</span><div><p class="title">Connect Claude Code</p><p class="hint">In a second terminal, same folder.</p></div></div>
+            <div class="cmd"><pre>nebulosity setup</pre></div>
+          </li>
+        </ol>
+        <p class="card-foot">
+          <span>If something seems off, <code>nebulosity doctor</code> says what's missing. Every command is in <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">the guide</a>.</span>
+        </p>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <h3>In VS Code</h3>
+          <span class="card-note">2 steps, after the first two above</span>
+        </header>
+        <ol class="rows chain">
+          <li class="item">
+            <div class="step"><span class="num">1</span><div><p class="title">Install the extension</p><p class="hint">From the <a href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Marketplace</a>, or in a terminal.</p></div></div>
+            <div class="cmd"><pre>code --install-extension andrewl746.nebulosity-vscode</pre></div>
+          </li>
+          <li class="item">
+            <div class="step"><span class="num">2</span><div><p class="title">Open the Map</p><p class="hint">It follows the file you have open.</p></div></div>
+            <div class="cmd static"><span class="label">Command Palette</span><span>Nebulosity: Show Map</span></div>
+          </li>
+        </ol>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <h3>Then ask Claude Code</h3>
+          <span class="card-note">4 examples</span>
+        </header>
+        <ul class="asks">
+          <li>What could break if <code>src/vs/base/common/event.ts</code> changes?</li>
+          <li>How does <code>main.ts</code> end up loading <code>terminal.ts</code>?</li>
+          <li>Which entry points load this file?</li>
+          <li>Are there import cycles in <code>src/vs/platform</code>?</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="card facts">
+      <div>
+        <h3>Seven languages</h3>
+        <p>TypeScript, JavaScript, Python, Go, Java, C# and Rust.</p>
+      </div>
+      <div>
+        <h3>AI summaries, optional</h3>
+        <p>With an Anthropic API key, a summary of every file and folder for about $1 per 1,000 files. It sends your code to Anthropic, and asks before spending.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <a class="brand" href="./"><img src="icon.svg" alt="" width="26" height="26">Nebulosity</a>
+      <ul>
+        <li><a href="https://demo.nebulosity.ca">Live Demo</a></li>
+        <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
+        <li><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Evaluation</a></li>
+        <li><a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">Guide</a></li>
+      </ul>
+    </div>
+    <p>MIT License. Built by Andrew Li. The demo's data comes from VS Code at commit <code>cc3fec88</code> (MIT, © Microsoft Corporation).</p>
+  </div>
+</footer>
+
+<dialog class="lightbox" aria-label="Screenshot, full size">
+  <button class="close" type="button" aria-label="Close">×</button>
+  <img alt="">
+</dialog>
+
+<script>
+  // A screenshot opens full size over the page, not as a page of its own; the ×, Escape or a click outside the image
+  // closes it. A Ctrl-click or a middle click still opens it in a new tab, and without scripts the link opens it as before.
+  const viewer = document.querySelector(".lightbox");
+  const viewerImage = viewer.querySelector("img");
+  for (const link of document.querySelectorAll("a.frame")) {
+    link.addEventListener("click", (event) => {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      viewerImage.src = link.href;
+      viewerImage.alt = link.querySelector("img").alt;
+      viewer.showModal();
+      // where it's wider than the screen (a phone), start from its middle
+      viewer.scrollTo(0, 0);
+      viewerImage.decode().catch(() => {}).then(() => { viewer.scrollLeft = (viewer.scrollWidth - viewer.clientWidth) / 2; });
+    });
+  }
+  viewer.addEventListener("click", (event) => {
+    if (event.target !== viewerImage) viewer.close();
+  });
+
+  // A Copy button on each command (added here, so a page without scripts shows none): it copies that one line. Where the
+  // browser refuses the clipboard, the line is selected instead, so it can be copied by hand.
+  for (const item of document.querySelectorAll(".cmd:not(.static)")) {
+    const pre = item.querySelector("pre");
+    const button = document.createElement("button");
+    button.className = "copy";
+    button.type = "button";
+    button.textContent = "Copy";
+    button.setAttribute("aria-label", "Copy " + pre.textContent);
+    button.addEventListener("click", async () => {
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(pre.textContent);
+        copied = true;
+      } catch {
+        getSelection().selectAllChildren(pre);
+        try { copied = document.execCommand("copy"); } catch { copied = false; }
+      }
+      button.textContent = copied ? "Copied" : "Selected";
+      setTimeout(() => { button.textContent = "Copy"; }, 1600);
+    });
+    item.append(button);
+  }
+</script>
+</body>
+</html>

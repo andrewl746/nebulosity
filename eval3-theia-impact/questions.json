@@ -1,0 +1,33 @@
+{
+  "name": "Eval #3, Theia addendum (2026-10-26)",
+  "repos": {
+    "theia": {
+      "slug": "eclipse-theia/theia",
+      "commit": "81ea5f939c40c905de91083d07e284bfd7437fac"
+    }
+  },
+  "formats": {
+    "list": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "chain": "End with a line that says ANSWER: and then either the word none, or the chain as file paths relative to the repository root, one per line, from the first file to the last, where each file imports the next.",
+    "bigPicture": "Answer in at most 400 words.",
+    "impact": "End with a line that says ANSWER: and then one line for each folder named above, in the same order, as the folder, a colon and the number of files, then a line elsewhere: and the number of files outside them, then a line total: and the number of files in all.",
+    "cycle": "End with a line that says ANSWER: and then either the word none, or the cycle as file paths relative to the repository root, one per line, starting and ending with <file>, where each file imports the next.",
+    "pairs": "End with a line that says ANSWER: and then one line for each pair, as the importing folder's name, then ->, then the imported folder's name.",
+    "callers": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "breaks": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "adopt": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "injects": "End with a line that says ANSWER: and then every such file's path relative to the repository root, one per line, with nothing after the list.",
+    "task": "End with a line that says ANSWER CHANGE: and then every file to change, one path per line relative to the repository root; then a line that says ANSWER TESTS: and then every test file to run, one per line, with nothing after the list."
+  },
+  "questions": [
+    {
+      "id": "theia-impact",
+      "repo": "theia",
+      "kind": "impact",
+      "family": "impact",
+      "prompt": "If I change `packages/core/src/browser/tree/tree-navigation.ts`, which code could it affect? Count every file that depends on it, directly or through other files, and say how many of those files are inside each of these folders: `packages/ai-ide`, `packages/plugin-ext`, `packages/ai-chat-ui`, `packages/debug`, and how many are elsewhere. Count a file if any of its import, export … from, side-effect import, import() or require() statements refers to it; type-only imports and test files count.",
+      "truth": "eval3-theia-impact/truth/theia-impact.json",
+      "origin": "addendum"
+    }
+  ]
+}

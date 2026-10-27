@@ -1,0 +1,26 @@
+{
+  "name": "Eval #3, Theia addendum (2026-10-26)",
+  "claudeVersion": "2.1.301",
+  "pins": {
+    "model": "claude-sonnet-5-5",
+    "effort": "medium",
+    "maxTurns": 80,
+    "maxBudgetUsd": 4,
+    "sessionMaxBudgetUsd": 10
+  },
+  "repos": {
+    "theia": {
+      "path": "../theia",
+      "commit": "81ea5f939c40c905de91083d07e284bfd7437fac",
+      "slug": "eclipse-theia/theia"
+    }
+  },
+  "arms": [
+    "baseline",
+    "nebulosity"
+  ],
+  "repeats": 3,
+  "scripts": true,
+  "sentence": "rules",
+  "pilot": []
+}
