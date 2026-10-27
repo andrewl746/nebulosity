@@ -221,7 +221,7 @@ describe("main", () => {
         expect(await main(["serve"])).toBe(1);
         expect(printed(errors)).toBe('nebulosity has no command "serve". Commands: index, summarize, map, mcp, setup, doctor.');
         expect(await main(["--version"])).toBe(0);
-        expect(printed(logs)).toBe("1.0.0");
+        expect(printed(logs)).toBe("1.0.1");
     });
 });
 
