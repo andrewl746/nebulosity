@@ -1,55 +1,114 @@
-// The Map at every window size (docs/VISUAL_REFRESH.md, "Narrow windows"): headless Chrome over the DevTools protocol
-// opens the running Map at a grid of sizes, walks it through its states (panels, menus, dialogs, the activity bar),
-// and checks that nothing is cut off out of reach, nothing covers a control, no text is clipped unreadably, and the
-// page scrolls only below the floor. Plain Node 24 (its global WebSocket and fetch), no dependency.
+// The Map at every window size (the Workbench layout, app/map/shell.ts): headless Chrome over the DevTools protocol
+// opens the running Map at a grid of sizes and screen scales, walks it through its states (the inspector in each of its
+// places, menus, dialogs, Claude Code's activity), and checks that nothing is cut off out of reach, nothing covers a
+// control, no text is clipped unreadably, the layout is the one shell.ts gives that window, and the page never scrolls
+// sideways (down only in a window shorter than the layout's least height). Plain Node 24 (its global WebSocket and
+// fetch, and its own TypeScript stripping for shell.ts), no dependency.
 //
-//   npm run check-layout -- http://127.0.0.1:3002 [--shots <dir>] [--all-shots] [--sizes 1440x900,200x260] [--states top,file] [--embed]
+//   npm run check-layout -- http://127.0.0.1:3002 [--shots <dir>] [--all-shots] [--sizes 1440x900,1440x900@1.5,200x260] [--dpr 1,2] [--states top,file] [--embed]
 //
-// --embed walks the Map as VS Code's panel shows it (`embed=vscode` in every address), with its Back button.
+// A size is WIDTHxHEIGHT in CSS px, with @ and a device pixel ratio for a high-DPI screen. Browser zoom is the same as a
+// smaller window at a higher ratio: 1440 × 900 at 125% zoom is 1152x720@1.25. --dpr runs every size at each ratio given.
+// --embed walks the Map as VS Code's panel shows it (`embed=vscode` in every address), over VS Code's own sizes.
 // It never touches port 3000 (the owner's Map), and it posts its live events only to the server it was given. The Map
 // must be showing the VS Code demo repo: the states are VS Code's own folders and files.
 // Each size gets a fresh tab, and the states inside it are reached in-app (pushState + popstate), as the Map's own
-// navigation does: many full page loads in one tab used to stall the Map's live channel. A last walk resizes one tab
-// live, the way VS Code's panel is dragged (skipped when --sizes or --states narrows the run, unless --resize asks).
+// navigation does: many full page loads in one tab used to stall the Map's live channel. Last, two walks resize one tab
+// live, the way a window or VS Code's panel is dragged (skipped when --sizes or --states narrows the run, unless --resize
+// asks).
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const USAGE = "usage: npm run check-layout -- <base-url> [--shots <dir>] [--all-shots] [--sizes WxH,...] [--states name,...] [--resize] [--embed]";
+const USAGE = "usage: npm run check-layout -- <base-url> [--shots <dir>] [--all-shots] [--sizes WxH[@dpr],...] [--dpr r,...] [--states name,...] [--resize] [--embed]";
 /** Every address ends with `embed=vscode` (--embed): the Map as VS Code's panel shows it, Back button and all. */
 let EMBED = false;
 
-/** Normal sizes, in between, the floor and around it, below it, and short windows; 200 × 260 is the smallest asked for. */
+/**
+ * The Map's own layout rules (app/map/shell.ts, pure), so the check expects of each window exactly what the Map was told
+ * to do there. Node strips the file's types itself; while it does, it warns that package.json names no module type,
+ * which says nothing about the check, so that one warning is kept out of the output.
+ */
+const { shellLayout } = await (async () => {
+    const emit = process.emitWarning;
+    process.emitWarning = () => {};
+    try{
+        return await import(new URL("../app/map/shell.ts", import.meta.url).href);
+    } finally {
+        process.emitWarning = emit;
+    }
+})();
+
+/**
+ * The browser's sizes: the normal ones, each at the screen scales Windows offers (125%, 150%, 200%), and browser zoom at
+ * 125% and 200% of 1440 × 900; then widths in between, a phone and VS Code's side splits, then short windows (VS Code's
+ * bottom panel among them) down to 200 × 200, where the page has to scroll down.
+ */
 const SIZES = [
-    "1440x900", "1100x800",
-    "900x700", "768x800", "640x700", "520x700", "440x700", "400x800",
-    "360x640", "320x600", "280x600", "240x600", "200x600",
-    "1440x400", "900x320", "640x260", "400x400", "360x320", "280x260", "200x260",
+    "3840x2160",
+    "1920x1080", "1920x1080@1.25", "1920x1080@1.5", "1920x1080@2",
+    "1440x900", "1440x900@1.25", "1440x900@1.5", "1440x900@2",
+    "1100x800", "1100x800@1.25", "1100x800@1.5", "1100x800@2",
+    "1152x720@1.25", "720x450@2",
+    "900x700", "768x800", "640x700", "520x700", "440x700", "420x900", "400x800", "390x844",
+    "360x640", "320x600", "300x900", "280x600", "240x600", "200x600",
+    "1600x300", "1600x250", "1440x400", "900x320", "700x400", "640x260", "400x400", "360x320", "280x260", "200x260", "200x200",
 ];
-/** The sizes whose screenshots are saved without --all-shots: both normal sizes (compared before/after) and four narrower ones. */
-const SHOT_SIZES = new Set(["1440x900", "1100x800", "768x800", "400x800", "240x600", "200x260"]);
-/** At or above this the page must not scroll at all (the Map's look is complete there). */
-const NORMAL = { width: 1100, height: 700 };
+/** VS Code's panel (--embed): moved to the editor area, the bottom panel at a few heights, the side splits, dragged small. */
+const EMBED_SIZES = [
+    "1440x900", "1600x300", "1600x300@1.5", "1600x250", "1440x400", "900x320", "700x400", "640x260",
+    "420x900", "300x900", "400x400", "200x260",
+];
+/** The sizes whose screenshots are saved without --all-shots: the normal sizes and a few narrower ones. */
+const SHOT_SIZES = new Set(["1920x1080", "1440x900", "1100x800", "768x800", "390x844", "1600x250", "700x400", "240x600", "200x260"]);
+
+/** A size as given: "1440x900", or "1440x900@1.5" at a device pixel ratio. */
+function parseSize(spec){
+    const m = /^(\d+)x(\d+)(?:@(\d+(?:\.\d+)?))?$/.exec(spec);
+    if (!m) fail(`a size is WIDTHxHEIGHT, like 400x260, with @ and a pixel ratio if it isn't 1, like 1440x900@1.5: ${spec}`);
+    const dpr = m[3] === undefined ? 1 : Number(m[3]);
+    if (!(dpr >= 0.5 && dpr <= 4)) fail(`a pixel ratio is between 0.5 and 4: ${spec}`);
+    return { spec, width: Number(m[1]), height: Number(m[2]), dpr };
+}
+
+/** The layout shell.ts gives a window (the page's own width, without a scrollbar), with or without a selection. */
+const layoutAt = (width, height, selected) => shellLayout({ width, height, embedded: EMBED, selected });
+
+/** The toolbar's … menu has something in it (MapToolbar's menu): short of room, short of height, or holding help. */
+const toolbarMenuAt = ({ width, height }) => {
+    const shell = layoutAt(width, height, false);
+    return shell.toolbarInHeader || shell.canvasWidth < 470 || EMBED || width < 480;
+};
 
 const FILE = "src/vs/base/common/event.ts";
+const DEEP = "src/vs/workbench/contrib/terminal/browser";
 /**
  * The states, in the order one tab walks them. `place` is where the Map goes first; `select` clicks a box; `act` does
- * the rest in the page. The activity state comes late: its tool calls stay in the bar for the rest of the tab's life.
+ * the rest in the page. `when` says at which sizes a state exists at all (a rail only where the explorer is one); the
+ * table shows "-" at the others. `applies`, checked in the page once the place is drawn, does the same for what only the
+ * page can tell (whether the breadcrumb folded). The activity state comes late: its tool calls stay in the status bar
+ * for the rest of the tab's life.
  */
 const STATES = [
     { name: "top", place: "" },
-    // a long breadcrumb, a busy folder's note and a page pill at once
-    { name: "deep", place: "src/vs/workbench/contrib/terminal/browser" },
-    // the middle page of three: both of the pill's arrows are live
+    // a long breadcrumb, a busy folder's note and a page control at once
+    { name: "deep", place: DEEP },
+    // the middle page of three: both of the page control's arrows are live
     { name: "paged", place: "src/vs/base/common", page: 1 },
     { name: "busy", place: "src/vs/workbench/contrib" },
-    // a file with many declarations, on a paged level, so the pill moves aside for the panel
-    { name: "file", place: "src/vs/base/common", select: FILE },
+    // a file with many declarations, on a paged level, the inspector in each of its places (shell.ts): beside the
+    // canvas, under it in a tall window, a drawer over it in a short one, over all of it where the window is narrow too
+    { name: "file", place: "src/vs/base/common", select: FILE, when: (size) => layoutAt(size.width, size.height, true).inspector === "beside" },
+    { name: "below", place: "src/vs/base/common", select: FILE, when: (size) => layoutAt(size.width, size.height, true).inspector === "below" },
+    { name: "drawer", place: "src/vs/base/common", select: FILE, when: (size) => layoutAt(size.width, size.height, true).inspector === "drawer" },
+    { name: "cover", place: "src/vs/base/common", select: FILE, when: (size) => layoutAt(size.width, size.height, true).inspector === "cover" },
+    // another tab of the inspector, Uses (a file opens on Used by)
+    { name: "uses-tab", place: "src/vs/base/common", select: FILE, act: "uses-tab" },
     { name: "folder", place: "src/vs", select: "src/vs/workbench" },
-    // where the panel would cover the canvas, a click only selects: the box's actions beside it (owner review,
-    // 2026-10-25); the folder state then asks for its Details. At the other sizes this is the folder state's panel.
-    { name: "actions", place: "src/vs", select: "src/vs/workbench", details: false },
+    // where the inspector would cover the canvas, a click only selects: the box's actions beside it (owner review,
+    // 2026-10-25); the folder state then asks for its Details
+    { name: "actions", place: "src/vs", select: "src/vs/workbench", details: false, when: (size) => layoutAt(size.width, size.height, true).inspector === "cover" },
     // the source root's panel, the one the owner saw cut off in VS Code's panel
     { name: "root", place: "", select: "src" },
     // a summary whose lead holds a 51-character setting name in inline code, wider than the panel at any size
@@ -59,28 +118,52 @@ const STATES = [
     { name: "help", place: "", act: "help" },
     { name: "repo-menu", place: "", act: "repo-menu" },
     { name: "status-menu", place: "", act: "status-menu" },
-    // doorways and a busy folder: the legend at its tallest
-    { name: "legend", place: "src/vs/base/common", act: "legend" },
+    // the explorer's rail opened over the canvas, with a box selected so its row is lit
+    { name: "explorer-rail", place: "src/vs", select: "src/vs/workbench", act: "explorer-rail", when: (size) => layoutAt(size.width, size.height, true).explorer === "rail" },
+    // the toolbar's … menu, wherever it holds something
+    { name: "toolbar-menu", place: "src/vs/base/common", act: "toolbar-menu", when: toolbarMenuAt },
+    // the folders folded out of a deep breadcrumb, wherever the trail is too long to show whole
+    { name: "breadcrumb-menu", place: DEEP, act: "breadcrumb-menu", applies: `!!document.querySelector('[data-testid="breadcrumb-folded"]')` },
     { name: "activity", place: "src/vs", act: "activity" },
-    // a failed jump's banner over a paged level with the panel open: it must clear the pill and the panel
+    // a failed jump's banner over a paged level with the inspector open: it must clear the page control and the inspector
     { name: "banner", place: "src/vs/base/common", select: FILE, act: "banner" },
-    // the same banner with nothing selected, in the pill's band, and with the legend open, which must leave it room
+    // the same banner with nothing selected
     { name: "banner-plain", place: "src/vs/base/common", act: "banner" },
-    { name: "banner-legend", place: "src/vs/base/common", act: ["legend", "banner"] },
 ];
 /** What a state does after reaching its place, as a list (most states do one thing). */
 const actsOf = (state) => state.act === undefined ? [] : [state.act].flat();
 
+/** The widths and heights where shell.ts's layout changes: each walk crosses every one, down and back up. */
+const THRESHOLDS = [1180, 900, 640, 600, 560, 420, 300];
+/** Consecutive repeats dropped: a resize to the size the tab already has does nothing. */
+const deduped = (sizes) => sizes.filter((size, i) => i === 0 || size !== sizes[i - 1]);
+const across = (dimension) => {
+    const down = THRESHOLDS.flatMap((t) => [t, t - 1]);
+    const steps = [...down, ...down.toReversed()];
+    return dimension === "width" ? steps.map((w) => `${w}x900`) : steps.map((h) => `1440x${h}`);
+};
 /**
- * One tab resized while it shows a file's panel and the open repo list, the way VS Code's panel is dragged: the panel
- * must cover and uncover the canvas, the pill and the zoom controls follow it, and the list stay inside the Map.
+ * One tab resized step by step, the way a window or VS Code's panel is dragged: across every threshold in width at 900
+ * tall, then in height at 1440 wide, then from 1440 × 900 down to 200 × 260 and back.
  */
-const RESIZE_WALK = ["1440x900", "900x700", "760x800", "759x800", "400x400", "360x320", "240x600", "200x260", "640x700", "1100x800", "1440x900"];
+const RESIZE_WALK = deduped([
+    "1440x900", ...across("width"), "1440x900", "1440x1200", ...across("height"), "1440x900",
+    "1100x800", "900x700", "640x600", "420x420", "300x300", "200x260", "300x300", "420x420", "640x600", "900x700", "1100x800", "1440x900",
+]);
+/**
+ * The walks: a file selected and a popover open, one with the repo list (it never moves out of the header) and one with
+ * the toolbar's … menu, which exists only where the toolbar is short of room and is drawn again when the toolbar folds
+ * into the header. A popover that went is opened again where its button is, so every step has one to place.
+ */
+const WALKS = [
+    { name: "the repo list", act: "repo-menu", popover: "repo-list", button: "repo-menu" },
+    { name: "the toolbar's … menu", act: "toolbar-menu", popover: "toolbar-menu", button: "toolbar-more" },
+];
 
 // ─── arguments ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 function parseArgs(argv){
-    const options = { base: null, shots: null, allShots: false, sizes: SIZES, states: STATES, resize: null };
+    const options = { base: null, shots: null, allShots: false, sizes: null, dprs: null, states: STATES, resize: null };
     for (let i = 0; i < argv.length; i++){
         const arg = argv[i];
         if (arg === "--shots") options.shots = path.resolve(argv[++i] ?? "");
@@ -89,6 +172,10 @@ function parseArgs(argv){
         else if (arg === "--embed") EMBED = true;
         else if (arg === "--sizes"){
             options.sizes = (argv[++i] ?? "").split(",").filter(Boolean);
+            options.resize ??= false;
+        } else if (arg === "--dpr"){
+            options.dprs = (argv[++i] ?? "").split(",").filter(Boolean).map(Number);
+            if (options.dprs.some((r) => !(r >= 0.5 && r <= 4))) fail(`--dpr takes pixel ratios between 0.5 and 4, like 1,1.25,2\n${USAGE}`);
             options.resize ??= false;
         } else if (arg === "--states"){
             const names = (argv[++i] ?? "").split(",").filter(Boolean);
@@ -100,8 +187,10 @@ function parseArgs(argv){
         else options.base = arg;
     }
     if (options.base === null) fail(USAGE);
+    options.sizes ??= EMBED ? EMBED_SIZES : SIZES;
     // an empty list would check nothing and still say "0 failures"
     if (options.sizes.length === 0) fail(`--sizes names no size\n${USAGE}`);
+    if (options.dprs !== null && options.dprs.length === 0) fail(`--dpr names no ratio\n${USAGE}`);
     if (options.states.length === 0) fail(`--states names no state\n${USAGE}`);
     options.resize ??= true;
     let url;
@@ -114,7 +203,13 @@ function parseArgs(argv){
     // the owner's own Map runs on 3000, and this script posts live events to whatever it checks
     if (port === "3000") fail("refusing port 3000: that's where your own Map runs. Start a dev server on another port (npx next dev -p 3002) and check that.");
     options.base = url.origin;
-    for (const size of options.sizes) if (!/^\d+x\d+$/.test(size)) fail(`a size is WIDTHxHEIGHT, like 400x260: ${size}`);
+    let sizes = options.sizes.map(parseSize);
+    // --dpr: each size at each ratio (a size that names its own ratio keeps it)
+    if (options.dprs !== null){
+        sizes = sizes.flatMap((size) => size.spec.includes("@") ? [size]
+            : options.dprs.map((dpr) => parseSize(dpr === 1 ? size.spec : `${size.spec}@${dpr}`)));
+    }
+    options.sizes = sizes.filter((size, i) => sizes.findIndex((s) => s.spec === size.spec) === i);
     return options;
 }
 
@@ -210,8 +305,11 @@ async function connect(url){
     };
 }
 
+/** The window's size and screen scale, as a tab emulates it (the window is the viewport; nothing of Chrome's own). */
+const metrics = (size) => ({ width: size.width, height: size.height, deviceScaleFactor: size.dpr, mobile: false });
+
 /** A tab at one size, with helpers to run code in it. */
-async function openTab(cdp, width, height){
+async function openTab(cdp, size){
     const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
     const send = (method, params) => cdp.send(method, params, sessionId);
@@ -229,7 +327,7 @@ async function openTab(cdp, width, height){
     });
     await send("Page.enable");
     await send("Runtime.enable");
-    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+    await send("Emulation.setDeviceMetricsOverride", metrics(size));
     // a background tab isn't focused: emulate focus, so the palette's input takes focus the way it does for a person
     await send("Emulation.setFocusEmulationEnabled", { enabled: true });
     const evaluate = async (expression) => {
@@ -284,8 +382,8 @@ async function press(tab, key, code, keyCode){
 }
 
 /**
- * Back to a plain Map: Escape closes a dialog, a popover, the details over a narrow canvas, the selection, then Claude's
- * highlights, one press each.
+ * Back to a plain Map: Escape closes a dialog, a popover, the explorer's rail, the details over a narrow canvas, the
+ * selection, then Claude's highlights, one press each.
  */
 async function reset(tab){
     for (let i = 0; i < 5; i++){
@@ -318,10 +416,13 @@ async function goTo(tab, folder, page){
 const panelReady = (box) => `(() => { const p = document.querySelector('[data-panel=${JSON.stringify(box)}]'); return !!p && !p.innerText.includes("Loading…"); })()`;
 /** The box's actions beside it, where the panel would cover the canvas (BoxActions). */
 const actionsShown = (box) => `!!document.querySelector('[data-box-actions=${JSON.stringify(box)}]')`;
+/** A box on the canvas is drawn selected (MapBox's tone). */
+const SELECTED = `!!document.querySelector('.react-flow__node [data-tone="selected"]')`;
 
 /**
- * Clicks a box. Where the panel fits beside the canvas, the click opens it. Where it would cover the canvas, the click
- * shows the box's actions, and their Details opens the panel, unless `details` is false (the actions state).
+ * Clicks a box. Where the panel fits beside, under or over part of the canvas, the click opens it. Where it would cover
+ * the canvas, the click shows the box's actions, and their Details opens the panel, unless `details` is false (the
+ * actions state).
  */
 async function selectBox(tab, box, { details = true } = {}){
     const found = await tab.evaluate(`(() => {
@@ -342,12 +443,16 @@ async function selectBox(tab, box, { details = true } = {}){
     await tab.waitFor(panelReady(box), `the panel of ${box}`);
 }
 
+/** Clicks a control a person can see: one hidden at this size (display: none) is a failure, not a click. */
 const click = (tab, selector, what) => tab.evaluate(`(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
     if (!el) throw new Error(${JSON.stringify(`no ${what}`)});
+    if (el.getClientRects().length === 0) throw new Error(${JSON.stringify(`the ${what} is hidden at this size`)});
     el.click();
     return true;
 })()`);
+/** Whether a control is there and shown at this size. */
+const shown = (selector) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return !!el && el.getClientRects().length > 0; })()`;
 
 /** Claude Code's three tool calls, the last highlighting three boxes: posted to this server's own live channel. */
 const ACTIVITY = [
@@ -355,6 +460,8 @@ const ACTIVITY = [
     { tool: "mcp__nebulosity__imports", paths: ["src/vs/workbench/contrib/terminal/browser/terminalInstance.ts", FILE] },
     { tool: "mcp__nebulosity__show_on_map", paths: ["src/vs/base", "src/vs/editor", "src/vs/platform"], action: { type: "highlight_nodes", nodeIds: ["src/vs/base", "src/vs/editor", "src/vs/platform"] } },
 ];
+/** The newest call as the status bar names it (activity.ts's activityLabel), in its cell's title at any size. */
+const ACTIVITY_LABEL = "Showing src/vs/base +2 on the map";
 /** A focus_node on a path the index doesn't hold: the Map stays put and says why in its banner (for 6 s). */
 const MISSING_FOCUS = [{ tool: "mcp__nebulosity__show_on_map", paths: [], action: { type: "focus_node", nodeId: "src/vs/base/common/no-such-folder/missing.ts" } }];
 
@@ -363,6 +470,18 @@ async function postLive(base, events){
         const response = await fetch(`${base}/api/live`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(event) });
         if (response.status !== 204) throw new Error(`POST /api/live answered ${response.status}`);
     }
+}
+
+/** Picks an item from the toolbar's … menu, where the header has no room for its own button (`what`). */
+async function pickFromToolbarMenu(tab, label, what){
+    await click(tab, '[data-testid="toolbar-more"]', `toolbar's … button (no ${what} at this size)`);
+    await tab.waitFor(`!!document.querySelector('[data-testid="toolbar-menu"]')`, "the toolbar's menu");
+    await tab.evaluate(`(() => {
+        const item = [...document.querySelectorAll('[data-testid="toolbar-menu"] [role^="menuitem"]')].find((b) => b.textContent.trim() === ${JSON.stringify(label)});
+        if (!item) throw new Error(${JSON.stringify(`no ${label} in the toolbar's menu`)});
+        item.click();
+        return true;
+    })()`);
 }
 
 async function act(tab, state, base){
@@ -380,8 +499,14 @@ async function actStep(tab, step, base){
             })()`);
             await tab.waitFor(`(() => { const v = document.querySelector("[data-source-viewer] pre.syntax"); return !!v && !!v.querySelector("span"); })()`, "the source, colored");
             break;
+        case "uses-tab":
+            await click(tab, '[data-panel] [role="tab"][data-tab="uses"]', "Uses tab");
+            await tab.waitFor(`document.querySelector('[data-panel] [role="tab"][data-tab="uses"]')?.getAttribute("aria-selected") === "true"`, "the Uses tab selected");
+            break;
         case "search":
-            await click(tab, '[data-testid="search-button"]', "search button");
+            // the header's search where it shows, else the toolbar's … menu holds it (a short window under 360 px)
+            if (await tab.evaluate(shown('[data-testid="search-button"]'))) await click(tab, '[data-testid="search-button"]', "search button");
+            else await pickFromToolbarMenu(tab, "Search files and concepts", "search button");
             await tab.waitFor(`document.activeElement?.getAttribute("aria-label") === "Search"`, "the search field's focus");
             await tab.send("Input.insertText", { text: "terminal" });
             await tab.waitFor(`document.querySelectorAll("[data-hit]").length > 0`, "search results");
@@ -389,19 +514,30 @@ async function actStep(tab, step, base){
             await tab.waitFor(`![...document.querySelectorAll("[role=dialog] .syntax")].some((s) => s.children.length === 0 && s.textContent.trim() !== "")`, "colored code lines", 5_000).catch(() => {});
             break;
         case "help":
-            await click(tab, '[data-testid="help-button"]', "help button");
+            // the header's ? where it shows, else the toolbar's … menu holds it (VS Code's panel, a narrow window)
+            if (await tab.evaluate(shown('[data-testid="help-button"]'))) await click(tab, '[data-testid="help-button"]', "help button");
+            else await pickFromToolbarMenu(tab, "How to use the Map", "help button");
             await tab.waitFor(`!!document.querySelector('[data-testid="help"]')`, "the help");
             break;
         case "repo-menu":
             await click(tab, '[data-testid="repo-menu"]', "repo menu button (one repo indexed?)");
-            await tab.waitFor(`!!document.querySelector('[data-testid="repo-menu"]')?.closest(".relative")?.querySelector("ul")`, "the repo list");
+            await tab.waitFor(`!!document.querySelector('[data-testid="repo-list"]')`, "the repo list");
             break;
         case "status-menu":
             await click(tab, '[data-testid="status-pill"]', "status pill");
             await tab.waitFor(`!!document.querySelector('[data-testid="status-menu"]')`, "the status menu");
             break;
-        case "legend":
-            await tab.evaluate(`(() => { const b = document.querySelector('[data-testid="legend-toggle"]'); if (!b) throw new Error("no legend"); if (b.getAttribute("aria-expanded") !== "true") b.click(); return true; })()`);
+        case "explorer-rail":
+            await click(tab, 'button[aria-label="Open the explorer"]', "explorer's rail button");
+            await tab.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Explorer"] [data-explorer-row]')`, "the explorer's list over the canvas");
+            break;
+        case "toolbar-menu":
+            await click(tab, '[data-testid="toolbar-more"]', "toolbar's … button");
+            await tab.waitFor(`!!document.querySelector('[data-testid="toolbar-menu"]')`, "the toolbar's menu");
+            break;
+        case "breadcrumb-menu":
+            await click(tab, '[data-testid="breadcrumb-folded"]', "breadcrumb's … button");
+            await tab.waitFor(`!!document.querySelector('[data-testid="breadcrumb-menu"]')`, "the folded folders' menu");
             break;
         case "banner":
             await postLive(base, MISSING_FOCUS);
@@ -409,7 +545,7 @@ async function actStep(tab, step, base){
             break;
         case "activity":
             await postLive(base, ACTIVITY);
-            await tab.waitFor(`document.querySelectorAll('[data-testid="activity-bar"] ol li').length === 3 && document.querySelector('[data-testid="activity-bar"]').innerText.includes("highlighted")`, "three tool calls in the activity bar");
+            await tab.waitFor(`[...document.querySelectorAll("[title]")].some((el) => el.title.includes(${JSON.stringify(ACTIVITY_LABEL)}))`, "Claude Code's newest call in the status bar");
             // the pulse (0.9 s) is over and the bar's clock has ticked once: "just now" holds for 5 s
             await sleep(1_300);
             break;
@@ -418,21 +554,19 @@ async function actStep(tab, step, base){
     }
 }
 
-/** Undoes what a state left that Escape doesn't: the legend remembers being open. */
-async function undo(tab, state){
-    if (actsOf(state).includes("legend")) await tab.evaluate(`(() => { const b = document.querySelector('[data-testid="legend-toggle"]'); if (b?.getAttribute("aria-expanded") === "true") b.click(); return true; })()`);
-}
-
 /** What shows that each step is still on screen. */
 const STEP_MARKERS = {
     source: `!!document.querySelector("[data-source-viewer]")`,
+    "uses-tab": `document.querySelector('[data-panel] [role="tab"][data-tab="uses"]')?.getAttribute("aria-selected") === "true"`,
     search: `document.querySelectorAll("[data-hit]").length > 0`,
     help: `!!document.querySelector('[data-testid="help"]')`,
     "repo-menu": `!!document.querySelector('[data-testid="repo-list"]')`,
     "status-menu": `!!document.querySelector('[data-testid="status-menu"]')`,
-    legend: `document.querySelector('[data-testid="legend-toggle"]')?.getAttribute("aria-expanded") === "true"`,
+    "explorer-rail": `!!document.querySelector('[role="dialog"][aria-label="Explorer"]')`,
+    "toolbar-menu": `!!document.querySelector('[data-testid="toolbar-menu"]')`,
+    "breadcrumb-menu": `!!document.querySelector('[data-testid="breadcrumb-menu"]')`,
     banner: `!!document.querySelector('main [role="alert"]')`,
-    activity: `document.querySelectorAll('[data-testid="activity-bar"] ol li').length === 3`,
+    activity: `[...document.querySelectorAll("[title]")].some((el) => el.title.includes(${JSON.stringify(ACTIVITY_LABEL)}))`,
 };
 
 /**
@@ -456,12 +590,17 @@ const stateShown = (state) => [
  *       Map by design: then only the dialog's controls count);
  *   (c) text wider than its box is cut by the box, with an ellipsis, a title or aria-label holding the whole text, and
  *       room for a couple of characters, not a lone "…";
- *   (d) at a normal size the page doesn't scroll, and nowhere does it scroll past the floor (the Map root's min size);
+ *   (d) the page never scrolls sideways, and scrolls down only in a window shorter than the layout's least height, and
+ *       then no further than that height;
  *   (e) no two pieces of visible text sit on each other;
- *   (f) no text sits on a control it isn't part of (a message over the canvas lets clicks through, so (b) can't see it).
+ *   (f) no text sits on a control it isn't part of (a message over the canvas lets clicks through, so (b) can't see it);
+ *   (g) the layout is the one shell.ts gives this window: the explorer's form, the inspector's place, the toolbar's and
+ *       the status bar's rows, the legend, and the page's least height;
+ *   (h) no text is drawn under something else (an overlay that lets clicks through, which (b) and (f) can't see).
+ * `shell` is shellLayout for the page's own width and height and whether a box is selected, worked out by the caller.
  * The canvas's boxes, lines and the divider pan with the Map, so they're left out.
  */
-function inspectLayout({ normal }){
+function inspectLayout({ shell }){
     const TOL = 1;
     const failures = [];
     const vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
@@ -475,10 +614,12 @@ function inspectLayout({ normal }){
         const text = norm(el.textContent).slice(0, 48);
         return `<${el.tagName.toLowerCase()}${name ? ` "${norm(name).slice(0, 48)}"` : cls ? ` .${cls}` : ""}>${text ? ` "${text}"` : ""}`;
     };
+    // seen at all: a screen reader's text (sr-only, clipped to nothing) isn't, and its label is what a person clicks
     const visible = (el) => {
         const r = el.getBoundingClientRect();
         if (r.width < 0.5 || r.height < 0.5) return false;
-        return getComputedStyle(el).visibility !== "hidden";
+        const cs = getComputedStyle(el);
+        return cs.visibility !== "hidden" && cs.clipPath !== "inset(50%)" && cs.clip !== "rect(0px, 0px, 0px, 0px)";
     };
     const elements = [...document.body.querySelectorAll("*")].filter((el) =>
         !["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"].includes(el.tagName) && !(el instanceof SVGElement && el.ownerSVGElement) && !el.closest(PANNED) && visible(el));
@@ -557,7 +698,7 @@ function inspectLayout({ normal }){
     const savedWindow = [window.scrollX, window.scrollY];
     const dialogs = [...document.querySelectorAll('[role="dialog"]')];
     const modal = dialogs.at(-1) ?? null;
-    const controls = elements.filter((el) => el.matches('button, a[href], input, [role="button"]')
+    const controls = elements.filter((el) => el.matches('button, a[href], input, [role="button"], label:has(input)')
         && !el.closest(".react-flow__nodes") && getComputedStyle(el).pointerEvents !== "none" && (!modal || modal.contains(el)));
     const hides = (overflow) => overflow === "hidden" || overflow === "clip";
     for (const el of controls){
@@ -565,8 +706,8 @@ function inspectLayout({ normal }){
         for (let p = el; p; p = p.parentElement) if (failedA.has(p)){ ancestorFailed = true; break; }
         if (ancestorFailed) continue;
         // scrollIntoView scrolls every box that can scroll, overflow: hidden ones too. React Flow's pane is one (its
-        // boxes overflow it), and moving the zoom controls with it would slide them out from under whatever covers
-        // them. A person can't scroll such a box, so its scroll goes back before the hit test.
+        // boxes overflow it), and moving what sits over the canvas with it (a box's actions, the banner) would slide it
+        // out from under whatever covers it. A person can't scroll such a box, so its scroll goes back before the test.
         const pinned = [];
         for (let p = el.parentElement; p; p = p.parentElement){
             const cs = getComputedStyle(p);
@@ -629,13 +770,40 @@ function inspectLayout({ normal }){
         else if (el.clientWidth < 2 * parseFloat(cs.fontSize)) failures.push(`(c) ${describe(el)} is cut to ${el.clientWidth} px, too narrow to read`);
     }
 
-    // (d)
-    const root = document.querySelector('[data-testid="map-root"]');
-    const floorW = root ? parseFloat(getComputedStyle(root).minWidth) || 0 : 0;
-    const floorH = root ? parseFloat(getComputedStyle(root).minHeight) || 0 : 0;
-    const sw = se.scrollWidth, sh = se.scrollHeight;
-    if (normal && (sw > vw + TOL || sh > vh + TOL)) failures.push(`(d) the page scrolls at a normal size: ${sw} × ${sh} in a ${vw} × ${vh} window`);
-    else if (sw > Math.max(vw, floorW) + TOL || sh > Math.max(vh, floorH) + TOL) failures.push(`(d) the page scrolls past the floor: ${sw} × ${sh}, where ${Math.max(vw, floorW)} × ${Math.max(vh, floorH)} is the most it needs`);
+    // (d): sideways never, at any size (the owner, 2026-10-27); down only below the layout's least height, and no further
+    const de = document.documentElement;
+    if (de.scrollWidth > de.clientWidth + 0.5) failures.push(`(d) the page scrolls sideways: ${de.scrollWidth} px of page in a ${de.clientWidth} px window`);
+    if (de.scrollHeight > de.clientHeight + 0.5){
+        if (window.innerHeight >= shell.minHeight) failures.push(`(d) the page scrolls down (${de.scrollHeight} px of page) in a window ${window.innerHeight} px tall, though the layout needs only ${shell.minHeight}`);
+        else if (de.scrollHeight > shell.minHeight + 0.5) failures.push(`(d) the page scrolls down to ${de.scrollHeight} px, past the layout's least height of ${shell.minHeight}`);
+    }
+
+    // (g): the layout is shell.ts's for this window
+    const mapShell = document.querySelector('[data-testid="map-shell"]');
+    const drawn = document.querySelector(".react-flow__node") !== null;
+    if (mapShell === null) failures.push("(g) no map-shell on the page");
+    else if (drawn){
+        const least = parseFloat(getComputedStyle(mapShell).minHeight) || 0;
+        if (Math.abs(least - shell.minHeight) > 0.5) failures.push(`(g) the page keeps ${least} px as its least height, where shell.ts says ${shell.minHeight}`);
+        const rail = document.querySelector('button[aria-label="Open the explorer"]');
+        const list = document.querySelector('aside[aria-label="Explorer"]');
+        const explorer = rail ? "rail" : list ? "full" : "none";
+        if (explorer !== shell.explorer) failures.push(`(g) the explorer is ${explorer === "none" ? "gone" : `a ${explorer === "rail" ? "rail" : "full list"}`}, where shell.ts says ${shell.explorer}`);
+        const panel = document.querySelector("[data-panel]");
+        const placement = panel?.getAttribute("data-placement") ?? null;
+        if (panel !== null && placement !== shell.inspector) failures.push(`(g) the inspector is ${placement}, where shell.ts says ${shell.inspector}`);
+        const wrapper = panel?.closest("[data-inspector-place]")?.getAttribute("data-inspector-place") ?? null;
+        if (panel !== null && wrapper !== placement) failures.push(`(g) the inspector says it's ${placement} but sits in the ${wrapper ?? "no"} place`);
+        // beside the canvas it's always there (the folder on screen, with nothing selected); under it or as a drawer,
+        // whenever something is selected; over the whole canvas only once Details asks
+        if (panel === null && (shell.inspector === "beside" || shell.inspector === "below" || shell.inspector === "drawer")) failures.push(`(g) no inspector, where shell.ts puts it ${shell.inspector}`);
+        const toolbarRow = document.querySelector('[data-testid="toolbar"]') !== null;
+        if (toolbarRow === shell.toolbarInHeader) failures.push(`(g) the toolbar ${toolbarRow ? "has a row of its own" : "is folded into the header"}, where shell.ts says ${shell.toolbarInHeader ? "folded" : "its own row"}`);
+        const bar = document.querySelector('[data-testid="activity-bar"]') !== null;
+        if (bar !== (shell.status === "bar")) failures.push(`(g) the status bar is ${bar ? "there" : "gone"}, where shell.ts says ${shell.status}`);
+        const legend = document.querySelector('[data-testid="legend"]') !== null;
+        if (legend !== shell.legend) failures.push(`(g) the legend is ${legend ? "shown" : "gone"}, where shell.ts says ${shell.legend ? "shown" : "gone"}`);
+    }
 
     // what of an element shows: the rect its clipping boxes leave (with `self`, its own overflow clips too)
     const clipOf = (el, self) => {
@@ -699,26 +867,70 @@ function inspectLayout({ normal }){
             failures.push(`(f) the text of ${describe(run.el)} sits on ${describe(el)} (${Math.round(ox)} × ${Math.round(oy)} px)`);
         }
     }
+
+    // (h): text something else is drawn over, so it can't be read (a drawer over the end of the banner's line). Each run
+    // is hit-tested at its start, middle and end, with every element taking the pointer for the moment (the banner and
+    // the overlays let clicks through, and hit-testing skips them otherwise): what's on top there must be the text's own
+    // element, unless it's an open popover or a dialog over the Map, by design. With a dialog open, only its text counts.
+    const probe = document.createElement("style");
+    probe.textContent = "* { pointer-events: auto !important; }";
+    document.head.appendChild(probe);
+    try{
+        for (const run of runs){
+            if (modal && !modal.contains(run.el)) continue;
+            // a sliver at the edge of a scroll box (a line scrolled nearly out of it) is the box's business, and a hit
+            // test at a fractional point there can round onto whatever is next to the box
+            if (run.box.bottom - run.box.top < 4 || run.box.right - run.box.left < 6) continue;
+            const y = (run.box.top + run.box.bottom) / 2;
+            const points = [["its start", run.box.left + 2], ["its middle", (run.box.left + run.box.right) / 2], ["its end", run.box.right - 2]];
+            for (const [where, x] of points){
+                if (x < 0 || y < 0 || x >= vw || y >= vh) continue;
+                const hit = document.elementFromPoint(x, y);
+                if (hit === null || run.el === hit || run.el.contains(hit) || hit.contains(run.el)) continue;
+                const cover = hit.closest(COVERS);
+                if (cover && !cover.contains(run.el)) continue;
+                const key = `h|${describe(run.el)}|${describe(hit)}`;
+                if (!reported.has(key)){
+                    reported.add(key);
+                    failures.push(`(h) the text of ${describe(run.el)} is under ${describe(hit)} at ${where}`);
+                }
+                break;
+            }
+        }
+    } finally {
+        probe.remove();
+    }
     return failures;
 }
 
 // ─── the run ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Inspects the tab as it is, in one evaluation with the check that the state is still on screen (nothing can change between the two). */
-const inspect = (tab, state, width, height) => tab.evaluate(`(() => {
-    if (!(${stateShown(state)})) return ["(setup) the state went away before it was inspected"];
-    return (${inspectLayout.toString()})(${JSON.stringify({ normal: width >= NORMAL.width && height >= NORMAL.height })});
-})()`);
+/** What the Map lays itself out by (useWindowSize): the page's own width, without a scrollbar, the window's height, and whether a box is selected. */
+const LAYOUT_INPUT = `({ width: document.documentElement.clientWidth, height: window.innerHeight, selected: ${SELECTED} })`;
 
-/** Saves the tab as `<name>.png`, and the far corner as `<name>-scrolled.png` where the page scrolls (below the floor). */
+/**
+ * Inspects the tab as it is: shell.ts's layout for what the page reports, then, in one evaluation with the check that the
+ * state is still on screen (nothing can change between the two), the inspection.
+ */
+async function inspect(tab, state){
+    const input = await tab.evaluate(LAYOUT_INPUT);
+    const shell = layoutAt(input.width, input.height, input.selected);
+    return tab.evaluate(`(() => {
+        if (!(${stateShown(state)})) return ["(setup) the state went away before it was inspected"];
+        return (${inspectLayout.toString()})(${JSON.stringify({ shell })});
+    })()`);
+}
+
+/** Saves the tab as `<name>.png`, and the bottom as `<name>-scrolled.png` where the page scrolls down. */
 async function shoot(tab, dir, name){
+    const file = name.replaceAll("@", "-at-");
     const { data } = await tab.send("Page.captureScreenshot", { format: "png" });
-    writeFileSync(path.join(dir, `${name}.png`), Buffer.from(data, "base64"));
-    const scrolled = await tab.evaluate(`(() => { const se = document.scrollingElement; if (se.scrollWidth <= innerWidth && se.scrollHeight <= innerHeight) return false; scrollTo(se.scrollWidth, se.scrollHeight); return true; })()`);
+    writeFileSync(path.join(dir, `${file}.png`), Buffer.from(data, "base64"));
+    const scrolled = await tab.evaluate(`(() => { const se = document.scrollingElement; if (se.scrollWidth <= se.clientWidth && se.scrollHeight <= se.clientHeight) return false; scrollTo(se.scrollWidth, se.scrollHeight); return true; })()`);
     if (!scrolled) return;
     await tab.evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
     const far = await tab.send("Page.captureScreenshot", { format: "png" });
-    writeFileSync(path.join(dir, `${name}-scrolled.png`), Buffer.from(far.data, "base64"));
+    writeFileSync(path.join(dir, `${file}-scrolled.png`), Buffer.from(far.data, "base64"));
     await tab.evaluate(`scrollTo(0, 0); true`);
 }
 
@@ -729,39 +941,68 @@ async function openMap(tab, base, state){
     await tab.evaluate(`document.fonts.ready.then(() => { const s = document.createElement("style"); s.textContent = ${JSON.stringify(SHOT_CSS)}; document.head.appendChild(s); return true; })`);
 }
 
-/** The live-resize walk (RESIZE_WALK): one tab, the file's panel and the repo list open, resized step by step. */
-async function resizeWalk(cdp, options, failures){
-    const state = { name: "resize", place: "src/vs/base/common", select: FILE, act: "repo-menu" };
-    const [w0, h0] = RESIZE_WALK[0].split("x").map(Number);
-    const tab = await openTab(cdp, w0, h0);
+/**
+ * After a walk's step: the selection is still drawn selected, and the popover, where it's open, lies inside the window.
+ * `open` says whether it is; sideways scroll and errors are the inspection's and the tab's.
+ */
+const walkCheck = (walk) => `(() => {
+    const lines = [];
+    if (!(${SELECTED})) lines.push("(walk) the selected box isn't selected any more");
+    const pop = document.querySelector('[data-testid=${JSON.stringify(walk.popover)}]');
+    if (pop){
+        const r = pop.getBoundingClientRect(), de = document.documentElement;
+        const out = [r.left < -0.5 && "left", r.top < -0.5 && "top", r.right > de.clientWidth + 0.5 && "right", r.bottom > de.clientHeight + 0.5 && "bottom"].filter(Boolean);
+        if (out.length > 0) lines.push(\`(walk) ${walk.name} sticks out of the window (\${out.join(", ")}): \${Math.round(r.left)}, \${Math.round(r.top)} to \${Math.round(r.right)}, \${Math.round(r.bottom)} in \${de.clientWidth} × \${de.clientHeight}\`);
+    }
+    return { lines, open: !!pop };
+})()`;
+
+/**
+ * One live-resize walk (RESIZE_WALK): one tab, the file selected and a popover open, resized step by step. Each step is
+ * inspected like a state, and the selection must hold and the popover stay in the window. Where the popover went (the
+ * toolbar's menu has nothing to hold, or was drawn again in the header), it's opened again if its button is there.
+ */
+async function resizeWalk(cdp, options, walk, failures){
+    const place = "src/vs/base/common";
+    const tab = await openTab(cdp, parseSize(RESIZE_WALK[0]));
     const row = [];
+    let reopened = 0;
     try{
-        await openMap(tab, options.base, state);
-        await goTo(tab, state.place, 0);
-        await selectBox(tab, state.select);
-        await act(tab, state, options.base);
-        for (const size of RESIZE_WALK){
-            const [width, height] = size.split("x").map(Number);
+        await openMap(tab, options.base, { place });
+        await goTo(tab, place, 0);
+        await selectBox(tab, FILE);
+        for (const spec of RESIZE_WALK){
+            const size = parseSize(spec);
             let lines;
+            let note = "";
             try{
-                await tab.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+                await tab.send("Emulation.setDeviceMetricsOverride", metrics(size));
                 await tab.evaluate(QUIET);
-                if (options.shots && options.allShots) await shoot(tab, options.shots, `resize-${row.length + 1}-${size}`);
-                lines = await inspect(tab, state, width, height);
+                let check = await tab.evaluate(walkCheck(walk));
+                if (!check.open && await tab.evaluate(shown(`[data-testid="${walk.button}"]`))){
+                    if (row.length > 0) reopened++;
+                    note = row.length > 0 ? " (opened again)" : "";
+                    await actStep(tab, walk.act, options.base);
+                    await tab.evaluate(QUIET);
+                    check = await tab.evaluate(walkCheck(walk));
+                } else if (!check.open) note = " (no popover here)";
+                if (options.shots && options.allShots) await shoot(tab, options.shots, `walk-${walk.act}-${row.length + 1}-${spec}`);
+                const state = { place, select: FILE, act: check.open ? walk.act : undefined };
+                lines = [...check.lines, ...await inspect(tab, state)];
             } catch (err){
                 lines = [`(setup) ${err instanceof Error ? err.message : String(err)}`];
             }
             for (const error of tab.errors.splice(0)) lines.push(`(js) ${error}`);
-            for (const line of lines) failures.push(`resize to ${size} ${line}`);
+            for (const line of lines) failures.push(`walk with ${walk.name}, resized to ${spec} ${line}`);
             row.push(lines.length === 0 ? "ok" : String(lines.length));
-            console.log(`resize to ${size}: ${lines.length === 0 ? "ok" : `${lines.length} failure${lines.length === 1 ? "" : "s"}`}`);
+            console.log(`walk with ${walk.name}, resized to ${spec}: ${lines.length === 0 ? "ok" : `${lines.length} failure${lines.length === 1 ? "" : "s"}`}${note}`);
         }
     } catch (err){
-        failures.push(`resize (setup) ${err instanceof Error ? err.message : String(err)}`);
+        failures.push(`walk with ${walk.name} (setup) ${err instanceof Error ? err.message : String(err)}`);
     } finally {
         await tab.close();
     }
-    return row;
+    return { row, reopened };
 }
 
 async function main(){
@@ -779,49 +1020,55 @@ async function main(){
     const cdp = await connect(chrome.url);
     const failures = [];
     const table = [];
-    let resized = null;
+    const walks = [];
+    let ran = 0;
     const started = Date.now();
     try{
-        // first visit settings, once for the origin: the help doesn't open by itself, and the legend starts closed
-        {
-            const tab = await openTab(cdp, 800, 600);
-            await tab.send("Page.navigate", { url: `${options.base}/api/repos` });
-            await tab.waitFor(`document.readyState === "complete"`, "a page on the server's origin");
-            await tab.evaluate(`localStorage.setItem("nebulosity.helpSeen", "1"); localStorage.setItem("nebulosity.legendOpen", "0"); true`);
-            await tab.close();
-        }
         for (const size of options.sizes){
-            const [width, height] = size.split("x").map(Number);
-            const tab = await openTab(cdp, width, height);
+            const tab = await openTab(cdp, size);
             const row = [];
             try{
                 await openMap(tab, options.base, options.states[0]);
                 for (const state of options.states){
-                    const label = `${size} ${state.name}`;
+                    const label = `${size.spec} ${state.name}`;
+                    if (state.when && !state.when(size)){
+                        row.push("-");
+                        continue;
+                    }
                     let lines;
                     try{
                         await reset(tab);
                         await goTo(tab, state.place, state.page ?? 0);
+                        if (state.applies && !(await tab.evaluate(state.applies))){
+                            row.push("-");
+                            console.log(`${label}: not at this size`);
+                            continue;
+                        }
                         if (state.select) await selectBox(tab, state.select, { details: state.details !== false });
                         await act(tab, state, options.base);
                         await tab.evaluate(QUIET);
-                        if (options.shots && (options.allShots || SHOT_SIZES.has(size))) await shoot(tab, options.shots, `${state.name}-${size}`);
-                        lines = await inspect(tab, state, width, height);
-                        await undo(tab, state);
+                        if (options.shots && (options.allShots || SHOT_SIZES.has(size.spec))) await shoot(tab, options.shots, `${state.name}-${size.spec}`);
+                        lines = await inspect(tab, state);
                     } catch (err){
                         lines = [`(setup) ${err instanceof Error ? err.message : String(err)}`];
                     }
                     for (const error of tab.errors.splice(0)) lines.push(`(js) ${error}`);
                     for (const line of lines) failures.push(`${label} ${line}`);
                     row.push(lines.length === 0 ? "ok" : String(lines.length));
+                    ran++;
                     console.log(`${label}: ${lines.length === 0 ? "ok" : `${lines.length} failure${lines.length === 1 ? "" : "s"}`}`);
                 }
             } finally {
                 await tab.close();
             }
-            table.push([size, row]);
+            table.push([size.spec, row]);
         }
-        if (options.resize) resized = await resizeWalk(cdp, options, failures);
+        // a state the page decides on (the breadcrumb folding) that never came about checked nothing, and "0 failures"
+        // would say it passed; where shell.ts's rules rule a state out (no explorer in VS Code's panel), that's the rule
+        for (const [i, state] of options.states.entries()){
+            if (state.applies && table.length > 0 && table.every(([, row]) => row[i] === "-")) failures.push(`${state.name} (setup) the state came about at none of the sizes checked`);
+        }
+        if (options.resize) for (const walk of WALKS) walks.push([walk, await resizeWalk(cdp, options, walk, failures)]);
     } finally {
         cdp.close();
         await chrome.close();
@@ -830,13 +1077,14 @@ async function main(){
     console.log("\nFailures:");
     if (failures.length === 0) console.log("  none");
     for (const line of failures) console.log(`  ${line}`);
-    console.log(`\n${"size".padEnd(10)} ${options.states.map((s) => s.name.padEnd(Math.max(4, s.name.length))).join(" ")}`);
-    for (const [size, row] of table) console.log(`${size.padEnd(10)} ${row.map((cell, i) => cell.padEnd(Math.max(4, options.states[i].name.length))).join(" ")}`);
-    const combos = table.length * options.states.length;
-    let summary = `${combos} size × state combinations`;
-    if (resized !== null){
-        console.log(`\nlive resize, the file's panel and the repo list open: ${RESIZE_WALK.map((size, i) => `${size} ${resized[i] ?? "-"}`).join(" → ")}`);
-        summary += ` and ${RESIZE_WALK.length} live-resize steps`;
+    const width = Math.max(10, ...table.map(([spec]) => spec.length + 1));
+    console.log(`\n${"size".padEnd(width)} ${options.states.map((s) => s.name.padEnd(Math.max(4, s.name.length))).join(" ")}`);
+    for (const [spec, row] of table) console.log(`${spec.padEnd(width)} ${row.map((cell, i) => cell.padEnd(Math.max(4, options.states[i].name.length))).join(" ")}`);
+    let summary = `${ran} size × state combinations (${table.length} sizes${EMBED ? ", inside VS Code's panel" : ""})`;
+    for (const [walk, { row, reopened }] of walks){
+        const bad = row.filter((cell) => cell !== "ok").length;
+        console.log(`\nlive resize, the file selected and ${walk.name} open: ${row.length} steps, ${bad === 0 ? "all ok" : `${bad} with failures`}${reopened > 0 ? `, the popover opened again ${reopened} ${reopened === 1 ? "time" : "times"} where it had gone` : ""}`);
+        summary += `, ${row.length} live-resize steps with ${walk.name}`;
     }
     console.log(`\n${summary}, ${failures.length} failure${failures.length === 1 ? "" : "s"}, ${((Date.now() - started) / 1000).toFixed(0)} s.`);
     process.exit(failures.length === 0 ? 0 : 1);
