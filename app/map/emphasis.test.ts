@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge } from "@/lib/contracts";
-import { edgeKey, isBusyLevel, mapEmphasis, STRONG_MIN, STRONG_SHARE, strongThreshold, weakLinesHidden, type BoxTone, type EdgeTone } from "./emphasis";
+import { edgeKey, isBusyLevel, mapEmphasis, STRONG_SHARE, strongThreshold, weakLinesHidden, type BoxTone, type EdgeTone } from "./emphasis";
 
 // boxes a, b, c, d; lines a→b, b→c, d→c (the plan's Task 5 vectors)
 const BOXES = ["a", "b", "c", "d"];
@@ -86,7 +86,7 @@ describe("mapEmphasis (VISUAL_REFRESH.md §4)", () => {
 
 describe("Strong links only (ADR-070)", () => {
     // VS Code's root (the demo's level file): its heaviest line carries 665 imports, so a strong line carries at least
-    // max(3, 2% × 665) = 13.3, which leaves extensions → src (665), build → src (16) and extensions → test (16)
+    // 2% × 665 = 13.3, which leaves extensions → src (665), build → src (16) and extensions → test (16)
     const ROOT_BOXES = ["eslint.config.js", "extensions", "gulpfile.mjs", "test", "build", ".github", ".eslint-plugin-local", "src"];
     const ROOT: MapEdge[] = [
         { source: ".eslint-plugin-local", target: "src", count: 2 }, { source: ".github", target: "src", count: 2 },
@@ -100,11 +100,19 @@ describe("Strong links only (ADR-070)", () => {
         return [...tones].filter(([, tone]) => tone !== "hidden").map(([key]) => key).sort();
     };
 
-    it("puts the threshold at 2% of the heaviest line, and never under 3 imports", () => {
+    it("puts the threshold at 2% of the heaviest line, with no floor (the owner's pick, 2026-10-27)", () => {
         expect(strongThreshold(665)).toBeCloseTo(13.3, 10);
-        expect(strongThreshold(100)).toBe(3);
-        expect(strongThreshold(0)).toBe(3);
-        expect([STRONG_SHARE, STRONG_MIN]).toEqual([0.02, 3]);
+        expect(strongThreshold(100)).toBe(2);
+        expect(strongThreshold(0)).toBe(0);
+        expect(STRONG_SHARE).toBe(0.02);
+    });
+
+    it("hides nothing in a folder of files whose lines are 1 or 2 imports", () => {
+        // the heaviest is 2, so a strong line needs 0.04 imports: every line shows
+        const files: MapEdge[] = [{ source: "a.ts", target: "b.ts", count: 1 }, { source: "b.ts", target: "c.ts", count: 2 }, { source: "a.ts", target: "c.ts", count: 1 }];
+        const tones = mapEmphasis(["a.ts", "b.ts", "c.ts"], files, null, null, { strongOnly: true }).edges;
+        expect([...tones.values()]).toEqual(["normal", "normal", "normal"]);
+        expect(weakLinesHidden(files, null)).toBe(0);
     });
 
     it("draws only the strong lines when nothing is selected", () => {

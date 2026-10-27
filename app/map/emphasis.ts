@@ -26,14 +26,15 @@ export const isBusyLevel = (lineCount: number): boolean => lineCount > BUSY_LINE
 
 /**
  * "Strong links only" (the Workbench redesign, ADR-070, on unless turned off): a line is strong when it carries at least
- * STRONG_SHARE of the imports of the page's heaviest line, and never fewer than STRONG_MIN imports. The weaker ones
- * stay hidden unless they touch the selection, the hovered box, or a box Claude Code or the editor has lit.
+ * STRONG_SHARE of the imports of the page's heaviest line. The weaker ones stay hidden unless they touch the selection,
+ * the hovered box, or a box Claude Code or the editor has lit. There's no floor of 3 imports, as the spec had: in a
+ * folder of files every line is 1 or 2 imports, and the floor hid them all (the owner's pick, 2026-10-27). So a page
+ * whose heaviest line carries under 50 imports hides nothing.
  */
 export const STRONG_SHARE = 0.02;
-export const STRONG_MIN = 3;
 
 /** The fewest imports a strong line carries on a page whose heaviest line carries `maxImports`. */
-export const strongThreshold = (maxImports: number): number => Math.max(STRONG_MIN, STRONG_SHARE * maxImports);
+export const strongThreshold = (maxImports: number): number => STRONG_SHARE * maxImports;
 
 /** How many lines Strong links only hides on this page with `selected` selected and `pinned` lit, before any hover. */
 export function weakLinesHidden(edges: readonly MapEdge[], selected: string | null, pinned: ReadonlySet<string> = new Set()): number {
