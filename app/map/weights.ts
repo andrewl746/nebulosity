@@ -15,9 +15,12 @@ export function dotSize(files: number, maxFiles: number): number {
     return DOT_MIN + ((DOT_MAX - DOT_MIN) * Math.log10(Math.max(0, files) + 1)) / Math.log10(maxFiles + 1);
 }
 
-/** A line, 1 px for a single import up to 10 px for the page's heaviest. */
+/**
+ * A line, 1 px for a single import up to 6 px for the page's heaviest. The spec's 10 px made every strong line of a dense
+ * level a 7 to 10 px tube, too alike to tell apart (the owner, 2026-10-27, on src/vs).
+ */
 export const LINE_MIN = 1;
-export const LINE_MAX = 10;
+export const LINE_MAX = 6;
 
 export function lineWidth(imports: number, maxImports: number): number {
     if (maxImports <= 1 || imports <= 1) return LINE_MIN;

@@ -20,15 +20,15 @@ describe("dotSize: 6 + 12 × log10(files + 1) / log10(largest + 1)", () => {
     });
 });
 
-describe("lineWidth: 1 + 9 × ln(imports) / ln(heaviest)", () => {
-    it("is 1 px for one import and 10 px for the heaviest line", () => {
+describe("lineWidth: 1 + 5 × ln(imports) / ln(heaviest)", () => {
+    it("is 1 px for one import and 6 px for the heaviest line", () => {
         expect(lineWidth(1, 665)).toBe(1);
-        expect(lineWidth(665, 665)).toBe(10);
+        expect(lineWidth(665, 665)).toBe(6);
     });
 
-    it("is 5.5 px where ln(imports) is half of the heaviest's", () => {
+    it("is 3.5 px where ln(imports) is half of the heaviest's", () => {
         // ln(10) / ln(100) = 1 / 2
-        expect(lineWidth(10, 100)).toBeCloseTo(5.5, 10);
+        expect(lineWidth(10, 100)).toBeCloseTo(3.5, 10);
     });
 
     it("is 1 px on a page whose heaviest line is a single import", () => {
@@ -44,8 +44,10 @@ describe("arrowHead: half-width max(4.5, 0.9w + 3), length max(7, 1.2w + 5)", ()
     });
 
     it("grows with a thick line, wider than it by 3 px a side and more", () => {
-        // 0.9 × 10 + 3 = 12, 1.2 × 10 + 5 = 17
-        expect(arrowHead(10)).toEqual({ half: 12, length: 17 });
+        // the heaviest line, 6 px: 0.9 × 6 + 3 = 8.4, 1.2 × 6 + 5 = 12.2
+        const head = arrowHead(6);
+        expect(head.half).toBeCloseTo(8.4, 10);
+        expect(head.length).toBeCloseTo(12.2, 10);
     });
 });
 

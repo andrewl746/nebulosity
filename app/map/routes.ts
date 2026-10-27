@@ -16,13 +16,16 @@ export type Point = { x: number; y: number };
  * arrowhead it ends in. Pure and deterministic, like the layout it follows: the same level always routes the same way.
  */
 
-/** How far a lane keeps from the boxes beside it, past half its own width. */
-const LANE_CLEARANCE = 8;
-/** Where the first lane outside every box runs: this far from the outermost box's edge, as before the redesign. */
-const OUTER_LANE = 20;
+/**
+ * How far a lane keeps from the boxes beside it, past half its own width, and from other lanes and tracks: room enough
+ * that lines running side by side read as separate lines rather than one mass (the owner, 2026-10-27, on src/vs).
+ */
+const LANE_CLEARANCE = 16;
+/** Where the first lane outside every box runs: this far from the outermost box's edge. */
+const OUTER_LANE = 28;
 /** The room between two lanes, and between two runs on neighbouring tracks, past half of each one's width. */
-const LANE_GAP = 6;
-const TRACK_GAP = 6;
+const LANE_GAP = 8;
+const TRACK_GAP = 8;
 /** The room between two lines leaving a box's bottom, past half of each one's width. */
 const PORT_GAP_OUT = 10;
 /** The room between two arrowheads arriving at a box's top, past each one's half-width. */

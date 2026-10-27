@@ -38,11 +38,12 @@ const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
 
 /**
  * Each line's color per tone (the Workbench redesign, ADR-070), its width going by its imports whatever the tone: the
- * selection's lines in the logo's spoke color, the hovered box's a step brighter than the rest, and the rest quiet,
- * quieter still while something is selected. Its arrowhead is the line's own color, filled and wider than it.
+ * selection's lines in the logo's spoke color, the hovered box's a step brighter, and the rest quiet, so the boxes lead
+ * and a dense level reads as structure until you point at a box (the owner, 2026-10-27: src/vs was "so messy and
+ * unreadable" with every line in the bright gray). Its arrowhead is the line's own color, filled and wider than it.
  */
 const EDGE_LOOKS: Record<Exclude<EdgeTone, "hidden">, { color: string; layer: number }> = {
-    normal: { color: "var(--text-3)", layer: 0 },
+    normal: { color: "var(--edge-dim)", layer: 0 },
     faded: { color: "var(--edge-dim)", layer: 0 },
     preview: { color: "var(--text-2)", layer: 1 },
     selected: { color: "var(--edge-strong)", layer: 2 },

@@ -21,26 +21,26 @@ describe("routeEdges (owner review: no line may pass through a box)", () => {
     });
 
     it("goes around a box in a row it skips, down a lane in the gutter beside it, from a port of its own", () => {
-        // m (0..232 wide, y 120..176) is in the way of s → t; the lanes beside it are 20 px out: x = -20 or 252, and a tie
+        // m (0..232 wide, y 120..176) is in the way of s → t; the lanes beside it are 28 px out: x = -28 or 260, and a tie
         // goes to the lower x. Channels: y (0 + 56 + 120) / 2 = 88 under s, y (120 + 56 + 240) / 2 = 208 above t.
         // s has two lines leaving, 1 px each: 1 + 10 apart, centred on 116, so 110.5 and 121.5, the one to the lane at
-        // -20 on the left. s → m's ports are 5.5 apart, under 16, so m's port moves over and it drops straight.
+        // -28 on the left. s → m's ports are 5.5 apart, under 16, so m's port moves over and it drops straight.
         const routes = routeEdges(
             at({ s: { x: 0, y: 0 }, m: { x: 0, y: 120 }, t: { x: 0, y: 240 } }),
             [line("s", "m"), line("s", "t")],
         );
         expect(routes.get("s->t")).toEqual([
-            { x: 110.5, y: 56 }, { x: 110.5, y: 88 }, { x: -20, y: 88 }, { x: -20, y: 208 }, { x: 116, y: 208 }, { x: 116, y: 240 },
+            { x: 110.5, y: 56 }, { x: 110.5, y: 88 }, { x: -28, y: 88 }, { x: -28, y: 208 }, { x: 116, y: 208 }, { x: 116, y: 240 },
         ]);
         expect(routes.get("s->m")).toEqual([{ x: 121.5, y: 56 }, { x: 121.5, y: 120 }]);
     });
 
     it("routes a line that points back up around both rows it passes", () => {
         // s (y 120) imports t (y 0): out under s (y 120 + 56 + 32 = 208, half a rank gap below the last row), up the lane
-        // at x = -20 past both rows, and into t from above (y -32)
+        // at x = -28 past both rows, and into t from above (y -32)
         const routes = routeEdges(at({ t: { x: 0, y: 0 }, s: { x: 0, y: 120 } }), [line("t", "s"), line("s", "t")]);
         expect(routes.get("s->t")).toEqual([
-            { x: 116, y: 176 }, { x: 116, y: 208 }, { x: -20, y: 208 }, { x: -20, y: -32 }, { x: 116, y: -32 }, { x: 116, y: 0 },
+            { x: 116, y: 176 }, { x: 116, y: 208 }, { x: -28, y: 208 }, { x: -28, y: -32 }, { x: 116, y: -32 }, { x: 116, y: 0 },
         ]);
     });
 
@@ -59,7 +59,7 @@ describe("routeEdges (owner review: no line may pass through a box)", () => {
         expect([...routes.keys()]).toEqual(["s->t"]);
         // the one line leaving s has the middle of its bottom to itself
         expect(routes.get("s->t")).toEqual([
-            { x: 116, y: 56 }, { x: 116, y: 88 }, { x: -20, y: 88 }, { x: -20, y: 208 }, { x: 116, y: 208 }, { x: 116, y: 240 },
+            { x: 116, y: 56 }, { x: 116, y: 88 }, { x: -28, y: 88 }, { x: -28, y: 208 }, { x: 116, y: 208 }, { x: 116, y: 240 },
         ]);
     });
 
@@ -127,17 +127,18 @@ describe("routeEdges on VS Code's root, as the approved mockup draws it", () => 
     const routes = routeEdges(ROOT, ROOT_LINES, SRC_SELECTED);
 
     it("takes the 665 imports from extensions to src down the lane left of every box, from its own ports, lowest into src", () => {
-        // widths (weights.ts): 665 → 10 px, 16 → 1 + 9 × ln 16 / ln 665 = 4.839 px, 2 → 1.960 px.
-        // extensions' two leaving lines, (10 + 4.839) / 2 + 10 = 17.42 apart round its centre 0: −8.71 to src's lane, +8.71
-        // to test. The lane: the rows passed (gulpfile and test, build, .github and .eslint) leave room only outside them
-        // all, 20 px out from −252, so −272, which ties with +272 and goes to the lower x.
-        // src's four arriving lines in the order they come from (the lane −272, .github −136, build's lane 0, .eslint 136),
-        // their heads (half-widths 12, 4.764, 7.355, 4.764) 8 apart, centred: −32.50, −7.74, 12.38, 32.50.
+        // widths (weights.ts): 665 → 6 px, 16 → 1 + 5 × ln 16 / ln 665 = 3.1328 px, 2 → 1.5332 px.
+        // extensions' two leaving lines, (6 + 3.1328) / 2 + 10 = 14.566 apart round its centre 0: −7.283 to src's lane,
+        // +7.283 to test. The lane: the rows passed (gulpfile and test, build, .github and .eslint) leave room only outside
+        // them all, 28 px out from −252, so −280, which ties with +280 and goes to the lower x.
+        // src's four arriving lines in the order they come from (the lane −280, .github −136, build's lane 0, .eslint 136),
+        // their heads (half-widths 8.4, 4.5, 5.8195, 4.5) 8 apart, centred: −28.770, −7.870, 10.450, 28.770.
         // The channel over src (536 to 600): .github's, build's and .eslint's runs share a track, and extensions' must
-        // run below .github's (whose turn at −7.74 lies past its end), so two tracks, 13.42 apart, the lower one 17 + 3 +
-        // 8 above src: 572, and 558.58. The channel under extensions holds both its runs on one track, at its middle, 208.
+        // run below .github's (whose turn at −7.87 lies past its end), so two tracks, (3.1328 + 6) / 2 + 8 = 12.566
+        // apart, centred on 568 they'd be 561.717 and 574.283, and the lower one keeps 12.2 + 3 + 8 above src (576.8).
+        // The channel under extensions holds both its runs on one track, at its middle, 208.
         const heavy = routes.get("extensions->src")!;
-        const expected = [[-8.70977, 176], [-8.70977, 208], [-272, 208], [-272, 572], [-32.50088, 572], [-32.50088, 600]];
+        const expected = [[-7.2832, 176], [-7.2832, 208], [-280, 208], [-280, 574.2832], [-28.76955, 574.2832], [-28.76955, 600]];
         expect(heavy).toHaveLength(expected.length);
         heavy.forEach((p, i) => {
             expect(p.x, `point ${i} x`).toBeCloseTo(expected[i][0], 3);
@@ -147,7 +148,7 @@ describe("routeEdges on VS Code's root, as the approved mockup draws it", () => 
 
     it("ends the four lines into src at their own points, in the order they come from", () => {
         const ends = ["extensions->src", ".github->src", "build->src", ".eslint-plugin-local->src"].map((key) => routes.get(key)!.at(-1)!.x);
-        expect(ends.map((x) => Number(x.toFixed(2)))).toEqual([-32.5, -7.74, 12.38, 32.5]);
+        expect(ends.map((x) => Number(x.toFixed(2)))).toEqual([-28.77, -7.87, 10.45, 28.77]);
     });
 
     it("takes build's line down the gutter between .github and .eslint-plugin-local", () => {
