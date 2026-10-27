@@ -20,9 +20,24 @@ export type PanelState =
 const README = "https://github.com/andrewl746/Nebulosity#readme";
 const INSTALL = "npm install -g nebulosity";
 
-/** The address the panel frames: the external URL with one "/" and the flag that turns the Map's bridge on (API_CONTRACTS §20). */
-export function mapFrameUrl(external: string): string {
-    return `${external.replace(/\/+$/, "")}/?embed=vscode`;
+/** VS Code's theme kinds as the Map names them (lib/contracts.ts's ThemeKind). */
+export type FrameKind = "dark" | "light" | "hc" | "hc-light";
+
+/**
+ * VS Code's `ColorThemeKind` (Light 1, Dark 2, HighContrast 3, HighContrastLight 4) as the Map's kind. Anything else is
+ * dark, the Map's own palette.
+ */
+export function frameKindOf(colorThemeKind: number): FrameKind {
+    return colorThemeKind === 1 ? "light" : colorThemeKind === 3 ? "hc" : colorThemeKind === 4 ? "hc-light" : "dark";
+}
+
+/**
+ * The address the panel frames: the external URL with one "/" and the flag that turns the Map's bridge on (API_CONTRACTS
+ * §20). A theme kind other than dark goes in the address too (`&kind=light`), so a light theme's Map is light from its
+ * first paint, before the relay's theme message brings the exact colors (the Workbench redesign, ADR-070).
+ */
+export function mapFrameUrl(external: string, kind: FrameKind = "dark"): string {
+    return `${external.replace(/\/+$/, "")}/?embed=vscode${kind === "dark" ? "" : `&kind=${kind}`}`;
 }
 
 /** The frame URL's origin (`http://localhost:41234`): where the relay sends its messages, and the only sender it hears from the frame. */
@@ -103,8 +118,10 @@ function messageOf(state: Exclude<PanelState, { kind: "map" }>): string {
 }
 
 /**
- * The Map's own colors (app/globals.css: the canvas, its text, the code chips, cyan for what you click), so the panel
- * reads as the Map's from its first message to the Map itself, with no flash of another color between them.
+ * The person's own theme, as the Map takes it (the Workbench redesign, ADR-070): VS Code's `--vscode-*` variables for
+ * the background, the text, code and the scrollbar, each with Dark 2026's value as its fallback, and the Map's purple
+ * for the one button a message offers (a step darker on light themes, with white text). So the panel reads as the
+ * Map's, in the editor's colors, from its first message to the Map itself, and follows a theme change by itself.
  *
  * It also holds up when the panel is squeezed (the owner's "no matter how much I compress it"). Nothing here is cut off:
  * long words and paths wrap (`overflow-wrap:anywhere` on `main`, whose children inherit it); the side padding shrinks
@@ -115,21 +132,22 @@ function messageOf(state: Exclude<PanelState, { kind: "map" }>): string {
  * size and the Map inside keeps its own floor and scrolling. Wider than 480 px the page is as it was.
  */
 const STYLE = [
-    "*{scrollbar-width:thin;scrollbar-color:#4B3B85 transparent}",
-    "html,body{margin:0;padding:0;height:100%;background:#0E0A1C;color:#F1EEF8}",
+    "*{scrollbar-width:thin;scrollbar-color:var(--vscode-scrollbarSlider-background,#464747) transparent}",
+    "html,body{margin:0;padding:0;height:100%;background:var(--vscode-editor-background,#121314);color:var(--vscode-foreground,#BFBFBF)}",
     "body{font-family:var(--vscode-font-family),system-ui,sans-serif;font-size:13px;line-height:1.5}",
     "iframe{display:block;width:100%;height:100vh;border:0}",
-    "main{max-width:34rem;min-width:7rem;padding:2.5rem 2rem;color:#D3C7EE;overflow-wrap:anywhere}",
+    "main{max-width:34rem;min-width:7rem;padding:2.5rem 2rem;overflow-wrap:anywhere}",
     "@media (max-width:480px){main{padding:1.5rem 1rem}}",
     "@media (max-width:240px){main{padding:1rem .75rem}}",
-    "h1{margin:0 0 .75rem;font-size:15px;font-weight:600;color:#F1EEF8}",
+    "h1{margin:0 0 .75rem;font-size:15px;font-weight:600}",
     "p{margin:0 0 .75rem}",
-    "code{padding:.1rem .35rem;border-radius:4px;background:#2A1B52;color:#D8CAFF;font-family:var(--vscode-editor-font-family),monospace;word-break:break-all}",
-    ".detail{color:#B9A9DE;font-family:var(--vscode-editor-font-family),monospace;white-space:pre-wrap;word-break:break-word}",
-    "a{color:#67E8F9}",
-    "button{padding:.375rem .75rem;border:1px solid rgba(103,232,249,.6);border-radius:6px;background:transparent;color:#67E8F9;font:inherit;cursor:pointer}",
-    "button:hover{border-color:#67E8F9}",
-    "button:focus-visible{border-color:#67E8F9;outline:1px solid #67E8F9;outline-offset:2px}",
+    "code{padding:.1rem .35rem;border-radius:4px;background:var(--vscode-textCodeBlock-background,#222223);font-family:var(--vscode-editor-font-family),monospace;word-break:break-all}",
+    ".detail{color:var(--vscode-descriptionForeground,#8C8C8C);font-family:var(--vscode-editor-font-family),monospace;white-space:pre-wrap;word-break:break-word}",
+    "a{color:inherit;text-decoration:underline;text-underline-offset:2px}",
+    "button{padding:.375rem .75rem;border:0;border-radius:5px;background:#A855F7;color:#120C1C;font:inherit;font-weight:600;cursor:pointer}",
+    "body.vscode-light button,body.vscode-high-contrast-light button{background:#9333EA;color:#FFFFFF}",
+    "body.vscode-high-contrast button{outline:1px solid var(--vscode-contrastBorder,#6FC3DF)}",
+    ":focus-visible{outline:2px solid var(--vscode-focusBorder,#67E8F9);outline-offset:2px}",
 ].join("");
 
 /** The panel's whole page for a state. `relayUri` is the webview's URI of dist/relay.js; `nonce` is new for every page. */

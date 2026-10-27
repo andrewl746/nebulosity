@@ -24,6 +24,7 @@ import { nextPulses, type Pulse } from "./pulses";
 import RepoMenu from "./RepoMenu";
 import SearchPalette from "./SearchPalette";
 import StatusPill from "./StatusPill";
+import { applyTheme, themeInputOf } from "./theme";
 import TopBar from "./TopBar";
 import { EMBEDDED, useEditorBridge } from "./useEditorBridge";
 import { useIndexStatus } from "./useIndexStatus";
@@ -284,13 +285,19 @@ function MapScreen(){
 
     /**
      * What the editor asks for (API_CONTRACTS §20): `follow` when its active file changed, a deliberate `show`, and the
-     * files to light. Only the Map's own clicks open files in the editor, so nothing here echoes back (V1.8 plan P10).
+     * files to light, and its color theme. Only the Map's own clicks open files in the editor, so nothing here echoes back
+     * (V1.8 plan P10).
      */
     const onEditorMessage = useCallback((message: BridgeToMap) => {
         if (message.type === "nebulosity.follow") focus(message.path, { history: "replace", quiet: true });
         else if (message.type === "nebulosity.show") focus(message.path, { quiet: true });
         else if (message.type === "nebulosity.highlight") setEditorHighlights(message.paths);
         else if (message.type === "nebulosity.clear") setEditorHighlights([]);
+        else if (message.type === "nebulosity.theme"){
+            // the editor's own grays (ADR-070): set on the page's root, over globals.css's Dark 2026
+            const theme = themeInputOf(message.kind, message.colors);
+            if (theme !== null) applyTheme(document.documentElement, theme);
+        }
     }, [focus]);
 
     /**

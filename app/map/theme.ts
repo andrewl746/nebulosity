@@ -10,8 +10,9 @@
  * Pure, so the rule is tested on its own, and app/globals.css holds its result for Dark 2026.
  */
 
-/** Which kind of theme it is, as VS Code's webview says (`vscode-light`, `vscode-dark`, the two high contrast ones). */
-export type ThemeKind = "dark" | "light" | "hc" | "hc-light";
+import type { BridgeThemeColors, ThemeKind } from "@/lib/contracts";
+
+export type { ThemeKind };
 
 /** A theme's colors, as the panel's relay reads them from VS Code's `--vscode-*` variables. Hex, `#rrggbb`. */
 export type ThemeInput = {
@@ -138,4 +139,51 @@ export function fromTheme(t: ThemeInput): Palette {
 }
 
 /** Whether a theme kind is a light one: the syntax colors, the native scrollbars and React Flow's own parts follow it. */
-export const isLightKind = (kind: ThemeKind): boolean => kind === "light" || kind === "hc-light";
+export const isLightKind = (kind: ThemeKind | null): boolean => kind === "light" || kind === "hc-light";
+
+/**
+ * The theme a `nebulosity.theme` message names, its colors read as hex (each over the editor's background, so a
+ * see-through border becomes the gray it looks like), or null when its editor, side bar or text color can't be read.
+ */
+export function themeInputOf(kind: ThemeKind, colors: BridgeThemeColors): ThemeInput | null {
+    const editor = parseColor(colors.editor);
+    if (editor === null) return null;
+    const over = (value: string | undefined): string | null => (value === undefined ? null : parseColor(value, editor));
+    const side = over(colors.side);
+    const fg = over(colors.fg);
+    if (side === null || fg === null) return null;
+    const optional = (value: string | undefined): string | undefined => over(value) ?? undefined;
+    return { kind, editor, side, fg, border: optional(colors.border), desc: optional(colors.desc), focus: optional(colors.focus) };
+}
+
+/** The element the tokens live on, the page's `<html>`: the real one fits, and tests pass a stand-in. */
+export type ThemeRoot = { style: { setProperty(name: string, value: string): void }; setAttribute(name: string, value: string): void };
+
+/** Sets every token from a theme on the page's root, over globals.css's own values, and names its kind (`data-kind`). */
+export function applyTheme(root: ThemeRoot, input: ThemeInput): void {
+    for (const [name, value] of Object.entries(fromTheme(input))) root.style.setProperty(`--${name}`, value);
+    root.setAttribute("data-kind", input.kind);
+}
+
+/**
+ * Stand-ins for the other kinds until the panel's message brings the person's own colors: VS Code's Light 2026 and its
+ * two high contrast themes (theme-defaults/themes). The panel's address names the kind (`&kind=light`), so a light
+ * theme's Map is light from its first paint instead of flashing dark until the bridge is up.
+ */
+export const KIND_DEFAULTS: Record<Exclude<ThemeKind, "dark">, ThemeInput> = {
+    light: { kind: "light", editor: "#FFFFFF", side: "#FAFAFD", border: "#E2E2E5", fg: "#202020", desc: "#606060" },
+    hc: { kind: "hc", editor: "#000000", side: "#000000", border: "#6FC3DF", fg: "#FFFFFF", desc: "#FFFFFF" },
+    "hc-light": { kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" },
+};
+
+/**
+ * The script the page runs before its first paint (app/layout.tsx): inside VS Code's panel, with a kind other than
+ * dark in the address, it sets that kind's stand-in tokens. Anywhere else it does nothing, so the browser and the
+ * demo keep globals.css's Dark 2026.
+ */
+export function earlyThemeScript(): string {
+    const palettes = Object.fromEntries(Object.entries(KIND_DEFAULTS).map(([kind, input]) => [kind, fromTheme(input)]));
+    return `(function(){try{var q=new URLSearchParams(location.search);if(q.get("embed")!=="vscode")return;`
+        + `var k=q.get("kind"),P=${JSON.stringify(palettes)},p=Object.prototype.hasOwnProperty.call(P,k)?P[k]:null;if(!p)return;`
+        + `var r=document.documentElement;for(var n in p)r.style.setProperty("--"+n,p[n]);r.setAttribute("data-kind",k);}catch(e){}})();`;
+}

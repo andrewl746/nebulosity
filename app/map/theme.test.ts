@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DARK_2026, fromTheme, mix, parseColor, type ThemeInput } from "./theme";
+import { applyTheme, DARK_2026, earlyThemeScript, fromTheme, mix, parseColor, themeInputOf, type ThemeInput } from "./theme";
 
 // The five themes of the approved mockup (mockup3.html's THEMES, read from VS Code's installed theme files), and what the
 // mockup's own fromTheme gave for each, transcribed from a run of the mockup's script (2026-10-27, the owner's picks):
@@ -86,5 +86,74 @@ describe("parseColor", () => {
         expect(parseColor("#12345")).toBeNull();
         expect(parseColor("var(--x)")).toBeNull();
         expect(parseColor("")).toBeNull();
+    });
+});
+
+describe("themeInputOf (a nebulosity.theme message, API_CONTRACTS §20)", () => {
+    it("reads each color as hex, laying a see-through one over the editor's background", () => {
+        expect(themeInputOf("dark", { editor: "#121314", side: "#191a1b", fg: "#bfbfbf", border: "#80808059", desc: "rgb(140, 140, 140)" })).toEqual({
+            kind: "dark", editor: "#121314", side: "#191A1B", fg: "#BFBFBF",
+            // 18 + 110 × 0.349 = 56.4, 19 + 109 × 0.349 = 57.0, 20 + 108 × 0.349 = 57.7 (parseColor's test)
+            border: "#38393A", desc: "#8C8C8C", focus: undefined,
+        });
+    });
+
+    it("drops an optional color it can't read, and gives null without the editor's, the side bar's or the text's", () => {
+        expect(themeInputOf("light", { editor: "#fff", side: "#fafafd", fg: "#202020", border: "var(--x)" })?.border).toBeUndefined();
+        expect(themeInputOf("light", { editor: "white", side: "#fafafd", fg: "#202020" })).toBeNull();
+        expect(themeInputOf("light", { editor: "#fff", side: "", fg: "#202020" })).toBeNull();
+        expect(themeInputOf("light", { editor: "#fff", side: "#fafafd", fg: "black" })).toBeNull();
+    });
+});
+
+/** A stand-in for the page's <html>: what was set on its style and as attributes. */
+function fakeRoot(){
+    const style: Record<string, string> = {};
+    const attributes: Record<string, string> = {};
+    return {
+        style: { setProperty: (name: string, value: string) => { style[name] = value; } },
+        setAttribute: (name: string, value: string) => { attributes[name] = value; },
+        style_: style,
+        attributes,
+    };
+}
+
+describe("applyTheme", () => {
+    it("sets every token and names the kind", () => {
+        const root = fakeRoot();
+        applyTheme(root, THEMES.monokai);
+        for (const [mockupName, hex] of Object.entries(MOCKUP.monokai)) expect(root.style_[`--${NAMES[mockupName]}`], NAMES[mockupName]).toBe(hex.toUpperCase());
+        expect(root.style_["--fade"]).toBe("50%");
+        expect(root.attributes["data-kind"]).toBe("dark");
+    });
+});
+
+describe("earlyThemeScript (before the first paint, app/layout.tsx)", () => {
+    /** Runs the script against a stand-in page at this address. */
+    function run(search: string){
+        const root = fakeRoot();
+        new Function("location", "document", earlyThemeScript())({ search }, { documentElement: root });
+        return root;
+    }
+
+    it("inside VS Code's panel, gives a light theme's Map Light 2026's tokens from the start", () => {
+        const root = run("?embed=vscode&kind=light");
+        // Light 2026 is the mockup's own light theme, so these are the mockup's values
+        for (const [mockupName, hex] of Object.entries(MOCKUP.light2026)) expect(root.style_[`--${NAMES[mockupName]}`], NAMES[mockupName]).toBe(hex.toUpperCase());
+        expect(root.attributes["data-kind"]).toBe("light");
+    });
+
+    it("gives high contrast its stand-in too", () => {
+        const root = run("?path=src&embed=vscode&kind=hc");
+        for (const [mockupName, hex] of Object.entries(MOCKUP.hc)) expect(root.style_[`--${NAMES[mockupName]}`], NAMES[mockupName]).toBe(hex.toUpperCase());
+        expect(root.attributes["data-kind"]).toBe("hc");
+    });
+
+    it("does nothing for dark, an unknown kind, or outside the panel", () => {
+        for (const search of ["?embed=vscode&kind=dark", "?embed=vscode&kind=toString", "?embed=vscode", "?kind=light", ""]){
+            const root = run(search);
+            expect(Object.keys(root.style_), search).toEqual([]);
+            expect(root.attributes, search).toEqual({});
+        }
     });
 });

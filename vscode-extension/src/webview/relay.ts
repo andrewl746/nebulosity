@@ -25,9 +25,49 @@ export type RelayCommand = "start" | "showLog" | "indexRepo";
 /** The commands as a record, so adding one to RelayCommand and not here (or the reverse) doesn't compile. */
 const COMMANDS: Record<RelayCommand, true> = { start: true, showLog: true, indexRepo: true };
 
+/** The theme kinds the Map knows (lib/contracts.ts's ThemeKind). */
+type ThemeKind = "dark" | "light" | "hc" | "hc-light";
+
+/**
+ * The theme's kind as VS Code marks the webview's body: its `data-vscode-theme-kind`, else its class
+ * (`vscode-high-contrast-light` before `vscode-high-contrast`, since a high contrast light body carries both). Dark when
+ * neither says.
+ */
+export function themeKindOf(kindAttribute: string | null, className: string): ThemeKind {
+    const NAMED: Record<string, ThemeKind> = {
+        "vscode-high-contrast-light": "hc-light", "vscode-high-contrast": "hc", "vscode-light": "light", "vscode-dark": "dark",
+    };
+    if (kindAttribute !== null && Object.hasOwn(NAMED, kindAttribute)) return NAMED[kindAttribute];
+    const classes = ` ${className} `;
+    const marked = Object.keys(NAMED).find((name) => classes.includes(` ${name} `));
+    return marked === undefined ? "dark" : NAMED[marked];
+}
+
+/**
+ * The theme message for the Map (API_CONTRACTS §20's `nebulosity.theme`, ADR-070): VS Code's colors read from the
+ * webview's `--vscode-*` variables by `read` (an empty string for one the theme doesn't set). The border is the high
+ * contrast border on a high contrast theme, else the first of a widget's, the panel's and the side bar's that's set.
+ * Null without the editor's, the side bar's or the text's color, which every theme sets.
+ */
+export function themeMessageOf(read: (name: string) => string, kind: ThemeKind): { type: "nebulosity.theme"; kind: ThemeKind; colors: Record<string, string> } | null {
+    const value = (name: string): string => read(`--vscode-${name}`).trim();
+    const first = (...names: string[]): string => names.map(value).find((v) => v !== "") ?? "";
+    const colors: Record<string, string> = { editor: value("editor-background"), side: value("sideBar-background"), fg: value("foreground") };
+    if (colors.editor === "" || colors.side === "" || colors.fg === "") return null;
+    const hc = kind === "hc" || kind === "hc-light";
+    const optional = {
+        border: hc ? first("contrastBorder", "widget-border", "panel-border", "sideBar-border") : first("widget-border", "panel-border", "sideBar-border"),
+        desc: value("descriptionForeground"),
+        focus: value("focusBorder"),
+    };
+    for (const [name, color] of Object.entries(optional)) if (color !== "") colors[name] = color;
+    return { type: "nebulosity.theme", kind, colors };
+}
+
 /**
  * The parts of the page the relay uses. `frame` and `mapOrigin` are null outside the `map` state. `host` is the window
- * of VS Code's own frame around this page (pre/index.html), which delivers the extension's messages.
+ * of VS Code's own frame around this page (pre/index.html), which delivers the extension's messages. `theme` reads the
+ * theme message as it is now and calls back whenever VS Code changes the theme; null where there's none to read.
  */
 export type RelayEnv = {
     frame: { contentWindow: { postMessage(m: unknown, origin: string): void } | null; addEventListener(t: "load", f: () => void): void } | null;
@@ -38,6 +78,7 @@ export type RelayEnv = {
     mapOrigin: string | null;
     setInterval: typeof setInterval;
     clearInterval: typeof clearInterval;
+    theme?: { read(): unknown; watch(onChange: () => void): void } | null;
 };
 
 /** The `data-command` of the clicked element's nearest `[data-command]` ancestor (or itself), when it's one of the three. */
@@ -67,10 +108,24 @@ export function startRelay(env: RelayEnv): void {
     /** True from the Map's first `ready` after a load until the next load. */
     let ready = false;
     let held: unknown[] = [];
+    /** The theme message the Map was last sent since its `ready`, as JSON: a change VS Code reports twice is sent once. */
+    let themeSent: string | null = null;
     let hello: ReturnType<typeof setInterval> | null = null;
     let giveUp: ReturnType<typeof setInterval> | null = null;
 
     const toMap = (message: unknown): void => frame.contentWindow?.postMessage(message, mapOrigin);
+    // The theme goes to a ready Map only: right after each `ready`, then whenever VS Code changes it. Before that it would
+    // land on the frame's blank page or a Map not listening yet.
+    const sendTheme = (): void => {
+        if (!ready || !env.theme) return;
+        const message = env.theme.read();
+        if (message === null || message === undefined) return;
+        const json = JSON.stringify(message);
+        if (json === themeSent) return;
+        themeSent = json;
+        toMap(message);
+    };
+    env.theme?.watch(sendTheme);
     const stopHello = (): void => {
         if (hello !== null) stopEvery(hello);
         if (giveUp !== null) stopEvery(giveUp);
@@ -110,6 +165,9 @@ export function startRelay(env: RelayEnv): void {
                 stopHello();
                 for (const message of held) toMap(message);
                 held = [];
+                // every load is a new page with Dark 2026 again, so it gets the theme again
+                themeSent = null;
+                sendTheme();
             } else if (!ready) return;
             vscode.postMessage(e.data);
             return;
@@ -132,14 +190,38 @@ export function startRelay(env: RelayEnv): void {
  * The page's own globals, typed here so this file needs no DOM types. In a webview `acquireVsCodeApi` exists; in Node
  * (the tests) it doesn't, so nothing below runs there.
  */
+type PageElement = { getAttribute(name: string): string | null; className: string };
 type WebviewGlobals = {
     acquireVsCodeApi?: () => RelayEnv["vscode"];
     document: RelayEnv["document"] & {
         querySelector(selector: "iframe"): RelayEnv["frame"];
         querySelector(selector: "script[data-map-origin]"): { getAttribute(name: string): string | null } | null;
+        documentElement: PageElement;
+        body: PageElement;
     };
     window: RelayEnv["window"] & { parent: unknown; frameElement: { ownerDocument: { defaultView: unknown } | null } | null };
+    getComputedStyle(element: PageElement): { getPropertyValue(name: string): string };
+    MutationObserver: new (callback: () => void) => { observe(target: PageElement, options: { attributes: true; attributeFilter: string[] }): void };
 };
+
+/**
+ * The page's theme, read and watched (ADR-070). VS Code writes the theme's colors as `--vscode-*` variables in `<html>`'s
+ * style and marks its kind on `<body>`, and rewrites both when the theme changes, so the watch is on those attributes.
+ */
+function pageTheme(globals: WebviewGlobals): NonNullable<RelayEnv["theme"]> {
+    const { document: doc } = globals;
+    return {
+        read: () => {
+            const style = globals.getComputedStyle(doc.documentElement);
+            return themeMessageOf((name) => style.getPropertyValue(name), themeKindOf(doc.body.getAttribute("data-vscode-theme-kind"), doc.body.className));
+        },
+        watch: (onChange) => {
+            const observer = new globals.MutationObserver(onChange);
+            observer.observe(doc.documentElement, { attributes: true, attributeFilter: ["style"] });
+            observer.observe(doc.body, { attributes: true, attributeFilter: ["class", "data-vscode-theme-kind"] });
+        },
+    };
+}
 
 /**
  * The window that holds this page's frame: the extension's messages come from it. Not `window.parent`: VS Code writes
@@ -165,5 +247,6 @@ if (typeof page.acquireVsCodeApi === "function"){
         mapOrigin: page.document.querySelector("script[data-map-origin]")?.getAttribute("data-map-origin") ?? null,
         setInterval,
         clearInterval,
+        theme: pageTheme(page),
     });
 }

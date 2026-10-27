@@ -20,6 +20,8 @@ import { portalCaption, portalDirection, portalLinks, portalTitle } from "./port
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { routeEdges } from "./routes";
+import { isLightKind } from "./theme";
+import { useThemeKind } from "./useThemeKind";
 import { boundsOf, initialViewport, TOP_INSET } from "./viewport";
 
 // at module scope: a new object per render would make React Flow remount every box and line
@@ -88,6 +90,8 @@ type MapCanvasProps = {
 function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered, bannerBottom, actionsFor, onDetails }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
+    // React Flow's own parts follow a light VS Code theme (theme.ts)
+    const themeKind = useThemeKind();
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
     const divider = useMemo(() => looseDivider(level.nodes, level.edges, positions), [level, positions]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
@@ -225,7 +229,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             zoomOnDoubleClick={false}
             minZoom={0.1}
             maxZoom={2}
-            colorMode="dark"
+            colorMode={isLightKind(themeKind) ? "light" : "dark"}
             proOptions={{ hideAttribution: true }}
             inert={covered}
         >
