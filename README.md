@@ -14,15 +14,13 @@ You can also explore these imports yourself on the Map, which shows your codebas
 
 ## Evaluation
 
-I tested Nebulosity by giving Claude Code the same questions with and without it, on three large open-source TypeScript codebases: VS Code, AFFiNE and Theia. Across 378 runs, every answer was checked against a reference answer prepared without Nebulosity. I never adjusted Nebulosity for Theia, so Theia is the fairest test of the three.
+I gave Claude Code the same questions with and without Nebulosity on three large open-source TypeScript codebases, VS Code, AFFiNE and Theia, and checked all 378 runs' answers against reference answers prepared without it. I never adjusted Nebulosity for Theia, so Theia is the fairest test of the three.
 
-Nebulosity helped most on questions that require following imports through several files, like "what would changing this file affect?", "how does this entry point end up loading that file?" and "is this file part of an import cycle?". On those, depending on the type of question, Claude Code with Nebulosity was **2.3–4.4× faster** on VS Code and AFFiNE, and **1.5–3.7× faster**\* on Theia. It was usually cheaper too: 1.4–2.6× cheaper on VS Code and AFFiNE, and up to 1.3× cheaper on Theia. There were 14 of these questions, each asked 3 times with Nebulosity and 3 times without. With Nebulosity, Claude Code got all 42 answers fully right. Without it, Claude Code got 29 fully right and the rest partly right.
+Nebulosity helped most on questions that mean following imports through several files: "what would changing this file affect?", "how does this entry point end up loading that file?", "is this file part of an import cycle?". There were 14 of these, each asked 3 times with Nebulosity and 3 times without. Depending on the type of question, Claude Code with Nebulosity was **2.3–4.4× faster** on VS Code and AFFiNE and **1.5–3.7× faster**\* on Theia, and usually cheaper too: 1.4–2.6× on VS Code and AFFiNE, and up to 1.3× on Theia. With Nebulosity it got all 42 answers fully right; without it, 29 were fully right and the rest partly right. To trace how one file ends up loading another, it used one tool call every time and took a median of 5–6 seconds, against three to six calls and 16–24 seconds without.
 
-For example, to trace how one file ends up loading another, Claude Code with Nebulosity used one tool call every time, with a median of 5–6 seconds on each codebase. Without Nebulosity, it used three to six tool calls and took a median of 16–24 seconds.
+On simpler questions, like listing the files that import a given file directly, Nebulosity made little difference, because one search already answers them. I split the questions into these two groups after the runs. [docs/EVALUATION.md](docs/EVALUATION.md) has the method, the caveats and the data behind every number.
 
-On simpler questions, such as listing the files that import a given file directly, Nebulosity made little difference, because a single search already answers them. The method, the caveats and the data behind every number are in [docs/EVALUATION.md](docs/EVALUATION.md), which also notes that I split the questions into multi-step and simpler ones after the runs.
-
-\* The test didn't ask "what would changing this file affect?" on Theia, so I measured it later, on 26 October 2026, with the same setup. It came out 3.7× faster, with all 3 answers fully right with Nebulosity and none of 3 without. Those 6 runs aren't among the 14 questions and 42 answers above. Their data is in [eval3-theia-impact/](eval3-theia-impact/).
+\* The test didn't ask "what would changing this file affect?" on Theia, so I measured it later, on 26 October 2026, with the same setup: 3.7× faster, with all 3 answers fully right with Nebulosity and none of 3 without. Those 6 runs aren't in the 14 questions above; their data is in [eval3-theia-impact/](eval3-theia-impact/).
 
 ## Quick start
 
@@ -77,29 +75,13 @@ There's more in [vscode-extension/README.md](vscode-extension/README.md).
 
 ## AI summaries (optional)
 
-With an Anthropic API key ([how to add one](#adding-your-api-key)), `nebulosity summarize .` writes a short summary of every file and folder. You'll see them in the Map's details panel and in the answers Nebulosity gives Claude Code. They also let search find files by what they do, not just by the words in them.
+With an Anthropic API key, `nebulosity summarize .` writes a short summary of every file and folder. You'll see them in the Map's details panel and in Nebulosity's answers to Claude Code, and search can find files by what they do, not just by the words in them.
 
-This does send your code to Anthropic, since that's how the summaries get written. It costs about $1 per 1,000 files ($10.30 for all of VS Code). It always shows you an estimate and waits for a yes before spending anything. Each repo is also capped at $15 in total, unless you raise the limit with `--budget`.
+This sends your code to Anthropic, since that's how the summaries get written. It costs about $1 per 1,000 files ($10.30 for all of VS Code). It shows you an estimate and waits for a yes before spending anything, and it stops once a repo has spent $15 in total, unless you raise the limit with `--budget`.
 
-### Adding your API key
+To add a key, [create one in the Claude Console](https://platform.claude.com/docs/en/get-api-key), then save the line `ANTHROPIC_API_KEY=sk-ant-...` in a file named `.env.local` in [Nebulosity's data folder](docs/GUIDE.md#the-commands), or set `ANTHROPIC_API_KEY` in your terminal. `nebulosity doctor` tells you once it finds the key. If the Map is already open, restart it so it picks the key up. Keep the key private, and never commit it.
 
-1. Create a key in the [Claude Console](https://platform.claude.com/) ([how](https://platform.claude.com/docs/en/get-api-key)).
-2. Give it to Nebulosity in one of two ways:
-   - **For the current terminal:** `export ANTHROPIC_API_KEY="sk-ant-..."` on macOS and Linux, or `$env:ANTHROPIC_API_KEY = "sk-ant-..."` in Windows PowerShell.
-   - **Once, for every terminal:** save the line `ANTHROPIC_API_KEY=sk-ant-...` in a file named `.env.local` in Nebulosity's data folder. That's `%LOCALAPPDATA%\Nebulosity` on Windows, `~/Library/Application Support/Nebulosity` on macOS, and `~/.local/share/nebulosity` on Linux. If the folder doesn't exist yet, create it.
-3. Run `nebulosity doctor`. Once it finds the key, it says "ANTHROPIC_API_KEY set". Then run `nebulosity summarize .` from your repo. If the Map is already open, restart it so it picks up the key.
-
-Keep the key private, and never commit it to a repository.
-
-### Summary models
-
-By default, Claude Haiku 5.5 summarizes files and Claude Sonnet 5.5 summarizes folders. When those models get retired, or if you'd rather use different ones, name new ones in `config.json` in Nebulosity's data folder. Include their prices so the cost estimate still works:
-
-```json
-{ "summaryModels": { "file": { "model": "claude-haiku-6", "inputPerMTok": 0.1, "outputPerMTok": 0.5 } } }
-```
-
-[The guide](docs/GUIDE.md#summary-models) has the rest: where the data folder lives, what gets re-summarized when you switch models, and what happens if the file has a typo.
+[The guide](docs/GUIDE.md#summaries) has the rest, including which models write the summaries and [how to switch them](docs/GUIDE.md#summary-models).
 
 ## Architecture
 
