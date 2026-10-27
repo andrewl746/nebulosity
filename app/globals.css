@@ -62,14 +62,15 @@
   --color-danger: var(--danger);
   --color-ok: var(--ok);
   --color-focus: var(--focus);
-  --font-sans: var(--font-plex-sans);
-  --font-mono: var(--font-plex-mono);
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 body {
   background: var(--canvas);
   color: var(--text);
-  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 /*
