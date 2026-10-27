@@ -1,7 +1,7 @@
 {
   "name": "nebulosity",
-  "version": "1.0.0",
-  "description": "A live map of how a big codebase fits together, for Claude Code and for you: a local import index, an MCP server and the Map.",
+  "version": "1.0.1",
+  "description": "A live map of how a big codebase fits together, for Claude Code and for you, with a local import index, an MCP server and the Map.",
   "keywords": [
     "claude-code",
     "mcp",

@@ -1,9 +1,9 @@
 {
   "name": "nebulosity-vscode",
   "displayName": "Nebulosity",
-  "description": "The Nebulosity Map beside your code: the repo's folders, files and imports, following the editor. Needs the nebulosity package (npm install -g nebulosity).",
+  "description": "The Nebulosity Map beside your code, showing the repo's folders, files and imports and following the editor. Needs the nebulosity package (npm install -g nebulosity).",
   "publisher": "andrewl746",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "author": "Andrew Li",
   "private": true,
@@ -129,7 +129,7 @@
           "type": "string",
           "default": "",
           "scope": "machine",
-          "markdownDescription": "The `nebulosity` command to run: the installed command's path, or a checkout's `bin/nebulosity.mjs` (run with `node`). Empty finds `nebulosity` on PATH. Read only from your user settings (or a remote machine's), never from a folder's `.vscode/settings.json`."
+          "markdownDescription": "The `nebulosity` command to run, either the installed command's path or a checkout's `bin/nebulosity.mjs` (run with `node`). Empty finds `nebulosity` on PATH. Read only from your user settings (or a remote machine's), never from a folder's `.vscode/settings.json`."
         },
         "nebulosity.port": {
           "type": [
