@@ -181,3 +181,11 @@ body {
     transition: none;
   }
 }
+
+/*
+ * React Flow paints its viewport's own layer (ViewportPortal) above the boxes. The Map's holds what belongs under the
+ * lines, the folders' back cards and the loose boxes' divider (MapCanvas), so it goes beneath every line and box.
+ */
+.react-flow__viewport-portal {
+  z-index: -1;
+}

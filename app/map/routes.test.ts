@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
-import { midpointAlong, roundedPath, routeEdges, type Point } from "./routes";
+import { longestSideMiddle, roundedPath, routeEdges, type Point } from "./routes";
 
 const at = (entries: Record<string, Position>): Map<string, Position> => new Map(Object.entries(entries));
 const line = (source: string, target: string): MapEdge => ({ source, target, count: 1 });
@@ -66,7 +66,7 @@ function crossesInside(p: Point, q: Point, box: Position): boolean {
     return x1 < box.x + BOX_WIDTH && x2 > box.x && y1 < box.y + BOX_HEIGHT && y2 > box.y;
 }
 
-describe("roundedPath and midpointAlong", () => {
+describe("roundedPath and longestSideMiddle", () => {
     it("draws a straight line as one segment", () => {
         expect(roundedPath([{ x: 0, y: 0 }, { x: 0, y: 50 }])).toBe("M 0 0 L 0 50");
     });
@@ -78,8 +78,10 @@ describe("roundedPath and midpointAlong", () => {
         expect(roundedPath([{ x: 0, y: 0 }, { x: 0, y: 6 }, { x: 100, y: 6 }])).toBe("M 0 0 L 0 3 Q 0 6 3 6 L 100 6");
     });
 
-    it("finds the point halfway along a route, for the line's label", () => {
-        // 20 down then 100 across: 120 long, so halfway is 40 along the second side
-        expect(midpointAlong([{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 100, y: 20 }])).toEqual({ x: 40, y: 20 });
+    it("puts a line's count in the middle of its longest side", () => {
+        // 20 down, then 100 across, then 10 down: the across side is longest, its middle at x = 50
+        expect(longestSideMiddle([{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 100, y: 20 }, { x: 100, y: 30 }])).toEqual({ x: 50, y: 20 });
+        // two sides of 40: the first wins
+        expect(longestSideMiddle([{ x: 0, y: 0 }, { x: 0, y: 40 }, { x: 40, y: 40 }])).toEqual({ x: 0, y: 20 });
     });
 });

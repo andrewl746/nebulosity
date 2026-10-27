@@ -14,12 +14,12 @@ function subject(box: MapNode): string {
 
 const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** A line's hover label: "editor uses base · 12 imports" (the arrow runs from the user to the used). */
+/** A line's hover label: "editor uses base, 12 imports" (the arrow runs from the user to the used). */
 export function lineLabel(source: MapNode, target: MapNode, count: number): string {
     const imports = `${formatCount(count)} import${count === 1 ? "" : "s"}`;
     const verb = source.kind === "portal" ? "use" : "uses";
     const who = source.kind === "portal" ? capitalized(subject(source)) : subject(source);
-    return `${who} ${verb} ${subject(target)} · ${imports}`;
+    return `${who} ${verb} ${subject(target)}, ${imports}`;
 }
 
 /** A box's hover title: its path, and its one-line summary when there is one. */

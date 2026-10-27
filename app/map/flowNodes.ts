@@ -1,4 +1,4 @@
-import { Position, type EdgeMarker, type NodeHandle } from "@xyflow/react";
+import { Position, type NodeHandle } from "@xyflow/react";
 import type { MapNode } from "@/lib/contracts";
 import { BOX_HEIGHT, BOX_WIDTH, type Position as Point } from "./levelLayout";
 import type { BoxData, BoxNode } from "./MapBox";
@@ -56,16 +56,16 @@ export function reuseUnchanged<T extends { id: string }>(previous: readonly T[],
     return unchanged ? (previous as T[]) : out;
 }
 
-/** Whether two box nodes draw the same: the same box, place, tone, ring, pulse and doorway caption. */
+/** Whether two box nodes draw the same: the same box, place, tone, ring, pulse, dot and doorway caption. */
 export function sameBoxNode(a: BoxNode, b: BoxNode): boolean {
     return a.position.x === b.position.x && a.position.y === b.position.y
         && a.data.box === b.data.box && a.data.tone === b.data.tone && a.data.agent === b.data.agent
-        && a.data.pulseKey === b.data.pulseKey && a.data.portal === b.data.portal;
+        && a.data.pulseKey === b.data.pulseKey && a.data.dot === b.data.dot && a.data.portal === b.data.portal;
 }
 
-/** Whether two lines draw the same: the same ends, route, label, stroke and arrowhead. */
+/** Whether two lines draw the same: the same ends, route, width, color, count and hover label. */
 export function sameRoutedEdge(a: RoutedEdgeType, b: RoutedEdgeType): boolean {
     return a.source === b.source && a.target === b.target && a.data?.points === b.data?.points && a.label === b.label
-        && a.style?.stroke === b.style?.stroke && a.style?.strokeWidth === b.style?.strokeWidth && a.style?.opacity === b.style?.opacity
-        && (a.markerEnd as EdgeMarker | undefined)?.color === (b.markerEnd as EdgeMarker | undefined)?.color;
+        && a.data?.width === b.data?.width && a.data?.color === b.data?.color
+        && a.data?.count === b.data?.count && a.data?.countStrong === b.data?.countStrong;
 }

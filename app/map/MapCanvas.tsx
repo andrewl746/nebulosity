@@ -2,19 +2,20 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
+    ControlButton, Controls, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
     type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { IconFocusCentered } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import BoxActions from "./BoxActions";
-import { edgeKey, mapEmphasis, type EdgeTone } from "./emphasis";
+import { edgeKey, mapEmphasis, type BoxTone, type EdgeTone } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
+import { formatCount } from "./format";
 import { lineLabel } from "./labels";
 import Legend from "./Legend";
-import { FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider } from "./levelLayout";
-import MapBox, { type BoxData, type BoxNode } from "./MapBox";
+import { BOX_HEIGHT, BOX_WIDTH, FIT_PADDING, layoutLevel, looseDivider, perRowFor, type Divider, type Position } from "./levelLayout";
+import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
 import { legendMaxHeight } from "./narrow";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
@@ -23,6 +24,7 @@ import { routeEdges } from "./routes";
 import { isLightKind } from "./theme";
 import { useThemeKind } from "./useThemeKind";
 import { boundsOf, initialViewport, TOP_INSET } from "./viewport";
+import { dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
@@ -35,19 +37,16 @@ const edgeTypes: EdgeTypes = { routed: RoutedEdge };
 const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
 
 /**
- * Each line's look per tone (VISUAL_REFRESH.md §4): 1 px slate normally, 2 px purple for the selection's links. The
- * arrowhead of a quiet line is brighter than the line itself, so the direction reads without the line getting louder
- * (owner review: the arrows were too small to see).
+ * Each line's color per tone (the Workbench redesign, ADR-070), its width going by its imports whatever the tone: the
+ * selection's lines in the logo's spoke color, the hovered box's a step brighter than the rest, and the rest quiet,
+ * quieter still while something is selected. Its arrowhead is the line's own color, filled and wider than it.
  */
-const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: string; width: number; opacity: number; layer: number }> = {
-    normal: { stroke: "var(--edge-dim)", arrow: "var(--text-2)", width: 1, opacity: 1, layer: 0 },
-    faded: { stroke: "var(--edge-dim)", arrow: "var(--edge-dim)", width: 1, opacity: 0.35, layer: 0 },
-    preview: { stroke: "var(--text-2)", arrow: "var(--text)", width: 1.5, opacity: 1, layer: 1 },
-    // 1.5 px, not 2: a selected box's lines merge into shared tracks, and at 2 px they outshone the box itself
-    selected: { stroke: "var(--accent)", arrow: "var(--accent)", width: 1.5, opacity: 1, layer: 2 },
+const EDGE_LOOKS: Record<Exclude<EdgeTone, "hidden">, { color: string; layer: number }> = {
+    normal: { color: "var(--text-3)", layer: 0 },
+    faded: { color: "var(--edge-dim)", layer: 0 },
+    preview: { color: "var(--text-2)", layer: 1 },
+    selected: { color: "var(--edge-strong)", layer: 2 },
 };
-/** The arrowhead's size in px, whatever the line's width (26 since the three-task test: 18 was too small to read). */
-const ARROW_SIZE = 26;
 
 type MapCanvasProps = {
     level: LevelResponse;
@@ -95,12 +94,16 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const positions = useMemo(() => layoutLevel(level.nodes, level.edges, undefined, perRow), [level, perRow]);
     const divider = useMemo(() => looseDivider(level.nodes, level.edges, positions), [level, positions]);
     const byPath = useMemo(() => new Map(level.nodes.map((n) => [n.path, n])), [level]);
-    // each portal's arrow, "Lines to page 2" and "44 folders and files · 6 imports", worked out once per level, not on every hover
+    // each portal's arrow, "Lines to page 2" and "44 folders and files, 6 imports", worked out once per level, not on every hover
     const portals = useMemo(() => new Map<string, BoxData["portal"]>(level.nodes.filter((n) => n.kind === "portal").map((n) => [
         n.path,
         { direction: portalDirection(n, level.page), title: portalTitle(n), caption: portalCaption(n, portalLinks(level.edges, n.path)) },
     ])), [level]);
     const routes = useMemo(() => routeEdges(positions, level.edges), [positions, level]);
+    // dots and lines are scaled against the page's largest folder and heaviest line (weights.ts)
+    const maxFiles = useMemo(() => maxFilesOf(level.nodes), [level]);
+    const maxImports = useMemo(() => maxImportsOf(level.edges), [level]);
+    const labelled = useMemo(() => labelledLines(level.edges, selected), [level, selected]);
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
     // A hover belongs to the level it happened on. Going into a folder unmounts the old boxes before their mouseleave
@@ -138,10 +141,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             tone: emphasis.boxes.get(box.path) ?? "normal",
             agent: agent.has(box.path),
             pulseKey: pulses.get(box.path)?.key ?? 0,
+            dot: dotSize(box.fileCount, maxFiles),
             portal: portals.get(box.path),
         }));
         setNodes((previous) => reuseUnchanged(previous, next, sameBoxNode));
-    }, [level, positions, portals, emphasis, agent, pulses, setNodes]);
+    }, [level, positions, portals, emphasis, agent, pulses, maxFiles, setNodes]);
 
     useEffect(() => {
         // a busy level's hidden lines aren't handed to React Flow at all: fewer lines to draw, and none to hover
@@ -149,19 +153,23 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             const id = edgeKey(edge);
             const tone = emphasis.edges.get(id) ?? "normal";
             if (tone === "hidden") return [];
-            const look = EDGE_STYLES[tone];
+            const look = EDGE_LOOKS[tone];
             const drawnEdge: RoutedEdgeType = {
                 id,
                 type: "routed",
-                data: { points: routes.get(id) ?? [] },
+                data: {
+                    points: routes.get(id) ?? [],
+                    width: lineWidth(edge.count, maxImports),
+                    color: look.color,
+                    // the page's heaviest lines and the selection's carry their count, the selection's in the text color
+                    count: labelled.has(id) ? formatCount(edge.count) : undefined,
+                    countStrong: tone === "selected",
+                },
                 source: edge.source,
                 target: edge.target,
                 focusable: false,
-                // in words ("editor uses base · 12 imports"): the three-task test's tester read an arrow backwards
+                // in words ("editor uses base, 12 imports"): the three-task test's tester read an arrow backwards
                 label: hoveredEdge === id ? lineLabel(byPath.get(edge.source)!, byPath.get(edge.target)!, edge.count) : undefined,
-                style: { stroke: look.stroke, strokeWidth: look.width, opacity: look.opacity },
-                // userSpaceOnUse: the arrowhead stays the same size whatever the line's width
-                markerEnd: { type: MarkerType.ArrowClosed, width: ARROW_SIZE, height: ARROW_SIZE, color: look.arrow, markerUnits: "userSpaceOnUse" },
             };
             return [{ layer: look.layer, edge: drawnEdge }];
         });
@@ -169,7 +177,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
         const next = drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge);
         setEdges((previous) => reuseUnchanged(previous, next, sameRoutedEdge));
-    }, [level, byPath, routes, emphasis, hoveredEdge, setEdges]);
+    }, [level, byPath, routes, emphasis, hoveredEdge, maxImports, labelled, setEdges]);
 
     // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, unless that would
     // shrink it past 75%, then from its top), then report it drawn. The boxes reach React Flow a render after the level
@@ -233,11 +241,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             proOptions={{ hideAttribution: true }}
             inert={covered}
         >
-            {divider && (
-                <ViewportPortal>
-                    <LooseDivider divider={divider} />
-                </ViewportPortal>
-            )}
+            {/* under the lines (globals.css puts this layer beneath them): the folders' back cards, and the divider */}
+            <ViewportPortal>
+                <BackCards nodes={level.nodes} positions={positions} tones={emphasis.boxes} />
+                {divider && <LooseDivider divider={divider} />}
+            </ViewportPortal>
             {actionsFor !== null && byPath.has(actionsFor) && positions.has(actionsFor) && (
                 <BoxActions
                     box={byPath.get(actionsFor)!}
@@ -272,6 +280,41 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                 </Controls>
             )}
         </ReactFlow>
+    );
+}
+
+/** A back card's color: 70% of the way from the background to its front card's, so it reads as the card behind. */
+const behind = (color: string): string => `color-mix(in srgb, ${color} 70%, var(--canvas))`;
+
+/**
+ * Every folder's back card, a second card 5 px behind it (the owner's pick of 2026-10-27, compare-files.png option C):
+ * a folder opens into more boxes, and a file has none. Opaque, its fill and border 70% of the way from the background
+ * to its own card's, faded with its card, and drawn under the lines, so a line leaving a box's bottom edge stays whole.
+ */
+function BackCards({ nodes, positions, tones }: {
+    nodes: LevelResponse["nodes"];
+    positions: ReadonlyMap<string, Position>;
+    tones: ReadonlyMap<string, BoxTone>;
+}){
+    return (
+        <div aria-hidden data-testid="back-cards" className="pointer-events-none">
+            {nodes.filter((n) => n.kind === "folder").map((n) => {
+                const at = positions.get(n.path);
+                if (at === undefined) return null;
+                const tone = tones.get(n.path) ?? "normal";
+                const faded = tone === "faded";
+                return (
+                    <div
+                        key={n.path}
+                        data-back-card={n.path}
+                        style={{
+                            position: "absolute", left: at.x + 5, top: at.y + 5, width: BOX_WIDTH, height: BOX_HEIGHT, borderRadius: 5,
+                            background: behind(shade("var(--node)", faded)), border: `1px solid ${behind(shade(borderOf(tone, false), faded))}`,
+                        }}
+                    />
+                );
+            })}
+        </div>
     );
 }
 

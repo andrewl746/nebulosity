@@ -93,13 +93,20 @@ export function roundedPath(points: readonly Point[], radius: number = CORNER_RA
     return `${d} L ${last.x} ${last.y}`;
 }
 
-/** The point halfway along a route, where its label goes. */
-export function midpointAlong(points: readonly Point[]): Point {
-    const sides = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
-    let left = sides.reduce((sum, length) => sum + length, 0) / 2;
-    for (let i = 0; i < sides.length; i++){
-        if (left <= sides[i]) return toward(points[i], points[i + 1], left);
-        left -= sides[i];
+/**
+ * The middle of a route's longest side, where its count is written: the longest run has the most room beside it, and a
+ * label there stays in its channel or gutter. A tie goes to the first.
+ */
+export function longestSideMiddle(points: readonly Point[]): Point {
+    let best = 0;
+    let bestLength = -1;
+    for (let i = 0; i < points.length - 1; i++){
+        const length = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+        if (length > bestLength){
+            best = i;
+            bestLength = length;
+        }
     }
-    return points[points.length - 1];
+    if (points.length < 2) return points[0] ?? { x: 0, y: 0 };
+    return { x: (points[best].x + points[best + 1].x) / 2, y: (points[best].y + points[best + 1].y) / 2 };
 }
