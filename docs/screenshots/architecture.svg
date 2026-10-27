@@ -6,7 +6,7 @@
   architecture.png is this file at 2x: a headless Edge or Chrome screenshot at 800 by 800 with a device scale factor of 2,
   allowed to read local files so that the IBM Plex fonts in site/fonts load.
 -->
-<title>How Nebulosity fits together</title>
+<title>Nebulosity architecture diagram</title>
 <desc>nebulosity index reads your repo into the index, a SQLite database on your machine, and the Map keeps it current on every save. The MCP server and the Map both read the index. Claude Code asks the MCP server and gets its answer, often in one call, and each tool call shows up on the Map, which you look at in a browser or VS Code. The only thing that leaves your machine is the optional AI summaries, written by the Anthropic API with your key.</desc>
 <style>
   @font-face { font-family: "IBM Plex Sans"; src: url("../../site/fonts/ibm-plex-sans-latin.woff2") format("woff2"); font-weight: 100 700; }
@@ -56,7 +56,7 @@
   <circle cx="340" cy="340" r="62" fill="none" stroke="#a855f7" stroke-width="6"/>
 </g>
 <text x="60" y="59" style="font-size:17px;font-weight:500;fill:#F1EEF8">Nebulosity</text>
-<text class="label" x="60" y="82" style="font-size:14px">how the pieces fit together</text>
+<text class="label" x="60" y="82" style="font-size:14px">Architecture Diagram</text>
 
 <!-- your machine: everything but the summaries' API -->
 <rect x="16" y="128" width="768" height="616" rx="6" fill="#140E28" fill-opacity="0.45" stroke="#4B3B85" stroke-dasharray="6 5"/>
