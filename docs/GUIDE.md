@@ -135,7 +135,7 @@ Nebulosity runs on Windows, macOS and Linux. CI installs the package on all thre
 
 ## Tested on
 
-Five real repos of different shapes, each indexed from a fresh clone ([Variety Benchmark #1](BENCHMARKS.md)).
+Five real repos of different shapes, each indexed from a fresh clone.
 
 | Repo | Shape | Files indexed | Links between files | Relative imports resolved |
 |---|---|---|---|---|
@@ -149,7 +149,7 @@ The index reads code, so imports of style sheets, images, fonts and JSON aren't 
 
 ## Languages
 
-Besides TypeScript and JavaScript, Nebulosity reads Python, Go, Java, C# and Rust, each through a tree-sitter grammar that ships with it, so there's nothing to install and no build of your repo. Each was measured on one real repo, indexed cold, with 30 of its links drawn at random and checked in the source by someone other than its builder ([Language Benchmark #1](BENCHMARKS.md)).
+Besides TypeScript and JavaScript, Nebulosity reads Python, Go, Java, C# and Rust, each through a tree-sitter grammar that ships with it, so there's nothing to install and no build of your repo. Each was measured on one real repo, indexed cold, with 30 of its links drawn at random and checked in the source by someone other than its builder.
 
 | Language | Repo | Its files indexed | Whole repo's index, worst of 3 | References to the repo's own code resolved | Sampled links right |
 |---|---|---|---|---|---|

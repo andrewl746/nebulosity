@@ -91,10 +91,7 @@ To add a key, [create one in the Claude Console](https://platform.claude.com/doc
 
 All of it runs on one engine in `lib/`. The MCP server, the Map and the static demo are thin layers on top. Nebulosity has over 2,600 automated tests, which run in CI on Windows, macOS and Linux.
 
-To dig deeper, start with these two docs.
-
-- [docs/GUIDE.md](docs/GUIDE.md) covers every command and setting.
-- [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the speed, accuracy and cost measurements.
+Every command and setting is in [docs/GUIDE.md](docs/GUIDE.md).
 
 ## Background
 
