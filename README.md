@@ -103,17 +103,11 @@ By default, Claude Haiku 5.5 summarizes files and Claude Sonnet 5.5 summarizes f
 
 ## Architecture
 
-```
-your repo ──► nebulosity index ──► SQLite: files, imports, folders, summaries, search
-                                        │
-                  ┌─────────────────────┼─────────────────────┐
-                  ▼                     ▼                     ▼
-             MCP server        the Map (Next.js) and    the static demo
-      (Claude Code, any MCP     the VS Code extension
-             client)
-```
+![How Nebulosity fits together: nebulosity index reads your repo into the index, a SQLite database on your machine, and the Map keeps it current on every save. The MCP server and the Map both read the index. Claude Code asks the MCP server and gets its answer, often in one call, and each call shows up on the Map. The only thing that leaves your machine is the optional AI summaries](docs/screenshots/architecture.png)
 
-Everything runs on one engine in `lib/`. The MCP server, the Map and the static demo are thin layers on top of it. While the Map is open, it keeps the index current in the background. Nebulosity has over 2,600 automated tests, which run in CI on Windows, macOS and Linux.
+`nebulosity index` reads your repo once and writes down every file, import and folder in a SQLite database on your machine. From then on, everything works from that index. When Claude Code asks a question, the MCP server answers from it, and the Map draws from the same data. While the Map is open, a background worker watches for saves and updates the index as you go, so neither one falls behind. And every time Claude Code uses one of Nebulosity's tools, the Map lights up what it's looking at.
+
+All of it runs on one engine in `lib/`. The MCP server, the Map and the static demo are thin layers on top. Nebulosity has over 2,600 automated tests, which run in CI on Windows, macOS and Linux.
 
 If you want to dig deeper:
 
