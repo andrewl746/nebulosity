@@ -69,20 +69,20 @@ export default function StatusPill({ status }: { status: IndexStatus | null }){
                 <IconChevronDown aria-hidden size={14} stroke={1.75} className={`shrink-0 ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
-                <div data-testid="status-menu" data-covers style={menuPlace} className="absolute top-9 z-30 space-y-3 overflow-y-auto rounded-lg border border-border bg-surface p-3 text-[12px] text-text-2">
+                <div data-testid="status-menu" data-covers style={menuPlace} className="absolute top-9 z-30 space-y-3 overflow-y-auto rounded-lg border border-border bg-node p-3 text-[12px] text-text-2">
                     {STAGES.map((name) => (
                         <div key={name}>
                             <div className="text-[13px] text-text">{stageLabel(name, status.stages[name])}</div>
                             {status.stages[name].note && <div>{status.stages[name].note}</div>}
                         </div>
                     ))}
-                    <div className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
+                    <div className="flex items-center justify-between gap-3 border-t border-divider pt-3">
                         {DEMO
                             ? <span>A static demo: the index is frozen at export.</span>
                             : (
                                 <>
                                     <span className="truncate" title={reindex ?? `index version ${status.indexVersion}`}>{reindex ?? `index version ${status.indexVersion}`}</span>
-                                    <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-control underline underline-offset-2 hover:text-text">Re-index</button>
+                                    <button type="button" onClick={runReindex} className="shrink-0 text-[13px] text-text underline underline-offset-2 hover:text-text">Re-index</button>
                                 </>
                             )}
                     </div>

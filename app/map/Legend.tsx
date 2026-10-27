@@ -37,12 +37,12 @@ export default function Legend({ quietLines, doorways, maxHeight }: { quietLines
     const Chevron = open ? IconChevronDown : IconChevronUp;
 
     return (
-        <div aria-label="Legend" style={{ maxHeight }} className={`nopan nodrag nowheel absolute bottom-4 left-4 z-[5] flex flex-col ${open ? "w-[252px]" : ""} rounded-lg bg-overlay text-[12px] text-overlay-text-2`}>
+        <div aria-label="Legend" style={{ maxHeight }} className={`nopan nodrag nowheel absolute bottom-4 left-4 z-[5] flex flex-col ${open ? "w-[252px]" : ""} rounded-lg bg-panel text-[12px] text-text-2`}>
             {open && (
-                <div className="min-h-0 space-y-1.5 overflow-y-auto border-b border-overlay-line px-3 py-2">
+                <div className="min-h-0 space-y-1.5 overflow-y-auto border-b border-divider px-3 py-2">
                     {/* one sentence for direction: "arrows out / arrows in" rows read as abstract, even to the owner */}
                     <Row glyph={<Arrow color="var(--text-2)" />}>A → B: A uses B. The arrow points at what&apos;s being used.</Row>
-                    <Row glyph={<Arrow color="var(--select)" />}>Selected box and its lines</Row>
+                    <Row glyph={<Arrow color="var(--accent)" />}>Selected box and its lines</Row>
                     <Row glyph={<span className="block h-3 w-3 rounded-sm outline-2 outline-agent" />}>What Claude Code is touching</Row>
                     {/* only where there are doorways: a page of a big folder (deferred minor: the legend had no row for them) */}
                     {doorways && <Row glyph={<span className="block h-3 w-5 rounded-sm border border-dashed border-text-2" />}>Dashed box: a doorway to another page</Row>}
@@ -54,7 +54,7 @@ export default function Legend({ quietLines, doorways, maxHeight }: { quietLines
                 data-testid="legend-toggle"
                 onClick={toggle}
                 aria-expanded={open}
-                className="flex w-full shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-1.5 text-[12px] font-medium text-control hover:bg-overlay-line"
+                className="flex w-full shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-1.5 text-[12px] font-medium text-text hover:bg-node"
             >
                 Legend
                 <Chevron aria-hidden size={16} stroke={1.75} />

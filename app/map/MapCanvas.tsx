@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Background, BackgroundVariant, ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
+    ControlButton, Controls, MarkerType, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore, ViewportPortal,
     type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -38,11 +38,11 @@ const FIT = { padding: FIT_PADDING, maxZoom: 1 } as const;
  * (owner review: the arrows were too small to see).
  */
 const EDGE_STYLES: Record<Exclude<EdgeTone, "hidden">, { stroke: string; arrow: string; width: number; opacity: number; layer: number }> = {
-    normal: { stroke: "var(--neutral-edge)", arrow: "var(--text-2)", width: 1, opacity: 1, layer: 0 },
-    faded: { stroke: "var(--neutral-edge)", arrow: "var(--neutral-edge)", width: 1, opacity: 0.35, layer: 0 },
+    normal: { stroke: "var(--edge-dim)", arrow: "var(--text-2)", width: 1, opacity: 1, layer: 0 },
+    faded: { stroke: "var(--edge-dim)", arrow: "var(--edge-dim)", width: 1, opacity: 0.35, layer: 0 },
     preview: { stroke: "var(--text-2)", arrow: "var(--text)", width: 1.5, opacity: 1, layer: 1 },
     // 1.5 px, not 2: a selected box's lines merge into shared tracks, and at 2 px they outshone the box itself
-    selected: { stroke: "var(--select)", arrow: "var(--select)", width: 1.5, opacity: 1, layer: 2 },
+    selected: { stroke: "var(--accent)", arrow: "var(--accent)", width: 1.5, opacity: 1, layer: 2 },
 };
 /** The arrowhead's size in px, whatever the line's width (26 since the three-task test: 18 was too small to read). */
 const ARROW_SIZE = 26;
@@ -229,8 +229,6 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             proOptions={{ hideAttribution: true }}
             inert={covered}
         >
-            {/* a faint dot grid: texture, so a busy level isn't a void with rectangles in it (VISUAL_REFRESH.md §3) */}
-            <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid)" />
             {divider && (
                 <ViewportPortal>
                     <LooseDivider divider={divider} />

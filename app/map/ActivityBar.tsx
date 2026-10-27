@@ -51,7 +51,7 @@ export default function ActivityBar({ recent, connected, highlightCount, onClear
         : connected ? "No tool calls yet" : "Not connected";
 
     return (
-        <footer data-testid="activity-bar" className="relative z-20 flex h-8 shrink-0 items-center gap-4 border-t border-hairline bg-panel px-4 text-[13px]">
+        <footer data-testid="activity-bar" className="relative z-20 flex h-8 shrink-0 items-center gap-4 border-t border-divider bg-panel px-4 text-[13px]">
             <span className="flex shrink-0 items-center gap-2 text-text-2" title={connected ? "Claude Code: connected to the live channel" : "Claude Code: not connected to the live channel"}>
                 <span aria-hidden className={`h-2 w-2 rounded-full ${connected ? "bg-text-2" : "border border-text-2"}`} />
                 <span className={recent.length > 0 ? "max-[520px]:hidden" : undefined}>Claude Code</span>
@@ -73,7 +73,7 @@ export default function ActivityBar({ recent, connected, highlightCount, onClear
             {highlightNote !== null && (
                 <span className="ml-auto flex shrink-0 items-center gap-3 text-text-2">
                     {highlightNote}
-                    <button type="button" onClick={onClear} className="text-control hover:underline" title="Clear Claude Code's highlights (Esc)">Clear</button>
+                    <button type="button" onClick={onClear} className="text-text hover:underline" title="Clear Claude Code's highlights (Esc)">Clear</button>
                 </span>
             )}
         </footer>

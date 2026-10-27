@@ -50,7 +50,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                             at the top right, or the ? key.
                         </p>
                     </div>
-                    <button type="button" onClick={onClose} aria-label="Close help" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">
+                    <button type="button" onClick={onClose} aria-label="Close help" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-node hover:text-text">
                         <IconX aria-hidden size={16} stroke={1.75} />
                     </button>
                 </div>
@@ -73,9 +73,9 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li>Lines to other pages end at a doorway, a dashed box like &quot;Lines to page 2&quot;; double-click it to go there.</li>
                     </Section>
                     <Section title="Colors">
-                        <li><Swatch className="border-2 border-select bg-select-fill" /> Purple: the box you selected and its lines. Everything else fades.</li>
+                        <li><Swatch className="border-2 border-accent bg-node-sel" /> Purple: the box you selected and its lines. Everything else fades.</li>
                         <li><Swatch className="outline-2 outline-offset-1 outline-agent" /> Orange: what Claude Code is touching right now.</li>
-                        <li><Swatch className="rounded-full bg-control" /> Cyan: something you can click, like a link or the Map&apos;s buttons.</li>
+                        <li><Swatch className="rounded-full bg-text" /> Cyan: something you can click, like a link or the Map&apos;s buttons.</li>
                         <li><Swatch className="rounded-full bg-ok" /> Green: the index is up to date.</li>
                         <li><Swatch className="rounded-full bg-danger" /> Red: something failed.</li>
                     </Section>
@@ -102,7 +102,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     </Section>
                 </div>
 
-                <h3 className="mt-6 text-[13px] font-medium text-title">Keyboard</h3>
+                <h3 className="mt-6 text-[13px] font-medium text-text">Keyboard</h3>
                 <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px] text-text-2 max-[360px]:grid-cols-1 max-[360px]:[&_dd]:mb-1.5">
                     <dt><Key>Ctrl K</Key></dt><dd>Search files and concepts</dd>
                     <dt><Key>Esc</Key></dt><dd>Close what&apos;s open, let go of the selection, then clear Claude Code&apos;s highlights</dd>
@@ -119,14 +119,14 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
 function Section({ title, children }: { title: string; children: ReactNode }){
     return (
         <section>
-            <h3 className="text-[13px] font-medium text-title">{title}</h3>
-            <ul className="mt-2 space-y-1.5 text-text-body [&_b]:font-medium [&_b]:text-text">{children}</ul>
+            <h3 className="text-[13px] font-medium text-text">{title}</h3>
+            <ul className="mt-2 space-y-1.5 text-text-2 [&_b]:font-medium [&_b]:text-text">{children}</ul>
         </section>
     );
 }
 
 function Key({ children }: { children: ReactNode }){
-    return <kbd className="rounded-md border border-border bg-surface px-1.5 py-px font-sans text-[12px] text-text">{children}</kbd>;
+    return <kbd className="rounded-md border border-border bg-node px-1.5 py-px font-sans text-[12px] text-text">{children}</kbd>;
 }
 
 function Swatch({ className }: { className: string }){

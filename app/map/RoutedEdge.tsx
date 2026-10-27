@@ -26,7 +26,7 @@ function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, style, marke
                     <div
                         data-edge-label={id}
                         style={{ transform: `translate(-50%, -50%) translate(${middle.x}px, ${middle.y}px)`, zIndex: 1001 }}
-                        className="pointer-events-none absolute rounded-md border border-border bg-surface px-1.5 py-0.5 text-[12px] text-text"
+                        className="pointer-events-none absolute rounded-md border border-border bg-node px-1.5 py-0.5 text-[12px] text-text"
                     >
                         {label}
                     </div>

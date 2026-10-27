@@ -83,9 +83,9 @@ export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: S
                 aria-label={`Source of ${path}`}
                 onClick={(event) => event.stopPropagation()}
                 // a narrow window (under 600 px) gives it the whole width: 80% of it would leave too little code
-                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-hairline bg-panel max-[600px]:w-full"
+                className="absolute inset-y-0 right-0 flex w-[min(960px,80vw)] flex-col border-l border-divider bg-panel max-[600px]:w-full"
             >
-                <header className="flex items-start justify-between gap-3 border-b border-hairline px-4 py-3">
+                <header className="flex items-start justify-between gap-3 border-b border-divider px-4 py-3">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
                             <IconFile aria-hidden size={16} stroke={1.75} className="shrink-0 text-text-2" />
@@ -99,18 +99,18 @@ export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: S
                             {lines && <span>Lines {lines.start}–{lines.end} highlighted</span>}
                             {editorHref && (onOpenInEditor
                                 ? (
-                                    <button type="button" onClick={() => onOpenInEditor(lines?.start)} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                                    <button type="button" onClick={() => onOpenInEditor(lines?.start)} className="inline-flex items-center gap-1 text-text underline underline-offset-2 hover:text-text">
                                         Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
                                     </button>
                                 )
                                 : (
-                                    <a href={editorHref} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                                    <a href={editorHref} className="inline-flex items-center gap-1 text-text underline underline-offset-2 hover:text-text">
                                         Open in VS Code <IconExternalLink aria-hidden size={14} stroke={1.75} />
                                     </a>
                                 ))}
                         </div>
                     </div>
-                    <button type="button" onClick={onClose} aria-label="Close the source" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">
+                    <button type="button" onClick={onClose} aria-label="Close the source" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-node hover:text-text">
                         <IconX aria-hidden size={16} stroke={1.75} />
                     </button>
                 </header>
@@ -123,7 +123,7 @@ export default function SourceViewer({ path, lines, onClose, onOpenInEditor }: S
                             {lines && (
                                 <div
                                     aria-hidden
-                                    className="absolute inset-x-0 bg-surface"
+                                    className="absolute inset-x-0 bg-node"
                                     style={{ top: (lines.start - 1) * LINE_HEIGHT + 12, height: (lines.end - lines.start + 1) * LINE_HEIGHT }}
                                 />
                             )}

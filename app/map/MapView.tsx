@@ -484,7 +484,7 @@ function MapScreen(){
                 status={<StatusPill status={status} />}
                 onHelp={() => setHelpOpen(true)}
             />
-            <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-hairline bg-canvas px-4">
+            <div className="pointer-events-auto relative z-10 flex h-10 items-center justify-between gap-4 border-b border-divider bg-canvas px-4">
                 {level && repo ? (
                     EMBEDDED ? (
                         // inside VS Code's panel, Back comes first (BackButton): the webview has no browser Back
@@ -507,7 +507,7 @@ function MapScreen(){
                                 data-testid="lines-toggle"
                                 onClick={() => setShowAllLines((all) => !all)}
                                 title={showAllLines ? `All ${formatCount(level.edges.length)} lines are shown` : "A busy folder: a box's lines show when you hover or select it"}
-                                className="text-control underline underline-offset-2 hover:text-text"
+                                className="text-text underline underline-offset-2 hover:text-text"
                             >
                                 {showAllLines ? "Show on hover only" : "Show all lines"}
                             </button>
@@ -601,7 +601,7 @@ function PagePill({ sizeRef, level, onTurn, panelWidth, form }: {
                 onClick={() => onTurn(next)}
                 aria-label={`${side === "left" ? "Previous" : "Next"} page`}
                 title={`${side === "left" ? "Previous" : "Next"} page (${side === "left" ? "←" : "→"})`}
-                className="grid h-9 w-9 place-items-center rounded-md text-control hover:bg-overlay-line disabled:opacity-35 disabled:hover:bg-transparent"
+                className="grid h-9 w-9 place-items-center rounded-md text-text hover:bg-node disabled:opacity-35 disabled:hover:bg-transparent"
             >
                 <Icon aria-hidden size={22} stroke={2} />
             </button>
@@ -614,12 +614,12 @@ function PagePill({ sizeRef, level, onTurn, panelWidth, form }: {
         <div
             ref={sizeRef}
             style={{ right: panelWidth + 16 }}
-            className="absolute top-4 z-[7] flex items-center gap-1.5 rounded-lg bg-overlay p-1"
+            className="absolute top-4 z-[7] flex items-center gap-1.5 rounded-lg bg-panel p-1"
         >
             {step("left")}
             <span data-testid="page-note" title={form === "full" ? undefined : note} className="whitespace-nowrap px-1 text-[14px] text-text">
                 {form === "numbers" ? `${level.page + 1} / ${level.pageCount}` : pagePart}
-                {form === "full" && rest.length > 0 && <span className="text-overlay-text-2"> · {rest.join(" · ")}</span>}
+                {form === "full" && rest.length > 0 && <span className="text-text-2"> · {rest.join(" · ")}</span>}
             </span>
             {step("right")}
         </div>
@@ -664,7 +664,7 @@ function ErrorBanner({ message, form, panelWidth, pillWidth, bandRef, cardRef }:
                     ref={cardRef}
                     role="alert"
                     style={{ maxWidth: `calc(100% - ${CARD_TOP + panelWidth + cardClear(pillWidth)}px)` }}
-                    className="pointer-events-none absolute left-4 top-4 z-[7] rounded-lg border border-hairline bg-panel px-3 py-2 text-[13px] text-danger [overflow-wrap:anywhere]"
+                    className="pointer-events-none absolute left-4 top-4 z-[7] rounded-lg border border-divider bg-panel px-3 py-2 text-[13px] text-danger [overflow-wrap:anywhere]"
                 >
                     {message}
                 </div>
@@ -678,8 +678,8 @@ function EmptyState(){
         <div className="absolute inset-0 grid place-items-center px-4">
             <div className="max-w-md space-y-2 text-center text-[14px] text-text-2">
                 <p className="text-[15px] font-medium text-text">No repository indexed yet.</p>
-                <p>Index one from a terminal, then reload: <code className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">nebulosity index &lt;path-to-repo&gt;</code></p>
-                <p>In a checkout of Nebulosity: <code className="rounded-md bg-code-bg px-1 font-mono text-[13px] text-code">npm run index -- &lt;path-to-repo&gt;</code></p>
+                <p>Index one from a terminal, then reload: <code className="rounded-md bg-node px-1 font-mono text-[13px] text-text">nebulosity index &lt;path-to-repo&gt;</code></p>
+                <p>In a checkout of Nebulosity: <code className="rounded-md bg-node px-1 font-mono text-[13px] text-text">npm run index -- &lt;path-to-repo&gt;</code></p>
             </div>
         </div>
     );

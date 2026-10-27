@@ -49,7 +49,7 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
     const name = repo.slice(repo.lastIndexOf("/") + 1);
     const label = <RepoName entry={list?.repos.find((r) => r.root === repo)} fallback={name} />;
     const home = (
-        <button type="button" data-testid="repo-name" onClick={onHome} title="Go to the top level" className="flex min-w-0 rounded-md px-1 hover:bg-surface">
+        <button type="button" data-testid="repo-name" onClick={onHome} title="Go to the top level" className="flex min-w-0 rounded-md px-1 hover:bg-node">
             {label}
         </button>
     );
@@ -74,13 +74,13 @@ export default function RepoMenu({ repo, onSwitched, onHome }: RepoMenuProps){
                     }}
                     aria-label="Switch repository"
                     title="Switch repository"
-                    className="grid h-7 w-6 shrink-0 place-items-center rounded-md text-text-2 hover:bg-surface hover:text-text"
+                    className="grid h-7 w-6 shrink-0 place-items-center rounded-md text-text-2 hover:bg-node hover:text-text"
                 >
                     <IconChevronDown aria-hidden size={14} stroke={1.75} />
                 </button>
             </div>
             {open && (
-                <ul data-testid="repo-list" data-covers style={listPlace} className="absolute top-9 z-30 overflow-y-auto rounded-lg border border-border bg-surface py-1 text-[13px]">
+                <ul data-testid="repo-list" data-covers style={listPlace} className="absolute top-9 z-30 overflow-y-auto rounded-lg border border-border bg-node py-1 text-[13px]">
                     {list.repos.map((r) => (
                         <li key={r.root}>
                             <button type="button" onClick={() => pick(r.root)} className="block w-full px-3 py-2 text-left hover:bg-border">

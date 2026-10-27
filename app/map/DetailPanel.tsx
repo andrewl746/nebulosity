@@ -89,15 +89,15 @@ type PanelFrameProps = {
  */
 function PanelFrame({ path, covers, alert, kindLabel, name, title, subtitle, header, onClose, children }: PanelFrameProps){
     return (
-        <aside data-panel={path} style={{ width: covers ? "100%" : PANEL_WIDTH }} className={`pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-hairline bg-panel ${SHORT_FRAME}`}>
-            <header className="border-b border-hairline px-4 py-4">
+        <aside data-panel={path} style={{ width: covers ? "100%" : PANEL_WIDTH }} className={`pointer-events-auto absolute inset-y-0 right-0 z-10 flex flex-col border-l border-divider bg-panel ${SHORT_FRAME}`}>
+            <header className="border-b border-divider px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <div className="text-[12px] leading-4 text-text-2">{kindLabel}</div>
                         <h2 className="mt-1 truncate text-[18px] font-medium leading-6 text-text" title={title}>{name}</h2>
                         <div className="truncate font-mono text-[12px] leading-4 text-text-2" title={subtitle}>{subtitle}</div>
                     </div>
-                    <button type="button" onClick={onClose} aria-label="Close the panel" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-surface hover:text-text">
+                    <button type="button" onClick={onClose} aria-label="Close the panel" className="shrink-0 rounded-md p-1 text-text-2 hover:bg-node hover:text-text">
                         <IconX aria-hidden size={16} stroke={1.75} />
                     </button>
                 </div>
@@ -105,7 +105,7 @@ function PanelFrame({ path, covers, alert, kindLabel, name, title, subtitle, hea
             </header>
             {children}
             {/* in a short window, where the whole panel scrolls, it stays pinned over the rows scrolling under it */}
-            {alert && <p role="alert" data-covers className="pointer-events-none sticky bottom-0 shrink-0 border-t border-hairline bg-panel px-4 py-2 text-center text-[13px] text-danger [overflow-wrap:anywhere]">{alert}</p>}
+            {alert && <p role="alert" data-covers className="pointer-events-none sticky bottom-0 shrink-0 border-t border-divider bg-panel px-4 py-2 text-center text-[13px] text-danger [overflow-wrap:anywhere]">{alert}</p>}
         </aside>
     );
 }
@@ -269,7 +269,7 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, covers
                                     type="button"
                                     data-go-page={p}
                                     onClick={() => onTurnPage(p)}
-                                    className="inline-flex items-center gap-1.5 rounded-md border border-control/60 px-3 py-1.5 text-[13px] text-control hover:border-control"
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[13px] text-text hover:border-text-2"
                                 >
                                     {p < level.page && <IconArrowLeft aria-hidden size={14} stroke={1.75} />}
                                     {pages.length === 1 ? `Go to page ${p + 1}` : `Page ${p + 1}`}
@@ -287,7 +287,7 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, covers
                             data-linked={boxPath}
                             title={`${boxPath}: ${formatCount(count)} import${count === 1 ? "" : "s"} with ${portal.name}`}
                             onClick={() => onFocus(boxPath)}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-surface"
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-node"
                         >
                             <BoxIcon box={byPath.get(boxPath)} />
                             <span className="min-w-0 flex-1 truncate">{byPath.get(boxPath)?.name ?? boxPath}</span>
@@ -304,7 +304,7 @@ function PortalPanel({ portal, path, level, onFocus, onTurnPage, onClose, covers
 function BoxIcon({ box }: { box: MapNode | undefined }){
     const folder = box?.kind === "folder";
     const Icon = folder ? IconFolder : IconFile;
-    return <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-folder" : "text-text-2"}`} />;
+    return <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-glyph-dim" : "text-text-2"}`} />;
 }
 
 type StatsProps = {
@@ -328,22 +328,22 @@ function Stats({ data, github, onOpen, onViewSource, onOpenInEditor }: StatsProp
             <span>{size}</span>
             {data.stalePaths > 0 && <span>{formatCount(data.stalePaths)} changed since summarized</span>}
             {data.kind === "folder" && (
-                <button type="button" onClick={() => onOpen(data.path)} className="text-control underline underline-offset-2 hover:text-text">Open folder</button>
+                <button type="button" onClick={() => onOpen(data.path)} className="text-text underline underline-offset-2 hover:text-text">Open folder</button>
             )}
             {data.kind === "file" && DEMO && github && (
-                <a href={githubLink(github, data.path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                <a href={githubLink(github, data.path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-text underline underline-offset-2 hover:text-text">
                     <IconCode aria-hidden size={14} stroke={1.75} />View on GitHub
                 </a>
             )}
             {data.kind === "file" && !DEMO && (
                 <>
-                    <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-control underline underline-offset-2 hover:text-text">
+                    <button type="button" onClick={onViewSource} className="inline-flex items-center gap-1 text-text underline underline-offset-2 hover:text-text">
                         <IconCode aria-hidden size={14} stroke={1.75} />View source
                     </button>
                     {onOpenInEditor
                         // the webview's sandbox stops a vscode:// link inside the panel, so the editor is asked instead
-                        ? <button type="button" onClick={onOpenInEditor} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</button>
-                        : <a href={editorLink(data)} className="text-control underline underline-offset-2 hover:text-text">Open in VS Code</a>}
+                        ? <button type="button" onClick={onOpenInEditor} className="text-text underline underline-offset-2 hover:text-text">Open in VS Code</button>
+                        : <a href={editorLink(data)} className="text-text underline underline-offset-2 hover:text-text">Open in VS Code</a>}
                 </>
             )}
         </div>
@@ -386,7 +386,7 @@ function Details({ data, fresh, refreshing, summaryError, onRetry, onFocus, onOp
                             type="button"
                             title={`Show ${symbol.name} in the source`}
                             onClick={() => onViewLines(symbol.startLine, symbol.endLine)}
-                            className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-1 text-left hover:bg-surface"
+                            className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-1 text-left hover:bg-node"
                         >
                             <span className={`truncate font-mono text-[13px] ${symbol.exported ? "text-text" : "text-text-2"}`}>{symbol.name}</span>
                             <span className="shrink-0 text-[12px] text-text-2">{symbol.kind} · line {symbol.startLine}</span>
@@ -413,17 +413,17 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
         // edge; wherever a line has a space to break at, it still breaks there
         <section aria-label="Summary" className="[overflow-wrap:anywhere]">
             {shown.tagline
-                ? <p className="text-[15px] font-medium leading-snug text-title"><Rich text={shown.tagline} /></p>
+                ? <p className="text-[15px] font-medium leading-snug text-text"><Rich text={shown.tagline} /></p>
                 : <p className="text-text-2">{summaryLine(shown.summaryStatus, summaryError)}</p>}
-            {lead && <p className="mt-2 text-text-body"><Rich text={lead} /></p>}
-            {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2 text-text-body"><Rich text={paragraph} /></p>)}
+            {lead && <p className="mt-2 text-text-2"><Rich text={lead} /></p>}
+            {rest && expanded && rest.split(/\n\s*\n/).map((paragraph, i) => <p key={i} className="mt-2 text-text-2"><Rich text={paragraph} /></p>)}
             {/* it folds back, so a long summary doesn't push the rest of the panel away for good (owner review) */}
             {rest && (
                 <button
                     type="button"
                     aria-expanded={expanded}
                     onClick={() => setExpanded((open) => !open)}
-                    className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text"
+                    className="mt-2 text-[13px] text-text underline underline-offset-2 hover:text-text"
                 >
                     {expanded ? "Show less" : "Read full summary"}
                 </button>
@@ -436,7 +436,7 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
                 {failure && (
                     <p className="text-danger">
                         {failure}{" "}
-                        <button type="button" onClick={onRetry} className="text-control underline underline-offset-2 hover:text-text">Try again</button>
+                        <button type="button" onClick={onRetry} className="text-text underline underline-offset-2 hover:text-text">Try again</button>
                     </p>
                 )}
             </div>
@@ -453,7 +453,7 @@ function Rich({ text }: { text: string }){
     return (
         <>
             {inlineCode(text).map((part, i) => part.code
-                ? <code key={i} className="rounded-md bg-code-bg box-decoration-clone px-1 font-mono text-[13px] text-code">{part.text}</code>
+                ? <code key={i} className="rounded-md bg-node box-decoration-clone px-1 font-mono text-[13px] text-text">{part.text}</code>
                 : <span key={i}>{part.text}</span>)}
         </>
     );
@@ -493,7 +493,7 @@ function Chips({ title, note, items, empty, onFocus }: ChipsProps){
                                     data-chip={area.path}
                                     title={`${area.path}: ${formatCount(area.count)} import${area.count === 1 ? "" : "s"}`}
                                     onClick={() => onFocus(area.path)}
-                                    className="flex max-w-[min(360px,100%)] items-center gap-2 rounded-md border border-border bg-surface px-2 py-1 text-[13px] text-text hover:border-text-2"
+                                    className="flex max-w-[min(360px,100%)] items-center gap-2 rounded-md border border-border bg-node px-2 py-1 text-[13px] text-text hover:border-text-2"
                                 >
                                     <span className="truncate">{shortPath(area.path)}</span>
                                     <span className="shrink-0 text-text-2">{formatCount(area.count)}</span>
@@ -529,9 +529,9 @@ function ChildRow({ child, onFocus, onOpen }: { child: MapNode; onFocus: (target
                 data-child={child.path}
                 title={child.tagline ? `${child.path}: ${child.tagline}` : child.path}
                 onClick={() => (folder ? onOpen(child.path) : onFocus(child.path))}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-surface"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-node"
             >
-                <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-folder" : "text-text-2"}`} />
+                <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${folder ? "text-glyph-dim" : "text-text-2"}`} />
                 <span className="min-w-0 flex-1 truncate">{child.name}</span>
                 {folder && <span className="shrink-0 text-[12px] text-text-2">{formatCount(child.fileCount)} {child.fileCount === 1 ? "file" : "files"}</span>}
             </button>
@@ -562,7 +562,7 @@ function Rows<T>({ title, items, render, empty }: RowsProps<T>){
                     type="button"
                     aria-expanded={all}
                     onClick={() => setAll((open) => !open)}
-                    className="mt-2 text-[13px] text-control underline underline-offset-2 hover:text-text"
+                    className="mt-2 text-[13px] text-text underline underline-offset-2 hover:text-text"
                 >
                     {all ? "Show fewer" : `View all ${formatCount(items.length)}`}
                 </button>

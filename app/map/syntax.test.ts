@@ -91,8 +91,26 @@ describe("languageFor", () => {
     });
 });
 
-describe("the syntax colors (VISUAL_REFRESH.md §2, code only): VS Code's Dark+ palette, transcribed", () => {
+describe("the syntax colors (VISUAL_REFRESH.md §2, code only): VS Code's Dark+ palette, and Light+ under a light theme, transcribed", () => {
     const css = readFileSync("app/globals.css", "utf8");
+    // the light theme's block, apart: Dark+ is the one in the page's own :root
+    const lightStart = css.search(/:root\[data-kind="light"\], :root\[data-kind="hc-light"\] \{\r?\n\s*--syn-text/);
+    const lightBlock = css.slice(lightStart, css.indexOf("}", lightStart));
+    const darkCss = css.slice(0, lightStart) + css.slice(lightStart + lightBlock.length);
+    // theme-defaults/themes/light_plus.json and light_vs.json, VS Code 1.143
+    const LIGHT_PLUS: Record<string, string> = {
+        "syn-text": "#000000",
+        "syn-keyword": "#0000FF",
+        "syn-control": "#AF00DB",
+        "syn-string": "#A31515",
+        "syn-number": "#098658",
+        "syn-comment": "#008000",
+        "syn-type": "#267F99",
+        "syn-function": "#795E26",
+        "syn-variable": "#001080",
+        "syn-constant": "#0070C1",
+        "syn-regexp": "#811F3F",
+    };
     const DARK_PLUS: Record<string, string> = {
         "syn-text": "#D4D4D4",
         "syn-keyword": "#569CD6",
@@ -109,7 +127,16 @@ describe("the syntax colors (VISUAL_REFRESH.md §2, code only): VS Code's Dark+ 
 
     it("defines each once, with Dark+'s value", () => {
         for (const [name, hex] of Object.entries(DARK_PLUS)){
-            const definitions = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`, "g")) ?? [];
+            const definitions = darkCss.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`, "g")) ?? [];
+            expect(definitions, `--${name}`).toHaveLength(1);
+            expect(definitions.join("").toUpperCase(), `--${name}`).toContain(hex.toUpperCase());
+        }
+    });
+
+    it("defines each once more for a light theme, with Light+'s value", () => {
+        expect(lightStart).toBeGreaterThan(0);
+        for (const [name, hex] of Object.entries(LIGHT_PLUS)){
+            const definitions = lightBlock.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`, "g")) ?? [];
             expect(definitions, `--${name}`).toHaveLength(1);
             expect(definitions.join("").toUpperCase(), `--${name}`).toContain(hex.toUpperCase());
         }

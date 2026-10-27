@@ -27,11 +27,11 @@ export type BoxNode = Node<BoxData, "box">;
  * doesn't shift when it's selected.
  */
 const TONES: Record<BoxTone, string> = {
-    normal: "border border-border bg-surface px-3",
-    linked: "border border-border bg-surface px-3",
-    preview: "border border-text-2 bg-surface px-3",
-    selected: "border-2 border-select bg-select-fill px-[11px]",
-    faded: "border border-border bg-surface px-3 opacity-60",
+    normal: "border border-border bg-node px-3",
+    linked: "border border-border bg-node px-3",
+    preview: "border border-text-2 bg-node px-3",
+    selected: "border-2 border-accent bg-node-sel px-[11px]",
+    faded: "border border-border bg-node px-3 opacity-60",
 };
 
 /**
@@ -42,7 +42,7 @@ const PORTAL_TONES: Record<BoxTone, string> = {
     normal: "border border-dashed border-text-2 bg-transparent px-3",
     linked: "border border-dashed border-text-2 bg-transparent px-3",
     preview: "border border-dashed border-text bg-transparent px-3",
-    selected: "border-2 border-dashed border-select bg-select-fill px-[11px]",
+    selected: "border-2 border-dashed border-accent bg-node-sel px-[11px]",
     faded: "border border-dashed border-text-2 bg-transparent px-3 opacity-60",
 };
 
@@ -69,7 +69,7 @@ function MapBox({ data }: NodeProps<BoxNode>){
             className={`relative flex h-[56px] w-[232px] items-center gap-2 rounded-lg ${portal ? PORTAL_TONES[tone] : TONES[tone]} ${agent ? "outline-2 outline-offset-2 outline-agent" : ""}`}
         >
             {pulseKey > 0 && <span key={pulseKey} aria-hidden className="neb-pulse pointer-events-none absolute inset-0 rounded-lg" />}
-            <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${box.kind === "folder" ? "text-folder" : "text-text-2"}`} />
+            <Icon aria-hidden size={16} stroke={1.75} className={`shrink-0 ${box.kind === "folder" ? "text-glyph-dim" : "text-text-2"}`} />
             <div className="min-w-0">
                 <div className="truncate text-[15px] font-medium leading-5 text-text">{portal ? portal.title : box.name}</div>
                 {portal && <div className="truncate text-[12px] leading-4 text-text-2">{portal.caption}</div>}

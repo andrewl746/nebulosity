@@ -34,12 +34,12 @@ export default function TopBar({ repo, onSearch, status, onHelp }: TopBarProps){
     const isMac = useSyncExternalStore(noSubscription, () => /Mac|iPhone|iPad/.test(navigator.platform), () => false);
 
     return (
-        <header className="pointer-events-auto relative z-20 flex h-12 shrink-0 items-center gap-4 border-b border-hairline bg-canvas px-4 max-[440px]:gap-3">
+        <header className="pointer-events-auto relative z-20 flex h-12 shrink-0 items-center gap-4 border-b border-divider bg-canvas px-4 max-[440px]:gap-3">
             <div className="flex shrink-0 items-center gap-2">
                 <Image src="/icon.svg" alt="" width={18} height={18} unoptimized />
                 <span className="text-[14px] font-medium text-text max-[440px]:hidden">Nebulosity</span>
             </div>
-            <span aria-hidden className="h-4 w-px shrink-0 bg-hairline" />
+            <span aria-hidden className="h-4 w-px shrink-0 bg-divider" />
             <div className="flex min-w-0 items-center gap-3">
                 {repo}
                 <span className="shrink-0 text-[13px] text-text-2 max-[1100px]:hidden">Dependency map</span>
@@ -56,7 +56,7 @@ export default function TopBar({ repo, onSearch, status, onHelp }: TopBarProps){
                         data-testid="search-button"
                         aria-label="Search files and concepts"
                         title={`Search files and concepts (${isMac ? "⌘K" : "Ctrl K"})`}
-                        className="flex w-full max-w-xl cursor-text items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] text-text-2 hover:border-text-2 max-[640px]:w-auto max-[640px]:cursor-pointer max-[640px]:px-2"
+                        className="flex w-full max-w-xl cursor-text items-center gap-2 rounded-lg border border-border bg-node px-3 py-1.5 text-[13px] text-text-2 hover:border-text-2 max-[640px]:w-auto max-[640px]:cursor-pointer max-[640px]:px-2"
                     >
                         <IconSearch aria-hidden size={16} stroke={1.75} className="shrink-0" />
                         <span className="w-0 flex-1 truncate text-left max-[640px]:hidden @max-[90px]:hidden">Search files and concepts</span>

@@ -46,7 +46,7 @@ export default function Breadcrumb({ repo, trail, onOpen }: BreadcrumbProps){
 
     const label = (step: string, last: boolean) => last
         ? <span aria-current="page" title={step || nameOf(step, repo)} className="truncate px-1 font-medium text-text">{nameOf(step, repo)}</span>
-        : <button type="button" onClick={() => onOpen(step)} title={step || nameOf(step, repo)} className="truncate rounded-md px-1 hover:bg-surface hover:text-text">{nameOf(step, repo)}</button>;
+        : <button type="button" onClick={() => onOpen(step)} title={step || nameOf(step, repo)} className="truncate rounded-md px-1 hover:bg-node hover:text-text">{nameOf(step, repo)}</button>;
 
     return (
         <nav ref={nav} aria-label="Where you are" className="relative flex min-w-0 flex-1 items-center gap-1 text-[14px] text-text-2">
@@ -57,7 +57,7 @@ export default function Breadcrumb({ repo, trail, onOpen }: BreadcrumbProps){
                     onClick={() => onOpen(trail[folded - 1])}
                     title={`Up to ${nameOf(trail[folded - 1], repo)}: ${trail.slice(0, folded).map((step) => nameOf(step, repo)).join(" / ")}`}
                     aria-label={`Up to ${nameOf(trail[folded - 1], repo)}`}
-                    className="shrink-0 rounded-md px-1 hover:bg-surface hover:text-text"
+                    className="shrink-0 rounded-md px-1 hover:bg-node hover:text-text"
                 >
                     …
                 </button>
