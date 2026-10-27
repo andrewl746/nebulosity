@@ -129,6 +129,30 @@ describe("prepare-package (ADR-058: a built Map npm can pack, with nothing of th
     });
 });
 
+describe("what npm packs from a built Map (package.json's files)", () => {
+    // The release rehearsal (2026-10-26): Turbopack traces the whole build folder, so each route's .nft.json listed every
+    // file in it (18,251 in ../Nebulosity-build: the demo's out/ and export, the eval transcripts, a local AGENTS.md) and
+    // the package went from 9 MB to 23 MB unpacked. next start reads neither the traces nor the source maps (R29).
+    it("ships the server's code, never its build traces, source maps or cache", () => {
+        const root = makeTempDir("neb-pack-");
+        const { files } = JSON.parse(fs.readFileSync("package.json", "utf8")) as { files: string[] };
+        fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "nebulosity-pack-test", version: "0.0.0", files }));
+        const route = path.join(root, ".next", "server", "app", "api", "status");
+        fs.mkdirSync(route, { recursive: true });
+        fs.mkdirSync(path.join(root, ".next", "cache"));
+        for (const file of [path.join(".next", "BUILD_ID"), path.join(".next", "next-server.js.nft.json"), path.join(".next", "cache", "x.json")]){
+            fs.writeFileSync(path.join(root, file), "{}");
+        }
+        for (const file of ["route.js", "route.js.nft.json", "route.js.map"]) fs.writeFileSync(path.join(route, file), "{}");
+
+        // npm's own reading of `files`, through the shell so npm.cmd runs on Windows; no scripts, nothing written
+        const packed = spawnSync("npm pack --dry-run --json --ignore-scripts", { cwd: root, encoding: "utf8", shell: true });
+        expect(packed.status, packed.stderr).toBe(0);
+        const shipped = (JSON.parse(packed.stdout) as [{ files: { path: string }[] }])[0].files.map((file) => file.path).sort();
+        expect(shipped).toEqual([".next/BUILD_ID", ".next/server/app/api/status/route.js", "package.json"]);
+    });
+});
+
 describe("untracked files in the shipped folders (final review, C-M5)", () => {
     /** A git checkout with no built Map: lib/a.ts tracked (staged is enough), the rest as each test writes it. */
     function checkout(files: Record<string, string>): string {
