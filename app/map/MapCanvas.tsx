@@ -62,6 +62,8 @@ type MapCanvasProps = {
     onDrawn: () => void;
     /** A busy level: only the hovered or selected box's lines are drawn (emphasis.ts). */
     quietLines: boolean;
+    /** Strong links only: a weak line is drawn only when it touches the selection, the hovered box or a lit box (emphasis.ts). */
+    strongOnly: boolean;
     /** The open panel's width over the canvas's right edge, 0 with none (narrow.ts's panelLayout). */
     panelWidth: number;
     /**
@@ -86,7 +88,7 @@ type MapCanvasProps = {
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, panelWidth, covered, bannerBottom, actionsFor, onDetails }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, strongOnly, panelWidth, covered, bannerBottom, actionsFor, onDetails }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     // React Flow's own parts follow a light VS Code theme (theme.ts)
@@ -116,8 +118,9 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         setHoveredEdge(null);
     }
     const emphasis = useMemo(
-        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines }),
-        [level, selected, hoveredBox, quietLines],
+        // the boxes Claude Code or the editor has lit keep their lines, whatever hides the rest
+        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines, strongOnly, pinned: agent }),
+        [level, selected, hoveredBox, quietLines, strongOnly, agent],
     );
     // Only the lines drawn are routed, so they share the ports and tracks out among themselves (routes.ts). Kept by
     // content: a hover that draws the same lines keeps every route, and on a level that draws them all, nothing moves.

@@ -11,7 +11,7 @@ import DetailPanel from "./DetailPanel";
 import HelpDialog from "./HelpDialog";
 import ActivityBar from "./ActivityBar";
 import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
-import { isBusyLevel } from "./emphasis";
+import { isBusyLevel, weakLinesHidden } from "./emphasis";
 import { formatCount } from "./format";
 import MapCanvas from "./MapCanvas";
 import { followStep, historyDepth, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
@@ -119,6 +119,8 @@ function MapScreen(){
     // a busy level draws only the hovered or selected box's lines, unless the user asks for all of them; the choice
     // holds across levels until it's turned off (owner, 2026-10-12)
     const [showAllLines, setShowAllLines] = useState(false);
+    // Strong links only, on until it's turned off, and like Show all lines it holds across levels (ADR-070)
+    const [strongOnly, setStrongOnly] = useState(true);
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
     // the Map area's width: whether the panel covers the canvas and the page pill's wording go by it (narrow.ts); the
     // pill's width and the banner's height decide where the banner goes
@@ -465,6 +467,8 @@ function MapScreen(){
         return () => window.removeEventListener("keydown", onKey);
     }, [levelPath, open, page, pageCount, turnPage, hasSelection, hasHighlights, clearHighlights, detailsOverCanvas]);
 
+    // how many lines Strong links only hides right now, before a hover adds any back
+    const weakHidden = level !== null && strongOnly ? weakLinesHidden(level.edges, shownSelected, agent) : 0;
     const jumpError = focusError !== null && focusError.place === cacheKey(place) && focusError.selected === selected ? focusError.error : null;
     const banner = levelError ?? jumpError;
 
@@ -502,6 +506,13 @@ function MapScreen(){
                     ) : <Breadcrumb repo={repo} trail={level.breadcrumb} onOpen={open} />
                 ) : <span />}
                 <div className="flex shrink-0 items-center gap-4 text-[12px] text-text-2">
+                    {level && (
+                        <label className="flex cursor-pointer items-center gap-2" title="Draw only the lines with at least 2% of the heaviest line's imports, and every line of the box you select or hover">
+                            <input type="checkbox" data-testid="strong-only" checked={strongOnly} onChange={(e) => setStrongOnly(e.target.checked)} className="accent-accent" />
+                            Strong links only
+                            {strongOnly && weakHidden > 0 && <span data-testid="weak-hidden" className="text-text-3">{formatCount(weakHidden)} weak {weakHidden === 1 ? "link" : "links"} hidden</span>}
+                        </label>
+                    )}
                     {level && isBusyLevel(level.edges.length) && (
                         <span data-testid="lines-note">
                             {/* a narrow window keeps the toggle alone (its title says the rest), so the path keeps its room */}
@@ -534,6 +545,7 @@ function MapScreen(){
                         onTurnPage={turnPage}
                         onDrawn={onDrawn}
                         quietLines={!showAllLines && isBusyLevel(level.edges.length)}
+                        strongOnly={strongOnly}
                         panelWidth={panelWidth}
                         covered={covered}
                         bannerBottom={bannerBottom}

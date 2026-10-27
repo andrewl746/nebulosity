@@ -24,6 +24,25 @@ export const BUSY_LINES = 60;
 
 export const isBusyLevel = (lineCount: number): boolean => lineCount > BUSY_LINES;
 
+/**
+ * "Strong links only" (the Workbench redesign, ADR-070, on unless turned off): a line is strong when it carries at least
+ * STRONG_SHARE of the imports of the page's heaviest line, and never fewer than STRONG_MIN imports. The weaker ones
+ * stay hidden unless they touch the selection, the hovered box, or a box Claude Code or the editor has lit.
+ */
+export const STRONG_SHARE = 0.02;
+export const STRONG_MIN = 3;
+
+/** The fewest imports a strong line carries on a page whose heaviest line carries `maxImports`. */
+export const strongThreshold = (maxImports: number): number => Math.max(STRONG_MIN, STRONG_SHARE * maxImports);
+
+/** How many lines Strong links only hides on this page with `selected` selected and `pinned` lit, before any hover. */
+export function weakLinesHidden(edges: readonly MapEdge[], selected: string | null, pinned: ReadonlySet<string> = new Set()): number {
+    const threshold = strongThreshold(Math.max(0, ...edges.map((e) => e.count)));
+    const touches = (edge: MapEdge, box: string): boolean => edge.source === box || edge.target === box;
+    return edges.filter((e) => e.source !== e.target && e.count < threshold
+        && !(selected !== null && touches(e, selected)) && !pinned.has(e.source) && !pinned.has(e.target)).length;
+}
+
 /** One line's id, the same one React Flow gets. */
 export const edgeKey = (edge: Pick<MapEdge, "source" | "target">): string => `${edge.source}->${edge.target}`;
 
@@ -43,13 +62,15 @@ function neighbours(edges: readonly MapEdge[], box: string | null): Set<string> 
  * apart from React Flow. The selection always wins over the hover: a box linked to the selection stays linked when a
  * hovered box also touches it. A selection or hover that isn't one of this level's boxes counts as none. With
  * `quietLines` (a busy level), only the selection's and the hovered box's lines are drawn; the boxes are toned as usual.
+ * With `strongOnly`, a weak line (strongThreshold) is hidden too, unless it touches the selection, the hovered box or a
+ * `pinned` box (Claude Code's or the editor's highlights), whose lines always show.
  */
 export function mapEmphasis(
     boxes: readonly string[],
     edges: readonly MapEdge[],
     selected: string | null,
     hovered: string | null,
-    options: { quietLines?: boolean } = {},
+    options: { quietLines?: boolean; strongOnly?: boolean; pinned?: ReadonlySet<string> } = {},
 ): { boxes: Map<string, BoxTone>; edges: Map<string, EdgeTone> } {
     const onLevel = new Set(boxes);
     const chosen = selected !== null && onLevel.has(selected) ? selected : null;
@@ -65,12 +86,16 @@ export function mapEmphasis(
         else boxTones.set(box, chosen === null ? "normal" : "faded");
     }
 
+    const threshold = strongThreshold(Math.max(0, ...edges.map((e) => e.count)));
+    const pinned = options.pinned ?? new Set<string>();
     const edgeTones = new Map<string, EdgeTone>();
     for (const edge of edges){
         const touches = (box: string | null): boolean => box !== null && (edge.source === box || edge.target === box);
+        const lit = pinned.has(edge.source) || pinned.has(edge.target);
         if (touches(chosen)) edgeTones.set(edgeKey(edge), "selected");
         else if (touches(pointed)) edgeTones.set(edgeKey(edge), "preview");
-        else if (options.quietLines) edgeTones.set(edgeKey(edge), "hidden");
+        else if (options.quietLines && !lit) edgeTones.set(edgeKey(edge), "hidden");
+        else if (options.strongOnly && edge.count < threshold && !lit) edgeTones.set(edgeKey(edge), "hidden");
         else edgeTones.set(edgeKey(edge), chosen === null ? "normal" : "faded");
     }
 
