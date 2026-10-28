@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
+import { edgeKey, mapEmphasis } from "./emphasis";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
-import { longestSideMiddle, roundedPath, routeEdges, type Point } from "./routes";
+import { longestSideMiddle, nextRoutes, roundedPath, routeEdges, type Point } from "./routes";
 import { arrowHead, lineWidth } from "./weights";
 
 const at = (entries: Record<string, Position>): Map<string, Position> => new Map(Object.entries(entries));
@@ -277,6 +278,89 @@ describe("routeEdges: no two lines share a run or an end (the owner, 2026-10-27)
                 // the head (weights.ts), the 3 px gap above the box and a corner's 8 px
                 expect(end.y - before.y, key).toBeGreaterThanOrEqual(arrowHead(lineWidth(edge.count, max)).length + 3 + 8 - 1e-9);
             }
+        });
+    }
+});
+
+// VS Code's src/vs/editor as the owner saw it in VS Code's panel (6 a row, Strong links only on), and its 20 lines:
+// hovering standalone drew 4 more and moved 8 of the 9 already there
+const EDITOR = at({
+    "editor.main.ts": { x: -116, y: 0 }, "editor.api.ts": { x: -116, y: 120 }, standalone: { x: -252, y: 240 }, "editor.all.ts": { x: 20, y: 240 },
+    contrib: { x: -116, y: 360 }, test: { x: -116, y: 480 }, "editor.worker.start.ts": { x: -252, y: 600 }, browser: { x: 20, y: 600 }, common: { x: -116, y: 720 },
+});
+const EDITOR_LINES = ([
+    ["browser", "common", 590], ["contrib", "browser", 340], ["contrib", "common", 1368], ["contrib", "test", 95], ["editor.all.ts", "browser", 3],
+    ["editor.all.ts", "common", 1], ["editor.all.ts", "contrib", 59], ["editor.api.ts", "common", 2], ["editor.api.ts", "contrib", 1],
+    ["editor.api.ts", "standalone", 2], ["editor.main.ts", "editor.all.ts", 1], ["editor.main.ts", "editor.api.ts", 1], ["editor.main.ts", "standalone", 8],
+    ["editor.worker.start.ts", "common", 2], ["standalone", "browser", 40], ["standalone", "common", 111], ["standalone", "contrib", 6],
+    ["standalone", "test", 1], ["test", "browser", 73], ["test", "common", 460],
+] as const).map(([source, target, count]) => weighed(source, target, count));
+
+/**
+ * The Map's lines through a run of states, as MapCanvas draws them: the lines drawn at rest routed once, and each
+ * state's routes from the last one's (nextRoutes). Each state is what's selected and what's hovered.
+ */
+function drive(positions: Map<string, Position>, edges: MapEdge[], states: [string | null, string | null][]): { drawn: Set<string>; routes: Map<string, Point[]> }[] {
+    const boxes = [...positions.keys()];
+    const drawnIn = (selected: string | null, hovered: string | null): Set<string> => {
+        const tones = mapEmphasis(boxes, edges, selected, hovered, { strongOnly: true }).edges;
+        return new Set(edges.map(edgeKey).filter((key) => tones.get(key) !== "hidden"));
+    };
+    const rest = routeEdges(positions, edges, drawnIn(null, null));
+    let before = rest;
+    return states.map(([selected, hovered]) => {
+        const drawn = drawnIn(selected, hovered);
+        before = nextRoutes(positions, edges, rest, before, drawn);
+        return { drawn, routes: before };
+    });
+}
+
+describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a box rearranged the lines)", () => {
+    const boxes = [...EDITOR.keys()];
+
+    it("keeps every route a level was given when it's routed again with them all kept", () => {
+        const routes = routeEdges(VS, VS_LINES, VS_AT_REST);
+        const again = routeEdges(VS, VS_LINES, VS_AT_REST, routes);
+        for (const [key, route] of routes) expect(again.get(key), key).toBe(route);
+    });
+
+    it("hovering standalone on src/vs/editor draws its four weak lines and moves none of the nine already there", () => {
+        const [rest, hovered] = drive(EDITOR, EDITOR_LINES, [[null, null], [null, "standalone"]]);
+        expect(rest.drawn.size).toBe(9);
+        expect(hovered.drawn.size).toBe(13);
+        for (const [key, route] of rest.routes) expect(hovered.routes.get(key), key).toBe(route);
+    });
+
+    // every box hovered from rest, every box selected and then every other hovered, and a click on the hovered box
+    const walks: [string, [string | null, string | null][]][] = [
+        ["hovering each box in turn", boxes.flatMap((b): [string | null, string | null][] => [[null, b], [null, null]])],
+        ...boxes.map((s): [string, [string | null, string | null][]] => [`with ${s} selected, hovering each other box and clicking it`,
+            [[s, null], ...boxes.filter((b) => b !== s).flatMap((b): [string | null, string | null][] => [[s, b], [b, null], [s, null]])]]),
+    ];
+    for (const [name, states] of walks){
+        it(`src/vs/editor, ${name}: a drawn line keeps its route, none wiggles or crosses a box, and no two share a run or line up`, () => {
+            const max = Math.max(...EDITOR_LINES.map((e) => e.count));
+            const widthOf = (key: string): number => lineWidth(EDITOR_LINES.find((e) => edgeKey(e) === key)!.count, max);
+            const steps = drive(EDITOR, EDITOR_LINES, states);
+            steps.forEach((step, i) => {
+                const last = steps[i - 1];
+                if (last !== undefined){
+                    for (const key of step.drawn) if (last.drawn.has(key)) expect(step.routes.get(key), `${key} at step ${i}`).toBe(last.routes.get(key));
+                }
+                const list = [...step.routes];
+                for (let a = 0; a < list.length; a++){
+                    for (let b = a + 1; b < list.length; b++){
+                        const [[ka, pa], [kb, pb]] = [list[a], list[b]];
+                        expect(sharedRuns(pa, pb), `${ka} and ${kb} at step ${i}`).toEqual([]);
+                        expect(endToEnd(pa, pb, (widthOf(ka) + widthOf(kb)) / 2 + 8), `${ka} and ${kb} at step ${i}`).toEqual([]);
+                    }
+                    const points = list[a][1];
+                    expect(wiggles(points), `${list[a][0]} at step ${i}`).toEqual([]);
+                    for (const [path, box] of EDITOR){
+                        for (let p = 0; p + 1 < points.length; p++) expect(crossesInside(points[p], points[p + 1], box), `${list[a][0]} through ${path} at step ${i}`).toBe(false);
+                    }
+                }
+            });
         });
     }
 });

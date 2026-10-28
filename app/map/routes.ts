@@ -202,6 +202,69 @@ function placePorts(box: Position, lines: readonly Line[], approach: (line: Line
 }
 
 /**
+ * Ports along one edge of a box for `added` lines, where its `kept` lines keep theirs (`keptAt`), placed as placePorts
+ * places them when it has none. Each added line goes in the gap between kept ports it falls in by where it's going (or
+ * coming from), and those that share a gap spread through it as placePorts spreads a box's, centred in it. Where a gap
+ * is too small for them, each goes to the free place nearest where it's going, in any gap with room for it.
+ */
+function placePortsAround(
+    box: Position,
+    added: readonly Line[],
+    kept: readonly Line[],
+    keptAt: (line: Line) => number,
+    approach: (line: Line) => number,
+    gap: (a: Line, b: Line) => number,
+): Map<string, number> {
+    if (kept.length === 0) return placePorts(box, added, approach, gap);
+    const [lo, hi] = [box.x + PORT_MARGIN, box.x + BOX_WIDTH - PORT_MARGIN];
+    const ordered = [...added].sort((a, b) => approach(a) - approach(b) || byKey(a, b));
+    // every port on the edge so far, kept or placed, left to right
+    const taken = kept.map((line) => ({ line, x: keptAt(line) })).sort((a, b) => a.x - b.x);
+    const fixedLeft = (line: Line): number => taken.filter((t) => approach(t.line) < approach(line) || (approach(t.line) === approach(line) && byKey(t.line, line) < 0)).length;
+    const groups = new Map<number, Line[]>();
+    for (const line of ordered) groups.set(fixedLeft(line), [...(groups.get(fixedLeft(line)) ?? []), line]);
+    const ports = new Map<string, number>();
+    const strays: Line[] = [];
+    for (const [slot, group] of [...groups].sort((a, b) => a[0] - b[0])){
+        const [left, right] = [taken[slot - 1], taken[slot]];
+        const from = left === undefined ? lo : left.x + gap(left.line, group[0]);
+        const to = right === undefined ? hi : right.x - gap(group[group.length - 1], right.line);
+        const offsets = [0];
+        for (let i = 1; i < group.length; i++) offsets.push(offsets[i - 1] + gap(group[i - 1], group[i]));
+        const total = offsets[offsets.length - 1];
+        if (total > to - from + EPSILON){
+            strays.push(...group);
+            continue;
+        }
+        const start = (from + to) / 2 - total / 2;
+        group.forEach((line, i) => ports.set(line.key, start + offsets[i]));
+    }
+    for (const [key, x] of ports) taken.push({ line: added.find((l) => l.key === key)!, x });
+    // each stray to the free place nearest where it's going, in whichever gap holds it
+    for (const line of strays){
+        taken.sort((a, b) => a.x - b.x);
+        const want = Math.max(lo, Math.min(hi, approach(line)));
+        let best: number | undefined;
+        for (let i = 0; i <= taken.length; i++){
+            const from = i === 0 ? lo : taken[i - 1].x + gap(taken[i - 1].line, line);
+            const to = i === taken.length ? hi : taken[i].x - gap(line, taken[i].line);
+            if (from > to + EPSILON) continue;
+            const x = Math.max(from, Math.min(to, want));
+            if (best === undefined || Math.abs(x - want) < Math.abs(best - want)) best = x;
+        }
+        // no room anywhere on the edge: the middle of its widest gap, closer to its neighbours than it should be
+        if (best === undefined){
+            const xs = [lo, ...taken.map((t) => t.x), hi];
+            const widest = xs.slice(1).reduce((w, x, i) => (x - xs[i] > xs[w + 1] - xs[w] ? i : w), 0);
+            best = (xs[widest] + xs[widest + 1]) / 2;
+        }
+        ports.set(line.key, best);
+        taken.push({ line, x: best });
+    }
+    return ports;
+}
+
+/**
  * The ports settle, a channel at a time, so no line wiggles and no two read as one. A sideways step shorter than
  * LEAST_JOG is a wiggle, not a turn (the owner, 2026-10-27, on src/vs/editor's 460-import line), and a line that stops
  * just above where another starts, at about the same x, reads as one line through the channel. Each fault is fixed by
@@ -216,6 +279,7 @@ function settlePorts(
     boxes: ReadonlyMap<string, { out: Line[]; into: Line[] }>,
     positions: ReadonlyMap<string, Position>,
     lanes: ReadonlyMap<Line, { fits: (x: number) => boolean; set: (x: number) => void }>,
+    fixed: ReadonlySet<Line> = new Set(),
 ): void {
     // each box edge's ports, in the order they were placed, with the room each pair keeps (less, where they're squeezed)
     type Edge = { box: Position; side: Side; order: Line[]; room: number[] };
@@ -309,6 +373,9 @@ function settlePorts(
         const line = run.line;
         const edge = end.port === undefined ? undefined : edgeOf.get(`${end.port} ${line.key}`)!;
         const moves: Move[] = [];
+        if (fixed.has(line)) return moves;
+        // a row's kept ports stay put: only the others move with it
+        const movable = edge?.order.filter((l) => !fixed.has(l)) ?? [];
         // onto its line's other end or LEAST_JOG from it, and just clear of each other line's turn the other way, whether
         // that one's in the fault or not
         const targets = new Set([partner, partner - LEAST_JOG, partner + LEAST_JOG]);
@@ -327,9 +394,9 @@ function settlePorts(
                     const [shiftLeft, shiftRight] = [Math.min(0, o.x - away - Math.max(-Infinity, ...lefts)), Math.max(0, o.x + away - Math.min(Infinity, ...rights))];
                     moves.push({
                         cost: Math.abs(shiftLeft) * lefts.length + shiftRight * rights.length,
-                        lines: new Set(edge.order),
+                        lines: new Set(movable),
                         channels: [k],
-                        apply: () => edge.order.forEach((l, j) => setPort(l, side, was[j] + (was[j] < o.x ? shiftLeft : shiftRight))),
+                        apply: () => movable.forEach((l) => setPort(l, side, was[edge.order.indexOf(l)] + (was[edge.order.indexOf(l)] < o.x ? shiftLeft : shiftRight))),
                         restore: () => edge.order.forEach((l, j) => setPort(l, side, was[j])),
                         valid: () => holds(edge),
                     });
@@ -346,10 +413,10 @@ function settlePorts(
                 // the port on its own, else its box's whole row of ports with it
                 moves.push({ cost: Math.abs(shift), lines: new Set([line]), channels: [k], apply: () => setPort(line, side, x), restore, valid: () => holds(edge) });
                 moves.push({
-                    cost: Math.abs(shift) * edge.order.length,
-                    lines: new Set(edge.order),
+                    cost: Math.abs(shift) * movable.length,
+                    lines: new Set(movable),
                     channels: [k],
-                    apply: () => edge.order.forEach((l, j) => setPort(l, side, was[j] + shift)),
+                    apply: () => movable.forEach((l) => setPort(l, side, was[edge.order.indexOf(l)] + shift)),
                     restore,
                     valid: () => holds(edge),
                 });
@@ -376,6 +443,7 @@ function settlePorts(
             const runs = runsIn(k);
             for (const run of [...runs.filter(isJog), ...runs.filter((r) => !isJog(r))]){
                 if (tried > SETTLE_TRIES) break;
+                if (fixed.has(run.line)) continue;
                 runsIn(k);
                 const ends = [0, 1].filter((i) => inFault(runs, run, i));
                 if (ends.length === 0) continue;
@@ -398,6 +466,7 @@ function settlePorts(
     }
     // ends that line up to within rounding line up exactly, so a straight drop has no hairline step
     for (const line of lines){
+        if (fixed.has(line)) continue;
         const to = line.lane ?? line.portOut!;
         if (Math.abs(line.portIn! - to) <= 0.5) line.portIn = to;
         if (line.lane !== undefined && Math.abs(line.portOut! - line.lane) <= 0.5) line.portOut = line.lane;
@@ -440,8 +509,16 @@ function trackOrder(runs: readonly Run[]): Run[] {
  * with a line on the level stands in the way of a lane, drawn or not; the loose ones sit apart in their grid. `drawn`
  * names the lines to route (all of them when it's left out): ports and tracks are shared out among those alone, so a
  * line that isn't drawn leaves no gap. Widths are scaled against the level's heaviest line, drawn or not.
+ *
+ * `kept` holds routes already on screen, for lines that stay drawn: each keeps its own exactly, and the other lines
+ * are routed around them, taking the free places on each box, in each gutter and in each channel (nextRoutes).
  */
-export function routeEdges(positions: ReadonlyMap<string, Position>, edges: readonly MapEdge[], drawn?: ReadonlySet<string>): Map<string, Point[]> {
+export function routeEdges(
+    positions: ReadonlyMap<string, Position>,
+    edges: readonly MapEdge[],
+    drawn?: ReadonlySet<string>,
+    kept: ReadonlyMap<string, Point[]> = new Map(),
+): Map<string, Point[]> {
     const maxImports = maxImportsOf(edges);
     const onLevel = edges.filter((e) => e.source !== e.target && positions.has(e.source) && positions.has(e.target));
     const routable = drawn === undefined ? onLevel : onLevel.filter((e) => drawn.has(`${e.source}->${e.target}`));
@@ -456,18 +533,31 @@ export function routeEdges(positions: ReadonlyMap<string, Position>, edges: read
         const width = lineWidth(edge.count, maxImports);
         return { key: `${edge.source}->${edge.target}`, edge, width, head: arrowHead(width), s, t, outChannel: row(s) + 1, intoChannel: row(t) };
     });
+    // the kept lines take their ports, lane and tracks from their routes, and stay where they are
+    const fixed = new Map<Line, Point[]>();
+    for (const line of lines){
+        const route = kept.get(line.key);
+        if (route !== undefined && takeRoute(line, route, tops)) fixed.set(line, route);
+    }
+    const fresh = lines.filter((l) => !fixed.has(l));
 
     // 1. lanes, for the lines that pass a row between their channels or point back up: the free place nearest the
     // middle of their two boxes, the lines nearest their lanes placed first
     const placed: { x: number; width: number; span: [number, number] }[] = [];
+    const spanOfLine = (line: Line): [number, number] => [Math.min(line.outChannel, line.intoChannel), Math.max(line.outChannel, line.intoChannel)];
+    // a kept line's lane, and its ports as if they were lanes in their channels: a new lane can't line up with one there,
+    // since a kept port doesn't move out of its way
+    for (const line of fixed.keys()){
+        if (line.lane !== undefined) placed.push({ x: line.lane, width: line.width, span: spanOfLine(line) });
+        placed.push({ x: line.portOut!, width: line.width, span: [line.outChannel, line.outChannel] }, { x: line.portIn!, width: line.width, span: [line.intoChannel, line.intoChannel] });
+    }
     const lanesOf = new Map<Line, { rows: (readonly number[])[]; entry: { x: number; width: number; span: [number, number] } }>();
-    const laned = lines.filter((l) => l.outChannel !== l.intoChannel)
+    const laned = fresh.filter((l) => l.outChannel !== l.intoChannel)
         .sort((a, b) => (centreOf(a.s) + centreOf(a.t)) - (centreOf(b.s) + centreOf(b.t)) || byKey(a, b));
     for (const line of laned){
-        const [from, to] = [Math.min(line.outChannel, line.intoChannel), Math.max(line.outChannel, line.intoChannel)];
-        const passed = lefts.slice(from, to);
-        // its height as the channels it runs between: two lanes overlap when they share a row they pass
-        const span: [number, number] = [from, to];
+        // its height as the channels it runs between: two lanes overlap when they share any of it (sharesHeight)
+        const span = spanOfLine(line);
+        const passed = lefts.slice(span[0], span[1]);
         line.lane = placeLane(passed, (centreOf(line.s) + centreOf(line.t)) / 2, line.width, span, placed);
         const entry = { x: line.lane, width: line.width, span };
         placed.push(entry);
@@ -475,7 +565,8 @@ export function routeEdges(positions: ReadonlyMap<string, Position>, edges: read
     }
 
     // 2. ports: each box's leaving lines along its bottom and arriving lines along its top, ordered by where the other
-    // end turns (the lane, else the other box), with room for each line and, at the top, each arrowhead
+    // end turns (the lane, else the other box), with room for each line and, at the top, each arrowhead; around the
+    // kept ones where a box has any
     const boxes = new Map<string, { out: Line[]; into: Line[] }>();
     for (const line of lines){
         if (!boxes.has(line.edge.source)) boxes.set(line.edge.source, { out: [], into: [] });
@@ -483,12 +574,14 @@ export function routeEdges(positions: ReadonlyMap<string, Position>, edges: read
         boxes.get(line.edge.source)!.out.push(line);
         boxes.get(line.edge.target)!.into.push(line);
     }
+    const gapOut = (a: Line, b: Line): number => (a.width + b.width) / 2 + PORT_GAP_OUT;
+    const gapIn = (a: Line, b: Line): number => a.head.half + b.head.half + PORT_GAP_IN;
     for (const [path, { out, into }] of boxes){
         const box = positions.get(path)!;
-        const outPorts = placePorts(box, out, (l) => l.lane ?? centreOf(l.t), (a, b) => (a.width + b.width) / 2 + PORT_GAP_OUT);
-        const inPorts = placePorts(box, into, (l) => l.lane ?? centreOf(l.s), (a, b) => a.head.half + b.head.half + PORT_GAP_IN);
-        for (const l of out) l.portOut = outPorts.get(l.key);
-        for (const l of into) l.portIn = inPorts.get(l.key);
+        const outPorts = placePortsAround(box, out.filter((l) => !fixed.has(l)), out.filter((l) => fixed.has(l)), (l) => l.portOut!, (l) => l.lane ?? centreOf(l.t), gapOut);
+        const inPorts = placePortsAround(box, into.filter((l) => !fixed.has(l)), into.filter((l) => fixed.has(l)), (l) => l.portIn!, (l) => l.lane ?? centreOf(l.s), gapIn);
+        for (const l of out) if (!fixed.has(l)) l.portOut = outPorts.get(l.key);
+        for (const l of into) if (!fixed.has(l)) l.portIn = inPorts.get(l.key);
     }
 
     // a lane that can run right under its leaving port (or over its arriving one) moves there, so the line drops
@@ -500,17 +593,18 @@ export function routeEdges(positions: ReadonlyMap<string, Position>, edges: read
         if (straight !== undefined) line.lane = entry.x = straight;
     }
 
-    // then the ports (and where it takes one, a lane) settle: no short jogs, and no two lines lined up end to end
+    // then the new lines' ports (and where it takes one, a lane) settle: no short jogs, and no two lines lined up end to end
     settlePorts(lines, boxes, positions, new Map(laned.map((line) => {
         const { rows, entry } = lanesOf.get(line)!;
         return [line, {
             fits: (x: number) => laneFits(rows, x, line.width, entry.span, placed.filter((p) => p !== entry)),
             set: (x: number) => { line.lane = entry.x = x; },
         }];
-    })));
+    })), new Set(fixed.keys()));
 
-    // 3. runs along each channel, and the tracks they take
-    const runs = lines.flatMap(runsOf);
+    // 3. runs along each channel, and the tracks they take: the kept ones where they were
+    const runs = fresh.flatMap(runsOf);
+    const keptRuns = [...fixed.keys()].flatMap((line) => runsOf(line).map((run) => ({ ...run, y: trackOf(fixed.get(line)!, run.channel, tops) })));
     const byChannel = new Map<number, Run[]>();
     for (const run of runs){
         // a run whose two ends line up is a straight drop through the channel: it needs no track
@@ -518,6 +612,11 @@ export function routeEdges(positions: ReadonlyMap<string, Position>, edges: read
         byChannel.set(run.channel, [...(byChannel.get(run.channel) ?? []), run]);
     }
     for (const [channel, inChannel] of byChannel){
+        const around = keptRuns.filter((r) => r.channel === channel && r.y !== undefined);
+        if (around.length > 0){
+            placeRunsAround(channel, inChannel, around, tops);
+            continue;
+        }
         // tracks in order, each run on the first track at or below the ones that must be above it that it fits on
         const tracks: Run[][] = [];
         for (const run of trackOrder(inChannel)){
@@ -537,11 +636,15 @@ export function routeEdges(positions: ReadonlyMap<string, Position>, edges: read
         placeTracks(channel, tracks, tops);
     }
 
-    // 4. every line's corners, in order
+    // 4. every line's corners, in order: a kept line's as they were, the same object, so React Flow keeps it as it is
     const routes = new Map<string, Point[]>();
     const runsByLine = new Map<Line, Run[]>();
     for (const run of runs) runsByLine.set(run.line, [...(runsByLine.get(run.line) ?? []), run]);
     for (const line of lines){
+        if (fixed.has(line)){
+            routes.set(line.key, fixed.get(line)!);
+            continue;
+        }
         const [first, second] = runsByLine.get(line)!;
         const start = { x: line.portOut!, y: line.s.y + BOX_HEIGHT };
         const end = { x: line.portIn!, y: line.t.y };
@@ -552,6 +655,48 @@ export function routeEdges(positions: ReadonlyMap<string, Position>, edges: read
         routes.set(line.key, simplify(points));
     }
     return routes;
+}
+
+/**
+ * The routes to draw when the lines drawn change to `drawn` from what's on screen, `before` (the owner, 2026-10-27:
+ * pointing at a box rearranged lines already there). The lines drawn at rest keep their routes from `rest`, every
+ * other line still drawn keeps the one it had, and the lines that just appeared are routed around them all
+ * (routeEdges with them kept). So a line never moves while it's drawn: lines appear and fade, and that's all.
+ */
+export function nextRoutes(
+    positions: ReadonlyMap<string, Position>,
+    edges: readonly MapEdge[],
+    rest: ReadonlyMap<string, Point[]>,
+    before: ReadonlyMap<string, Point[]>,
+    drawn: ReadonlySet<string>,
+): Map<string, Point[]> {
+    const kept = new Map<string, Point[]>();
+    for (const [key, route] of before) if (drawn.has(key)) kept.set(key, route);
+    for (const [key, route] of rest) if (drawn.has(key)) kept.set(key, route);
+    return routeEdges(positions, edges, drawn, kept);
+}
+
+/**
+ * A kept line's ports and lane, read back from its route (routeEdges's kept): its first point is its leaving port,
+ * its last its arriving one, and its lane is the drop that passes the middle of the first row between its channels.
+ * False when the route isn't one this level could have given it, so the line is routed afresh.
+ */
+function takeRoute(line: Line, route: readonly Point[], tops: readonly number[]): boolean {
+    if (route.length < 2 || route[0].y !== line.s.y + BOX_HEIGHT || route[route.length - 1].y !== line.t.y) return false;
+    line.portOut = route[0].x;
+    line.portIn = route[route.length - 1].x;
+    if (line.outChannel === line.intoChannel) return true;
+    const y = tops[Math.min(line.outChannel, line.intoChannel)] + BOX_HEIGHT / 2;
+    const drop = route.slice(1).findIndex((p, i) => p.x === route[i].x && Math.min(p.y, route[i].y) <= y && y <= Math.max(p.y, route[i].y));
+    if (drop < 0) return false;
+    line.lane = route[drop].x;
+    return true;
+}
+
+/** The height a kept route runs along channel `k`, or undefined where it drops straight through it. */
+function trackOf(route: readonly Point[], k: number, tops: readonly number[]): number | undefined {
+    const channelOf = (y: number): number => tops.filter((t) => t + BOX_HEIGHT <= y).length;
+    return route.slice(1).find((p, i) => p.y === route[i].y && channelOf(p.y) === k)?.y;
 }
 
 /**
@@ -621,6 +766,49 @@ function placeTracks(k: number, tracks: readonly Run[][], tops: readonly number[
         if (i > 0) y += spacing[i - 1];
         for (const run of track) run.y = y;
     });
+}
+
+/**
+ * The heights for `fresh` runs in channel `k`, which already holds the `kept` runs of lines that stay where they are
+ * (routeEdges with routes kept). In trackOrder's order, each takes the free height nearest the channel's middle (past
+ * the first or last row, nearest the boxes): TRACK_GAP from every run it overlaps, end to end or alongside, above any it
+ * must be above, and inside placeTracks's bounds. A run that should be above another, or below it, and isn't costs
+ * more than any distance. Where nothing is free, the bounds widen to CROWDED_ROOM and then the gap to a pixel; past
+ * that a run takes the middle.
+ */
+function placeRunsAround(k: number, fresh: readonly Run[], kept: readonly Run[], tops: readonly number[]): void {
+    const placed: Run[] = [...kept];
+    const middle = channelMiddle(k, tops);
+    const want = k <= 0 ? Math.min(middle, tops[0] - TOP_ROOM) : k >= tops.length ? Math.max(middle, tops[tops.length - 1] + BOX_HEIGHT + TOP_ROOM) : middle;
+    for (const run of trackOrder(fresh)){
+        const [lo, hi] = spanOf(run);
+        const alongside = placed.filter((other) => {
+            const [olo, ohi] = spanOf(other);
+            const room = (other.line.width + run.line.width) / 2 + RUN_GAP;
+            return !(hi + room <= olo || ohi + room <= lo);
+        });
+        // above its own arrowhead, and above those of the lines arriving under it
+        const under = placed.filter((o) => o.arrives && o.ends[1].x + o.line.head.half + run.line.width / 2 > lo && o.ends[1].x - o.line.head.half - run.line.width / 2 < hi);
+        const head = Math.max(run.arrives ? run.line.head.length : 0, ...under.map((o) => o.line.head.length)) + TIP_GAP;
+        const attempts: [number, number, number][] = [[TOP_ROOM, CORNER_ROOM, TRACK_GAP], [CROWDED_ROOM, CROWDED_ROOM, TRACK_GAP], [CROWDED_ROOM, CROWDED_ROOM, 1]];
+        let y: number | undefined;
+        for (const [topRoom, cornerRoom, trackGap] of attempts){
+            const upper = k > 0 ? tops[k - 1] + BOX_HEIGHT + topRoom : -Infinity;
+            const lower = k < tops.length ? tops[k] - head - cornerRoom : Infinity;
+            const gapTo = (other: Run): number => (other.line.width + run.line.width) / 2 + trackGap;
+            const tries = [want, upper, lower, ...alongside.flatMap((o) => [o.y! - gapTo(o), o.y! + gapTo(o)])].filter(Number.isFinite);
+            const free = tries.filter((t) => t >= upper - EPSILON && t <= lower + EPSILON
+                && alongside.every((o) => Math.abs(t - o.y!) >= gapTo(o) - EPSILON && !(sharesDrop(run, o) && t > o.y!) && !(sharesDrop(o, run) && t < o.y!)));
+            const cost = (t: number): number => Math.abs(t - want)
+                + 1000 * alongside.filter((o) => (mustBeAbove(run, o) && t > o.y!) || (mustBeAbove(o, run) && t < o.y!)).length;
+            if (free.length > 0){
+                y = free.reduce((best, t) => (cost(t) < cost(best) || (cost(t) === cost(best) && t < best) ? t : best));
+                break;
+            }
+        }
+        run.y = y ?? middle;
+        placed.push(run);
+    }
 }
 
 /** Drops repeated points, and middle points on a straight run, so a route has only its real corners. */
