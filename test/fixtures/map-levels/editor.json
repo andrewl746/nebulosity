@@ -1,0 +1,172 @@
+{
+ "path": "src/vs/editor",
+ "page": 0,
+ "pageCount": 1,
+ "nodes": [
+  {
+   "path": "src/vs/editor/contrib",
+   "name": "contrib",
+   "kind": "folder",
+   "fileCount": 335,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor/common",
+   "name": "common",
+   "kind": "folder",
+   "fileCount": 227,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor/browser",
+   "name": "browser",
+   "kind": "folder",
+   "fileCount": 152,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor/test",
+   "name": "test",
+   "kind": "folder",
+   "fileCount": 134,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/editor/standalone",
+   "name": "standalone",
+   "kind": "folder",
+   "fileCount": 29,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor/editor.all.ts",
+   "name": "editor.all.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor/editor.api.ts",
+   "name": "editor.api.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor/editor.main.ts",
+   "name": "editor.main.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor/editor.worker.start.ts",
+   "name": "editor.worker.start.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  }
+ ],
+ "edges": [
+  {
+   "source": "src/vs/editor/browser",
+   "target": "src/vs/editor/common",
+   "count": 590
+  },
+  {
+   "source": "src/vs/editor/contrib",
+   "target": "src/vs/editor/browser",
+   "count": 340
+  },
+  {
+   "source": "src/vs/editor/contrib",
+   "target": "src/vs/editor/common",
+   "count": 1368
+  },
+  {
+   "source": "src/vs/editor/contrib",
+   "target": "src/vs/editor/test",
+   "count": 95
+  },
+  {
+   "source": "src/vs/editor/editor.all.ts",
+   "target": "src/vs/editor/browser",
+   "count": 3
+  },
+  {
+   "source": "src/vs/editor/editor.all.ts",
+   "target": "src/vs/editor/common",
+   "count": 1
+  },
+  {
+   "source": "src/vs/editor/editor.all.ts",
+   "target": "src/vs/editor/contrib",
+   "count": 59
+  },
+  {
+   "source": "src/vs/editor/editor.api.ts",
+   "target": "src/vs/editor/common",
+   "count": 2
+  },
+  {
+   "source": "src/vs/editor/editor.api.ts",
+   "target": "src/vs/editor/contrib",
+   "count": 1
+  },
+  {
+   "source": "src/vs/editor/editor.api.ts",
+   "target": "src/vs/editor/standalone",
+   "count": 2
+  },
+  {
+   "source": "src/vs/editor/editor.main.ts",
+   "target": "src/vs/editor/editor.all.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/editor/editor.main.ts",
+   "target": "src/vs/editor/editor.api.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/editor/editor.main.ts",
+   "target": "src/vs/editor/standalone",
+   "count": 8
+  },
+  {
+   "source": "src/vs/editor/editor.worker.start.ts",
+   "target": "src/vs/editor/common",
+   "count": 2
+  },
+  {
+   "source": "src/vs/editor/standalone",
+   "target": "src/vs/editor/browser",
+   "count": 40
+  },
+  {
+   "source": "src/vs/editor/standalone",
+   "target": "src/vs/editor/common",
+   "count": 111
+  },
+  {
+   "source": "src/vs/editor/standalone",
+   "target": "src/vs/editor/contrib",
+   "count": 6
+  },
+  {
+   "source": "src/vs/editor/standalone",
+   "target": "src/vs/editor/test",
+   "count": 1
+  },
+  {
+   "source": "src/vs/editor/test",
+   "target": "src/vs/editor/browser",
+   "count": 73
+  },
+  {
+   "source": "src/vs/editor/test",
+   "target": "src/vs/editor/common",
+   "count": 460
+  }
+ ]
+}

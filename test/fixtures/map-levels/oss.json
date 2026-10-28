@@ -1,0 +1,151 @@
+{
+ "path": "build/azure-pipelines/oss",
+ "page": 0,
+ "pageCount": 1,
+ "nodes": [
+  {
+   "path": "build/azure-pipelines/oss/scan-licenses.ts",
+   "name": "scan-licenses.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "build/azure-pipelines/oss/parse-notices.ts",
+   "name": "parse-notices.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "build/azure-pipelines/oss/utils.ts",
+   "name": "utils.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "build/azure-pipelines/oss/apply-overrides.ts",
+   "name": "apply-overrides.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "build/azure-pipelines/oss/merge-notices.ts",
+   "name": "merge-notices.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "build/azure-pipelines/oss/audit-notices.ts",
+   "name": "audit-notices.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "build/azure-pipelines/oss/cargo-section4.test.ts",
+   "name": "cargo-section4.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "build/azure-pipelines/oss/merge-notices.test.ts",
+   "name": "merge-notices.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "build/azure-pipelines/oss/platform-binary.test.ts",
+   "name": "platform-binary.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "build/azure-pipelines/oss/section6.test.ts",
+   "name": "section6.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "build/azure-pipelines/oss/section7.test.ts",
+   "name": "section7.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  }
+ ],
+ "edges": [
+  {
+   "source": "build/azure-pipelines/oss/audit-notices.ts",
+   "target": "build/azure-pipelines/oss/parse-notices.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/audit-notices.ts",
+   "target": "build/azure-pipelines/oss/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/cargo-section4.test.ts",
+   "target": "build/azure-pipelines/oss/scan-licenses.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/merge-notices.test.ts",
+   "target": "build/azure-pipelines/oss/merge-notices.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/merge-notices.ts",
+   "target": "build/azure-pipelines/oss/apply-overrides.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/merge-notices.ts",
+   "target": "build/azure-pipelines/oss/parse-notices.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/merge-notices.ts",
+   "target": "build/azure-pipelines/oss/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/platform-binary.test.ts",
+   "target": "build/azure-pipelines/oss/scan-licenses.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/scan-licenses.ts",
+   "target": "build/azure-pipelines/oss/apply-overrides.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/scan-licenses.ts",
+   "target": "build/azure-pipelines/oss/parse-notices.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/scan-licenses.ts",
+   "target": "build/azure-pipelines/oss/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/section6.test.ts",
+   "target": "build/azure-pipelines/oss/scan-licenses.ts",
+   "count": 1
+  },
+  {
+   "source": "build/azure-pipelines/oss/section7.test.ts",
+   "target": "build/azure-pipelines/oss/scan-licenses.ts",
+   "count": 1
+  }
+ ]
+}

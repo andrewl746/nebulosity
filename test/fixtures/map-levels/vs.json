@@ -1,0 +1,234 @@
+{
+ "path": "src/vs",
+ "page": 0,
+ "pageCount": 1,
+ "nodes": [
+  {
+   "path": "src/vs/workbench",
+   "name": "workbench",
+   "kind": "folder",
+   "fileCount": 4634,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform",
+   "name": "platform",
+   "kind": "folder",
+   "fileCount": 3097,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions",
+   "name": "sessions",
+   "kind": "folder",
+   "fileCount": 912,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/editor",
+   "name": "editor",
+   "kind": "folder",
+   "fileCount": 881,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/base",
+   "name": "base",
+   "kind": "folder",
+   "fileCount": 498,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/server",
+   "name": "server",
+   "kind": "folder",
+   "fileCount": 30,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/code",
+   "name": "code",
+   "kind": "folder",
+   "fileCount": 22,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/nls.ts",
+   "name": "nls.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/amdX.ts",
+   "name": "amdX.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/monaco.d.ts",
+   "name": "monaco.d.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  }
+ ],
+ "edges": [
+  {
+   "source": "src/vs/amdX.ts",
+   "target": "src/vs/base",
+   "count": 5
+  },
+  {
+   "source": "src/vs/base",
+   "target": "src/vs/amdX.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base",
+   "target": "src/vs/nls.ts",
+   "count": 31
+  },
+  {
+   "source": "src/vs/base",
+   "target": "src/vs/platform",
+   "count": 1
+  },
+  {
+   "source": "src/vs/code",
+   "target": "src/vs/base",
+   "count": 151
+  },
+  {
+   "source": "src/vs/code",
+   "target": "src/vs/nls.ts",
+   "count": 4
+  },
+  {
+   "source": "src/vs/code",
+   "target": "src/vs/platform",
+   "count": 416
+  },
+  {
+   "source": "src/vs/code",
+   "target": "src/vs/workbench",
+   "count": 6
+  },
+  {
+   "source": "src/vs/editor",
+   "target": "src/vs/amdX.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/editor",
+   "target": "src/vs/base",
+   "count": 2414
+  },
+  {
+   "source": "src/vs/editor",
+   "target": "src/vs/nls.ts",
+   "count": 127
+  },
+  {
+   "source": "src/vs/editor",
+   "target": "src/vs/platform",
+   "count": 1212
+  },
+  {
+   "source": "src/vs/platform",
+   "target": "src/vs/amdX.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform",
+   "target": "src/vs/base",
+   "count": 6313
+  },
+  {
+   "source": "src/vs/platform",
+   "target": "src/vs/editor",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform",
+   "target": "src/vs/nls.ts",
+   "count": 223
+  },
+  {
+   "source": "src/vs/server",
+   "target": "src/vs/base",
+   "count": 160
+  },
+  {
+   "source": "src/vs/server",
+   "target": "src/vs/nls.ts",
+   "count": 4
+  },
+  {
+   "source": "src/vs/server",
+   "target": "src/vs/platform",
+   "count": 206
+  },
+  {
+   "source": "src/vs/server",
+   "target": "src/vs/workbench",
+   "count": 12
+  },
+  {
+   "source": "src/vs/sessions",
+   "target": "src/vs/base",
+   "count": 4247
+  },
+  {
+   "source": "src/vs/sessions",
+   "target": "src/vs/editor",
+   "count": 288
+  },
+  {
+   "source": "src/vs/sessions",
+   "target": "src/vs/nls.ts",
+   "count": 269
+  },
+  {
+   "source": "src/vs/sessions",
+   "target": "src/vs/platform",
+   "count": 4071
+  },
+  {
+   "source": "src/vs/sessions",
+   "target": "src/vs/workbench",
+   "count": 2718
+  },
+  {
+   "source": "src/vs/workbench",
+   "target": "src/vs/amdX.ts",
+   "count": 32
+  },
+  {
+   "source": "src/vs/workbench",
+   "target": "src/vs/base",
+   "count": 20648
+  },
+  {
+   "source": "src/vs/workbench",
+   "target": "src/vs/editor",
+   "count": 3652
+  },
+  {
+   "source": "src/vs/workbench",
+   "target": "src/vs/nls.ts",
+   "count": 1579
+  },
+  {
+   "source": "src/vs/workbench",
+   "target": "src/vs/platform",
+   "count": 19171
+  },
+  {
+   "source": "src/vs/workbench",
+   "target": "src/vs/sessions",
+   "count": 89
+  }
+ ]
+}
