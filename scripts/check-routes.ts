@@ -39,7 +39,8 @@ const perRow = Number(option("--per-row") ?? MAX_PER_ROW);
 const shown = Number(option("--examples") ?? 5);
 const under = option("--folder");
 const walk = option("--walk");
-if (!target || !Number.isInteger(perRow) || perRow < 1 || !Number.isInteger(shown) || shown < 0 || (walk !== undefined && walk !== "hover" && walk !== "light")){
+// a bare --walk would read as no walk and pass unwalked, so it needs one of its two values
+if (!target || !Number.isInteger(perRow) || perRow < 1 || !Number.isInteger(shown) || shown < 0 || (args.includes("--walk") && walk !== "hover" && walk !== "light")){
     console.error(USAGE);
     process.exit(1);
 }
@@ -53,8 +54,9 @@ const LABEL: Record<FaultKind, string> = {
 const SHORT: Record<FaultKind, string> = { shared: "shared runs", jog: "wiggles", lined: "end to end", head: "through a head" };
 /**
  * The most of each kind a router may leave at rest: main's own counts over all of VS Code at 0063e4c, under PR #17's
- * rules (1,251 in all on 56 pages). So the router that merges lines does no worse at rest in any kind than the one it
- * replaces, where zero would fail on the crowded channels no merging clears.
+ * rules (1,251 in all on 56 pages). main scores the same under these rules in every kind but heads, where it scores 0,
+ * since its 243 were all two lines into one box, which now share its head. A bar of zero would fail on crowded channels
+ * that merging can't clear.
  */
 const BAR: Record<FaultKind, number> = { shared: 909, jog: 31, lined: 68, head: 243 };
 /** With every line drawn, the pages with the most faults listed; at rest, all of them. */
