@@ -530,8 +530,9 @@ function Relations({ data, tab, onTab, onFocus, onOpen, onViewLines }: Relations
                             tabIndex={on ? 0 : -1}
                             title={TAB_TITLES[t.id]}
                             onClick={() => onTab(t.id)}
+                            // Used by is underlined in the pink its lines take on the Map, the other tabs in the accent
                             className={`relative whitespace-nowrap pb-2 pt-1.5 text-[13px] ${on
-                                ? "text-text after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[1px] after:bg-accent"
+                                ? `text-text after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[1px] ${t.id === "usedBy" ? "after:bg-used-by-accent" : "after:bg-accent"}`
                                 : "text-text-2 hover:text-text"}`}
                         >
                             {t.label} {formatCount(t.count)}
@@ -541,7 +542,7 @@ function Relations({ data, tab, onTab, onFocus, onOpen, onViewLines }: Relations
             </div>
             <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${tab}`} className="pt-2">
                 {tab === "uses" && <Areas key="uses" items={data.uses} empty="Imports nothing outside itself." onFocus={onFocus} />}
-                {tab === "usedBy" && <Areas key="usedBy" items={data.usedBy} empty="Nothing outside it imports it." onFocus={onFocus} />}
+                {tab === "usedBy" && <Areas key="usedBy" items={data.usedBy} empty="Nothing outside it imports it." onFocus={onFocus} usedBy />}
                 {tab === "inside" && file && (
                     <Preview items={data.symbols ?? []} empty={noDeclarationsText(data)} render={(symbol: SymbolInfo) => (
                         <DeclarationRow key={`${symbol.name}:${symbol.startLine}`} symbol={symbol} onViewLines={onViewLines} />
@@ -558,7 +559,7 @@ function Relations({ data, tab, onTab, onFocus, onOpen, onViewLines }: Relations
 }
 
 /** Uses or Used by: each area a row that focuses it on the Map, its bar measured against the tab's largest. */
-function Areas({ items, empty, onFocus }: { items: readonly AreaCount[]; empty: string; onFocus: (targetPath: string) => void }){
+function Areas({ items, empty, onFocus, usedBy = false }: { items: readonly AreaCount[]; empty: string; onFocus: (targetPath: string) => void; usedBy?: boolean }){
     const largest = largestCount(items);
     return (
         <Preview items={items} empty={empty} render={(area: AreaCount) => (
@@ -570,6 +571,7 @@ function Areas({ items, empty, onFocus }: { items: readonly AreaCount[]; empty: 
                 largest={largest}
                 title={importsTitle(area.path, area.count)}
                 onClick={() => onFocus(area.path)}
+                usedBy={usedBy}
             />
         )} />
     );
@@ -586,13 +588,15 @@ type BarRowProps = {
     chip?: string;
     /** data-linked, on a doorway's rows. */
     linked?: string;
+    /** A Used by row: its bar in the pink its line takes on the Map, where every other row's is lilac. */
+    usedBy?: boolean;
 };
 
 /**
  * A row with a bar (the mockup's .irow): the name in the code font, cut off with an ellipsis, the count on the right,
  * and under both a 3 px bar as long as the count is against the largest in its list.
  */
-function BarRow({ name, count, largest, title, onClick, chip, linked }: BarRowProps){
+function BarRow({ name, count, largest, title, onClick, chip, linked, usedBy = false }: BarRowProps){
     return (
         <li>
             <button
@@ -605,7 +609,7 @@ function BarRow({ name, count, largest, title, onClick, chip, linked }: BarRowPr
             >
                 <span className="truncate font-mono text-[12.5px] leading-[18px] text-text">{name}</span>
                 <span className="text-[11.5px] leading-4 text-text-2">{formatCount(count)}</span>
-                <span aria-hidden className="col-span-2 mt-[5px] h-[3px] rounded-[2px] bg-linked-glyph" style={{ width: `${barWidth(count, largest)}%` }} />
+                <span aria-hidden className={`col-span-2 mt-[5px] h-[3px] rounded-[2px] ${usedBy ? "bg-used-by-bar" : "bg-linked-glyph"}`} style={{ width: `${barWidth(count, largest)}%` }} />
             </button>
         </li>
     );
