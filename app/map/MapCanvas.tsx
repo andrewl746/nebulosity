@@ -17,11 +17,14 @@ import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
-import { routeEdges } from "./routes";
+import { nextRoutes, routeEdges } from "./routes";
 import { isLightKind } from "./theme";
 import { useThemeKind } from "./useThemeKind";
 import { boundsOf, initialViewport } from "./viewport";
 import { dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
+
+/** The line ids a key of ids joined by newlines names. */
+const keySet = (key: string): Set<string> => new Set(key === "" ? [] : key.split("\n"));
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
@@ -110,10 +113,23 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines, strongOnly, pinned: agent }),
         [level, selected, hoveredBox, quietLines, strongOnly, agent],
     );
-    // Only the lines drawn are routed, so they share the ports and tracks out among themselves (routes.ts). Kept by
-    // content: a hover that draws the same lines keeps every route, and on a level that draws them all, nothing moves.
+    // The lines drawn at rest (nothing selected, hovered or lit) are routed once, among themselves (routes.ts). A line a
+    // selection, a hover or a lit box adds is routed when it appears, around every line on screen, and keeps that route
+    // while it stays, so pointing at a box or clicking one never moves a line that's drawn (the owner, 2026-10-27).
+    // Keyed by content: a hover that draws the same lines keeps every route.
+    const restKey = useMemo(() => {
+        const rest = mapEmphasis(level.nodes.map((n) => n.path), level.edges, null, null, { quietLines, strongOnly });
+        return level.edges.map(edgeKey).filter((id) => rest.edges.get(id) !== "hidden").join("\n");
+    }, [level, quietLines, strongOnly]);
+    const restRoutes = useMemo(() => routeEdges(positions, level.edges, keySet(restKey)), [positions, level, restKey]);
     const drawnKey = level.edges.map(edgeKey).filter((id) => emphasis.edges.get(id) !== "hidden").join("\n");
-    const routes = useMemo(() => routeEdges(positions, level.edges, new Set(drawnKey === "" ? [] : drawnKey.split("\n"))), [positions, level, drawnKey]);
+    // what's on screen, and what it was routed from: React's way to keep state that follows a prop, set during render
+    const [shown, setShown] = useState({ rest: restRoutes, drawn: restKey, routes: restRoutes });
+    if (shown.rest !== restRoutes || shown.drawn !== drawnKey){
+        const before = shown.rest === restRoutes ? shown.routes : restRoutes;
+        setShown({ rest: restRoutes, drawn: drawnKey, routes: nextRoutes(positions, level.edges, restRoutes, before, keySet(drawnKey)) });
+    }
+    const routes = shown.routes;
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
     const { setViewport, getViewport } = useReactFlow();

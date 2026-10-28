@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
+import { edgeKey, mapEmphasis } from "./emphasis";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
-import { longestSideMiddle, roundedPath, routeEdges, type Point } from "./routes";
+import { longestSideMiddle, nextRoutes, roundedPath, routeEdges, type Point } from "./routes";
 import { arrowHead, lineWidth } from "./weights";
 
 const at = (entries: Record<string, Position>): Map<string, Position> => new Map(Object.entries(entries));
@@ -132,13 +133,15 @@ describe("routeEdges on VS Code's root, as the approved mockup draws it", () => 
         // +7.283 to test. The lane: the rows passed (gulpfile and test, build, .github and .eslint) leave room only outside
         // them all, 28 px out from −252, so −280, which ties with +280 and goes to the lower x.
         // src's four arriving lines in the order they come from (the lane −280, .github −136, build's lane 0, .eslint 136),
-        // their heads (half-widths 8.4, 4.5, 5.8195, 4.5) 8 apart, centred: −28.770, −7.870, 10.450, 28.770.
-        // The channel over src (536 to 600): .github's, build's and .eslint's runs share a track, and extensions' must
-        // run below .github's (whose turn at −7.87 lies past its end), so two tracks, (3.1328 + 6) / 2 + 8 = 12.566
-        // apart, centred on 568 they'd be 561.717 and 574.283, and the lower one keeps 12.2 + 3 + 8 above src (576.8).
+        // their heads (half-widths 8.4, 4.5, 5.8195, 4.5) 8 apart, centred: −28.770, −7.870, 10.450, 28.770. Build's
+        // line would then step 10.45 px sideways at the foot of its lane, a wiggle (settlePorts), so src's four ports
+        // move over together by −10.45 and it drops straight: −39.220, −18.320, 0, 18.320.
+        // The channel over src (536 to 600): .github's and .eslint's runs share a track, and extensions' must run below
+        // .github's (whose turn at −18.32 lies past its end), so two tracks, (1.5332 + 6) / 2 + 8 = 11.767 apart,
+        // centred on 568: 562.117 and 573.883, the lower one more than 12.2 + 3 + 8 above src (576.8).
         // The channel under extensions holds both its runs on one track, at its middle, 208.
         const heavy = routes.get("extensions->src")!;
-        const expected = [[-7.2832, 176], [-7.2832, 208], [-280, 208], [-280, 574.2832], [-28.76955, 574.2832], [-28.76955, 600]];
+        const expected = [[-7.2832, 176], [-7.2832, 208], [-280, 208], [-280, 573.8833], [-39.21955, 573.8833], [-39.21955, 600]];
         expect(heavy).toHaveLength(expected.length);
         heavy.forEach((p, i) => {
             expect(p.x, `point ${i} x`).toBeCloseTo(expected[i][0], 3);
@@ -148,14 +151,30 @@ describe("routeEdges on VS Code's root, as the approved mockup draws it", () => 
 
     it("ends the four lines into src at their own points, in the order they come from", () => {
         const ends = ["extensions->src", ".github->src", "build->src", ".eslint-plugin-local->src"].map((key) => routes.get(key)!.at(-1)!.x);
-        expect(ends.map((x) => Number(x.toFixed(2)))).toEqual([-28.77, -7.87, 10.45, 28.77]);
+        expect(ends.map((x) => Number(x.toFixed(2)))).toEqual([-39.22, -18.32, 0, 18.32]);
     });
 
-    it("takes build's line down the gutter between .github and .eslint-plugin-local", () => {
-        const lane = routes.get("build->src")!.find((p, i, all) => i > 0 && all[i - 1].x === p.x && p.y > 416 && all[i - 1].y < 480);
-        expect(lane?.x).toBe(0);
+    it("takes build's line straight down the gutter between .github and .eslint-plugin-local, into src", () => {
+        expect(routes.get("build->src")).toEqual([{ x: 0, y: 416 }, { x: 0, y: 600 }]);
     });
 });
+
+// VS Code's src/vs as the Map lays it out in VS Code's panel (6 a row), its 31 lines, and the 11 drawn at rest with
+// Strong links only (2% of the heaviest, workbench → base's 20,648 imports)
+const VS = at({
+    "src/vs/code": { x: -252, y: 0 }, "src/vs/server": { x: 20, y: 0 }, "src/vs/workbench": { x: -116, y: 120 }, "src/vs/sessions": { x: -116, y: 240 },
+    "src/vs/platform": { x: -116, y: 360 }, "src/vs/editor": { x: -116, y: 480 }, "src/vs/base": { x: -116, y: 600 },
+    "src/vs/amdX.ts": { x: -252, y: 720 }, "src/vs/nls.ts": { x: 20, y: 720 },
+});
+const VS_LINES = ([
+    ["workbench", "base", 20648], ["workbench", "platform", 19171], ["platform", "base", 6313], ["sessions", "base", 4247], ["sessions", "platform", 4071],
+    ["workbench", "editor", 3652], ["sessions", "workbench", 2718], ["editor", "base", 2414], ["workbench", "nls.ts", 1579], ["editor", "platform", 1212],
+    ["code", "platform", 416], ["sessions", "editor", 288], ["sessions", "nls.ts", 269], ["platform", "nls.ts", 223], ["server", "platform", 206],
+    ["server", "base", 160], ["code", "base", 151], ["editor", "nls.ts", 127], ["workbench", "sessions", 89], ["workbench", "amdX.ts", 32],
+    ["base", "nls.ts", 31], ["server", "workbench", 12], ["code", "workbench", 6], ["amdX.ts", "base", 5], ["server", "nls.ts", 4], ["code", "nls.ts", 4],
+    ["platform", "editor", 3], ["platform", "amdX.ts", 3], ["editor", "amdX.ts", 1], ["base", "platform", 1], ["base", "amdX.ts", 1],
+] as const).map(([source, target, count]) => weighed(`src/vs/${source}`, `src/vs/${target}`, count));
+const VS_AT_REST = new Set(VS_LINES.filter((e) => e.count >= 0.02 * 20648).map((e) => `${e.source}->${e.target}`));
 
 /** Every pair of segments two routes share: the same line at the same x (or y) over more than half a pixel. */
 function sharedRuns(a: Point[], b: Point[]): string[] {
@@ -173,10 +192,39 @@ function sharedRuns(a: Point[], b: Point[]): string[] {
     return found;
 }
 
+/** A route's sideways steps shorter than 24 px between two drops. */
+function wiggles(points: Point[]): string[] {
+    return points.slice(1, -2).flatMap((p, i) => {
+        const q = points[i + 2];
+        return p.y === q.y && Math.abs(q.x - p.x) < 24 ? [`${Math.abs(q.x - p.x).toFixed(2)} px at y ${p.y}`] : [];
+    });
+}
+
+/**
+ * Where one route's drop stops less than 48 px above where another's starts, their x's closer than `near`, inside one
+ * channel (one that turns into a box's top and one leaving its bottom are a box apart, 56 px): the two read as one line.
+ */
+function endToEnd(a: Point[], b: Point[], near: number): string[] {
+    const drops = (points: Point[]) => points.slice(0, -1).flatMap((p, i) => {
+        const q = points[i + 1];
+        return p.x === q.x ? [{ x: p.x, lo: Math.min(p.y, q.y), hi: Math.max(p.y, q.y) }] : [];
+    });
+    const found: string[] = [];
+    for (const u of drops(a)){
+        for (const v of drops(b)){
+            const gap = Math.max(u.lo, v.lo) - Math.min(u.hi, v.hi);
+            if (Math.abs(u.x - v.x) < near - 1e-6 && gap >= 0 && gap < 48) found.push(`x ${u.x.toFixed(2)} and ${v.x.toFixed(2)}, ${gap.toFixed(1)} px apart`);
+        }
+    }
+    return found;
+}
+
 describe("routeEdges: no two lines share a run or an end (the owner, 2026-10-27)", () => {
     const LEVELS: [string, Map<string, Position>, MapEdge[], ReadonlySet<string> | undefined][] = [
         ["VS Code's root, all eleven lines", ROOT, ROOT_LINES, undefined],
         ["VS Code's root, src selected", ROOT, ROOT_LINES, SRC_SELECTED],
+        ["src/vs at rest", VS, VS_LINES, VS_AT_REST],
+        ["src/vs, every line", VS, VS_LINES, undefined],
     ];
     // and the fan of 13 from above, every line drawn
     const bs = Array.from({ length: 13 }, (_, i) => `b${i + 1}`);
@@ -198,6 +246,29 @@ describe("routeEdges: no two lines share a run or an end (the owner, 2026-10-27)
             }
         });
 
+        it(`${name}: no line steps sideways less than 24 px (the owner, 2026-10-27: a wiggle, not a turn)`, () => {
+            for (const [key, points] of routeEdges(positions, edges, drawn)) expect(wiggles(points), key).toEqual([]);
+        });
+
+        it(`${name}: no line stops just above where another starts, in about the same column`, () => {
+            const max = Math.max(...edges.map((e) => e.count));
+            const widthOf = (key: string): number => lineWidth(edges.find((e) => `${e.source}->${e.target}` === key)!.count, max);
+            const routes = [...routeEdges(positions, edges, drawn)];
+            const lined: string[] = [];
+            for (let i = 0; i < routes.length; i++){
+                for (let j = i + 1; j < routes.length; j++){
+                    const [[ka, a], [kb, b]] = [routes[i], routes[j]];
+                    if (endToEnd(a, b, (widthOf(ka) + widthOf(kb)) / 2 + 8).length > 0) lined.push(`${ka} and ${kb}`);
+                }
+            }
+            // With every line drawn, src/vs's last two channels are full: five lanes end over nls.ts's top, and what's left
+            // between them holds about 100 px of its seven arrowheads' 114, and editor's four leaving lines share the
+            // channel over base with its seven arriving ones, the tracks already squeezed. A move that clears one pair
+            // lines up another, so settlePorts leaves at most two there. Strong links only (on by default) draws neither.
+            if (name === "src/vs, every line") expect(lined.length).toBeLessThanOrEqual(2);
+            else expect(lined).toEqual([]);
+        });
+
         it(`${name}: every line ends in a drop long enough for its arrowhead`, () => {
             const max = Math.max(...edges.map((e) => e.count));
             for (const [key, points] of routeEdges(positions, edges, drawn)){
@@ -207,6 +278,89 @@ describe("routeEdges: no two lines share a run or an end (the owner, 2026-10-27)
                 // the head (weights.ts), the 3 px gap above the box and a corner's 8 px
                 expect(end.y - before.y, key).toBeGreaterThanOrEqual(arrowHead(lineWidth(edge.count, max)).length + 3 + 8 - 1e-9);
             }
+        });
+    }
+});
+
+// VS Code's src/vs/editor as the owner saw it in VS Code's panel (6 a row, Strong links only on), and its 20 lines:
+// hovering standalone drew 4 more and moved 8 of the 9 already there
+const EDITOR = at({
+    "editor.main.ts": { x: -116, y: 0 }, "editor.api.ts": { x: -116, y: 120 }, standalone: { x: -252, y: 240 }, "editor.all.ts": { x: 20, y: 240 },
+    contrib: { x: -116, y: 360 }, test: { x: -116, y: 480 }, "editor.worker.start.ts": { x: -252, y: 600 }, browser: { x: 20, y: 600 }, common: { x: -116, y: 720 },
+});
+const EDITOR_LINES = ([
+    ["browser", "common", 590], ["contrib", "browser", 340], ["contrib", "common", 1368], ["contrib", "test", 95], ["editor.all.ts", "browser", 3],
+    ["editor.all.ts", "common", 1], ["editor.all.ts", "contrib", 59], ["editor.api.ts", "common", 2], ["editor.api.ts", "contrib", 1],
+    ["editor.api.ts", "standalone", 2], ["editor.main.ts", "editor.all.ts", 1], ["editor.main.ts", "editor.api.ts", 1], ["editor.main.ts", "standalone", 8],
+    ["editor.worker.start.ts", "common", 2], ["standalone", "browser", 40], ["standalone", "common", 111], ["standalone", "contrib", 6],
+    ["standalone", "test", 1], ["test", "browser", 73], ["test", "common", 460],
+] as const).map(([source, target, count]) => weighed(source, target, count));
+
+/**
+ * The Map's lines through a run of states, as MapCanvas draws them: the lines drawn at rest routed once, and each
+ * state's routes from the last one's (nextRoutes). Each state is what's selected and what's hovered.
+ */
+function drive(positions: Map<string, Position>, edges: MapEdge[], states: [string | null, string | null][]): { drawn: Set<string>; routes: Map<string, Point[]> }[] {
+    const boxes = [...positions.keys()];
+    const drawnIn = (selected: string | null, hovered: string | null): Set<string> => {
+        const tones = mapEmphasis(boxes, edges, selected, hovered, { strongOnly: true }).edges;
+        return new Set(edges.map(edgeKey).filter((key) => tones.get(key) !== "hidden"));
+    };
+    const rest = routeEdges(positions, edges, drawnIn(null, null));
+    let before = rest;
+    return states.map(([selected, hovered]) => {
+        const drawn = drawnIn(selected, hovered);
+        before = nextRoutes(positions, edges, rest, before, drawn);
+        return { drawn, routes: before };
+    });
+}
+
+describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a box rearranged the lines)", () => {
+    const boxes = [...EDITOR.keys()];
+
+    it("keeps every route a level was given when it's routed again with them all kept", () => {
+        const routes = routeEdges(VS, VS_LINES, VS_AT_REST);
+        const again = routeEdges(VS, VS_LINES, VS_AT_REST, routes);
+        for (const [key, route] of routes) expect(again.get(key), key).toBe(route);
+    });
+
+    it("hovering standalone on src/vs/editor draws its four weak lines and moves none of the nine already there", () => {
+        const [rest, hovered] = drive(EDITOR, EDITOR_LINES, [[null, null], [null, "standalone"]]);
+        expect(rest.drawn.size).toBe(9);
+        expect(hovered.drawn.size).toBe(13);
+        for (const [key, route] of rest.routes) expect(hovered.routes.get(key), key).toBe(route);
+    });
+
+    // every box hovered from rest, every box selected and then every other hovered, and a click on the hovered box
+    const walks: [string, [string | null, string | null][]][] = [
+        ["hovering each box in turn", boxes.flatMap((b): [string | null, string | null][] => [[null, b], [null, null]])],
+        ...boxes.map((s): [string, [string | null, string | null][]] => [`with ${s} selected, hovering each other box and clicking it`,
+            [[s, null], ...boxes.filter((b) => b !== s).flatMap((b): [string | null, string | null][] => [[s, b], [b, null], [s, null]])]]),
+    ];
+    for (const [name, states] of walks){
+        it(`src/vs/editor, ${name}: a drawn line keeps its route, none wiggles or crosses a box, and no two share a run or line up`, () => {
+            const max = Math.max(...EDITOR_LINES.map((e) => e.count));
+            const widthOf = (key: string): number => lineWidth(EDITOR_LINES.find((e) => edgeKey(e) === key)!.count, max);
+            const steps = drive(EDITOR, EDITOR_LINES, states);
+            steps.forEach((step, i) => {
+                const last = steps[i - 1];
+                if (last !== undefined){
+                    for (const key of step.drawn) if (last.drawn.has(key)) expect(step.routes.get(key), `${key} at step ${i}`).toBe(last.routes.get(key));
+                }
+                const list = [...step.routes];
+                for (let a = 0; a < list.length; a++){
+                    for (let b = a + 1; b < list.length; b++){
+                        const [[ka, pa], [kb, pb]] = [list[a], list[b]];
+                        expect(sharedRuns(pa, pb), `${ka} and ${kb} at step ${i}`).toEqual([]);
+                        expect(endToEnd(pa, pb, (widthOf(ka) + widthOf(kb)) / 2 + 8), `${ka} and ${kb} at step ${i}`).toEqual([]);
+                    }
+                    const points = list[a][1];
+                    expect(wiggles(points), `${list[a][0]} at step ${i}`).toEqual([]);
+                    for (const [path, box] of EDITOR){
+                        for (let p = 0; p + 1 < points.length; p++) expect(crossesInside(points[p], points[p + 1], box), `${list[a][0]} through ${path} at step ${i}`).toBe(false);
+                    }
+                }
+            });
         });
     }
 });
