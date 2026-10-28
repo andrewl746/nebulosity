@@ -42,6 +42,20 @@ export const maxFilesOf = (nodes: readonly MapNode[]): number => Math.max(0, ...
 /** The heaviest line on a page, by imports. */
 export const maxImportsOf = (edges: readonly MapEdge[]): number => Math.max(0, ...edges.map((e) => e.count));
 
+/**
+ * The width each box's one arrowhead is sized for (arrowHead), by box. The lines into a box share its head, so it's
+ * sized for the heaviest of them on the page, drawn or not, and never grows when a hover draws a heavier one (the
+ * owner, 2026-10-28). A line from a box to itself isn't drawn, so it doesn't count.
+ */
+export function boxHeadWidths(edges: readonly MapEdge[]): Map<string, number> {
+    const max = maxImportsOf(edges);
+    const heads = new Map<string, number>();
+    for (const e of edges){
+        if (e.source !== e.target) heads.set(e.target, Math.max(heads.get(e.target) ?? 0, lineWidth(e.count, max)));
+    }
+    return heads;
+}
+
 /** How many of the page's heaviest lines carry their count, whatever is selected. */
 export const LABELLED_LINES = 3;
 
