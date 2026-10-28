@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import type { LevelResponse, MapEdge, MapNode } from "@/lib/contracts";
 import { drawnAt, endsOf, headsOf, routeFaults, widthsOf } from "@/scripts/route-faults";
-import { edgeKey, mapEmphasis } from "./emphasis";
+import { edgeKey, isBusyLevel, mapEmphasis } from "./emphasis";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
 import { longestSideMiddle, nextRoutes, roundedPath, routeEdges, type Point } from "./routes";
 import { arrowHead, boxHeadWidths } from "./weights";
@@ -226,6 +226,39 @@ describe("merged at rest: no faults by the merge-aware rules, one point a side, 
     });
 });
 
+describe("a line that appears joins its group's lane and track where they're drawn, and moves none", () => {
+    it("joins a line that appears to the track its box's lines are on, and moves none", () => {
+        // a → t carries 100 imports (6 px), b → t 1, under 2% of it, so hidden at rest. t's head is sized for a → t's 6 px,
+        // half 8.4 and 12.2 long, so the track can sink no lower than 120 - 12.2 - 3 - 8 = 96.8: it's at 88, the middle.
+        // Hovering b draws b → t: t's point is a → t's, 252, and b → t's run from 388 to 252 joins a → t's track at 88,
+        // reaching past it from 252 to 388, where nothing else runs
+        const positions = at({ a: { x: 0, y: 0 }, b: { x: 272, y: 0 }, t: { x: 136, y: 120 } });
+        const edges = [weighed("a", "t", 100), weighed("b", "t", 1)];
+        const rest = routeEdges(positions, edges, new Set(["a->t"]));
+        const hovered = nextRoutes(positions, edges, rest, rest, new Set(["a->t", "b->t"]));
+        expect(hovered.get("a->t")).toBe(rest.get("a->t"));
+        expect(hovered.get("b->t")).toEqual([{ x: 388, y: 56 }, { x: 388, y: 88 }, { x: 252, y: 88 }, { x: 252, y: 120 }]);
+    });
+
+    it("keeps a line that appears off its box's lane where joining it would wiggle, and joins t's track", () => {
+        // s (middle -136) → m1 → t and m2 → t carry 100 each (6 px), s → t carries 1, hidden at rest. At rest m1 → t goes
+        // down the lane 28 px left of m1, m2 and t (-144), its runs at 208 and 328, and s → m1 runs at 88.
+        // Hovering s draws s → t (1 px). t's lane at -144 is within reach, but s's point is kept at -136, an 8 px step:
+        // no join. Its own lane, clear of every lane and of the kept ports at -136 and 0 by (6 + 1) / 2 + 8 = 11.5, is
+        // -155.5, a 19.5 px wiggle from -136, so settle moves the lane to 24 px from it, -160, clear of -144 by 16.
+        // s → m1 runs between neighbouring rows, so its one run is in m1's group, not s's (R4). s's leaving group has no
+        // kept run in that channel, so s → t's first run goes round s → m1's at 88 by 11.5, to 76.5 (a tie with 99.5 goes
+        // to the smaller). It joins t's track at 328 (from -144 to -160)
+        const positions = at({ s: { x: -252, y: 0 }, m1: { x: -116, y: 120 }, m2: { x: -116, y: 240 }, t: { x: -116, y: 360 } });
+        const edges = [weighed("s", "m1", 100), weighed("m1", "t", 100), weighed("m2", "t", 100), weighed("s", "t", 1)];
+        const rest = routeEdges(positions, edges, new Set(["s->m1", "m1->t", "m2->t"]));
+        expect(rest.get("m1->t")).toEqual([{ x: 0, y: 176 }, { x: 0, y: 208 }, { x: -144, y: 208 }, { x: -144, y: 328 }, { x: 0, y: 328 }, { x: 0, y: 360 }]);
+        const hovered = nextRoutes(positions, edges, rest, rest, new Set(["s->m1", "m1->t", "m2->t", "s->t"]));
+        for (const [key, route] of rest) expect(hovered.get(key), key).toBe(route);
+        expect(hovered.get("s->t")).toEqual([{ x: -136, y: 56 }, { x: -136, y: 76.5 }, { x: -160, y: 76.5 }, { x: -160, y: 328 }, { x: 0, y: 328 }, { x: 0, y: 360 }]);
+    });
+});
+
 // VS Code's src/vs/editor as the owner saw it in VS Code's panel (6 a row, Strong links only on), and its 20 lines:
 // hovering standalone drew 4 more and moved 8 of the 9 already there
 const EDITOR = at({
@@ -240,24 +273,51 @@ const EDITOR_LINES = ([
     ["standalone", "test", 1], ["test", "browser", 73], ["test", "common", 460],
 ] as const).map(([source, target, count]) => weighed(source, target, count));
 
+type State = [string | null, string | null];
+type Step = { drawn: Set<string>; routes: Map<string, Point[]> };
+
 /**
- * The Map's lines through a run of states, as MapCanvas draws them: the lines drawn at rest routed once, and each
- * state's routes from the last one's (nextRoutes). Each state is what's selected and what's hovered.
+ * The Map's lines through a run of states, as MapCanvas draws them: the lines drawn at rest routed once, which come
+ * first, and then each state's routes from the last one's (nextRoutes). Each state is what's selected and what's
+ * hovered, with the `pinned` boxes lit throughout (Claude Code's or the editor's), whose lines rest leaves out as
+ * MapCanvas's does, and a busy level's lines quiet.
  */
-function drive(positions: Map<string, Position>, edges: MapEdge[], states: [string | null, string | null][]): { drawn: Set<string>; routes: Map<string, Point[]> }[] {
+function drive(positions: Map<string, Position>, edges: MapEdge[], states: State[], pinned: ReadonlySet<string> = new Set()): Step[] {
     const boxes = [...positions.keys()];
-    const drawnIn = (selected: string | null, hovered: string | null): Set<string> => {
-        const tones = mapEmphasis(boxes, edges, selected, hovered, { strongOnly: true }).edges;
+    const drawnIn = (selected: string | null, hovered: string | null, lit: ReadonlySet<string>): Set<string> => {
+        const tones = mapEmphasis(boxes, edges, selected, hovered, { strongOnly: true, quietLines: isBusyLevel(edges.length), pinned: lit }).edges;
         return new Set(edges.map(edgeKey).filter((key) => tones.get(key) !== "hidden"));
     };
-    const rest = routeEdges(positions, edges, drawnIn(null, null));
+    const drawn = drawnIn(null, null, new Set());
+    const rest = routeEdges(positions, edges, drawn);
     let before = rest;
-    return states.map(([selected, hovered]) => {
-        const drawn = drawnIn(selected, hovered);
+    return [{ drawn, routes: rest }, ...states.map(([selected, hovered]) => {
+        const drawn = drawnIn(selected, hovered, pinned);
         before = nextRoutes(positions, edges, rest, before, drawn);
         return { drawn, routes: before };
-    });
+    })];
 }
+
+/** The lines drawn in a step and the one before that haven't the very route they had. */
+function moved(steps: readonly Step[]): string[] {
+    return steps.flatMap((step, i) => (i === 0 ? [] : [...step.drawn].filter((key) => steps[i - 1].drawn.has(key) && step.routes.get(key) !== steps[i - 1].routes.get(key)).map((key) => `${key} at step ${i}`)));
+}
+
+/** The lines through a box at each step. */
+function throughBoxes(steps: readonly Step[], positions: ReadonlyMap<string, Position>): string[] {
+    return steps.flatMap((step, i) => [...step.routes].flatMap(([key, points]) => [...positions]
+        .filter(([, box]) => points.slice(1).some((q, p) => crossesInside(points[p], q, box))).map(([path]) => `${key} through ${path} at step ${i}`)));
+}
+
+/** Each step's faults by the merge-aware rules (route-faults.ts). */
+function faultsOver(steps: readonly Step[], edges: MapEdge[]): string[] {
+    const [widths, ends, heads] = [widthsOf(edges), endsOf(edges), headsOf(edges)];
+    return steps.flatMap((step, i) => Object.values(routeFaults(step.routes, widths, ends, heads)).flat().map((f) => `${f.kind} at step ${i}: ${f.lines.join(" and ")}, ${f.detail}`));
+}
+
+/** `selected` selected, then each other box hovered and clicked, and the selection clicked again. */
+const selectionWalk = (boxes: readonly string[], selected: string): State[] =>
+    [[selected, null], ...boxes.filter((b) => b !== selected).flatMap((b): State[] => [[selected, b], [b, null], [selected, null]])];
 
 describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a box rearranged the lines)", () => {
     const boxes = [...EDITOR.keys()];
@@ -269,32 +329,53 @@ describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a
     });
 
     it("hovering standalone on src/vs/editor draws its four weak lines and moves none of the nine already there", () => {
-        const [rest, hovered] = drive(EDITOR, EDITOR_LINES, [[null, null], [null, "standalone"]]);
+        const [rest, hovered] = drive(EDITOR, EDITOR_LINES, [[null, "standalone"]]);
         expect(rest.drawn.size).toBe(9);
         expect(hovered.drawn.size).toBe(13);
         for (const [key, route] of rest.routes) expect(hovered.routes.get(key), key).toBe(route);
     });
 
     // every box hovered from rest, every box selected and then every other hovered, and a click on the hovered box
-    const walks: [string, [string | null, string | null][]][] = [
-        ["hovering each box in turn", boxes.flatMap((b): [string | null, string | null][] => [[null, b], [null, null]])],
-        ...boxes.map((s): [string, [string | null, string | null][]] => [`with ${s} selected, hovering each other box and clicking it`,
-            [[s, null], ...boxes.filter((b) => b !== s).flatMap((b): [string | null, string | null][] => [[s, b], [b, null], [s, null]])]]),
+    const walks: [string, State[]][] = [
+        ["hovering each box in turn", boxes.flatMap((b): State[] => [[null, b], [null, null]])],
+        ...boxes.map((s): [string, State[]] => [`with ${s} selected, hovering each other box and clicking it`, selectionWalk(boxes, s)]),
     ];
     for (const [name, states] of walks){
-        it(`src/vs/editor, ${name}: a drawn line keeps its route and none crosses a box`, () => {
+        it(`src/vs/editor, ${name}: a drawn line keeps its route, none crosses a box, and no step has a fault`, () => {
             const steps = drive(EDITOR, EDITOR_LINES, states);
-            steps.forEach((step, i) => {
-                const last = steps[i - 1];
-                if (last !== undefined){
-                    for (const key of step.drawn) if (last.drawn.has(key)) expect(step.routes.get(key), `${key} at step ${i}`).toBe(last.routes.get(key));
-                }
-                for (const [key, points] of step.routes){
-                    for (const [path, box] of EDITOR){
-                        for (let p = 0; p + 1 < points.length; p++) expect(crossesInside(points[p], points[p + 1], box), `${key} through ${path} at step ${i}`).toBe(false);
-                    }
-                }
-            });
+            expect(moved(steps)).toEqual([]);
+            expect(throughBoxes(steps, EDITOR)).toEqual([]);
+            expect(faultsOver(steps, EDITOR_LINES)).toEqual([]);
         });
     }
+
+    // src/vs's six wiggles into amdX.ts, down a lane boxed in 19 px from its held point, are a fault no move fixes
+    // (PR #16), so only the moves are held here, and check-routes counts its faults
+    for (const s of VS.keys()){
+        it(`src/vs, with ${s} selected, hovering each other box and clicking it: a drawn line keeps its route`, () => {
+            expect(moved(drive(VS, VS_LINES, selectionWalk([...VS.keys()], s)))).toEqual([]);
+        });
+    }
+
+    it("editor.json with contrib lit at rest, hovering each box: nothing drawn moves", () => {
+        // lit at rest, contrib's lines are routed around the rest routes as a hover's are (MapCanvas). The 9 strong lines,
+        // then contrib's two weak ones too, editor.api.ts's 1 import and standalone's 6, under 2% of the 1,368 heaviest
+        const [positions, edges] = fixture("editor");
+        const steps = drive(positions, edges, [[null, null], ...[...positions.keys()].flatMap((b): State[] => [[null, b], [null, null]])], new Set(["src/vs/editor/contrib"]));
+        expect([steps[0].drawn.size, steps[1].drawn.size]).toEqual([9, 11]);
+        expect(moved(steps)).toEqual([]);
+    });
+
+    it("agenthost.json, a busy level, its first 8 linked boxes each selected and each box it has a line to hovered: nothing drawn moves", () => {
+        // a busy level's lines are quiet, so nothing is drawn at rest and every line drawn comes from the selection
+        const [positions, edges, level] = fixture("agenthost");
+        const linked = level.nodes.map((n) => n.path).filter((box) => edges.some((e) => e.source !== e.target && (e.source === box || e.target === box)));
+        const states = linked.slice(0, 8).flatMap((s): State[] => {
+            const near = new Set(edges.flatMap((e) => (e.source === e.target ? [] : e.source === s ? [e.target] : e.target === s ? [e.source] : [])));
+            return [[s, null], ...[...near].flatMap((b): State[] => [[s, b], [s, null]]), [null, null]];
+        });
+        const steps = drive(positions, edges, states);
+        expect(steps[0].drawn.size).toBe(0);
+        expect(moved(steps)).toEqual([]);
+    });
 });

@@ -16,8 +16,9 @@ export type Point = { x: number; y: number };
  * first drop and, those going past the next row, a track along the channel under it, so each box's lines read as one
  * trunk that forks where they part. Lines that share no end keep their own lanes and tracks, spaced for each line's
  * width and for the arrowheads they pass over. A drawn line never moves (nextRoutes): a line that appears takes its
- * boxes' points where a drawn line holds them, and routes around everything on screen. Pure and deterministic, like
- * the layout it follows: the same level always routes the same way.
+ * boxes' points where a drawn line holds them, joins the lane and the tracks its group has on screen where it fits on
+ * them, and routes around everything else there. Pure and deterministic, like the layout it follows: the same level
+ * always routes the same way.
  */
 
 /**
@@ -55,6 +56,13 @@ const LEAST_JOG = 24;
  * two (src/vs/platform's 441 with every line drawn); what it hasn't fixed by then stays.
  */
 const SETTLE_TRIES = 4000;
+/**
+ * What a hidden line between neighbouring rows weighs when a point settles, for the wiggle a move would leave between
+ * its two points: a tie-breaker, so any drawn line's fault counts for more, but a point that can settle either way
+ * settles where a hover drawing that line finds it straight. Without it, a point on src/vs settled 13 px off its box's
+ * middle, and selecting editor drew platform → editor with a 13 px wiggle between two held points.
+ */
+const HIDDEN_WIGGLE = 0.01;
 /**
  * Spacing is compared this loosely: a place exactly one step from a lane is free, though the sums that find it round.
  * Compared exactly, src/vs's gutters both counted as full, and workbench → base fell back onto a lane already there.
@@ -103,6 +111,11 @@ type End = { x: number; dir: "up" | "down"; port?: Side };
 
 /** A box's point on one side, where every line it has on that side meets: held where it is while any of them is kept. */
 type BoxPoint = { box: Position; side: Side; lines: Line[]; fixed: boolean };
+/**
+ * A line on the level that isn't drawn, between neighbouring rows, by where a hover would draw it from and to: at each
+ * end its box's point on that side, or the box's middle where no drawn line has a point there, as a fresh one starts.
+ */
+type HiddenLine = Record<Side, BoxPoint | number>;
 
 /**
  * A lane down a gutter, and the lines on it: the lines into one box, the same way, share one (laneGroupOf). It spans
@@ -242,6 +255,10 @@ const sharesHeight = (a: readonly [number, number], b: readonly [number, number]
  * with the other line. Of the moves at a run's two ends, the one that fixes the most faults its lines take part in is
  * kept, the smallest of those, so the same level always settles the same way. A point a kept line uses, and a lane a
  * kept line is on, stay where they are, and a fault no move fixes stays.
+ *
+ * The `hidden` lines between neighbouring rows weigh in when a point moves, since a hover may draw one between two
+ * points that are held by then: each the move would leave with a wiggle counts HIDDEN_WIGGLE, and its other end, and
+ * LEAST_JOG either side of it, are places the point may move to.
  */
 function settle(
     lines: readonly Line[],
@@ -249,6 +266,7 @@ function settle(
     lanes: readonly Lane[],
     fixed: ReadonlySet<Line>,
     lanesClear: (lane: Lane, x: number) => boolean,
+    hidden: readonly HiddenLine[],
     trunks: boolean,
 ): void {
     const pointOf: Record<Side, Map<Line, BoxPoint>> = { out: new Map(), in: new Map() };
@@ -256,6 +274,11 @@ function settle(
     const laneOf = new Map<Line, Lane>();
     for (const lane of lanes) for (const line of lane.lines) laneOf.set(line, lane);
     const xOf = (point: BoxPoint): number => (point.side === "out" ? point.lines[0].portOut! : point.lines[0].portIn!);
+    // the hidden lines at each point, and how many of a point's it leaves wiggling where it is now
+    const hiddenAt = new Map<BoxPoint, HiddenLine[]>();
+    for (const h of hidden) for (const end of [h.out, h.in]) if (typeof end !== "number") hiddenAt.set(end, [...(hiddenAt.get(end) ?? []), h]);
+    const xAt = (end: BoxPoint | number): number => (typeof end === "number" ? end : xOf(end));
+    const hiddenWiggles = (point: BoxPoint): number => (hiddenAt.get(point) ?? []).filter((h) => isWiggle(Math.abs(xAt(h.out) - xAt(h.in)))).length;
     const inChannel = new Map<number, Line[]>();
     for (const line of lines){
         for (const k of new Set([line.outChannel, line.intoChannel])) inChannel.set(k, [...(inChannel.get(k) ?? []), line]);
@@ -318,8 +341,9 @@ function settle(
         return count;
     };
 
-    // a move: the lines it moves, the channels it changes, and whether it keeps a lane clear of the boxes and lanes
-    type Move = { cost: number; lines: Set<Line>; channels: number[]; apply: () => void; restore: () => void; valid: () => boolean };
+    // a move: the lines it moves, the channels it changes, whether it keeps a lane clear of the boxes and lanes, and the
+    // point it moves, if it moves one
+    type Move = { cost: number; lines: Set<Line>; channels: number[]; apply: () => void; restore: () => void; valid: () => boolean; point?: BoxPoint };
     // whether the end `i` of `run` is in a fault: its run wiggles, or another line turns the other way in line with it
     const inFault = (runs: readonly Run[], run: Run, i: number): boolean => {
         const end = run.ends[i];
@@ -344,9 +368,14 @@ function settle(
             const point = pointOf[end.port].get(line)!;
             if (point.fixed) return moves;
             const was = xOf(point);
+            // and onto the other end of each hidden line it would start or end, or LEAST_JOG from it
+            for (const h of hiddenAt.get(point) ?? []){
+                const other = xAt(point.side === "out" ? h.in : h.out);
+                targets.add(other).add(other - LEAST_JOG).add(other + LEAST_JOG);
+            }
             for (const x of targets){
                 if (Math.abs(x - was) < EPSILON || x < point.box.x + PORT_MARGIN - EPSILON || x > point.box.x + BOX_WIDTH - PORT_MARGIN + EPSILON) continue;
-                moves.push({ cost: Math.abs(x - was) * point.lines.length, lines: new Set(point.lines), channels: [k], apply: () => setPoint(point, x), restore: () => setPoint(point, was), valid: () => true });
+                moves.push({ cost: Math.abs(x - was) * point.lines.length, lines: new Set(point.lines), channels: [k], apply: () => setPoint(point, x), restore: () => setPoint(point, was), valid: () => true, point });
             }
         } else {
             // its lane, with every line on it, anywhere it still clears the boxes and lanes beside it
@@ -361,8 +390,9 @@ function settle(
         }
         return moves;
     };
-    // what a move's lines take part in, over the channels it changes
-    const share = (move: Move): number => move.channels.reduce((sum, c) => sum + faults(c, move.lines), 0);
+    // what a move's lines take part in, over the channels it changes, and a moved point's hidden lines, a little
+    const share = (move: Move): number => move.channels.reduce((sum, c) => sum + faults(c, move.lines), 0)
+        + (move.point === undefined ? 0 : HIDDEN_WIGGLE * hiddenWiggles(move.point));
 
     // a channel at a time, a run at a time, the wiggles first (moving one straight often clears the lines in line with it
     // too): of the moves at either end of a run in a fault, the one that fixes the most is kept, the smallest of those.
@@ -448,7 +478,8 @@ function groupRun(group: readonly Run[]): Run {
  * each box's arrowhead.
  *
  * `kept` holds routes already on screen, for lines that stay drawn: each keeps its own exactly, and the other lines take
- * the points they hold and are routed around them, in each gutter and in each channel (nextRoutes).
+ * the points they hold, join their groups' lanes and tracks where they fit on them, and are routed around the rest, in
+ * each gutter and in each channel (nextRoutes).
  *
  * The level is routed with straight trunks first: two lines that meet where a line drops straight through a channel
  * aren't taken for two lines in line, since the column is one line. Where that leaves a new line on one drop with a line
@@ -575,10 +606,10 @@ function route(
         // a lane its kept leaving point would step over to by less than a jog would leave it a wiggle
         const from = heldOut.get(line.edge.source);
         const wiggles = (x: number): boolean => from !== undefined && isWiggle(Math.abs(from - x));
-        // it joins its group's new lane nearest its own, within reach, when that leaves no wiggle and either the lane's
-        // clear over all its rows, its own isn't clear either (a full gutter), or its own would crowd it while the lane
-        // clears the boxes and, joined, runs no more than a pixel nearer any other lane than its own would
-        const join = lanes.filter((lane) => !lane.kept && lane.group === group && Math.abs(lane.x - own) < MERGE_REACH && !wiggles(lane.x)
+        // it joins its group's lane nearest its own, a kept one or a new one, within reach, when that leaves no wiggle and
+        // either the lane's clear over all its rows, its own isn't clear either (a full gutter), or its own would crowd it
+        // while the lane clears the boxes and, joined, runs no more than a pixel nearer any other lane than its own would
+        const join = lanes.filter((lane) => lane.group === group && Math.abs(lane.x - own) < MERGE_REACH && !wiggles(lane.x)
                 && (!ownFits || laneFits(rows, lane.x, line.width, span, others(lane))
                     || (Math.abs(lane.x - own) < (lane.width + line.width) / 2 + LANE_GAP && laneFits(rows, lane.x, line.width, span, [])
                         && others(lane).every((o) => !sharesHeight(o.span, span) || Math.abs(o.x - lane.x) >= Math.min(Math.abs(o.x - own), (o.width + line.width) / 2 + LANE_GAP) - 1))))
@@ -619,8 +650,12 @@ function route(
         if (straight !== undefined) setLane(lane, straight);
     }
 
-    // then the new lines' points and lanes settle: no short jogs, and no two lines lined up end to end
-    settle(lines, [...pointAt.values()], newLanes, new Set(fixed.keys()), lanesClear, trunks);
+    // then the new lines' points and lanes settle: no short jogs, and no two lines lined up end to end. The lines not
+    // drawn between neighbouring rows weigh in a little, from the points they'd join, so a hover finds them straight
+    const hidden: HiddenLine[] = drawn === undefined ? [] : onLevel
+        .filter((e) => !drawn.has(`${e.source}->${e.target}`) && row(positions.get(e.target)!) === row(positions.get(e.source)!) + 1)
+        .map((e) => ({ out: pointAt.get(`out ${e.source}`) ?? centreOf(positions.get(e.source)!), in: pointAt.get(`in ${e.target}`) ?? centreOf(positions.get(e.target)!) }));
+    settle(lines, [...pointAt.values()], newLanes, new Set(fixed.keys()), lanesClear, hidden, trunks);
     // ends that line up to within rounding line up exactly, so a straight drop has no hairline step: a new line between
     // neighbouring rows has its free point take the other's x, and then a new lane takes the x of its lines' point it's
     // that near, unless it's already on one
@@ -637,8 +672,8 @@ function route(
         if (near !== undefined && !xs.includes(lane.x)) setLane(lane, near);
     }
 
-    // 3. runs along each channel, and the tracks they take: a group's runs (trackGroupOf) as one, around the kept ones
-    // where the channel has any
+    // 3. runs along each channel, and the tracks they take: a group's runs (trackGroupOf) as one, joining its kept tracks
+    // or around the kept ones where the channel has any
     const runs = fresh.flatMap(runsOf);
     const keptRuns = [...fixed.keys()].flatMap((line) => runsOf(line).map((run) => ({ ...run, y: trackOf(fixed.get(line)!, run.channel, tops) })));
     const byChannel = new Map<number, Run[]>();
@@ -650,8 +685,34 @@ function route(
     for (const [channel, inChannel] of byChannel){
         const groups = new Map<string, Run[]>();
         for (const run of inChannel) groups.set(trackGroupOf(run), [...(groups.get(trackGroupOf(run)) ?? []), run]);
-        const grouped = [...groups.values()].map(groupRun);
-        const around = keptRuns.filter((r) => r.channel === channel && r.y !== undefined);
+        const around: Run[] = keptRuns.filter((r) => r.channel === channel && r.y !== undefined);
+        // a new run whose group has kept runs here joins one of their tracks where what it runs past them fits (joins),
+        // the height it reaches least past them first, then the lowest y, the highest up. The group's other new runs
+        // go round them all as one
+        const arrivals = lines.filter((l) => l.intoChannel === channel);
+        const left: Run[][] = [];
+        for (const [group, members] of groups){
+            const groupKept = around.filter((r) => trackGroupOf(r) === group);
+            const otherRuns = around.filter((r) => trackGroupOf(r) !== group);
+            const unjoined: Run[] = [];
+            for (const run of members){
+                const [lo, hi] = spanOf(run);
+                const heights = [...new Set(groupKept.map((r) => r.y!))].map((y) => {
+                    const spans = groupKept.filter((r) => r.y === y).map(spanOf);
+                    const covered: [number, number] = [Math.min(...spans.map((s) => s[0])), Math.max(...spans.map((s) => s[1]))];
+                    return { y, covered, past: Math.max(0, covered[0] - lo) + Math.max(0, hi - covered[1]) };
+                }).sort((a, b) => a.past - b.past || a.y - b.y);
+                const height = heights.find((h) => joins(run, h.y, h.covered, otherRuns, arrivals, channel, tops));
+                if (height === undefined){
+                    unjoined.push(run);
+                    continue;
+                }
+                run.y = height.y;
+                around.push(run);
+            }
+            if (unjoined.length > 0) left.push(unjoined);
+        }
+        const grouped = left.map(groupRun);
         if (around.length > 0){
             placeRunsAround(channel, grouped, around, tops);
         } else {
@@ -701,8 +762,9 @@ function route(
 /**
  * The routes to draw when the lines drawn change to `drawn` from what's on screen, `before` (the owner, 2026-10-27:
  * pointing at a box rearranged lines already there). The lines drawn at rest keep their routes from `rest`, every
- * other line still drawn keeps the one it had, and the lines that just appeared are routed around them all
- * (routeEdges with them kept). So a line never moves while it's drawn: lines appear and fade, and that's all.
+ * other line still drawn keeps the one it had, and the lines that just appeared join them where they share an end and
+ * fit, and are routed around them all elsewhere (routeEdges with them kept). So a line never moves while it's drawn:
+ * lines appear and fade, and that's all.
  */
 export function nextRoutes(
     positions: ReadonlyMap<string, Position>,
@@ -807,6 +869,27 @@ function placeTracks(k: number, tracks: readonly Run[][], tops: readonly number[
         if (i > 0) y += spacing[i - 1];
         for (const run of track) run.y = y;
     });
+}
+
+/**
+ * Whether a new run in channel `k` can join its group's kept track at height `y`, whose kept runs cover `covered`: along
+ * that it runs on their track, one line with them, and what it runs past it keeps TRACK_GAP past half of each width
+ * from every other run alongside it, keeps the order a shared drop needs (sharesDrop), and passes CROWDED_ROOM above
+ * the arrowhead of each line arriving in the channel under it (`arrivals`), but its own box's, which it shares.
+ */
+function joins(run: Run, y: number, covered: readonly [number, number], others: readonly Run[], arrivals: readonly Line[], k: number, tops: readonly number[]): boolean {
+    const [lo, hi] = spanOf(run);
+    const past: [number, number][] = [];
+    if (lo < covered[0] - EPSILON) past.push([lo, covered[0]]);
+    if (hi > covered[1] + EPSILON) past.push([covered[1], hi]);
+    return past.every(([plo, phi]) => others.every((o) => {
+        const [olo, ohi] = spanOf(o);
+        const room = (o.line.width + run.line.width) / 2 + RUN_GAP;
+        if (phi + room <= olo || ohi + room <= plo) return true;
+        return Math.abs(y - o.y!) >= (o.line.width + run.line.width) / 2 + TRACK_GAP - EPSILON && !(sharesDrop(run, o) && y > o.y!) && !(sharesDrop(o, run) && y < o.y!);
+    }) && arrivals.every((l) => l.edge.target === run.line.edge.target
+        || l.portIn! + l.head.half + run.line.width / 2 <= plo || l.portIn! - l.head.half - run.line.width / 2 >= phi
+        || y <= tops[k] - l.head.length - TIP_GAP - CROWDED_ROOM + EPSILON));
 }
 
 /**
