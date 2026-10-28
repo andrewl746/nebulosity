@@ -10,8 +10,8 @@ import type { MapEdge } from "@/lib/contracts";
 export type BoxTone = "normal" | "selected" | "linked" | "preview" | "faded";
 
 /**
- * How a line is drawn: the selection's in purple, the hovered box's brighter, the rest quieter while something is
- * selected. On a busy level the rest aren't drawn at all ("hidden").
+ * How a line is drawn: the selection's in purple or pink (lineLook), the hovered box's brighter, the rest quieter while
+ * something is selected. On a busy level the rest aren't drawn at all ("hidden").
  */
 export type EdgeTone = "normal" | "selected" | "preview" | "faded" | "hidden";
 
@@ -42,6 +42,20 @@ export function weakLinesHidden(edges: readonly MapEdge[], selected: string | nu
     const touches = (edge: MapEdge, box: string): boolean => edge.source === box || edge.target === box;
     return edges.filter((e) => e.source !== e.target && e.count < threshold
         && !(selected !== null && touches(e, selected)) && !pinned.has(e.source) && !pinned.has(e.target)).length;
+}
+
+/**
+ * Each line's color and layer by its tone (the Workbench redesign, ADR-070), its width going by its imports whatever the
+ * tone: the selection's lines out (what it uses) in the logo's spoke color and its lines in (what uses it) in pink, so a
+ * glance tells the two apart (the owner, 2026-10-28), the hovered box's a step brighter in both directions, and the rest
+ * quiet, so the boxes lead and a dense level reads as structure until you point at a box (the owner, 2026-10-27: src/vs
+ * was "so messy and unreadable" with every line in the bright gray). Its arrowhead is the line's own color. A higher
+ * layer is drawn later, over the quieter lines it crosses or shares a run with.
+ */
+export function lineLook(tone: Exclude<EdgeTone, "hidden">, edge: Pick<MapEdge, "source" | "target">, selected: string | null): { color: string; layer: number } {
+    if (tone === "selected") return { color: edge.target === selected ? "var(--used-by-edge)" : "var(--edge-strong)", layer: 2 };
+    if (tone === "preview") return { color: "var(--text-2)", layer: 1 };
+    return { color: "var(--edge-dim)", layer: 0 };
 }
 
 /** One line's id, the same one React Flow gets. */

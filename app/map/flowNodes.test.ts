@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapNode } from "@/lib/contracts";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
 import type { BoxData } from "./MapBox";
-import type { RoutedEdgeType } from "./RoutedEdge";
+import type { RoutedEdgeData, RoutedEdgeType } from "./RoutedEdge";
 
 const box: MapNode = { path: "src/vs", name: "vs", kind: "folder", fileCount: 10073, summaryStatus: "fresh" };
 const data: BoxData = { box, tone: "normal", agent: false, pulseKey: 0, dot: 12 };
@@ -75,6 +75,8 @@ describe("sameRoutedEdge: whether a line would draw the same", () => {
         id: "a->b", type: "routed", source: "a", target: "b", data: { points, width: 1, color: "var(--text-3)" },
         ...fields,
     });
+    // the same line with some of its data changed
+    const edge = (fields: Partial<RoutedEdgeData>): RoutedEdgeType => line({ data: { points, width: 1, color: "var(--text-3)", ...fields } });
 
     it("is the same with the same ends, route, width, color, count and label", () => {
         expect(sameRoutedEdge(line(), line())).toBe(true);
@@ -87,5 +89,10 @@ describe("sameRoutedEdge: whether a line would draw the same", () => {
         expect(sameRoutedEdge(line(), line({ data: { points, width: 4, color: "var(--text-3)" } }))).toBe(false);
         expect(sameRoutedEdge(line(), line({ data: { points, width: 1, color: "var(--text-3)", count: "16" } }))).toBe(false);
         expect(sameRoutedEdge(line(), line({ data: { points, width: 1, color: "var(--text-3)", countStrong: true } }))).toBe(false);
+    });
+
+    it("redraws a line whose head changes size", () => {
+        expect(sameRoutedEdge(edge({ headWidth: 6 }), edge({ headWidth: 6 }))).toBe(true);
+        expect(sameRoutedEdge(edge({ headWidth: 6 }), edge({ headWidth: 3 }))).toBe(false);
     });
 });

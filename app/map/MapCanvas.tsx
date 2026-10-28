@@ -8,7 +8,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { LevelResponse } from "@/lib/contracts";
 import BoxActions from "./BoxActions";
-import { edgeKey, mapEmphasis, type BoxTone, type EdgeTone } from "./emphasis";
+import { edgeKey, lineLook, mapEmphasis, type BoxTone } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
 import { formatCount } from "./format";
 import { lineLabel } from "./labels";
@@ -21,7 +21,7 @@ import { nextRoutes, routeEdges } from "./routes";
 import { isLightKind } from "./theme";
 import { useThemeKind } from "./useThemeKind";
 import { boundsOf, initialViewport } from "./viewport";
-import { dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
+import { boxHeadWidths, dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
 
 /** The line ids a key of ids joined by newlines names. */
 const keySet = (key: string): Set<string> => new Set(key === "" ? [] : key.split("\n"));
@@ -29,19 +29,6 @@ const keySet = (key: string): Set<string> => new Set(key === "" ? [] : key.split
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
 const edgeTypes: EdgeTypes = { routed: RoutedEdge };
-
-/**
- * Each line's color per tone (the Workbench redesign, ADR-070), its width going by its imports whatever the tone: the
- * selection's lines in the logo's spoke color, the hovered box's a step brighter, and the rest quiet, so the boxes lead
- * and a dense level reads as structure until you point at a box (the owner, 2026-10-27: src/vs was "so messy and
- * unreadable" with every line in the bright gray). Its arrowhead is the line's own color, filled and wider than it.
- */
-const EDGE_LOOKS: Record<Exclude<EdgeTone, "hidden">, { color: string; layer: number }> = {
-    normal: { color: "var(--edge-dim)", layer: 0 },
-    faded: { color: "var(--edge-dim)", layer: 0 },
-    preview: { color: "var(--text-2)", layer: 1 },
-    selected: { color: "var(--edge-strong)", layer: 2 },
-};
 
 type MapCanvasProps = {
     level: LevelResponse;
@@ -75,7 +62,7 @@ type MapCanvasProps = {
 /**
  * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
  * around the boxes (routes.ts). A click selects (where the panel would cover the canvas, the selected box shows its
- * actions beside it: BoxActions); a double click opens a folder, or turns to a portal's page. The selection's lines turn purple and unrelated boxes fade;
+ * actions beside it: BoxActions); a double click opens a folder, or turns to a portal's page. The selection's lines turn purple (what it uses) and pink (what uses it), and unrelated boxes fade;
  * hovering a box previews its lines without selecting it, and hovering a line shows its count. React Flow stays
  * controlled with the StrictMode workaround in next.config.ts.
  */
@@ -95,6 +82,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     // dots and lines are scaled against the page's largest folder and heaviest line (weights.ts)
     const maxFiles = useMemo(() => maxFilesOf(level.nodes), [level]);
     const maxImports = useMemo(() => maxImportsOf(level.edges), [level]);
+    // each box's one head, sized from every line on the level, drawn or not, as routing sized the room above it
+    const heads = useMemo(() => boxHeadWidths(level.edges), [level]);
     const labelled = useMemo(() => labelledLines(level.edges, selected), [level, selected]);
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
@@ -163,13 +152,14 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             const id = edgeKey(edge);
             const tone = emphasis.edges.get(id) ?? "normal";
             if (tone === "hidden") return [];
-            const look = EDGE_LOOKS[tone];
+            const look = lineLook(tone, edge, selected);
             const drawnEdge: RoutedEdgeType = {
                 id,
                 type: "routed",
                 data: {
                     points: routes.get(id) ?? [],
                     width: lineWidth(edge.count, maxImports),
+                    headWidth: heads.get(edge.target),
                     color: look.color,
                     // the page's heaviest lines and the selection's carry their count, the selection's in the text color
                     count: labelled.has(id) ? formatCount(edge.count) : undefined,
@@ -183,11 +173,12 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             };
             return [{ layer: look.layer, edge: drawnEdge }];
         });
-        // the emphasized lines go last, so they're drawn over the quiet ones they cross. Order, not zIndex: React Flow
-        // lifts an edge with a zIndex above every box, where it would take the box's clicks (final review I2)
+        // the emphasized lines go last, so they're drawn over the quiet ones they cross or share a run with. Order, not
+        // zIndex: React Flow lifts an edge with a zIndex above every box, where it would take the box's clicks (final
+        // review I2)
         const next = drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge);
         setEdges((previous) => reuseUnchanged(previous, next, sameRoutedEdge));
-    }, [level, byPath, routes, emphasis, hoveredEdge, maxImports, labelled, setEdges]);
+    }, [level, byPath, routes, emphasis, selected, hoveredEdge, maxImports, heads, labelled, setEdges]);
 
     // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, unless that would
     // shrink it past 75%, then from its top), then report it drawn. The boxes reach React Flow a render after the level

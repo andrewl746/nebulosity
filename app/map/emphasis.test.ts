@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge } from "@/lib/contracts";
-import { edgeKey, isBusyLevel, mapEmphasis, STRONG_SHARE, strongThreshold, weakLinesHidden, type BoxTone, type EdgeTone } from "./emphasis";
+import { edgeKey, isBusyLevel, lineLook, mapEmphasis, STRONG_SHARE, strongThreshold, weakLinesHidden, type BoxTone, type EdgeTone } from "./emphasis";
 
 // boxes a, b, c, d; lines a→b, b→c, d→c (the plan's Task 5 vectors)
 const BOXES = ["a", "b", "c", "d"];
@@ -81,6 +81,19 @@ describe("mapEmphasis (VISUAL_REFRESH.md §4)", () => {
         expect([...result.boxes]).toEqual([["src/a", "selected"], ["src/b", "faded"], ["src//page-2", "linked"]]);
         expect([...result.edges]).toEqual([["src/a->src//page-2", "selected"]]);
         expect([...mapEmphasis(boxes, edges, "src//page-2", null).boxes]).toEqual([["src/a", "linked"], ["src/b", "faded"], ["src//page-2", "selected"]]);
+    });
+});
+
+describe("lineLook (the owner, 2026-10-28: what uses the selection in pink)", () => {
+    it("draws the selection's lines out in purple and its lines in in pink, on top", () => {
+        expect(lineLook("selected", { source: "editor", target: "base" }, "editor")).toEqual({ color: "var(--edge-strong)", layer: 2 });
+        expect(lineLook("selected", { source: "workbench", target: "editor" }, "editor")).toEqual({ color: "var(--used-by-edge)", layer: 2 });
+    });
+    it("doesn't split a hovered box's lines by direction, and keeps the rest quiet", () => {
+        expect(lineLook("preview", { source: "a", target: "b" }, null)).toEqual({ color: "var(--text-2)", layer: 1 });
+        expect(lineLook("preview", { source: "a", target: "b" }, "b")).toEqual({ color: "var(--text-2)", layer: 1 });
+        expect(lineLook("normal", { source: "a", target: "b" }, null)).toEqual({ color: "var(--edge-dim)", layer: 0 });
+        expect(lineLook("faded", { source: "a", target: "b" }, "c")).toEqual({ color: "var(--edge-dim)", layer: 0 });
     });
 });
 

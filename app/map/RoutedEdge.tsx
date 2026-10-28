@@ -8,9 +8,10 @@ import { arrowHead } from "./weights";
 /**
  * A line that follows its route (routes.ts) instead of React Flow's straight curve. `width` goes by how many imports it
  * carries (weights.ts), `color` by its tone, and `count` is the number written on it, when it's one of the lines that
- * carry theirs (weights.ts's labelledLines).
+ * carry theirs (weights.ts's labelledLines). `headWidth` is the width its box's one arrowhead is sized for
+ * (weights.ts's boxHeadWidths), shared by every line into that box, else its own.
  */
-export type RoutedEdgeData = { points: Point[]; width: number; color: string; count?: string; countStrong?: boolean };
+export type RoutedEdgeData = { points: Point[]; width: number; color: string; count?: string; countStrong?: boolean; headWidth?: number };
 export type RoutedEdgeType = Edge<RoutedEdgeData, "routed">;
 
 /** How far above the box's top edge the arrowhead's tip stops, so it never touches the border. */
@@ -31,7 +32,9 @@ function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, label, inter
     const route = data && data.points.length >= 2 ? data.points : [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
     const width = data?.width ?? 1;
     const color = data?.color ?? "var(--edge-dim)";
-    const { half, length } = arrowHead(width);
+    // the lines into one box end at its one point under one head, so each draws that head, the same size whichever of
+    // them are drawn, and they coincide (the owner, 2026-10-28: a line that appears never changes its box's head)
+    const { half, length } = arrowHead(data?.headWidth ?? width);
     const end = route[route.length - 1];
     const tip = { x: end.x, y: end.y - TIP_GAP };
     // the line stops a pixel inside the head's base, so no gap shows between them
