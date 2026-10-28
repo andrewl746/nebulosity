@@ -204,8 +204,9 @@ function placePorts(box: Position, lines: readonly Line[], approach: (line: Line
 /**
  * Ports along one edge of a box for `added` lines, where its `kept` lines keep theirs (`keptAt`), placed as placePorts
  * places them when it has none. Each added line goes in the gap between kept ports it falls in by where it's going (or
- * coming from), and those that share a gap spread through it as placePorts spreads a box's, centred in it. Where a gap
- * is too small for them, each goes to the free place nearest where it's going, in any gap with room for it.
+ * coming from), and those that share a gap spread through it as placePorts spreads a box's, as near as it lets them to
+ * where they're going. Where a gap is too small for them, each goes to the free place nearest where it's going, in any
+ * gap with room for it.
  */
 function placePortsAround(
     box: Position,
@@ -236,7 +237,9 @@ function placePortsAround(
             strays.push(...group);
             continue;
         }
-        const start = (from + to) / 2 - total / 2;
+        // as near as the gap lets it to where its lines are going, so they run no further across the channel than they must
+        const want = group.reduce((sum, l) => sum + Math.max(lo, Math.min(hi, approach(l))), 0) / group.length;
+        const start = Math.max(from, Math.min(to - total, want - total / 2));
         group.forEach((line, i) => ports.set(line.key, start + offsets[i]));
     }
     for (const [key, x] of ports) taken.push({ line: added.find((l) => l.key === key)!, x });
