@@ -84,6 +84,7 @@
     "bench-calls": "tsx scripts/bench-calls.ts",
     "bench-languages": "tsx scripts/bench-languages.ts",
     "check-layout": "node scripts/check-layout.mjs",
+    "check-routes": "tsx scripts/check-routes.ts",
     "compare-summaries": "tsx scripts/compare-summaries.ts",
     "eval:run": "tsx scripts/eval/run.ts",
     "eval:probe": "tsx scripts/eval/probe.ts",
