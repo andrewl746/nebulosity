@@ -128,6 +128,13 @@ describe("Strong links only (ADR-070)", () => {
         expect(weakLinesHidden(files, null)).toBe(0);
     });
 
+    it("hides nothing on a page whose heaviest line carries under 50 imports, so the checkbox has nothing to do there", () => {
+        // a page like VS Code's build folder: its heaviest line carries 17, so a strong line needs 0.34 imports and a line
+        // of 1 is strong
+        const build: MapEdge[] = [{ source: "lib", target: "gulpfile.js", count: 17 }, { source: "azure-pipelines", target: "lib", count: 3 }, { source: "npm", target: "lib", count: 1 }];
+        expect(weakLinesHidden(build, null)).toBe(0);
+    });
+
     it("draws only the strong lines when nothing is selected", () => {
         expect(drawn(null, null)).toEqual(["build->src", "extensions->src", "extensions->test"]);
     });
