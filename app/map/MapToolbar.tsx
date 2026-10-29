@@ -46,8 +46,12 @@ type MapToolbarProps = {
 };
 
 const MENU_WIDTH = 220;
-/** The least canvas the side picker keeps its place in the bar at, before it goes into the … menu. */
+/**
+ * The least canvas the side picker keeps its place in the bar at, before it goes into the … menu, and beside a big
+ * folder's page control, which with it left the busy note 16 px in VS Code's panel at 700 px (check-layout).
+ */
 const SIDES_IN_BAR = 600;
+const SIDES_IN_BAR_PAGED = 760;
 
 /**
  * The three sides, in the inspector's own words, each with its title and, for Uses and Used by, the color of the
@@ -83,7 +87,8 @@ function Check({ on }: { on: boolean }){
  * zoom − + Fit.
  *
  * As the canvas narrows the toolbar gives way in a fixed order and nothing hides off its edge (the owner, 2026-10-27):
- * the finding truncates (its title has the whole of it); All, Uses and Used by move into a … menu at its end under 600;
+ * the finding truncates (its title has the whole of it); All, Uses and Used by move into a … menu at its end under 600
+ * (760 beside a big folder's page control);
  * the finding goes under a 500 px canvas; Strong links only moves into the menu under 470, then − and + under 330; the
  * page control says "2 / 5" under 400 and moves into the menu under 260. Over the canvas Fit always stays. In a short
  * window the toolbar folds into the header's row, keeping the page control, Fit and the menu, and in a window under
@@ -104,12 +109,12 @@ export default function MapToolbar({ level, strongOnly, onStrongOnly, busy, show
         const { width, height } = store.getState();
         void flow.setViewport(fitViewport(boxes, lines, { width, height }), { duration: 0 });
     };
-    const sidesInBar = !inHeader && canvasWidth >= SIDES_IN_BAR;
     const strongInBar = !inHeader && canvasWidth >= 470;
     const zoomInBar = !inHeader && canvasWidth >= 330;
     const findingShown = !inHeader && canvasWidth >= 500;
     // a big folder's page control, until even "2 / 5" and its arrows leave no room for Fit and the menu
     const paged = level.pageCount > 1;
+    const sidesInBar = !inHeader && canvasWidth >= (paged ? SIDES_IN_BAR_PAGED : SIDES_IN_BAR);
     const menuOnly = inHeader && narrow;
     const pageInBar = paged && canvasWidth >= 260 && !menuOnly;
     const finding = heaviestLink(level);

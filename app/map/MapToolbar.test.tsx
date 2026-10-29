@@ -26,13 +26,13 @@ const LEVEL: LevelResponse = {
     indexVersion: 1,
 };
 
-type Draw = { canvasWidth?: number; inHeader?: boolean; hasSelection?: boolean; direction?: LineDirection; emptySides?: LineDirection[] };
+type Draw = { canvasWidth?: number; inHeader?: boolean; hasSelection?: boolean; direction?: LineDirection; emptySides?: LineDirection[]; pageCount?: number };
 
-function toolbar({ canvasWidth = 900, inHeader = false, hasSelection = true, direction = "all", emptySides = [] }: Draw = {}): string {
+function toolbar({ canvasWidth = 900, inHeader = false, hasSelection = true, direction = "all", emptySides = [], pageCount = 1 }: Draw = {}): string {
     return renderToStaticMarkup(
         <ReactFlowProvider>
             <MapToolbar
-                level={LEVEL}
+                level={{ ...LEVEL, pageCount }}
                 strongOnly
                 onStrongOnly={() => {}}
                 busy={false}
@@ -115,5 +115,11 @@ describe("the toolbar's All, Uses and Used by (the owner's pick A2, 2026-10-29)"
         expect(narrow).not.toContain(GROUP);
         expect(narrow).toContain('data-testid="toolbar-more"');
         expect(toolbar({ canvasWidth: 1600, inHeader: true })).not.toContain(GROUP);
+    });
+
+    it("leaves it under 760 px beside a big folder's page control, which left the busy note 16 px in a 700 px panel", () => {
+        expect(toolbar({ canvasWidth: 760, pageCount: 3 })).toContain(GROUP);
+        expect(toolbar({ canvasWidth: 759, pageCount: 3 })).not.toContain(GROUP);
+        expect(toolbar({ canvasWidth: 700, pageCount: 1 })).toContain(GROUP);
     });
 });
