@@ -6,6 +6,7 @@ import path from "path";
 import { configPath } from "../../config";
 import { copyFixture } from "../../../test/helpers/fixture";
 import { rejectionOf } from "../../../test/helpers/rejection";
+import { rewriteAsWrittenBy10 } from "../../../test/helpers/summaries-v2";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { makeTempDir } from "../../../test/helpers/temp";
 import { getDb } from "../../db/client";
@@ -17,7 +18,8 @@ import { readIndexStatus } from "../../engine/status";
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
 import { createClaudeSummarizer } from "./claude";
-import { resolveSummaryModels } from "./models";
+import { DEFAULT_SUMMARY_MODELS, resolveSummaryModels } from "./models";
+import { PROMPT_VERSION } from "./prompts";
 import { buildFilePrompt, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
 import { refreshSummaryStatus } from "./status";
 import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type Summarizer } from "./types";
@@ -127,6 +129,19 @@ describe("buildFilePrompt", () => {
 
         expect(buildFilePrompt(db, repoId, root, build)).toContain("\nLines: 3\nImported by: no other indexed file\n\nSource:\n");
     });
+
+    it("ends a file's prompt with its tier's line", () => {
+        const root = indexedFixture();
+        const db = getDb();
+        const repoId = requireRepository(db, repoKey(root));
+        const log = loadFileFacts(db, repoId).find((f) => f.path === "src/core/log.ts")!;
+
+        // log.ts has 9 lines, under 120, and 3 importers (main.ts, core/index.ts, index.ts), 3 or fewer: small, which a
+        // file is told as 30 words (FILE_TOLD_WORDS)
+        const line = "\n\nWrite at most 30 words, in 2 paragraphs, and name at most 2 exports.";
+        const prompt = buildFilePrompt(db, repoId, root, log)!;
+        expect(prompt.slice(-line.length)).toBe(line);
+    });
 });
 
 describe("runSummaries — the regular API", () => {
@@ -161,6 +176,15 @@ describe("runSummaries — the regular API", () => {
 
         expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).toMatchObject({ summarized: 0, templated: 0, waves: 0, upToDate: 14 });
         expect(stub.requests).toHaveLength(13);
+    });
+
+    it("records the prompt version with every summary it writes", async () => {
+        const root = indexedFixture();
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+
+        // the 13 model-written rows (7 files, 5 folders, the repo); the test file's template records none
+        expect(rows(root).filter((r) => r.model !== "template").map((r) => r.promptVersion)).toEqual(Array.from({ length: 13 }, () => PROMPT_VERSION));
+        expect(row(root, "src/util/strings.test.ts")).toMatchObject({ model: "template", promptVersion: null });
     });
 
     it("isolates a failure: its folder goes ahead without it, and the next run redoes it and everything above", async () => {
@@ -467,7 +491,7 @@ describe("runSummaries — the Batch API", () => {
                     redone = true;
                     writeResults(db, loadBatchRows(db, id).map((r) => ({
                         id: r.id, batchId: null, inputHash: r.inputHash,
-                        outcome: { ok: true, text: { tagline: "Redone", summary: `Redone ${r.path}.` }, model: "claude-haiku-5-5" },
+                        outcome: { ok: true, text: { tagline: "Redone", summary: `Redone ${r.path}.` }, model: "claude-haiku-5-5", promptVersion: PROMPT_VERSION },
                     })));
                     return null;
                 }
@@ -1051,6 +1075,88 @@ function setModels(setting: unknown){
     if (!resolved.ok) throw new Error(resolved.error);
     return resolved;
 }
+
+/** The fixture summarized by the stub, then its rows made what Nebulosity 1.0 stored for the same input (P1). */
+async function writtenBy10(): Promise<string> {
+    const root = indexedFixture();
+    await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+    const db = getDb();
+    rewriteAsWrittenBy10(db, requireRepository(db, repoKey(root)));
+    return root;
+}
+
+describe("runSummaries — summaries an older prompt wrote (P1, P7, P8)", () => {
+    it("leaves summaries an older prompt wrote alone unless told to restyle them", async () => {
+        const root = await writtenBy10();
+        const stub = stubSummarizer();
+
+        // without restyle, every target 1.0 wrote is current: written in the older style, for the same input
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct" })).toMatchObject({ summarized: 0, waves: 0, upToDate: 14 });
+        expect(stub.requests).toHaveLength(0);
+
+        // with it, as on a first pass: the 7 files, then each folder once its children's new text is in, bottom-up,
+        // each of the 13 once
+        const said: string[] = [];
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", restyle: true, onProgress: (m) => said.push(m) }))
+            .toMatchObject({ summarized: 13, failed: 0, waves: 4, upToDate: 14 });
+        expect(said.filter((m) => m.includes(" to summarize "))).toEqual([
+            "wave 1: 7 to summarize through the regular API",
+            "wave 2: 4 to summarize through the regular API",
+            "wave 3: 1 to summarize through the regular API",
+            "wave 4: 1 to summarize through the regular API",
+        ]);
+        expect(stub.subjects()).toEqual([
+            "File: src/app/main.ts", "File: src/core/log.ts", "File: src/util/strings.ts", "File: src/app/view.tsx",
+            "File: src/core/index.ts", "File: src/index.ts", "File: scripts/build.js",
+            "Folder: src/app", "Folder: src/core", "Folder: src/util", "Folder: scripts",
+            "Folder: src",
+            `Repository: ${path.basename(root)}`,
+        ]);
+        expect(rows(root).filter((r) => r.model !== "template").map((r) => r.promptVersion)).toEqual(Array.from({ length: 13 }, () => PROMPT_VERSION));
+        expect(row(root, "src/util/strings.test.ts")).toMatchObject({ model: "template", promptVersion: null });
+
+        // nothing an older prompt wrote is left, so a second run asked to restyle sends nothing
+        expect(await runSummaries(root, { summarizer: stub.summarizer, transport: "direct", restyle: true })).toMatchObject({ summarized: 0, waves: 0, upToDate: 14 });
+        expect(stub.requests).toHaveLength(13);
+    });
+
+    it("restyles the one target a panel opens, a folder whose children 1.0 wrote included", async () => {
+        const root = await writtenBy10();
+        const stub = stubSummarizer();
+
+        // its files are left as 1.0 wrote them, which is current, so src/core is ready at once: one request
+        expect(await summarizeNow(root, "src/core", stub.summarizer)).toMatchObject({ kind: "folder", status: "fresh", promptVersion: PROMPT_VERSION });
+        expect(stub.subjects()).toEqual(["Folder: src/core"]);
+        expect(["src/core/log.ts", "src/core/index.ts"].map((p) => row(root, p)?.promptVersion)).toEqual([2, 2]);
+    });
+
+    // the Task 4 review's I1: under Q2 B only opening a stale folder 1.0 wrote rewrites it, so it can't hold up its parent
+    it("opens a folder whose subfolder 1.0 wrote is out of date, without waiting for that subfolder", async () => {
+        const root = await writtenBy10();
+        // a text of its own, so log.ts rewritten reads differently from what 1.0 stored for it
+        const stub = stubSummarizer({ texts: { "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines." } } });
+        await summarizeNow(root, "src/core/log.ts", stub.summarizer);
+        expect(row(root, "src/core")).toMatchObject({ status: "stale", promptVersion: 2 });
+
+        // src's own input is unchanged (src/core's stored text is), so opening it restyles it, over src/core's 1.0 text: one request
+        expect(await summarizeNow(root, "src", stub.summarizer)).toMatchObject({ kind: "folder", status: "fresh", promptVersion: PROMPT_VERSION });
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts", "Folder: src"]);
+        expect(stub.requests[1].prompt).toContain("\n- core/ (2 files): About Folder: src/core — ");
+        expect(row(root, "src/core")).toMatchObject({ status: "stale", promptVersion: 2 });
+    });
+
+    it("counts older-style rows in a full run's estimate, and marks them", async () => {
+        const root = await writtenBy10();
+
+        // a full run restyles all of them: the 7 files, the 5 folders and the repo, as on a first pass
+        const requests = plannedRequests(root);
+        expect(requests).toHaveLength(13);
+        expect(tally(requests)).toEqual({ "file claude-haiku-5-5": 7, "folder claude-sonnet-5-5": 5, "repo claude-sonnet-5-5": 1 });
+        expect(requests.every((r) => r.restyle === true)).toBe(true);
+        // and a run that doesn't restyle (--no-restyle) has nothing to send
+        expect(plannedRequests(root, DEFAULT_SUMMARY_MODELS, false)).toEqual([]);
+    });
+});
 
 describe("runSummaries — models set in summaryModels (ADR-066)", () => {
     // Every file gets the same text from both stubs, so the folders' prompts, which carry their files' summaries, don't move

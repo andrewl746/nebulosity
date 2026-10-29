@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import { copyFixture } from "../../../test/helpers/fixture";
+import { rewriteAsWrittenBy10 } from "../../../test/helpers/summaries-v2";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { getDb } from "../../db/client";
 import { acquireSummaryLock, releaseSummaryLock } from "../../db/store/lock";
@@ -61,6 +62,21 @@ describe("refreshSummaryStatus", () => {
         expect(refreshSummaryStatus(root, { summarizerAvailable: true })).toEqual({ state: "idle", done: 12, total: 14, note: "1 waiting to be summarized" });
         expect(readStages(db, repoId).summaries).toMatchObject({ state: "idle", done: 12, total: 14 });
         expect(loadSummaries(db, repoId).find((s) => s.path === "src/core/log.ts")?.status).toBe("stale");
+    });
+
+    it("calls the summaries up to date after the version bump while nothing changed", async () => {
+        const root = copyFixture();
+        const { repoId } = indexRepository(root);
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        const db = getDb();
+        rewriteAsWrittenBy10(db, repoId);
+        const before = loadSummaries(db, repoId);
+
+        // every row a model wrote is in the older style, for the same input, so all 14 targets are current (P1)
+        expect(refreshSummaryStatus(root, { summarizerAvailable: true })).toEqual({ state: "ready", done: 14, total: 14 });
+        expect(readStages(db, repoId).summaries).toMatchObject({ state: "ready", done: 14, total: 14 });
+        // and no row turns stale, or changes at all
+        expect(loadSummaries(db, repoId)).toEqual(before);
     });
 
     it("without a key writes the test template and says how many summaries can't be written", () => {

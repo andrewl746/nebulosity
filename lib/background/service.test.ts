@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { isolateDataFolder } from "../../test/helpers/data-folder";
 import { ARCH_FIXTURE, copyFixture } from "../../test/helpers/fixture";
+import { rewriteAsWrittenBy10 } from "../../test/helpers/summaries-v2";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { makeTempDir } from "../../test/helpers/temp";
 import { getDb } from "../db/client";
@@ -17,6 +18,7 @@ import { embedSummaries, type EmbedFn } from "../index/embed";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
 import { resolveSummaryModels } from "../index/summarize/models";
+import { PROMPT_VERSION } from "../index/summarize/prompts";
 import { runSummaries } from "../index/summarize/run";
 import type { Summarizer } from "../index/summarize/types";
 import type { RepoWatcher } from "../index/watch";
@@ -58,9 +60,21 @@ async function summarizedFixture(): Promise<string> {
     return root;
 }
 
-function rowStatus(root: string, targetPath: string){
+/** summarizedFixture, with its rows then made what Nebulosity 1.0 stored for the same input (P1). */
+async function summarizedBy10(): Promise<string> {
+    const root = await summarizedFixture();
     const db = getDb();
-    return loadSummaries(db, requireRepository(db, repoKey(root))).find((s) => s.path === targetPath)?.status;
+    rewriteAsWrittenBy10(db, requireRepository(db, repoKey(root)));
+    return root;
+}
+
+function storedRow(root: string, targetPath: string){
+    const db = getDb();
+    return loadSummaries(db, requireRepository(db, repoKey(root))).find((s) => s.path === targetPath);
+}
+
+function rowStatus(root: string, targetPath: string){
+    return storedRow(root, targetPath)?.status;
 }
 
 function embedded(root: string): number {
@@ -450,6 +464,100 @@ describe("background service", () => {
         // the repo's prompt names the root folder, which buildFolders calls by the copy's own directory name
         expect(stub.subjects()).toEqual(["File: src/core/log.ts", "Folder: src/core", "Folder: src", `Repository: ${path.basename(root)}`]);
         expect(rowStatus(root, "src/core")).toBe("fresh");
+        await service.stop();
+    });
+
+    // Review focus 2 (P1): a file 1.0 wrote whose content then changed is out of date, whatever prompt wrote it
+    it("refreshes a file 1.0 summarized once it's saved with new content", async () => {
+        const root = await summarizedBy10();
+        const watcher = fakeWatcher();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: watcher.watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        watcher.changed(["src/core/log.ts"]);
+        await service.idle();
+        expect(rowStatus(root, "src/core/log.ts")).toBe("stale");
+
+        await vi.advanceTimersByTimeAsync(60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
+        expect(storedRow(root, "src/core/log.ts")).toMatchObject({ status: "fresh", promptVersion: PROMPT_VERSION });
+        await service.stop();
+    });
+
+    it("never sweeps a folder only because an older prompt wrote it", async () => {
+        const root = await summarizedBy10();
+        const stub = stubSummarizer();
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        // nothing changed, so every folder and the repo 1.0 wrote is current, and the sweep has nothing to do
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.requests).toHaveLength(0);
+        expect(["src/app", "src/core", "src/util", "scripts", "src", ""].map((p) => rowStatus(root, p))).toEqual(Array.from({ length: 6 }, () => "fresh"));
+        await service.stop();
+    });
+
+    // Q2 B: a folder or the repo an older prompt wrote waits to be opened, and the sweep never pays to restyle it
+    it("never sweeps a folder an older prompt wrote, even once its inputs change", async () => {
+        const root = await summarizedBy10();
+        // texts of their own, so each file rewritten here reads differently from what 1.0 stored for it
+        const stub = stubSummarizer({ texts: {
+            "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines." },
+            "src/util/strings.ts": { tagline: "String helpers", summary: "Pads and trims strings." },
+        } });
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        // log.ts opened, so rewritten in the current style: its new text is part of src/core's input
+        await service.summarizeNow("src/core/log.ts");
+        expect(rowStatus(root, "src/core")).toBe("stale");
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts"]);
+        expect(rowStatus(root, "src/core")).toBe("stale");
+
+        // src/util opened, then strings.ts: src/util, which the current prompt wrote, is out of date the same way, and is
+        // swept; src above it, which 1.0 wrote, waits like src/core
+        await service.summarizeNow("src/util");
+        await service.summarizeNow("src/util/strings.ts");
+        expect(rowStatus(root, "src/util")).toBe("stale");
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts", "Folder: src/util", "File: src/util/strings.ts", "Folder: src/util"]);
+        expect(["src/util", "src/core", "src"].map((p) => rowStatus(root, p))).toEqual(["fresh", "stale", "stale"]);
+        await service.stop();
+    });
+
+    // the Task 4 review's I1: a stale folder 1.0 wrote waits to be opened, so it can't hold up the folder above it
+    it("sweeps a stale folder the current prompt wrote, though a stale subfolder an older prompt wrote stays as it is", async () => {
+        const root = await summarizedBy10();
+        // texts of their own, so each file rewritten here reads differently from what 1.0 stored for it
+        const stub = stubSummarizer({ texts: {
+            "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines." },
+            "src/index.ts": { tagline: "Package entry", summary: "Re-exports the core." },
+        } });
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        // src opened, so the current prompt wrote it; then src/index.ts, directly inside it, and src/core/log.ts below it
+        await service.summarizeNow("src");
+        await service.summarizeNow("src/index.ts");
+        await service.summarizeNow("src/core/log.ts");
+        expect(["src", "src/core"].map((p) => [rowStatus(root, p), storedRow(root, p)?.promptVersion])).toEqual([["stale", PROMPT_VERSION], ["stale", 2]]);
+
+        // the sweep redoes src, over src/core's 1.0 text; src/core, and the repo above src, wait to be opened (Q2 B)
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["Folder: src", "File: src/index.ts", "File: src/core/log.ts", "Folder: src"]);
+        expect(["src", "src/core", ""].map((p) => rowStatus(root, p))).toEqual(["fresh", "stale", "stale"]);
         await service.stop();
     });
 

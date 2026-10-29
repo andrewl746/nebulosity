@@ -14,7 +14,7 @@ export const SUMMARY_SCHEMA = {
     type: "object",
     properties: {
         tagline: { type: "string", description: "A noun phrase of 3 to 6 plain words." },
-        summary: { type: "string", description: "2 to 4 sentences." },
+        summary: { type: "string", description: "Short paragraphs separated by a blank line, about the length the request gives." },
     },
     required: ["tagline", "summary"],
     additionalProperties: false,
@@ -31,6 +31,20 @@ const SENTENCE_END = /[.!?]["'`)\]]*$/;
 
 /** Two or more periods at the very end ("…in one place.."), which read as one. */
 const TRAILING_PERIODS = /\.{2,}$/;
+
+/** A paragraph break: two line breaks with only whitespace between them, CRLF and extra blank lines included. */
+const PARAGRAPH_BREAK = /\n\s*\n/;
+
+/**
+ * A summary's paragraphs in the one shape every reader splits on (P5): exactly one blank line between paragraphs,
+ * each trimmed, and a single line break inside one read as a space.
+ */
+function normalizeParagraphs(summary: string): string {
+    return summary.split(PARAGRAPH_BREAK)
+        .map((paragraph) => paragraph.trim().replace(/\s*\n\s*/g, " "))
+        .filter((paragraph) => paragraph !== "")
+        .join("\n\n");
+}
 
 /** Regular-API retries of a batch's cut-off answers in flight at once: as many as the runner's regular-API waves send. */
 const RETRY_CONCURRENCY = 4;
@@ -170,10 +184,11 @@ export function parseSummary(reply: Pick<Reply, "stop_reason" | "content">): Sum
     const tagline = cleanTagline(parsed.data.tagline);
     if (!tagline) throw new Error("the reply didn't have a tagline and a summary");
 
-    // ".." is a slip, not an ellipsis, and so is "...": the run becomes one "." before the check below
-    const summary = parsed.data.summary.replace(TRAILING_PERIODS, ".");
+    // ".." is a slip, not an ellipsis, and so is "...": the run becomes one "." before the check below.
+    // Then the paragraphs take their one shape, whatever line breaks the model wrote between them.
+    const summary = normalizeParagraphs(parsed.data.summary.replace(TRAILING_PERIODS, "."));
     // A normal stop doesn't prove the answer is whole: Summary Review #3 found well-formed JSON, stopped at end_turn,
-    // whose summary ended "…applyEdits. The". A summary is 2 to 4 sentences, so a whole one ends a sentence.
+    // whose summary ended "…applyEdits. The". A summary's paragraphs are whole sentences, so a whole one ends a sentence.
     if (!SENTENCE_END.test(summary)) throw new Error(`${CUT_OFF} (stop reason: end_turn): ${summary === "" ? "it's empty" : "it ends mid-sentence"}`);
     return { tagline, summary };
 }

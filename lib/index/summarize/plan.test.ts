@@ -19,6 +19,7 @@ function written(targets: PlannedTarget[], paths: string[], earlier: StoredSumma
     for (const t of targets.filter((x) => paths.includes(x.path))){
         rows.set(`${t.kind}:${t.path}`, {
             id: 0, kind: t.kind, path: t.path, model: t.model, inputHash: t.inputHash, batchId: null, error: null,
+            promptVersion: t.templateText ? null : PROMPT_VERSION,
             status: t.templateText ? "skipped" : "fresh",
             tagline: t.templateText?.tagline ?? `T:${t.path}`,
             summary: t.templateText?.summary ?? `S:${t.path}`,
@@ -26,6 +27,78 @@ function written(targets: PlannedTarget[], paths: string[], earlier: StoredSumma
     }
 
     return [...rows.values()];
+}
+
+/**
+ * Every folder's and the repo's prompt body (the prompt less its length line) once each of their children holds the
+ * text written() gives it, transcribed by hand from the mini-repo's facts. Every summary in them is one line, so prompt
+ * version 2 rendered the same bodies.
+ */
+const BODIES: Record<string, string> = {
+    "src/app": [
+        "Folder: src/app",
+        "2 source files in total, 2 directly inside.",
+        "",
+        "Contents, largest first:",
+        "- view.tsx (11 lines): T:src/app/view.tsx — S:src/app/view.tsx",
+        "- main.ts (8 lines): T:src/app/main.ts — S:src/app/main.ts",
+    ].join("\n"),
+    "src/core": [
+        "Folder: src/core",
+        "2 source files in total, 2 directly inside.",
+        "",
+        "Contents, largest first:",
+        "- log.ts (9 lines): T:src/core/log.ts — S:src/core/log.ts",
+        "- index.ts (1 line): T:src/core/index.ts — S:src/core/index.ts",
+    ].join("\n"),
+    "src/util": [
+        "Folder: src/util",
+        "2 source files in total, 2 directly inside.",
+        "",
+        "Contents, largest first:",
+        "- strings.ts (6 lines): T:src/util/strings.ts — S:src/util/strings.ts",
+        "- strings.test.ts (3 lines): Tests for strings — Test code (3 lines) for strings. Test files get this template instead of a model-written summary.",
+    ].join("\n"),
+    // app/ has 19 lines below it, core/ 10, util/ 9 and index.ts 7
+    "src": [
+        "Folder: src",
+        "7 source files in total, 1 directly inside.",
+        "",
+        "Contents, largest first:",
+        "- app/ (2 files): T:src/app — S:src/app",
+        "- core/ (2 files): T:src/core — S:src/core",
+        "- util/ (2 files): T:src/util — S:src/util",
+        "- index.ts (7 lines): T:src/index.ts — S:src/index.ts",
+    ].join("\n"),
+    "scripts": [
+        "Folder: scripts",
+        "1 source file in total, 1 directly inside.",
+        "",
+        "Contents, largest first:",
+        "- build.js (3 lines): T:scripts/build.js — S:scripts/build.js",
+    ].join("\n"),
+    "": [
+        "Repository: mini-repo",
+        "8 source files in 6 folders.",
+        "",
+        "Top-level contents, largest first:",
+        "- src/ (7 files): T:src — S:src",
+        "- scripts/ (1 file): T:scripts — S:scripts",
+    ].join("\n"),
+};
+
+const CONTENT_HASHES = new Map(FILES.map((f) => [f.path, f.contentHash]));
+
+/**
+ * The same rows as Nebulosity 1.0 stored them: every model-written row at prompt version 2, with its input hashed under
+ * version 2 (a file's from its path and content hash, a folder's and the repo's from BODIES). Templates stay as they are.
+ */
+function inV2(stored: StoredSummary[]): StoredSummary[] {
+    return stored.map((s) => {
+        if (!s.model || s.model === "template") return s;
+        const input = s.kind === "file" ? `file\n${s.path}\n${CONTENT_HASHES.get(s.path)}` : BODIES[s.path];
+        return { ...s, promptVersion: 2, inputHash: inputHash(s.model, 2, input) };
+    });
 }
 
 /** Plans, "writes" whatever is ready, and repeats until nothing is: every wave's plan, and the rows at the end. */
@@ -88,29 +161,21 @@ describe("planSummaries — bottom-up waves", () => {
     it("builds each folder's prompt from its children's summaries, largest first", () => {
         const wave2 = allWaves().waves[1];
         const prompt = (p: string) => wave2.find((t) => t.path === p)?.prompt;
-        expect(prompt("src/core")).toBe([
-            "Folder: src/core",
-            "2 source files in total, 2 directly inside.",
-            "",
-            "Contents, largest first:",
-            "- log.ts (9 lines): T:src/core/log.ts — S:src/core/log.ts",
-            "- index.ts (1 line): T:src/core/index.ts — S:src/core/index.ts",
-        ].join("\n"));
-        expect(prompt("src/util")).toBe([
-            "Folder: src/util",
-            "2 source files in total, 2 directly inside.",
-            "",
-            "Contents, largest first:",
-            "- strings.ts (6 lines): T:src/util/strings.ts — S:src/util/strings.ts",
-            "- strings.test.ts (3 lines): Tests for strings — Test code (3 lines) for strings. Test files get this template instead of a model-written summary.",
-        ].join("\n"));
+        // 2 files each, so both are small
+        expect(prompt("src/core")).toBe(`${BODIES["src/core"]}\n\nWrite at most 50 words, in 2 paragraphs, and name at most 2 files or subfolders.`);
+        expect(prompt("src/util")).toBe(`${BODIES["src/util"]}\n\nWrite at most 50 words, in 2 paragraphs, and name at most 2 files or subfolders.`);
     });
 
     it("builds the repo's prompt from its top-level folders, and then everything is current", () => {
         const { waves, stored } = allWaves();
         expect(waves[3].find((t) => t.path === "")?.prompt).toBe(
-            "Repository: mini-repo\n8 source files in 6 folders.\n\nTop-level contents, largest first:\n- src/ (7 files): T:src — S:src\n- scripts/ (1 file): T:scripts — S:scripts");
+            `${BODIES[""]}\n\nWrite at most 150 words, in up to 5 paragraphs, as many as it needs, and name at most 5 folders or files.`);
         expect(planSummaries(FILES, FOLDERS, stored, options()).every((t) => t.state === "current")).toBe(true);
+    });
+
+    it("hashes a folder's prompt without its length line", () => {
+        const core = allWaves().waves[1].find((t) => t.path === "src/core");
+        expect(core?.inputHash).toBe(inputHash("claude-sonnet-5-5", PROMPT_VERSION, BODIES["src/core"]));
     });
 });
 
@@ -139,17 +204,127 @@ describe("planSummaries — after the first run", () => {
         expect(planSummaries(FILES, FOLDERS, stored, options()).find((t) => t.path === "src/core/log.ts")).toMatchObject({ state: "current", status: "fresh" });
     });
 
-    it("redoes a file summary written under prompt version 1, so prompt v2 reaches every file", () => {
-        // the hash a version-1 run stored for log.ts: the planner's recipe for a file's input ("file", path, content hash), under version 1
-        const stored = allWaves().stored.map((s) =>
-            s.path === "src/core/log.ts" ? { ...s, inputHash: inputHash("claude-haiku-5-5", 1, "file\nsrc/core/log.ts\nh-log") } : s);
-        expect(planSummaries(FILES, FOLDERS, stored, options()).find((t) => t.path === "src/core/log.ts"))
-            .toMatchObject({ state: "ready", status: "stale" });
-    });
-
     it("doesn't redo a file because more files import it: its hash covers the path and the bytes, not its importers", () => {
         const moreImported = FILES.map((f) => (f.path === "src/core/log.ts" ? { ...f, importedBy: f.importedBy + 40 } : f));
         expect(planSummaries(moreImported, FOLDERS, allWaves().stored, options()).every((t) => t.state === "current")).toBe(true);
+    });
+});
+
+// P1 and P2: what an older prompt wrote stays current until a plan is asked to restyle it, unless its input changed too
+describe("planSummaries — summaries an older prompt wrote", () => {
+    const notCurrent = (targets: PlannedTarget[]) =>
+        targets.filter((t) => t.state !== "current").map((t) => [t.path, t.state, t.status, t.restyle]);
+
+    it("leaves everything 1.0 wrote current, status fresh, when nothing changed", () => {
+        const stored = inV2(allWaves().stored);
+        // the 7 files, 5 folders and the repo; the test file's template is the 14th row
+        expect(stored.filter((s) => s.promptVersion === 2)).toHaveLength(13);
+        const plan = planSummaries(FILES, FOLDERS, stored, options());
+        expect(plan).toHaveLength(14);
+        expect(plan.filter((t) => t.state !== "current" || t.status !== null || t.restyle).map((t) => t.path)).toEqual([]);
+    });
+
+    it("redoes everything 1.0 wrote under restyle all, bottom-up, keeping each status fresh", () => {
+        const plan = planSummaries(FILES, FOLDERS, inV2(allWaves().stored), options({ restyle: "all" }));
+        expect(plan.map((t) => [t.path, t.state, t.status, t.restyle])).toEqual([
+            ["src/app/main.ts", "ready", null, true],
+            ["src/core/log.ts", "ready", null, true],
+            ["src/util/strings.ts", "ready", null, true],
+            ["src/app/view.tsx", "ready", null, true],
+            ["src/core/index.ts", "ready", null, true],
+            ["src/index.ts", "ready", null, true],
+            ["scripts/build.js", "ready", null, true],
+            ["src/util/strings.test.ts", "current", null, undefined],
+            ["src/app", "waiting", null, true],
+            ["src/core", "waiting", null, true],
+            ["src/util", "waiting", null, true],
+            ["src", "waiting", null, true],
+            ["scripts", "waiting", null, true],
+            ["", "waiting", null, true],
+        ]);
+    });
+
+    it("restyles only the target it's told to, so a folder whose children 1.0 wrote is ready", () => {
+        const plan = planSummaries(FILES, FOLDERS, inV2(allWaves().stored), options({ restyle: { path: "src/core" } }));
+        expect(notCurrent(plan)).toEqual([["src/core", "ready", null, true]]);
+    });
+
+    it("calls a file 1.0 wrote out of date when its content changed too", () => {
+        const edited = FILES.map((f) => (f.path === "src/core/log.ts" ? { ...f, contentHash: "h-log-2" } : f));
+        const stored = inV2(allWaves().stored);
+        expect(notCurrent(planSummaries(edited, FOLDERS, stored, options()))).toEqual([["src/core/log.ts", "ready", "stale", undefined]]);
+        // a restyle doesn't change that: the file is redone because it changed
+        const log = planSummaries(edited, FOLDERS, stored, options({ restyle: "all" })).find((t) => t.path === "src/core/log.ts");
+        expect([log?.state, log?.status, log?.restyle]).toEqual(["ready", "stale", undefined]);
+    });
+
+    it("calls a folder 1.0 wrote out of date once a child's text changes", () => {
+        const stored = inV2(allWaves().stored).map((s) => (s.path === "src/core/log.ts" ? { ...s, tagline: "T2:src/core/log.ts" } : s));
+        expect(notCurrent(planSummaries(FILES, FOLDERS, stored, options({ refreshStaleFolders: false })))).toEqual([["src/core", "lazy", "stale", undefined]]);
+        expect(notCurrent(planSummaries(FILES, FOLDERS, stored, options({ refreshStaleFolders: true })))).toEqual([["src/core", "ready", "stale", undefined]]);
+    });
+
+    // Q2 B and the Task 4 review's I1: only opening a stale folder an older prompt wrote rewrites it, so it mustn't hold up its parent
+    it("lets a stale folder 1.0 wrote wait to be opened when told to, so the folder above it can go", () => {
+        // log.ts rewritten in the current style (as an opened panel would): src/core's input changed, src's didn't
+        const stored = inV2(allWaves().stored).map((s) => (s.path === "src/core/log.ts"
+            ? { ...s, tagline: "T3:src/core/log.ts", promptVersion: PROMPT_VERSION, inputHash: inputHash("claude-haiku-5-5", PROMPT_VERSION, "file\nsrc/core/log.ts\nh-log") }
+            : s));
+        const plan = (overrides: Partial<PlanOptions>) => notCurrent(planSummaries(FILES, FOLDERS, stored, options(overrides)));
+
+        // src opened: src/core waits to be opened itself, settled, so src is ready
+        expect(plan({ restyle: { path: "src" }, olderFoldersWaitToBeOpened: true })).toEqual([["src/core", "lazy", "stale", undefined], ["src", "ready", null, true]]);
+        // without the option, as a full run plans: src/core is ready, and src waits for it
+        expect(plan({ restyle: { path: "src" } })).toEqual([["src/core", "ready", "stale", undefined], ["src", "waiting", null, true]]);
+        // src/core opened itself: it's ready, and src's input is still unchanged
+        expect(plan({ restyle: { path: "src/core" }, olderFoldersWaitToBeOpened: true })).toEqual([["src/core", "ready", "stale", undefined]]);
+        // a stale src/core the current prompt wrote is ready as before, so src waits for it
+        const current = stored.map((s) => (s.path === "src/core" ? { ...s, promptVersion: PROMPT_VERSION } : s));
+        expect(notCurrent(planSummaries(FILES, FOLDERS, current, options({ restyle: { path: "src" }, olderFoldersWaitToBeOpened: true }))))
+            .toEqual([["src/core", "ready", "stale", undefined], ["src", "waiting", null, true]]);
+    });
+
+    it("keeps a folder 1.0 wrote current when a child's 1.0 summary holds a blank line", () => {
+        // the body version 2 rendered, with log.ts's summary verbatim
+        const body = [
+            "Folder: src/core",
+            "2 source files in total, 2 directly inside.",
+            "",
+            "Contents, largest first:",
+            "- log.ts (9 lines): T:src/core/log.ts — S1.",
+            "",
+            "S2.",
+            "- index.ts (1 line): T:src/core/index.ts — S:src/core/index.ts",
+        ].join("\n");
+        const stored = inV2(allWaves().stored).map((s) =>
+            s.path === "src/core/log.ts" ? { ...s, summary: "S1.\n\nS2." }
+            : s.path === "src/core" ? { ...s, inputHash: inputHash("claude-sonnet-5-5", 2, body) }
+            : s);
+        expect(planSummaries(FILES, FOLDERS, stored, options()).find((t) => t.path === "src/core")).toMatchObject({ state: "current", status: null });
+    });
+
+    it("reads a null prompt version as 2, and a version 1 hash as out of date", () => {
+        // log.ts's row with no prompt version, its input hashed under the version given
+        const unrecorded = (version: number) => inV2(allWaves().stored).map((s) =>
+            s.path === "src/core/log.ts" ? { ...s, promptVersion: null, inputHash: inputHash("claude-haiku-5-5", version, "file\nsrc/core/log.ts\nh-log") } : s);
+        const log = (stored: StoredSummary[]) => {
+            const target = planSummaries(FILES, FOLDERS, stored, options()).find((t) => t.path === "src/core/log.ts");
+            return [target?.state, target?.status, target?.restyle];
+        };
+        expect(log(unrecorded(2))).toEqual(["current", null, undefined]);
+        expect(log(unrecorded(1))).toEqual(["ready", "stale", undefined]);
+    });
+
+    it("rewrites every template once after the version bump, for free", () => {
+        const summary = "Test code (3 lines) for strings. Test files get this template instead of a model-written summary.";
+        const stored = inV2(allWaves().stored).map((s) =>
+            s.path === "src/util/strings.test.ts" ? { ...s, inputHash: inputHash("template", 2, `src/util/strings.test.ts\nTests for strings\n${summary}`) } : s);
+        const plan = planSummaries(FILES, FOLDERS, stored, options());
+        expect(plan.find((t) => t.path === "src/util/strings.test.ts")).toMatchObject({
+            model: "template", state: "template", status: "skipped", templateText: { tagline: "Tests for strings", summary },
+        });
+        // its text is the same, so src/util's input hasn't changed and no model is asked for anything
+        expect(notCurrent(plan)).toEqual([["src/util/strings.test.ts", "template", "skipped", undefined]]);
     });
 });
 
@@ -201,7 +376,7 @@ describe("foldersAbove", () => {
 
 describe("planSummaries — in flight and failed", () => {
     it("never requeues a target a batch is carrying, and its folder waits for it", () => {
-        const stored: StoredSummary[] = [{ id: 1, kind: "file", path: "src/app/main.ts", tagline: null, summary: null, model: null, inputHash: null, status: "pending", batchId: "batch-1", error: null }];
+        const stored: StoredSummary[] = [{ id: 1, kind: "file", path: "src/app/main.ts", tagline: null, summary: null, model: null, inputHash: null, promptVersion: null, status: "pending", batchId: "batch-1", error: null }];
         const plan = planSummaries(FILES, FOLDERS, stored, options());
         expect(plan.find((t) => t.path === "src/app/main.ts")?.state).toBe("in-flight");
         expect(plan.find((t) => t.path === "src/app")?.state).toBe("waiting");

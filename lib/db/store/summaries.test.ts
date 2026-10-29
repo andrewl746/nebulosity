@@ -9,6 +9,7 @@ import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { getDb } from "../client";
 import { files, imports, summaryVectors } from "../schema";
 import { indexRepository } from "../../index/pipeline";
+import { PROMPT_VERSION } from "../../index/summarize/prompts";
 import { runSummaries } from "../../index/summarize/run";
 import { upsertRepository } from "./structure";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./summaries";
 import { writeSummaryVectors } from "./summary-vectors";
 
-const ok = (tagline: string) => ({ ok: true as const, text: { tagline, summary: "S" }, model: "m" });
+const ok = (tagline: string) => ({ ok: true as const, text: { tagline, summary: "S" }, model: "m", promptVersion: PROMPT_VERSION });
 
 describe("summary store — facts for the planner", () => {
     it("loads every file with how many files import it, in path order", () => {
@@ -216,6 +217,25 @@ describe("summary store — rows", () => {
         expect(vectors()).toEqual([]);
     });
 
+    it("records the prompt version a summary was written with, keeps it through a failure, and clears it for a template", () => {
+        const db = getDb();
+        const repoId = upsertRepository(db, "/summaries/prompt-version");
+        const id = applyTargetUpdates(db, repoId, [{ kind: "file", path: "a.ts", inputHash: "h1", status: "pending" }]).get("file:a.ts")!;
+
+        writeResults(db, [{ id, batchId: null, inputHash: "h1", outcome: { ok: true, text: { tagline: "T", summary: "S" }, model: "m", promptVersion: 3 } }]);
+        expect(loadSummaries(db, repoId)[0].promptVersion).toBe(3);
+
+        // the failure keeps the old text on show, and the version is that text's
+        writeResults(db, [{ id, batchId: null, inputHash: "h2", outcome: { ok: false, error: "boom" } }]);
+        expect(loadSummaries(db, repoId)[0]).toMatchObject({ status: "failed", tagline: "T", inputHash: "h1" });
+        expect(loadSummaries(db, repoId)[0].promptVersion).toBe(3);
+
+        // the file became a test file: a template, which no prompt wrote, replaces the text
+        applyTargetUpdates(db, repoId, [{ kind: "file", path: "a.ts", inputHash: "h3", status: "skipped", templateText: { tagline: "Tests for a", summary: "Test code." } }]);
+        expect(loadSummaries(db, repoId)[0]).toMatchObject({ model: "template", tagline: "Tests for a" });
+        expect(loadSummaries(db, repoId)[0].promptVersion).toBeNull();
+    });
+
     it("adds up API usage per model and transport", () => {
         const db = getDb();
         const repoId = upsertRepository(db, "/summaries/usage");
@@ -259,7 +279,7 @@ describe("summary store — a template over model text", () => {
 
         // the test file's row as if a model had summarized it (before it counted as a test file), with a vector
         const testFile = loadSummaries(db, repoId).find((s) => s.path === "src/util/strings.test.ts")!;
-        writeResults(db, [{ id: testFile.id, batchId: null, inputHash: "model-written", outcome: { ok: true, text: { tagline: "Shout checks", summary: "S." }, model: "m" } }]);
+        writeResults(db, [{ id: testFile.id, batchId: null, inputHash: "model-written", outcome: { ok: true, text: { tagline: "Shout checks", summary: "S." }, model: "m", promptVersion: PROMPT_VERSION } }]);
         writeSummaryVectors(db, [{ summaryId: testFile.id, inputHash: "model-written", embedding: Buffer.alloc(12) }]);
         const vectorsOf = () => db.select().from(summaryVectors).where(eq(summaryVectors.summaryId, testFile.id)).all();
         expect(vectorsOf()).toHaveLength(1);

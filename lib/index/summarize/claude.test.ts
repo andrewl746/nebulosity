@@ -34,6 +34,14 @@ describe("requestParams", () => {
     });
 });
 
+describe("SUMMARY_SCHEMA", () => {
+    it("describes the summary as short paragraphs, about the length the request gives", () => {
+        expect(SUMMARY_SCHEMA.properties.summary.description).toBe("Short paragraphs separated by a blank line, about the length the request gives.");
+        // the tagline's stays
+        expect(SUMMARY_SCHEMA.properties.tagline.description).toBe("A noun phrase of 3 to 6 plain words.");
+    });
+});
+
 describe("cleanTagline", () => {
     it("keeps a tagline of 8 words or fewer whole, connector words and all", () => {
         expect(cleanTagline("Typed event emitter and listener registry helpers")).toBe("Typed event emitter and listener registry helpers");
@@ -127,6 +135,17 @@ describe("parseSummary", () => {
         expect(summaryOf("Keeps every setting in one place...")).toBe("Keeps every setting in one place.");
         // trimmed first, and periods inside the summary stay
         expect(summaryOf(" Reads `a.b`. Keeps every setting in one place.. ")).toBe("Reads `a.b`. Keeps every setting in one place.");
+    });
+
+    it("keeps one blank line between paragraphs, whatever the model wrote between them", () => {
+        // CRLF breaks with an extra blank line, a single line break inside a paragraph, and spaces and a tab on a blank line
+        expect(parseSummary(reply(JSON.stringify({ tagline: "Logging helpers", summary: "First one.\r\n\r\n\r\nSecond\nline.  \n \t\nThird." }))).summary)
+            .toBe("First one.\n\nSecond line.\n\nThird.");
+    });
+
+    it("still calls a summary cut off when its last paragraph stops mid-sentence", () => {
+        expect(() => parseSummary(reply(JSON.stringify({ tagline: "Logging helpers", summary: "First.\n\nSecond and" }))))
+            .toThrow(/^the summary was cut off \(stop reason: end_turn\): it ends mid-sentence/);
     });
 
     it("reads the answer that stood when a fallback model took over partway", () => {

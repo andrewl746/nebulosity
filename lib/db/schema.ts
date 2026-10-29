@@ -156,9 +156,10 @@ export const summaries = sqliteTable("summaries", {
     targetKind: text("target_kind", { enum: SUMMARY_TARGET_KINDS }).notNull(),
     targetPath: text("target_path").notNull(),   // "" for the repo itself
     tagline: text("tagline"),                     // 3–6 words asked for, up to 8 kept whole; null until a summary exists
-    summary: text("summary"),                     // 2–4 sentences
+    summary: text("summary"),                     // short paragraphs, separated by blank lines
     model: text("model"),                         // the model that wrote it, or "template"
     inputHash: text("input_hash"),                // hash(model, prompt version, input) of the text above
+    promptVersion: integer("prompt_version"),     // the prompt version that wrote the text above, null for a template or for text from before v3 (ADR-034)
     status: text("status", { enum: SUMMARY_STATUSES }).notNull(),
     error: text("error"),                         // why the last attempt failed
     // A Message Batch can take hours. These two say which batch carries this row's request and

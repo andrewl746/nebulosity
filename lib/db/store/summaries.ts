@@ -20,6 +20,8 @@ export type StoredSummary = {
     summary: string | null;
     model: string | null;
     inputHash: string | null;
+    /** The prompt version that wrote the text, null for a template or for text from before v3 (ADR-034). */
+    promptVersion: number | null;
     status: StoredSummaryStatus;
     batchId: string | null;
     error: string | null;
@@ -53,7 +55,7 @@ export type SummaryResult = {
     batchId: string | null;
     /** The input the answer was written for. */
     inputHash: string;
-    outcome: { ok: true; text: SummaryText; model: string } | { ok: false; error: string };
+    outcome: { ok: true; text: SummaryText; model: string; promptVersion: number } | { ok: false; error: string };
 };
 
 export type UsageRow = { model: string; transport: "direct" | "batch"; requests: number; inputTokens: number; outputTokens: number };
@@ -117,6 +119,7 @@ export function loadSummaries(db: Db, repoId: number): StoredSummary[] {
         summary: summaries.summary,
         model: summaries.model,
         inputHash: summaries.inputHash,
+        promptVersion: summaries.promptVersion,
         status: summaries.status,
         batchId: summaries.batchId,
         error: summaries.error,
@@ -165,7 +168,7 @@ export function applyTargetUpdates(db: Db, repoId: number, updates: readonly Tar
 
             if (u.templateText){
                 const result = tx.update(summaries).set({
-                    tagline: u.templateText.tagline, summary: u.templateText.summary, model: "template",
+                    tagline: u.templateText.tagline, summary: u.templateText.summary, model: "template", promptVersion: null,
                     inputHash: u.inputHash, status: "skipped", error: null, updatedAt: now,
                 }).where(row).run();
                 if (result.changes > 0) changed = true;
@@ -217,11 +220,11 @@ export function loadBatchRows(db: Db, batchId: string): { id: number; kind: Summ
 
 /**
  * Writes answers back and returns how many rows changed.
- * - A summary lands as "fresh" with its text and inputHash. Its old vector is deleted, so
- *   the embeddings stage redoes it.
- * - A failure becomes "failed" and keeps any older text on show. A failure from the regular API
- *   leaves a batch's claim on the row in place: that request is already paid for, and its
- *   answer can still land.
+ * - A summary lands as "fresh" with its text, inputHash and prompt version. Its old vector is
+ *   deleted, so the embeddings stage redoes it.
+ * - A failure becomes "failed" and keeps any older text on show, with the prompt version that
+ *   wrote it. A failure from the regular API leaves a batch's claim on the row in place: that
+ *   request is already paid for, and its answer can still land.
  * - An answer from a batch that no longer owns the row (the row was redone some other way
  *   meanwhile) is dropped.
  */
@@ -234,7 +237,10 @@ export function writeResults(db: Db, results: readonly SummaryResult[]): number 
         for (const r of results){
             const owner = r.batchId === null ? eq(summaries.id, r.id) : and(eq(summaries.id, r.id), eq(summaries.batchId, r.batchId));
             const answer = r.outcome.ok
-                ? { tagline: r.outcome.text.tagline, summary: r.outcome.text.summary, model: r.outcome.model, inputHash: r.inputHash, status: "fresh" as const, error: null }
+                ? {
+                    tagline: r.outcome.text.tagline, summary: r.outcome.text.summary, model: r.outcome.model, promptVersion: r.outcome.promptVersion,
+                    inputHash: r.inputHash, status: "fresh" as const, error: null,
+                }
                 : { status: "failed" as const, error: r.outcome.error };
 
             // Only a regular-API failure keeps the row's claim: a regular-API success supersedes the batch,

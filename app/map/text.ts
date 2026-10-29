@@ -36,14 +36,22 @@ function wordBefore(text: string, end: number): string {
     return text.slice(start, end).replace(/^\(/, "").toLowerCase();
 }
 
+/** A blank line, the break between two paragraphs. parseSummary leaves exactly one, but any whitespace on it counts. */
+const PARAGRAPH_BREAK = /\n\s*\n/;
+
 /**
- * A summary's first sentence (the panel's lead) and the rest, behind "Read full summary" (VISUAL_REFRESH.md §5).
+ * A summary's lead, which the panel shows first, and the rest, behind "Full summary" (VISUAL_REFRESH.md §5). A summary
+ * in paragraphs leads with its whole first paragraph, which the prompt keeps to a sentence or two on what the thing is
+ * for (D10). One in a single block, the way an older prompt wrote nearly all of them, leads with its first sentence.
  * A sentence ends at ".", "!" or "?" outside code, followed by whitespace and then something a sentence starts with,
  * unless the word before the period is an abbreviation. "3.4" and `main.ts` never split, since no space follows
  * their periods. When in doubt it doesn't split: a longer lead costs a line, a cut-off one costs the meaning.
  */
 export function splitSummary(summary: string): { lead: string; rest: string } {
     const text = summary.trim();
+    const paragraph = PARAGRAPH_BREAK.exec(text);
+    if (paragraph) return { lead: text.slice(0, paragraph.index), rest: text.slice(paragraph.index + paragraph[0].length) };
+
     let inCode = false;
 
     for (let i = 0; i < text.length; i++){

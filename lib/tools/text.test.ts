@@ -19,6 +19,11 @@ describe("text helpers", () => {
         expect(summaryLine({ summaryStatus: "failed" })).toBe("Summary: failed.");
     });
 
+    it("puts a summary of several paragraphs on one line", () => {
+        expect(summaryLine({ tagline: "Logging helpers", summary: "Writes lines.\n\nUsed everywhere.", summaryStatus: "fresh" }))
+            .toBe("Logging helpers — Writes lines. Used everywhere.");
+    });
+
     it("fits lines under a limit and a character budget, counting each line's break", () => {
         expect(fitting(["aaaa", "bbbb", "cccc"], 2, 1_000)).toBe(2);
         expect(fitting(["aaaa", "bbbb", "cccc"], 10, 10)).toBe(2);   // 5 + 5 fits in 10, a third would make 15

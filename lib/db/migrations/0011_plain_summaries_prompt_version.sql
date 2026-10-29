@@ -1,0 +1,1 @@
+ALTER TABLE `summaries` ADD `prompt_version` integer;
