@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionsPlace, actionsSide, bannerForm, fitPopover, trailStart } from "./narrow";
+import { actionsPlace, actionsSide, bannerForm, fitPopover, hoverCardPlace, hoverCardRows, trailStart } from "./narrow";
 
 describe("actionsSide (a selected box's actions, while the panel would cover the canvas: owner review 2026-10-25)", () => {
     it("goes under a box whose middle is in the canvas's top half, clear of the page pill's band", () => {
@@ -100,5 +100,61 @@ describe("fitPopover", () => {
         // 360 - 32 = 328 wide, from x = 16
         expect(fitPopover({ left: 67, right: 200 }, { left: 0, right: 360 }, 340, "start")).toEqual({ shift: -51, width: 328 });
         expect(fitPopover({ left: 300, right: 344 }, { left: 0, right: 360 }, 340, "end")).toEqual({ shift: 0, width: 328 });
+    });
+});
+
+describe("hoverCardPlace (the line's hover card beside the pointer: the owner, 2026-10-29)", () => {
+    const canvas = { width: 700, height: 600 };
+    const card = { width: 160, height: 80 };
+
+    it("goes 12 px right of the pointer and 20 px below it, past the pointer's arrow", () => {
+        expect(hoverCardPlace({ x: 100, y: 100 }, card, canvas, [], [])).toEqual({ left: 112, top: 120 });
+    });
+
+    it("flips to the left near the right edge, above near the bottom, and both in the corner, 8 px inside", () => {
+        // 612 + 160 would pass 700 - 8: 600 - 12 - 160 = 428
+        expect(hoverCardPlace({ x: 600, y: 100 }, card, canvas, [], [])).toEqual({ left: 428, top: 120 });
+        // 570 + 80 would pass 592: 550 - 10 - 80 = 460
+        expect(hoverCardPlace({ x: 100, y: 550 }, card, canvas, [], [])).toEqual({ left: 112, top: 460 });
+        expect(hoverCardPlace({ x: 600, y: 550 }, card, canvas, [], [])).toEqual({ left: 428, top: 460 });
+    });
+
+    it("slides sideways off an upright line the pointer is a few px beside, and down off a heavy level one", () => {
+        // a 10 px line from x 108 to 118, the pointer 8 px left of its middle: the card starts at 112, so it moves to 118 + 4
+        expect(hoverCardPlace({ x: 105, y: 100 }, card, canvas, [{ left: 108, top: 0, width: 10, height: 300 }], [])).toEqual({ left: 122, top: 120 });
+        // a 26 px line from y 102 to 128 and the pointer 15 px over its middle: 120 is on it, so 128 + 4
+        expect(hoverCardPlace({ x: 100, y: 100 }, card, canvas, [{ left: 0, top: 102, width: 400, height: 26 }], [])).toEqual({ left: 112, top: 132 });
+    });
+
+    it("keeps clear of a drawer over the canvas, as of its edge", () => {
+        // the drawer from x 380: 312 + 160 runs under it, so the card goes left, 300 - 12 - 160 = 128
+        expect(hoverCardPlace({ x: 300, y: 100 }, card, canvas, [], [{ left: 380, top: 0, width: 320, height: 600 }])).toEqual({ left: 128, top: 120 });
+    });
+
+    it("where no side fits, takes the first that fits moved inside the canvas and still clear of the line", () => {
+        // a 200 × 150 canvas: right of the pointer runs past 192, left of it past 8, and above it past 8 (75 - 10 - 60 = 5).
+        // Moved in, below and right is at (92, 82), on the line from x 150; below and left is at (8, 82), clear of it
+        const small = { width: 200, height: 150 };
+        expect(hoverCardPlace({ x: 100, y: 75 }, { width: 100, height: 60 }, small, [{ left: 150, top: 0, width: 10, height: 150 }], [])).toEqual({ left: 8, top: 82 });
+    });
+
+    it("and failing that, the first moved inside the canvas: it never leaves it", () => {
+        const small = { width: 200, height: 150 };
+        expect(hoverCardPlace({ x: 100, y: 75 }, { width: 100, height: 60 }, small, [{ left: 0, top: 0, width: 200, height: 150 }], [])).toEqual({ left: 92, top: 82 });
+    });
+});
+
+describe("hoverCardRows (how many of a run's lines the hover card lists)", () => {
+    it("lists five, and all six where the sixth would only replace the 'and 1 more' row", () => {
+        expect(hoverCardRows(3, 500)).toBe(3);
+        expect(hoverCardRows(6, 500)).toBe(6);
+        expect(hoverCardRows(7, 500)).toBe(5);
+        expect(hoverCardRows(43, 500)).toBe(5);
+    });
+
+    it("lists fewer where the canvas is short: a 150 px canvas leaves 134 px, the frame, the title, 4 rows and the more row", () => {
+        // 10 + 18 × (1 + 4 + 1) = 118 fits in 134, 10 + 18 × 7 = 136 doesn't
+        expect(hoverCardRows(43, 134)).toBe(4);
+        expect(hoverCardRows(4, 64)).toBe(1);
     });
 });

@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { BaseEdge, EdgeLabelRenderer, type Edge, type EdgeProps } from "@xyflow/react";
-import { longestSideMiddle, roundedPath, type Point } from "./routes";
+import { roundedPath, type Point } from "./routes";
 import { arrowHead } from "./weights";
 
 /**
@@ -25,11 +25,11 @@ const TIP_GAP = 3;
  * its box's top, so the head always points down. Without a route (React Flow may draw before the routes arrive) it
  * falls back to a straight line between the two handles.
  *
- * The labels are HTML above the boxes, not SVG beside the line: the lines sit under the boxes, and a label drawn with
- * them was cut off by any box it overlapped (owner review). The hover label says what the line means in words and
- * replaces the count while it shows.
+ * The count is HTML above the boxes, not SVG beside the line: the lines sit under the boxes, and a label drawn with
+ * them was cut off by any box it overlapped (owner review). What a hovered line means, in words, is the canvas's hover
+ * card (LineCard), beside the pointer rather than on the line.
  */
-function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, label, interactionWidth }: EdgeProps<RoutedEdgeType>){
+function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, interactionWidth }: EdgeProps<RoutedEdgeType>){
     const route = data && data.points.length >= 2 ? data.points : [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
     const width = data?.width ?? 1;
     const color = data?.color ?? "var(--edge-dim)";
@@ -40,10 +40,8 @@ function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, label, inter
     const tip = { x: end.x, y: end.y - TIP_GAP };
     // the line stops a pixel inside the head's base, so no gap shows between them
     const line = [...route.slice(0, -1), { x: tip.x, y: tip.y - length + 1 }];
-    // a count goes only where the Map placed it, clear of every other line, count and box (the owner, 2026-10-28), and
-    // the hover sentence goes there too, else in the middle of the line's longest side
+    // a count goes only where the Map placed it, clear of every other line, count and box (the owner, 2026-10-28)
     const count = data?.labelAt !== undefined ? data.count : undefined;
-    const middle = data?.labelAt ?? longestSideMiddle(line);
     const head = `M ${tip.x - half} ${tip.y - length} L ${tip.x + half} ${tip.y - length} L ${tip.x} ${tip.y} Z`;
     return (
         <>
@@ -54,15 +52,15 @@ function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, label, inter
                 interactionWidth={Math.max(interactionWidth ?? 20, width + 10)}
             />
             <path d={head} fill={color} stroke={color} strokeWidth={1} strokeLinejoin="round" className="pointer-events-none" />
-            {(label || count) && (
+            {count && data?.labelAt && (
                 <EdgeLabelRenderer>
                     <div
                         data-edge-label={id}
-                        data-edge-count={label ? undefined : count}
-                        style={{ transform: `translate(-50%, -50%) translate(${middle.x}px, ${middle.y}px)`, zIndex: 1001 }}
-                        className={`pointer-events-none absolute whitespace-nowrap rounded-[4px] border border-divider bg-canvas px-1.5 leading-[16px] tabular-nums ${label ? "text-[12px] text-text" : `text-[11.5px] ${data?.countStrong ? "text-text" : "text-text-3"}`}`}
+                        data-edge-count={count}
+                        style={{ transform: `translate(-50%, -50%) translate(${data.labelAt.x}px, ${data.labelAt.y}px)`, zIndex: 1001 }}
+                        className={`pointer-events-none absolute whitespace-nowrap rounded-[4px] border border-divider bg-canvas px-1.5 text-[11.5px] leading-[16px] tabular-nums ${data.countStrong ? "text-text" : "text-text-3"}`}
                     >
-                        {label ?? count}
+                        {count}
                     </div>
                 </EdgeLabelRenderer>
             )}
