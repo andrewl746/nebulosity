@@ -3,10 +3,10 @@
 import { IconArrowLeft } from "@tabler/icons-react";
 
 /**
- * Back, inside VS Code's panel (owner review, 2026-10-25). The webview has no browser Back, though the Map's moves go
- * into its history as in a browser tab (history.ts), so this goes back one of them. It's disabled at the Map's first
- * entry (historyDepth 0), where going back would take the webview off the Map. A browser tab keeps its own Back, so the
- * Map shows no button there.
+ * Back, first inside VS Code's panel (owner review, 2026-10-25), whose webview has no browser Back, and since
+ * 2026-10-29 in the browser and the demo too, so the Map has one Back everywhere (the owner). The Map's moves go into
+ * the history (history.ts), so this goes back one of them. It's disabled at the Map's first entry (historyDepth 0),
+ * where going back would take the webview off the Map, or a browser tab to the page before it.
  */
 export default function BackButton({ enabled }: { enabled: boolean }){
     return (
