@@ -12,6 +12,7 @@ import { configuredSummaryModels, SummaryModelsError, type SummaryModelsResoluti
 import { DEFAULT_BUDGET_USD, runSummaries, StructureNotReadyError, summarizeNow } from "../index/summarize/run";
 import type { PlannedTarget } from "../index/summarize/plan";
 import { snapshotOf } from "../index/summarize/pricing";
+import { writtenInOlderStyle } from "../index/summarize/prompts";
 import { refreshSummaryStatus } from "../index/summarize/status";
 import type { Summarizer } from "../index/summarize/types";
 import { applyFileChanges } from "../index/update";
@@ -200,20 +201,24 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         return (repoId === null ? null : approvedBudgetUsd(db, repoId)) ?? DEFAULT_BUDGET_USD;
     }
 
+    /** The repo's stored summaries by targetKey, read once per job as it starts, so every check the job makes reads the same rows. */
+    function storedRows(repo: string): Map<string, StoredSummary> {
+        const db = getDb();
+        const repoId = findRepository(db, repoKey(repo));
+        return new Map(repoId === null ? [] : loadSummaries(db, repoId).map((s) => [targetKey(s.kind, s.path), s]));
+    }
+
     /**
      * What an automatic job (a refresh after a save, the sweep) may send without asking (ADR-066, R17): a target whose
      * stored text the model now in use for its kind wrote (so it's out of date only because its inputs changed), or one
      * no model has written yet. Text another model wrote waits for `nebulosity summarize`'s estimate and yes, "Summarize
      * now", or a panel being opened: redoing it is a model change, and only a yes pays for that. A dated snapshot the API
      * reported (`<model>-20261001`) counts as its model, and nothing else does: claude-sonnet-5-5 isn't claude-sonnet-5
-     * (snapshotOf). Read once per job, from the rows as the job starts.
+     * (snapshotOf). `rows` are the job's storedRows.
      */
-    function sentUnasked(repo: string): (target: PlannedTarget) => boolean {
-        const db = getDb();
-        const repoId = findRepository(db, repoKey(repo));
-        const writtenBy = new Map(repoId === null ? [] : loadSummaries(db, repoId).map((s) => [targetKey(s.kind, s.path), s.model]));
+    function sentUnasked(rows: ReadonlyMap<string, StoredSummary>): (target: PlannedTarget) => boolean {
         return (target) => {
-            const model = writtenBy.get(targetKey(target.kind, target.path));
+            const model = rows.get(targetKey(target.kind, target.path))?.model;
             return !model || model === "template" || model === target.model || snapshotOf(model) === target.model;
         };
     }
@@ -276,7 +281,7 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
         }
 
         const wanted = new Set(paths.map((p) => targetKey("file", p)));
-        const unasked = sentUnasked(repo);
+        const unasked = sentUnasked(storedRows(repo));
         // The content whose quiet minute is up: each file's input hash as this run first plans it. A file saved again
         // mid-refresh (structure updates don't wait for refreshes) plans with a new hash and isn't sent again here: its
         // update restarted its own minute. Otherwise every save during a wave would be paid for at once.
@@ -318,7 +323,8 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
     /**
      * Out-of-date folders whose children are settled, deepest first, at most SWEEP_MAX_FOLDERS (PIVOT_SPEC.md §5.6): only
      * those the model now in use wrote, or that no model has written (sentUnasked). After a folder or repo model change
-     * the rest wait for a yes, instead of being redone 20 every 10 minutes with no estimate (R17).
+     * the rest wait for a yes, instead of being redone 20 every 10 minutes with no estimate (R17). A folder or the repo
+     * an older prompt version wrote waits too, to be opened or redone by `nebulosity summarize` (Q2 B).
      */
     async function runSweep(): Promise<void> {
         const repo = root;
@@ -332,18 +338,28 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
             return;
         }
 
-        const unasked = sentUnasked(repo);
+        const rows = storedRows(repo);
+        const unasked = sentUnasked(rows);
+        const olderStyle = (target: PlannedTarget): boolean => {
+            const row = rows.get(targetKey(target.kind, target.path));
+            return row !== undefined && writtenInOlderStyle(row);
+        };
         try{
             const result = await runSummaries(repo, {
                 summarizer: deps.summarizer,
                 models,
                 transport: "direct",
                 refreshStaleFolders: true,
+                // such a folder plans lazy, so it never keeps the folder above it waiting (Q2 B, the select below)
+                olderFoldersWaitToBeOpened: true,
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",
                 repoBudgetUsd: approvedBudget(repo),
-                select: (target) => target.kind !== "file" && unasked(target),
+                // Q2 B: a folder or the repo an older prompt wrote is left to be opened, even once its inputs change (an
+                // edit below it, or a child a panel restyled), so the sweep never restyles the folders above an edit
+                // unasked. The refresh after a save keeps redoing an edited file whatever prompt wrote it (P1).
+                select: (target) => target.kind !== "file" && unasked(target) && !olderStyle(target),
                 maxTargets: SWEEP_MAX_FOLDERS,
                 onProgress: (message) => log(`sweep: ${message}`),
             });

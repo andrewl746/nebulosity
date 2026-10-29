@@ -5,13 +5,14 @@ import { describe as group, expect, it } from "vitest";
 import { copyFixture } from "../../test/helpers/fixture";
 import { makeTempDir } from "../../test/helpers/temp";
 import { stubSummarizer } from "../../test/helpers/summarizer";
+import { rewriteAsWrittenBy10 } from "../../test/helpers/summaries-v2";
 import { getDb } from "../db/client";
 import { requireRepository } from "../db/store/structure";
 import { applyTargetUpdates } from "../db/store/summaries";
 import { bumpIndexVersion, readIndexVersion } from "../db/store/version";
 import { repoKey } from "../index/paths";
 import { indexRepository } from "../index/pipeline";
-import { runSummaries } from "../index/summarize/run";
+import { runSummaries, summarizeNow } from "../index/summarize/run";
 import { describe } from "./describe";
 import { PathNotFoundError } from "./level";
 
@@ -102,6 +103,30 @@ group("describe — the fixture", () => {
         expect(describe(root, "src/core").stalePaths).toBe(1);
         expect(describe(root, "src").stalePaths).toBe(1);
         expect(describe(root, "src/app").stalePaths).toBe(0);
+    });
+
+    it("marks a summary an older prompt wrote, and nothing else", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        // everything but scripts/build.js, which keeps a row with no text yet (scripts and the repo wait for it)
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct", select: (t) => t.path !== "scripts/build.js" });
+        const db = getDb();
+        // what 1.0 stored for the same input, at version 2, then log.ts opened and rewritten by this version (P8), with a
+        // text of its own so that src/core's input changes
+        rewriteAsWrittenBy10(db, requireRepository(db, repoKey(root)));
+        await summarizeNow(root, "src/core/log.ts", stubSummarizer({ texts: { "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines." } } }).summarizer);
+
+        expect(describe(root, "src/util/strings.ts")).toMatchObject({ summaryStatus: "fresh", summaryOlderStyle: true });
+        // out of date with its input, but still in the older style (P10 reads it)
+        expect(describe(root, "src/core")).toMatchObject({ summaryStatus: "stale", summaryOlderStyle: true });
+
+        // the current prompt's, a template, and a row with no text yet
+        expect(describe(root, "src/core/log.ts")).toMatchObject({ summaryStatus: "fresh", tagline: "Log lines" });
+        expect(describe(root, "src/core/log.ts")).not.toHaveProperty("summaryOlderStyle");
+        expect(describe(root, "src/util/strings.test.ts")).toMatchObject({ summaryStatus: "skipped", tagline: "Tests for strings" });
+        expect(describe(root, "src/util/strings.test.ts")).not.toHaveProperty("summaryOlderStyle");
+        expect(describe(root, "scripts/build.js")).toMatchObject({ summaryStatus: "pending" });
+        expect(describe(root, "scripts/build.js")).not.toHaveProperty("summaryOlderStyle");
     });
 
     it("says why a summary failed, but not when there's no key to retry with", async () => {

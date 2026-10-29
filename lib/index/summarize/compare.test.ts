@@ -120,6 +120,27 @@ describe("renderComparison", () => {
         expect(markdown).toContain("- **claude-sonnet-5-5** (answered by claude-opus-5-5): *Core logging* — Core logging in detail.");
     });
 
+    it("puts an answer of several paragraphs on one line", () => {
+        const file = FILES.find((f) => f.path === "src/core/log.ts")!;
+        const ok = (model: string, summary: string) => ({
+            customId: "s1", ok: true as const, text: { tagline: "Logging helpers", summary }, model, usage: [{ model, inputTokens: 2_000, outputTokens: 200 }],
+        });
+        const markdown = renderComparison({
+            title: "t",
+            repo: "r",
+            effort: "low",
+            models: ["claude-haiku-5-5", "claude-sonnet-5-5"],
+            rows: [{ file, outcomes: {
+                "claude-haiku-5-5": ok("claude-haiku-5-5", "Writes lines.\n\nUsed everywhere."),
+                "claude-sonnet-5-5": ok("claude-sonnet-5-5", "Writes log lines.\n\nThe app and its core call it."),
+            } }],
+            fullPass: { files: 1, folders: 1 },
+        });
+
+        expect(markdown).toContain("- **claude-haiku-5-5:** *Logging helpers* — Writes lines. Used everywhere.\n");
+        expect(markdown).toContain("- **claude-sonnet-5-5:** *Logging helpers* — Writes log lines. The app and its core call it.\n");
+    });
+
     it("multiplies the rounded per-request price it prints, so every line of the estimate can be redone by hand", () => {
         const [first, second, third] = FILES.filter((f) => !f.isTest);
         // both models carry the same tokens, so every figure below comes from one set of sums

@@ -2,7 +2,7 @@ import type { FileFacts } from "../../db/store/summaries";
 import { ASSUMED_TOKENS } from "./budget";
 import { writtenByModel } from "./plan";
 import { costUsd, formatUsd, pricePerMTok, type PriceTable } from "./pricing";
-import { plural, PROMPT_VERSION } from "./prompts";
+import { joinParagraphs, plural, PROMPT_VERSION } from "./prompts";
 import type { SummaryOutcome } from "./types";
 
 /** Folder inputs, assumed for the estimate as the spend cap assumes them (budget.ts): a folder lists its children's taglines and summaries. */
@@ -108,7 +108,7 @@ export function renderComparison(report: ComparisonReport): string {
         for (const model of report.models){
             const outcome = row.outcomes[model];
             lines.push(outcome?.ok
-                ? `- ${answerLabel(model, outcome.model)} *${outcome.text.tagline}* — ${outcome.text.summary}`
+                ? `- ${answerLabel(model, outcome.model)} *${outcome.text.tagline}* — ${joinParagraphs(outcome.text.summary)}`
                 : `- **${model}:** failed: ${outcome ? outcome.error : "no answer"}`);
         }
     });

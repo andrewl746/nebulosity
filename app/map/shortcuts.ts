@@ -26,7 +26,8 @@ export type ShortcutState = {
  * The Map's keyboard (HelpDialog's "Keyboard" list). Ctrl K or ⌘K opens search from anywhere. Every other key is the
  * Map's only while nothing is being typed and no dialog is open: with the source viewer open, Backspace or an arrow
  * would otherwise move the Map underneath and close the viewer with the panel it belongs to (second review I2).
- * Escape inside a dialog closes just that dialog; the dialogs handle it themselves.
+ * Escape inside a dialog closes just that dialog, and with a popover open just the popover. They handle it themselves and
+ * stop it before it gets here (useDismiss).
  */
 export function mapShortcut(event: { key: string; ctrlKey: boolean; metaKey: boolean }, state: ShortcutState): MapShortcut {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") return { type: "search" };

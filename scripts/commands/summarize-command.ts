@@ -1,5 +1,5 @@
 /**
- * nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>]
+ * nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--no-restyle] [--budget <usd>] [--path <repo-relative path>]
  *                      [--release-batch <batch id>]... [--yes]
  * (in a checkout: npm run summarize -- <path-to-repo> …)
  *
@@ -8,6 +8,9 @@
  *   --no-wait never sleeps: it collects the batches that have already ended, submits what
  *   that makes ready, and exits. Running the command again (by hand, or from cron) carries
  *   on from there.
+ * - A full run also rewrites, in the current style, the summaries an older Nebulosity wrote (P7), and its estimate says
+ *   how many requests do that. --no-restyle leaves them as they are, so a catch-up sends only what changed: the spend
+ *   cap counts the repo's spend across runs, and a big repo's restyle could take it past the budget before anything else.
  * - --budget caps this repo's recorded summary spend (summary_usage, across runs), in US
  *   dollars (default 15, S2's ceiling); ADR-035 lists the spend it can't see, such as the
  *   checkpoint reviews. Before each batch or regular-API wave the run projects spent + at
@@ -39,6 +42,7 @@ import { summarizerFromEnv } from "../../lib/index/summarize/claude";
 import { estimateSpend } from "../../lib/index/summarize/estimate";
 import { configuredSummaryModels, type ResolvedSummaryModels } from "../../lib/index/summarize/models";
 import { costUsd, formatUsd, type PriceTable } from "../../lib/index/summarize/pricing";
+import { joinParagraphs, plural } from "../../lib/index/summarize/prompts";
 import {
     BATCH_THRESHOLD, BatchesUnreachableError, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError,
     TargetNotReadyError, UnknownBatchError, type Transport,
@@ -47,7 +51,7 @@ import { ModelUnavailableError } from "../../lib/index/summarize/types";
 import { keyHint } from "../../lib/hints";
 import { loadLocalEnv } from "../env";
 
-const USAGE = "usage: nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--budget <usd>] [--path <repo-relative path>] [--release-batch <batch id>]... [--yes]"
+const USAGE = "usage: nebulosity summarize <path-to-repo> [--direct | --batch] [--no-wait] [--no-restyle] [--budget <usd>] [--path <repo-relative path>] [--release-batch <batch id>]... [--yes]"
     + "   (in a checkout: npm run summarize -- <path-to-repo> …)";
 
 /** The arguments as a run uses them, or null when they can't be run as given. */
@@ -56,6 +60,8 @@ type SummarizeOptions = {
     onePath: string | null;
     transport: Transport;
     wait: boolean;
+    /** A full run rewrites the summaries an older version wrote (P7), unless --no-restyle is given. */
+    restyle: boolean;
     budgetUsd: number;
     releaseBatches: string[];
     /** --yes: spend without being asked (the only way without a terminal). */
@@ -65,7 +71,7 @@ type SummarizeOptions = {
 /**
  * Every argument after the repo path must be one this command knows, or it stops here. An argument it ignored would
  * leave the defaults in charge: "--path=src/x.ts" used to start a full summary pass (up to the $15 budget) instead of
- * the one request --path asks for. So, each at most once: the three switches, and the two options whose value is the
+ * the one request --path asks for. So, each at most once: the five switches, and the two options whose value is the
  * next argument, whatever it is ("--path ''" is the repo itself). Anything else, a "--flag=value" spelling or a second
  * repo path included, gets the usage line.
  */
@@ -73,7 +79,7 @@ function parseSummarizeArgs(args: readonly string[]): SummarizeOptions | null {
     const target = args[0];
     if (!target || target.startsWith("--")) return null;
 
-    const SWITCHES = ["--direct", "--batch", "--no-wait", "--yes"];
+    const SWITCHES = ["--direct", "--batch", "--no-wait", "--no-restyle", "--yes"];
     const OPTIONS = ["--budget", "--path"];
     const REPEATABLE = ["--release-batch"];
     const repeated = new Map<string, string[]>();
@@ -108,6 +114,7 @@ function parseSummarizeArgs(args: readonly string[]): SummarizeOptions | null {
         onePath: values.get("--path") ?? null,
         transport: switches.has("--direct") ? "direct" : switches.has("--batch") ? "batch" : "auto",
         wait: !switches.has("--no-wait"),
+        restyle: !switches.has("--no-restyle"),
         budgetUsd,
         releaseBatches,
         yes: switches.has("--yes"),
@@ -168,12 +175,17 @@ async function summarize(options: SummarizeOptions): Promise<number> {
         }
         const row = await summarizeNow(root, onePath, summarizer, models);
         say(`${row.kind} ${row.path || "(repo)"}: ${row.status}${row.error ? ` (${row.error})` : ""}`);
-        if (row.tagline) say(`${row.tagline} — ${row.summary}`);
+        // on one line (P9): a summary's paragraphs, joined by a space
+        if (row.tagline) say(`${row.tagline} — ${joinParagraphs(row.summary ?? "")}`);
     } else{
         if (!summarizer) say(`ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key: ${keyHint()}).`);
         else if (!(await confirmSpend(options, models))) return 1;
         const result = await runSummaries(root, {
-            summarizer, models, transport: options.transport, wait: options.wait, budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,
+            summarizer, models, transport: options.transport, wait: options.wait,
+            // Without a key nothing can be sent, a restyle included, so the run plans as the stage refresh does: what an
+            // older version wrote counts as current (P1), instead of turning the stage "off" over rewrites it can't send.
+            restyle: summarizer !== null && options.restyle,
+            budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,
         });
         say(`up to date ${result.upToDate}/${result.total} · summarized ${result.summarized} · templated ${result.templated}`
             + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
@@ -195,11 +207,12 @@ async function summarize(options: SummarizeOptions): Promise<number> {
 /**
  * The estimate and the yes (S11): prints what a full run would send and cost, then asks. Without a terminal it needs --yes.
  * A run with nothing to send needs no yes. A yes is recorded for the repo, with the run's budget. Returns false when the
- * run must not start. The requests are planned, and priced, with the summary models setting (ADR-066).
+ * run must not start. The requests are planned, and priced, with the summary models setting (ADR-066), and restyled as the
+ * run restyles (P7).
  */
 async function confirmSpend(options: SummarizeOptions, setting: ResolvedSummaryModels): Promise<boolean> {
     const { root } = options;
-    const requests = plannedRequests(root, setting);
+    const requests = plannedRequests(root, setting, options.restyle);
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
 
@@ -223,9 +236,14 @@ async function confirmSpend(options: SummarizeOptions, setting: ResolvedSummaryM
     const folders = requests.filter((r) => r.kind === "folder").length.toLocaleString("en-US");
     // the repo is named apart only when the setting gives it a model of its own
     const above = models.repo === models.folder ? `${folders} folders and the repo to ${models.folder}` : `${folders} folders to ${models.folder} and the repo to ${models.repo}`;
+    // what an older version wrote, which this run rewrites unless it was given --no-restyle (P7)
+    const restyled = requests.filter((r) => r.restyle).length;
+    const restyle = restyled > 0
+        ? ` This includes rewriting ${plural(restyled, "summary", "summaries")} an older version of Nebulosity wrote, in the new plain style. Add --no-restyle to leave them as they are.`
+        : "";
     say(`${path.basename(root)}: about ${estimate.requests.toLocaleString("en-US")} requests (${files.toLocaleString("en-US")} files to ${models.file},`
         + ` ${above}), about ${formatUsd(estimate.usd)} at list prices`
-        + `${batch ? ", by the Batch API" : ""}${noPrice}. Writing summaries sends each file's code to Anthropic.`);
+        + `${batch ? ", by the Batch API" : ""}${noPrice}. Writing summaries sends each file's code to Anthropic.${restyle}`);
 
     if (!options.yes){
         if (!process.stdin.isTTY){
