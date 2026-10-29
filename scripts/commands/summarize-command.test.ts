@@ -6,6 +6,7 @@ import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
 import { rewriteAsWrittenBy10 } from "../../test/helpers/summaries-v2";
 import { getDb } from "../../lib/db/client";
+import { readStages } from "../../lib/db/store/stages";
 import { requireRepository } from "../../lib/db/store/structure";
 import { approvedBudgetUsd, loadSummaries, summariesConfirmed } from "../../lib/db/store/summaries";
 import { dataDir } from "../../lib/home";
@@ -284,6 +285,26 @@ describe("nebulosity summarize: summaries an older version wrote (P7)", () => {
             "file scripts/build.js", "file src/app/main.ts", "file src/app/view.tsx", "file src/core/index.ts", "file src/index.ts", "file src/util/strings.ts",
             "folder scripts", "folder src/app", "folder src/util",
         ]);
+    });
+
+    // the Task 5 review's Important 1: a run with no key sends nothing, so it plans as the stage refresh does (P1)
+    it("with no key, counts what an older version wrote as up to date and sends nothing", async () => {
+        const root = await writtenBy10();
+        summarizer = null;
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+        expect(await runSummarize([root])).toBe(0);
+
+        // 14 targets: the 7 files, the 5 folders and the repo 1.0 wrote, each current for the same input, and the test
+        // file's template. Nothing waits for a key, so the stage is ready with no note
+        expect(printed(log)).toContain("up to date 14/14 · summarized 0");
+        const db = getDb();
+        const stage = readStages(db, requireRepository(db, repoKey(root))).summaries;
+        expect(stage).toMatchObject({ state: "ready", done: 14, total: 14 });
+        expect(stage?.note).toBeUndefined();
+        expect(stub.requests).toHaveLength(0);
+        expect(loadSummaries(db, requireRepository(db, repoKey(root))).filter((r) => r.promptVersion === 2)).toHaveLength(13);
     });
 });
 

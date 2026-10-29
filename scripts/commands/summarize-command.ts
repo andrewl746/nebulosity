@@ -181,8 +181,11 @@ async function summarize(options: SummarizeOptions): Promise<number> {
         if (!summarizer) say(`ANTHROPIC_API_KEY is not set: writing test-file templates only (summaries need a key: ${keyHint()}).`);
         else if (!(await confirmSpend(options, models))) return 1;
         const result = await runSummaries(root, {
-            summarizer, models, transport: options.transport, wait: options.wait, restyle: options.restyle, budgetUsd: options.budgetUsd,
-            releaseBatches: options.releaseBatches, onProgress: say,
+            summarizer, models, transport: options.transport, wait: options.wait,
+            // Without a key nothing can be sent, a restyle included, so the run plans as the stage refresh does: what an
+            // older version wrote counts as current (P1), instead of turning the stage "off" over rewrites it can't send.
+            restyle: summarizer !== null && options.restyle,
+            budgetUsd: options.budgetUsd, releaseBatches: options.releaseBatches, onProgress: say,
         });
         say(`up to date ${result.upToDate}/${result.total} · summarized ${result.summarized} · templated ${result.templated}`
             + ` · failed ${result.failed} · lazy ${result.lazy} · at Anthropic ${result.inFlight}`
