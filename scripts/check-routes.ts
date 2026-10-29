@@ -54,11 +54,12 @@ const LABEL: Record<FaultKind, string> = {
 const SHORT: Record<FaultKind, string> = { shared: "shared runs", jog: "wiggles", lined: "end to end", head: "through a head" };
 /**
  * The most of each kind a router may leave at rest: main's own counts over all of VS Code at 0063e4c, under PR #17's
- * rules (1,251 in all on 56 pages). main scores the same under these rules in every kind but heads, where it scores 0,
- * since its 243 were all two lines into one box, which now share its head. A bar of zero would fail on crowded channels
- * that merging can't clear.
+ * rules (1,251 in all on 56 pages), for shared runs, wiggles and lines end to end, where a bar of zero would fail on
+ * crowded channels that merging can't clear. Heads are held to zero (the owner, 2026-10-28): main's 243 were all two
+ * lines into one box, which now share its head, so main and the merged router both score none, and any line through an
+ * arrowhead at rest is a regression.
  */
-const BAR: Record<FaultKind, number> = { shared: 909, jog: 31, lined: 68, head: 243 };
+const BAR: Record<FaultKind, number> = { shared: 909, jog: 31, lined: 68, head: 0 };
 /** With every line drawn, the pages with the most faults listed; at rest, all of them. */
 const WORST = 10;
 const SLOWEST = 5;
