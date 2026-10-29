@@ -76,7 +76,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li>Boxes with no lines on the page sit under a line that says &quot;Not linked to anything here&quot;. Lines to other pages end at a doorway, a dashed box like &quot;Lines to page 2&quot;, and double-clicking it goes there.</li>
                     </Section>
                     <Section title="Colors">
-                        <li><Swatch className="border-2 border-accent bg-node-sel" /> Purple is the box you selected, the lines to what it uses, and what they join. <span className="whitespace-nowrap"><Swatch className="bg-used-by-edge" /> Pink</span> is the lines from what uses it. Everything else fades.</li>
+                        <li><Swatch className="border-2 border-accent bg-node-sel" /> Purple is the box you selected, the lines to what it uses, and what they join. <span className="whitespace-nowrap"><Swatch className="bg-used-by-edge" /> Gold</span> is the lines from what uses it. Everything else fades.</li>
                         <li><Swatch className="outline-2 outline-offset-1 outline-agent" /> Orange is what Claude Code is touching right now.</li>
                         <li><Swatch className="rounded-full bg-ok" /> The cyan dot at the bottom left says the index is up to date.</li>
                         <li><Swatch className="rounded-full bg-danger" /> Red means something failed.</li>

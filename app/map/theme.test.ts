@@ -58,16 +58,16 @@ describe("fromTheme, the approved mockup's rule", () => {
     });
 });
 
-describe("fromTheme, what uses the selection (the owner's pink, 2026-10-28, moved off purple 2026-10-29)", () => {
-    const pinks = (input: ThemeInput) => { const p = fromTheme(input); return [p["used-by-edge"], p["used-by-bar"], p["used-by-accent"]]; };
+describe("fromTheme, what uses the selection (the owner's gold, 2026-10-29, after pink)", () => {
+    const golds = (input: ThemeInput) => { const p = fromTheme(input); return [p["used-by-edge"], p["used-by-bar"], p["used-by-accent"]]; };
     it("takes the owner's dark values on dark themes and high contrast dark", () => {
-        for (const name of ["dark2026", "solarized", "monokai", "hc"]) expect(pinks(THEMES[name]), name).toEqual(["#F472B6", "#EC4899", "#EC4899"]);
+        for (const name of ["dark2026", "solarized", "monokai", "hc"]) expect(golds(THEMES[name]), name).toEqual(["#FCD34D", "#FCD34D", "#FCD34D"]);
     });
     it("takes the owner's light values on light themes", () => {
-        expect(pinks(THEMES.light2026)).toEqual(["#DB2777", "#EC4899", "#DB2777"]);
+        expect(golds(THEMES.light2026)).toEqual(["#CA8A04", "#CA8A04", "#CA8A04"]);
     });
     it("goes a step darker on high contrast light, as purple does", () => {
-        expect(pinks({ kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" })).toEqual(["#BE185D", "#DB2777", "#BE185D"]);
+        expect(golds({ kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" })).toEqual(["#A16207", "#A16207", "#A16207"]);
     });
 });
 
@@ -137,8 +137,8 @@ describe("applyTheme", () => {
         applyTheme(root, THEMES.monokai);
         for (const [mockupName, hex] of Object.entries(MOCKUP.monokai)) expect(root.style_[`--${NAMES[mockupName]}`], NAMES[mockupName]).toBe(hex.toUpperCase());
         expect(root.style_["--fade"]).toBe("50%");
-        // a theme change inside VS Code's panel brings the pink too, so a selected box's Used by follows the theme
-        expect(root.style_["--used-by-edge"]).toBe("#F472B6");
+        // a theme change inside VS Code's panel brings the gold too, so a selected box's Used by follows the theme
+        expect(root.style_["--used-by-edge"]).toBe("#FCD34D");
         expect(root.attributes["data-kind"]).toBe("dark");
     });
 });

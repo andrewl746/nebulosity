@@ -239,7 +239,7 @@ function PageControl({ level, onTurn, short }: { level: LevelResponse; onTurn: (
  * All, Uses and Used by: which side of the selected box's lines is highlighted, the other drawn gray (emphasis.ts). A
  * radio group, so Tab lands only on the side picked and the arrow keys, Home and End move between the sides, skipping
  * one that can't be picked. Greyed out with nothing selected, and a side with no line on the page greyed out on its
- * own, each saying why in its title. The side picked is filled, Uses underlined in the accent and Used by in pink, as
+ * own, each saying why in its title. The side picked is filled, Uses underlined in the accent and Used by in gold, as
  * their tabs are in the inspector.
  */
 function SidePicker({ direction, onDirection, hasSelection, emptySides }: Pick<MapToolbarProps, "direction" | "onDirection" | "hasSelection" | "emptySides">){

@@ -87,7 +87,7 @@ describe("the toolbar's All, Uses and Used by (the owner's pick A2, 2026-10-29)"
         expect(html.indexOf(GROUP)).toBeLessThan(html.indexOf("Strong links only"));
     });
 
-    it("marks the side picked, Uses underlined in the accent and Used by in pink, as the inspector's tabs are", () => {
+    it("marks the side picked, Uses underlined in the accent and Used by in gold, as the inspector's tabs are", () => {
         const uses = radios(toolbar({ direction: "uses" }));
         expect(uses.map((r) => r.checked)).toEqual([false, true, false]);
         expect(uses[1].markup).toContain("bg-accent");

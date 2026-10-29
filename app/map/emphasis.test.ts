@@ -87,8 +87,8 @@ describe("mapEmphasis (VISUAL_REFRESH.md §4)", () => {
     });
 });
 
-describe("lineLook (the owner, 2026-10-28: what uses the selection in pink)", () => {
-    it("draws the selection's lines out in purple and its lines in in pink, on top", () => {
+describe("lineLook (the owner, 2026-10-28: what uses the selection in its own colour, gold since 2026-10-29)", () => {
+    it("draws the selection's lines out in purple and its lines in in gold, on top", () => {
         expect(lineLook("selected", { source: "editor", target: "base" }, "editor")).toEqual({ color: "var(--edge-strong)", layer: 2 });
         expect(lineLook("selected", { source: "workbench", target: "editor" }, "editor")).toEqual({ color: "var(--used-by-edge)", layer: 2 });
     });
