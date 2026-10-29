@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge } from "@/lib/contracts";
 import {
-    edgeKey, isBusyLevel, lineLook, mapEmphasis, selectionLines, sidesWithoutLines, STRONG_SHARE, strongThreshold, weakLinesHidden,
+    edgeKey, isBusyLevel, lineLook, mapEmphasis, selectionLines, SIDE_COLOR, sidesWithoutLines, STRONG_SHARE, strongThreshold, weakLinesHidden,
     type BoxTone, type EdgeTone, type LineDirection,
 } from "./emphasis";
 
@@ -91,6 +91,12 @@ describe("lineLook (the owner, 2026-10-28: what uses the selection in its own co
     it("draws the selection's lines out in purple and its lines in in gold, on top", () => {
         expect(lineLook("selected", { source: "editor", target: "base" }, "editor")).toEqual({ color: "var(--edge-strong)", layer: 2 });
         expect(lineLook("selected", { source: "workbench", target: "editor" }, "editor")).toEqual({ color: "var(--used-by-edge)", layer: 2 });
+    });
+    it("gives each side one color, its lines', for its bars, underline and mark too (the owner, 2026-10-29)", () => {
+        expect(SIDE_COLOR).toEqual({
+            uses: { line: "var(--edge-strong)", fill: "bg-edge-strong", underline: "after:bg-edge-strong" },
+            usedBy: { line: "var(--used-by-edge)", fill: "bg-used-by-edge", underline: "after:bg-used-by-edge" },
+        });
     });
     it("doesn't split a hovered box's lines by direction, and keeps the rest quiet", () => {
         expect(lineLook("preview", { source: "a", target: "b" }, null)).toEqual({ color: "var(--text-2)", layer: 1 });

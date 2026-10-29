@@ -45,13 +45,12 @@ export type Palette = {
     "text-2": string;
     "text-3": string;
     "edge-dim": string;
+    /** What the selection uses, in the logo's spoke color: its lines out, and Uses' bars, underline and mark (emphasis.ts's SIDE_COLOR). */
     "edge-strong": string;
     "glyph-dim": string;
     "linked-glyph": string;
-    /** What uses the selection, in gold across from the purple of what it uses: its lines in, Used by's bars and underline. */
+    /** What uses the selection, in gold across from the purple of what it uses: its lines in, and Used by's bars, underline and mark. */
     "used-by-edge": string;
-    "used-by-bar": string;
-    "used-by-accent": string;
     accent: string;
     "on-accent": string;
     core: string;
@@ -117,9 +116,7 @@ export function fromTheme(t: ThemeInput): Palette {
     // what uses the selection, in the owner's gold (2026-10-29, after pink was too like the purple), across from the
     // purple of what it uses, a mustard on light themes and a step darker again on high contrast light, the way purple
     // steps darker there, so its lines keep their contrast against white
-    const gold = t.kind === "hc-light" ? { edge: "#A16207", bar: "#A16207", accent: "#A16207" }
-        : light ? { edge: "#CA8A04", bar: "#CA8A04", accent: "#CA8A04" }
-        : { edge: "#FCD34D", bar: "#FCD34D", accent: "#FCD34D" };
+    const gold = t.kind === "hc-light" ? "#A16207" : light ? "#CA8A04" : "#FCD34D";
     return {
         canvas: bg,
         panel: t.side,
@@ -136,9 +133,7 @@ export function fromTheme(t: ThemeInput): Palette {
         "edge-strong": light ? "#7E22CE" : "#E9D5FF",
         "glyph-dim": mix(bg, fg, hc ? 0.6 : k.glyph),
         "linked-glyph": light ? "#A855F7" : "#C084FC",
-        "used-by-edge": gold.edge,
-        "used-by-bar": gold.bar,
-        "used-by-accent": gold.accent,
+        "used-by-edge": gold,
         accent,
         "on-accent": light ? "#FFFFFF" : "#120C1C",
         core: light ? accent : "#F0FDFF",

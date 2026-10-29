@@ -20,10 +20,10 @@
   --text-2: #999999;        /* secondary text, counts, summaries */
   --text-3: #8C8C8C;        /* the quietest text: labels, the legend, the status bar */
   --edge-dim: #464747;      /* a line that isn't the selection's */
-  --edge-strong: #E9D5FF;   /* the selection's lines: the logo's spoke color */
+  --edge-strong: #E9D5FF;   /* the selection's lines out, and Uses' bars, underline and mark: the logo's spoke color */
   --glyph-dim: #606061;     /* a dot or a page icon that isn't linked to the selection */
-  --linked-glyph: #C084FC;  /* the dots and bars of what's linked to the selection: the logo's outer dots */
-  --accent: #A855F7;        /* the selection's border, the selected dot's ring, the active tab, the one primary button */
+  --linked-glyph: #C084FC;  /* the dots of what's linked to the selection, and their explorer bars: the logo's outer dots */
+  --accent: #A855F7;        /* the selection's border, the selected dot's ring, the Contents tab, the one primary button */
   --on-accent: #120C1C;     /* text on the accent */
   --core: #F0FDFF;          /* the selected dot's core: the logo's own */
   --agent: #F08A4B;         /* orange: what Claude Code is touching right now. Nothing else */
@@ -32,9 +32,7 @@
   --focus: #67E8F9;         /* the keyboard focus ring */
   --fade: 50%;              /* how much of its color a box away from the selection keeps, mixed with the background */
   /* gold: what uses the selection, across from the purple of what it uses (the owner, 2026-10-29, after pink) */
-  --used-by-edge: #FCD34D;   /* the selection's lines in */
-  --used-by-bar: #FCD34D;    /* Used by's bars in the inspector */
-  --used-by-accent: #FCD34D; /* Used by's underline when it's the open tab */
+  --used-by-edge: #FCD34D;  /* the selection's lines in, and Used by's bars, underline and mark */
   color-scheme: dark;
 }
 
@@ -67,8 +65,6 @@
   --color-ok: var(--ok);
   --color-focus: var(--focus);
   --color-used-by-edge: var(--used-by-edge);
-  --color-used-by-bar: var(--used-by-bar);
-  --color-used-by-accent: var(--used-by-accent);
   --font-sans: var(--font-archivo);
   --font-mono: var(--font-jetbrains-mono);
 }

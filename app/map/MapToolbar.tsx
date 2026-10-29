@@ -10,7 +10,7 @@ import type { BoxNode } from "./MapBox";
 import { placePopover, usePlaceOnResize } from "./popover";
 import { pageNote } from "./portals";
 import type { RoutedEdgeType } from "./RoutedEdge";
-import { weakLinesHidden, type LineDirection } from "./emphasis";
+import { SIDE_COLOR, weakLinesHidden, type LineDirection } from "./emphasis";
 import { useDismiss } from "./useDismiss";
 import { boundsOf, fitViewport, linesBounds } from "./viewport";
 import { arrowHead } from "./weights";
@@ -59,8 +59,8 @@ const SIDES_IN_BAR_PAGED = 760;
  */
 const SIDES: { id: LineDirection; label: string; title: string; mark?: string; dot: string }[] = [
     { id: "all", label: "All", title: "Highlight every line of the selected box", dot: "bg-text" },
-    { id: "uses", label: "Uses", title: "Highlight only its lines to what it uses, the rest in gray", mark: "bg-accent", dot: "bg-accent" },
-    { id: "usedBy", label: "Used by", title: "Highlight only its lines from what uses it, the rest in gray", mark: "bg-used-by-accent", dot: "bg-used-by-accent" },
+    { id: "uses", label: "Uses", title: "Highlight only its lines to what it uses, the rest in gray", mark: SIDE_COLOR.uses.fill, dot: SIDE_COLOR.uses.fill },
+    { id: "usedBy", label: "Used by", title: "Highlight only its lines from what uses it, the rest in gray", mark: SIDE_COLOR.usedBy.fill, dot: SIDE_COLOR.usedBy.fill },
 ];
 const NO_SELECTION = "Select a box to choose which of its lines are highlighted";
 const EMPTY_SIDE: Record<LineDirection, string> = {

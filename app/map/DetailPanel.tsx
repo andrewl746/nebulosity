@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useId, useRef, useState, type KeyboardEve
 import { IconArrowLeft, IconArrowRight, IconFile, IconFolder, IconX } from "@tabler/icons-react";
 import type { AreaCount, DescribeResponse, LevelResponse, MapNode, SummarizeResponse, SymbolInfo } from "@/lib/contracts";
 import { api, ApiError, demoGithub, type GitHubSource } from "./api";
+import { SIDE_COLOR } from "./emphasis";
 import { formatCount } from "./format";
 import {
     barWidth,
@@ -530,9 +531,9 @@ function Relations({ data, tab, onTab, onFocus, onOpen, onViewLines }: Relations
                             tabIndex={on ? 0 : -1}
                             title={TAB_TITLES[t.id]}
                             onClick={() => onTab(t.id)}
-                            // Used by is underlined in the gold its lines take on the Map, the other tabs in the accent
+                            // Uses and Used by are underlined in the color their lines take on the Map, Contents in the accent
                             className={`relative whitespace-nowrap pb-2 pt-1.5 text-[13px] ${on
-                                ? `text-text after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[1px] ${t.id === "usedBy" ? "after:bg-used-by-accent" : "after:bg-accent"}`
+                                ? `text-text after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[1px] ${t.id === "inside" ? "after:bg-accent" : SIDE_COLOR[t.id].underline}`
                                 : "text-text-2 hover:text-text"}`}
                         >
                             {t.label} {formatCount(t.count)}
@@ -609,7 +610,7 @@ function BarRow({ name, count, largest, title, onClick, chip, linked, usedBy = f
             >
                 <span className="truncate font-mono text-[12.5px] leading-[18px] text-text">{name}</span>
                 <span className="text-[11.5px] leading-4 text-text-2">{formatCount(count)}</span>
-                <span aria-hidden className={`col-span-2 mt-[5px] h-[3px] rounded-[2px] ${usedBy ? "bg-used-by-bar" : "bg-linked-glyph"}`} style={{ width: `${barWidth(count, largest)}%` }} />
+                <span aria-hidden className={`col-span-2 mt-[5px] h-[3px] rounded-[2px] ${SIDE_COLOR[usedBy ? "usedBy" : "uses"].fill}`} style={{ width: `${barWidth(count, largest)}%` }} />
             </button>
         </li>
     );

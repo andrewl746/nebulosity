@@ -87,13 +87,14 @@ describe("the toolbar's All, Uses and Used by (the owner's pick A2, 2026-10-29)"
         expect(html.indexOf(GROUP)).toBeLessThan(html.indexOf("Strong links only"));
     });
 
-    it("marks the side picked, Uses underlined in the accent and Used by in gold, as the inspector's tabs are", () => {
+    it("marks the side picked in its lines' color, Uses in the pale purple and Used by in gold, as the inspector's tabs are", () => {
         const uses = radios(toolbar({ direction: "uses" }));
         expect(uses.map((r) => r.checked)).toEqual([false, true, false]);
-        expect(uses[1].markup).toContain("bg-accent");
+        expect(uses[1].markup).toContain("bg-edge-strong");
+        expect(uses[1].markup).not.toContain("bg-accent");
         const usedBy = radios(toolbar({ direction: "usedBy" }));
         expect(usedBy.map((r) => r.checked)).toEqual([false, false, true]);
-        expect(usedBy[2].markup).toContain("bg-used-by-accent");
+        expect(usedBy[2].markup).toContain("bg-used-by-edge");
         // All has no colour of its own to underline
         expect(radios(toolbar())[0].markup).not.toContain("bg-");
     });
