@@ -2,6 +2,7 @@ import type { IndexEventMap, SummarizeResponse } from "../contracts";
 import type { StoredSummary } from "../db/store/summaries";
 import { errorResponseFor } from "../engine/errors";
 import type { IndexResult } from "../index/pipeline";
+import { writtenInOlderStyle } from "../index/summarize/prompts";
 import type { ChildMessage, ParentMessage } from "./protocol";
 import type { BackgroundService } from "./service";
 
@@ -13,6 +14,7 @@ export function toSummarizeResponse(row: StoredSummary): SummarizeResponse {
         ...(row.tagline ? { tagline: row.tagline, summary: row.summary ?? "" } : {}),
         summaryStatus: row.status,
         ...(row.status === "failed" && row.error ? { summaryError: row.error } : {}),
+        ...(writtenInOlderStyle(row) ? { summaryOlderStyle: true as const } : {}),
     };
 }
 
