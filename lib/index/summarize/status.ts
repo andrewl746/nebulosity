@@ -90,8 +90,9 @@ export function refreshSummaryStatus(
     if (!models.ok && options.summarizerAvailable) return null;
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
-    // between runs, out-of-date folders are lazy: redone when opened, or by the background worker's sweep
-    const snap = planSnapshot(db, repoId, false, new Set(), models.ok ? models : DEFAULT_SUMMARY_MODELS);
+    // between runs, out-of-date folders are lazy: redone when opened, or by the background worker's sweep. Nothing is
+    // restyled: a summary an older prompt wrote for the same input counts as current, so it isn't waiting (P1).
+    const snap = planSnapshot(db, repoId, false, new Set(), models.ok ? models : DEFAULT_SUMMARY_MODELS, "none");
     if (models.ok) applyTargetUpdates(db, repoId, snap.targets);
     if (isSummaryLockHeld(db)) return null;
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { copyFixture } from "../../../test/helpers/fixture";
 import { FILES, FOLDERS } from "../../../test/helpers/mini-repo-facts";
+import { rewriteAsWrittenBy10 } from "../../../test/helpers/summaries-v2";
 import { stubSummarizer } from "../../../test/helpers/summarizer";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../db/client";
@@ -112,7 +113,7 @@ describe("answeredRow", () => {
         const row = answeredRow(target, outcome, undefined);
         expect(row).toEqual({
             id: 0, kind: "file", path: "src/core/log.ts", tagline: "Logger", summary: "Logs things.", model: "claude-haiku-5-5",
-            inputHash: target.inputHash, promptVersion: null, status: "fresh", batchId: null, error: null,
+            inputHash: target.inputHash, promptVersion: PROMPT_VERSION, status: "fresh", batchId: null, error: null,
         });
         // a row the index already had keeps its id
         expect(answeredRow(target, outcome, { ...row, id: 42, tagline: "Old", inputHash: "old" }).id).toBe(42);
@@ -158,7 +159,8 @@ describe("runFolderPreview", () => {
         // log.ts (imported by 3) goes before index.ts (1); its failure settles it, so src/core goes next
         expect(result.waves).toEqual([["file:src/core/log.ts", "file:src/core/index.ts"], ["folder:src/core"]]);
         expect(result.answers.get("file:src/core/log.ts")).toMatchObject({ ok: false, error: "stub failure" });
-        // the folder prompt renderFolderPrompt builds: largest first, log.ts (9 lines) before index.ts (1 line)
+        // the folder prompt renderFolderPrompt builds: largest first, log.ts (9 lines) before index.ts (1 line), then the
+        // length line of a small folder (2 source files, 5 or fewer)
         expect(stub.requests[2].prompt).toBe([
             "Folder: src/core",
             "2 source files in total, 2 directly inside.",
@@ -166,6 +168,8 @@ describe("runFolderPreview", () => {
             "Contents, largest first:",
             "- log.ts (9 lines): (no summary yet)",
             "- index.ts (1 line): Core barrel — Re-exports the logger.",
+            "",
+            "Write at most 50 words, in 2 paragraphs, and name at most 2 files or subfolders.",
         ].join("\n"));
         expect(messages).toContain("wave 1 done: 1 summarized, 1 failed");
     });
@@ -384,6 +388,21 @@ describe("previewRepoFolders", () => {
             "Folder: src", "Folder: src/app", "Folder: src/core", "Folder: src/util",
         ]);
         for (const request of previewStub.requests) expect(sent(request)).toEqual(ran.get(firstLine(request)));
+    });
+
+    it("previews what a full run would write over summaries 1.0 wrote", async () => {
+        const root = copyFixture();
+        const { repoId } = indexRepository(root);
+        await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+        const db = getDb();
+        rewriteAsWrittenBy10(db, repoId);
+        const stub = stubSummarizer();
+
+        // a full run rewrites what 1.0 wrote (P7), so the sample goes out as on a first pass: its two files, log.ts
+        // (3 importers) before index.ts (1), then the folder
+        const result = await previewRepoFolders(db, repoId, root, [{ path: "src/core", why: "w" }], stub.summarizer);
+        expect(result.preview.waves).toEqual([["file:src/core/log.ts", "file:src/core/index.ts"], ["folder:src/core"]]);
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts", "File: src/core/index.ts", "Folder: src/core"]);
     });
 });
 

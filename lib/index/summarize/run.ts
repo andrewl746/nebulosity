@@ -16,9 +16,11 @@ import { repoKey } from "../paths";
 import { projectSpend, type ProjectedRequest } from "./budget";
 import { mapLimit } from "./concurrency";
 import { DEFAULT_SUMMARY_MODELS, type ResolvedSummaryModels } from "./models";
-import { foldersAbove, type PlannedTarget, type TargetState } from "./plan";
+import { foldersAbove, type PlannedTarget, type Restyle, type TargetState } from "./plan";
 import { formatUsd } from "./pricing";
-import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
+import {
+    FILE_SYSTEM_PROMPT, fileTier, FOLDER_SYSTEM_PROMPT, importerLine, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT, renderFilePrompt, withLengthLine,
+} from "./prompts";
 import { planSnapshot, type Snapshot } from "./snapshot";
 import { refreshSummaryStatus, stillAtAnthropic, summaryStageStatus } from "./status";
 import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
@@ -42,6 +44,11 @@ export type SummaryRunOptions = {
     wait?: boolean;
     /** Redo out-of-date folders now (default). Incremental runs pass false: those wait until someone opens them. */
     refreshStaleFolders?: boolean;
+    /**
+     * true redoes the summaries an older prompt version wrote, as `nebulosity summarize` does after its estimate and yes.
+     * The worker's jobs leave it off.
+     */
+    restyle?: boolean;
     pollIntervalMs?: number;
     /** How often a long wave refreshes the stage and the lock. */
     heartbeatMs?: number;
@@ -221,6 +228,11 @@ type RunContext = {
      */
     refreshStaleFolders: boolean;
     /**
+     * Which summaries an older prompt version wrote every pass redoes (SummaryRunOptions.restyle): "all" when the run was
+     * told to restyle, else "none". Every wave plans the same way, so a later wave restyles what an earlier one left.
+     */
+    restyle: Restyle;
+    /**
      * The note of the spend-cap check that failed in this pass; every pass starts with none. While it's set nothing more
      * is sent, but batches at Anthropic are still collected, and the run finishes with it when nothing more can happen.
      */
@@ -235,10 +247,11 @@ type RunContext = {
 
 function newContext(
     db: Db, repoId: number, root: string, models: ResolvedSummaryModels, say: (message: string) => void, budget: Budget | null = null,
-    select: (target: PlannedTarget) => boolean = () => true, sendLeft: number = Infinity, refreshStaleFolders: boolean = true
+    select: (target: PlannedTarget) => boolean = () => true, sendLeft: number = Infinity, refreshStaleFolders: boolean = true,
+    restyle: Restyle = "none"
 ): RunContext {
     return {
-        db, repoId, root, models, say, budget, select, sendLeft, refreshStaleFolders,
+        db, repoId, root, models, say, budget, select, sendLeft, refreshStaleFolders, restyle,
         failedThisRun: new Set(),
         tally: { summarized: 0, templated: 0, failed: 0, batches: 0, waves: 0 },
         missedPasses: 0,
@@ -276,7 +289,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
     };
     const refreshStaleFolders = options.refreshStaleFolders ?? true;
     const ctx = newContext(db, repoId, root, options.models ?? DEFAULT_SUMMARY_MODELS, options.onProgress ?? (() => {}), budget,
-        options.select, options.maxTargets, refreshStaleFolders);
+        options.select, options.maxTargets, refreshStaleFolders, options.restyle ? "all" : "none");
     let last: PlannedTarget[] = [];
 
     // a mistyped id must fail before anything is locked, released or rewritten
@@ -290,7 +303,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             ctx.say(`released ${batchId}: ${plural(released, "request")} will be sent again`);
         }
         for (;;){
-            const snap = planSnapshot(db, repoId, refreshStaleFolders, ctx.failedThisRun, ctx.models);
+            const snap = planSnapshot(db, repoId, refreshStaleFolders, ctx.failedThisRun, ctx.models, ctx.restyle);
             last = snap.targets;
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
@@ -365,16 +378,19 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
  * What a full run would send to a model right now (S11): every target still to be written, as the kind and model of its
  * request, planned the way runSummaries' first pass plans (stale folders redone), and then every folder and the repo
  * above them, which their new text puts out of date (foldersAbove, R24), and above what's still at Anthropic. A template
- * is no request. Reads only.
+ * is no request. With restyle (the default, as a full run restyles), every summary an older prompt version wrote is one
+ * too, marked restyle; false plans as `--no-restyle` runs, leaving them as they are. Reads only.
  */
-export function plannedRequests(repoRoot: string, models: ResolvedSummaryModels = DEFAULT_SUMMARY_MODELS): ProjectedRequest[] {
+export function plannedRequests(
+    repoRoot: string, models: ResolvedSummaryModels = DEFAULT_SUMMARY_MODELS, restyle: boolean = true
+): ProjectedRequest[] {
     const db = getDb();
     const repoId = requireRepository(db, repoKey(path.resolve(repoRoot)));
     const toWrite: ReadonlySet<TargetState> = new Set(["ready", "waiting", "lazy", "failed"]);
-    const targets = planSnapshot(db, repoId, true, new Set(), models).targets;
+    const targets = planSnapshot(db, repoId, true, new Set(), models, restyle ? "all" : "none").targets;
     const written = targets.filter((t) => toWrite.has(t.state) && t.model !== "template");
     const above = foldersAbove(targets, [...written, ...targets.filter((t) => t.state === "in-flight")]);
-    return [...written, ...above].map((t) => ({ kind: t.kind, model: t.model }));
+    return [...written, ...above].map((t) => ({ kind: t.kind, model: t.model, ...(t.restyle ? { restyle: true as const } : {}) }));
 }
 
 /**
@@ -386,8 +402,10 @@ const summarizingNow = new Map<string, Promise<StoredSummary>>();
 /**
  * Summarizes one file or folder right now through the regular API, jumping the queue (PIVOT_SPEC.md §5.3: the Map calls
  * this when someone opens a path that has no summary, or an out-of-date one). A current summary comes back as it is,
- * without an API call. A folder whose children aren't all summarized is refused (TargetNotReadyError): its summary would
- * be written over "(no summary yet)" lines. Concurrent calls for one target share one request (ADR-033, amended).
+ * without an API call, unless an older prompt version wrote it: that one target is rewritten in the current style (P8,
+ * Q2 B), and its children are left as they are. A folder whose children aren't all summarized is refused
+ * (TargetNotReadyError): its summary would be written over "(no summary yet)" lines. Concurrent calls for one target
+ * share one request (ADR-033, amended).
  * A model the API no longer serves throws ModelUnavailableError, leaving the row as it was (ADR-066).
  */
 export function summarizeNow(
@@ -407,7 +425,9 @@ async function summarizeOnce(root: string, targetPath: string, summarizer: Summa
     const db = getDb();
     const repoId = requireRepository(db, repoKey(root));
     requireStructureReady(db, repoId);
-    const snap = planSnapshot(db, repoId, true, new Set(), models);
+    // Only the opened target is restyled (P8): children an older prompt wrote count as current, so a folder whose
+    // children are all in the older style is ready at once instead of waiting for them.
+    const snap = planSnapshot(db, repoId, true, new Set(), models, { path: targetPath });
     const target = snap.targets.find((t) => t.path === targetPath);
     if (!target) throw new TargetNotFoundError(targetPath);
     if (target.state === "waiting") throw new TargetNotReadyError(targetPath);
@@ -433,9 +453,9 @@ async function summarizeOnce(root: string, targetPath: string, summarizer: Summa
 }
 
 /**
- * A file's prompt, built from exactly the bytes the index saw. Null when the file changed
- * on disk after indexing, or vanished: a summary of different bytes would contradict the
- * structure the index holds for it.
+ * A file's prompt, built from exactly the bytes the index saw, ending with its tier's length line (P6). Null when the
+ * file changed on disk after indexing, or vanished: a summary of different bytes would contradict the structure the
+ * index holds for it.
  */
 export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick<FileFacts, "path" | "contentHash" | "lineCount">): string | null {
     let source: string;
@@ -451,7 +471,10 @@ export function buildFilePrompt(db: Db, repoId: number, root: string, file: Pick
     if (listing === null) return null;
 
     // The importers are in the prompt but not in the input hash (path + content only, plan.ts), so a new importer doesn't re-summarize a central file on every pull.
-    return renderFilePrompt(listing, file.lineCount, importerLine(file.path, loadImporters(db, repoId, file.path)), source);
+    // Their count, tests included (the same count as FileFacts.importedBy), also sets the tier, which is likewise left out of the hash.
+    const importers = loadImporters(db, repoId, file.path);
+    const body = renderFilePrompt(listing, file.lineCount, importerLine(file.path, importers), source);
+    return withLengthLine(body, "file", fileTier(file.lineCount, importers.length));
 }
 
 /**

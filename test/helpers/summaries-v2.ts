@@ -4,7 +4,7 @@ import { summaries } from "../../lib/db/schema";
 import { loadFileFacts, loadFolderFacts, loadSummaries, targetKey } from "../../lib/db/store/summaries";
 import { bumpIndexVersion } from "../../lib/db/store/version";
 import { inputHash, planSummaries } from "../../lib/index/summarize/plan";
-import { folderTier, lengthLine, SUMMARY_MODELS } from "../../lib/index/summarize/prompts";
+import { folderTier, joinParagraphs, lengthLine, SUMMARY_MODELS } from "../../lib/index/summarize/prompts";
 
 /**
  * Makes a repo's summaries what Nebulosity 1.0 stored for the same input: every model-written row at prompt version 2,
@@ -18,6 +18,12 @@ export function rewriteAsWrittenBy10(db: Db, repoId: number): void {
     const files = loadFileFacts(db, repoId);
     const folders = loadFolderFacts(db, repoId);
     const stored = loadSummaries(db, repoId);
+    // a folder lists its children's summaries on one line each now, verbatim in 1.0, so the two agree only on one paragraph
+    for (const row of stored){
+        if (row.kind !== "repo" && row.summary !== null && joinParagraphs(row.summary) !== row.summary){
+            throw new Error(`rewriteAsWrittenBy10: the summary of ${row.kind} "${row.path}" isn't one trimmed paragraph, so its folder's body isn't what 1.0 rendered`);
+        }
+    }
     const contentHashes = new Map(files.map((f) => [f.path, f.contentHash]));
     const fileCounts = new Map(folders.map((f) => [f.path, f.fileCount]));
     const prompts = new Map(planSummaries(files, folders, stored, { models: SUMMARY_MODELS, refreshStaleFolders: true, failedThisRun: new Set() })

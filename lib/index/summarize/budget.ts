@@ -16,8 +16,11 @@ export const ASSUMED_TOKENS: Readonly<Record<SummaryTargetKind, TokenUsage>> = {
     repo: { inputTokens: 1_000, outputTokens: 250 },
 };
 
-/** One request the projection prices: the kind of target it's for, and the model that answers it. */
-export type ProjectedRequest = { kind: SummaryTargetKind; model: string };
+/**
+ * One request the projection prices: the kind of target it's for, and the model that answers it. restyle: it's sent
+ * only because an older prompt version wrote its summary (PlannedTarget.restyle), so the estimate can say how many are.
+ */
+export type ProjectedRequest = { kind: SummaryTargetKind; model: string; restyle?: true };
 
 type Billing = "direct" | "batch";
 
