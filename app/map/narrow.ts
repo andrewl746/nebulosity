@@ -57,28 +57,38 @@ export function trailStart(widths: readonly number[], available: number, ellipsi
 export type CanvasRect = { left: number; top: number; width: number; height: number };
 
 /**
- * Where the hover card goes from the pointer (the owner, 2026-10-29): this far right of it, and this far below it, past
- * the pointer's own arrow, which hangs below and right of its tip; on the left and above, this far off.
+ * How far the hover card keeps from the pointer's tip (the owner, 2026-10-29). The pointer's arrow, or its hand over a
+ * line, hangs below and right of the tip, so a card below it keeps CARD_BELOW down and one right of it under the tip
+ * CARD_RIGHT over, past it. Above the tip, and left of it, nothing of the pointer is there, so CARD_GAP is enough.
  */
+const CARD_GAP = 8;
 const CARD_RIGHT = 12;
 const CARD_BELOW = 20;
-const CARD_LEFT = 12;
-const CARD_ABOVE = 10;
 /** The least room the card keeps from the canvas's sides, and from the line it's about. */
 export const CARD_EDGE = 8;
 const CARD_LINE_GAP = 4;
+/**
+ * The bit of line right at the pointer, each way from its tip, which the card covers in no window it fits: under
+ * CARD_GAP, and as wide as the heaviest line is drawn.
+ */
+const CARD_SPOT = 6;
+
+/** Which corner of the pointer the hover card tries first: the others follow round, the nearest sides first. */
+export type CardCorner = "above-left" | "below-right";
 
 const overlaps = (a: CanvasRect, b: CanvasRect): boolean =>
     a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
 
 /**
- * Where the hover card about the lines under the pointer goes (its top-left corner, canvas px). It's tried below and
- * right of the pointer, then below and left, above and right, above and left: the first place that's inside the
- * canvas, CARD_EDGE in from its sides, and clear of `line` (the bit of line pointed at, as rectangles as wide as it's
- * drawn) and of `clear` (what's over the canvas: a drawer, a box's actions, the banner) wins. A place over the line is
- * slid off it first, sideways off an upright run and down or up off a level one, since the pointer can be a few px
- * beside the line it's on. Where no place fits, the first that fits the canvas once moved inside it, still clear of the
- * line and the rest, and failing that the first, moved inside the canvas: the card never leaves it.
+ * Where the hover card about the lines under the pointer goes (its top-left corner, canvas px). It's tried at each
+ * corner of the pointer, `first` first: from above and left, then above and right, below and left, below and right;
+ * from below and right, the other way round. The first place that's inside the canvas, CARD_EDGE in from its sides, and
+ * clear of `line` (the bit of line pointed at, as rectangles as wide as it's drawn) and of `clear` (what's over the
+ * canvas: a drawer, a box's actions, the banner) wins. A place over the line is slid off it first, sideways off an
+ * upright run and down or up off a level one, since the pointer can be a few px beside the line it's on. Where no place
+ * fits, the first that fits once moved inside the canvas and is still clear of the line and the rest; in a canvas too
+ * small for that, the first moved inside that keeps off the line right at the pointer (CARD_SPOT), and failing that the
+ * first, moved inside: the card never leaves the canvas.
  */
 export function hoverCardPlace(
     pointer: { x: number; y: number },
@@ -86,14 +96,18 @@ export function hoverCardPlace(
     canvas: { width: number; height: number },
     line: readonly CanvasRect[],
     clear: readonly CanvasRect[],
+    first: CardCorner = "below-right",
 ): { left: number; top: number } {
     const { width, height } = card;
-    const tries = [
-        { right: true, below: true, left: pointer.x + CARD_RIGHT, top: pointer.y + CARD_BELOW },
-        { right: false, below: true, left: pointer.x - CARD_LEFT - width, top: pointer.y + CARD_BELOW },
-        { right: true, below: false, left: pointer.x + CARD_RIGHT, top: pointer.y - CARD_ABOVE - height },
-        { right: false, below: false, left: pointer.x - CARD_LEFT - width, top: pointer.y - CARD_ABOVE - height },
-    ];
+    const corners = {
+        aboveLeft: { right: false, below: false, left: pointer.x - CARD_GAP - width, top: pointer.y - CARD_GAP - height },
+        aboveRight: { right: true, below: false, left: pointer.x + CARD_GAP, top: pointer.y - CARD_GAP - height },
+        belowLeft: { right: false, below: true, left: pointer.x - CARD_GAP - width, top: pointer.y + CARD_GAP },
+        belowRight: { right: true, below: true, left: pointer.x + CARD_RIGHT, top: pointer.y + CARD_BELOW },
+    };
+    const tries = first === "above-left"
+        ? [corners.aboveLeft, corners.aboveRight, corners.belowLeft, corners.belowRight]
+        : [corners.belowRight, corners.belowLeft, corners.aboveRight, corners.aboveLeft];
     const slid = tries.map((t) => {
         let at = { left: t.left, top: t.top };
         // a slide a rectangle at most: each moves the card on, away from the pointer, so none loops back
@@ -109,11 +123,23 @@ export function hoverCardPlace(
     const inside = (at: { left: number; top: number }): boolean =>
         at.left >= CARD_EDGE && at.top >= CARD_EDGE && at.left + width <= canvas.width - CARD_EDGE && at.top + height <= canvas.height - CARD_EDGE;
     const free = (at: { left: number; top: number }): boolean => [...line, ...clear].every((r) => !overlaps({ ...at, width, height }, r));
+    const spot = { left: pointer.x - CARD_SPOT, top: pointer.y - CARD_SPOT, width: 2 * CARD_SPOT, height: 2 * CARD_SPOT };
+    const offSpot = (at: { left: number; top: number }): boolean => !overlaps({ ...at, width, height }, spot) && clear.every((r) => !overlaps({ ...at, width, height }, r));
     const moveIn = (at: { left: number; top: number }) => ({
         left: Math.max(CARD_EDGE, Math.min(at.left, canvas.width - CARD_EDGE - width)),
         top: Math.max(CARD_EDGE, Math.min(at.top, canvas.height - CARD_EDGE - height)),
     });
-    return slid.find((at) => inside(at) && free(at)) ?? slid.map(moveIn).find(free) ?? moveIn(slid[0]);
+    const movedIn = slid.map(moveIn);
+    return slid.find((at) => inside(at) && free(at)) ?? movedIn.find(free) ?? movedIn.find(offSpot) ?? movedIn[0];
+}
+
+/**
+ * The height the hover card has for itself in a canvas `canvasHeight` tall with the pointer at `pointerY`: the room
+ * under the pointer or over it, whichever is more, inside the canvas's edges, so a card that fits it keeps off the
+ * pointer (hoverCardPlace) in any window.
+ */
+export function hoverCardRoom(pointerY: number, canvasHeight: number): number {
+    return Math.max(canvasHeight - CARD_EDGE - pointerY - CARD_BELOW, pointerY - CARD_GAP - CARD_EDGE);
 }
 
 /** The most lines the hover card lists before "and N more" (the owner, 2026-10-29), and each row's height (leading-[18px]). */

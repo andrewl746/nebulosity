@@ -13,9 +13,8 @@ import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNo
 import { formatCount } from "./format";
 import { runWords } from "./labels";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, looseDivider, perRowFor, type Divider, type Position } from "./levelLayout";
-import LineCard from "./LineCard";
+import LineCard, { type CardAt } from "./LineCard";
 import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
-import type { CanvasRect } from "./narrow";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
@@ -61,11 +60,10 @@ type Shown = {
 };
 
 /**
- * The lines under the pointer (runs.ts's linesSharing), by `key`, their ids joined by newlines: where the pointer
- * landed on their run, and the bit of line there and what's over the canvas then (canvas px), which the hover card
- * keeps off.
+ * The lines under the pointer (runs.ts's linesSharing), by `key`, their ids joined by newlines, and where the pointer
+ * is on their run, with the bit of line there and what's over the canvas then, which the hover card keeps off.
  */
-type LineHover = { key: string; lines: string[]; pointer: Point; line: CanvasRect[]; clear: CanvasRect[] };
+type LineHover = { key: string; lines: string[] } & CardAt;
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
@@ -316,11 +314,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const onNodeMouseLeave: NodeMouseHandler<BoxNode> = () => setHoveredBox(null);
 
     // The lines under the pointer (the owner, 2026-10-29): every line on the run it's on (runs.ts), named by the hover
-    // card beside it (LineCard). The card stays where the pointer landed while it stays on that run, so it reads as
-    // still rather than trailing the pointer, and moves only to another run, or when the pointer comes onto it.
+    // card at the pointer (LineCard). Another run is another card, and along the same run the card is handed the pointer
+    // itself (followRef), so it goes with the pointer without drawing the canvas again.
     const drawnLines = useMemo(() => keySet(drawnKey), [drawnKey]);
     const edgeById = useMemo(() => new Map(level.edges.map((e) => [edgeKey(e), e])), [level]);
-    const cardAt = useRef<CanvasRect | null>(null);
+    const followCard = useRef<((at: CardAt) => void) | null>(null);
     const hoverAt = (event: { clientX: number; clientY: number }, id: string): LineHover | null => {
         const found = linesSharing(id, screenToFlowPosition({ x: event.clientX, y: event.clientY }), routes, drawnLines);
         const edge = edgeById.get(id);
@@ -339,18 +337,14 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const onEdgeMouseMove: EdgeMouseHandler = (event, edge) => {
         const next = hoverAt(event, edge.id);
         if (next === null) return;
-        const card = cardAt.current;
-        const onCard = card !== null && next.pointer.x >= card.left - 4 && next.pointer.x <= card.left + card.width + 4
-            && next.pointer.y >= card.top - 4 && next.pointer.y <= card.top + card.height + 4;
-        if (lineHover !== null && lineHover.key === next.key && !onCard) return;
-        setLineHover(next);
+        if (lineHover !== null && lineHover.key === next.key) followCard.current?.(next);
+        else setLineHover(next);
     };
     const onEdgeMouseLeave: EdgeMouseHandler = () => setLineHover(null);
     // a click on the run pins its card where it is, listing every line (LineCard)
     const onEdgeClick: EdgeMouseHandler = (event, edge) => {
         const next = hoverAt(event, edge.id);
-        if (next === null) return;
-        setPinned(lineHover !== null && lineHover.key === next.key ? lineHover : next);
+        if (next !== null) setPinned(next);
     };
 
     // A pinned card closes on Escape, a click anywhere outside it, another page (above), or the view moving under it.
@@ -434,14 +428,13 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             )}
             {card !== null && (
                 <LineCard
-                    key={`${pinned === null ? "hover" : "pinned"}\n${card.key}`}
+                    // a hover card is one a run, and a pinned one is one a click
+                    key={pinned === null ? `hover\n${card.key}` : `pinned\n${card.key}\n${card.pointer.x},${card.pointer.y}`}
                     words={runWords(card.lines.map((id) => edgeById.get(id)!), byPath)}
-                    pointer={card.pointer}
-                    line={card.line}
-                    clear={card.clear}
+                    at={card}
                     pinned={pinned !== null}
                     cardRef={pinned === null ? undefined : pinnedCard}
-                    placedRef={cardAt}
+                    followRef={pinned === null ? followCard : undefined}
                 />
             )}
         </ReactFlow>
