@@ -20,7 +20,7 @@ import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
 import { nextRoutes, routeEdges } from "./routes";
 import { isLightKind } from "./theme";
 import { useThemeKind } from "./useThemeKind";
-import { boundsOf, initialViewport } from "./viewport";
+import { boundsOf, drawnLinesBounds, initialViewport } from "./viewport";
 import { boxHeadWidths, dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
 
 /** The line ids a key of ids joined by newlines names. */
@@ -124,11 +124,12 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const { setViewport, getViewport } = useReactFlow();
     const canvasWidth = useStore((s) => s.width);
     const canvasHeight = useStore((s) => s.height);
-    // the latest of each, for the opening view below: it runs when the level changes, not when they do
-    const openRef = useRef({ setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } });
+    // the latest of each, for the opening view below: it runs when the level changes, not when they do. The lines on
+    // screen are framed with the boxes (viewport.ts), measured only when a level opens or refits, not on every hover
+    const openRef = useRef({ setViewport, onDrawn, positions, routes, edges: level.edges, canvas: { width: canvasWidth, height: canvasHeight } });
     useEffect(() => {
-        openRef.current = { setViewport, onDrawn, positions, canvas: { width: canvasWidth, height: canvasHeight } };
-    }, [setViewport, onDrawn, positions, canvasWidth, canvasHeight]);
+        openRef.current = { setViewport, onDrawn, positions, routes, edges: level.edges, canvas: { width: canvasWidth, height: canvasHeight } };
+    }, [setViewport, onDrawn, positions, routes, level.edges, canvasWidth, canvasHeight]);
     // whether the person has panned or zoomed since the level opened (a programmatic move has no event)
     const moved = useRef(false);
 
@@ -180,11 +181,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         setEdges((previous) => reuseUnchanged(previous, next, sameRoutedEdge));
     }, [level, byPath, routes, emphasis, selected, hoveredEdge, maxImports, heads, labelled, setEdges]);
 
-    // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, unless that would
-    // shrink it past 75%, then from its top), then report it drawn. The boxes reach React Flow a render after the level
-    // does (setNodes runs in an effect), so this waits until `nodes` holds this level's boxes: placing the view sooner
-    // frames the previous level's, which is what a level from the cache got. The same level refetched after the index
-    // moved keeps its key, so the user's pan and zoom stay put.
+    // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, its drawn lines
+    // too where the boxes keep their size, unless that would shrink it past 75%, then from its top), then report it
+    // drawn. The boxes reach React Flow a render after the level does (setNodes runs in an effect), so this waits until
+    // `nodes` holds this level's boxes: placing the view sooner frames the previous level's, which is what a level from
+    // the cache got. The same level refetched after the index moved keeps its key, so the user's pan and zoom stay put.
     // the row width is in the key: a window resized across WIDE_CANVAS lays the level out again, so it's fitted again
     const levelKey = `${level.repo}\n${level.path}\n${level.page}\n${perRow}`;
     const fittedKey = useRef<string | null>(null);
@@ -196,7 +197,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             fittedKey.current = levelKey;
             moved.current = false;
             const open = openRef.current;
-            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas), { duration: 0 });
+            void open.setViewport(initialViewport(boundsOf(open.positions), open.canvas, 0, drawnLinesBounds(open.routes, open.edges)), { duration: 0 });
             open.onDrawn();
         });
         return () => cancelAnimationFrame(frame);
@@ -211,8 +212,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         lastSize.current = { width: canvasWidth, height: canvasHeight };
         if (last === null || canvasWidth === 0 || canvasHeight === 0 || fittedKey.current !== levelKey) return;
         if (last.width === canvasWidth && last.height === canvasHeight) return;
-        if (!moved.current) void setViewport(initialViewport(boundsOf(positions), { width: canvasWidth, height: canvasHeight }), { duration: 0 });
-        else {
+        if (!moved.current){
+            const lines = drawnLinesBounds(openRef.current.routes, openRef.current.edges);
+            void setViewport(initialViewport(boundsOf(positions), { width: canvasWidth, height: canvasHeight }, 0, lines), { duration: 0 });
+        } else {
             const view = getViewport();
             void setViewport({ x: view.x + (canvasWidth - last.width) / 2, y: view.y + (canvasHeight - last.height) / 2, zoom: view.zoom }, { duration: 0 });
         }

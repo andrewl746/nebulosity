@@ -1,15 +1,18 @@
 "use client";
 
 import { useCallback, useState, type CSSProperties, type ReactNode } from "react";
-import { useReactFlow } from "@xyflow/react";
+import { useReactFlow, useStoreApi } from "@xyflow/react";
 import { IconCheck, IconChevronLeft, IconChevronRight, IconDots } from "@tabler/icons-react";
 import type { LevelResponse } from "@/lib/contracts";
 import { formatCount } from "./format";
 import { heaviestLink } from "./labels";
-import { FIT_PADDING } from "./levelLayout";
+import type { BoxNode } from "./MapBox";
 import { placePopover, usePlaceOnResize } from "./popover";
 import { pageNote } from "./portals";
+import type { RoutedEdgeType } from "./RoutedEdge";
 import { useDismiss } from "./useDismiss";
+import { boundsOf, fitViewport, linesBounds } from "./viewport";
+import { arrowHead } from "./weights";
 
 type MapToolbarProps = {
     level: LevelResponse;
@@ -34,8 +37,6 @@ type MapToolbarProps = {
     onSearch: () => void;
 };
 
-/** The fit button's fit: the whole level with room around it, never past 100% (VISUAL_REFRESH.md §4). */
-const FIT = { padding: FIT_PADDING, maxZoom: 1, duration: 0 } as const;
 const MENU_WIDTH = 220;
 const BUTTON = "grid h-6 min-w-[26px] shrink-0 place-items-center rounded-[5px] border border-border px-2 text-[12.5px] text-text-2 hover:border-text-3 hover:text-text disabled:opacity-40 disabled:hover:border-border disabled:hover:text-text-2";
 
@@ -61,7 +62,19 @@ function Check({ on }: { on: boolean }){
  * needs the room), and under 360 the search.
  */
 export default function MapToolbar({ level, strongOnly, onStrongOnly, busy, showAllLines, onShowAllLines, onTurnPage, canvasWidth, inHeader, narrow, helpInMenu, onHelp, searchInMenu, onSearch }: MapToolbarProps){
-    const flow = useReactFlow();
+    const flow = useReactFlow<BoxNode, RoutedEdgeType>();
+    const store = useStoreApi<BoxNode, RoutedEdgeType>();
+    // Fit: the whole level with room around it, never past 100% (VISUAL_REFRESH.md §4), and its drawn lines too unless
+    // the boxes would shrink past 85% (viewport.ts). React Flow's fitView frames only the boxes, and a lane beside them
+    // ran off under the inspector. A hidden line isn't handed to React Flow (MapCanvas), so these are the lines on screen
+    const fit = () => {
+        const boxes = boundsOf(new Map(flow.getNodes().map((node) => [node.id, node.position])));
+        const lines = linesBounds(flow.getEdges().flatMap(({ data }) => data
+            ? [{ points: data.points, width: data.width, headHalf: arrowHead(data.headWidth ?? data.width).half }]
+            : []));
+        const { width, height } = store.getState();
+        void flow.setViewport(fitViewport(boxes, lines, { width, height }), { duration: 0 });
+    };
     const strongInBar = !inHeader && canvasWidth >= 470;
     const zoomInBar = !inHeader && canvasWidth >= 330;
     const findingShown = !inHeader && canvasWidth >= 500;
@@ -79,7 +92,7 @@ export default function MapToolbar({ level, strongOnly, onStrongOnly, busy, show
             { label: "Next page", disabled: level.page >= level.pageCount - 1, act: () => onTurnPage(level.page + 1) },
         );
     }
-    if (menuOnly) menu.push({ label: "Show the whole level", act: () => void flow.fitView(FIT) });
+    if (menuOnly) menu.push({ label: "Show the whole level", act: fit });
     if (!strongInBar) menu.push({ label: "Strong links only", on: strongOnly, act: () => onStrongOnly(!strongOnly) });
     if (busy && (inHeader || !findingShown)) menu.push({ label: "Show all lines", on: showAllLines, act: () => onShowAllLines(!showAllLines) });
     if (!zoomInBar) menu.push({ label: "Zoom in", act: () => void flow.zoomIn({ duration: 0 }) }, { label: "Zoom out", act: () => void flow.zoomOut({ duration: 0 }) });
@@ -101,7 +114,7 @@ export default function MapToolbar({ level, strongOnly, onStrongOnly, busy, show
                     <button type="button" onClick={() => void flow.zoomIn({ duration: 0 })} aria-label="Zoom in" title="Zoom in" className={BUTTON}>+</button>
                 </>
             )}
-            {!menuOnly && <button type="button" data-testid="fit" onClick={() => void flow.fitView(FIT)} title="Show the whole level" className={BUTTON}>Fit</button>}
+            {!menuOnly && <button type="button" data-testid="fit" onClick={fit} title="Show the whole level" className={BUTTON}>Fit</button>}
             {menu.length > 0 && <MoreMenu items={menu} />}
         </div>
     );
