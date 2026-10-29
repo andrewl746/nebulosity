@@ -1108,21 +1108,3 @@ export function headRooms(routes: ReadonlyMap<string, readonly Point[]>, edges: 
     }
     return [...rooms.values()];
 }
-
-/**
- * The middle of a route's longest side, where its hover sentence goes when it has no count placed (placeCounts): the
- * longest run has the most room beside it, and a label there stays in its channel or gutter. A tie goes to the first.
- */
-export function longestSideMiddle(points: readonly Point[]): Point {
-    if (points.length < 2) return points[0] ?? { x: 0, y: 0 };
-    let best = 0;
-    let bestLength = -1;
-    for (let i = 0; i < points.length - 1; i++){
-        const length = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
-        if (length > bestLength){
-            best = i;
-            bestLength = length;
-        }
-    }
-    return { x: (points[best].x + points[best + 1].x) / 2, y: (points[best].y + points[best + 1].y) / 2 };
-}

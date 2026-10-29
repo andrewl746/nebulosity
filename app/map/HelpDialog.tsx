@@ -69,7 +69,7 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     <Section title="Reading the Map">
                         <li>A box is a folder or a file. A folder&apos;s dot grows with how many files it holds, and it has a second card behind it. A file has a page.</li>
                         <li>A line from A to B means A uses code from B, and the arrow points at what&apos;s being used. Its weight, and the number on it, show how many imports it carries.</li>
-                        <li>Hover a box to bring its lines forward. Hover a line to read it as a sentence, like &quot;editor uses base, 12 imports&quot;.</li>
+                        <li>Hover a box to bring its lines forward. Hover a line to read it as a sentence, like &quot;editor uses base, 12 imports&quot;. Where lines join, it lists every line on that stretch, and a click keeps the list open until you press Escape or click elsewhere.</li>
                         <li><b>Strong links only</b>, in the toolbar, hides the lines under 2% of the heaviest line&apos;s imports. Every line of the box you select or hover still shows.</li>
                         <li>With a box selected, <b>Uses</b> or <b>Used by</b> in the toolbar keeps only its lines to what it uses, or from what uses it, in color, and turns its other lines gray. <b>All</b> colors both, and it&apos;s back to All when you select something else.</li>
                         <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select, until you ask for <b>Show all lines</b>.</li>

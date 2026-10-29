@@ -53,6 +53,151 @@ export function trailStart(widths: readonly number[], available: number, ellipsi
     return last;
 }
 
+/** A rectangle on the canvas, in canvas px. */
+export type CanvasRect = { left: number; top: number; width: number; height: number };
+
+/** The least room the card keeps from the canvas's sides. */
+export const CARD_EDGE = 8;
+/**
+ * The tail a card points at its line with, a comic's speech bubble's (the owner, 2026-10-29): this wide at its base and
+ * this long, one size whatever the line, its tip TAIL_GAP short of the line's edge, its middle TAIL_INSET along the
+ * card's side from the corner nearest the line, so the card keeps the same distance from the spot it's about.
+ */
+export const TAIL_BASE = 12;
+export const TAIL_LENGTH = 7;
+const TAIL_GAP = 1;
+const TAIL_INSET = 16;
+/** The least a tail's middle keeps from the card's corners, its base clear of their 6 px rounding. */
+const TAIL_END = 12;
+/**
+ * The bit of line right at the spot, each way from it, which the card covers in no window it fits, as wide as the
+ * heaviest line is drawn.
+ */
+const CARD_SPOT = 6;
+
+/** Which side of the card its tail comes out of. */
+export type TailSide = "top" | "bottom" | "left" | "right";
+/**
+ * A card's place (its top-left corner, canvas px), and its tail: the side it comes out of and how far along that side
+ * its middle is, from the card's left or top. No tail where the card couldn't keep its distance from the spot.
+ * `rises` says the card runs up from its tail, so a pinned card grows up from it.
+ */
+export type BubblePlace = { left: number; top: number; tail: { side: TailSide; at: number } | null; rises: boolean };
+
+const overlaps = (a: CanvasRect, b: CanvasRect): boolean =>
+    a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+
+/** How far the card's side keeps from the middle of a line `half` px wide each side, its tail between them. */
+const tailReach = (half: number): number => half + TAIL_GAP + TAIL_LENGTH;
+
+/**
+ * Where the card about the lines under the pointer goes, pointing at `spot`, the point of the line nearest the pointer
+ * (canvas px), with its tail across the line, never along it. Beside a line that runs up and down there (`upright`),
+ * the tail comes out of the card's side, and over or under a level one out of its bottom or top, so the card never
+ * lies on the line it's about. `half` is half the line's width on screen. The places are tried above and left first
+ * (the owner's pick of 2026-10-29, closest to the pointer's tip, where nothing of the pointer is, and clear of the box
+ * a line runs down into): left of an upright line rising from the tail, then right of it, then left and right going
+ * down; over a level line reaching left from the tail, then right, then under it; then each of those slid along the
+ * line, its tail still on the spot, to fit the canvas near its edge. The first inside the canvas, CARD_EDGE in from its
+ * sides, and clear of `line` (the bit of line pointed at and its arrowhead, as rectangles as wide
+ * as they're drawn) and of `clear` (what's over the canvas: a drawer, a box's actions, the banner) wins, then the first
+ * inside and clear of the rest that keeps off the line right at the spot. Where none fits, the first moved inside the
+ * canvas that's clear, then the first moved inside that keeps off the spot, then just over or under the spot (a canvas
+ * too narrow for the card beside an upright line), then the first moved inside: the card never leaves the canvas, and
+ * moved, it can't keep its tail.
+ */
+export function bubblePlace(
+    spot: { x: number; y: number },
+    upright: boolean,
+    half: number,
+    card: { width: number; height: number },
+    canvas: { width: number; height: number },
+    line: readonly CanvasRect[],
+    clear: readonly CanvasRect[],
+): BubblePlace {
+    const { width, height } = card;
+    const reach = tailReach(half);
+    const tries: BubblePlace[] = upright ? [
+        { left: spot.x - reach - width, top: spot.y + TAIL_INSET - height, tail: { side: "right", at: height - TAIL_INSET }, rises: true },
+        { left: spot.x + reach, top: spot.y + TAIL_INSET - height, tail: { side: "left", at: height - TAIL_INSET }, rises: true },
+        { left: spot.x - reach - width, top: spot.y - TAIL_INSET, tail: { side: "right", at: TAIL_INSET }, rises: false },
+        { left: spot.x + reach, top: spot.y - TAIL_INSET, tail: { side: "left", at: TAIL_INSET }, rises: false },
+    ] : [
+        { left: spot.x + TAIL_INSET - width, top: spot.y - reach - height, tail: { side: "bottom", at: width - TAIL_INSET }, rises: true },
+        { left: spot.x - TAIL_INSET, top: spot.y - reach - height, tail: { side: "bottom", at: TAIL_INSET }, rises: true },
+        { left: spot.x + TAIL_INSET - width, top: spot.y + reach, tail: { side: "top", at: width - TAIL_INSET }, rises: false },
+        { left: spot.x - TAIL_INSET, top: spot.y + reach, tail: { side: "top", at: TAIL_INSET }, rises: false },
+    ];
+    // near the canvas's edge, each place also slides along the line, inside the canvas, with its tail still on the spot,
+    // as far as the tail keeps TAIL_END from the card's corners: the tail stays one size
+    const slid = tries.map((at): BubblePlace => {
+        const along = upright
+            ? Math.max(CARD_EDGE, Math.min(at.top, canvas.height - CARD_EDGE - height))
+            : Math.max(CARD_EDGE, Math.min(at.left, canvas.width - CARD_EDGE - width));
+        const tailAt = (upright ? spot.y : spot.x) - along;
+        if (at.tail === null || tailAt < TAIL_END || tailAt > (upright ? height : width) - TAIL_END) return at;
+        return { ...at, ...(upright ? { top: along } : { left: along }), tail: { side: at.tail.side, at: tailAt } };
+    });
+    const placed = [...tries, ...slid];
+    const box = (at: { left: number; top: number }): CanvasRect => ({ ...at, width, height });
+    const inside = (at: BubblePlace): boolean =>
+        at.left >= CARD_EDGE && at.top >= CARD_EDGE && at.left + width <= canvas.width - CARD_EDGE && at.top + height <= canvas.height - CARD_EDGE;
+    const free = (at: { left: number; top: number }): boolean => [...line, ...clear].every((r) => !overlaps(box(at), r));
+    const near = { left: spot.x - CARD_SPOT, top: spot.y - CARD_SPOT, width: 2 * CARD_SPOT, height: 2 * CARD_SPOT };
+    const offSpot = (at: { left: number; top: number }): boolean => !overlaps(box(at), near) && clear.every((r) => !overlaps(box(at), r));
+    const movedIn = tries.map((at): BubblePlace => ({ ...insideCanvas(at, card, canvas), tail: null, rises: at.rises }));
+    const overUnder = [spot.y - CARD_SPOT - 1 - height, spot.y + CARD_SPOT + 1]
+        .map((top): BubblePlace => ({ ...insideCanvas({ left: spot.x - width / 2, top }, card, canvas), tail: null, rises: top < spot.y }));
+    return placed.find((at) => inside(at) && free(at)) ?? placed.find((at) => inside(at) && offSpot(at))
+        ?? movedIn.find(free) ?? [...movedIn, ...overUnder].find(offSpot) ?? movedIn[0];
+}
+
+/** Whether a card `cardWidth` wide fits beside an upright line at `spotX`, its tail between them, on either side. */
+const fitsBeside = (spotX: number, half: number, cardWidth: number, canvasWidth: number): boolean =>
+    Math.max(spotX - tailReach(half) - CARD_EDGE, canvasWidth - CARD_EDGE - spotX - tailReach(half)) >= cardWidth;
+
+/**
+ * A card's place moved inside the canvas, CARD_EDGE in from its sides, the least it takes: a pinned card the wheel's
+ * zoom took to the canvas's edge stays in sight (LineCard), as a card with no place that fits does.
+ */
+export function insideCanvas(at: { left: number; top: number }, card: { width: number; height: number }, canvas: { width: number; height: number }): { left: number; top: number } {
+    return {
+        left: Math.max(CARD_EDGE, Math.min(at.left, canvas.width - CARD_EDGE - card.width)),
+        top: Math.max(CARD_EDGE, Math.min(at.top, canvas.height - CARD_EDGE - card.height)),
+    };
+}
+
+/**
+ * The height a card `cardWidth` wide has for itself on `canvas`, pointing at `spot` (bubblePlace): over or under a level
+ * line, past its tail, whichever has more, or beside an upright one the canvas's height inside its edges, the card
+ * sliding along the line to fit. Where the card can't be beside an upright line, too wide for the canvas there or the
+ * spot within TAIL_END of the canvas's top or bottom, it's the room just over or under the spot. So a card that fits it
+ * stays off the line at the spot in any window, and keeps its tail wherever it can.
+ */
+export function bubbleRoom(spot: { x: number; y: number }, upright: boolean, half: number, cardWidth: number, canvas: { width: number; height: number }): number {
+    if (!upright) return Math.max(spot.y - tailReach(half) - CARD_EDGE, canvas.height - CARD_EDGE - spot.y - tailReach(half));
+    const tailFits = spot.y >= CARD_EDGE + TAIL_END && spot.y <= canvas.height - CARD_EDGE - TAIL_END;
+    return fitsBeside(spot.x, half, cardWidth, canvas.width) && tailFits
+        ? canvas.height - 2 * CARD_EDGE
+        : Math.max(spot.y - CARD_SPOT - 1 - CARD_EDGE, canvas.height - CARD_EDGE - spot.y - CARD_SPOT - 1);
+}
+
+/** The most lines the hover card lists before "and N more" (the owner, 2026-10-29), and each row's height (leading-[18px]). */
+export const CARD_ROWS = 5;
+export const CARD_ROW = 18;
+/** The card's border and padding, top and bottom together (border and py-1). */
+export const CARD_FRAME = 10;
+
+/**
+ * How many of a run's `total` lines the hover card lists in `room` px of height: CARD_ROWS, or all of them where one
+ * more would only replace the "and 1 more" row, but no more than fit under the title with the "and N more" row.
+ */
+export function hoverCardRows(total: number, room: number): number {
+    let rows = total <= CARD_ROWS + 1 ? total : CARD_ROWS;
+    while (rows > 0 && CARD_FRAME + CARD_ROW * (1 + rows + (rows < total ? 1 : 0)) > room) rows--;
+    return rows;
+}
+
 /** The space a popover keeps from the Map's edges. */
 const POPOVER_GUTTER = 16;
 

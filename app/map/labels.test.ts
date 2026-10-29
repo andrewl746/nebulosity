@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapNode } from "@/lib/contracts";
-import { boxTitle, heaviestLink, lineLabel, noDeclarationsText } from "./labels";
+import { boxTitle, heaviestLink, lineLabel, noDeclarationsText, runWords } from "./labels";
 
 const box = (path: string, extra: Partial<MapNode> = {}): MapNode =>
     ({ path, name: path.slice(path.lastIndexOf("/") + 1), kind: "folder", fileCount: 3, summaryStatus: "fresh", ...extra });
@@ -60,5 +60,61 @@ describe("heaviestLink (the toolbar's finding)", () => {
         const nodes = ["a", "b", "c"].map(named);
         expect(heaviestLink({ nodes, edges: [{ source: "b", target: "c", count: 3 }, { source: "a", target: "c", count: 3 }] })).toEqual({ from: "a", to: "c", count: 3, total: 6 });
         expect(heaviestLink({ nodes, edges: [] })).toBeNull();
+    });
+});
+
+describe("runWords (the owner, 2026-10-29: which line is the hover about, on merged lines?)", () => {
+    const named = (path: string) => box(path);
+    const line = (source: string, target: string, count: number) => ({ source, target, count });
+    const byPath = (paths: string[], ...more: MapNode[]) => new Map([...paths.map(named), ...more].map((n) => [n.path, n]));
+
+    it("says one line's sentence, in parts, where it has the stretch to itself", () => {
+        const words = runWords([line(".eslint-plugin-local", "src", 2)], byPath([".eslint-plugin-local", "src"]));
+        expect(words).toEqual({
+            kind: "one",
+            id: ".eslint-plugin-local->src",
+            parts: { who: ".eslint-plugin-local", verb: "uses", whom: "src", imports: "2 imports" },
+            sentence: ".eslint-plugin-local uses src, 2 imports",
+        });
+    });
+
+    it("lists the lines into one box by the box each comes from, heaviest first (VS Code's root, into src)", () => {
+        const words = runWords([line("build", "src", 16), line("extensions", "src", 665), line(".eslint-plugin-local", "src", 2)], byPath(["build", "extensions", ".eslint-plugin-local", "src"]));
+        expect(words).toEqual({
+            kind: "run",
+            title: "Into src",
+            rows: [
+                { id: "extensions->src", name: "extensions", count: 665 },
+                { id: "build->src", name: "build", count: 16 },
+                { id: ".eslint-plugin-local->src", name: ".eslint-plugin-local", count: 2 },
+            ],
+        });
+    });
+
+    it("lists the lines out of one box by the box each goes to (src/vs, out of workbench)", () => {
+        const paths = ["src/vs/workbench", "src/vs/base", "src/vs/platform", "src/vs/editor", "src/vs/nls.ts"];
+        const words = runWords([
+            line("src/vs/workbench", "src/vs/editor", 3652), line("src/vs/workbench", "src/vs/base", 20648),
+            line("src/vs/workbench", "src/vs/nls.ts", 1579), line("src/vs/workbench", "src/vs/platform", 19171),
+        ], byPath(paths));
+        expect(words.kind === "run" && words.title).toBe("From workbench");
+        expect(words.kind === "run" && words.rows.map((r) => `${r.name} ${r.count}`)).toEqual(["base 20648", "platform 19171", "editor 3652", "nls.ts 1579"]);
+    });
+
+    it("puts lines of the same weight in name order, and a doorway by the boxes behind it, with a capital", () => {
+        const page2 = portal("x//page-2", "Page 2", { page: 1 });
+        const words = runWords([line("x/b.ts", "x/u.ts", 1), line("x//page-2", "x/u.ts", 33), line("x/a.ts", "x/u.ts", 1)], byPath(["x/a.ts", "x/b.ts", "x/u.ts"], page2));
+        expect(words.kind === "run" && words.rows.map((r) => r.name)).toEqual(["Boxes on Page 2", "a.ts", "b.ts"]);
+    });
+
+    it("names a doorway in the title without a capital, after Into", () => {
+        const page2 = portal("x//page-2", "Page 2", { page: 1 });
+        const words = runWords([line("x/a", "x//page-2", 3), line("x/b", "x//page-2", 2)], byPath(["x/a", "x/b"], page2));
+        expect(words.kind === "run" && words.title).toBe("Into boxes on Page 2");
+    });
+
+    it("names both ends of each line where the run shares neither", () => {
+        const words = runWords([line("a", "b", 2), line("c", "d", 5)], byPath(["a", "b", "c", "d"]));
+        expect(words).toEqual({ kind: "run", title: "Lines here", rows: [{ id: "c->d", name: "c → d", count: 5 }, { id: "a->b", name: "a → b", count: 2 }] });
     });
 });
