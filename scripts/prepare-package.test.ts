@@ -133,7 +133,8 @@ describe("what npm packs from a built Map (package.json's files)", () => {
     // The release rehearsal (2026-10-26): Turbopack traces the whole build folder, so each route's .nft.json listed every
     // file in it (18,251 in ../Nebulosity-build: the demo's out/ and export, the eval transcripts, a local AGENTS.md) and
     // the package went from 9 MB to 23 MB unpacked. next start reads neither the traces nor the source maps (R29).
-    it("ships the server's code, never its build traces, source maps or cache", () => {
+    // npm's own start-up takes 3 to 5 s on Windows while the rest of the suite runs, the default 5 s's edge
+    it("ships the server's code, never its build traces, source maps or cache", { timeout: 20_000 }, () => {
         const root = makeTempDir("neb-pack-");
         const { files } = JSON.parse(fs.readFileSync("package.json", "utf8")) as { files: string[] };
         fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "nebulosity-pack-test", version: "0.0.0", files }));

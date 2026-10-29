@@ -98,7 +98,7 @@ function MapScreen(){
         setDetailsSelection(selected);
         setDetailsFor(null);
     }
-    // Whether the history entry on screen has one of the Map's own steps behind it, for Back inside VS Code's panel
+    // Whether the history entry on screen has one of the Map's own steps behind it, for the header's Back
     // (BackButton, history.ts's historyDepth). It shows only once a level is drawn, in the browser, so reading the
     // history here can't make the server's render and the browser's differ.
     const [canGoBack, setCanGoBack] = useState(() => typeof window !== "undefined" && historyDepth(window.history.state) > 0);
@@ -225,7 +225,7 @@ function MapScreen(){
     // A link that names the same place another way (?path=src%2Fvs, ?page=1) is rewritten instead, so Back needs one
     // press (history.ts). Inside VS Code's panel the address keeps `embed=vscode` (P8), and a move an editor's follow
     // made rewrites the entry instead of pushing one, so switching tabs doesn't fill Back (followStep). Each entry carries
-    // how many of the Map's own steps lie behind it (historyDepth), for the Back button there.
+    // how many of the Map's own steps lie behind it (historyDepth), for the header's Back.
     useEffect(() => {
         const step = followStep(historyStep(window.location.pathname + window.location.search, place, EMBEDDED), historyMode.current);
         historyMode.current = "push";
