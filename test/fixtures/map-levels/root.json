@@ -1,0 +1,155 @@
+{
+ "path": "",
+ "page": 0,
+ "pageCount": 1,
+ "nodes": [
+  {
+   "path": "src",
+   "name": "src",
+   "kind": "folder",
+   "fileCount": 10280,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "extensions",
+   "name": "extensions",
+   "kind": "folder",
+   "fileCount": 4128,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "build",
+   "name": "build",
+   "kind": "folder",
+   "fileCount": 269,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "test",
+   "name": "test",
+   "kind": "folder",
+   "fileCount": 156,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "cli",
+   "name": "cli",
+   "kind": "folder",
+   "fileCount": 85,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": ".eslint-plugin-local",
+   "name": ".eslint-plugin-local",
+   "kind": "folder",
+   "fileCount": 58,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "scripts",
+   "name": "scripts",
+   "kind": "folder",
+   "fileCount": 24,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": ".vscode",
+   "name": ".vscode",
+   "kind": "folder",
+   "fileCount": 21,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": ".github",
+   "name": ".github",
+   "kind": "folder",
+   "fileCount": 12,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": ".agents",
+   "name": ".agents",
+   "kind": "folder",
+   "fileCount": 4,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": ".vscode-test.js",
+   "name": ".vscode-test.js",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "eslint.config.js",
+   "name": "eslint.config.js",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "gulpfile.mjs",
+   "name": "gulpfile.mjs",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  }
+ ],
+ "edges": [
+  {
+   "source": ".eslint-plugin-local",
+   "target": "src",
+   "count": 2
+  },
+  {
+   "source": ".github",
+   "target": "src",
+   "count": 2
+  },
+  {
+   "source": "build",
+   "target": ".eslint-plugin-local",
+   "count": 2
+  },
+  {
+   "source": "build",
+   "target": "src",
+   "count": 16
+  },
+  {
+   "source": "eslint.config.js",
+   "target": ".eslint-plugin-local",
+   "count": 1
+  },
+  {
+   "source": "eslint.config.js",
+   "target": "extensions",
+   "count": 1
+  },
+  {
+   "source": "extensions",
+   "target": "build",
+   "count": 1
+  },
+  {
+   "source": "extensions",
+   "target": "src",
+   "count": 665
+  },
+  {
+   "source": "extensions",
+   "target": "test",
+   "count": 16
+  },
+  {
+   "source": "gulpfile.mjs",
+   "target": "build",
+   "count": 1
+  },
+  {
+   "source": "test",
+   "target": "build",
+   "count": 1
+  }
+ ]
+}

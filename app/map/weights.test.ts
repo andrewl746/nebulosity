@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/contracts";
-import { arrowHead, dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
+import { arrowHead, boxHeadWidths, dotSize, labelledLines, lineWidth, maxFilesOf, maxImportsOf } from "./weights";
 
 // The scales of the approved mockup (mockup3.html, the owner's picks of 2026-10-27), worked by hand.
 describe("dotSize: 6 + 12 × log10(files + 1) / log10(largest + 1)", () => {
@@ -66,24 +66,48 @@ describe("the page's largest folder and heaviest line", () => {
     });
 });
 
-describe("labelledLines: the three heaviest, and the selection's", () => {
-    // VS Code's root (mockup3.html's edges)
-    const ROOT = [
-        edge(".eslint-plugin-local", "src", 2), edge(".github", "src", 2), edge("build", ".eslint-plugin-local", 2), edge("build", "src", 16),
-        edge("eslint.config.js", ".eslint-plugin-local", 1), edge("eslint.config.js", "extensions", 1), edge("extensions", "build", 1),
-        edge("extensions", "src", 665), edge("extensions", "test", 16), edge("gulpfile.mjs", "build", 1), edge("test", "build", 1),
-    ];
+// VS Code's root (mockup3.html's edges, routes.test.ts's ROOT_LINES)
+const ROOT_LINES = [
+    edge(".eslint-plugin-local", "src", 2), edge(".github", "src", 2), edge("build", ".eslint-plugin-local", 2), edge("build", "src", 16),
+    edge("eslint.config.js", ".eslint-plugin-local", 1), edge("eslint.config.js", "extensions", 1), edge("extensions", "build", 1),
+    edge("extensions", "src", 665), edge("extensions", "test", 16), edge("gulpfile.mjs", "build", 1), edge("test", "build", 1),
+];
 
+describe("boxHeadWidths: each box's one head, for the heaviest line into it", () => {
+    // VS Code's root: widths 665 → 6, 16 → 1 + 5 × ln 16 / ln 665 = 3.1328, 2 → 1.5332, 1 → 1
+    it("sizes each box's one head for the heaviest line into it", () => {
+        const heads = boxHeadWidths(ROOT_LINES);
+        expect(heads.get("src")).toBe(6);                                   // 665, 16, 2 and 2 arrive
+        expect(heads.get("test")).toBeCloseTo(3.1328, 4);                   // extensions → test, 16
+        expect(heads.get(".eslint-plugin-local")).toBeCloseTo(1.5332, 4);   // build's 2 against eslint.config.js's 1
+        expect(heads.get("build")).toBe(1);
+        expect(heads.has("eslint.config.js")).toBe(false);                  // nothing arrives there
+    });
+});
+
+describe("labelledLines: the three heaviest, and the selection's", () => {
     it("labels the three heaviest with nothing selected, ties by source then target", () => {
         // 665, then the two 16s; the 2s are tied, and three is the cap
-        expect([...labelledLines(ROOT, null)].sort()).toEqual(["build->src", "extensions->src", "extensions->test"]);
+        expect([...labelledLines(ROOT_LINES, null)].sort()).toEqual(["build->src", "extensions->src", "extensions->test"]);
     });
 
     it("adds every line of the selected box", () => {
-        expect([...labelledLines(ROOT, "src")].sort()).toEqual([".eslint-plugin-local->src", ".github->src", "build->src", "extensions->src", "extensions->test"]);
+        expect([...labelledLines(ROOT_LINES, "src")].sort()).toEqual([".eslint-plugin-local->src", ".github->src", "build->src", "extensions->src", "extensions->test"]);
+    });
+
+    it("leaves a count of 1 off the selected box's lines (owner review)", () => {
+        // extensions -> build and eslint.config.js -> extensions carry 1 each
+        expect([...labelledLines(ROOT_LINES, "extensions")].sort()).toEqual(["build->src", "extensions->src", "extensions->test"]);
+    });
+
+    it("leaves it off the page's heaviest too, so a page of single imports has no counts", () => {
+        const singles = [edge("a", "b", 1), edge("c", "d", 1), edge("e", "f", 1)];
+        expect([...labelledLines(singles, null)]).toEqual([]);
+        expect([...labelledLines(singles, "a")]).toEqual([]);
+        expect([...labelledLines([edge("a", "b", 5), edge("c", "d", 1), edge("e", "f", 1)], null)]).toEqual(["a->b"]);
     });
 
     it("never labels a line from a box to itself among the heaviest", () => {
-        expect([...labelledLines([edge("a", "a", 99), edge("a", "b", 1)], null)]).toEqual(["a->b"]);
+        expect([...labelledLines([edge("a", "a", 99), edge("a", "b", 2)], null)]).toEqual(["a->b"]);
     });
 });

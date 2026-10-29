@@ -7,10 +7,12 @@ import { arrowHead } from "./weights";
 
 /**
  * A line that follows its route (routes.ts) instead of React Flow's straight curve. `width` goes by how many imports it
- * carries (weights.ts), `color` by its tone, and `count` is the number written on it, when it's one of the lines that
- * carry theirs (weights.ts's labelledLines).
+ * carries (weights.ts), `color` by its tone, and `count` is the number written on it at `labelAt`, when it's one of the
+ * lines that carry theirs (weights.ts's labelledLines) and its count has a place clear of everything else (routes.ts's
+ * placeCounts). `headWidth` is the width its box's one arrowhead is sized for (weights.ts's boxHeadWidths), shared by
+ * every line into that box, else its own.
  */
-export type RoutedEdgeData = { points: Point[]; width: number; color: string; count?: string; countStrong?: boolean };
+export type RoutedEdgeData = { points: Point[]; width: number; color: string; count?: string; countStrong?: boolean; headWidth?: number; labelAt?: Point };
 export type RoutedEdgeType = Edge<RoutedEdgeData, "routed">;
 
 /** How far above the box's top edge the arrowhead's tip stops, so it never touches the border. */
@@ -31,12 +33,17 @@ function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, label, inter
     const route = data && data.points.length >= 2 ? data.points : [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
     const width = data?.width ?? 1;
     const color = data?.color ?? "var(--edge-dim)";
-    const { half, length } = arrowHead(width);
+    // the lines into one box end at its one point under one head, so each draws that head, the same size whichever of
+    // them are drawn, and they coincide (the owner, 2026-10-28: a line that appears never changes its box's head)
+    const { half, length } = arrowHead(data?.headWidth ?? width);
     const end = route[route.length - 1];
     const tip = { x: end.x, y: end.y - TIP_GAP };
     // the line stops a pixel inside the head's base, so no gap shows between them
     const line = [...route.slice(0, -1), { x: tip.x, y: tip.y - length + 1 }];
-    const middle = longestSideMiddle(line);
+    // a count goes only where the Map placed it, clear of every other line, count and box (the owner, 2026-10-28), and
+    // the hover sentence goes there too, else in the middle of the line's longest side
+    const count = data?.labelAt !== undefined ? data.count : undefined;
+    const middle = data?.labelAt ?? longestSideMiddle(line);
     const head = `M ${tip.x - half} ${tip.y - length} L ${tip.x + half} ${tip.y - length} L ${tip.x} ${tip.y} Z`;
     return (
         <>
@@ -47,15 +54,15 @@ function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, data, label, inter
                 interactionWidth={Math.max(interactionWidth ?? 20, width + 10)}
             />
             <path d={head} fill={color} stroke={color} strokeWidth={1} strokeLinejoin="round" className="pointer-events-none" />
-            {(label || data?.count) && (
+            {(label || count) && (
                 <EdgeLabelRenderer>
                     <div
                         data-edge-label={id}
-                        data-edge-count={label ? undefined : data?.count}
+                        data-edge-count={label ? undefined : count}
                         style={{ transform: `translate(-50%, -50%) translate(${middle.x}px, ${middle.y}px)`, zIndex: 1001 }}
                         className={`pointer-events-none absolute whitespace-nowrap rounded-[4px] border border-divider bg-canvas px-1.5 leading-[16px] tabular-nums ${label ? "text-[12px] text-text" : `text-[11.5px] ${data?.countStrong ? "text-text" : "text-text-3"}`}`}
                     >
-                        {label ?? data?.count}
+                        {label ?? count}
                     </div>
                 </EdgeLabelRenderer>
             )}

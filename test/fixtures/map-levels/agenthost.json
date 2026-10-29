@@ -1,0 +1,2166 @@
+{
+ "path": "src/vs/platform/agentHost/node",
+ "page": 0,
+ "pageCount": 4,
+ "nodes": [
+  {
+   "path": "src/vs/platform/agentHost/node/codex",
+   "name": "codex",
+   "kind": "folder",
+   "fileCount": 911,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/copilot",
+   "name": "copilot",
+   "kind": "folder",
+   "fileCount": 61,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/claude",
+   "name": "claude",
+   "kind": "folder",
+   "fileCount": 48,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/shared",
+   "name": "shared",
+   "kind": "folder",
+   "fileCount": 36,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/chatContributions",
+   "name": "chatContributions",
+   "kind": "folder",
+   "fileCount": 32,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/missionControl",
+   "name": "missionControl",
+   "kind": "folder",
+   "fileCount": 9,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/localCommands",
+   "name": "localCommands",
+   "kind": "folder",
+   "fileCount": 4,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "name": "agentHostStateManager.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "name": "agentConfigurationService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "name": "agentHostTelemetryReporter.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "name": "agentHostGitHubEndpointService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "name": "agentHostProviderService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "name": "agentHostCustomizationEnablementService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "name": "agentSdkDownloader.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "name": "agentHostAuthenticationService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "name": "agentHostClientConnectionService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "name": "agentHostPeerChatStore.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "name": "agentHostBranchChangesetScope.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostStartupPerformance.ts",
+   "name": "agentHostStartupPerformance.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/byokLmBridgeRegistry.ts",
+   "name": "byokLmBridgeRegistry.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "name": "agentHostProxyResolver.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "name": "agentHostTerminalManager.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "name": "agentHostTurnTracker.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "name": "agentHostSessionTitleController.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "name": "agentHostTelemetryService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "name": "agentHostCompletions.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "name": "agentHostGitHubService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "name": "agentHostStorageService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostLocalTurns.ts",
+   "name": "agentHostLocalTurns.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "name": "agentHostToolCallTracker.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "name": "agentHostUtilityModelService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentService.ts",
+   "name": "agentService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "name": "agentSideEffects.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "name": "agentMergeController.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "name": "protocolServerHandler.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "name": "agentServiceFoundation.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "name": "agentHostBootstrap.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "name": "agentHostPullRequestOperationHandler.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "name": "agentHostServices.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "name": "agentHostAutomationService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "name": "agentHostGitStateService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "name": "agentServiceComposition.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "name": "agentHostMain.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "name": "agentHostServerMain.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/platform/agentHost/node//page-2",
+   "name": "Page 2",
+   "kind": "portal",
+   "page": 1,
+   "fileCount": 44,
+   "hiddenCount": 44,
+   "summaryStatus": "skipped",
+   "members": [
+    "src/vs/platform/agentHost/node/agentHostDatabase.ts",
+    "src/vs/platform/agentHost/node/agentHostCatalogProjection.ts",
+    "src/vs/platform/agentHost/node/agentSessionRegistry.ts",
+    "src/vs/platform/agentHost/node/agentHostSessionTitleSignal.ts",
+    "src/vs/platform/agentHost/node/sshRemoteAgentHostHelpers.ts",
+    "src/vs/platform/agentHost/node/agentHostRestrictedTelemetry.ts",
+    "src/vs/platform/agentHost/node/agentHostTurnService.ts",
+    "src/vs/platform/agentHost/node/sessionDatabase.ts",
+    "src/vs/platform/agentHost/node/activeClientState.ts",
+    "src/vs/platform/agentHost/node/agentHostCatalogSourceResolver.ts",
+    "src/vs/platform/agentHost/node/agentHostManagedSettingsService.ts",
+    "src/vs/platform/agentHost/node/agentHostPullRequestStatusService.ts",
+    "src/vs/platform/agentHost/node/agentChatContext.ts",
+    "src/vs/platform/agentHost/node/agentHostChatInputService.ts",
+    "src/vs/platform/agentHost/node/agentHostCatalogSyncService.ts",
+    "src/vs/platform/agentHost/node/appNodeModules.ts",
+    "src/vs/platform/agentHost/node/agentHostSessionPromptService.ts",
+    "src/vs/platform/agentHost/node/devContainerSandbox.ts",
+    "src/vs/platform/agentHost/node/agentHostCatalogReconciliationService.ts",
+    "src/vs/platform/agentHost/node/agentHostTurnTelemetryContext.ts",
+    "src/vs/platform/agentHost/node/devContainerServerCache.ts",
+    "src/vs/platform/agentHost/node/localAgentHostMetadata.ts",
+    "src/vs/platform/agentHost/node/remoteAgentHostCliInstaller.ts",
+    "src/vs/platform/agentHost/node/agentHostMicrosoftTelemetry.ts",
+    "src/vs/platform/agentHost/node/devContainerAgentHostService.ts",
+    "src/vs/platform/agentHost/node/devContainerSamples.ts",
+    "src/vs/platform/agentHost/node/sessionPermissions.ts",
+    "src/vs/platform/agentHost/node/sshConfigPaths.ts",
+    "src/vs/platform/agentHost/node/sshKnownHosts.ts",
+    "src/vs/platform/agentHost/node/sshRemoteAgentHostService.ts",
+    "src/vs/platform/agentHost/node/agentHostCatalogListReader.ts",
+    "src/vs/platform/agentHost/node/agentHostChatCatalogMigration.ts",
+    "src/vs/platform/agentHost/node/agentHostChatCatalogV2.ts",
+    "src/vs/platform/agentHost/node/agentHostGitHubTelemetryRouter.ts",
+    "src/vs/platform/agentHost/node/agentHostLockfile.ts",
+    "src/vs/platform/agentHost/node/agentHostRepoInfoTelemetry.ts",
+    "src/vs/platform/agentHost/node/agentHostTurnStarter.ts",
+    "src/vs/platform/agentHost/node/commandAutoApprover.ts",
+    "src/vs/platform/agentHost/node/remoteAgentHostCliCache.ts",
+    "src/vs/platform/agentHost/node/sessionDataService.ts",
+    "src/vs/platform/agentHost/node/sshProxyCommand.ts",
+    "src/vs/platform/agentHost/node/wslRemoteAgentHostHelpers.ts",
+    "src/vs/platform/agentHost/node/wslRemoteAgentHostService.ts",
+    "src/vs/platform/agentHost/node/agentHostSessionsV2MigrationService.ts"
+   ]
+  },
+  {
+   "path": "src/vs/platform/agentHost/node//page-3",
+   "name": "Page 3",
+   "kind": "portal",
+   "page": 2,
+   "fileCount": 44,
+   "hiddenCount": 44,
+   "summaryStatus": "skipped",
+   "members": [
+    "src/vs/platform/agentHost/node/agentHostChatContributionsService.ts",
+    "src/vs/platform/agentHost/node/sessionSandbox.ts",
+    "src/vs/platform/agentHost/node/agentHostSubscriptionService.ts",
+    "src/vs/platform/agentHost/node/gitDiffContent.ts",
+    "src/vs/platform/agentHost/node/agentHostSessionOpenTelemetry.ts",
+    "src/vs/platform/agentHost/node/agentMergeTools.ts",
+    "src/vs/platform/agentHost/node/agentHostFileMonitorService.ts",
+    "src/vs/platform/agentHost/node/agentHostGitService.ts",
+    "src/vs/platform/agentHost/node/agentHostPromptCache.ts",
+    "src/vs/platform/agentHost/node/agentHostBangCommand.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetSummary.ts",
+    "src/vs/platform/agentHost/node/agentHostFileCompletionUtils.ts",
+    "src/vs/platform/agentHost/node/agentHostSessionRepositories.ts",
+    "src/vs/platform/agentHost/node/agentHostSlashCompletion.ts",
+    "src/vs/platform/agentHost/node/agentHostWorkspaceFiles.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetCoordinator.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetOperationService.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetService.ts",
+    "src/vs/platform/agentHost/node/agentHostContributions.ts",
+    "src/vs/platform/agentHost/node/agentHostPullRequestLifecycleOperationHandler.ts",
+    "src/vs/platform/agentHost/node/agentHostRenameCommand.ts",
+    "src/vs/platform/agentHost/node/agentHostSkillCompletionProvider.ts",
+    "src/vs/platform/agentHost/node/agentMergeConfiguration.ts",
+    "src/vs/platform/agentHost/node/codexCompactCommand.ts",
+    "src/vs/platform/agentHost/node/agentHostChatCompletionProvider.ts",
+    "src/vs/platform/agentHost/node/agentHostCheckoutOperationHandler.ts",
+    "src/vs/platform/agentHost/node/agentHostCheckoutOperationProvider.ts",
+    "src/vs/platform/agentHost/node/agentHostCommitOperationHandler.ts",
+    "src/vs/platform/agentHost/node/agentHostCommitOperationProvider.ts",
+    "src/vs/platform/agentHost/node/agentHostDiscardChangesOperationHandler.ts",
+    "src/vs/platform/agentHost/node/agentHostFileCompletionProvider.ts",
+    "src/vs/platform/agentHost/node/agentHostMergeOperationHandler.ts",
+    "src/vs/platform/agentHost/node/agentHostMergeOperationProvider.ts",
+    "src/vs/platform/agentHost/node/agentHostMultiRootDiff.ts",
+    "src/vs/platform/agentHost/node/agentHostPullRequestOperationProvider.ts",
+    "src/vs/platform/agentHost/node/agentHostSyncOperationHandler.ts",
+    "src/vs/platform/agentHost/node/agentHostSyncOperationProvider.ts",
+    "src/vs/platform/agentHost/node/agentMergeCIEvidence.ts",
+    "src/vs/platform/agentHost/node/diffComputeService.ts",
+    "src/vs/platform/agentHost/node/sessionDiffAggregator.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetFileMonitorCoordinator.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetTelemetry.ts",
+    "src/vs/platform/agentHost/node/agentHostDiscardChangesOperationProvider.ts",
+    "src/vs/platform/agentHost/node/worktreeSymlink.ts"
+   ]
+  },
+  {
+   "path": "src/vs/platform/agentHost/node//page-4",
+   "name": "Page 4",
+   "kind": "portal",
+   "page": 3,
+   "fileCount": 38,
+   "hiddenCount": 38,
+   "summaryStatus": "skipped",
+   "members": [
+    "src/vs/platform/agentHost/node/agentPluginManager.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetSubscriptionService.ts",
+    "src/vs/platform/agentHost/node/agentHostDebugLogs.ts",
+    "src/vs/platform/agentHost/node/agentHostResources.ts",
+    "src/vs/platform/agentHost/node/agentHostReviewService.ts",
+    "src/vs/platform/agentHost/node/agentHostSessionLifecycle.ts",
+    "src/vs/platform/agentHost/node/agentModelRefreshScheduler.ts",
+    "src/vs/platform/agentHost/node/agentSdkSetupChannel.ts",
+    "src/vs/platform/agentHost/node/messagePortProtocolServer.ts",
+    "src/vs/platform/agentHost/node/networkDiagnosticsService.ts",
+    "src/vs/platform/agentHost/node/osc633Parser.ts",
+    "src/vs/platform/agentHost/node/webSocketTransport.ts",
+    "src/vs/platform/agentHost/node/agentChatBackings.ts",
+    "src/vs/platform/agentHost/node/agentHostAutomationCustomizations.ts",
+    "src/vs/platform/agentHost/node/agentHostAutomationTelemetry.ts",
+    "src/vs/platform/agentHost/node/agentHostCheckpointService.ts",
+    "src/vs/platform/agentHost/node/agentHostHeadlessTerminal.ts",
+    "src/vs/platform/agentHost/node/agentHostInputRequestTracker.ts",
+    "src/vs/platform/agentHost/node/agentHostManagementService.ts",
+    "src/vs/platform/agentHost/node/agentHostPullRequestAssociationResolver.ts",
+    "src/vs/platform/agentHost/node/agentHostRequestService.ts",
+    "src/vs/platform/agentHost/node/agentHostService.ts",
+    "src/vs/platform/agentHost/node/agentHostShellUtils.ts",
+    "src/vs/platform/agentHost/node/agentHostShutdown.ts",
+    "src/vs/platform/agentHost/node/agentPeerChats.ts",
+    "src/vs/platform/agentHost/node/agentSdkDownloadTelemetry.ts",
+    "src/vs/platform/agentHost/node/agentSessionResidency.ts",
+    "src/vs/platform/agentHost/node/automationCron.ts",
+    "src/vs/platform/agentHost/node/devContainerAgentHostProtocol.ts",
+    "src/vs/platform/agentHost/node/diffWorkerMain.ts",
+    "src/vs/platform/agentHost/node/nodeAgentHostStarter.ts",
+    "src/vs/platform/agentHost/node/serverUrls.ts",
+    "src/vs/platform/agentHost/node/tunnelAgentHostService.ts",
+    "src/vs/platform/agentHost/node/agentHostChangesetStateCache.ts",
+    "src/vs/platform/agentHost/node/agentHostUpgradeChannel.ts",
+    "src/vs/platform/agentHost/node/compositeProtocolServer.ts",
+    "src/vs/platform/agentHost/node/workspacelessScratchDir.ts",
+    "src/vs/platform/agentHost/node/otel"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 7
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/codex",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-2",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 8
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 11
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "count": 6
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 20
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/chatContributions",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-3",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 6
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/copilot",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node//page-4",
+   "target": "src/vs/platform/agentHost/node/missionControl",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostLocalTurns.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStartupPerformance.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/byokLmBridgeRegistry.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "target": "src/vs/platform/agentHost/node/copilot",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/byokLmBridgeRegistry.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/claude",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/codex",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/copilot",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/missionControl",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostMain.ts",
+   "target": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostPullRequestOperationHandler.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostBootstrap.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/claude",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/codex",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/copilot",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServerMain.ts",
+   "target": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 8
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 9
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 6
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitStateService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStartupPerformance.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/byokLmBridgeRegistry.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/chatContributions",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/claude",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/codex",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/copilot",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostServices.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 7
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "target": "src/vs/platform/agentHost/node/codex",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node/byokLmBridgeRegistry.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentHostUtilityModelService.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 12
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 5
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAutomationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostLocalTurns.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStartupPerformance.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/chatContributions",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentService.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 8
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostLocalTurns.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentMergeController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/chatContributions",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/localCommands",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceComposition.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node/agentService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentServiceFoundation.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostLocalTurns.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/localCommands",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/agentSideEffects.ts",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 6
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostBranchChangesetScope.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostLocalTurns.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 18
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostToolCallTracker.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/agentHostTurnTracker.ts",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/localCommands",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/chatContributions",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 11
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/agentHostStartupPerformance.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/copilot",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/claude",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 16
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/agentHostStartupPerformance.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/agentSdkDownloader.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/codex",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 22
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 11
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 7
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 5
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostCompletions.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostStartupPerformance.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostStorageService.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 4
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/byokLmBridgeRegistry.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/claude",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/copilot",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 26
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/localCommands",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/localCommands",
+   "target": "src/vs/platform/agentHost/node/agentHostLocalTurns.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/localCommands",
+   "target": "src/vs/platform/agentHost/node/agentHostPeerChatStore.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/localCommands",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/localCommands",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/localCommands",
+   "target": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/localCommands",
+   "target": "src/vs/platform/agentHost/node/shared",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/missionControl",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/missionControl",
+   "target": "src/vs/platform/agentHost/node/agentHostAuthenticationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/missionControl",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/missionControl",
+   "target": "src/vs/platform/agentHost/node/agentHostProviderService.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/missionControl",
+   "target": "src/vs/platform/agentHost/node/agentHostProxyResolver.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/missionControl",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/missionControl",
+   "target": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node//page-2",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node//page-3",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node//page-4",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostClientConnectionService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+   "target": "src/vs/platform/agentHost/node/missionControl",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentConfigurationService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostCustomizationEnablementService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubEndpointService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostGitHubService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostSessionTitleController.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostStateManager.ts",
+   "count": 6
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryReporter.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostTelemetryService.ts",
+   "count": 2
+  },
+  {
+   "source": "src/vs/platform/agentHost/node/shared",
+   "target": "src/vs/platform/agentHost/node/agentHostTerminalManager.ts",
+   "count": 1
+  }
+ ]
+}

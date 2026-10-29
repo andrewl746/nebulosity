@@ -58,6 +58,19 @@ describe("fromTheme, the approved mockup's rule", () => {
     });
 });
 
+describe("fromTheme, what uses the selection (the owner's pink, 2026-10-28)", () => {
+    const pinks = (input: ThemeInput) => { const p = fromTheme(input); return [p["used-by-edge"], p["used-by-bar"], p["used-by-accent"]]; };
+    it("takes the owner's dark values on dark themes and high contrast dark", () => {
+        for (const name of ["dark2026", "solarized", "monokai", "hc"]) expect(pinks(THEMES[name]), name).toEqual(["#F0ABFC", "#E879F9", "#E879F9"]);
+    });
+    it("takes the owner's light values on light themes", () => {
+        expect(pinks(THEMES.light2026)).toEqual(["#C026D3", "#D946EF", "#C026D3"]);
+    });
+    it("goes a step darker on high contrast light, as purple does", () => {
+        expect(pinks({ kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" })).toEqual(["#A21CAF", "#C026D3", "#A21CAF"]);
+    });
+});
+
 describe("mix", () => {
     it("moves each channel the given share of the way, rounding to the nearest", () => {
         // 18 + (191 - 18) × 0.09 = 33.57 → 34 (0x22), 19 + 172 × 0.09 = 34.48 → 34 (0x22), 20 + 171 × 0.09 = 35.39 → 35 (0x23)
@@ -124,6 +137,8 @@ describe("applyTheme", () => {
         applyTheme(root, THEMES.monokai);
         for (const [mockupName, hex] of Object.entries(MOCKUP.monokai)) expect(root.style_[`--${NAMES[mockupName]}`], NAMES[mockupName]).toBe(hex.toUpperCase());
         expect(root.style_["--fade"]).toBe("50%");
+        // a theme change inside VS Code's panel brings the pink too, so a selected box's Used by follows the theme
+        expect(root.style_["--used-by-edge"]).toBe("#F0ABFC");
         expect(root.attributes["data-kind"]).toBe("dark");
     });
 });

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { boundsOf, initialViewport, MIN_READABLE_ZOOM, SIDE_ROOM } from "./viewport";
+import { boundsOf, drawnLinesBounds, fitViewport, initialViewport, linesBounds, MIN_READABLE_ZOOM, SIDE_ROOM } from "./viewport";
 
 // a 1907 × 998 window's canvas, less the top bar, the breadcrumb bar and the activity bar
 const CANVAS = { width: 1907, height: 878 };
+const panel = { width: 700, height: 758 };   // VS Code's panel at 700 x 900, less its bars (shell.ts)
+const laptop = { width: 904, height: 754 };  // 1440 x 900, less the explorer, inspector and bars
 
 describe("boundsOf", () => {
     it("spans every box, from the top-left corners to the far edges (232 × 56 boxes)", () => {
@@ -80,5 +82,70 @@ describe("initialViewport (owner: open every level at a readable size)", () => {
         // 1000 × 1000: 878 / 1150 ≈ 0.76 would fit without the band; with it, 814 / 1150 ≈ 0.71 is under the floor, so
         // it fills the width ((1907 - 144) / 1000, capped at 1) from 64 px down
         expect(initialViewport({ x: -500, y: 0, width: 1000, height: 1000 }, CANVAS, 64)).toEqual({ x: 953.5, y: 64, zoom: 1 });
+    });
+});
+
+it("reaches a line's extent past its corners by half its width, and its head's half-width at its tip", () => {
+    expect(linesBounds([{ points: [{ x: 0, y: 0 }, { x: 0, y: 100 }], width: 2, headHalf: 4.5 }])).toEqual({ x: -4.5, y: -1, width: 9, height: 102 });
+    expect(linesBounds([])).toBeNull();
+});
+
+it("measures the drawn lines as MapCanvas draws them, each under its box's one head", () => {
+    // max 4 imports: a -> b is 6 px, c -> b 1 px, and b's head is sized for 6, half max(4.5, 0.9 x 6 + 3) = 8.4. Only
+    // c -> b is drawn: x -0.5..0.5 and y -0.5..100.5 for the line, -8.4..8.4 at its tip for the head (its own would be 4.5)
+    const edges = [{ source: "a", target: "b", count: 4 }, { source: "c", target: "b", count: 1 }];
+    const b = drawnLinesBounds(new Map([["c->b", [{ x: 0, y: 0 }, { x: 0, y: 100 }]]]), edges)!;
+    expect(b.x).toBeCloseTo(-8.4, 10);
+    expect(b.width).toBeCloseTo(16.8, 10);
+    expect(b.y).toBe(-0.5);
+    expect(b.height).toBe(101);
+    expect(drawnLinesBounds(new Map(), edges)).toBeNull();
+});
+
+describe("fitViewport (the owner, 2026-10-28: Fit frames the lines too, the boxes win)", () => {
+    it("fits the boxes as React Flow's fit does when there are no lines", () => {
+        // 232 x 56 grown by 7.5% each side is 266.8 x 64.4: past 100%, so 1, centred on (116, 28)
+        expect(fitViewport({ x: 0, y: 0, width: 232, height: 56 }, null, panel)).toEqual({ x: 234, y: 351, zoom: 1 });
+    });
+    it("frames lines that reach past the boxes", () => {
+        // the boxes grown by 7.5% are -915.4..915.4 by -40.2..576.2, fit 700 / 1830.8 = 0.38235. The lines grown by 16
+        // are -1016..1016 by -46..586, 2032 x 632: 700 / 2032 = 0.34449, 0.901 of the boxes' fit, over 0.85. Centred on
+        // (0, 270): y = 379 - 270 x 0.34449
+        const v = fitViewport({ x: -796, y: 0, width: 1592, height: 536 }, { x: -1000, y: -30, width: 2000, height: 600 }, panel);
+        expect(v.zoom).toBeCloseTo(0.344488, 5);
+        expect(v.x).toBeCloseTo(350, 5);
+        expect(v.y).toBeCloseTo(285.988, 3);
+    });
+    it("frames the boxes alone when the lines would shrink them under 85% of their fit", () => {
+        // the lines grown are 2632 wide: 700 / 2632 = 0.26596, 0.696 of 0.38235. The boxes' own fit, centred on (0, 268)
+        const v = fitViewport({ x: -796, y: 0, width: 1592, height: 536 }, { x: -1300, y: -30, width: 2600, height: 600 }, panel);
+        expect(v.zoom).toBeCloseTo(0.382347, 5);
+        expect(v.y).toBeCloseTo(276.531, 3);
+    });
+});
+
+describe("initialViewport with lines", () => {
+    it("shifts a fitted page to show lanes on one side, at the same zoom", () => {
+        // boxes 504 x 176 fit at 1. The lines grown by 16 reach to -76 on the left, so what's framed is -76..541.8 by
+        // -16..192, its middle (232.9, 88): x = 350 - 232.9, against 350 - 252 = 98 for the boxes alone
+        expect(initialViewport({ x: 0, y: 0, width: 504, height: 176 }, panel, 0, { x: -60, y: 0, width: 300, height: 176 })).toEqual({ x: 117.1, y: 291, zoom: 1 });
+    });
+    it("keeps the boxes' view when framing the lines would take a fitted page under 0.75", () => {
+        // boxes 800 wide fit at 700 / 920 = 0.76087. With the lines, 976 wide: 0.7172, under the floor
+        const v = initialViewport({ x: 0, y: 0, width: 800, height: 176 }, panel, 0, { x: -100, y: 0, width: 900, height: 176 });
+        expect(v.zoom).toBeCloseTo(0.760870, 5);
+        expect(v.x).toBeCloseTo(45.652, 3);
+    });
+    it("opens a page too big to fit wide enough for its lines across, centred on them", () => {
+        // 504 x 2000 boxes open from the top at 1 (760 / 504 is over 1). Boxes and lines across are -600..252, 852 wide:
+        // 760 / 852 = 0.89202, over 0.85. Centred across on -174
+        const v = initialViewport({ x: -252, y: 0, width: 504, height: 2000 }, laptop, 0, { x: -600, y: 0, width: 850, height: 2000 });
+        expect(v.zoom).toBeCloseTo(0.892019, 5);
+        expect(v.x).toBeCloseTo(607.211, 3);
+        expect(v.y).toBe(64);
+    });
+    it("opens it as today when its lines across would take it under 85% of that", () => {
+        // -500..500 is 1000 wide: 0.76, under 0.85 of 1
+        expect(initialViewport({ x: -252, y: 0, width: 504, height: 2000 }, laptop, 0, { x: -500, y: 0, width: 1000, height: 2000 })).toEqual({ x: 452, y: 64, zoom: 1 });
     });
 });

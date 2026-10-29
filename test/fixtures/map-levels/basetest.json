@@ -1,0 +1,636 @@
+{
+ "path": "src/vs/base/test/common",
+ "page": 0,
+ "pageCount": 3,
+ "nodes": [
+  {
+   "path": "src/vs/base/test/common/virtualScheduling",
+   "name": "virtualScheduling",
+   "kind": "folder",
+   "fileCount": 13,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/observables",
+   "name": "observables",
+   "kind": "folder",
+   "fileCount": 3,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/utils.ts",
+   "name": "utils.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/timeTravelScheduler.ts",
+   "name": "timeTravelScheduler.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/executionGraph.ts",
+   "name": "executionGraph.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/arrays.test.ts",
+   "name": "arrays.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/arraysFind.test.ts",
+   "name": "arraysFind.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/assert.test.ts",
+   "name": "assert.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/async.test.ts",
+   "name": "async.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/buffer.test.ts",
+   "name": "buffer.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/cache.test.ts",
+   "name": "cache.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/cancelPreviousCalls.test.ts",
+   "name": "cancelPreviousCalls.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/cancellation.test.ts",
+   "name": "cancellation.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/charCode.test.ts",
+   "name": "charCode.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/collections.test.ts",
+   "name": "collections.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/color.test.ts",
+   "name": "color.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/console.test.ts",
+   "name": "console.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/date.test.ts",
+   "name": "date.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/decorators.test.ts",
+   "name": "decorators.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/diff",
+   "name": "diff",
+   "kind": "folder",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/envfile.test.ts",
+   "name": "envfile.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/errors.test.ts",
+   "name": "errors.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/event.test.ts",
+   "name": "event.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/executionGraph.test.ts",
+   "name": "executionGraph.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/extpath.test.ts",
+   "name": "extpath.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/filters.test.ts",
+   "name": "filters.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/fuzzyScorer.test.ts",
+   "name": "fuzzyScorer.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/glob.test.ts",
+   "name": "glob.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/hash.test.ts",
+   "name": "hash.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/history.test.ts",
+   "name": "history.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/htmlContent.test.ts",
+   "name": "htmlContent.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/iconLabels.test.ts",
+   "name": "iconLabels.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/image.test.ts",
+   "name": "image.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/iterativePaging.test.ts",
+   "name": "iterativePaging.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/iterator.test.ts",
+   "name": "iterator.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/json.test.ts",
+   "name": "json.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/jsonEdit.test.ts",
+   "name": "jsonEdit.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/jsonFormatter.test.ts",
+   "name": "jsonFormatter.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/jsonParse.test.ts",
+   "name": "jsonParse.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/jsonRpcProtocol.test.ts",
+   "name": "jsonRpcProtocol.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/jsonSchema.test.ts",
+   "name": "jsonSchema.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/keyCodes.test.ts",
+   "name": "keyCodes.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/keybindings.test.ts",
+   "name": "keybindings.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common/labels.test.ts",
+   "name": "labels.test.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "skipped"
+  },
+  {
+   "path": "src/vs/base/test/common//page-2",
+   "name": "Page 2",
+   "kind": "portal",
+   "page": 1,
+   "fileCount": 44,
+   "hiddenCount": 44,
+   "summaryStatus": "skipped",
+   "members": [
+    "src/vs/base/test/common/mock.ts",
+    "src/vs/base/test/common/snapshot.ts",
+    "src/vs/base/test/common/testUtils.ts",
+    "src/vs/base/test/common/filters.perf.data.js",
+    "src/vs/base/test/common/randomOverwrite.ts",
+    "src/vs/base/test/common/sinonUtils.ts",
+    "src/vs/base/test/common/assertHeap.ts",
+    "src/vs/base/test/common/filters.perf.data.d.ts",
+    "src/vs/base/test/common/filters.perf.test.ts",
+    "src/vs/base/test/common/layout.test.ts",
+    "src/vs/base/test/common/lazy.test.ts",
+    "src/vs/base/test/common/lifecycle.test.ts",
+    "src/vs/base/test/common/linkedList.test.ts",
+    "src/vs/base/test/common/linkedText.test.ts",
+    "src/vs/base/test/common/map.test.ts",
+    "src/vs/base/test/common/markdownLinks.test.ts",
+    "src/vs/base/test/common/markdownString.test.ts",
+    "src/vs/base/test/common/marshalling.test.ts",
+    "src/vs/base/test/common/mime.test.ts",
+    "src/vs/base/test/common/naturalLanguage",
+    "src/vs/base/test/common/network.test.ts",
+    "src/vs/base/test/common/nls.test.ts",
+    "src/vs/base/test/common/normalization.test.ts",
+    "src/vs/base/test/common/numbers.test.ts",
+    "src/vs/base/test/common/oauth.test.ts",
+    "src/vs/base/test/common/objects.test.ts",
+    "src/vs/base/test/common/observableInternal",
+    "src/vs/base/test/common/paging.test.ts",
+    "src/vs/base/test/common/path.test.ts",
+    "src/vs/base/test/common/performance.test.ts",
+    "src/vs/base/test/common/prefixTree.test.ts",
+    "src/vs/base/test/common/processes.test.ts",
+    "src/vs/base/test/common/resourceTree.test.ts",
+    "src/vs/base/test/common/resources.test.ts",
+    "src/vs/base/test/common/scrollable.test.ts",
+    "src/vs/base/test/common/sseParser.test.ts",
+    "src/vs/base/test/common/stream.test.ts",
+    "src/vs/base/test/common/strings.test.ts",
+    "src/vs/base/test/common/ternarySearchtree.test.ts",
+    "src/vs/base/test/common/tfIdf.test.ts",
+    "src/vs/base/test/common/traceableTimeApi.ts",
+    "src/vs/base/test/common/troubleshooting.ts",
+    "src/vs/base/test/common/types.test.ts",
+    "src/vs/base/test/common/uri.test.ts"
+   ]
+  },
+  {
+   "path": "src/vs/base/test/common//page-3",
+   "name": "Page 3",
+   "kind": "portal",
+   "page": 2,
+   "fileCount": 3,
+   "hiddenCount": 3,
+   "summaryStatus": "skipped",
+   "members": [
+    "src/vs/base/test/common/uriTemplate.test.ts",
+    "src/vs/base/test/common/uuid.test.ts",
+    "src/vs/base/test/common/yaml.test.ts"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "source": "src/vs/base/test/common//page-2",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 33
+  },
+  {
+   "source": "src/vs/base/test/common//page-2",
+   "target": "src/vs/base/test/common/virtualScheduling",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common//page-3",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/base/test/common/arrays.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/arraysFind.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/assert.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/async.test.ts",
+   "target": "src/vs/base/test/common/timeTravelScheduler.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/async.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/buffer.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/cache.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/cancelPreviousCalls.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/cancellation.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/charCode.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/collections.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/color.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/console.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/date.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/decorators.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/diff",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/envfile.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/errors.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/event.test.ts",
+   "target": "src/vs/base/test/common/timeTravelScheduler.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/event.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/executionGraph.test.ts",
+   "target": "src/vs/base/test/common/executionGraph.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/executionGraph.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/extpath.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/filters.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/fuzzyScorer.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/glob.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/hash.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/history.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/htmlContent.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/iconLabels.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/image.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/iterativePaging.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/iterator.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/json.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/jsonEdit.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/jsonFormatter.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/jsonParse.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/jsonRpcProtocol.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/jsonSchema.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/keyCodes.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/keybindings.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/labels.test.ts",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/observables",
+   "target": "src/vs/base/test/common/timeTravelScheduler.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/observables",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 3
+  },
+  {
+   "source": "src/vs/base/test/common/timeTravelScheduler.ts",
+   "target": "src/vs/base/test/common/virtualScheduling",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/virtualScheduling",
+   "target": "src/vs/base/test/common/executionGraph.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/base/test/common/virtualScheduling",
+   "target": "src/vs/base/test/common/utils.ts",
+   "count": 1
+  }
+ ]
+}

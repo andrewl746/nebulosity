@@ -1,0 +1,423 @@
+{
+ "path": "src/vs/sessions/contrib/agentFeedback/browser",
+ "page": 0,
+ "pageCount": 1,
+ "nodes": [
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "name": "agentFeedbackService.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "name": "sessionEditorComments.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "name": "agentFeedbackEditorUtils.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackModel.ts",
+   "name": "agentFeedbackModel.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorActions.ts",
+   "name": "agentFeedbackEditorActions.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentEntry.ts",
+   "name": "agentFeedbackAttachmentEntry.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorInputContribution.ts",
+   "name": "agentFeedbackEditorInputContribution.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorOverlay.ts",
+   "name": "agentFeedbackEditorOverlay.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidget.ts",
+   "name": "agentFeedbackEditorWidget.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/feedbackInputWidget.ts",
+   "name": "feedbackInputWidget.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentEditorCommentsProvider.ts",
+   "name": "agentEditorCommentsProvider.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachment.ts",
+   "name": "agentFeedbackAttachment.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentWidget.ts",
+   "name": "agentFeedbackAttachmentWidget.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidgetContribution.ts",
+   "name": "agentFeedbackEditorWidgetContribution.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackItemsBackend.ts",
+   "name": "agentFeedbackItemsBackend.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackPRReviewSeeder.ts",
+   "name": "agentFeedbackPRReviewSeeder.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackPRThreadResolver.ts",
+   "name": "agentFeedbackPRThreadResolver.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackReviewCommands.ts",
+   "name": "agentFeedbackReviewCommands.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "name": "agentFeedback.contribution.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackContextView.ts",
+   "name": "agentFeedbackContextView.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackOverviewRulerContribution.ts",
+   "name": "agentFeedbackOverviewRulerContribution.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  },
+  {
+   "path": "src/vs/sessions/contrib/agentFeedback/browser/nullAgentFeedbackService.contribution.ts",
+   "name": "nullAgentFeedbackService.contribution.ts",
+   "kind": "file",
+   "fileCount": 1,
+   "summaryStatus": "fresh"
+  }
+ ],
+ "edges": [
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentEditorCommentsProvider.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackModel.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentEditorCommentsProvider.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentEditorCommentsProvider.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentEditorCommentsProvider.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachment.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentWidget.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorActions.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorInputContribution.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorOverlay.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidgetContribution.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackOverviewRulerContribution.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackPRReviewSeeder.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackPRThreadResolver.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackReviewCommands.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachment.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentEntry.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachment.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentEntry.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackModel.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentWidget.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackContextView.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentWidget.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackContextView.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorActions.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorActions.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorActions.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorInputContribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorInputContribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorInputContribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/feedbackInputWidget.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorOverlay.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorActions.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorOverlay.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorOverlay.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorOverlay.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidget.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidget.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackModel.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidget.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidget.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidgetContribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidget.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidgetContribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorWidgetContribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackItemsBackend.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackModel.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackOverviewRulerContribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackPRReviewSeeder.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackPRThreadResolver.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackReviewCommands.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackAttachmentEntry.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackItemsBackend.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackModel.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/nullAgentFeedbackService.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackEditorUtils.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/nullAgentFeedbackService.contribution.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackService.ts",
+   "count": 1
+  },
+  {
+   "source": "src/vs/sessions/contrib/agentFeedback/browser/sessionEditorComments.ts",
+   "target": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedbackModel.ts",
+   "count": 1
+  }
+ ]
+}
