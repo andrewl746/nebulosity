@@ -54,6 +54,13 @@ export type PlanOptions = {
      * and the stage refresh). Default: "none".
      */
     restyle?: Restyle;
+    /**
+     * true plans an out-of-date folder or the repo whose text an older prompt version wrote, and which this plan doesn't
+     * restyle, as lazy, so it counts as settled and its parent can go over its older text. Under Q2 B only opening it
+     * rewrites it, so without this its parent would wait for it for good (the Task 4 review's I1, ruled as option a).
+     * summarizeNow and the sweep pass it. A full run and the stage refresh don't. Default: false.
+     */
+    olderFoldersWaitToBeOpened?: boolean;
 };
 
 /**
@@ -256,7 +263,9 @@ type TargetInput = {
 
 /**
  * The state of one model-written target, given its input, its stored row and whether its children are settled. A row
- * an older prompt wrote for the same input is older style only (P1): current, unless the plan restyles it.
+ * an older prompt wrote for the same input is older style only (P1): current, unless the plan restyles it. One it wrote
+ * for another input is out of date, and with olderFoldersWaitToBeOpened a folder or the repo like that is lazy unless
+ * the plan restyles it.
  */
 function decide(
     kind: SummaryTargetKind,
@@ -287,6 +296,8 @@ function decide(
     const keep = (state: TargetState): PlannedTarget => ({ ...base, state, status: row?.status === status ? null : status });
 
     if (kind !== "file" && hasText && !options.refreshStaleFolders) return keep("lazy");
+    // left to be opened (Q2 B, PlanOptions.olderFoldersWaitToBeOpened): only the target a plan restyles goes now
+    if (kind !== "file" && hasText && options.olderFoldersWaitToBeOpened && !restyled && row && writtenInOlderStyle(row)) return keep("lazy");
     return keep(childrenSettled ? "ready" : "waiting");
 }
 

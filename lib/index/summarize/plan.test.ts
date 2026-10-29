@@ -264,6 +264,26 @@ describe("planSummaries — summaries an older prompt wrote", () => {
         expect(notCurrent(planSummaries(FILES, FOLDERS, stored, options({ refreshStaleFolders: true })))).toEqual([["src/core", "ready", "stale", undefined]]);
     });
 
+    // Q2 B and the Task 4 review's I1: only opening a stale folder an older prompt wrote rewrites it, so it mustn't hold up its parent
+    it("lets a stale folder 1.0 wrote wait to be opened when told to, so the folder above it can go", () => {
+        // log.ts rewritten in the current style (as an opened panel would): src/core's input changed, src's didn't
+        const stored = inV2(allWaves().stored).map((s) => (s.path === "src/core/log.ts"
+            ? { ...s, tagline: "T3:src/core/log.ts", promptVersion: PROMPT_VERSION, inputHash: inputHash("claude-haiku-5-5", PROMPT_VERSION, "file\nsrc/core/log.ts\nh-log") }
+            : s));
+        const plan = (overrides: Partial<PlanOptions>) => notCurrent(planSummaries(FILES, FOLDERS, stored, options(overrides)));
+
+        // src opened: src/core waits to be opened itself, settled, so src is ready
+        expect(plan({ restyle: { path: "src" }, olderFoldersWaitToBeOpened: true })).toEqual([["src/core", "lazy", "stale", undefined], ["src", "ready", null, true]]);
+        // without the option, as a full run plans: src/core is ready, and src waits for it
+        expect(plan({ restyle: { path: "src" } })).toEqual([["src/core", "ready", "stale", undefined], ["src", "waiting", null, true]]);
+        // src/core opened itself: it's ready, and src's input is still unchanged
+        expect(plan({ restyle: { path: "src/core" }, olderFoldersWaitToBeOpened: true })).toEqual([["src/core", "ready", "stale", undefined]]);
+        // a stale src/core the current prompt wrote is ready as before, so src waits for it
+        const current = stored.map((s) => (s.path === "src/core" ? { ...s, promptVersion: PROMPT_VERSION } : s));
+        expect(notCurrent(planSummaries(FILES, FOLDERS, current, options({ restyle: { path: "src" }, olderFoldersWaitToBeOpened: true }))))
+            .toEqual([["src/core", "ready", "stale", undefined], ["src", "waiting", null, true]]);
+    });
+
     it("keeps a folder 1.0 wrote current when a child's 1.0 summary holds a blank line", () => {
         // the body version 2 rendered, with log.ts's summary verbatim
         const body = [

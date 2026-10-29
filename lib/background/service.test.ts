@@ -535,6 +535,32 @@ describe("background service", () => {
         await service.stop();
     });
 
+    // the Task 4 review's I1: a stale folder 1.0 wrote waits to be opened, so it can't hold up the folder above it
+    it("sweeps a stale folder the current prompt wrote, though a stale subfolder an older prompt wrote stays as it is", async () => {
+        const root = await summarizedBy10();
+        // texts of their own, so each file rewritten here reads differently from what 1.0 stored for it
+        const stub = stubSummarizer({ texts: {
+            "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines." },
+            "src/index.ts": { tagline: "Package entry", summary: "Re-exports the core." },
+        } });
+        const service = createBackgroundService({ summarizer: stub.summarizer, watch: fakeWatcher().watch, embed: fakeEmbed });
+        await service.setRepo(root);
+        await service.idle();
+
+        // src opened, so the current prompt wrote it; then src/index.ts, directly inside it, and src/core/log.ts below it
+        await service.summarizeNow("src");
+        await service.summarizeNow("src/index.ts");
+        await service.summarizeNow("src/core/log.ts");
+        expect(["src", "src/core"].map((p) => [rowStatus(root, p), storedRow(root, p)?.promptVersion])).toEqual([["stale", PROMPT_VERSION], ["stale", 2]]);
+
+        // the sweep redoes src, over src/core's 1.0 text; src/core, and the repo above src, wait to be opened (Q2 B)
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await service.idle();
+        expect(stub.subjects()).toEqual(["Folder: src", "File: src/index.ts", "File: src/core/log.ts", "Folder: src"]);
+        expect(["src", "src/core", ""].map((p) => rowStatus(root, p))).toEqual(["fresh", "stale", "stale"]);
+        await service.stop();
+    });
+
     // R17 (ADR-066): a model change is paid for only after a yes, so the automatic jobs leave what another model wrote
     it("after a folder model change, the sweep redoes only folders the model now in use wrote, once their own inputs change", async () => {
         const root = await summarizedFixture();   // every folder and the repo written by Sonnet 5.5, every file by Haiku 5.5

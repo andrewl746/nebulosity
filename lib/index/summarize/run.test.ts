@@ -1129,6 +1129,21 @@ describe("runSummaries — summaries an older prompt wrote (P1, P7, P8)", () => 
         expect(["src/core/log.ts", "src/core/index.ts"].map((p) => row(root, p)?.promptVersion)).toEqual([2, 2]);
     });
 
+    // the Task 4 review's I1: under Q2 B only opening a stale folder 1.0 wrote rewrites it, so it can't hold up its parent
+    it("opens a folder whose subfolder 1.0 wrote is out of date, without waiting for that subfolder", async () => {
+        const root = await writtenBy10();
+        // a text of its own, so log.ts rewritten reads differently from what 1.0 stored for it
+        const stub = stubSummarizer({ texts: { "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines." } } });
+        await summarizeNow(root, "src/core/log.ts", stub.summarizer);
+        expect(row(root, "src/core")).toMatchObject({ status: "stale", promptVersion: 2 });
+
+        // src's own input is unchanged (src/core's stored text is), so opening it restyles it, over src/core's 1.0 text: one request
+        expect(await summarizeNow(root, "src", stub.summarizer)).toMatchObject({ kind: "folder", status: "fresh", promptVersion: PROMPT_VERSION });
+        expect(stub.subjects()).toEqual(["File: src/core/log.ts", "Folder: src"]);
+        expect(stub.requests[1].prompt).toContain("\n- core/ (2 files): About Folder: src/core — ");
+        expect(row(root, "src/core")).toMatchObject({ status: "stale", promptVersion: 2 });
+    });
+
     it("counts older-style rows in a full run's estimate, and marks them", async () => {
         const root = await writtenBy10();
 

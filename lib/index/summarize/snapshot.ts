@@ -11,10 +11,11 @@ export type Snapshot = { targets: PlannedTarget[]; files: Map<string, FileFacts>
  * refresh (status.ts) all plan through here, so they can't disagree about a target's state. `models` is the setting
  * as resolved for this job (ADR-066): the model is part of every inputHash, so every planner has to use the same one.
  * `restyle` is PlanOptions.restyle: which summaries an older prompt wrote this plan redoes (P1).
+ * `olderFoldersWaitToBeOpened` is PlanOptions.olderFoldersWaitToBeOpened (Q2 B).
  */
 export function planSnapshot(
     db: Db, repoId: number, refreshStaleFolders: boolean, failedThisRun: ReadonlySet<string>, models: ResolvedSummaryModels,
-    restyle: Restyle = "none"
+    restyle: Restyle = "none", olderFoldersWaitToBeOpened: boolean = false
 ): Snapshot {
     // One read transaction: a structure run committing meanwhile can't hand us half of its changes.
     // (better-sqlite3 has one connection, so reads through `db` inside the callback belong to it.)
@@ -25,6 +26,7 @@ export function planSnapshot(
             refreshStaleFolders,
             failedThisRun,
             restyle,
+            olderFoldersWaitToBeOpened,
         });
         return { targets, files: new Map(files.map((f) => [f.path, f])) };
     });

@@ -350,6 +350,8 @@ export function createBackgroundService(deps: BackgroundDeps): BackgroundService
                 models,
                 transport: "direct",
                 refreshStaleFolders: true,
+                // such a folder plans lazy, so it never keeps the folder above it waiting (Q2 B, the select below)
+                olderFoldersWaitToBeOpened: true,
                 wait: false,
                 budgetUsd: INCREMENTAL_BUDGET_USD,
                 budgetScope: "run",

@@ -49,6 +49,11 @@ export type SummaryRunOptions = {
      * The worker's jobs leave it off.
      */
     restyle?: boolean;
+    /**
+     * true leaves an out-of-date folder or the repo an older prompt version wrote to be opened, and lets the folder
+     * above it go without it (PlanOptions.olderFoldersWaitToBeOpened, Q2 B). The sweep passes it. Default: false.
+     */
+    olderFoldersWaitToBeOpened?: boolean;
     pollIntervalMs?: number;
     /** How often a long wave refreshes the stage and the lock. */
     heartbeatMs?: number;
@@ -288,6 +293,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
         repoUsd: options.repoBudgetUsd ?? null,
     };
     const refreshStaleFolders = options.refreshStaleFolders ?? true;
+    const olderFoldersWaitToBeOpened = options.olderFoldersWaitToBeOpened ?? false;
     const ctx = newContext(db, repoId, root, options.models ?? DEFAULT_SUMMARY_MODELS, options.onProgress ?? (() => {}), budget,
         options.select, options.maxTargets, refreshStaleFolders, options.restyle ? "all" : "none");
     let last: PlannedTarget[] = [];
@@ -303,7 +309,7 @@ export async function runSummaries(repoRoot: string, options: SummaryRunOptions)
             ctx.say(`released ${batchId}: ${plural(released, "request")} will be sent again`);
         }
         for (;;){
-            const snap = planSnapshot(db, repoId, refreshStaleFolders, ctx.failedThisRun, ctx.models, ctx.restyle);
+            const snap = planSnapshot(db, repoId, refreshStaleFolders, ctx.failedThisRun, ctx.models, ctx.restyle, olderFoldersWaitToBeOpened);
             last = snap.targets;
             const ids = applyTargetUpdates(db, repoId, snap.targets);
             ctx.tally.templated += snap.targets.filter((t) => t.state === "template").length;
@@ -426,8 +432,9 @@ async function summarizeOnce(root: string, targetPath: string, summarizer: Summa
     const repoId = requireRepository(db, repoKey(root));
     requireStructureReady(db, repoId);
     // Only the opened target is restyled (P8): children an older prompt wrote count as current, so a folder whose
-    // children are all in the older style is ready at once instead of waiting for them.
-    const snap = planSnapshot(db, repoId, true, new Set(), models, { path: targetPath });
+    // children are all in the older style is ready at once instead of waiting for them. An out-of-date child folder an
+    // older prompt wrote waits to be opened itself (Q2 B), so it doesn't keep this one waiting either.
+    const snap = planSnapshot(db, repoId, true, new Set(), models, { path: targetPath }, true);
     const target = snap.targets.find((t) => t.path === targetPath);
     if (!target) throw new TargetNotFoundError(targetPath);
     if (target.state === "waiting") throw new TargetNotReadyError(targetPath);
