@@ -22,7 +22,7 @@ import os from "node:os";
 import path from "node:path";
 
 const USAGE = "usage: npm run check-layout -- <base-url> [--shots <dir>] [--all-shots] [--sizes WxH[@dpr],...] [--dpr r,...] [--states name,...] [--resize] [--embed]";
-/** Every address ends with `embed=vscode` (--embed): the Map as VS Code's panel shows it, Back button and all. */
+/** Every address ends with `embed=vscode` (--embed): the Map as VS Code's panel shows it, with no logo or ? button. */
 let EMBED = false;
 
 /**
@@ -595,7 +595,8 @@ const stateShown = (state) => [
  *   (e) no two pieces of visible text sit on each other;
  *   (f) no text sits on a control it isn't part of (a message over the canvas lets clicks through, so (b) can't see it);
  *   (g) the layout is the one shell.ts gives this window: the explorer's form, the inspector's place, the toolbar's and
- *       the status bar's rows, the legend, and the page's least height;
+ *       the status bar's rows, the legend, and the page's least height; and the header's Back is there at every size,
+ *       right before the breadcrumb, in the browser and VS Code's panel alike (the owner's pick, 2026-10-29);
  *   (h) no text is drawn under something else (an overlay that lets clicks through, which (b) and (f) can't see).
  * `shell` is shellLayout for the page's own width and height and whether a box is selected, worked out by the caller.
  * The canvas's boxes, lines and the divider pan with the Map, so they're left out.
@@ -803,6 +804,10 @@ function inspectLayout({ shell }){
         if (bar !== (shell.status === "bar")) failures.push(`(g) the status bar is ${bar ? "there" : "gone"}, where shell.ts says ${shell.status}`);
         const legend = document.querySelector('[data-testid="legend"]') !== null;
         if (legend !== shell.legend) failures.push(`(g) the legend is ${legend ? "shown" : "gone"}, where shell.ts says ${shell.legend ? "shown" : "gone"}`);
+        const back = document.querySelector('header [data-testid="back"]');
+        const crumb = document.querySelector('header nav[aria-label="Where you are"]');
+        if (back === null || !visible(back)) failures.push("(g) the header has no Back");
+        else if (crumb !== null && (back.nextElementSibling !== crumb || back.getBoundingClientRect().right > crumb.getBoundingClientRect().left + TOL)) failures.push(`(g) Back isn't right before the breadcrumb`);
     }
 
     // what of an element shows: the rect its clipping boxes leave (with `self`, its own overflow clips too)
