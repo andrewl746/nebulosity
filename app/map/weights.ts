@@ -61,15 +61,19 @@ export const LABELLED_LINES = 3;
 
 /**
  * The lines whose count is written on them: the page's three heaviest (ties by source, then target, so the same page
- * always labels the same ones) and every line of the selected box. Keys are "source->target", as React Flow's ids.
+ * always labels the same ones) and every line of the selected box. A line that carries one import goes without, on any
+ * page: a busy box's lines were covered in 1s, the thinnest line already says it, and the inspector and a line's hover
+ * sentence give it in words (the owner, 2026-10-28). Keys are "source->target", as React Flow's ids. A count is drawn
+ * only where it fits clear of everything else (routes.ts's placeCounts).
  */
 export function labelledLines(edges: readonly MapEdge[], selected: string | null): Set<string> {
     const key = (e: MapEdge): string => `${e.source}->${e.target}`;
-    const heaviest = [...edges]
+    const counted = edges.filter((e) => e.count > 1);
+    const heaviest = counted
         .filter((e) => e.source !== e.target)
         .sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0) || (a.target < b.target ? -1 : a.target > b.target ? 1 : 0))
         .slice(0, LABELLED_LINES)
         .map(key);
-    const ofSelected = selected === null ? [] : edges.filter((e) => e.source === selected || e.target === selected).map(key);
+    const ofSelected = selected === null ? [] : counted.filter((e) => e.source === selected || e.target === selected).map(key);
     return new Set([...heaviest, ...ofSelected]);
 }

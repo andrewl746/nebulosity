@@ -17,7 +17,7 @@ import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
-import { nextRoutes, routeEdges } from "./routes";
+import { nextRoutes, placeCounts, routeEdges, type Point, type Rect } from "./routes";
 import { isLightKind } from "./theme";
 import { useThemeKind } from "./useThemeKind";
 import { boundsOf, drawnLinesBounds, initialViewport } from "./viewport";
@@ -25,6 +25,32 @@ import { boxHeadWidths, dotSize, labelledLines, lineWidth, maxFilesOf, maxImport
 
 /** The line ids a key of ids joined by newlines names. */
 const keySet = (key: string): Set<string> => new Set(key === "" ? [] : key.split("\n"));
+
+/** What a page's counts are placed by: each line's width, each line's label size, and the boxes a count keeps off. */
+type CountPage = { widths: Map<string, number>; sizes: Map<string, { width: number; height: number }>; boxes: Rect[] };
+
+/** Where the counts of `labelled` go among the lines of `routes` that are `drawn`, from the places `kept` gives them (placeCounts). */
+function countsOn(page: CountPage, routes: ReadonlyMap<string, Point[]>, drawn: ReadonlySet<string>, labelled: ReadonlySet<string>, kept: ReadonlyMap<string, Point>): Map<string, Point> {
+    const on = new Map([...routes].filter(([id]) => drawn.has(id)));
+    const labels = new Map([...on.keys()].filter((id) => labelled.has(id)).map((id) => [id, page.sizes.get(id)!]));
+    return placeCounts(on, page.widths, labels, page.boxes, kept);
+}
+
+/**
+ * What's on screen, and what it was worked out from: the rest routes, the lines drawn and their routes, and the counts.
+ * `settled` is the lines drawn without the hover, `restCounts` rest's counts and `settledCounts` the counts without
+ * the hover (the selection's, from rest's), which a hover's `counts` start from.
+ */
+type Shown = {
+    rest: Map<string, Point[]>;
+    drawn: string;
+    routes: Map<string, Point[]>;
+    selected: string | null;
+    settled: string;
+    restCounts: Map<string, Point>;
+    settledCounts: Map<string, Point>;
+    counts: Map<string, Point>;
+};
 
 // at module scope: a new object per render would make React Flow remount every box and line
 const nodeTypes: NodeTypes = { box: MapBox };
@@ -112,13 +138,43 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     }, [level, quietLines, strongOnly]);
     const restRoutes = useMemo(() => routeEdges(positions, level.edges, keySet(restKey)), [positions, level, restKey]);
     const drawnKey = level.edges.map(edgeKey).filter((id) => emphasis.edges.get(id) !== "hidden").join("\n");
-    // what's on screen, and what it was routed from: React's way to keep state that follows a prop, set during render
-    const [shown, setShown] = useState({ rest: restRoutes, drawn: restKey, routes: restRoutes });
-    if (shown.rest !== restRoutes || shown.drawn !== drawnKey){
-        const before = shown.rest === restRoutes ? shown.routes : restRoutes;
-        setShown({ rest: restRoutes, drawn: drawnKey, routes: nextRoutes(positions, level.edges, restRoutes, before, keySet(drawnKey)) });
-    }
-    const routes = shown.routes;
+    // the lines drawn without the hover: rest's, and the selection's and the lit boxes' on top
+    const settledKey = useMemo(() => {
+        const settled = mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, null, { quietLines, strongOnly, pinned: agent });
+        return level.edges.map(edgeKey).filter((id) => settled.edges.get(id) !== "hidden").join("\n");
+    }, [level, selected, quietLines, strongOnly, agent]);
+    // what a count keeps clear of: every other line by its width, every other count, its label sized from its count's
+    // text as RoutedEdge writes it (7 px a character and 14 of padding and border, by 18), and every box with its back card
+    const countPage = useMemo((): CountPage => ({
+        widths: new Map(level.edges.map((e) => [edgeKey(e), lineWidth(e.count, maxImports)])),
+        sizes: new Map(level.edges.map((e) => [edgeKey(e), { width: formatCount(e.count).length * 7 + 14, height: 18 }])),
+        boxes: level.nodes.flatMap((box) => {
+            const at = positions.get(box.path);
+            return at === undefined ? [] : [{ x: at.x + (BOX_WIDTH + 5) / 2, y: at.y + (BOX_HEIGHT + 5) / 2, width: BOX_WIDTH + 5, height: BOX_HEIGHT + 5 }];
+        }),
+    }), [level, positions, maxImports]);
+    // What's on screen, and what it was worked out from: React's way to keep state that follows a prop, set during render.
+    // A count is placed from a base, so lines that appear move only the counts they run into (placeCounts): rest's are
+    // placed afresh, the screen without a hover (a selection, or a lit box) starts from rest's, and a hover from the
+    // screen without it. Rest's and the selection's are held beside the routes, so a count a hovered line pushed aside
+    // goes back when the hover ends, and nothing chains from one hover to the next. New rest routes (another level, or
+    // Strong links only or Show all lines turned) start the counts afresh with them.
+    const follow = (previous: Shown | null): Shown => {
+        const fresh = previous === null || previous.rest !== restRoutes;
+        // the same lines keep the routes they have, rest's lines included, which nextRoutes would give back as they are
+        const before = fresh ? restRoutes : previous.routes;
+        const routes = drawnKey === (fresh ? restKey : previous.drawn) ? before : nextRoutes(positions, level.edges, restRoutes, before, keySet(drawnKey));
+        const restCounts = fresh ? countsOn(countPage, restRoutes, keySet(restKey), labelledLines(level.edges, null), new Map()) : previous.restCounts;
+        // a hover draws more lines and never hides one, so the lines without it are on screen, where they'll stay
+        const settledCounts = !fresh && previous.selected === selected && previous.settled === settledKey
+            ? previous.settledCounts
+            : countsOn(countPage, routes, keySet(settledKey), labelled, restCounts);
+        const counts = drawnKey === settledKey ? settledCounts : countsOn(countPage, routes, keySet(drawnKey), labelled, settledCounts);
+        return { rest: restRoutes, drawn: drawnKey, routes, selected, settled: settledKey, restCounts, settledCounts, counts };
+    };
+    const [shown, setShown] = useState(() => follow(null));
+    if (shown.rest !== restRoutes || shown.drawn !== drawnKey || shown.selected !== selected || shown.settled !== settledKey) setShown(follow(shown));
+    const { routes, counts } = shown;
     const [nodes, setNodes, onNodesChange] = useNodesState<BoxNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<RoutedEdgeType>([]);
     const { setViewport, getViewport } = useReactFlow();
@@ -162,9 +218,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     width: lineWidth(edge.count, maxImports),
                     headWidth: heads.get(edge.target),
                     color: look.color,
-                    // the page's heaviest lines and the selection's carry their count, the selection's in the text color
-                    count: labelled.has(id) ? formatCount(edge.count) : undefined,
+                    // the page's heaviest lines and the selection's carry their count where it has a place clear of
+                    // everything else, the selection's in the text color
+                    count: counts.has(id) ? formatCount(edge.count) : undefined,
                     countStrong: tone === "selected",
+                    labelAt: counts.get(id),
                 },
                 source: edge.source,
                 target: edge.target,
@@ -179,7 +237,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         // review I2)
         const next = drawn.sort((a, b) => a.layer - b.layer).map((d) => d.edge);
         setEdges((previous) => reuseUnchanged(previous, next, sameRoutedEdge));
-    }, [level, byPath, routes, emphasis, selected, hoveredEdge, maxImports, heads, labelled, setEdges]);
+    }, [level, byPath, routes, counts, emphasis, selected, hoveredEdge, maxImports, heads, setEdges]);
 
     // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, its drawn lines
     // too where the boxes keep their size, unless that would shrink it past 75%, then from its top), then report it

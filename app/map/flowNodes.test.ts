@@ -95,4 +95,12 @@ describe("sameRoutedEdge: whether a line would draw the same", () => {
         expect(sameRoutedEdge(edge({ headWidth: 6 }), edge({ headWidth: 6 }))).toBe(true);
         expect(sameRoutedEdge(edge({ headWidth: 6 }), edge({ headWidth: 3 }))).toBe(false);
     });
+
+    it("redraws a line whose count moves, or goes, and not one whose count is placed again where it was", () => {
+        // a new object at the same place is the same line, so a count placed again where it was draws nothing new
+        expect(sameRoutedEdge(edge({ count: "16", labelAt: { x: 0, y: 20 } }), edge({ count: "16", labelAt: { x: 0, y: 20 } }))).toBe(true);
+        expect(sameRoutedEdge(edge({ count: "16", labelAt: { x: 0, y: 20 } }), edge({ count: "16", labelAt: { x: 0, y: 30 } }))).toBe(false);
+        expect(sameRoutedEdge(edge({ count: "16", labelAt: { x: 0, y: 20 } }), edge({ count: "16", labelAt: { x: 4, y: 20 } }))).toBe(false);
+        expect(sameRoutedEdge(edge({ count: "16", labelAt: { x: 0, y: 20 } }), edge({ count: "16" }))).toBe(false);
+    });
 });

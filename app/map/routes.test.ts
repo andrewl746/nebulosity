@@ -4,7 +4,7 @@ import type { LevelResponse, MapEdge, MapNode } from "@/lib/contracts";
 import { drawnAt, endsOf, headsOf, routeFaults, widthsOf } from "@/scripts/route-faults";
 import { edgeKey, isBusyLevel, mapEmphasis } from "./emphasis";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
-import { longestSideMiddle, nextRoutes, roundedPath, routeEdges, type Point } from "./routes";
+import { longestSideMiddle, nextRoutes, placeCounts, roundedPath, routeEdges, type Point } from "./routes";
 import { arrowHead, boxHeadWidths } from "./weights";
 
 const at = (entries: Record<string, Position>): Map<string, Position> => new Map(Object.entries(entries));
@@ -130,7 +130,7 @@ describe("roundedPath and longestSideMiddle", () => {
         expect(roundedPath([{ x: 0, y: 0 }, { x: 0, y: 6 }, { x: 100, y: 6 }])).toBe("M 0 0 L 0 3 Q 0 6 3 6 L 100 6");
     });
 
-    it("puts a line's count in the middle of its longest side", () => {
+    it("puts a line's hover sentence, when it has no count placed, in the middle of its longest side", () => {
         // 20 down, then 100 across, then 10 down: the across side is longest, its middle at x = 50
         expect(longestSideMiddle([{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 100, y: 20 }, { x: 100, y: 30 }])).toEqual({ x: 50, y: 20 });
         // two sides of 40: the first wins
@@ -377,5 +377,79 @@ describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a
         const steps = drive(positions, edges, states);
         expect(steps[0].drawn.size).toBe(0);
         expect(moved(steps)).toEqual([]);
+    });
+});
+
+describe("placeCounts: a count says whose it is, and overlaps nothing but its own line (the owner, 2026-10-28)", () => {
+    const size = { width: 30, height: 18 };
+
+    it("puts each count on a stretch its line has to itself, not on the run two lines share", () => {
+        // a and b leave one point and run right together to x 100; a turns down there, b runs on to x 300 and turns down
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 100, y: 20 }, { x: 100, y: 200 }];
+        const b: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 300, y: 20 }, { x: 300, y: 200 }];
+        const at = placeCounts(new Map([["a", a], ["b", b]]), new Map([["a", 2], ["b", 2]]), new Map([["a", size], ["b", size]]), []);
+        // a's own stretch is its drop at x 100, b's the rest of its run (100 to 300) or its drop at x 300
+        expect(at.get("a")!.x).toBe(100);
+        const pb = at.get("b")!;
+        expect(pb.x === 300 || (pb.y === 20 && pb.x > 100 + size.width / 2)).toBe(true);
+    });
+
+    it("moves a count along its line off a place another line crosses", () => {
+        // a long drop at x 0, crossed at its middle (y 100) by a run along y 100
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 200 }];
+        const b: Point[] = [{ x: -50, y: 100 }, { x: 50, y: 100 }];
+        const at = placeCounts(new Map([["a", a], ["b", b]]), new Map([["a", 1], ["b", 1]]), new Map([["a", size]]), []);
+        const p = at.get("a")!;
+        expect(p.x).toBe(0);
+        expect(Math.abs(p.y - 100)).toBeGreaterThan(size.height / 2 + 1);
+    });
+
+    it("keeps two counts apart, moving the second along its line", () => {
+        // a and b are drops 24 px apart, each 100 long, so 82 of room. a goes first (ties by key) at its middle, 9 + 41 = 50,
+        // and its 30 px label reaches 15 px, short of b's line and its room at 21.5. b's middle, (24, 50), meets a's
+        // label grown by 3 px each side (|dx| 24 × 2 = 48 < 66, |dy| 0 < 42), and so do 0.3 (33.6) and 0.7 (66.4), each
+        // 16.4 off (32.8 < 42). 0.15 is 9 + 12.3 = 21.3, 28.7 off (57.4 ≥ 42), so b goes there
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 100 }];
+        const b: Point[] = [{ x: 24, y: 0 }, { x: 24, y: 100 }];
+        const at = placeCounts(new Map([["a", a], ["b", b]]), new Map([["a", 1], ["b", 1]]), new Map([["a", size], ["b", size]]), []);
+        expect(at.get("a")).toEqual({ x: 0, y: 50 });
+        expect(at.get("b")!.x).toBe(24);
+        expect(at.get("b")!.y).toBeCloseTo(21.3, 9);
+    });
+
+    it("keeps a count off a box", () => {
+        // a box 60 x 20 centred on (0, 50) sits across a's drop. The middle (50), 0.3 (33.6) and 0.7 (66.4) are each under
+        // 19 off its centre (|dy| × 2 < 18 + 20 = 38). 0.15 is 21.3, 28.7 off (57.4 ≥ 38)
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 100 }];
+        const box = { x: 0, y: 50, width: 60, height: 20 };
+        const at = placeCounts(new Map([["a", a]]), new Map([["a", 1]]), new Map([["a", size]]), [box]);
+        expect(at.get("a")!.x).toBe(0);
+        expect(at.get("a")!.y).toBeCloseTo(21.3, 9);
+    });
+
+    it("leaves out a count with nowhere clear (the owner, 2026-10-28: never overlap with anything)", () => {
+        // drops 10 px apart. A 30 px label reaches 15 px from its line, past the other line's edge and room at 7.5 px, at
+        // every height the two share, so neither count has a clear place
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 100 }];
+        const b: Point[] = [{ x: 10, y: 0 }, { x: 10, y: 100 }];
+        const at = placeCounts(new Map([["a", a], ["b", b]]), new Map([["a", 1], ["b", 1]]), new Map([["a", size], ["b", size]]), []);
+        expect(at.size).toBe(0);
+    });
+
+    it("keeps a kept count where it is while nothing runs into it", () => {
+        // placed afresh, a would take its middle (0, 100). Kept at (0, 63.6) and clear, it stays
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 200 }];
+        const at = placeCounts(new Map([["a", a]]), new Map([["a", 1]]), new Map([["a", size]]), [], new Map([["a", { x: 0, y: 63.6 }]]));
+        expect(at.get("a")).toEqual({ x: 0, y: 63.6 });
+    });
+
+    it("moves a kept count that a new line runs into", () => {
+        // kept at a's middle (0, 100), and b now runs across at y 100 (97.5 to 102.5 with its room). The middle is taken,
+        // the 0.3 try is 9 + 54.6 = 63.6, clear of b
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 200 }];
+        const b: Point[] = [{ x: -50, y: 100 }, { x: 50, y: 100 }];
+        const at = placeCounts(new Map([["a", a], ["b", b]]), new Map([["a", 1], ["b", 1]]), new Map([["a", size]]), [], new Map([["a", { x: 0, y: 100 }]]));
+        expect(at.get("a")!.x).toBe(0);
+        expect(at.get("a")!.y).toBeCloseTo(63.6, 9);
     });
 });

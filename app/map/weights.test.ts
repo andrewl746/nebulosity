@@ -95,7 +95,19 @@ describe("labelledLines: the three heaviest, and the selection's", () => {
         expect([...labelledLines(ROOT_LINES, "src")].sort()).toEqual([".eslint-plugin-local->src", ".github->src", "build->src", "extensions->src", "extensions->test"]);
     });
 
+    it("leaves a count of 1 off the selected box's lines (owner review)", () => {
+        // extensions -> build and eslint.config.js -> extensions carry 1 each
+        expect([...labelledLines(ROOT_LINES, "extensions")].sort()).toEqual(["build->src", "extensions->src", "extensions->test"]);
+    });
+
+    it("leaves it off the page's heaviest too, so a page of single imports has no counts", () => {
+        const singles = [edge("a", "b", 1), edge("c", "d", 1), edge("e", "f", 1)];
+        expect([...labelledLines(singles, null)]).toEqual([]);
+        expect([...labelledLines(singles, "a")]).toEqual([]);
+        expect([...labelledLines([edge("a", "b", 5), edge("c", "d", 1), edge("e", "f", 1)], null)]).toEqual(["a->b"]);
+    });
+
     it("never labels a line from a box to itself among the heaviest", () => {
-        expect([...labelledLines([edge("a", "a", 99), edge("a", "b", 1)], null)]).toEqual(["a->b"]);
+        expect([...labelledLines([edge("a", "a", 99), edge("a", "b", 2)], null)]).toEqual(["a->b"]);
     });
 });

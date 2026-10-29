@@ -18,7 +18,8 @@ export type Point = { x: number; y: number };
  * width and for the arrowheads they pass over. A drawn line never moves (nextRoutes): a line that appears takes its
  * boxes' points where a drawn line holds them, joins the lane and the tracks its group has on screen where it fits on
  * them, and routes around everything else there. Pure and deterministic, like the layout it follows: the same level
- * always routes the same way.
+ * always routes the same way. Each line's count goes on a stretch of its route clear of everything else, or not at all
+ * (placeCounts).
  */
 
 /**
@@ -73,6 +74,17 @@ const EPSILON = 1e-6;
  * cluster rule), so the lines into one box go down it as one rather than side by side.
  */
 export const MERGE_REACH = 60;
+/**
+ * The room a count keeps from another line past its width, each side, and from another count, each side, so it never
+ * touches either (placeCounts).
+ */
+const COUNT_LINE_ROOM = 2;
+const COUNT_GAP = 3;
+/**
+ * Where a count is tried along a stretch of its line, as shares of the room the label leaves on it: the middle first,
+ * then further out each way, so a count sits as near the middle of its stretch as it clearly can.
+ */
+const COUNT_TRIES = [0.5, 0.3, 0.7, 0.15, 0.85, 0, 1];
 
 /** One line, with what routing it needs: its width, its rows, and the channels it leaves and enters by. */
 type Line = {
@@ -966,9 +978,115 @@ export function roundedPath(points: readonly Point[], radius: number = CORNER_RA
     return `${d} L ${last.x} ${last.y}`;
 }
 
+/** A rectangle by its middle and size, as a count's label or a box takes the canvas. */
+export type Rect = { x: number; y: number; width: number; height: number };
+
+/** One side of a route, and the width of the line it's part of. */
+type Segment = { key: string; a: Point; b: Point; width: number };
+
+/** Whether two rectangles overlap. Touching isn't overlapping. */
+const overlaps = (r: Rect, s: Rect): boolean => Math.abs(r.x - s.x) * 2 < r.width + s.width && Math.abs(r.y - s.y) * 2 < r.height + s.height;
+
 /**
- * The middle of a route's longest side, where its count is written: the longest run has the most room beside it, and a
- * label there stays in its channel or gutter. A tie goes to the first.
+ * The stretches of line `key`'s sides that no other line runs along (two lines along one run are within half of each
+ * width and a pixel of each other), longest first: a count on a run two lines share didn't say whose it was.
+ */
+function ownStretches(key: string, segments: readonly Segment[]): { a: Point; b: Point; length: number }[] {
+    const others = segments.filter((s) => s.key !== key);
+    const stretches: { a: Point; b: Point; length: number }[] = [];
+    for (const s of segments){
+        if (s.key !== key) continue;
+        const across = s.a.y === s.b.y;
+        const [lo, hi] = across ? [Math.min(s.a.x, s.b.x), Math.max(s.a.x, s.b.x)] : [Math.min(s.a.y, s.b.y), Math.max(s.a.y, s.b.y)];
+        let free: [number, number][] = [[lo, hi]];
+        for (const o of others){
+            const along = across
+                ? o.a.y === o.b.y && Math.abs(o.a.y - s.a.y) < (o.width + s.width) / 2 + 1
+                : o.a.x === o.b.x && Math.abs(o.a.x - s.a.x) < (o.width + s.width) / 2 + 1;
+            if (!along) continue;
+            const [olo, ohi] = across ? [Math.min(o.a.x, o.b.x), Math.max(o.a.x, o.b.x)] : [Math.min(o.a.y, o.b.y), Math.max(o.a.y, o.b.y)];
+            free = free.flatMap(([f0, f1]): [number, number][] => (ohi <= f0 || olo >= f1
+                ? [[f0, f1]]
+                : ([[f0, Math.max(f0, olo)], [Math.min(f1, ohi), f1]] as [number, number][]).filter(([p, q]) => q - p > 0.5)));
+        }
+        for (const [f0, f1] of free){
+            stretches.push(across ? { a: { x: f0, y: s.a.y }, b: { x: f1, y: s.a.y }, length: f1 - f0 } : { a: { x: s.a.x, y: f0 }, b: { x: s.a.x, y: f1 }, length: f1 - f0 });
+        }
+    }
+    return stretches.sort((p, q) => q.length - p.length);
+}
+
+/**
+ * Where each line's count is written, for the lines it fits on (the owner, 2026-10-28: "make the numbers never overlap
+ * with anything"). A label, its size centred on its point, overlaps nothing but its own line, which runs under it: no
+ * other line, grown by COUNT_LINE_ROOM each side past its width, no other count, grown by COUNT_GAP each side, and no
+ * box (`boxes`, each with its back card). Heavier lines go first, ties by key, so the same screen always places the same
+ * way. A `kept` place, where the screen this one grew from had the count, stays while it's clear, so lines that appear
+ * move only the counts they run into. Every other count tries along the stretches its line has to itself (ownStretches),
+ * at COUNT_TRIES of the room, and takes the first clear place. A count with none is left out, and isn't drawn: its number
+ * is still in the inspector and in the line's hover sentence. `labels` gives each counted line its label's size.
+ */
+export function placeCounts(
+    routes: ReadonlyMap<string, readonly Point[]>,
+    widths: ReadonlyMap<string, number>,
+    labels: ReadonlyMap<string, { width: number; height: number }>,
+    boxes: readonly Rect[],
+    kept: ReadonlyMap<string, Point> = new Map(),
+): Map<string, Point> {
+    const segments: Segment[] = [];
+    for (const [key, points] of routes){
+        for (let i = 0; i + 1 < points.length; i++) segments.push({ key, a: points[i], b: points[i + 1], width: widths.get(key) ?? 1 });
+    }
+    // each side as the room a count keeps off it, worked out once rather than for every place tried
+    const rooms = segments.map((s) => ({ key: s.key, room: {
+        x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2,
+        width: Math.abs(s.b.x - s.a.x) + s.width + 2 * COUNT_LINE_ROOM, height: Math.abs(s.b.y - s.a.y) + s.width + 2 * COUNT_LINE_ROOM,
+    } }));
+    const placed: Rect[] = [];
+    const clear = (key: string, at: Point): boolean => {
+        const label = { x: at.x, y: at.y, ...labels.get(key)! };
+        return !rooms.some((s) => s.key !== key && overlaps(label, s.room))
+            && !placed.some((q) => overlaps(label, { ...q, width: q.width + 2 * COUNT_GAP, height: q.height + 2 * COUNT_GAP }))
+            && !boxes.some((b) => overlaps(label, b));
+    };
+    const result = new Map<string, Point>();
+    const place = (key: string, at: Point): void => {
+        result.set(key, at);
+        placed.push({ x: at.x, y: at.y, ...labels.get(key)! });
+    };
+    const order = [...labels.keys()].filter((key) => routes.has(key))
+        .sort((a, b) => (widths.get(b) ?? 1) - (widths.get(a) ?? 1) || (a < b ? -1 : a > b ? 1 : 0));
+    for (const key of order){
+        const at = kept.get(key);
+        if (at !== undefined && clear(key, at)) place(key, at);
+    }
+    // the first clear place along a stretch, the longest stretch first, where the whole label lies on the stretch
+    const spot = (key: string): Point | undefined => {
+        const size = labels.get(key)!;
+        for (const st of ownStretches(key, segments)){
+            const across = st.a.y === st.b.y;
+            const need = across ? size.width : size.height;
+            const room = st.length - need;
+            if (room < 0) continue;
+            for (const t of COUNT_TRIES){
+                const along = need / 2 + room * t;
+                const at = across ? { x: Math.min(st.a.x, st.b.x) + along, y: st.a.y } : { x: st.a.x, y: Math.min(st.a.y, st.b.y) + along };
+                if (clear(key, at)) return at;
+            }
+        }
+        return undefined;
+    };
+    for (const key of order){
+        if (result.has(key)) continue;
+        const at = spot(key);
+        if (at !== undefined) place(key, at);
+    }
+    return result;
+}
+
+/**
+ * The middle of a route's longest side, where its hover sentence goes when it has no count placed (placeCounts): the
+ * longest run has the most room beside it, and a label there stays in its channel or gutter. A tie goes to the first.
  */
 export function longestSideMiddle(points: readonly Point[]): Point {
     if (points.length < 2) return points[0] ?? { x: 0, y: 0 };
