@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import type { LevelResponse, MapEdge, MapNode } from "@/lib/contracts";
-import { drawnAt, endsOf, headsOf, routeFaults, widthsOf } from "@/scripts/route-faults";
+import { drawnAt, endsOf, headsOf, routeFaults, widthsOf, type LineEnds } from "@/scripts/route-faults";
 import { edgeKey, isBusyLevel, mapEmphasis } from "./emphasis";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
 import { headRooms, longestSideMiddle, nextRoutes, placeCounts, roundedPath, routeEdges, type Point } from "./routes";
@@ -201,15 +201,7 @@ describe("merged at rest: no faults by the merge-aware rules, one point a side, 
             const routes = routeEdges(positions, edges, drawn);
             const faults = routeFaults(routes, widthsOf(edges), endsOf(edges), headsOf(edges));
             expect(Object.fromEntries(Object.entries(faults).map(([k, v]) => [k, v.length]))).toEqual({ shared: 0, jog: 0, lined: 0, head: 0 });
-            const by = (side: 0 | 1) => {
-                const m = new Map<string, Set<number>>();
-                for (const [k, r] of routes){
-                    const box = edges.find((e) => edgeKey(e) === k)![side === 0 ? "source" : "target"];
-                    m.set(box, (m.get(box) ?? new Set()).add(side === 0 ? r[0].x : r.at(-1)!.x));
-                }
-                return m;
-            };
-            for (const side of [0, 1] as const) for (const [box, xs] of by(side)) expect(xs.size, `${box}'s ${side === 0 ? "leaving" : "arriving"} point`).toBe(1);
+            expect(splitPoints(routes, endsOf(edges))).toEqual([]);
             const heads = boxHeadWidths(edges);
             for (const [k, r] of routes){
                 const target = edges.find((e) => edgeKey(e) === k)!.target;
@@ -315,6 +307,31 @@ function faultsOver(steps: readonly Step[], edges: MapEdge[]): string[] {
     return steps.flatMap((step, i) => Object.values(routeFaults(step.routes, widths, ends, heads)).flat().map((f) => `${f.kind} at step ${i}: ${f.lines.join(" and ")}, ${f.detail}`));
 }
 
+/**
+ * The boxes whose lines on one side don't all meet at its one point (R1), with the xs they take. A line's boxes come
+ * from the level's lines, not its key, since a path can hold "->".
+ */
+function splitPoints(routes: ReadonlyMap<string, Point[]>, ends: LineEnds): string[] {
+    return (["leaving", "arriving"] as const).flatMap((side) => {
+        const xs = new Map<string, Set<number>>();
+        for (const [key, points] of routes){
+            const { source, target } = ends.get(key)!;
+            const box = side === "leaving" ? source : target;
+            xs.set(box, (xs.get(box) ?? new Set<number>()).add(side === "leaving" ? points[0].x : points.at(-1)!.x));
+        }
+        return [...xs].filter(([, at]) => at.size > 1).map(([box, at]) => `${box}'s ${side} point at x ${[...at].join(" and ")}`);
+    });
+}
+
+/**
+ * Each step's boxes whose lines on one side part at more than one point. A line that appears off its box's kept point
+ * draws a second head on the box, which no fault counts (headCrossings never counts a line into the same box).
+ */
+function splitsOver(steps: readonly Step[], edges: MapEdge[]): string[] {
+    const ends = endsOf(edges);
+    return steps.flatMap((step, i) => splitPoints(step.routes, ends).map((split) => `${split} at step ${i}`));
+}
+
 /** `selected` selected, then each other box hovered and clicked, and the selection clicked again. */
 const selectionWalk = (boxes: readonly string[], selected: string): State[] =>
     [[selected, null], ...boxes.filter((b) => b !== selected).flatMap((b): State[] => [[selected, b], [b, null], [selected, null]])];
@@ -333,6 +350,7 @@ describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a
         expect(rest.drawn.size).toBe(9);
         expect(hovered.drawn.size).toBe(13);
         for (const [key, route] of rest.routes) expect(hovered.routes.get(key), key).toBe(route);
+        expect(splitsOver([rest, hovered], EDITOR_LINES)).toEqual([]);
     });
 
     // every box hovered from rest, every box selected and then every other hovered, and a click on the hovered box
@@ -344,16 +362,19 @@ describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a
         it(`src/vs/editor, ${name}: a drawn line keeps its route, none crosses a box, and no step has a fault`, () => {
             const steps = drive(EDITOR, EDITOR_LINES, states);
             expect(moved(steps)).toEqual([]);
+            expect(splitsOver(steps, EDITOR_LINES)).toEqual([]);
             expect(throughBoxes(steps, EDITOR)).toEqual([]);
             expect(faultsOver(steps, EDITOR_LINES)).toEqual([]);
         });
     }
 
     // src/vs's six wiggles into amdX.ts, down a lane boxed in 19 px from its held point, are a fault no move fixes
-    // (PR #16), so only the moves are held here, and check-routes counts its faults
+    // (PR #16), so the moves and the points are held here, not the faults, which check-routes counts
     for (const s of VS.keys()){
         it(`src/vs, with ${s} selected, hovering each other box and clicking it: a drawn line keeps its route`, () => {
-            expect(moved(drive(VS, VS_LINES, selectionWalk([...VS.keys()], s)))).toEqual([]);
+            const steps = drive(VS, VS_LINES, selectionWalk([...VS.keys()], s));
+            expect(moved(steps)).toEqual([]);
+            expect(splitsOver(steps, VS_LINES)).toEqual([]);
         });
     }
 
@@ -364,6 +385,7 @@ describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a
         const steps = drive(positions, edges, [[null, null], ...[...positions.keys()].flatMap((b): State[] => [[null, b], [null, null]])], new Set(["src/vs/editor/contrib"]));
         expect([steps[0].drawn.size, steps[1].drawn.size]).toEqual([9, 11]);
         expect(moved(steps)).toEqual([]);
+        expect(splitsOver(steps, edges)).toEqual([]);
     });
 
     it("agenthost.json, a busy level, its first 8 linked boxes each selected and each box it has a line to hovered: nothing drawn moves", () => {
@@ -377,6 +399,7 @@ describe("a line never moves while it's drawn (the owner, 2026-10-27: hovering a
         const steps = drive(positions, edges, states);
         expect(steps[0].drawn.size).toBe(0);
         expect(moved(steps)).toEqual([]);
+        expect(splitsOver(steps, edges)).toEqual([]);
     });
 });
 

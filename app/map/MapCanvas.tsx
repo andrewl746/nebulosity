@@ -134,9 +134,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         [level, selected, hoveredBox, quietLines, strongOnly, agent],
     );
     // The lines drawn at rest (nothing selected, hovered or lit) are routed once, among themselves (routes.ts). A line a
-    // selection, a hover or a lit box adds is routed when it appears, around every line on screen, and keeps that route
-    // while it stays, so pointing at a box or clicking one never moves a line that's drawn (the owner, 2026-10-27).
-    // Keyed by content: a hover that draws the same lines keeps every route.
+    // selection, a hover or a lit box adds is routed when it appears: it takes its boxes' points (a box has one a side)
+    // and, where it fits, the lanes and tracks their drawn lines are on, and goes around every other line on screen. It
+    // keeps that route while it stays, so pointing at a box or clicking one never moves a line that's drawn (the owner,
+    // 2026-10-27). Keyed by content: a hover that draws the same lines keeps every route.
     const restKey = useMemo(() => {
         const rest = mapEmphasis(level.nodes.map((n) => n.path), level.edges, null, null, { quietLines, strongOnly });
         return level.edges.map(edgeKey).filter((id) => rest.edges.get(id) !== "hidden").join("\n");
@@ -247,10 +248,11 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     }, [level, byPath, routes, counts, emphasis, selected, hoveredEdge, maxImports, heads, setEdges]);
 
     // A new level (another folder, or another repo): open it at a readable size (viewport.ts: fitted, its drawn lines
-    // too where the boxes keep their size, unless that would shrink it past 75%, then from its top), then report it
-    // drawn. The boxes reach React Flow a render after the level does (setNodes runs in an effect), so this waits until
-    // `nodes` holds this level's boxes: placing the view sooner frames the previous level's, which is what a level from
-    // the cache got. The same level refetched after the index moved keeps its key, so the user's pan and zoom stay put.
+    // too unless that would shrink the boxes under 85% of their own fit or past 75%, and from its top when the boxes
+    // alone would shrink past 75%), then report it drawn. The boxes reach React Flow a render after the level does
+    // (setNodes runs in an effect), so this waits until `nodes` holds this level's boxes: placing the view sooner
+    // frames the previous level's, which is what a level from the cache got. The same level refetched after the index
+    // moved keeps its key, so the user's pan and zoom stay put.
     // the row width is in the key: a window resized across WIDE_CANVAS lays the level out again, so it's fitted again
     const levelKey = `${level.repo}\n${level.path}\n${level.page}\n${perRow}`;
     const fittedKey = useRef<string | null>(null);

@@ -2,8 +2,9 @@ import type { MapEdge, MapNode } from "@/lib/contracts";
 
 /**
  * What the Map draws bigger when there's more of it (the Workbench redesign, ADR-070): a folder's dot by how many files
- * it holds, a line's width by how many imports it carries, and its arrowhead with it. Each is a log scale against the
- * largest on the page, so VS Code's src (10,280 files) and a folder of 3 both read. Pure, so the scales are tested alone.
+ * it holds, a line's width by how many imports it carries, and a box's arrowhead by the heaviest line into it, since
+ * its lines share one (boxHeadWidths). Each is a log scale against the largest on the page, so VS Code's src (10,280
+ * files) and a folder of 3 both read. Pure, so the scales are tested alone.
  */
 
 /** A folder's dot, 6 px across for an empty one up to 18 px for the page's largest. */
