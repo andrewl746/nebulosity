@@ -13,7 +13,7 @@ import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNo
 import { formatCount } from "./format";
 import { runWords } from "./labels";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, looseDivider, perRowFor, type Divider, type Position } from "./levelLayout";
-import LineCard, { type CardAt } from "./LineCard";
+import LineCard, { type CardAt, type CardPlace } from "./LineCard";
 import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
@@ -127,7 +127,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const labelled = useMemo(() => labelledLines(level.edges, selected), [level, selected]);
     const [lineHover, setLineHover] = useState<LineHover | null>(null);
     // the hover card a click on a run pinned, every line listed (LineCard)
-    const [pinned, setPinned] = useState<LineHover | null>(null);
+    const [pinned, setPinned] = useState<(LineHover & { held: CardPlace | null }) | null>(null);
     const [hoveredBox, setHoveredBox] = useState<string | null>(null);
     // A hover belongs to the level it happened on. Going into a folder unmounts the old boxes before their mouseleave
     // fires, so the hover outlived the level, and coming back (a cached level, the same object as before) lit that box
@@ -319,6 +319,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const drawnLines = useMemo(() => keySet(drawnKey), [drawnKey]);
     const edgeById = useMemo(() => new Map(level.edges.map((e) => [edgeKey(e), e])), [level]);
     const followCard = useRef<((at: CardAt) => void) | null>(null);
+    const hoverPlace = useRef<CardPlace | null>(null);
     const hoverAt = (event: { clientX: number; clientY: number }, id: string): LineHover | null => {
         const found = linesSharing(id, screenToFlowPosition({ x: event.clientX, y: event.clientY }), routes, drawnLines);
         const edge = edgeById.get(id);
@@ -341,10 +342,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         else setLineHover(next);
     };
     const onEdgeMouseLeave: EdgeMouseHandler = () => setLineHover(null);
-    // a click on the run pins its card where it is, listing every line (LineCard)
+    // a click on the run pins its hover card just as it is, to list every line (LineCard)
     const onEdgeClick: EdgeMouseHandler = (event, edge) => {
         const next = hoverAt(event, edge.id);
-        if (next !== null) setPinned(next);
+        if (next !== null) setPinned({ ...next, held: lineHover !== null && lineHover.key === next.key ? hoverPlace.current : null });
     };
 
     // A pinned card closes on Escape, a click anywhere outside it, another page (above), or the view moving under it.
@@ -434,7 +435,9 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     at={card}
                     pinned={pinned !== null}
                     cardRef={pinned === null ? undefined : pinnedCard}
+                    held={pinned?.held}
                     followRef={pinned === null ? followCard : undefined}
+                    placedRef={pinned === null ? hoverPlace : undefined}
                 />
             )}
         </ReactFlow>
