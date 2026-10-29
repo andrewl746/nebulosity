@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionsPlace, actionsSide, bannerForm, fitPopover, hoverCardPlace, hoverCardRoom, hoverCardRows, insideCanvas, trailStart } from "./narrow";
+import { actionsPlace, actionsSide, bannerForm, bubblePlace, bubbleRoom, fitPopover, hoverCardRows, insideCanvas, trailStart } from "./narrow";
 
 describe("actionsSide (a selected box's actions, while the panel would cover the canvas: owner review 2026-10-25)", () => {
     it("goes under a box whose middle is in the canvas's top half, clear of the page pill's band", () => {
@@ -103,54 +103,49 @@ describe("fitPopover", () => {
     });
 });
 
-describe("hoverCardPlace (the line's hover card at the pointer: the owner, 2026-10-29)", () => {
+describe("bubblePlace (the line's card, its tail across the line at the spot: the owner, 2026-10-29)", () => {
     const canvas = { width: 700, height: 600 };
     const card = { width: 160, height: 80 };
 
-    it("goes above and left of the pointer, 8 px off its tip, where nothing of the pointer is (the owner's pick)", () => {
-        // 300 - 8 - 160 = 132 and 300 - 8 - 80 = 212
-        expect(hoverCardPlace({ x: 300, y: 300 }, card, canvas, [], [])).toEqual({ left: 132, top: 212 });
+    it("over a level line, reaches left from its tail, the tail 16 px in from the card's corner and its tip 1 px off the line", () => {
+        // a 2 px line: the card's bottom keeps 1 + 1 + 7 = 9 px over its middle, so 300 - 9 - 80 = 211, and its right
+        // edge is 16 past the spot, so 300 + 16 - 160 = 156, its tail 144 along its bottom
+        expect(bubblePlace({ x: 300, y: 300 }, false, 1, card, canvas, [], [])).toEqual({ left: 156, top: 211, tail: { side: "bottom", at: 144 }, rises: true });
     });
 
-    it("flips right near the left edge, below near the top, and below and right in the top left corner", () => {
-        // left of the pointer would start at -68, so above and right, 100 + 8
-        expect(hoverCardPlace({ x: 100, y: 300 }, card, canvas, [], [])).toEqual({ left: 108, top: 212 });
-        // above would start at -38, so below and left, 50 + 8 under the tip, left of the pointer's arrow
-        expect(hoverCardPlace({ x: 300, y: 50 }, card, canvas, [], [])).toEqual({ left: 132, top: 58 });
-        // under the tip and right of it, past the pointer's arrow: 50 + 12 and 50 + 20
-        expect(hoverCardPlace({ x: 50, y: 50 }, card, canvas, [], [])).toEqual({ left: 62, top: 70 });
+    it("over a level line, reaches right near the left edge, and goes under it near the top", () => {
+        expect(bubblePlace({ x: 100, y: 300 }, false, 1, card, canvas, [], [])).toEqual({ left: 84, top: 211, tail: { side: "bottom", at: 16 }, rises: true });
+        // over it would start at 50 - 9 - 80 = -39, so under it, 50 + 9
+        expect(bubblePlace({ x: 300, y: 50 }, false, 1, card, canvas, [], [])).toEqual({ left: 156, top: 59, tail: { side: "top", at: 144 }, rises: false });
+        expect(bubblePlace({ x: 50, y: 50 }, false, 1, card, canvas, [], [])).toEqual({ left: 34, top: 59, tail: { side: "top", at: 16 }, rises: false });
     });
 
-    it("slides sideways off an upright line the pointer is a few px beside, and up off a heavy level one", () => {
-        // a 10 px line from x 290 to 300, the pointer 10 px right of its middle: the card would end at 297, so it ends 4 px
-        // short of 290, at 126 + 160
-        expect(hoverCardPlace({ x: 305, y: 300 }, card, canvas, [{ left: 290, top: 0, width: 10, height: 600 }], [])).toEqual({ left: 126, top: 212 });
-        // a 26 px line from y 287 to 313 through the pointer: the card would end at 292, so it ends 4 px over 287
-        expect(hoverCardPlace({ x: 300, y: 300 }, card, canvas, [{ left: 0, top: 287, width: 700, height: 26 }], [])).toEqual({ left: 132, top: 203 });
+    it("beside an upright line, sits left of it rising from its tail, then right of it, then going down near the top", () => {
+        // a 4 px line: 2 + 1 + 7 = 10 px off its middle, so 300 - 10 - 160 = 130, and the card's bottom 16 under the spot
+        expect(bubblePlace({ x: 300, y: 300 }, true, 2, card, canvas, [], [])).toEqual({ left: 130, top: 236, tail: { side: "right", at: 64 }, rises: true });
+        expect(bubblePlace({ x: 100, y: 300 }, true, 2, card, canvas, [], [])).toEqual({ left: 110, top: 236, tail: { side: "left", at: 64 }, rises: true });
+        // rising, it would start at 40 + 16 - 80 = -24, so it goes down from 40 - 16
+        expect(bubblePlace({ x: 300, y: 40 }, true, 2, card, canvas, [], [])).toEqual({ left: 130, top: 24, tail: { side: "right", at: 16 }, rises: false });
     });
 
-    it("keeps clear of what's over the canvas, a box's actions here", () => {
-        // the actions from (100, 0) to (300, 100): above and left would run under them, above and right clears them
-        expect(hoverCardPlace({ x: 300, y: 150 }, card, canvas, [], [{ left: 100, top: 0, width: 200, height: 100 }])).toEqual({ left: 308, top: 62 });
+    it("keeps off the rest of the line pointed at, and clear of what's over the canvas", () => {
+        // the route turns up at x 200 to 210, under the card over and left of the spot, so it reaches right
+        expect(bubblePlace({ x: 300, y: 300 }, false, 1, card, canvas, [{ left: 200, top: 0, width: 10, height: 300 }], [])).toEqual({ left: 284, top: 211, tail: { side: "bottom", at: 16 }, rises: true });
+        // a box's actions from (100, 150) to (300, 250) take both places over the line, so it goes under it
+        expect(bubblePlace({ x: 300, y: 300 }, false, 1, card, canvas, [], [{ left: 100, top: 150, width: 200, height: 100 }])).toEqual({ left: 156, top: 309, tail: { side: "top", at: 144 }, rises: false });
     });
 
-    it("where no side fits, takes the first that fits moved inside the canvas and still clear of the line", () => {
-        // a 200 × 150 canvas fits no side of a 100 × 60 card at (100, 75). Moved in, above and left is at (8, 8), clear
-        // of the line from x 150
-        const small = { width: 200, height: 150 };
-        expect(hoverCardPlace({ x: 100, y: 75 }, { width: 100, height: 60 }, small, [{ left: 150, top: 0, width: 10, height: 150 }], [])).toEqual({ left: 8, top: 8 });
+    it("where every place is on the line somewhere, takes the first that keeps off the spot, its tail kept", () => {
+        expect(bubblePlace({ x: 300, y: 300 }, false, 1, card, canvas, [{ left: 0, top: 0, width: 700, height: 600 }], [])).toEqual({ left: 156, top: 211, tail: { side: "bottom", at: 144 }, rises: true });
     });
 
-    it("in a canvas too small to keep off the line, still keeps off the line right at the pointer", () => {
-        // the line runs down through the pointer at (100, 40). Moved in, above and left is at (8, 8) and above and right at
-        // (92, 8), both over the pointer's 6 px, while below and left, at (8, 48), starts under 46
-        const small = { width: 200, height: 200 };
-        expect(hoverCardPlace({ x: 100, y: 40 }, { width: 100, height: 60 }, small, [{ left: 95, top: 0, width: 10, height: 200 }], [])).toEqual({ left: 8, top: 48 });
+    it("where no place fits the canvas, the first moved inside, with no tail, since it's no longer the tail's length off", () => {
+        // a 200 × 150 canvas: over the line would start at 75 - 9 - 60 = 6, under it end at 84 + 60 = 144, past 142
+        expect(bubblePlace({ x: 100, y: 75 }, false, 1, { width: 100, height: 60 }, { width: 200, height: 150 }, [], [])).toEqual({ left: 16, top: 8, tail: null, rises: true });
     });
 
-    it("and failing that, the first moved inside the canvas: it never leaves it", () => {
-        // a 120 × 90 canvas leaves a 100 × 60 card nowhere off the pointer
-        expect(hoverCardPlace({ x: 60, y: 45 }, { width: 100, height: 60 }, { width: 120, height: 90 }, [{ left: 0, top: 0, width: 120, height: 90 }], [])).toEqual({ left: 8, top: 8 });
+    it("and in a canvas too small for anything else, the first moved inside: it never leaves the canvas", () => {
+        expect(bubblePlace({ x: 60, y: 45 }, false, 1, { width: 100, height: 60 }, { width: 120, height: 90 }, [{ left: 0, top: 0, width: 120, height: 90 }], [])).toEqual({ left: 8, top: 8, tail: null, rises: true });
     });
 });
 
@@ -169,12 +164,16 @@ describe("insideCanvas (a pinned card the wheel's zoom took to an edge stays in 
     });
 });
 
-describe("hoverCardRoom (the height the hover card has, over or under the pointer)", () => {
-    it("is the room under the pointer, past its arrow, or over it, whichever is more, inside the canvas's 8 px", () => {
-        // under: 600 - 8 - 100 - 20 = 472; over: 100 - 8 - 8 = 84
-        expect(hoverCardRoom(100, 600)).toBe(472);
-        // under: 600 - 8 - 500 - 20 = 72; over: 500 - 8 - 8 = 484
-        expect(hoverCardRoom(500, 600)).toBe(484);
+describe("bubbleRoom (the height the card has, past its tail)", () => {
+    it("is the room over a level line or under it, past the tail, whichever is more, inside the canvas's 8 px", () => {
+        // a 2 px line at 100: over it 100 - 9 - 8 = 83, under it 600 - 8 - 100 - 9 = 483
+        expect(bubbleRoom(100, false, 1, 600)).toBe(483);
+        expect(bubbleRoom(500, false, 1, 600)).toBe(483);
+    });
+
+    it("beside an upright line, the room rising from the tail, 16 px under the spot, or going down from 16 px over it", () => {
+        // rising from 100 + 16 = 116 to 8 is 108, going down from 84 to 592 is 508
+        expect(bubbleRoom(100, true, 2, 600)).toBe(508);
     });
 });
 

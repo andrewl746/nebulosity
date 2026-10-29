@@ -321,20 +321,25 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const followCard = useRef<((at: CardAt) => void) | null>(null);
     const hoverPlace = useRef<CardPlace | null>(null);
     const hoverAt = (event: { clientX: number; clientY: number }, id: string): LineHover | null => {
-        const spot = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-        const found = linesSharing(id, spot, routes, drawnLines);
+        const route = routes.get(id);
+        const found = linesSharing(id, screenToFlowPosition({ x: event.clientX, y: event.clientY }), routes, drawnLines);
         const edge = edgeById.get(id);
-        if (found === null || canvas === null || edge === undefined) return null;
+        if (found === null || canvas === null || edge === undefined || route === undefined) return null;
+        // the card points at the spot on the line nearest the pointer, across the line there (LineCard)
         const box = canvas.getBoundingClientRect();
-        const pointer = { x: event.clientX - box.left, y: event.clientY - box.top };
+        const view = getViewport();
+        const spot = found.point;
+        const point = { x: spot.x * view.zoom + view.x, y: spot.y * view.zoom + view.y };
+        const a = route[found.segment], b = route[found.segment + 1];
         const width = lineWidth(edge.count, maxImports);
-        const line = pointedBits(routes.get(id)!, pointer, getViewport(), width, arrowHead(heads.get(edge.target) ?? width));
+        const line = pointedBits(route, point, view, width, arrowHead(heads.get(edge.target) ?? width));
         // what's over the canvas says so (a drawer, a box's actions, the banner: MapView, BoxActions)
         const clear = [...(canvas.parentElement ?? canvas).querySelectorAll("[data-keep-clear]")].map((el) => {
             const r = el.getBoundingClientRect();
             return { left: r.left - box.left, top: r.top - box.top, width: r.width, height: r.height };
         });
-        return { key: found.lines.join("\n"), lines: found.lines, pointer, spot, line, clear };
+        const upright = Math.abs(b.y - a.y) > Math.abs(b.x - a.x);
+        return { key: found.lines.join("\n"), lines: found.lines, point, spot, upright, half: (width * view.zoom) / 2, line, clear };
     };
     const onEdgeMouseMove: EdgeMouseHandler = (event, edge) => {
         const next = hoverAt(event, edge.id);
@@ -433,7 +438,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             {card !== null && (
                 <LineCard
                     // a hover card is one a run, and a pinned one is one a click
-                    key={pinned === null ? `hover\n${card.key}` : `pinned\n${card.key}\n${card.pointer.x},${card.pointer.y}`}
+                    key={pinned === null ? `hover\n${card.key}` : `pinned\n${card.key}\n${card.point.x},${card.point.y}`}
                     words={runWords(card.lines.map((id) => edgeById.get(id)!), byPath)}
                     at={card}
                     pinned={pinned !== null}

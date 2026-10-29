@@ -1022,7 +1022,7 @@ function inspectLayout({ shell }){
  *   (i) lies 8 px inside the canvas (app/map/narrow.ts's CARD_EDGE), and so clear of the toolbar, the legend and an
  *       inspector beside or under the canvas, none of which is on it;
  *   (i) is clear of what's over the canvas, a drawer, a box's actions, the banner (data-keep-clear);
- *   (i) is off the bit of line pointed at, the spot and the line's half width around it, the pointer's tip with it,
+ *   (i) is off the bit of line pointed at, the spot and the line's half width around it, its tail reaching the line,
  *       wherever the canvas has room for it over or under the pointer (not once the wheel has zoomed, `zoomed`);
  *   (i) names every line that ends there, which share that run; and pinned, lists more than its ten rows by scrolling.
  * `spot` is where pointAtRun left the pointer, with the line's half width there and how many lines end there.
@@ -1044,11 +1044,21 @@ function inspectLineCard(spot){
         const k = el.getBoundingClientRect();
         if (k.width >= 0.5 && k.height >= 0.5 && over(r, k)) failures.push(`(i) the line card is over <${el.tagName.toLowerCase()} ${[...el.attributes].map((a) => a.name).filter((n) => n.startsWith("data-")).join(" ")}>`);
     }
-    // where the card fits over or under the pointer (narrow.ts's hoverCardRoom: 20 px under it past its arrow, 8 over it,
-    // 8 in from the canvas's edges), it keeps off it; only a canvas with no room either way may put it there
+    // the spot is on the drop into a box, which runs up and down, so the card sits beside it, rising from its tail 16 px
+    // under the spot or going down from 16 px over it (narrow.ts's bubbleRoom), 8 in from the canvas's edges. Where it
+    // fits either way, it keeps off the line there, and its tail reaches the line's edge, 1 px short of it; only a canvas
+    // with no room either way may put it over the spot or leave its tail off
     const bit = { left: spot.x - spot.half, right: spot.x + spot.half, top: spot.y - spot.half, bottom: spot.y + spot.half };
-    const room = Math.max(canvas.bottom - EDGE - spot.y - 20, spot.y - 8 - EDGE - canvas.top);
-    if (!spot.zoomed && r.height <= room + TOL && over(r, bit)) failures.push(`(i) the line card covers the line where the pointer is, at ${Math.round(spot.x)}, ${Math.round(spot.y)}`);
+    const room = Math.max(spot.y + 16 - EDGE - canvas.top, canvas.bottom - EDGE - spot.y + 16);
+    const roomy = !spot.zoomed && r.height <= room + TOL;
+    if (roomy && over(r, bit)) failures.push(`(i) the line card covers the line where the pointer is, at ${Math.round(spot.x)}, ${Math.round(spot.y)}`);
+    const tail = card.querySelector("[data-tail]");
+    if (roomy && tail === null && canvas.width >= 400) failures.push("(i) the line card has no tail pointing at its line");
+    if (!spot.zoomed && tail !== null){
+        const t = tail.getBoundingClientRect();
+        const off = Math.hypot(Math.max(t.left - spot.x, 0, spot.x - t.right), Math.max(t.top - spot.y, 0, spot.y - t.bottom));
+        if (off > spot.half + 3) failures.push(`(i) the line card's tail stops ${Math.round(off)} px from the middle of its line, which is ${Math.round(spot.half * 2)} px wide`);
+    }
     const named = Number(card.dataset.lines);
     if (named !== spot.lines) failures.push(`(i) the line card names ${named} line${named === 1 ? "" : "s"} where ${spot.lines} end on the run`);
     if (card.dataset.lineCard === "pinned" && named > 10){
