@@ -124,6 +124,9 @@ const STATES = [
     // where the inspector would cover the canvas, a click only selects: the box's actions beside it (owner review,
     // 2026-10-25); the folder state then asks for its Details
     { name: "actions", place: "src/vs", select: "src/vs/workbench", details: false, when: (size) => layoutAt(size.width, size.height, true).inspector === "cover" },
+    // a file's actions, which inside VS Code's panel hold Open too, since a click there only selects (the owner,
+    // 2026-10-29), and in a browser tab only Details
+    { name: "file-actions", place: "src/vs/base/common", select: FILE, details: false, when: (size) => layoutAt(size.width, size.height, true).inspector === "cover" },
     // the source root's panel, the one the owner saw cut off in VS Code's panel
     { name: "root", place: "", select: "src" },
     // a summary whose lead holds a 51-character setting name in inline code, wider than the panel at any size

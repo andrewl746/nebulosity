@@ -31,6 +31,12 @@ describe("actionsPlace (the actions' corner on the canvas)", () => {
         expect(actionsPlace({ left: -14, top: 64, width: 174, height: 42 }, actions, 360, 600).left).toBe(8);
         expect(actionsPlace({ left: 300, top: 64, width: 174, height: 42 }, actions, 360, 600).left).toBe(360 - 8 - 150);
     });
+
+    it("keeps them 8 px inside the canvas's top and bottom when the box is out of sight, as the inspector they stand for is (2026-10-29)", () => {
+        // a box selected below a 162 px canvas (a search pick in a 200 × 260 window), and one panned away above it
+        expect(actionsPlace({ left: 13, top: 250, width: 174, height: 42 }, actions, 200, 162).top).toBe(162 - 8 - 36);
+        expect(actionsPlace({ left: 13, top: -120, width: 174, height: 42 }, actions, 200, 162).top).toBe(8);
+    });
 });
 
 describe("bannerForm", () => {

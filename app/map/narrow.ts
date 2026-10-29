@@ -20,7 +20,9 @@ const ACTIONS_GAP = 8;
 /**
  * Where the selected box's actions go on the canvas (their top-left corner, canvas px), given the box and the actions'
  * size on screen: on actionsSide's side, 8 px off the box, centred on it, but kept 8 px inside the canvas's sides, so a
- * box hanging off an edge (a level opened from its top at 75%) never takes them past it. Each axis is its own rule.
+ * box hanging off an edge (a level opened from its top at 75%) never takes them past it. Each axis is its own rule. A
+ * box out of sight above or below (selected by a search pick or Follow in a short window, or panned away) keeps them 8 px
+ * inside the canvas's top or bottom, since they stand in for the inspector, which is always in sight (2026-10-29).
  */
 export function actionsPlace(
     box: { left: number; top: number; width: number; height: number },
@@ -28,7 +30,8 @@ export function actionsPlace(
     canvasWidth: number,
     canvasHeight: number,
 ): { left: number; top: number } {
-    const top = actionsSide(box.top, box.height, canvasHeight) === "bottom" ? box.top + box.height + ACTIONS_GAP : box.top - ACTIONS_GAP - actions.height;
+    const beside = actionsSide(box.top, box.height, canvasHeight) === "bottom" ? box.top + box.height + ACTIONS_GAP : box.top - ACTIONS_GAP - actions.height;
+    const top = Math.max(Math.min(beside, canvasHeight - ACTIONS_GAP - actions.height), ACTIONS_GAP);
     const centred = box.left + box.width / 2 - actions.width / 2;
     const left = Math.min(Math.max(centred, ACTIONS_GAP), canvasWidth - ACTIONS_GAP - actions.width);
     return { left, top };
