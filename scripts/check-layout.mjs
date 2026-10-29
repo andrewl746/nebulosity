@@ -103,6 +103,11 @@ const STATES = [
     { name: "below", place: "src/vs/base/common", select: FILE, when: (size) => layoutAt(size.width, size.height, true).inspector === "below" },
     { name: "drawer", place: "src/vs/base/common", select: FILE, when: (size) => layoutAt(size.width, size.height, true).inspector === "drawer" },
     { name: "cover", place: "src/vs/base/common", select: FILE, when: (size) => layoutAt(size.width, size.height, true).inspector === "cover" },
+    // a summary in paragraphs (the owner, 2026-10-29, "make sure the ui of the new feature doesnt break when the window
+    // is resized to any size"), folded to its first paragraph and then in full, at every size and so in every place the
+    // panel takes. FILE stays in the older style on the sample's copy, so the four states above cover its notes.
+    { name: "plain-summary", place: "src/vs/base/common", select: "src/vs/base/common/lifecycle.ts" },
+    { name: "full-summary", place: "src/vs/base/common", select: "src/vs/base/common/lifecycle.ts", act: "full-summary" },
     // another tab of the inspector, Uses (a file opens on Used by)
     { name: "uses-tab", place: "src/vs/base/common", select: FILE, act: "uses-tab" },
     { name: "folder", place: "src/vs", select: "src/vs/workbench" },
@@ -503,6 +508,11 @@ async function actStep(tab, step, base){
             await click(tab, '[data-panel] [role="tab"][data-tab="uses"]', "Uses tab");
             await tab.waitFor(`document.querySelector('[data-panel] [role="tab"][data-tab="uses"]')?.getAttribute("aria-selected") === "true"`, "the Uses tab selected");
             break;
+        case "full-summary":
+            // the summary's whole text, every paragraph, which then folds back with Show less
+            await click(tab, '[data-panel] [aria-label="Summary"] button[aria-expanded="false"]', "inspector's Full summary button");
+            await tab.waitFor(`[...document.querySelectorAll('[data-panel] [aria-label="Summary"] button[aria-expanded="true"]')].some((b) => b.textContent.trim() === "Show less")`, "the full summary, with Show less");
+            break;
         case "search":
             // the header's search where it shows, else the toolbar's … menu holds it (a short window under 360 px)
             if (await tab.evaluate(shown('[data-testid="search-button"]'))) await click(tab, '[data-testid="search-button"]', "search button");
@@ -558,6 +568,7 @@ async function actStep(tab, step, base){
 const STEP_MARKERS = {
     source: `!!document.querySelector("[data-source-viewer]")`,
     "uses-tab": `document.querySelector('[data-panel] [role="tab"][data-tab="uses"]')?.getAttribute("aria-selected") === "true"`,
+    "full-summary": `[...document.querySelectorAll('[data-panel] [aria-label="Summary"] button[aria-expanded="true"]')].some((b) => b.textContent.trim() === "Show less")`,
     search: `document.querySelectorAll("[data-hit]").length > 0`,
     help: `!!document.querySelector('[data-testid="help"]')`,
     "repo-menu": `!!document.querySelector('[data-testid="repo-list"]')`,
