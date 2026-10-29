@@ -99,8 +99,9 @@ const tailReach = (half: number): number => half + TAIL_GAP + TAIL_LENGTH;
  * CARD_EDGE in from its sides, and clear of `line` (the bit of line pointed at and its arrowhead, as rectangles as wide
  * as they're drawn) and of `clear` (what's over the canvas: a drawer, a box's actions, the banner) wins, then the first
  * inside and clear of the rest that keeps off the line right at the spot. Where none fits, the first moved inside the
- * canvas that's clear, then the first moved inside that keeps off the spot, then the first moved inside: the card never
- * leaves the canvas, and moved, it can't keep its tail.
+ * canvas that's clear, then the first moved inside that keeps off the spot, then just over or under the spot (a canvas
+ * too narrow for the card beside an upright line), then the first moved inside: the card never leaves the canvas, and
+ * moved, it can't keep its tail.
  */
 export function bubblePlace(
     spot: { x: number; y: number },
@@ -131,9 +132,15 @@ export function bubblePlace(
     const near = { left: spot.x - CARD_SPOT, top: spot.y - CARD_SPOT, width: 2 * CARD_SPOT, height: 2 * CARD_SPOT };
     const offSpot = (at: { left: number; top: number }): boolean => !overlaps(box(at), near) && clear.every((r) => !overlaps(box(at), r));
     const movedIn = tries.map((at): BubblePlace => ({ ...insideCanvas(at, card, canvas), tail: null, rises: at.rises }));
+    const overUnder = [spot.y - CARD_SPOT - 1 - height, spot.y + CARD_SPOT + 1]
+        .map((top): BubblePlace => ({ ...insideCanvas({ left: spot.x - width / 2, top }, card, canvas), tail: null, rises: top < spot.y }));
     return tries.find((at) => inside(at) && free(at)) ?? tries.find((at) => inside(at) && offSpot(at))
-        ?? movedIn.find(free) ?? movedIn.find(offSpot) ?? movedIn[0];
+        ?? movedIn.find(free) ?? [...movedIn, ...overUnder].find(offSpot) ?? movedIn[0];
 }
+
+/** Whether a card `cardWidth` wide fits beside an upright line at `spotX`, its tail between them, on either side. */
+const fitsBeside = (spotX: number, half: number, cardWidth: number, canvasWidth: number): boolean =>
+    Math.max(spotX - tailReach(half) - CARD_EDGE, canvasWidth - CARD_EDGE - spotX - tailReach(half)) >= cardWidth;
 
 /**
  * A card's place moved inside the canvas, CARD_EDGE in from its sides, the least it takes: a pinned card the wheel's
@@ -147,15 +154,16 @@ export function insideCanvas(at: { left: number; top: number }, card: { width: n
 }
 
 /**
- * The height a card has for itself in a canvas `canvasHeight` tall, pointing at a spot `spotY` down it (bubblePlace):
- * over or under a level line, past its tail, or beside an upright one, rising from the tail or going down from it,
- * whichever has more, inside the canvas's edges. So a card that fits it keeps its tail and stays off the line in any
- * window.
+ * The height a card `cardWidth` wide has for itself on `canvas`, pointing at `spot` (bubblePlace): over or under a level
+ * line, past its tail, or beside an upright one, rising from the tail or going down from it, whichever has more, inside
+ * the canvas's edges. Beside an upright line in a canvas too narrow for the card there, it's the room just over or under
+ * the spot. So a card that fits it stays off the line at the spot in any window, and keeps its tail wherever it can.
  */
-export function bubbleRoom(spotY: number, upright: boolean, half: number, canvasHeight: number): number {
-    return upright
-        ? Math.max(spotY + TAIL_INSET - CARD_EDGE, canvasHeight - CARD_EDGE - spotY + TAIL_INSET)
-        : Math.max(spotY - tailReach(half) - CARD_EDGE, canvasHeight - CARD_EDGE - spotY - tailReach(half));
+export function bubbleRoom(spot: { x: number; y: number }, upright: boolean, half: number, cardWidth: number, canvas: { width: number; height: number }): number {
+    if (!upright) return Math.max(spot.y - tailReach(half) - CARD_EDGE, canvas.height - CARD_EDGE - spot.y - tailReach(half));
+    return fitsBeside(spot.x, half, cardWidth, canvas.width)
+        ? Math.max(spot.y + TAIL_INSET - CARD_EDGE, canvas.height - CARD_EDGE - spot.y + TAIL_INSET)
+        : Math.max(spot.y - CARD_SPOT - 1 - CARD_EDGE, canvas.height - CARD_EDGE - spot.y - CARD_SPOT - 1);
 }
 
 /** The most lines the hover card lists before "and N more" (the owner, 2026-10-29), and each row's height (leading-[18px]). */

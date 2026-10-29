@@ -144,6 +144,13 @@ describe("bubblePlace (the line's card, its tail across the line at the spot: th
         expect(bubblePlace({ x: 100, y: 75 }, false, 1, { width: 100, height: 60 }, { width: 200, height: 150 }, [], [])).toEqual({ left: 16, top: 8, tail: null, rises: true });
     });
 
+    it("in a canvas too narrow for the card beside an upright line, goes just over or under the spot, with no tail", () => {
+        // 184 px wide in a 200 px canvas, the card is on the line wherever it's moved in beside it, and over the spot it
+        // would end at 100 - 6 - 1 = 93, so it starts 1 px under the spot's 6 px, at 107
+        const narrow = { width: 200, height: 300 };
+        expect(bubblePlace({ x: 100, y: 100 }, true, 2, { width: 184, height: 100 }, narrow, [{ left: 95, top: 0, width: 10, height: 300 }], [])).toEqual({ left: 8, top: 107, tail: null, rises: false });
+    });
+
     it("and in a canvas too small for anything else, the first moved inside: it never leaves the canvas", () => {
         expect(bubblePlace({ x: 60, y: 45 }, false, 1, { width: 100, height: 60 }, { width: 120, height: 90 }, [{ left: 0, top: 0, width: 120, height: 90 }], [])).toEqual({ left: 8, top: 8, tail: null, rises: true });
     });
@@ -165,15 +172,22 @@ describe("insideCanvas (a pinned card the wheel's zoom took to an edge stays in 
 });
 
 describe("bubbleRoom (the height the card has, past its tail)", () => {
+    const canvas = { width: 700, height: 600 };
+
     it("is the room over a level line or under it, past the tail, whichever is more, inside the canvas's 8 px", () => {
         // a 2 px line at 100: over it 100 - 9 - 8 = 83, under it 600 - 8 - 100 - 9 = 483
-        expect(bubbleRoom(100, false, 1, 600)).toBe(483);
-        expect(bubbleRoom(500, false, 1, 600)).toBe(483);
+        expect(bubbleRoom({ x: 300, y: 100 }, false, 1, 160, canvas)).toBe(483);
+        expect(bubbleRoom({ x: 300, y: 500 }, false, 1, 160, canvas)).toBe(483);
     });
 
     it("beside an upright line, the room rising from the tail, 16 px under the spot, or going down from 16 px over it", () => {
         // rising from 100 + 16 = 116 to 8 is 108, going down from 84 to 592 is 508
-        expect(bubbleRoom(100, true, 2, 600)).toBe(508);
+        expect(bubbleRoom({ x: 300, y: 100 }, true, 2, 160, canvas)).toBe(508);
+    });
+
+    it("where the card doesn't fit beside an upright line, the room just over or under the spot", () => {
+        // 82 px each side of the line in a 200 px canvas, under the 184 px card: under the spot, 300 - 8 - 100 - 7 = 185
+        expect(bubbleRoom({ x: 100, y: 100 }, true, 2, 184, { width: 200, height: 300 })).toBe(185);
     });
 });
 

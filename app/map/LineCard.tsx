@@ -92,7 +92,7 @@ export default function LineCard({ words, at: landed, pinned, held, cardRef, fol
     // ("Into utils.ts", "43 lines")
     const room = hold !== null
         ? Math.max(hold.height, hold.rises ? hold.top + hold.height - CARD_EDGE : canvasHeight - CARD_EDGE - hold.top)
-        : Math.max(bubbleRoom(at.point.y, at.upright, at.half, canvasHeight), pinned ? CARD_FRAME + 2 * CARD_ROW : 0);
+        : Math.max(bubbleRoom(at.point, at.upright, at.half, size?.width ?? Math.min(CARD_WIDTH, canvasWidth - 2 * CARD_EDGE), canvas), pinned ? CARD_FRAME + 2 * CARD_ROW : 0);
     const titleOnly = !pinned && words.kind === "run" && room < CARD_FRAME + 2 * CARD_ROW;
     const rows = words.kind === "run" && !titleOnly ? (pinned ? words.rows.length : hoverCardRows(words.rows.length, room)) : 0;
     const more = words.kind === "run" && !titleOnly ? words.rows.length - rows : 0;

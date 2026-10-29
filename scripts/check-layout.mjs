@@ -1044,16 +1044,20 @@ function inspectLineCard(spot){
         const k = el.getBoundingClientRect();
         if (k.width >= 0.5 && k.height >= 0.5 && over(r, k)) failures.push(`(i) the line card is over <${el.tagName.toLowerCase()} ${[...el.attributes].map((a) => a.name).filter((n) => n.startsWith("data-")).join(" ")}>`);
     }
-    // the spot is on the drop into a box, which runs up and down, so the card sits beside it, rising from its tail 16 px
-    // under the spot or going down from 16 px over it (narrow.ts's bubbleRoom), 8 in from the canvas's edges. Where it
-    // fits either way, it keeps off the line there, and its tail reaches the line's edge, 1 px short of it; only a canvas
-    // with no room either way may put it over the spot or leave its tail off
+    // the spot is on the drop into a box, which runs up and down, so the card sits beside it where it fits, rising from
+    // its tail 16 px under the spot or going down from 16 px over it, and else just over or under the spot (narrow.ts's
+    // bubbleRoom), 8 in from the canvas's edges. Where it fits, it keeps off the line there, and beside it, its tail
+    // reaches the line's edge, 1 px short of it; only a canvas with no room for it may put it over the spot
     const bit = { left: spot.x - spot.half, right: spot.x + spot.half, top: spot.y - spot.half, bottom: spot.y + spot.half };
-    const room = Math.max(spot.y + 16 - EDGE - canvas.top, canvas.bottom - EDGE - spot.y + 16);
+    const reach = spot.half + 8;
+    const beside = Math.max(spot.x - reach - EDGE - canvas.left, canvas.right - EDGE - spot.x - reach) >= r.width - TOL;
+    const room = beside
+        ? Math.max(spot.y + 16 - EDGE - canvas.top, canvas.bottom - EDGE - spot.y + 16)
+        : Math.max(spot.y - 7 - EDGE - canvas.top, canvas.bottom - EDGE - spot.y - 7);
     const roomy = !spot.zoomed && r.height <= room + TOL;
     if (roomy && over(r, bit)) failures.push(`(i) the line card covers the line where the pointer is, at ${Math.round(spot.x)}, ${Math.round(spot.y)}`);
     const tail = card.querySelector("[data-tail]");
-    if (roomy && tail === null && canvas.width >= 400) failures.push("(i) the line card has no tail pointing at its line");
+    if (roomy && beside && tail === null) failures.push("(i) the line card has no tail pointing at its line");
     if (!spot.zoomed && tail !== null){
         const t = tail.getBoundingClientRect();
         const off = Math.hypot(Math.max(t.left - spot.x, 0, spot.x - t.right), Math.max(t.top - spot.y, 0, spot.y - t.bottom));
