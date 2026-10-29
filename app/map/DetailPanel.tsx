@@ -42,8 +42,8 @@ type DetailPanelProps = {
     onTurnPage: (page: number) => void;
     onClose: () => void;
     /**
-     * Inside VS Code's panel only: a declaration opens at its line in the editor instead of the source viewer, which
-     * "View source" still opens (design §4.4).
+     * Inside VS Code's panel only: "Open in VS Code", here and in the source viewer (at the line it shows), asks the
+     * editor over the bridge. A declaration shows in the source viewer, as in a browser tab (the owner, 2026-10-29).
      */
     onOpenInEditor?: (path: string, line?: number) => void;
     /** Where MapView put it (app/map/shell.ts's InspectorPlace, without "none"): beside the canvas, under it, over it as a drawer, or over all of it. */
@@ -247,12 +247,11 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
                                 onTab={setTab}
                                 onFocus={onFocus}
                                 onOpen={onOpen}
+                                // inside VS Code's panel too, a declaration shows in View source, whose Open in VS Code
+                                // opens the editor at its line: nothing but an Open moves the editor (the owner, 2026-10-29)
                                 onViewLines={DEMO
                                     ? (start, end) => { if (github) window.open(githubLink(github, data.path, { start, end }), "_blank", "noreferrer"); }
-                                    : onOpenInEditor
-                                        // the real editor is right there (design §4.4)
-                                        ? (start) => onOpenInEditor(data.path, start)
-                                        : (start, end) => setViewing({ lines: { start, end } })}
+                                    : (start, end) => setViewing({ lines: { start, end } })}
                             />
                         </div>
                     </div>

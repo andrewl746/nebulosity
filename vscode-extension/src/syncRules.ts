@@ -124,7 +124,7 @@ export function openColumn(last: number | undefined, panel: number | undefined):
 }
 
 /**
- * Whether a file picked on the Map opens (P17, Review Focus 4), from `GET /api/repos`' answer as classifyRepos reads it:
+ * Whether a file the Map asks to open opens (P17, Review Focus 4), from `GET /api/repos`' answer as classifyRepos reads it:
  * only while the Map's active repo is the root the panel was shown for. The Map's own repo menu, or another window on
  * focus, can switch it, and then a path both repos have (README.md, package.json) would open this workspace's file for
  * the other repo's box without a word. "unknown" for an answer that isn't a current Map's.
@@ -140,7 +140,7 @@ export function notIndexedText(path: string): string {
     return `\`${path}\` isn't in Nebulosity's index (new, ignored, or not a source file).`;
 }
 
-/** A pick on the Map for a file this workspace doesn't have: the Map shows another repo (P17, Review Focus 4). */
+/** An open from the Map for a file this workspace doesn't have: the Map shows another repo (P17, Review Focus 4). */
 export function otherRepoText(path: string): string {
     return `\`${path}\` isn't in this workspace's repo (the Map shows another one; run Show Map to switch back)`;
 }

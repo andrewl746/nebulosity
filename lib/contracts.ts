@@ -242,7 +242,10 @@ export type BridgeThemeColors = { editor: string; side: string; fg: string; bord
 export type BridgeFromMap =
   /** The answer to hello. */
   | { type: "nebulosity.ready"; version: 1 }
-  /** A file box or a declaration was picked. */
+  /**
+   * Open the file in the editor: Open in VS Code (the source viewer's at its highlighted line), a double-clicked file
+   * box, or a narrow window's Open beside it. A click on a box only selects it (amended 2026-10-29).
+   */
   | { type: "nebulosity.open"; path: string; line?: number }
   /** A new level was drawn, the selection changed on the level drawn, or a `ready` was answered while a level is on screen (the extension's test and benchmarks read it). */
   | { type: "nebulosity.drawn"; path: string; page: number; selected: string | null };

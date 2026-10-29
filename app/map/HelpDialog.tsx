@@ -11,9 +11,9 @@ import { useScrollLock } from "./useScrollLock";
  * header's "?" button, the toolbar's … menu where there's no room for it, or the ? key. It no longer opens by itself on
  * a first visit, since the legend sentence under the canvas says what the marks mean (ADR-070). Rendered into the
  * page's body, above everything; Escape or a click outside closes it. In the static demo it opens with what the demo
- * can't do (ADR-049).
+ * can't do (ADR-049). Inside VS Code's panel (`embedded`) it says how a file opens in the editor.
  */
-export default function HelpDialog({ onClose }: { onClose: () => void }){
+export default function HelpDialog({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }){
     useScrollLock();
     useEffect(() => {
         const onKey = (event: KeyboardEvent): void => {
@@ -61,6 +61,8 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                     <Section title="Getting around">
                         <li><b>Click</b> a box to see what it is, in the inspector beside or under the Map.</li>
                         <li><b>Double-click</b> a folder to go inside it, or click a folder in the explorer on the left.</li>
+                        {/* a click only selects a file in the panel too (the owner, 2026-10-29) */}
+                        {embedded && <li>In VS Code, <b>double-click</b> a file to open it in the editor, or press <b>Open in VS Code</b> in the inspector.</li>}
                         <li>Go back up with the path at the top left, <Key>Backspace</Key>, or your browser&apos;s Back button. The repo&apos;s name at its start goes back to the top.</li>
                         <li>Big folders are split into pages of related boxes. Turn the page with the arrows in the toolbar, or <Key>←</Key> <Key>→</Key>.</li>
                         <li>A busy folder opens at a readable size, from its top. Drag to see the rest, or press <b>Fit</b> in the toolbar to see it all.</li>

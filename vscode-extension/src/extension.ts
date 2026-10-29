@@ -12,8 +12,8 @@ import { EditorSync, type NebulosityApi, type ShownMap } from "./sync";
 /**
  * The extension (design §4, ADR-062): "Nebulosity: Show Map" finds or starts the Map, puts the workspace's repo on it and
  * shows it in a panel; "Index this repo" indexes a repo the Map doesn't have, for free, in a terminal; "Stop Map" stops a
- * Map this window started. The editor and the Map follow each other, and "Show this file on the Map" and "What depends
- * on this file?" ask the Map about a file (sync.ts). Everything it asks the Map goes over HTTP (http.ts), and everything
+ * Map this window started. The Map follows the editor, the editor opens a file the Map asks it to, and "Show this file
+ * on the Map" and "What depends on this file?" ask the Map about a file (sync.ts). Everything it asks the Map goes over HTTP (http.ts), and everything
  * it tells the Map goes over the editor bridge (panel.ts).
  */
 

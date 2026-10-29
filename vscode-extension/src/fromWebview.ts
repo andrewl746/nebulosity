@@ -26,7 +26,7 @@ function readMapMessage(message: Record<string, unknown>): BridgeFromMap | null 
             return message.version === BRIDGE ? { type: "nebulosity.ready", version: BRIDGE } : null;
         case "nebulosity.open":
             if (!isPath(message.path)) return null;
-            // line is 1-based (a declaration's startLine), and absent for a file box
+            // line is 1-based (the source viewer's highlighted declaration's startLine), and absent for a whole file
             if (message.line === undefined) return { type: "nebulosity.open", path: message.path };
             return isWhole(message.line, 1) ? { type: "nebulosity.open", path: message.path, line: message.line } : null;
         case "nebulosity.drawn":
