@@ -19,6 +19,7 @@ function written(targets: PlannedTarget[], paths: string[], earlier: StoredSumma
     for (const t of targets.filter((x) => paths.includes(x.path))){
         rows.set(`${t.kind}:${t.path}`, {
             id: 0, kind: t.kind, path: t.path, model: t.model, inputHash: t.inputHash, batchId: null, error: null,
+            promptVersion: t.templateText ? null : PROMPT_VERSION,
             status: t.templateText ? "skipped" : "fresh",
             tagline: t.templateText?.tagline ?? `T:${t.path}`,
             summary: t.templateText?.summary ?? `S:${t.path}`,
@@ -201,7 +202,7 @@ describe("foldersAbove", () => {
 
 describe("planSummaries — in flight and failed", () => {
     it("never requeues a target a batch is carrying, and its folder waits for it", () => {
-        const stored: StoredSummary[] = [{ id: 1, kind: "file", path: "src/app/main.ts", tagline: null, summary: null, model: null, inputHash: null, status: "pending", batchId: "batch-1", error: null }];
+        const stored: StoredSummary[] = [{ id: 1, kind: "file", path: "src/app/main.ts", tagline: null, summary: null, model: null, inputHash: null, promptVersion: null, status: "pending", batchId: "batch-1", error: null }];
         const plan = planSummaries(FILES, FOLDERS, stored, options());
         expect(plan.find((t) => t.path === "src/app/main.ts")?.state).toBe("in-flight");
         expect(plan.find((t) => t.path === "src/app")?.state).toBe("waiting");

@@ -9,6 +9,7 @@ import { readIndexStatus } from "../engine/status";
 import { embedSummaries, summaryEmbeddingText, type EmbedFn } from "./embed";
 import { repoKey } from "./paths";
 import { indexRepository } from "./pipeline";
+import { PROMPT_VERSION } from "./summarize/prompts";
 import { runSummaries } from "./summarize/run";
 
 const fakeEmbed: EmbedFn = async (texts) => texts.map(() => Float32Array.from([1, 0, 0]));
@@ -36,7 +37,7 @@ describe("embedSummaries", () => {
         await embedSummaries(root, { embed: fakeEmbed });
         const db = getDb();
         const log = loadSummaries(db, requireRepository(db, repoKey(root))).find((s) => s.path === "src/core/log.ts")!;
-        writeResults(db, [{ id: log.id, batchId: null, inputHash: "new", outcome: { ok: true, text: { tagline: "New", summary: "S" }, model: "m" } }]);
+        writeResults(db, [{ id: log.id, batchId: null, inputHash: "new", outcome: { ok: true, text: { tagline: "New", summary: "S" }, model: "m", promptVersion: PROMPT_VERSION } }]);
 
         expect(await embedSummaries(root, { embed: fakeEmbed })).toEqual({ embedded: 1, total: 13, remaining: 0 });
     });
@@ -61,7 +62,7 @@ describe("embedSummaries", () => {
             if (!rewritten){
                 rewritten = true;
                 // a "summarize now" lands a new summary for log.ts while its old text is being embedded
-                writeResults(db, [{ id: log.id, batchId: null, inputHash: "rewritten", outcome: { ok: true, text: { tagline: "New", summary: "S." }, model: "m" } }]);
+                writeResults(db, [{ id: log.id, batchId: null, inputHash: "rewritten", outcome: { ok: true, text: { tagline: "New", summary: "S." }, model: "m", promptVersion: PROMPT_VERSION } }]);
             }
             return fakeEmbed(texts);
         };

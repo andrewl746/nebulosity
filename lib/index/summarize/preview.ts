@@ -109,6 +109,7 @@ export function answeredRow(target: PlannedTarget, outcome: Extract<SummaryOutco
         summary: outcome.text.summary,
         model: outcome.model,
         inputHash: target.inputHash,
+        promptVersion: null,
         status: "fresh",
         batchId: null,
         error: null,

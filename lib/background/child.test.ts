@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { StoredSummary } from "../db/store/summaries";
 import { SummariesOffError } from "../engine/errors";
 import type { IndexResult } from "../index/pipeline";
+import { PROMPT_VERSION } from "../index/summarize/prompts";
 import { TargetNotReadyError } from "../index/summarize/run";
 import { handleParentMessage } from "./child";
 import type { ChildMessage } from "./protocol";
@@ -19,7 +20,8 @@ function fakeService(overrides: Partial<BackgroundService>): BackgroundService {
 }
 
 const row: StoredSummary = {
-    id: 4, kind: "file", path: "src/a.ts", tagline: "A thing", summary: "Does it.", model: "m", inputHash: "h", status: "fresh", batchId: null, error: null,
+    id: 4, kind: "file", path: "src/a.ts", tagline: "A thing", summary: "Does it.", model: "m", inputHash: "h", promptVersion: PROMPT_VERSION, status: "fresh",
+    batchId: null, error: null,
 };
 
 describe("handleParentMessage", () => {

@@ -18,6 +18,7 @@ import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
 import { createClaudeSummarizer } from "./claude";
 import { resolveSummaryModels } from "./models";
+import { PROMPT_VERSION } from "./prompts";
 import { buildFilePrompt, DEFAULT_BUDGET_USD, plannedRequests, runSummaries, StructureNotReadyError, summarizeNow, TargetNotFoundError, TargetNotReadyError, UnknownBatchError } from "./run";
 import { refreshSummaryStatus } from "./status";
 import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type Summarizer } from "./types";
@@ -467,7 +468,7 @@ describe("runSummaries — the Batch API", () => {
                     redone = true;
                     writeResults(db, loadBatchRows(db, id).map((r) => ({
                         id: r.id, batchId: null, inputHash: r.inputHash,
-                        outcome: { ok: true, text: { tagline: "Redone", summary: `Redone ${r.path}.` }, model: "claude-haiku-5-5" },
+                        outcome: { ok: true, text: { tagline: "Redone", summary: `Redone ${r.path}.` }, model: "claude-haiku-5-5", promptVersion: PROMPT_VERSION },
                     })));
                     return null;
                 }

@@ -18,7 +18,7 @@ import { mapLimit } from "./concurrency";
 import { DEFAULT_SUMMARY_MODELS, type ResolvedSummaryModels } from "./models";
 import { foldersAbove, type PlannedTarget, type TargetState } from "./plan";
 import { formatUsd } from "./pricing";
-import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
+import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT, renderFilePrompt } from "./prompts";
 import { planSnapshot, type Snapshot } from "./snapshot";
 import { refreshSummaryStatus, stillAtAnthropic, summaryStageStatus } from "./status";
 import { BatchGoneError, ModelUnavailableError, SummarizerAuthError, type Summarizer, type SummaryOutcome, type SummaryRequest } from "./types";
@@ -873,7 +873,7 @@ function ingest(
             id: destination.id,
             batchId: destination.batchId,
             inputHash: destination.inputHash,
-            outcome: outcome.ok ? { ok: true, text: outcome.text, model: outcome.model } : { ok: false, error: outcome.error },
+            outcome: outcome.ok ? { ok: true, text: outcome.text, model: outcome.model, promptVersion: PROMPT_VERSION } : { ok: false, error: outcome.error },
         });
 
         if (outcome.ok){

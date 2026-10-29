@@ -10,7 +10,7 @@ import { loadSummaries, loadUsage, type StoredSummary, type SummaryText } from "
 import { repoKey } from "../paths";
 import { indexRepository } from "../pipeline";
 import { planSummaries, type PlannedTarget } from "./plan";
-import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, SUMMARY_MODELS } from "./prompts";
+import { FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, PROMPT_VERSION, SUMMARY_MODELS } from "./prompts";
 import {
     answeredRow, nextWave, previewRepoFolders, renderFolderPreview, runFolderPreview, SampleNotIndexedError, selectSample, unfinished,
     type FolderPreview,
@@ -112,7 +112,7 @@ describe("answeredRow", () => {
         const row = answeredRow(target, outcome, undefined);
         expect(row).toEqual({
             id: 0, kind: "file", path: "src/core/log.ts", tagline: "Logger", summary: "Logs things.", model: "claude-haiku-5-5",
-            inputHash: target.inputHash, status: "fresh", batchId: null, error: null,
+            inputHash: target.inputHash, promptVersion: null, status: "fresh", batchId: null, error: null,
         });
         // a row the index already had keeps its id
         expect(answeredRow(target, outcome, { ...row, id: 42, tagline: "Old", inputHash: "old" }).id).toBe(42);
@@ -174,7 +174,7 @@ describe("runFolderPreview", () => {
         const logHash = planSummaries(FILES, FOLDERS, [], PLAN_OPTIONS).find((t) => t.path === "src/core/log.ts")!.inputHash;
         const stored: StoredSummary[] = [{
             id: 7, kind: "file", path: "src/core/log.ts", tagline: "Stored logger", summary: "From an earlier run.", model: "claude-haiku-5-5",
-            inputHash: logHash, status: "fresh", batchId: null, error: null,
+            inputHash: logHash, promptVersion: PROMPT_VERSION, status: "fresh", batchId: null, error: null,
         }];
         const stub = stubSummarizer({ texts: { "src/core/index.ts": { tagline: "Core barrel", summary: "Re-exports the logger." } } });
         const result = await preview(["src/core"], stub.summarizer, stored);
@@ -187,7 +187,7 @@ describe("runFolderPreview", () => {
         // log.ts is in a batch at Anthropic: in flight, so neither src/core nor src can go
         const stored: StoredSummary[] = [{
             id: 3, kind: "file", path: "src/core/log.ts", tagline: null, summary: null, model: null,
-            inputHash: null, status: "pending", batchId: "batch-1", error: null,
+            inputHash: null, promptVersion: null, status: "pending", batchId: "batch-1", error: null,
         }];
         const stub = stubSummarizer();
         const result = await preview(["src"], stub.summarizer, stored);
@@ -337,7 +337,7 @@ describe("renderFolderPreview", () => {
         // a folder that never went out says so where its summary would be, and in the failures list
         const stuck = await preview(["src"], stubSummarizer().summarizer, [{
             id: 3, kind: "file", path: "src/core/log.ts", tagline: null, summary: null, model: null,
-            inputHash: null, status: "pending", batchId: "batch-1", error: null,
+            inputHash: null, promptVersion: null, status: "pending", batchId: "batch-1", error: null,
         }]);
         const stuckMarkdown = renderFolderPreview({ ...report, samples: [{ path: "src", why: "w" }], preview: stuck });
         expect(stuckMarkdown).toContain("- **Failures (3):**\n  - `src/core/log.ts` (file): not summarized (in-flight)\n"
