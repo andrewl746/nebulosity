@@ -63,7 +63,7 @@ And it's **free**. Everything above works without an API key, and Nebulosity its
 
 ## VS Code extension
 
-The extension shows the Map beside your code. It follows whatever file you have open, opens a file when you click it on the Map, and can light up the files that import the one you're looking at.
+The extension shows the Map beside your code. It follows whatever file you have open, opens a file when you double-click it on the Map or press Open in VS Code, and can light up the files that import the one you're looking at.
 
 ![The Nebulosity extension in VS Code. editor.main.ts is open in the editor and selected on the Map beside it, with lines to the files it imports and its summary open](docs/screenshots/vscode-extension.png)
 
