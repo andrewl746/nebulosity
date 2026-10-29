@@ -11,8 +11,9 @@ type HeaderProps = {
     crumb: ReactNode;
     onSearch: () => void;
     onHelp: () => void;
-    /** Inside VS Code's panel: Back first, no logo and no help button (the ? key still opens it). */
+    /** Inside VS Code's panel: no logo and no help button (the ? key still opens it). */
     embedded: boolean;
+    /** Whether Back has one of the Map's own steps to go back to (history.ts's historyDepth). */
     canGoBack: boolean;
     /** A short window's toolbar, folded into this bar (shell.ts). */
     toolbar?: ReactNode;
@@ -33,17 +34,20 @@ const SEARCH_ICON = {
 
 /**
  * The Map's one top bar (the Workbench redesign, ADR-070), 42 px, 38 inside VS Code's panel. Left to right: the logo
- * and name, the breadcrumb in mono with the repo first, the search field, and help. In the demo the logo goes to
+ * and name, Back, the breadcrumb in mono with the repo first, the search field, and help. In the demo the logo goes to
  * nebulosity.ca (the owner, 2026-10-27). Inside VS Code's panel it's Back, the breadcrumb and search, since VS Code has
- * its own chrome.
+ * its own chrome. Back is the same button in the browser, the demo and the panel, right before the breadcrumb it
+ * changes, and greyed out where none of the Map's own steps lie behind it (the owner's pick, 2026-10-29).
  *
  * A narrower window drops secondary parts one step at a time, so nothing sits on anything else and nothing scrolls
  * sideways: under 1000 px the search's shortcut, under 900 the Nebulosity name (the mark stays), under 640 the search's
  * words (the field becomes its icon), and under 480 the help button (the toolbar's … menu has it). Under 360 the mark
- * goes too (Back stays in VS Code's panel) and the bar's gaps narrow. The breadcrumb takes what's left and folds its
- * middle (under 360 the repo's name with it). In a short window the toolbar's controls and then the status dots join
- * this bar, which then has less to give: the search is its icon under 1000 px, and under 360 it moves into the toolbar's
- * … menu (Ctrl K still opens it).
+ * and its divider go too, and the bar's gaps and Back's box narrow (24 px, 4 px from the breadcrumb), so the folder on
+ * screen keeps a readable name at 200 × 200 with the toolbar and the status dots in this bar. Back never goes, so under
+ * 360 the browser's bar is the panel's. The breadcrumb takes what's left and folds its middle (under 360 the repo's
+ * name with it). In a short window the toolbar's controls and then the status dots join this bar, which then has less
+ * to give: the search is its icon under 1000 px, and under 360 it moves into the toolbar's … menu (Ctrl K still opens
+ * it).
  */
 export default function Header({ crumb, onSearch, onHelp, embedded, canGoBack, toolbar, status }: HeaderProps){
     // the server renders "Ctrl K"; a Mac shows "⌘K" once hydrated, without a mismatch
@@ -56,15 +60,14 @@ export default function Header({ crumb, onSearch, onHelp, embedded, canGoBack, t
         </>
     );
     return (
-        <header className={`relative z-20 flex shrink-0 items-center gap-3 border-b border-divider bg-panel pl-3 pr-2.5 max-[360px]:gap-2 max-[360px]:pl-2 max-[360px]:pr-1.5 ${embedded ? "h-[38px]" : "h-[42px]"}`}>
+        <header className={`relative z-20 flex shrink-0 items-center gap-3 border-b border-divider bg-panel pl-3 pr-2.5 max-[360px]:gap-1.5 max-[360px]:pl-2 max-[360px]:pr-1.5 ${embedded ? "h-[38px]" : "h-[42px]"}`}>
             {/* at its natural width, so a long breadcrumb takes room from the search field before it truncates */}
-            <div className="flex min-w-0 flex-[1_1_auto] items-center gap-2.5">
-                {embedded
-                    ? <BackButton enabled={canGoBack} />
-                    : DEMO
-                        ? <a href="https://nebulosity.ca" title="nebulosity.ca" className="flex shrink-0 items-center gap-2 rounded-[4px] max-[360px]:hidden">{brand}</a>
-                        : <span className="flex shrink-0 items-center gap-2 max-[360px]:hidden">{brand}</span>}
+            <div className="flex min-w-0 flex-[1_1_auto] items-center gap-2.5 max-[360px]:gap-1">
+                {!embedded && (DEMO
+                    ? <a href="https://nebulosity.ca" title="nebulosity.ca" className="flex shrink-0 items-center gap-2 rounded-[4px] max-[360px]:hidden">{brand}</a>
+                    : <span className="flex shrink-0 items-center gap-2 max-[360px]:hidden">{brand}</span>)}
                 {!embedded && <span aria-hidden className="h-4 w-px shrink-0 bg-divider max-[360px]:hidden" />}
+                <BackButton enabled={canGoBack} />
                 {crumb}
             </div>
             <button

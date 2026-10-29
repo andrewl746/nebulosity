@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { followStep, historyDepth, historyStep, mapUrl, placeFromSearch } from "./history";
 
-describe("historyDepth (the Back control inside VS Code's panel, owner review 2026-10-25)", () => {
+describe("historyDepth (the header's Back control, in VS Code's panel since 2026-10-25 and the browser since 2026-10-29)", () => {
     it("reads how many of the Map's own steps lie behind the entry", () => {
         expect(historyDepth({ mapDepth: 2 })).toBe(2);
         // Next's router keeps its own keys in the same state object
