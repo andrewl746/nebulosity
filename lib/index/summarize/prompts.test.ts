@@ -37,7 +37,9 @@ describe("the length tiers", () => {
     });
 
     it("ends a request with its tier's line", () => {
-        expect(lengthLine("file", "small")).toBe("Write at most 50 words, in 2 paragraphs, and name at most 2 exports.");
+        expect(lengthLine("file", "small")).toBe("Write at most 30 words, in 2 paragraphs, and name at most 2 exports.");
+        expect(lengthLine("file", "medium")).toBe("Write at most 70 words, in 2 or 3 paragraphs, and name at most 3 exports.");
+        expect(lengthLine("folder", "small")).toBe("Write at most 50 words, in 2 paragraphs, and name at most 2 files or subfolders.");
         expect(lengthLine("folder", "medium")).toBe("Write at most 90 words, in 2 or 3 paragraphs, and name at most 3 files or subfolders.");
         expect(lengthLine("repo", "large")).toBe("Write at most 150 words, in up to 5 paragraphs, as many as it needs, and name at most 5 folders or files.");
         expect(withLengthLine("A\nB", "file", "large"))

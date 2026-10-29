@@ -51,7 +51,8 @@ export const MAX_FOLDER_ITEMS = 50;
 /** A file's prompt names this many of the areas its importers sit in (PIVOT_SPEC.md §4.2's groups); the rest fold into a count. */
 export const MAX_IMPORTER_GROUPS = 3;
 
-// Prompt v3.2 (ADR-034, amended 2026-10-29). The taglines' examples are deliberately not from VS Code, so the model can't copy one into a summary.
+// Prompt v3.3 (ADR-034, amended 2026-10-29), v3.2 with a usage example that names a part instead of inviting a count,
+// still PROMPT_VERSION 3 since no release wrote v3.2. The taglines' examples are deliberately not from VS Code, so the model can't copy one into a summary.
 const PLAIN = "Use short sentences, with no semicolons, colons or dashes. When you need a technical term, say what it means the first time, or use a plainer word.";
 
 export const FILE_SYSTEM_PROMPT = [
@@ -60,7 +61,7 @@ export const FILE_SYSTEM_PROMPT = [
     "The summary is short paragraphs with a blank line between them. The last line of the request says about how many words, paragraphs and code names to use. Stay close to it, and use fewer when the file is simple.",
     "The first paragraph is 1 or 2 sentences on what the file is for and why the project needs it, in everyday words, with no code names.",
     "Then say what's inside. Name only the most important exports, in backticks like `parseConfig`, and say in plain words what each one does.",
-    "End with one sentence on how widely the file is used and where, from the \"Imported by\" line, which comes from the repository's import graph. Say it in words that match how widely it really is used, like \"Almost every part of the app relies on it.\" or \"Only the settings screen uses it.\" Never give a number of files.",
+    "End with one sentence on how widely the file is used and where, from the \"Imported by\" line, which comes from the repository's import graph. Say it in words that match how widely it really is used, like \"Almost every part of the app relies on it.\" or \"The settings screen uses it, and little else does.\" Name the parts that use it, never a number of files.",
     PLAIN,
     "Don't narrate the code line by line, don't guess beyond what you're shown, and don't mention truncation or code you weren't shown.",
 ].join("\n");
@@ -120,13 +121,24 @@ export function folderTier(fileCount: number): LengthTier {
 /** What a length line counts, per kind of target. */
 const NAMED: Record<SummaryTargetKind, string> = { file: "exports", folder: "files or subfolders", repo: "folders or files" };
 
+/** Each tier's word target (design §4). Folders and the repo are told these, and kept within them in the samples. */
+export const TIER_WORDS: Record<LengthTier, number> = { small: 50, medium: 90, large: 150 };
+
+/**
+ * The words a file is told, below its tier's target for small and medium files. The final sample (Summary Review #6)
+ * measured Haiku writing 1.6 to 1.8 times what it was told on small files and 1.1 to 1.3 times on medium ones, so
+ * these land it near 50 and 90 (the owner, 2026-10-29, as design §4 allowed). Large files kept within 150.
+ */
+export const FILE_TOLD_WORDS: Record<LengthTier, number> = { small: 30, medium: 70, large: 150 };
+
 /** The request's last line, saying about how many words, paragraphs and code names a summary of this tier uses. */
 export function lengthLine(kind: SummaryTargetKind, tier: LengthTier): string {
     const what = NAMED[kind];
+    const words = (kind === "file" ? FILE_TOLD_WORDS : TIER_WORDS)[tier];
     switch (tier){
-        case "small": return `Write at most 50 words, in 2 paragraphs, and name at most 2 ${what}.`;
-        case "medium": return `Write at most 90 words, in 2 or 3 paragraphs, and name at most 3 ${what}.`;
-        case "large": return `Write at most 150 words, in up to 5 paragraphs, as many as it needs, and name at most 5 ${what}.`;
+        case "small": return `Write at most ${words} words, in 2 paragraphs, and name at most 2 ${what}.`;
+        case "medium": return `Write at most ${words} words, in 2 or 3 paragraphs, and name at most 3 ${what}.`;
+        case "large": return `Write at most ${words} words, in up to 5 paragraphs, as many as it needs, and name at most 5 ${what}.`;
     }
 }
 

@@ -136,8 +136,9 @@ describe("buildFilePrompt", () => {
         const repoId = requireRepository(db, repoKey(root));
         const log = loadFileFacts(db, repoId).find((f) => f.path === "src/core/log.ts")!;
 
-        // log.ts has 9 lines, under 120, and 3 importers (main.ts, core/index.ts, index.ts), 3 or fewer: small
-        const line = "\n\nWrite at most 50 words, in 2 paragraphs, and name at most 2 exports.";
+        // log.ts has 9 lines, under 120, and 3 importers (main.ts, core/index.ts, index.ts), 3 or fewer: small, which a
+        // file is told as 30 words (FILE_TOLD_WORDS)
+        const line = "\n\nWrite at most 30 words, in 2 paragraphs, and name at most 2 exports.";
         const prompt = buildFilePrompt(db, repoId, root, log)!;
         expect(prompt.slice(-line.length)).toBe(line);
     });
