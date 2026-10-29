@@ -71,11 +71,12 @@ export default function HelpDialog({ onClose }: { onClose: () => void }){
                         <li>A line from A to B means A uses code from B, and the arrow points at what&apos;s being used. Its weight, and the number on it, show how many imports it carries.</li>
                         <li>Hover a box to bring its lines forward. Hover a line to read it as a sentence, like &quot;editor uses base, 12 imports&quot;. Where lines join, it lists every line on that stretch, and a click keeps the list open until you press Escape or click elsewhere.</li>
                         <li><b>Strong links only</b>, in the toolbar, hides the lines under 2% of the heaviest line&apos;s imports. Every line of the box you select or hover still shows.</li>
+                        <li>With a box selected, <b>Uses</b> or <b>Used by</b> in the toolbar keeps only its lines to what it uses, or from what uses it, in color, and turns its other lines gray. <b>All</b> colors both, and it&apos;s back to All when you select something else.</li>
                         <li>Busy folders (more than 60 lines) draw only the lines of the box you hover or select, until you ask for <b>Show all lines</b>.</li>
                         <li>Boxes with no lines on the page sit under a line that says &quot;Not linked to anything here&quot;. Lines to other pages end at a doorway, a dashed box like &quot;Lines to page 2&quot;, and double-clicking it goes there.</li>
                     </Section>
                     <Section title="Colors">
-                        <li><Swatch className="border-2 border-accent bg-node-sel" /> Purple is the box you selected, the lines to what it uses, and what they join. <span className="whitespace-nowrap"><Swatch className="bg-used-by-edge" /> Pink</span> is the lines from what uses it. Everything else fades.</li>
+                        <li><Swatch className="border-2 border-accent bg-node-sel" /> Purple is the box you selected, the lines to what it uses, and what they join. <span className="whitespace-nowrap"><Swatch className="bg-used-by-edge" /> Gold</span> is the lines from what uses it. Everything else fades.</li>
                         <li><Swatch className="outline-2 outline-offset-1 outline-agent" /> Orange is what Claude Code is touching right now.</li>
                         <li><Swatch className="rounded-full bg-ok" /> The cyan dot at the bottom left says the index is up to date.</li>
                         <li><Swatch className="rounded-full bg-danger" /> Red means something failed.</li>
