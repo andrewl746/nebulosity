@@ -42,10 +42,12 @@ const SEARCH_ICON = {
  * A narrower window drops secondary parts one step at a time, so nothing sits on anything else and nothing scrolls
  * sideways: under 1000 px the search's shortcut, under 900 the Nebulosity name (the mark stays), under 640 the search's
  * words (the field becomes its icon), and under 480 the help button (the toolbar's … menu has it). Under 360 the mark
- * and its divider go too and the bar's gaps narrow. Back never goes, so under 360 the browser's bar is the panel's. The
- * breadcrumb takes what's left and folds its middle (under 360 the repo's name with it). In a short window the
- * toolbar's controls and then the status dots join this bar, which then has less to give: the search is its icon under
- * 1000 px, and under 360 it moves into the toolbar's … menu (Ctrl K still opens it).
+ * and its divider go too, and the bar's gaps and Back's box narrow (24 px, 4 px from the breadcrumb), so the folder on
+ * screen keeps a readable name at 200 × 200 with the toolbar and the status dots in this bar. Back never goes, so under
+ * 360 the browser's bar is the panel's. The breadcrumb takes what's left and folds its middle (under 360 the repo's
+ * name with it). In a short window the toolbar's controls and then the status dots join this bar, which then has less
+ * to give: the search is its icon under 1000 px, and under 360 it moves into the toolbar's … menu (Ctrl K still opens
+ * it).
  */
 export default function Header({ crumb, onSearch, onHelp, embedded, canGoBack, toolbar, status }: HeaderProps){
     // the server renders "Ctrl K"; a Mac shows "⌘K" once hydrated, without a mismatch
@@ -58,9 +60,9 @@ export default function Header({ crumb, onSearch, onHelp, embedded, canGoBack, t
         </>
     );
     return (
-        <header className={`relative z-20 flex shrink-0 items-center gap-3 border-b border-divider bg-panel pl-3 pr-2.5 max-[360px]:gap-2 max-[360px]:pl-2 max-[360px]:pr-1.5 ${embedded ? "h-[38px]" : "h-[42px]"}`}>
+        <header className={`relative z-20 flex shrink-0 items-center gap-3 border-b border-divider bg-panel pl-3 pr-2.5 max-[360px]:gap-1.5 max-[360px]:pl-2 max-[360px]:pr-1.5 ${embedded ? "h-[38px]" : "h-[42px]"}`}>
             {/* at its natural width, so a long breadcrumb takes room from the search field before it truncates */}
-            <div className="flex min-w-0 flex-[1_1_auto] items-center gap-2.5">
+            <div className="flex min-w-0 flex-[1_1_auto] items-center gap-2.5 max-[360px]:gap-1">
                 {!embedded && (DEMO
                     ? <a href="https://nebulosity.ca" title="nebulosity.ca" className="flex shrink-0 items-center gap-2 rounded-[4px] max-[360px]:hidden">{brand}</a>
                     : <span className="flex shrink-0 items-center gap-2 max-[360px]:hidden">{brand}</span>)}
