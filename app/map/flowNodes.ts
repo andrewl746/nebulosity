@@ -64,11 +64,12 @@ export function sameBoxNode(a: BoxNode, b: BoxNode): boolean {
 }
 
 /**
- * Whether two lines draw the same: the same ends, route, width, head, color, count, count's place and hover label. The
- * place is compared by value, since a count placed again where it was comes back as a new point.
+ * Whether two lines draw the same: the same ends, route, width, head, color, count and count's place. The place is
+ * compared by value, since a count placed again where it was comes back as a new point. A hover draws nothing on a
+ * line (its words are the canvas's card), so it leaves every line as it was.
  */
 export function sameRoutedEdge(a: RoutedEdgeType, b: RoutedEdgeType): boolean {
-    return a.source === b.source && a.target === b.target && a.data?.points === b.data?.points && a.label === b.label
+    return a.source === b.source && a.target === b.target && a.data?.points === b.data?.points
         && a.data?.width === b.data?.width && a.data?.headWidth === b.data?.headWidth && a.data?.color === b.data?.color
         && a.data?.count === b.data?.count && a.data?.countStrong === b.data?.countStrong
         && a.data?.labelAt?.x === b.data?.labelAt?.x && a.data?.labelAt?.y === b.data?.labelAt?.y;

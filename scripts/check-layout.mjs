@@ -1,9 +1,10 @@
 // The Map at every window size (the Workbench layout, app/map/shell.ts): headless Chrome over the DevTools protocol
 // opens the running Map at a grid of sizes and screen scales, walks it through its states (the inspector in each of its
-// places, menus, dialogs, Claude Code's activity), and checks that nothing is cut off out of reach, nothing covers a
-// control, no text is clipped unreadably, the layout is the one shell.ts gives that window, and the page never scrolls
-// sideways (down only in a window shorter than the layout's least height). Plain Node 24 (its global WebSocket and
-// fetch, and its own TypeScript stripping for shell.ts), no dependency.
+// places, menus, dialogs, a line's hover card and its pinned list, Claude Code's activity), and checks that nothing is
+// cut off out of reach, nothing covers a control, no text is clipped unreadably, the layout is the one shell.ts gives
+// that window, the line's card stays inside the canvas and off the line, and the page never scrolls sideways (down only
+// in a window shorter than the layout's least height). Plain Node 24 (its global WebSocket and fetch, and its own
+// TypeScript stripping for shell.ts), no dependency.
 //
 //   npm run check-layout -- http://127.0.0.1:3002 [--shots <dir>] [--all-shots] [--sizes 1440x900,1440x900@1.5,200x260] [--dpr 1,2] [--states top,file] [--embed]
 //
@@ -75,14 +76,31 @@ function parseSize(spec){
 /** The layout shell.ts gives a window (the page's own width, without a scrollbar), with or without a selection. */
 const layoutAt = (width, height, selected) => shellLayout({ width, height, embedded: EMBED, selected });
 
-/** The toolbar's … menu has something in it (MapToolbar's menu): short of room, short of height, or holding help. */
+/**
+ * The toolbar's … menu has something in it (MapToolbar's menu): short of room (All, Uses and Used by go into it under a
+ * 760 px canvas on the big folder its state shows, greyed out with nothing selected), short of height, or holding help.
+ */
 const toolbarMenuAt = ({ width, height }) => {
     const shell = layoutAt(width, height, false);
-    return shell.toolbarInHeader || shell.canvasWidth < 470 || EMBED || width < 480;
+    return shell.toolbarInHeader || shell.canvasWidth < SIDES_IN_BAR_PAGED || EMBED || width < 480;
 };
+/**
+ * All, Uses and Used by keep the toolbar's own row from this canvas width, and from the second beside a big folder's
+ * page control (MapToolbar's SIDES_IN_BAR and SIDES_IN_BAR_PAGED).
+ */
+const SIDES_IN_BAR = 600;
+const SIDES_IN_BAR_PAGED = 760;
 
 const FILE = "src/vs/base/common/event.ts";
 const DEEP = "src/vs/workbench/contrib/terminal/browser";
+/** A page where 43 lines share the run into one box, utils.ts: the hover card's "and 38 more" and the pinned list's scroll. */
+const LINES = "src/vs/base/test/common";
+/** Some line's end is on the canvas, where the pointer can reach it (pointAtRun). */
+const LINE_SHOWN = `[...document.querySelectorAll(".react-flow__edge path.react-flow__edge-path")].some((p) => {
+    const length = p.getTotalLength(), q = p.getPointAtLength(Math.max(0, length - 4)), m = p.getScreenCTM();
+    const hit = document.elementFromPoint(q.x * m.a + q.y * m.c + m.e, q.x * m.b + q.y * m.d + m.f);
+    return !!hit && !!hit.closest(".react-flow__edge");
+})`;
 /**
  * The states, in the order one tab walks them. `place` is where the Map goes first; `select` clicks a box; `act` does
  * the rest in the page. `when` says at which sizes a state exists at all (a rail only where the explorer is one); the
@@ -96,6 +114,12 @@ const STATES = [
     { name: "deep", place: DEEP },
     // the middle page of three: both of the page control's arrows are live
     { name: "paged", place: "src/vs/base/common", page: 1 },
+    // the pointer on the run the most lines share, its hover card beside it, and that run clicked, the card pinned with
+    // every line in a list that scrolls (the owner, 2026-10-29): inside the canvas and off the line at every size
+    { name: "line-hover", place: LINES, act: "line-hover", applies: LINE_SHOWN },
+    { name: "line-pinned", place: LINES, act: "line-pinned", applies: LINE_SHOWN },
+    // the pinned card through a zoom with the wheel somewhere else, which takes it with the spot clicked: still inside
+    { name: "line-zoomed", place: LINES, act: "line-zoomed", applies: LINE_SHOWN },
     { name: "busy", place: "src/vs/workbench/contrib" },
     // a file with many declarations, on a paged level, the inspector in each of its places (shell.ts): beside the
     // canvas, under it in a tall window, a drawer over it in a short one, over all of it where the window is narrow too
@@ -134,6 +158,15 @@ const STATES = [
     { name: "banner", place: "src/vs/base/common", select: FILE, act: "banner" },
     // the same banner with nothing selected
     { name: "banner-plain", place: "src/vs/base/common", act: "banner" },
+    // workbench selected, a box in view at every size, and Uses picked (the owner's pick A2, 2026-10-29), in the
+    // toolbar's row or its … menu, the box's actions beside it where the inspector would cover the canvas, so its lines
+    // stay in view
+    { name: "sides", place: "src/vs", select: "src/vs/workbench", details: false, act: "sides-uses" },
+    // the … menu open on All, Uses and Used by, wherever they're folded into it
+    { name: "sides-menu", place: "src/vs", select: "src/vs/workbench", details: false, act: "toolbar-menu", when: (size) => {
+        const shell = layoutAt(size.width, size.height, true);
+        return shell.toolbarInHeader || shell.canvasWidth < SIDES_IN_BAR;
+    } },
 ];
 /** What a state does after reaching its place, as a list (most states do one thing). */
 const actsOf = (state) => state.act === undefined ? [] : [state.act].flat();
@@ -391,6 +424,11 @@ async function press(tab, key, code, keyCode){
  * selection, then Claude's highlights, one press each.
  */
 async function reset(tab){
+    // a pointer left on a line (pointAtRun) moves off the page, so its card goes and no later state finds one
+    if (tab.linePointer){
+        await tab.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: -1, y: -1, button: "none" });
+        tab.linePointer = null;
+    }
     for (let i = 0; i < 5; i++){
         await press(tab, "Escape", "Escape", 27);
         await sleep(60);
@@ -489,6 +527,72 @@ async function pickFromToolbarMenu(tab, label, what){
     })()`);
 }
 
+/**
+ * The run the most drawn lines share, the drop into the box most of them end at, just over its arrowhead: every line
+ * into a box ends on one point under one head (app/map/routes.ts), so 4 px up each one's drawn path is the same spot.
+ * Where that spot is off the canvas (a level opened from its top), the canvas is dragged by an empty bit of it, in
+ * steps that stay in the window, to bring the spot to the middle of what the window shows of it; where it still can't
+ * be reached, the most-shared spot that can. The pointer then comes onto it
+ * as a person's does, a step at a time, and stays there (reset moves it off). `tab.linePointer` keeps the spot, the
+ * line's half width there and how many lines end there, for the card's own check (inspectLineCard).
+ */
+async function pointAtRun(tab){
+    const find = `(() => {
+        const ends = new Map();
+        for (const edge of document.querySelectorAll(".react-flow__edge")){
+            const p = edge.querySelector("path.react-flow__edge-path");
+            if (!p) continue;
+            const target = edge.dataset.id.slice(edge.dataset.id.indexOf("->") + 2);
+            const length = p.getTotalLength(), q = p.getPointAtLength(Math.max(0, length - 4)), m = p.getScreenCTM();
+            const half = (parseFloat(getComputedStyle(p).strokeWidth) || 1) * m.a / 2;
+            const end = ends.get(target) ?? { x: q.x * m.a + q.y * m.c + m.e, y: q.x * m.b + q.y * m.d + m.f, half: 0, lines: 0 };
+            end.half = Math.max(end.half, half);
+            end.lines++;
+            ends.set(target, end);
+        }
+        const reached = (p) => { const hit = document.elementFromPoint(p.x, p.y); return !!hit && !!hit.closest(".react-flow__edge"); };
+        const sorted = [...ends.values()].sort((a, b) => b.lines - a.lines);
+        // the part of the canvas in the window: a short window scrolls the page, and the canvas runs on below it
+        const pane = document.querySelector(".react-flow__pane").getBoundingClientRect();
+        const seen = { left: Math.max(pane.left, 0), top: Math.max(pane.top, 0), right: Math.min(pane.right, innerWidth), bottom: Math.min(pane.bottom, innerHeight) };
+        const middle = { x: (seen.left + seen.right) / 2, y: (seen.top + seen.bottom) / 2 };
+        // an empty bit of the canvas near the middle of that, to drag it by
+        let grip = null;
+        for (let ring = 0; ring < 400 && grip === null; ring += 8){
+            for (const [fx, fy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]){
+                const x = middle.x + fx * ring, y = middle.y + fy * ring;
+                if (x < seen.left || x >= seen.right || y < seen.top || y >= seen.bottom) continue;
+                if (document.elementFromPoint(x, y)?.classList.contains("react-flow__pane")){ grip = { x, y }; break; }
+            }
+        }
+        return { most: sorted[0] ?? null, reachedMost: sorted.length > 0 && reached(sorted[0]), reachable: sorted.find(reached) ?? null, grip, middle, seen };
+    })()`;
+    const mouse = (type, x, y, extra = {}) => tab.send("Input.dispatchMouseEvent", { type, x, y, button: type === "mouseMoved" ? "none" : "left", ...extra });
+    let found = await tab.evaluate(find);
+    if (found.most === null) throw new Error("no line on the level to point at");
+    // a drag a step at a time, each one ending inside what the window shows of the canvas: the window gets no pointer
+    // past its own edges, so one long drag out of a short window would never move the view
+    for (let drags = 0; drags < 24 && !found.reachedMost && found.grip !== null; drags++){
+        const { grip, middle, most, seen } = found;
+        const dx = Math.max(seen.left + 2 - grip.x, Math.min(seen.right - 2 - grip.x, middle.x - most.x));
+        const dy = Math.max(seen.top + 2 - grip.y, Math.min(seen.bottom - 2 - grip.y, middle.y - most.y));
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break;
+        await mouse("mouseMoved", grip.x, grip.y);
+        await mouse("mousePressed", grip.x, grip.y, { clickCount: 1 });
+        for (let i = 1; i <= 8; i++) await mouse("mouseMoved", grip.x + dx * i / 8, grip.y + dy * i / 8, { buttons: 1 });
+        await mouse("mouseReleased", grip.x + dx, grip.y + dy, { clickCount: 1 });
+        await tab.evaluate(QUIET);
+        found = await tab.evaluate(find);
+    }
+    const spot = found.reachedMost ? found.most : found.reachable;
+    if (spot === null) throw new Error("no line's end the pointer can reach on the canvas");
+    for (let i = 1; i <= 8; i++) await mouse("mouseMoved", spot.x - 40 + 40 * i / 8, spot.y - 30 + 30 * i / 8);
+    await mouse("mouseMoved", spot.x + 0.5, spot.y);
+    tab.linePointer = spot;
+    await tab.waitFor(`!!document.querySelector('[data-line-card="hover"]')`, "the line's hover card");
+    return spot;
+}
+
 async function act(tab, state, base){
     for (const step of actsOf(state)) await actStep(tab, step, base);
 }
@@ -545,6 +649,15 @@ async function actStep(tab, step, base){
             await click(tab, '[data-testid="toolbar-more"]', "toolbar's … button");
             await tab.waitFor(`!!document.querySelector('[data-testid="toolbar-menu"]')`, "the toolbar's menu");
             break;
+        case "sides-uses":
+        case "sides-used-by": {
+            // in the toolbar's row from a 600 px canvas, else in its … menu, where a pick closes the menu
+            const [side, label] = step === "sides-uses" ? ["uses", "Uses"] : ["usedBy", "Used by"];
+            if (await tab.evaluate(shown(`[data-side="${side}"]`))) await click(tab, `[data-side="${side}"]`, `${label} in the toolbar`);
+            else await pickFromToolbarMenu(tab, label, "All, Uses and Used by");
+            await tab.waitFor(STEP_MARKERS[step], `only the selection's ${side === "uses" ? "lines out" : "lines in"} highlighted`);
+            break;
+        }
         case "breadcrumb-menu":
             await click(tab, '[data-testid="breadcrumb-folded"]', "breadcrumb's … button");
             await tab.waitFor(`!!document.querySelector('[data-testid="breadcrumb-menu"]')`, "the folded folders' menu");
@@ -553,6 +666,31 @@ async function actStep(tab, step, base){
             await postLive(base, MISSING_FOCUS);
             await tab.waitFor(`!!document.querySelector('main [role="alert"]')`, "the failed jump's banner");
             break;
+        case "line-hover":
+            await pointAtRun(tab);
+            break;
+        case "line-pinned":
+        case "line-zoomed": {
+            const spot = await pointAtRun(tab);
+            await tab.send("Input.dispatchMouseEvent", { type: "mousePressed", x: spot.x + 0.5, y: spot.y, button: "left", clickCount: 1 });
+            await tab.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: spot.x + 0.5, y: spot.y, button: "left", clickCount: 1 });
+            await tab.waitFor(`!!document.querySelector('[data-line-card="pinned"]')`, "the line's pinned card");
+            if (step === "line-pinned") break;
+            // the wheel turned three times over the middle of what the window shows of the canvas, zooming in round it, so
+            // the spot clicked, and the card with it, moves out toward an edge
+            const middle = await tab.evaluate(`(() => {
+                const r = document.querySelector(".react-flow__pane").getBoundingClientRect();
+                return { x: (Math.max(r.left, 0) + Math.min(r.right, innerWidth)) / 2, y: (Math.max(r.top, 0) + Math.min(r.bottom, innerHeight)) / 2 };
+            })()`);
+            await tab.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: middle.x, y: middle.y, button: "none" });
+            for (let i = 0; i < 3; i++){
+                await tab.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: middle.x, y: middle.y, deltaX: 0, deltaY: -120 });
+                await sleep(150);
+            }
+            // the pointer left the spot, so the card's check leaves out the spot
+            tab.linePointer = { ...tab.linePointer, zoomed: true };
+            break;
+        }
         case "activity":
             await postLive(base, ACTIVITY);
             await tab.waitFor(`[...document.querySelectorAll("[title]")].some((el) => el.title.includes(${JSON.stringify(ACTIVITY_LABEL)}))`, "Claude Code's newest call in the status bar");
@@ -569,6 +707,9 @@ const STEP_MARKERS = {
     source: `!!document.querySelector("[data-source-viewer]")`,
     "uses-tab": `document.querySelector('[data-panel] [role="tab"][data-tab="uses"]')?.getAttribute("aria-selected") === "true"`,
     "full-summary": `[...document.querySelectorAll('[data-panel] [aria-label="Summary"] button[aria-expanded="true"]')].some((b) => b.textContent.trim() === "Show less")`,
+    // a side picked: its lines in their color, and none in the other side's (that side is gray)
+    "sides-uses": `(() => { const s = [...document.querySelectorAll(".react-flow__edge-path")].map((p) => p.style.stroke); return s.includes("var(--edge-strong)") && !s.includes("var(--used-by-edge)"); })()`,
+    "sides-used-by": `(() => { const s = [...document.querySelectorAll(".react-flow__edge-path")].map((p) => p.style.stroke); return s.includes("var(--used-by-edge)") && !s.includes("var(--edge-strong)"); })()`,
     search: `document.querySelectorAll("[data-hit]").length > 0`,
     help: `!!document.querySelector('[data-testid="help"]')`,
     "repo-menu": `!!document.querySelector('[data-testid="repo-list"]')`,
@@ -577,6 +718,9 @@ const STEP_MARKERS = {
     "toolbar-menu": `!!document.querySelector('[data-testid="toolbar-menu"]')`,
     "breadcrumb-menu": `!!document.querySelector('[data-testid="breadcrumb-menu"]')`,
     banner: `!!document.querySelector('main [role="alert"]')`,
+    "line-hover": `!!document.querySelector('[data-line-card="hover"]')`,
+    "line-pinned": `!!document.querySelector('[data-line-card="pinned"]')`,
+    "line-zoomed": `!!document.querySelector('[data-line-card="pinned"]')`,
     activity: `[...document.querySelectorAll("[title]")].some((el) => el.title.includes(${JSON.stringify(ACTIVITY_LABEL)}))`,
 };
 
@@ -607,7 +751,8 @@ const stateShown = (state) => [
  *   (f) no text sits on a control it isn't part of (a message over the canvas lets clicks through, so (b) can't see it);
  *   (g) the layout is the one shell.ts gives this window: the explorer's form, the inspector's place, the toolbar's and
  *       the status bar's rows, the legend, and the page's least height; and the header's Back is there at every size,
- *       right before the breadcrumb, in the browser and VS Code's panel alike (the owner's pick, 2026-10-29);
+ *       right before the breadcrumb, in the browser and VS Code's panel alike (the owner's pick, 2026-10-29); and All,
+ *       Uses and Used by are in the toolbar's row exactly where the canvas has 600 px for them (760 beside a page control);
  *   (h) no text is drawn under something else (an overlay that lets clicks through, which (b) and (f) can't see).
  * `shell` is shellLayout for the page's own width and height and whether a box is selected, worked out by the caller.
  * The canvas's boxes, lines and the divider pan with the Map, so they're left out.
@@ -819,6 +964,13 @@ function inspectLayout({ shell }){
         const crumb = document.querySelector('header nav[aria-label="Where you are"]');
         if (back === null || !visible(back)) failures.push("(g) the header has no Back");
         else if (crumb !== null && (back.nextElementSibling !== crumb || back.getBoundingClientRect().right > crumb.getBoundingClientRect().left + TOL)) failures.push(`(g) Back isn't right before the breadcrumb`);
+        // All, Uses and Used by sit in the toolbar's own row from a 600 px canvas, or 760 beside a big folder's page
+        // control (in the bar wherever the toolbar has a row of its own that wide), greyed out or not, and in its …
+        // menu otherwise (MapToolbar), so a click never moves the toolbar
+        const sides = document.querySelector('[data-testid="sides"]');
+        const paged = document.querySelector('[data-testid="toolbar"] [data-testid="page-note"]') !== null;
+        const sidesInBar = !shell.toolbarInHeader && shell.canvasWidth >= (paged ? 760 : 600);
+        if ((sides !== null && visible(sides)) !== sidesInBar) failures.push(`(g) All, Uses and Used by are ${sides ? "in" : "not in"} the toolbar's row, where a ${shell.canvasWidth} px canvas${paged ? " beside a page control" : ""}${shell.toolbarInHeader ? " in a short window" : ""} puts them ${sidesInBar ? "there" : "in its … menu"}`);
     }
 
     // what of an element shows: the rect its clipping boxes leave (with `self`, its own overflow clips too)
@@ -919,6 +1071,60 @@ function inspectLayout({ shell }){
     return failures;
 }
 
+/**
+ * Runs inside the page, after inspectLayout, in the line states (serialized with toString, like it). The line's card:
+ *   (i) lies 8 px inside the canvas (app/map/narrow.ts's CARD_EDGE), and so clear of the toolbar, the legend and an
+ *       inspector beside or under the canvas, none of which is on it;
+ *   (i) is clear of what's over the canvas, a drawer, a box's actions, the banner (data-keep-clear);
+ *   (i) is off the bit of line pointed at, the spot and the line's half width around it, its tail reaching the line,
+ *       wherever the canvas has room for it over or under the pointer (not once the wheel has zoomed, `zoomed`);
+ *   (i) names every line that ends there, which share that run; and pinned, lists more than its ten rows by scrolling.
+ * `spot` is where pointAtRun left the pointer, with the line's half width there and how many lines end there.
+ */
+function inspectLineCard(spot){
+    const failures = [];
+    const card = document.querySelector("[data-line-card]");
+    if (card === null) return ["(i) no line card on the canvas"];
+    const r = card.getBoundingClientRect();
+    const canvas = document.querySelector(".react-flow").getBoundingClientRect();
+    const EDGE = 8, TOL = 1;
+    const over = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > TOL && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > TOL;
+    const out = [
+        r.left < canvas.left + EDGE - TOL && "left", r.top < canvas.top + EDGE - TOL && "top",
+        r.right > canvas.right - EDGE + TOL && "right", r.bottom > canvas.bottom - EDGE + TOL && "bottom",
+    ].filter(Boolean);
+    if (out.length > 0) failures.push(`(i) the line card isn't 8 px inside the canvas (${out.join(", ")}): ${Math.round(r.left)}, ${Math.round(r.top)} to ${Math.round(r.right)}, ${Math.round(r.bottom)} in ${Math.round(canvas.left)}, ${Math.round(canvas.top)} to ${Math.round(canvas.right)}, ${Math.round(canvas.bottom)}`);
+    for (const el of document.querySelectorAll("[data-keep-clear]")){
+        const k = el.getBoundingClientRect();
+        if (k.width >= 0.5 && k.height >= 0.5 && over(r, k)) failures.push(`(i) the line card is over <${el.tagName.toLowerCase()} ${[...el.attributes].map((a) => a.name).filter((n) => n.startsWith("data-")).join(" ")}>`);
+    }
+    // the spot is on the drop into a box, which runs up and down, so the card sits beside it where it fits, sliding along
+    // the line to fit the canvas as long as its tail keeps 12 px from its corners, and else just over or under the spot
+    // (narrow.ts's bubbleRoom), 8 in from the canvas's edges. Where it fits, it keeps off the line there, and beside it,
+    // its tail reaches the line's edge, 1 px short of it; only a canvas with no room for it may put it over the spot
+    const bit = { left: spot.x - spot.half, right: spot.x + spot.half, top: spot.y - spot.half, bottom: spot.y + spot.half };
+    const reach = spot.half + 8;
+    const beside = Math.max(spot.x - reach - EDGE - canvas.left, canvas.right - EDGE - spot.x - reach) >= r.width - TOL
+        && spot.y - canvas.top >= EDGE + 12 && canvas.bottom - spot.y >= EDGE + 12;
+    const room = beside ? canvas.height - 2 * EDGE : Math.max(spot.y - 7 - EDGE - canvas.top, canvas.bottom - EDGE - spot.y - 7);
+    const roomy = !spot.zoomed && r.height <= room + TOL;
+    if (roomy && over(r, bit)) failures.push(`(i) the line card covers the line where the pointer is, at ${Math.round(spot.x)}, ${Math.round(spot.y)}`);
+    const tail = card.querySelector("[data-tail]");
+    if (roomy && beside && tail === null) failures.push(`(i) the line card has no tail pointing at its line: the card ${Math.round(r.left)}, ${Math.round(r.top)}, ${Math.round(r.width)} by ${Math.round(r.height)}, the spot ${Math.round(spot.x)}, ${Math.round(spot.y)}, the canvas ${Math.round(canvas.left)}, ${Math.round(canvas.top)} to ${Math.round(canvas.right)}, ${Math.round(canvas.bottom)}`);
+    if (!spot.zoomed && tail !== null){
+        const t = tail.getBoundingClientRect();
+        const off = Math.hypot(Math.max(t.left - spot.x, 0, spot.x - t.right), Math.max(t.top - spot.y, 0, spot.y - t.bottom));
+        if (off > spot.half + 3) failures.push(`(i) the line card's tail stops ${Math.round(off)} px from the middle of its line, which is ${Math.round(spot.half * 2)} px wide`);
+    }
+    const named = Number(card.dataset.lines);
+    if (named !== spot.lines) failures.push(`(i) the line card names ${named} line${named === 1 ? "" : "s"} where ${spot.lines} end on the run`);
+    if (card.dataset.lineCard === "pinned" && named > 10){
+        const list = card.querySelector("ul");
+        if (list === null || list.scrollHeight <= list.clientHeight + TOL) failures.push(`(i) the pinned card's ${named} lines don't scroll`);
+    }
+    return failures;
+}
+
 // ─── the run ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** What the Map lays itself out by (useWindowSize): the page's own width, without a scrollbar, the window's height, and whether a box is selected. */
@@ -931,9 +1137,11 @@ const LAYOUT_INPUT = `({ width: document.documentElement.clientWidth, height: wi
 async function inspect(tab, state){
     const input = await tab.evaluate(LAYOUT_INPUT);
     const shell = layoutAt(input.width, input.height, input.selected);
+    // the line states check their card too, from where the pointer was left
+    const line = actsOf(state).some((step) => step.startsWith("line-")) && tab.linePointer ? `(${inspectLineCard.toString()})(${JSON.stringify(tab.linePointer)})` : "[]";
     return tab.evaluate(`(() => {
         if (!(${stateShown(state)})) return ["(setup) the state went away before it was inspected"];
-        return (${inspectLayout.toString()})(${JSON.stringify({ shell })});
+        return [...(${inspectLayout.toString()})(${JSON.stringify({ shell })}), ...${line}];
     })()`);
 }
 
@@ -974,8 +1182,9 @@ const walkCheck = (walk) => `(() => {
 })()`;
 
 /**
- * One live-resize walk (RESIZE_WALK): one tab, the file selected and a popover open, resized step by step. Each step is
- * inspected like a state, and the selection must hold and the popover stay in the window. Where the popover went (the
+ * One live-resize walk (RESIZE_WALK): one tab, the file selected with Used by picked and a popover open, resized step
+ * by step. Each step is inspected like a state, and the selection and its side must hold and the popover stay in the
+ * window. Where the popover went (the
  * toolbar's menu has nothing to hold, or was drawn again in the header), it's opened again if its button is there.
  */
 async function resizeWalk(cdp, options, walk, failures){
@@ -987,6 +1196,9 @@ async function resizeWalk(cdp, options, walk, failures){
         await openMap(tab, options.base, { place });
         await goTo(tab, place, 0);
         await selectBox(tab, FILE);
+        // its lines in highlighted alone (All, Uses and Used by: the owner, 2026-10-29), which has to hold through every
+        // step, the picker moving between the toolbar's row and its … menu
+        await actStep(tab, "sides-used-by", options.base);
         for (const spec of RESIZE_WALK){
             const size = parseSize(spec);
             let lines;
@@ -1003,7 +1215,7 @@ async function resizeWalk(cdp, options, walk, failures){
                     check = await tab.evaluate(walkCheck(walk));
                 } else if (!check.open) note = " (no popover here)";
                 if (options.shots && options.allShots) await shoot(tab, options.shots, `walk-${walk.act}-${row.length + 1}-${spec}`);
-                const state = { place, select: FILE, act: check.open ? walk.act : undefined };
+                const state = { place, select: FILE, act: ["sides-used-by", ...(check.open ? [walk.act] : [])] };
                 lines = [...check.lines, ...await inspect(tab, state)];
             } catch (err){
                 lines = [`(setup) ${err instanceof Error ? err.message : String(err)}`];

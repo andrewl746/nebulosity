@@ -78,12 +78,11 @@ describe("sameRoutedEdge: whether a line would draw the same", () => {
     // the same line with some of its data changed
     const edge = (fields: Partial<RoutedEdgeData>): RoutedEdgeType => line({ data: { points, width: 1, color: "var(--text-3)", ...fields } });
 
-    it("is the same with the same ends, route, width, color, count and label", () => {
+    it("is the same with the same ends, route, width, color and count", () => {
         expect(sameRoutedEdge(line(), line())).toBe(true);
     });
 
-    it("differs when it's hovered (a label), recolored, rerouted, widened or its count changes", () => {
-        expect(sameRoutedEdge(line(), line({ label: "a uses b, 3 imports" }))).toBe(false);
+    it("differs when it's recolored, rerouted, widened or its count changes", () => {
         expect(sameRoutedEdge(line(), line({ data: { points, width: 1, color: "var(--edge-strong)" } }))).toBe(false);
         expect(sameRoutedEdge(line(), line({ data: { points: [{ x: 0, y: 0 }, { x: 0, y: 40 }], width: 1, color: "var(--text-3)" } }))).toBe(false);
         expect(sameRoutedEdge(line(), line({ data: { points, width: 4, color: "var(--text-3)" } }))).toBe(false);

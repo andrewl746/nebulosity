@@ -8,7 +8,7 @@ import Breadcrumb from "./Breadcrumb";
 import DetailPanel from "./DetailPanel";
 import HelpDialog from "./HelpDialog";
 import { AGENT_ACTIVE_MS, agentFocus } from "./activity";
-import { isBusyLevel, weakLinesHidden } from "./emphasis";
+import { isBusyLevel, selectionLines, sidesWithoutLines, weakLinesHidden, type LineDirection } from "./emphasis";
 import MapCanvas from "./MapCanvas";
 import { followStep, historyDepth, historyStep, mapUrl, placeFromSearch, type MapPlace } from "./history";
 import { bannerForm, CARD_CLEAR, type BannerForm } from "./narrow";
@@ -122,6 +122,15 @@ function MapScreen(){
     const [showAllLines, setShowAllLines] = useState(false);
     // Strong links only, on until it's turned off, and like Show all lines it holds across levels (ADR-070)
     const [strongOnly, setStrongOnly] = useState(true);
+    // Which side of the selected box's lines is highlighted, the other drawn gray (emphasis.ts). It belongs to the box it
+    // was picked for, so it's All again whenever the selection changes: another box, none, another folder or page, or
+    // Back (the owner, 2026-10-29: "the default is view all"). Reset during render, as detailsFor is above.
+    const [direction, setDirection] = useState<LineDirection>("all");
+    const [directionFor, setDirectionFor] = useState(selected);
+    if (directionFor !== selected){
+        setDirectionFor(selected);
+        setDirection("all");
+    }
     const [pulses, setPulses] = useState<ReadonlyMap<string, Pulse>>(new Map());
     // the Map area's width: whether the panel covers the canvas and the page pill's wording go by it (narrow.ts); the
     // pill's width and the banner's height decide where the banner goes
@@ -367,10 +376,14 @@ function MapScreen(){
     // tick.
     const agentKey = level === null ? "" : [...agentFocus(level, live.recent, highlights, now, clearedAt, editorHighlights)].sort().join("\0");
     const agent = useMemo(() => new Set(agentKey === "" ? [] : agentKey.split("\0")), [agentKey]);
-    // the boxes joined to the selection by a line, which the explorer lights as the canvas does
+    // The sides of the selection with no line on the page can't be picked (they'd highlight nothing), and one picked
+    // before the index moved its lines away counts as All.
     const selectedOnLevel = selectionShown(level, selected);
-    const linked = useMemo(() => new Set(level === null || selectedOnLevel === null ? [] : level.edges
-        .filter((e) => e.source === selectedOnLevel || e.target === selectedOnLevel).flatMap((e) => [e.source, e.target])), [level, selectedOnLevel]);
+    const emptySides = useMemo(() => (level === null ? [] : sidesWithoutLines(level.edges, selectedOnLevel)), [level, selectedOnLevel]);
+    const shownDirection = emptySides.includes(direction) ? "all" : direction;
+    // the boxes joined to the selection by a highlighted line, which the explorer lights as the canvas does
+    const linked = useMemo(() => new Set(level === null ? [] : selectionLines(level.edges, selectedOnLevel, shownDirection)
+        .flatMap((e) => [e.source, e.target])), [level, selectedOnLevel, shownDirection]);
 
     const onSwitched = useCallback(() => {
         setPlace({ path: "", page: 0 });
@@ -500,6 +513,10 @@ function MapScreen(){
             // the header hides its search icon under 360 px while the toolbar shares it (Header)
             searchInMenu={shell.toolbarInHeader && windowSize.width < 360}
             onSearch={() => setPaletteOpen(true)}
+            hasSelection={shownSelected !== null}
+            direction={shownDirection}
+            onDirection={setDirection}
+            emptySides={emptySides}
         />
     );
     const statusBar = (dots: boolean) => (
@@ -569,6 +586,7 @@ function MapScreen(){
                                 onDrawn={onDrawn}
                                 quietLines={quietLines}
                                 strongOnly={strongOnly}
+                                direction={shownDirection}
                                 covered={covered}
                                 actionsFor={actionsFor}
                                 onDetails={showDetails}
@@ -582,9 +600,10 @@ function MapScreen(){
                                 <ErrorBanner message={banner.message} form={bannerAs} bandRef={bandRef} cardRef={cardRef} />
                             </div>
                         )}
-                        {/* over the canvas: a drawer on its right, or the whole of it */}
+                        {/* over the canvas: a drawer on its right, or the whole of it. The line's hover card keeps clear of
+                            it, as of the banner and a box's actions (LineCard) */}
                         {(shell.inspector === "drawer" || shell.inspector === "cover") && inspector && (
-                            <div data-inspector-place={shell.inspector} style={{ width: shell.inspector === "drawer" ? DRAWER_WIDTH : "100%" }} className="absolute inset-y-0 right-0 z-10">
+                            <div data-inspector-place={shell.inspector} data-keep-clear style={{ width: shell.inspector === "drawer" ? DRAWER_WIDTH : "100%" }} className="absolute inset-y-0 right-0 z-10">
                                 {inspector}
                             </div>
                         )}
@@ -636,12 +655,13 @@ function ErrorBanner({ message, form, bandRef, cardRef }: {
                 aria-hidden={form === "band" ? undefined : true}
                 className={`pointer-events-none absolute inset-x-0 top-6 z-[7] flex justify-center px-4 text-[13px] text-danger ${form === "band" ? "" : "invisible"}`}
             >
-                <p className="max-w-full rounded-[5px] bg-canvas px-2 text-center [overflow-wrap:anywhere]">{message}</p>
+                <p data-keep-clear={form === "band" ? true : undefined} className="max-w-full rounded-[5px] bg-canvas px-2 text-center [overflow-wrap:anywhere]">{message}</p>
             </div>
             {form === "card" && (
                 <div
                     ref={cardRef}
                     role="alert"
+                    data-keep-clear
                     style={{ maxWidth: `calc(100% - ${CARD_CLEAR}px)` }}
                     className="pointer-events-none absolute left-4 top-4 z-[7] rounded-md border border-divider bg-panel px-3 py-2 text-[13px] text-danger [overflow-wrap:anywhere]"
                 >

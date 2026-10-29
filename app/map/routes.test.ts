@@ -4,7 +4,7 @@ import type { LevelResponse, MapEdge, MapNode } from "@/lib/contracts";
 import { drawnAt, endsOf, headsOf, routeFaults, widthsOf, type LineEnds } from "@/scripts/route-faults";
 import { edgeKey, isBusyLevel, mapEmphasis } from "./emphasis";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
-import { headRooms, longestSideMiddle, nextRoutes, placeCounts, roundedPath, routeEdges, type Point } from "./routes";
+import { headRooms, nextRoutes, placeCounts, roundedPath, routeEdges, type Point } from "./routes";
 import { arrowHead, boxHeadWidths } from "./weights";
 
 const at = (entries: Record<string, Position>): Map<string, Position> => new Map(Object.entries(entries));
@@ -118,7 +118,7 @@ function crossesInside(p: Point, q: Point, box: Position): boolean {
     return x1 < box.x + BOX_WIDTH && x2 > box.x && y1 < box.y + BOX_HEIGHT && y2 > box.y;
 }
 
-describe("roundedPath and longestSideMiddle", () => {
+describe("roundedPath", () => {
     it("draws a straight line as one segment", () => {
         expect(roundedPath([{ x: 0, y: 0 }, { x: 0, y: 50 }])).toBe("M 0 0 L 0 50");
     });
@@ -128,13 +128,6 @@ describe("roundedPath and longestSideMiddle", () => {
         expect(roundedPath([{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 100, y: 20 }])).toBe("M 0 0 L 0 12 Q 0 20 8 20 L 100 20");
         // corner at (0, 6): the first side is 6 long, so the radius is 3
         expect(roundedPath([{ x: 0, y: 0 }, { x: 0, y: 6 }, { x: 100, y: 6 }])).toBe("M 0 0 L 0 3 Q 0 6 3 6 L 100 6");
-    });
-
-    it("puts a line's hover sentence, when it has no count placed, in the middle of its longest side", () => {
-        // 20 down, then 100 across, then 10 down: the across side is longest, its middle at x = 50
-        expect(longestSideMiddle([{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 100, y: 20 }, { x: 100, y: 30 }])).toEqual({ x: 50, y: 20 });
-        // two sides of 40: the first wins
-        expect(longestSideMiddle([{ x: 0, y: 0 }, { x: 0, y: 40 }, { x: 40, y: 40 }])).toEqual({ x: 0, y: 20 });
     });
 });
 
