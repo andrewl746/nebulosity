@@ -76,11 +76,20 @@ function parseSize(spec){
 /** The layout shell.ts gives a window (the page's own width, without a scrollbar), with or without a selection. */
 const layoutAt = (width, height, selected) => shellLayout({ width, height, embedded: EMBED, selected });
 
-/** The toolbar's … menu has something in it (MapToolbar's menu): short of room, short of height, or holding help. */
+/**
+ * The toolbar's … menu has something in it (MapToolbar's menu): short of room (All, Uses and Used by go into it under a
+ * 760 px canvas on the big folder its state shows, greyed out with nothing selected), short of height, or holding help.
+ */
 const toolbarMenuAt = ({ width, height }) => {
     const shell = layoutAt(width, height, false);
-    return shell.toolbarInHeader || shell.canvasWidth < 470 || EMBED || width < 480;
+    return shell.toolbarInHeader || shell.canvasWidth < SIDES_IN_BAR_PAGED || EMBED || width < 480;
 };
+/**
+ * All, Uses and Used by keep the toolbar's own row from this canvas width, and from the second beside a big folder's
+ * page control (MapToolbar's SIDES_IN_BAR and SIDES_IN_BAR_PAGED).
+ */
+const SIDES_IN_BAR = 600;
+const SIDES_IN_BAR_PAGED = 760;
 
 const FILE = "src/vs/base/common/event.ts";
 const DEEP = "src/vs/workbench/contrib/terminal/browser";
@@ -147,6 +156,15 @@ const STATES = [
     { name: "banner", place: "src/vs/base/common", select: FILE, act: "banner" },
     // the same banner with nothing selected
     { name: "banner-plain", place: "src/vs/base/common", act: "banner" },
+    // workbench selected, a box in view at every size, and Uses picked (the owner's pick A2, 2026-10-29), in the
+    // toolbar's row or its … menu, the box's actions beside it where the inspector would cover the canvas, so its lines
+    // stay in view
+    { name: "sides", place: "src/vs", select: "src/vs/workbench", details: false, act: "sides-uses" },
+    // the … menu open on All, Uses and Used by, wherever they're folded into it
+    { name: "sides-menu", place: "src/vs", select: "src/vs/workbench", details: false, act: "toolbar-menu", when: (size) => {
+        const shell = layoutAt(size.width, size.height, true);
+        return shell.toolbarInHeader || shell.canvasWidth < SIDES_IN_BAR;
+    } },
 ];
 /** What a state does after reaching its place, as a list (most states do one thing). */
 const actsOf = (state) => state.act === undefined ? [] : [state.act].flat();
@@ -624,6 +642,15 @@ async function actStep(tab, step, base){
             await click(tab, '[data-testid="toolbar-more"]', "toolbar's … button");
             await tab.waitFor(`!!document.querySelector('[data-testid="toolbar-menu"]')`, "the toolbar's menu");
             break;
+        case "sides-uses":
+        case "sides-used-by": {
+            // in the toolbar's row from a 600 px canvas, else in its … menu, where a pick closes the menu
+            const [side, label] = step === "sides-uses" ? ["uses", "Uses"] : ["usedBy", "Used by"];
+            if (await tab.evaluate(shown(`[data-side="${side}"]`))) await click(tab, `[data-side="${side}"]`, `${label} in the toolbar`);
+            else await pickFromToolbarMenu(tab, label, "All, Uses and Used by");
+            await tab.waitFor(STEP_MARKERS[step], `only the selection's ${side === "uses" ? "lines out" : "lines in"} highlighted`);
+            break;
+        }
         case "breadcrumb-menu":
             await click(tab, '[data-testid="breadcrumb-folded"]', "breadcrumb's … button");
             await tab.waitFor(`!!document.querySelector('[data-testid="breadcrumb-menu"]')`, "the folded folders' menu");
@@ -672,6 +699,9 @@ async function actStep(tab, step, base){
 const STEP_MARKERS = {
     source: `!!document.querySelector("[data-source-viewer]")`,
     "uses-tab": `document.querySelector('[data-panel] [role="tab"][data-tab="uses"]')?.getAttribute("aria-selected") === "true"`,
+    // a side picked: its lines in their color, and none in the other side's (that side is gray)
+    "sides-uses": `(() => { const s = [...document.querySelectorAll(".react-flow__edge-path")].map((p) => p.style.stroke); return s.includes("var(--edge-strong)") && !s.includes("var(--used-by-edge)"); })()`,
+    "sides-used-by": `(() => { const s = [...document.querySelectorAll(".react-flow__edge-path")].map((p) => p.style.stroke); return s.includes("var(--used-by-edge)") && !s.includes("var(--edge-strong)"); })()`,
     search: `document.querySelectorAll("[data-hit]").length > 0`,
     help: `!!document.querySelector('[data-testid="help"]')`,
     "repo-menu": `!!document.querySelector('[data-testid="repo-list"]')`,
@@ -713,7 +743,8 @@ const stateShown = (state) => [
  *   (f) no text sits on a control it isn't part of (a message over the canvas lets clicks through, so (b) can't see it);
  *   (g) the layout is the one shell.ts gives this window: the explorer's form, the inspector's place, the toolbar's and
  *       the status bar's rows, the legend, and the page's least height; and the header's Back is there at every size,
- *       right before the breadcrumb, in the browser and VS Code's panel alike (the owner's pick, 2026-10-29);
+ *       right before the breadcrumb, in the browser and VS Code's panel alike (the owner's pick, 2026-10-29); and All,
+ *       Uses and Used by are in the toolbar's row exactly where the canvas has 600 px for them (760 beside a page control);
  *   (h) no text is drawn under something else (an overlay that lets clicks through, which (b) and (f) can't see).
  * `shell` is shellLayout for the page's own width and height and whether a box is selected, worked out by the caller.
  * The canvas's boxes, lines and the divider pan with the Map, so they're left out.
@@ -925,6 +956,13 @@ function inspectLayout({ shell }){
         const crumb = document.querySelector('header nav[aria-label="Where you are"]');
         if (back === null || !visible(back)) failures.push("(g) the header has no Back");
         else if (crumb !== null && (back.nextElementSibling !== crumb || back.getBoundingClientRect().right > crumb.getBoundingClientRect().left + TOL)) failures.push(`(g) Back isn't right before the breadcrumb`);
+        // All, Uses and Used by sit in the toolbar's own row from a 600 px canvas, or 760 beside a big folder's page
+        // control (in the bar wherever the toolbar has a row of its own that wide), greyed out or not, and in its …
+        // menu otherwise (MapToolbar), so a click never moves the toolbar
+        const sides = document.querySelector('[data-testid="sides"]');
+        const paged = document.querySelector('[data-testid="toolbar"] [data-testid="page-note"]') !== null;
+        const sidesInBar = !shell.toolbarInHeader && shell.canvasWidth >= (paged ? 760 : 600);
+        if ((sides !== null && visible(sides)) !== sidesInBar) failures.push(`(g) All, Uses and Used by are ${sides ? "in" : "not in"} the toolbar's row, where a ${shell.canvasWidth} px canvas${paged ? " beside a page control" : ""}${shell.toolbarInHeader ? " in a short window" : ""} puts them ${sidesInBar ? "there" : "in its … menu"}`);
     }
 
     // what of an element shows: the rect its clipping boxes leave (with `self`, its own overflow clips too)
@@ -1136,8 +1174,9 @@ const walkCheck = (walk) => `(() => {
 })()`;
 
 /**
- * One live-resize walk (RESIZE_WALK): one tab, the file selected and a popover open, resized step by step. Each step is
- * inspected like a state, and the selection must hold and the popover stay in the window. Where the popover went (the
+ * One live-resize walk (RESIZE_WALK): one tab, the file selected with Used by picked and a popover open, resized step
+ * by step. Each step is inspected like a state, and the selection and its side must hold and the popover stay in the
+ * window. Where the popover went (the
  * toolbar's menu has nothing to hold, or was drawn again in the header), it's opened again if its button is there.
  */
 async function resizeWalk(cdp, options, walk, failures){
@@ -1149,6 +1188,9 @@ async function resizeWalk(cdp, options, walk, failures){
         await openMap(tab, options.base, { place });
         await goTo(tab, place, 0);
         await selectBox(tab, FILE);
+        // its lines in highlighted alone (All, Uses and Used by: the owner, 2026-10-29), which has to hold through every
+        // step, the picker moving between the toolbar's row and its … menu
+        await actStep(tab, "sides-used-by", options.base);
         for (const spec of RESIZE_WALK){
             const size = parseSize(spec);
             let lines;
@@ -1165,7 +1207,7 @@ async function resizeWalk(cdp, options, walk, failures){
                     check = await tab.evaluate(walkCheck(walk));
                 } else if (!check.open) note = " (no popover here)";
                 if (options.shots && options.allShots) await shoot(tab, options.shots, `walk-${walk.act}-${row.length + 1}-${spec}`);
-                const state = { place, select: FILE, act: check.open ? walk.act : undefined };
+                const state = { place, select: FILE, act: ["sides-used-by", ...(check.open ? [walk.act] : [])] };
                 lines = [...check.lines, ...await inspect(tab, state)];
             } catch (err){
                 lines = [`(setup) ${err instanceof Error ? err.message : String(err)}`];

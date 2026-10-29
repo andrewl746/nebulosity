@@ -529,7 +529,7 @@ function Relations({ data, tab, onTab, onFocus, onOpen, onViewLines }: Relations
                             tabIndex={on ? 0 : -1}
                             title={TAB_TITLES[t.id]}
                             onClick={() => onTab(t.id)}
-                            // Used by is underlined in the pink its lines take on the Map, the other tabs in the accent
+                            // Used by is underlined in the gold its lines take on the Map, the other tabs in the accent
                             className={`relative whitespace-nowrap pb-2 pt-1.5 text-[13px] ${on
                                 ? `text-text after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[1px] ${t.id === "usedBy" ? "after:bg-used-by-accent" : "after:bg-accent"}`
                                 : "text-text-2 hover:text-text"}`}
@@ -587,7 +587,7 @@ type BarRowProps = {
     chip?: string;
     /** data-linked, on a doorway's rows. */
     linked?: string;
-    /** A Used by row: its bar in the pink its line takes on the Map, where every other row's is lilac. */
+    /** A Used by row: its bar in the gold its line takes on the Map, where every other row's is lilac. */
     usedBy?: boolean;
 };
 

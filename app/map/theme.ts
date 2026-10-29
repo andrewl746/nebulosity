@@ -3,7 +3,7 @@
  * person's own (posted by the panel's relay, API_CONTRACTS §20's `nebulosity.theme`), in the browser and the demo a
  * fixed one, VS Code's Dark 2026. Purple only means something (the selection, what's linked to it, the one primary
  * button, the active tab, the logo), in the logo's own colors, a step darker on light themes so they keep their
- * contrast against white. Pink, beside it, means what uses the selection.
+ * contrast against white. Gold, across from it, means what uses the selection.
  *
  * `fromTheme` is the approved mockup's rule (mockup3.html, the owner's picks of 2026-10-27): each part is mixed from the
  * theme's background toward its text color by a set amount, strong enough that every box stands off any background.
@@ -48,7 +48,7 @@ export type Palette = {
     "edge-strong": string;
     "glyph-dim": string;
     "linked-glyph": string;
-    /** What uses the selection, in pink beside the purple of what it uses: its lines in, Used by's bars and underline. */
+    /** What uses the selection, in gold across from the purple of what it uses: its lines in, Used by's bars and underline. */
     "used-by-edge": string;
     "used-by-bar": string;
     "used-by-accent": string;
@@ -114,11 +114,12 @@ export function fromTheme(t: ThemeInput): Palette {
     // how far each part is mixed from the background toward the text: boxes strong in every theme (the owner, 2026-10-27)
     const k = { node: light ? 0.05 : 0.09, line: light ? 0.28 : 0.3, linked: 0.75, edge: 0.3, glyph: light ? 0.4 : 0.45 };
     const line = mix(bg, fg, k.line);
-    // what uses the selection, in the owner's pinks (2026-10-28), a step darker again on high contrast light, the way
-    // purple steps darker there, so its lines keep their contrast against white
-    const pink = t.kind === "hc-light" ? { edge: "#A21CAF", bar: "#C026D3", accent: "#A21CAF" }
-        : light ? { edge: "#C026D3", bar: "#D946EF", accent: "#C026D3" }
-        : { edge: "#F0ABFC", bar: "#E879F9", accent: "#E879F9" };
+    // what uses the selection, in the owner's gold (2026-10-29, after pink was too like the purple), across from the
+    // purple of what it uses, a mustard on light themes and a step darker again on high contrast light, the way purple
+    // steps darker there, so its lines keep their contrast against white
+    const gold = t.kind === "hc-light" ? { edge: "#A16207", bar: "#A16207", accent: "#A16207" }
+        : light ? { edge: "#CA8A04", bar: "#CA8A04", accent: "#CA8A04" }
+        : { edge: "#FCD34D", bar: "#FCD34D", accent: "#FCD34D" };
     return {
         canvas: bg,
         panel: t.side,
@@ -135,9 +136,9 @@ export function fromTheme(t: ThemeInput): Palette {
         "edge-strong": light ? "#7E22CE" : "#E9D5FF",
         "glyph-dim": mix(bg, fg, hc ? 0.6 : k.glyph),
         "linked-glyph": light ? "#A855F7" : "#C084FC",
-        "used-by-edge": pink.edge,
-        "used-by-bar": pink.bar,
-        "used-by-accent": pink.accent,
+        "used-by-edge": gold.edge,
+        "used-by-bar": gold.bar,
+        "used-by-accent": gold.accent,
         accent,
         "on-accent": light ? "#FFFFFF" : "#120C1C",
         core: light ? accent : "#F0FDFF",

@@ -8,7 +8,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { LevelResponse, MapEdge } from "@/lib/contracts";
 import BoxActions from "./BoxActions";
-import { edgeKey, lineLook, mapEmphasis, type BoxTone } from "./emphasis";
+import { edgeKey, lineLook, mapEmphasis, type BoxTone, type LineDirection } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
 import { formatCount } from "./format";
 import { runWords } from "./labels";
@@ -87,6 +87,11 @@ type MapCanvasProps = {
     /** Strong links only: a weak line is drawn only when it touches the selection, the hovered box or a lit box (emphasis.ts). */
     strongOnly: boolean;
     /**
+     * Which side of the selection's lines is highlighted, the other drawn gray (emphasis.ts). It changes no line drawn,
+     * so no route and no count moves, only colors.
+     */
+    direction: LineDirection;
+    /**
      * The inspector covers the whole canvas (a window both narrow and short, shell.ts): the boxes can't be reached by Tab
      * then, until its × brings the canvas back.
      */
@@ -105,12 +110,12 @@ type MapCanvasProps = {
  * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
  * around the boxes (routes.ts). A click selects (where the panel would cover the canvas, the selected box shows its
  * actions beside it: BoxActions); a double click opens a folder, turns to a portal's page, or inside VS Code's panel opens a
- * file in the editor (opening.ts). The selection's lines turn purple (what it uses) and pink (what uses it), and unrelated boxes fade;
+ * file in the editor (opening.ts). The selection's lines turn purple (what it uses) and gold (what uses it), and unrelated boxes fade;
  * hovering a box previews its lines without selecting it, and hovering a line names every line on that run beside the
  * pointer, a click on it keeping the list (LineCard). React Flow stays controlled with the StrictMode workaround in
  * next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, strongOnly, covered, actionsFor, onDetails, onOpenFile }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, strongOnly, direction, covered, actionsFor, onDetails, onOpenFile }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     // React Flow's own parts follow a light VS Code theme (theme.ts)
@@ -147,8 +152,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     }
     const emphasis = useMemo(
         // the boxes Claude Code or the editor has lit keep their lines, whatever hides the rest
-        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines, strongOnly, pinned: agent }),
-        [level, selected, hoveredBox, quietLines, strongOnly, agent],
+        () => mapEmphasis(level.nodes.map((n) => n.path), level.edges, selected, hoveredBox, { quietLines, strongOnly, pinned: agent, direction }),
+        [level, selected, hoveredBox, quietLines, strongOnly, agent, direction],
     );
     // The lines drawn at rest (nothing selected, hovered or lit) are routed once, among themselves (routes.ts). A line a
     // selection, a hover or a lit box adds is routed when it appears: it takes its boxes' points (a box has one a side)

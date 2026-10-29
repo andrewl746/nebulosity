@@ -1,8 +1,10 @@
 # Fonts
 
-IBM Plex Sans and IBM Plex Mono, Copyright © 2017 IBM Corp., with Reserved Font Name "Plex".
+Archivo, Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo).
 
-They are licensed under the SIL Open Font License, Version 1.1:
+JetBrains Mono, Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono).
+
+Both are licensed under the SIL Open Font License, Version 1.1, at
 https://openfontlicense.org/open-font-license-official-text/
 
-These files are the Latin subsets Google Fonts serves (the same files the Map's own build uses), unmodified.
+These files are the variable Latin subsets Google Fonts serves (the same files the Map's own build uses), unmodified.
