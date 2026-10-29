@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge } from "@/lib/contracts";
-import { edgeKey, isBusyLevel, lineLook, mapEmphasis, STRONG_SHARE, strongThreshold, weakLinesHidden, type BoxTone, type EdgeTone } from "./emphasis";
+import {
+    edgeKey, isBusyLevel, lineLook, mapEmphasis, selectionLines, sidesWithoutLines, STRONG_SHARE, strongThreshold, weakLinesHidden,
+    type BoxTone, type EdgeTone, type LineDirection,
+} from "./emphasis";
 
 // boxes a, b, c, d; lines a→b, b→c, d→c (the plan's Task 5 vectors)
 const BOXES = ["a", "b", "c", "d"];
@@ -167,5 +170,84 @@ describe("Strong links only (ADR-070)", () => {
     it("on a busy level, still draws a lit box's lines", () => {
         const tones = mapEmphasis(ROOT_BOXES, ROOT, null, null, { quietLines: true, pinned: new Set(["test"]) }).edges;
         expect([...tones].filter(([, t]) => t !== "hidden").map(([k]) => k).sort()).toEqual(["extensions->test", "test->build"]);
+    });
+
+    it("keeps every line of the selected box drawn whichever side is picked, its weak lines in gray", () => {
+        // build uses .eslint-plugin-local (2, weak) and src (16), and extensions, gulpfile.mjs and test use it (1 each,
+        // weak). With Uses its two lines out are coloured and its three lines in gray, all drawn
+        const tones = mapEmphasis(ROOT_BOXES, ROOT, "build", null, { strongOnly: true, direction: "uses" }).edges;
+        const shown = [...tones].filter(([, tone]) => tone !== "hidden").sort(([a], [b]) => (a < b ? -1 : 1));
+        expect(shown).toEqual([
+            ["build->.eslint-plugin-local", "selected"], ["build->src", "selected"], ["extensions->build", "faded"],
+            ["extensions->src", "faded"], ["extensions->test", "faded"], ["gulpfile.mjs->build", "faded"], ["test->build", "faded"],
+        ]);
+    });
+
+    it("finds the sides of a box with no line on the page, so neither can be picked to colour nothing", () => {
+        // src uses nothing on VS Code's top page; .github, gulpfile.mjs and eslint.config.js only use; extensions does both
+        expect(sidesWithoutLines(ROOT, "src")).toEqual(["uses"]);
+        expect(sidesWithoutLines(ROOT, ".github")).toEqual(["usedBy"]);
+        expect(sidesWithoutLines(ROOT, "eslint.config.js")).toEqual(["usedBy"]);
+        expect(sidesWithoutLines(ROOT, "extensions")).toEqual([]);
+        expect(sidesWithoutLines(ROOT, "README.md")).toEqual(["uses", "usedBy"]);
+        expect(sidesWithoutLines(ROOT, null)).toEqual([]);
+    });
+});
+
+describe("one side of the selection's lines (the owner, 2026-10-29: All, Uses and Used by, the other side gray, not gone)", () => {
+    // boxes a, b, c, d; lines a→b, b→c, d→c. b uses c, and a uses b
+    function picked(selected: string | null, hovered: string | null, direction: LineDirection, options: { quietLines?: boolean } = {}): { boxes: BoxTone[]; edges: EdgeTone[] } {
+        const result = mapEmphasis(BOXES, EDGES, selected, hovered, { ...options, direction });
+        return { boxes: BOXES.map((b) => result.boxes.get(b)!), edges: EDGES.map((e) => result.edges.get(edgeKey(e))!) };
+    }
+
+    it("draws All as the selection always was", () => {
+        expect(picked("b", null, "all")).toEqual(tones("b", null));
+    });
+
+    it("keeps the lines to what it uses with Uses, greys its lines in, and fades the box at their far end", () => {
+        expect(picked("b", null, "uses")).toEqual({ boxes: ["faded", "selected", "linked", "faded"], edges: ["faded", "selected", "faded"] });
+    });
+
+    it("keeps the lines from what uses it with Used by, and greys its lines out", () => {
+        expect(picked("b", null, "usedBy")).toEqual({ boxes: ["linked", "selected", "faded", "faded"], edges: ["selected", "faded", "faded"] });
+    });
+
+    it("brightens a gray line of the selection's as any other when the box at its far end is hovered", () => {
+        expect(picked("b", "a", "uses")).toEqual({ boxes: ["preview", "selected", "linked", "faded"], edges: ["preview", "selected", "faded"] });
+    });
+
+    it("keeps the gray side drawn on a busy level, where the rest of the lines are hidden", () => {
+        expect(picked("b", null, "uses", { quietLines: true })).toEqual({ boxes: ["faded", "selected", "linked", "faded"], edges: ["faded", "selected", "hidden"] });
+    });
+
+    it("changes nothing with nothing selected", () => {
+        expect(picked(null, "d", "usedBy")).toEqual(tones(null, "d"));
+    });
+
+    it("draws the same lines whichever side is picked, so none is routed again and none moves", () => {
+        const drawnLines = (selected: string | null, hovered: string | null, direction: LineDirection, quietLines: boolean, strongOnly: boolean): string[] => {
+            const { edges } = mapEmphasis(BOXES, EDGES, selected, hovered, { direction, quietLines, strongOnly });
+            return [...edges].filter(([, tone]) => tone !== "hidden").map(([key]) => key);
+        };
+        for (const selected of [null, "a", "b", "c", "d"]){
+            for (const hovered of [null, "a", "d"]){
+                for (const quiet of [false, true]){
+                    for (const strong of [false, true]){
+                        const all = drawnLines(selected, hovered, "all", quiet, strong);
+                        expect(drawnLines(selected, hovered, "uses", quiet, strong)).toEqual(all);
+                        expect(drawnLines(selected, hovered, "usedBy", quiet, strong)).toEqual(all);
+                    }
+                }
+            }
+        }
+    });
+
+    it("gives the selection's coloured lines, which the explorer lights the ends of", () => {
+        expect(selectionLines(EDGES, "b", "all").map(edgeKey)).toEqual(["a->b", "b->c"]);
+        expect(selectionLines(EDGES, "b", "uses").map(edgeKey)).toEqual(["b->c"]);
+        expect(selectionLines(EDGES, "b", "usedBy").map(edgeKey)).toEqual(["a->b"]);
+        expect(selectionLines(EDGES, "c", "uses")).toEqual([]);
+        expect(selectionLines(EDGES, null, "all")).toEqual([]);
     });
 });
