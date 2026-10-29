@@ -119,12 +119,19 @@ export function hoverCardPlace(
     const free = (at: { left: number; top: number }): boolean => [...line, ...clear].every((r) => !overlaps({ ...at, width, height }, r));
     const spot = { left: pointer.x - CARD_SPOT, top: pointer.y - CARD_SPOT, width: 2 * CARD_SPOT, height: 2 * CARD_SPOT };
     const offSpot = (at: { left: number; top: number }): boolean => !overlaps({ ...at, width, height }, spot) && clear.every((r) => !overlaps({ ...at, width, height }, r));
-    const moveIn = (at: { left: number; top: number }) => ({
-        left: Math.max(CARD_EDGE, Math.min(at.left, canvas.width - CARD_EDGE - width)),
-        top: Math.max(CARD_EDGE, Math.min(at.top, canvas.height - CARD_EDGE - height)),
-    });
-    const movedIn = slid.map(moveIn);
+    const movedIn = slid.map((at) => insideCanvas(at, card, canvas));
     return slid.find((at) => inside(at) && free(at)) ?? movedIn.find(free) ?? movedIn.find(offSpot) ?? movedIn[0];
+}
+
+/**
+ * A card's place moved inside the canvas, CARD_EDGE in from its sides, the least it takes: a pinned card the wheel's
+ * zoom took to the canvas's edge stays in sight (LineCard), as a hover card with no place that fits does.
+ */
+export function insideCanvas(at: { left: number; top: number }, card: { width: number; height: number }, canvas: { width: number; height: number }): { left: number; top: number } {
+    return {
+        left: Math.max(CARD_EDGE, Math.min(at.left, canvas.width - CARD_EDGE - card.width)),
+        top: Math.max(CARD_EDGE, Math.min(at.top, canvas.height - CARD_EDGE - card.height)),
+    };
 }
 
 /**

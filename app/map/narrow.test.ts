@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionsPlace, actionsSide, bannerForm, fitPopover, hoverCardPlace, hoverCardRoom, hoverCardRows, trailStart } from "./narrow";
+import { actionsPlace, actionsSide, bannerForm, fitPopover, hoverCardPlace, hoverCardRoom, hoverCardRows, insideCanvas, trailStart } from "./narrow";
 
 describe("actionsSide (a selected box's actions, while the panel would cover the canvas: owner review 2026-10-25)", () => {
     it("goes under a box whose middle is in the canvas's top half, clear of the page pill's band", () => {
@@ -151,6 +151,21 @@ describe("hoverCardPlace (the line's hover card at the pointer: the owner, 2026-
     it("and failing that, the first moved inside the canvas: it never leaves it", () => {
         // a 120 × 90 canvas leaves a 100 × 60 card nowhere off the pointer
         expect(hoverCardPlace({ x: 60, y: 45 }, { width: 100, height: 60 }, { width: 120, height: 90 }, [{ left: 0, top: 0, width: 120, height: 90 }], [])).toEqual({ left: 8, top: 8 });
+    });
+});
+
+describe("insideCanvas (a pinned card the wheel's zoom took to an edge stays in sight)", () => {
+    const canvas = { width: 700, height: 600 };
+    const card = { width: 160, height: 208 };
+
+    it("leaves a card that's inside the canvas where it is", () => {
+        expect(insideCanvas({ left: 290, top: 200 }, card, canvas)).toEqual({ left: 290, top: 200 });
+    });
+
+    it("moves one past an edge back in, 8 px from it, the least it takes", () => {
+        // 650 + 160 would pass 700 - 8, so 532; 500 + 208 would pass 592, so 384
+        expect(insideCanvas({ left: 650, top: 500 }, card, canvas)).toEqual({ left: 532, top: 384 });
+        expect(insideCanvas({ left: -40, top: -10 }, card, canvas)).toEqual({ left: 8, top: 8 });
     });
 });
 

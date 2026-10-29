@@ -321,7 +321,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     const followCard = useRef<((at: CardAt) => void) | null>(null);
     const hoverPlace = useRef<CardPlace | null>(null);
     const hoverAt = (event: { clientX: number; clientY: number }, id: string): LineHover | null => {
-        const found = linesSharing(id, screenToFlowPosition({ x: event.clientX, y: event.clientY }), routes, drawnLines);
+        const spot = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const found = linesSharing(id, spot, routes, drawnLines);
         const edge = edgeById.get(id);
         if (found === null || canvas === null || edge === undefined) return null;
         const box = canvas.getBoundingClientRect();
@@ -333,7 +334,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             const r = el.getBoundingClientRect();
             return { left: r.left - box.left, top: r.top - box.top, width: r.width, height: r.height };
         });
-        return { key: found.lines.join("\n"), lines: found.lines, pointer, line, clear };
+        return { key: found.lines.join("\n"), lines: found.lines, pointer, spot, line, clear };
     };
     const onEdgeMouseMove: EdgeMouseHandler = (event, edge) => {
         const next = hoverAt(event, edge.id);
@@ -348,7 +349,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         if (next !== null) setPinned({ ...next, held: lineHover !== null && lineHover.key === next.key ? hoverPlace.current : null });
     };
 
-    // A pinned card closes on Escape, a click anywhere outside it, another page (above), or the view moving under it.
+    // A pinned card closes on Escape, a click anywhere outside it (a drag of the canvas among them), another page
+    // (above), or a resize of the canvas. A zoom with the wheel keeps it (LineCard).
     // Escape is caught first, on the way down, and stopped there, so it doesn't also let go of the selection (Explorer's
     // rail does the same). A click on the empty canvas that closes it does only that, as Escape does, rather than letting
     // go of the selection too: the click after that pointerdown is stopped before the pane sees it.
@@ -396,9 +398,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             onMoveStart={(event) => {
                 if (event === null) return;
                 moved.current = true;
-                // the lines move under the cards, which were placed for where they were
+                // the lines move under the hover card, placed for where they were. A pinned card stays, beside the spot
+                // it was clicked at as the wheel zooms (LineCard), and a drag starts with a press outside it, which
+                // closes it (above)
                 setLineHover(null);
-                setPinned(null);
             }}
             onEdgeMouseEnter={onEdgeMouseMove}
             onEdgeMouseMove={onEdgeMouseMove}

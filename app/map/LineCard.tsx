@@ -4,7 +4,8 @@ import { useLayoutEffect, useState, type RefObject } from "react";
 import { useStore } from "@xyflow/react";
 import { formatCount } from "./format";
 import type { RunWords } from "./labels";
-import { CARD_EDGE, CARD_FRAME, CARD_ROW, hoverCardPlace, hoverCardRoom, hoverCardRows, type CanvasRect } from "./narrow";
+import { CARD_EDGE, CARD_FRAME, CARD_ROW, hoverCardPlace, hoverCardRoom, hoverCardRows, insideCanvas, type CanvasRect } from "./narrow";
+import type { Point } from "./routes";
 import { useSize } from "./useSize";
 
 /** The card's widest, so a long name is cut short rather than stretching it across the canvas. */
@@ -12,8 +13,11 @@ const CARD_WIDTH = 280;
 /** The rows a pinned card shows before its list scrolls, so it stays a small card beside the run. */
 const PINNED_ROWS = 10;
 
-/** Where the pointer is on the run (canvas px), and the bit of line there and what's over the canvas, which the card keeps off. */
-export type CardAt = { pointer: { x: number; y: number }; line: readonly CanvasRect[]; clear: readonly CanvasRect[] };
+/**
+ * Where the pointer is on the run, on the canvas (canvas px) and on the Map (`spot`, the Map's own coordinates), and
+ * the bit of line there and what's over the canvas, which the card keeps off.
+ */
+export type CardAt = { pointer: Point; spot: Point; line: readonly CanvasRect[]; clear: readonly CanvasRect[] };
 /** Where a hover card is on the canvas, and whether it's over the pointer, so a click can pin it just as it is. */
 export type CardPlace = CanvasRect & { above: boolean };
 
@@ -28,8 +32,9 @@ export type CardPlace = CanvasRect & { above: boolean };
  *
  * A click on the run pins it (`pinned`, `held`): the same card, where it was and as wide, that only grows, away from
  * the pointer, to list every line, scrolling past PINNED_ROWS (a pinned card placed afresh changed shape on the click,
- * owner review). Escape, a click elsewhere, or another page closes it (MapCanvas). At screen size whatever the zoom, as
- * wide as its words up to CARD_WIDTH, and never wider than the canvas.
+ * owner review). The wheel zooming the canvas keeps it, beside the spot it was clicked at, kept inside the canvas (the
+ * owner, 2026-10-29), and Escape, a click elsewhere, or another page closes it (MapCanvas). At screen size whatever the
+ * zoom, as wide as its words up to CARD_WIDTH, and never wider than the canvas.
  */
 export default function LineCard({ words, at: landed, pinned, held, cardRef, followRef, placedRef }: {
     words: RunWords;
@@ -56,10 +61,16 @@ export default function LineCard({ words, at: landed, pinned, held, cardRef, fol
     const canvasWidth = useStore((s) => s.width);
     const canvasHeight = useStore((s) => s.height);
     const hold = pinned ? held ?? null : null;
+    // a pinned card goes where the spot it was clicked at goes on screen, as the wheel zooms the canvas round the pointer
+    const view = useStore((s) => (pinned ? s.transform : null));
+    const shift = view === null ? { x: 0, y: 0 } : { x: at.spot.x * view[2] + view[0] - at.pointer.x, y: at.spot.y * view[2] + view[1] - at.pointer.y };
     // a held card keeps its left and its edge nearest the pointer: one under the pointer grows down, one over it up
-    const place = size === null ? null
+    const base = size === null ? null
         : hold !== null ? { left: hold.left, top: hold.above ? hold.top + hold.height - size.height : hold.top }
         : hoverCardPlace(at.pointer, size, { width: canvasWidth, height: canvasHeight }, at.line, at.clear);
+    const place = base === null || size === null ? null
+        : pinned ? insideCanvas({ left: base.left + shift.x, top: base.top + shift.y }, size, { width: canvasWidth, height: canvasHeight })
+        : base;
     useLayoutEffect(() => {
         if (placedRef === undefined) return;
         placedRef.current = place === null || size === null ? null : { ...place, ...size, above: place.top + size.height <= at.pointer.y };
