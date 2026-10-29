@@ -1085,6 +1085,31 @@ export function placeCounts(
 }
 
 /**
+ * The room a count keeps off each drawn arrowhead, to go with the boxes placeCounts keeps counts off: a count over a
+ * head hid it, and an arrowhead is always visible (PR #16). A route ends at its box's top, under the head, so its last
+ * drop alone kept no count off it (review: on src/vs with workbench selected, 3,652 covered editor's whole head). One
+ * for each box a drawn line arrives at, since its lines end at one point under one head (weights.ts's boxHeadWidths),
+ * where RoutedEdge draws it, TIP_GAP above the route's end, and grown by COUNT_LINE_ROOM each side as a line's room is.
+ */
+export function headRooms(routes: ReadonlyMap<string, readonly Point[]>, edges: readonly MapEdge[]): Rect[] {
+    const maxImports = maxImportsOf(edges);
+    const heads = boxHeadWidths(edges);
+    const edgeOf = new Map(edges.map((e) => [`${e.source}->${e.target}`, e]));
+    const rooms = new Map<string, Rect>();
+    for (const [key, points] of routes){
+        const edge = edgeOf.get(key);
+        if (edge === undefined || points.length < 2 || rooms.has(edge.target)) continue;
+        const end = points[points.length - 1];
+        const { half, length } = arrowHead(heads.get(edge.target) ?? lineWidth(edge.count, maxImports));
+        rooms.set(edge.target, {
+            x: end.x, y: end.y - TIP_GAP - length / 2,
+            width: 2 * half + 2 * COUNT_LINE_ROOM, height: length + 2 * COUNT_LINE_ROOM,
+        });
+    }
+    return [...rooms.values()];
+}
+
+/**
  * The middle of a route's longest side, where its hover sentence goes when it has no count placed (placeCounts): the
  * longest run has the most room beside it, and a label there stays in its channel or gutter. A tie goes to the first.
  */

@@ -6,7 +6,7 @@ import {
     type EdgeMouseHandler, type EdgeTypes, type NodeMouseHandler, type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { LevelResponse } from "@/lib/contracts";
+import type { LevelResponse, MapEdge } from "@/lib/contracts";
 import BoxActions from "./BoxActions";
 import { edgeKey, lineLook, mapEmphasis, type BoxTone } from "./emphasis";
 import { reuseUnchanged, sameBoxNode, sameRoutedEdge, toBoxNode } from "./flowNodes";
@@ -17,7 +17,7 @@ import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
-import { nextRoutes, placeCounts, routeEdges, type Point, type Rect } from "./routes";
+import { headRooms, nextRoutes, placeCounts, routeEdges, type Point, type Rect } from "./routes";
 import { isLightKind } from "./theme";
 import { useThemeKind } from "./useThemeKind";
 import { boundsOf, drawnLinesBounds, initialViewport } from "./viewport";
@@ -26,14 +26,19 @@ import { boxHeadWidths, dotSize, labelledLines, lineWidth, maxFilesOf, maxImport
 /** The line ids a key of ids joined by newlines names. */
 const keySet = (key: string): Set<string> => new Set(key === "" ? [] : key.split("\n"));
 
-/** What a page's counts are placed by: each line's width, each line's label size, and the boxes a count keeps off. */
-type CountPage = { widths: Map<string, number>; sizes: Map<string, { width: number; height: number }>; boxes: Rect[] };
+/**
+ * What a page's counts are placed by: its lines, each one's width and label size, and the boxes a count keeps off.
+ */
+type CountPage = { edges: readonly MapEdge[]; widths: Map<string, number>; sizes: Map<string, { width: number; height: number }>; boxes: Rect[] };
 
-/** Where the counts of `labelled` go among the lines of `routes` that are `drawn`, from the places `kept` gives them (placeCounts). */
+/**
+ * Where the counts of `labelled` go among the lines of `routes` that are `drawn`, from the places `kept` gives them
+ * (placeCounts), clear of the boxes and of the arrowheads those lines draw (headRooms).
+ */
 function countsOn(page: CountPage, routes: ReadonlyMap<string, Point[]>, drawn: ReadonlySet<string>, labelled: ReadonlySet<string>, kept: ReadonlyMap<string, Point>): Map<string, Point> {
     const on = new Map([...routes].filter(([id]) => drawn.has(id)));
     const labels = new Map([...on.keys()].filter((id) => labelled.has(id)).map((id) => [id, page.sizes.get(id)!]));
-    return placeCounts(on, page.widths, labels, page.boxes, kept);
+    return placeCounts(on, page.widths, labels, [...page.boxes, ...headRooms(on, page.edges)], kept);
 }
 
 /**
@@ -144,8 +149,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
         return level.edges.map(edgeKey).filter((id) => settled.edges.get(id) !== "hidden").join("\n");
     }, [level, selected, quietLines, strongOnly, agent]);
     // what a count keeps clear of: every other line by its width, every other count, its label sized from its count's
-    // text as RoutedEdge writes it (7 px a character and 14 of padding and border, by 18), and every box with its back card
+    // text as RoutedEdge writes it (7 px a character and 14 of padding and border, by 18), every box with its back card,
+    // and every arrowhead drawn (countsOn)
     const countPage = useMemo((): CountPage => ({
+        edges: level.edges,
         widths: new Map(level.edges.map((e) => [edgeKey(e), lineWidth(e.count, maxImports)])),
         sizes: new Map(level.edges.map((e) => [edgeKey(e), { width: formatCount(e.count).length * 7 + 14, height: 18 }])),
         boxes: level.nodes.flatMap((box) => {

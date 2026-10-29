@@ -4,7 +4,7 @@ import type { LevelResponse, MapEdge, MapNode } from "@/lib/contracts";
 import { drawnAt, endsOf, headsOf, routeFaults, widthsOf } from "@/scripts/route-faults";
 import { edgeKey, isBusyLevel, mapEmphasis } from "./emphasis";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, type Position } from "./levelLayout";
-import { longestSideMiddle, nextRoutes, placeCounts, roundedPath, routeEdges, type Point } from "./routes";
+import { headRooms, longestSideMiddle, nextRoutes, placeCounts, roundedPath, routeEdges, type Point } from "./routes";
 import { arrowHead, boxHeadWidths } from "./weights";
 
 const at = (entries: Record<string, Position>): Map<string, Position> => new Map(Object.entries(entries));
@@ -451,5 +451,48 @@ describe("placeCounts: a count says whose it is, and overlaps nothing but its ow
         const at = placeCounts(new Map([["a", a], ["b", b]]), new Map([["a", 1], ["b", 1]]), new Map([["a", size]]), [], new Map([["a", { x: 0, y: 100 }]]));
         expect(at.get("a")!.x).toBe(0);
         expect(at.get("a")!.y).toBeCloseTo(63.6, 9);
+    });
+
+    it("keeps a count off an arrowhead passed with the boxes, its own line's included (review: 3,652 hid editor's head)", () => {
+        // a drops 80 into a box at y 80, whose head of width 1 (half 4.5, length 7) is the rect MapCanvas passes: centred
+        // on (0, 80 - 3 - 3.5 = 73.5), 9 + 4 = 13 by 7 + 4 = 11. A label 30 x 18 meets it where |y - 73.5| < (18 + 11) / 2
+        // = 14.5, so below y 59. a's room is 80 - 18 = 62, so the tries are 0.5 at 9 + 31 = 40, 0.3 at 27.6, 0.7 at 52.4,
+        // 0.15 at 18.3, 0.85 at 61.7, 0 at 9 and 1 at 71. Runs across at y 24 and 48 (5 tall with their room) take
+        // each place within 11.5 of them: 18.3 and 27.6 from 24, 40 and 52.4 from 48. Without the head a takes 0.85,
+        // 61.7. The head takes 61.7 (11.8 off it) and 71, so a takes the next clear try, 0, at 9 (15 off the run at 24)
+        const a: Point[] = [{ x: 0, y: 0 }, { x: 0, y: 80 }];
+        const across = (y: number): Point[] => [{ x: -50, y }, { x: 50, y }];
+        const head = { x: 0, y: 73.5, width: 13, height: 11 };
+        const routes = new Map([["a", a], ["b", across(24)], ["c", across(48)]]);
+        const widths = new Map([["a", 1], ["b", 1], ["c", 1]]);
+        expect(placeCounts(routes, widths, new Map([["a", size]]), []).get("a")!.y).toBeCloseTo(61.7, 9);
+        const at = placeCounts(routes, widths, new Map([["a", size]]), [head]);
+        expect(at.get("a")!.x).toBe(0);
+        expect(at.get("a")!.y).toBeCloseTo(9, 9);
+        // with the run at y 20 instead, 9 is 11 off it, under 11.5, so every clear try is on the head and a is left out
+        const crowded = new Map([["a", a], ["b", across(20)], ["c", across(48)]]);
+        expect(placeCounts(crowded, widths, new Map([["a", size]]), []).get("a")!.y).toBeCloseTo(61.7, 9);
+        expect(placeCounts(crowded, widths, new Map([["a", size]]), [head]).has("a")).toBe(false);
+    });
+});
+
+describe("headRooms: the room a count keeps off each drawn arrowhead", () => {
+    it("gives one rect for each box a drawn line arrives at, around its one head and grown by 2 px each side", () => {
+        // the page's heaviest is 16, so t's head is sized for a's 6 px (b's 2 is 1 + 5 × ln 2 / ln 16 = 2.25): half
+        // 0.9 × 6 + 3 = 8.4, length 1.2 × 6 + 5 = 12.2. Its lines end at (10, 100), so the head runs from 3 above that
+        // (the tip's gap) 12.2 up: centred on y 100 - 3 - 6.1 = 90.9, 2 × 8.4 + 4 = 20.8 by 12.2 + 4 = 16.2. u's line of
+        // 1 has the least head, half 4.5 and length 7: centred on (100, 200 - 3 - 3.5 = 193.5), 13 by 11. d -> v isn't
+        // drawn, so v has none
+        const edges: MapEdge[] = [weighed("a", "t", 16), weighed("b", "t", 2), weighed("c", "u", 1), weighed("d", "v", 4)];
+        const routes = new Map<string, Point[]>([
+            ["a->t", [{ x: 0, y: 0 }, { x: 0, y: 50 }, { x: 10, y: 50 }, { x: 10, y: 100 }]],
+            ["b->t", [{ x: 20, y: 0 }, { x: 20, y: 50 }, { x: 10, y: 50 }, { x: 10, y: 100 }]],
+            ["c->u", [{ x: 100, y: 0 }, { x: 100, y: 200 }]],
+        ]);
+        const rooms = headRooms(routes, edges);
+        expect(rooms).toHaveLength(2);
+        const [t, u] = rooms;
+        expect([t.x, t.y, t.width, t.height].map((v) => +v.toFixed(9))).toEqual([10, 90.9, 20.8, 16.2]);
+        expect([u.x, u.y, u.width, u.height].map((v) => +v.toFixed(9))).toEqual([100, 193.5, 13, 11]);
     });
 });
