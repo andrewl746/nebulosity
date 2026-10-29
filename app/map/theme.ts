@@ -114,11 +114,12 @@ export function fromTheme(t: ThemeInput): Palette {
     // how far each part is mixed from the background toward the text: boxes strong in every theme (the owner, 2026-10-27)
     const k = { node: light ? 0.05 : 0.09, line: light ? 0.28 : 0.3, linked: 0.75, edge: 0.3, glyph: light ? 0.4 : 0.45 };
     const line = mix(bg, fg, k.line);
-    // what uses the selection, in the owner's pinks (2026-10-28), a step darker again on high contrast light, the way
-    // purple steps darker there, so its lines keep their contrast against white
-    const pink = t.kind === "hc-light" ? { edge: "#A21CAF", bar: "#C026D3", accent: "#A21CAF" }
-        : light ? { edge: "#C026D3", bar: "#D946EF", accent: "#C026D3" }
-        : { edge: "#F0ABFC", bar: "#E879F9", accent: "#E879F9" };
+    // what uses the selection, in the owner's pinks (2026-10-28), moved off purple toward rose so the two sides tell
+    // apart at a glance (2026-10-29), a step darker again on high contrast light, the way purple steps darker there, so
+    // its lines keep their contrast against white
+    const pink = t.kind === "hc-light" ? { edge: "#BE185D", bar: "#DB2777", accent: "#BE185D" }
+        : light ? { edge: "#DB2777", bar: "#EC4899", accent: "#DB2777" }
+        : { edge: "#F472B6", bar: "#EC4899", accent: "#EC4899" };
     return {
         canvas: bg,
         panel: t.side,

@@ -58,16 +58,16 @@ describe("fromTheme, the approved mockup's rule", () => {
     });
 });
 
-describe("fromTheme, what uses the selection (the owner's pink, 2026-10-28)", () => {
+describe("fromTheme, what uses the selection (the owner's pink, 2026-10-28, moved off purple 2026-10-29)", () => {
     const pinks = (input: ThemeInput) => { const p = fromTheme(input); return [p["used-by-edge"], p["used-by-bar"], p["used-by-accent"]]; };
     it("takes the owner's dark values on dark themes and high contrast dark", () => {
-        for (const name of ["dark2026", "solarized", "monokai", "hc"]) expect(pinks(THEMES[name]), name).toEqual(["#F0ABFC", "#E879F9", "#E879F9"]);
+        for (const name of ["dark2026", "solarized", "monokai", "hc"]) expect(pinks(THEMES[name]), name).toEqual(["#F472B6", "#EC4899", "#EC4899"]);
     });
     it("takes the owner's light values on light themes", () => {
-        expect(pinks(THEMES.light2026)).toEqual(["#C026D3", "#D946EF", "#C026D3"]);
+        expect(pinks(THEMES.light2026)).toEqual(["#DB2777", "#EC4899", "#DB2777"]);
     });
     it("goes a step darker on high contrast light, as purple does", () => {
-        expect(pinks({ kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" })).toEqual(["#A21CAF", "#C026D3", "#A21CAF"]);
+        expect(pinks({ kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" })).toEqual(["#BE185D", "#DB2777", "#BE185D"]);
     });
 });
 
@@ -138,7 +138,7 @@ describe("applyTheme", () => {
         for (const [mockupName, hex] of Object.entries(MOCKUP.monokai)) expect(root.style_[`--${NAMES[mockupName]}`], NAMES[mockupName]).toBe(hex.toUpperCase());
         expect(root.style_["--fade"]).toBe("50%");
         // a theme change inside VS Code's panel brings the pink too, so a selected box's Used by follows the theme
-        expect(root.style_["--used-by-edge"]).toBe("#F0ABFC");
+        expect(root.style_["--used-by-edge"]).toBe("#F472B6");
         expect(root.attributes["data-kind"]).toBe("dark");
     });
 });

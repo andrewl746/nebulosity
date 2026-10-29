@@ -31,10 +31,10 @@
   --ok: #5FC9D9;            /* the indexed dot. Nothing else */
   --focus: #67E8F9;         /* the keyboard focus ring */
   --fade: 50%;              /* how much of its color a box away from the selection keeps, mixed with the background */
-  /* pink: what uses the selection, beside the purple of what it uses (the owner, 2026-10-28) */
-  --used-by-edge: #F0ABFC;   /* the selection's lines in */
-  --used-by-bar: #E879F9;    /* Used by's bars in the inspector */
-  --used-by-accent: #E879F9; /* Used by's underline when it's the open tab */
+  /* pink: what uses the selection, beside the purple of what it uses (the owner, 2026-10-28, off purple 2026-10-29) */
+  --used-by-edge: #F472B6;   /* the selection's lines in */
+  --used-by-bar: #EC4899;    /* Used by's bars in the inspector */
+  --used-by-accent: #EC4899; /* Used by's underline when it's the open tab */
   color-scheme: dark;
 }
 
