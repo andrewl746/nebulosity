@@ -45,6 +45,16 @@ export function weakLinesHidden(edges: readonly MapEdge[], selected: string | nu
 }
 
 /**
+ * Each side of the selection's one color: its lines' color on the Map (lineLook), and the same for everything else that
+ * stands for that side, the inspector's tab underline and bars and the toolbar's mark (the owner, 2026-10-29). Written
+ * out as whole class names, so Tailwind finds them.
+ */
+export const SIDE_COLOR = {
+    uses: { line: "var(--edge-strong)", fill: "bg-edge-strong", underline: "after:bg-edge-strong" },
+    usedBy: { line: "var(--used-by-edge)", fill: "bg-used-by-edge", underline: "after:bg-used-by-edge" },
+} as const;
+
+/**
  * Each line's color and layer by its tone (the Workbench redesign, ADR-070), its width going by its imports whatever the
  * tone: the selection's lines out (what it uses) in the logo's spoke color and its lines in (what uses it) in gold, so a
  * glance tells the two apart (the owner, 2026-10-28, gold since 2026-10-29), the hovered box's a step brighter in both directions, and the rest
@@ -53,7 +63,7 @@ export function weakLinesHidden(edges: readonly MapEdge[], selected: string | nu
  * layer is drawn later, over the quieter lines it crosses or shares a run with.
  */
 export function lineLook(tone: Exclude<EdgeTone, "hidden">, edge: Pick<MapEdge, "source" | "target">, selected: string | null): { color: string; layer: number } {
-    if (tone === "selected") return { color: edge.target === selected ? "var(--used-by-edge)" : "var(--edge-strong)", layer: 2 };
+    if (tone === "selected") return { color: edge.target === selected ? SIDE_COLOR.usedBy.line : SIDE_COLOR.uses.line, layer: 2 };
     if (tone === "preview") return { color: "var(--text-2)", layer: 1 };
     return { color: "var(--edge-dim)", layer: 0 };
 }

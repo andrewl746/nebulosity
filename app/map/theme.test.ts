@@ -59,15 +59,18 @@ describe("fromTheme, the approved mockup's rule", () => {
 });
 
 describe("fromTheme, what uses the selection (the owner's gold, 2026-10-29, after pink)", () => {
-    const golds = (input: ThemeInput) => { const p = fromTheme(input); return [p["used-by-edge"], p["used-by-bar"], p["used-by-accent"]]; };
+    const gold = (input: ThemeInput) => fromTheme(input)["used-by-edge"];
     it("takes the owner's dark values on dark themes and high contrast dark", () => {
-        for (const name of ["dark2026", "solarized", "monokai", "hc"]) expect(golds(THEMES[name]), name).toEqual(["#FCD34D", "#FCD34D", "#FCD34D"]);
+        for (const name of ["dark2026", "solarized", "monokai", "hc"]) expect(gold(THEMES[name]), name).toBe("#FCD34D");
     });
     it("takes the owner's light values on light themes", () => {
-        expect(golds(THEMES.light2026)).toEqual(["#CA8A04", "#CA8A04", "#CA8A04"]);
+        expect(gold(THEMES.light2026)).toBe("#CA8A04");
     });
     it("goes a step darker on high contrast light, as purple does", () => {
-        expect(golds({ kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" })).toEqual(["#A16207", "#A16207", "#A16207"]);
+        expect(gold({ kind: "hc-light", editor: "#FFFFFF", side: "#FFFFFF", border: "#0F4A85", fg: "#292929" })).toBe("#A16207");
+    });
+    it("names one gold, for the lines and for Used by's bars, underline and mark alike", () => {
+        expect(Object.keys(fromTheme(THEMES.dark2026)).filter((key) => key.startsWith("used-by"))).toEqual(["used-by-edge"]);
     });
 });
 
