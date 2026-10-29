@@ -581,9 +581,10 @@ function MapScreen(){
                                 <ErrorBanner message={banner.message} form={bannerAs} bandRef={bandRef} cardRef={cardRef} />
                             </div>
                         )}
-                        {/* over the canvas: a drawer on its right, or the whole of it */}
+                        {/* over the canvas: a drawer on its right, or the whole of it. The line's hover card keeps clear of
+                            it, as of the banner and a box's actions (LineCard) */}
                         {(shell.inspector === "drawer" || shell.inspector === "cover") && inspector && (
-                            <div data-inspector-place={shell.inspector} style={{ width: shell.inspector === "drawer" ? DRAWER_WIDTH : "100%" }} className="absolute inset-y-0 right-0 z-10">
+                            <div data-inspector-place={shell.inspector} data-keep-clear style={{ width: shell.inspector === "drawer" ? DRAWER_WIDTH : "100%" }} className="absolute inset-y-0 right-0 z-10">
                                 {inspector}
                             </div>
                         )}
@@ -635,12 +636,13 @@ function ErrorBanner({ message, form, bandRef, cardRef }: {
                 aria-hidden={form === "band" ? undefined : true}
                 className={`pointer-events-none absolute inset-x-0 top-6 z-[7] flex justify-center px-4 text-[13px] text-danger ${form === "band" ? "" : "invisible"}`}
             >
-                <p className="max-w-full rounded-[5px] bg-canvas px-2 text-center [overflow-wrap:anywhere]">{message}</p>
+                <p data-keep-clear={form === "band" ? true : undefined} className="max-w-full rounded-[5px] bg-canvas px-2 text-center [overflow-wrap:anywhere]">{message}</p>
             </div>
             {form === "card" && (
                 <div
                     ref={cardRef}
                     role="alert"
+                    data-keep-clear
                     style={{ maxWidth: `calc(100% - ${CARD_CLEAR}px)` }}
                     className="pointer-events-none absolute left-4 top-4 z-[7] rounded-md border border-divider bg-panel px-3 py-2 text-[13px] text-danger [overflow-wrap:anywhere]"
                 >

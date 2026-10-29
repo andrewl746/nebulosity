@@ -38,6 +38,7 @@ export default function BoxActions({ box, position, onOpen, onTurnPage, onDetail
         <div
             ref={sizeRef}
             data-box-actions={box.path}
+            data-keep-clear
             style={{ left: place.left, top: place.top, visibility: size === null ? "hidden" : undefined }}
             className="absolute z-[6] flex items-center gap-1 rounded-lg bg-panel p-1"
         >
