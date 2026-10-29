@@ -16,7 +16,7 @@ export default function Legend({ doorways, agent, quiet }: {
 }){
     return (
         <p data-testid="legend" className="shrink-0 border-t border-divider px-3.5 py-2.5 text-[12px] leading-[1.45] text-text-3">
-            Dot size shows how many files a folder has. Line weight shows how many imports. Arrows point at the code being used.
+            Dot size shows how many files a folder has. Line weight, and the number on a line, show how many imports it carries. Arrows point at the code being used.
             Folders are stacked cards, and a page marks a single file.
             {doorways && " A dashed box is a doorway to another page of this folder."}
             {agent && " An orange ring is what Claude Code is touching right now."}
