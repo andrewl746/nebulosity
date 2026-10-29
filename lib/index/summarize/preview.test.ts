@@ -349,6 +349,24 @@ describe("renderFolderPreview", () => {
         expect(stuckMarkdown).toContain("  - **`core/`** (2 files): not summarized (waiting)");
         expect(stuckMarkdown).toContain("- `core/log.ts` (9 lines): not summarized (in-flight)");
     });
+
+    it("puts an answer of several paragraphs on one line, and a summary the index already holds", async () => {
+        const stringsHash = planSummaries(FILES, FOLDERS, [], PLAN_OPTIONS).find((t) => t.path === "src/util/strings.ts")!.inputHash;
+        const stored: StoredSummary[] = [{
+            id: 7, kind: "file", path: "src/util/strings.ts", tagline: "String helpers", summary: "Pads strings.\n\nTrims them too.", model: "claude-haiku-5-5",
+            inputHash: stringsHash, promptVersion: PROMPT_VERSION, status: "fresh", batchId: null, error: null,
+        }];
+        const result = await preview(["src/util"], scripted({
+            "src/util": ok({ tagline: "Utilities", summary: "String helpers.\n\nAnd their tests." }, 1_000, 300),
+        }), stored);
+        const markdown = renderFolderPreview({
+            title: "t", repo: "r", effort: "low", models: { file: "claude-haiku-5-5", folder: "claude-sonnet-5-5" },
+            samples: [{ path: "src/util", why: "a leaf" }], importerLines: [], fullPass: { files: 1, folders: 1 }, preview: result,
+        });
+
+        expect(markdown).toContain("- **`util/`** (2 files): *Utilities* — String helpers. And their tests.\n");
+        expect(markdown).toContain("- `strings.ts` (6 lines): *String helpers* — Pads strings. Trims them too. (already in the index, not sent again)\n");
+    });
 });
 
 describe("previewRepoFolders", () => {

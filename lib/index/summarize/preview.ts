@@ -12,7 +12,7 @@ import { DEFAULT_SUMMARY_MODELS, type ResolvedSummaryModels } from "./models";
 import { planSummaries, writtenByModel, type PlannedTarget } from "./plan";
 import { formatUsd, pricePerMTok, type PriceTable } from "./pricing";
 import {
-    FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT,
+    FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, joinParagraphs, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT,
 } from "./prompts";
 import { buildFilePrompt, requireStructureReady } from "./run";
 import type { Summarizer, SummaryOutcome } from "./types";
@@ -436,10 +436,10 @@ function shown(preview: FolderPreview, kind: SummaryTargetKind, targetPath: stri
         if (!outcome.ok) return `failed: ${outcome.error}`;
         // a server-side fallback's answer isn't the summary the model asked would have written, and the reader should know
         const by = outcome.model === target?.model ? "" : ` (answered by ${outcome.model})`;
-        return `*${outcome.text.tagline}* — ${outcome.text.summary}${by}`;
+        return `*${outcome.text.tagline}* — ${joinParagraphs(outcome.text.summary)}${by}`;
     }
 
     const row = preview.rows.get(key);
-    if (target?.state === "current" && row?.tagline) return `*${row.tagline}* — ${row.summary} (already in the index, not sent again)`;
+    if (target?.state === "current" && row?.tagline) return `*${row.tagline}* — ${joinParagraphs(row.summary ?? "")} (already in the index, not sent again)`;
     return `not summarized (${target?.state ?? "not planned"})`;
 }

@@ -1,5 +1,6 @@
 import type { SummaryStatus } from "../contracts";
 import { freshnessNote } from "../engine/freshness";
+import { joinParagraphs } from "../index/summarize/prompts";
 
 /**
  * Answers stay under this many characters (ADR-047). Claude Code warns past 10,000 tokens and moves a text result of
@@ -18,10 +19,10 @@ export function shownPath(repoPath: string, kind: "folder" | "file"): string {
 /** A count as answers write it: 4231 → "4,231". */
 export const formatCount = (n: number): string => n.toLocaleString("en-US");
 
-/** The line where a summary goes: its text, or what's in its place. */
+/** The line where a summary goes: its text, its paragraphs joined by a space so it stays one line, or what's in its place. */
 export function summaryLine(target: { tagline?: string; summary?: string; summaryStatus: SummaryStatus; summaryError?: string }): string {
     if (target.tagline){
-        const text = target.summary ? `${target.tagline} — ${target.summary}` : target.tagline;
+        const text = target.summary ? `${target.tagline} — ${joinParagraphs(target.summary)}` : target.tagline;
         return target.summaryStatus === "stale" ? `${text} (Out of date: changed since it was summarized.)` : text;
     }
     if (target.summaryStatus === "off") return SUMMARIES_OFF_LINE;

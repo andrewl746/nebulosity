@@ -8,6 +8,7 @@
 import path from "path";
 import { RepoNotIndexedError } from "../lib/db/store/structure";
 import { search } from "../lib/engine/search";
+import { joinParagraphs } from "../lib/index/summarize/prompts";
 import { hasAnthropicKey, loadLocalEnv } from "./env";
 
 loadLocalEnv();   // the key may live in .env.local, which tsx doesn't read; free mode (no key) says "off", not "not ready"
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
 
     result.hits.forEach((hit, i) => {
         console.log(`${String(i + 1).padStart(2)}. ${hit.path}${hit.kind === "folder" ? "/" : ""}  (${hit.score.toFixed(4)} · ${hit.matchedBy.join("+")})`);
-        if (hit.tagline) console.log(`    ${hit.tagline} — ${hit.summary ?? ""}`);
+        if (hit.tagline) console.log(`    ${hit.tagline} — ${joinParagraphs(hit.summary ?? "")}`);
         if (hit.code) console.log(`    ${hit.code.symbol}, lines ${hit.code.startLine}–${hit.code.endLine}: ${hit.code.snippet}`);
     });
 }
