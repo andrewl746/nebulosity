@@ -1,5 +1,68 @@
 import { describe, expect, it } from "vitest";
-import { importerLine, plural, renderFilePrompt, renderFolderPrompt, renderRepoPrompt, testFileSummary, testFolderSummary, truncateSource, type FolderItem } from "./prompts";
+import {
+    FILE_SYSTEM_PROMPT, fileTier, FOLDER_SYSTEM_PROMPT, folderTier, importerLine, joinParagraphs, lengthLine, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION,
+    renderFilePrompt, renderFolderPrompt, renderRepoPrompt, REPO_SYSTEM_PROMPT, testFileSummary, testFolderSummary, truncateSource, withLengthLine,
+    writtenInOlderStyle, type FolderItem,
+} from "./prompts";
+
+describe("the system prompts", () => {
+    it("is prompt version 3", () => {
+        expect(PROMPT_VERSION).toBe(3);
+    });
+
+    it("asks for plain short paragraphs, with no semicolon, colon or em dash in its own words", () => {
+        for (const prompt of [FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, REPO_SYSTEM_PROMPT]){
+            expect(prompt).toContain("short paragraphs with a blank line between them");
+            expect(prompt).toContain("It doesn't count toward the summary's length.");
+            expect(prompt).not.toMatch(/[;:—]/);
+        }
+    });
+});
+
+describe("the length tiers", () => {
+    it("sizes a file by its lines and its importers, large first", () => {
+        expect(fileTier(119, 3)).toBe("small");
+        expect(fileTier(120, 3)).toBe("medium");
+        expect(fileTier(119, 4)).toBe("medium");
+        expect(fileTier(599, 29)).toBe("medium");
+        expect(fileTier(600, 0)).toBe("large");
+        expect(fileTier(10, 30)).toBe("large");
+    });
+
+    it("sizes a folder by its files", () => {
+        expect(folderTier(5)).toBe("small");
+        expect(folderTier(6)).toBe("medium");
+        expect(folderTier(99)).toBe("medium");
+        expect(folderTier(100)).toBe("large");
+    });
+
+    it("ends a request with its tier's line", () => {
+        expect(lengthLine("file", "small")).toBe("Write at most 50 words, in 2 paragraphs, and name at most 2 exports.");
+        expect(lengthLine("folder", "medium")).toBe("Write at most 90 words, in 2 or 3 paragraphs, and name at most 3 files or subfolders.");
+        expect(lengthLine("repo", "large")).toBe("Write at most 150 words, in up to 5 paragraphs, as many as it needs, and name at most 5 folders or files.");
+        expect(withLengthLine("A\nB", "file", "large"))
+            .toBe("A\nB\n\nWrite at most 150 words, in up to 5 paragraphs, as many as it needs, and name at most 5 exports.");
+    });
+});
+
+describe("joinParagraphs", () => {
+    it("joins a summary's paragraphs with a space, and leaves one paragraph as it is", () => {
+        // the second break has a space on its blank line, which still makes it one
+        expect(joinParagraphs("One. Two.\n\nThree.\n \nFour.")).toBe("One. Two. Three. Four.");
+        expect(joinParagraphs("Just one.")).toBe("Just one.");
+    });
+});
+
+describe("writtenInOlderStyle", () => {
+    it("calls only model text from before version 3 older style", () => {
+        expect(writtenInOlderStyle({ model: "template", promptVersion: null })).toBe(false);
+        expect(writtenInOlderStyle({ model: null, promptVersion: null })).toBe(false);
+        // null is read as version 2, the prompt that wrote every row before the column existed
+        expect(writtenInOlderStyle({ model: "claude-haiku-5-5", promptVersion: null })).toBe(true);
+        expect(writtenInOlderStyle({ model: "claude-haiku-5-5", promptVersion: 2 })).toBe(true);
+        expect(writtenInOlderStyle({ model: "claude-haiku-5-5", promptVersion: 3 })).toBe(false);
+    });
+});
 
 describe("plural", () => {
     it("adds an s by default, and takes the plural form a word needs when that isn't it", () => {
@@ -162,6 +225,21 @@ describe("renderFolderPrompt", () => {
             "- log.ts (9 lines): Logging — Writes lines.",
             "- …and 1 smaller item",
         ]);
+    });
+
+    it("lists a child whose summary has paragraphs on one line", () => {
+        const child: FolderItem = { name: "a.ts", kind: "file", fileCount: 1, lineCount: 3, text: { tagline: "T", summary: "First.\n\nSecond." } };
+        const head = ["Folder: src", "1 source file in total, 1 directly inside.", "", "Contents, largest first:"];
+        expect(renderFolderPrompt({ path: "src", fileCount: 1, directFileCount: 1 }, [child]))
+            .toBe([...head, "- a.ts (3 lines): T — First. Second."].join("\n"));
+        // oneLine false writes the summary verbatim, as prompt v2 did
+        expect(renderFolderPrompt({ path: "src", fileCount: 1, directFileCount: 1 }, [child], MAX_FOLDER_ITEMS, false))
+            .toBe([...head, "- a.ts (3 lines): T — First.\n\nSecond."].join("\n"));
+        // the repo's prompt lists its children the same way
+        expect(renderRepoPrompt({ name: "mini-repo", fileCount: 1, folderCount: 0 }, [child]))
+            .toBe("Repository: mini-repo\n1 source file in 0 folders.\n\nTop-level contents, largest first:\n- a.ts (3 lines): T — First. Second.");
+        expect(renderRepoPrompt({ name: "mini-repo", fileCount: 1, folderCount: 0 }, [child], MAX_FOLDER_ITEMS, false))
+            .toBe("Repository: mini-repo\n1 source file in 0 folders.\n\nTop-level contents, largest first:\n- a.ts (3 lines): T — First.\n\nSecond.");
     });
 });
 

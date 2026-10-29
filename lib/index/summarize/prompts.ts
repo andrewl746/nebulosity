@@ -1,10 +1,25 @@
+import type { SummaryTargetKind } from "../../db/schema";
 import type { Importer, SummaryText } from "../../db/store/summaries";
 import { childToward, lcaFolder } from "../aggregate";
 import { countLines } from "../languages/typescript";
 import { dirOf } from "../paths";
 
-/** Part of every inputHash. Bump it to redo every summary on purpose (a better prompt, new settings). Version 2: ADR-034. */
-export const PROMPT_VERSION = 2;
+/**
+ * Part of every inputHash. Bump it to redo every summary on purpose (a better prompt, new settings).
+ * Version 2, ADR-034. Version 3, plain short paragraphs with a length line (ADR-034, amended 2026-10-29).
+ */
+export const PROMPT_VERSION = 3;
+
+/** The prompt that wrote a row whose prompt_version is null (P3). Version 1 never wrote a stored summary. */
+export const UNRECORDED_PROMPT_VERSION = 2;
+
+/**
+ * Whether a row holds model text an older prompt wrote. A template isn't model text, and a row with no model has no
+ * text yet. A null prompt_version reads as UNRECORDED_PROMPT_VERSION.
+ */
+export function writtenInOlderStyle(row: { model: string | null; promptVersion: number | null }): boolean {
+    return !!row.model && row.model !== "template" && (row.promptVersion ?? UNRECORDED_PROMPT_VERSION) < PROMPT_VERSION;
+}
 
 /**
  * Who writes what by default (ADR-028): Haiku for the many files, Sonnet for the folders and the repo people read first.
@@ -39,30 +54,89 @@ export const MAX_FOLDER_ITEMS = 50;
 /** A file's prompt names this many of the areas its importers sit in (PIVOT_SPEC.md §4.2's groups); the rest fold into a count. */
 export const MAX_IMPORTER_GROUPS = 3;
 
-// Prompt v2 (ADR-034). The taglines' examples are deliberately not from VS Code, so the model can't copy one into a summary.
+// Prompt v3.2 (ADR-034, amended 2026-10-29). The taglines' examples are deliberately not from VS Code, so the model can't copy one into a summary.
+const PLAIN = "Use short sentences, with no semicolons, colons or dashes. When you need a technical term, say what it means the first time, or use a plainer word.";
+
 export const FILE_SYSTEM_PROMPT = [
-    "You write the summary a developer sees for one source file while exploring an unfamiliar codebase.",
-    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Retry policy with exponential backoff\". The summary is 2 to 4 sentences.",
-    "The summary says what the file is responsible for, names its most important exports, and says how other code uses it. The \"Imported by\" line comes from the repository's import graph; use it to say how widely and where the file is used.",
-    "In the summary, write identifiers (functions, classes, types, variables and file names) in backticks, like `parseConfig`.",
-    "Use real identifiers from the file. Don't narrate the code line by line, and don't guess beyond what you're shown. Don't mention truncation or code you weren't shown.",
+    "You write the summary people see for one source file while they find their way around a codebase that's new to them. Write for a smart reader who doesn't know this project's vocabulary.",
+    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words that says what the file is for, like \"Automatic retry for failed requests\". It doesn't count toward the summary's length.",
+    "The summary is short paragraphs with a blank line between them. The last line of the request says about how many words, paragraphs and code names to use. Stay close to it, and use fewer when the file is simple.",
+    "The first paragraph is 1 or 2 sentences on what the file is for and why the project needs it, in everyday words, with no code names.",
+    "Then say what's inside. Name only the most important exports, in backticks like `parseConfig`, and say in plain words what each one does.",
+    "End with one sentence on how widely the file is used and where, from the \"Imported by\" line, which comes from the repository's import graph. Say it in words that match how widely it really is used, like \"Almost every part of the app relies on it.\" or \"Only the settings screen uses it.\" Never give a number of files.",
+    PLAIN,
+    "Don't narrate the code line by line, don't guess beyond what you're shown, and don't mention truncation or code you weren't shown.",
 ].join("\n");
 
 export const FOLDER_SYSTEM_PROMPT = [
-    "You write the summary a developer sees for one folder while exploring an unfamiliar codebase. You're given the summaries of the files and subfolders inside it.",
-    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Payment provider integrations\". The summary is 2 to 4 sentences.",
-    "The summary says what the folder is responsible for as a whole, which parts matter most, and how they fit together.",
-    "In the summary, write file, folder, function and class names in backticks, like `retry.ts`.",
-    "Don't list every item, and don't guess beyond the summaries you're given.",
+    "You write the summary people see for one folder while they find their way around a codebase that's new to them. You're given the summaries of the files and subfolders inside it. Write for a smart reader who doesn't know this project's vocabulary.",
+    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words that says what the folder is for, like \"Online payment handling\". It doesn't count toward the summary's length.",
+    "The summary is short paragraphs with a blank line between them. The last line of the request says about how many words, paragraphs and code names to use. Stay close to it, and use fewer when the folder is simple.",
+    "The first paragraph is 1 or 2 sentences on what this part of the project does, in everyday words, with no code names.",
+    "Then say which parts matter most and how they fit together. Name only the most important files or subfolders, in backticks like `checkout/`, and say in plain words what each one does.",
+    PLAIN,
+    "Don't list every item, don't give numbers of files, and don't guess beyond the summaries you're given.",
 ].join("\n");
 
 export const REPO_SYSTEM_PROMPT = [
-    "You write the overview a developer sees first when opening an unfamiliar repository. You're given the summaries of its top-level folders and files.",
-    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words, like \"Distributed task scheduling service\". The summary is 2 to 4 sentences.",
-    "The summary says what the project is, names its main areas, and says where a newcomer should start reading.",
-    "In the summary, write folder and file names in backticks, like `src/server`.",
-    "Don't guess beyond the summaries you're given.",
+    "You write the overview people see first when they open a repository that's new to them. You're given the summaries of its top-level folders and files. Write for a smart reader who doesn't know this project's vocabulary.",
+    "Give a tagline and a summary. The tagline is a noun phrase of 3 to 6 plain words that says what the project is, like \"Online store server\". It doesn't count toward the summary's length.",
+    "The summary is short paragraphs with a blank line between them. The last line of the request says about how many words, paragraphs and code names to use. Stay close to it.",
+    "The first paragraph is 1 or 2 sentences on what the project is and who it's for, in everyday words, with no code names.",
+    "Then name its main areas, in backticks like `src/server`, each with a few plain words on what it holds, and end by saying where a newcomer should start reading.",
+    PLAIN,
+    "Don't give numbers of files, and don't guess beyond the summaries you're given.",
 ].join("\n");
+
+/** How long a summary is asked to be. Its line ends every request (lengthLine). */
+export type LengthTier = "small" | "medium" | "large";
+
+/*
+ * The tiers' thresholds (ADR-034, amended 2026-10-29). A file is large at LARGE_FILE_LINES lines or more, or at
+ * LARGE_FILE_IMPORTERS importers or more, and small under SMALL_FILE_LINES lines with SMALL_FILE_IMPORTERS importers or
+ * fewer. A folder is large at LARGE_FOLDER_FILES files or more, and small at SMALL_FOLDER_FILES or fewer. Everything
+ * else is medium, and the repo is always large. On VS Code's model-written summaries that makes files 38% small, 48%
+ * medium and 14% large, and folders 69%, 29% and 3%, as measured by evidence/probes/spread.cjs in the plainer
+ * summaries ledger (.superpowers/sdd/2026-10-29-plain-summaries).
+ */
+export const SMALL_FILE_LINES = 120;
+export const SMALL_FILE_IMPORTERS = 3;
+export const LARGE_FILE_LINES = 600;
+export const LARGE_FILE_IMPORTERS = 30;
+export const SMALL_FOLDER_FILES = 5;
+export const LARGE_FOLDER_FILES = 100;
+
+/** A file's tier, from its line count and every file that imports it (tests included), large first. */
+export function fileTier(lineCount: number, importers: number): LengthTier {
+    if (lineCount >= LARGE_FILE_LINES || importers >= LARGE_FILE_IMPORTERS) return "large";
+    if (lineCount < SMALL_FILE_LINES && importers <= SMALL_FILE_IMPORTERS) return "small";
+    return "medium";
+}
+
+/** A folder's tier, from the source files under it. */
+export function folderTier(fileCount: number): LengthTier {
+    if (fileCount >= LARGE_FOLDER_FILES) return "large";
+    if (fileCount <= SMALL_FOLDER_FILES) return "small";
+    return "medium";
+}
+
+/** What a length line counts, per kind of target. */
+const NAMED: Record<SummaryTargetKind, string> = { file: "exports", folder: "files or subfolders", repo: "folders or files" };
+
+/** The request's last line, saying about how many words, paragraphs and code names a summary of this tier uses. */
+export function lengthLine(kind: SummaryTargetKind, tier: LengthTier): string {
+    const what = NAMED[kind];
+    switch (tier){
+        case "small": return `Write at most 50 words, in 2 paragraphs, and name at most 2 ${what}.`;
+        case "medium": return `Write at most 90 words, in 2 or 3 paragraphs, and name at most 3 ${what}.`;
+        case "large": return `Write at most 150 words, in up to 5 paragraphs, as many as it needs, and name at most 5 ${what}.`;
+    }
+}
+
+/** A request's body with its length line last, after a blank line, where sample #2 measured it. */
+export function withLengthLine(body: string, kind: SummaryTargetKind, tier: LengthTier): string {
+    return `${body}\n\n${lengthLine(kind, tier)}`;
+}
 
 /** One child of a folder, as its prompt shows it. lineCount is a folder's total, used only for ordering. */
 export type FolderItem = { name: string; kind: "file" | "folder"; fileCount: number; lineCount: number; text: SummaryText | null };
@@ -70,6 +144,11 @@ export type FolderItem = { name: string; kind: "file" | "folder"; fileCount: num
 /** "1 line", "9 lines", "12,103 files". Pass the plural form when it isn't the word plus "s", as in ("batch", "batches"). */
 export function plural(n: number, word: string, pluralWord = `${word}s`): string {
     return `${n.toLocaleString("en-US")} ${n === 1 ? word : pluralWord}`;
+}
+
+/** A summary on one line, for the readers that show it so: its paragraphs, each trimmed, joined by a space. */
+export function joinParagraphs(summary: string): string {
+    return summary.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph !== "").join(" ");
 }
 
 /**
@@ -130,43 +209,52 @@ export function importerLine(filePath: string, importers: readonly Importer[], m
     return line;
 }
 
+/** A folder's prompt, its body only (the length line is added by withLengthLine). oneLine is listItems'. */
 export function renderFolderPrompt(
     folder: { path: string; fileCount: number; directFileCount: number },
     items: readonly FolderItem[],
-    maxItems: number = MAX_FOLDER_ITEMS
+    maxItems: number = MAX_FOLDER_ITEMS,
+    oneLine: boolean = true
 ): string {
     return [
         `Folder: ${folder.path}`,
         `${plural(folder.fileCount, "source file")} in total, ${folder.directFileCount} directly inside.`,
         "",
         "Contents, largest first:",
-        ...listItems(items, maxItems),
+        ...listItems(items, maxItems, oneLine),
     ].join("\n");
 }
 
+/** The repo's prompt, its body only (the length line is added by withLengthLine). oneLine is listItems'. */
 export function renderRepoPrompt(
     repo: { name: string; fileCount: number; folderCount: number },
     items: readonly FolderItem[],
-    maxItems: number = MAX_FOLDER_ITEMS
+    maxItems: number = MAX_FOLDER_ITEMS,
+    oneLine: boolean = true
 ): string {
     return [
         `Repository: ${repo.name}`,
         `${plural(repo.fileCount, "source file")} in ${plural(repo.folderCount, "folder")}.`,
         "",
         "Top-level contents, largest first:",
-        ...listItems(items, maxItems),
+        ...listItems(items, maxItems, oneLine),
     ].join("\n");
 }
 
-/** Largest first (by lines), ties by name; the overflow becomes one "…and N smaller items" line. */
-function listItems(items: readonly FolderItem[], maxItems: number): string[] {
+/**
+ * Largest first (by lines), ties by name; the overflow becomes one "…and N smaller items" line. Each child's summary
+ * is written on one line (joinParagraphs), so one child stays one line. With oneLine false it's written verbatim, as
+ * prompt v2 did, for P2's older check, which renders a folder's body the way the version that wrote it did.
+ */
+function listItems(items: readonly FolderItem[], maxItems: number, oneLine: boolean): string[] {
     const sorted = [...items].sort((a, b) => b.lineCount - a.lineCount || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
     const lines = sorted.slice(0, maxItems).map((item) => {
         const label = item.kind === "folder"
             ? `${item.name}/ (${plural(item.fileCount, "file")})`
             : `${item.name} (${plural(item.lineCount, "line")})`;
-        return `- ${label}: ${item.text ? `${item.text.tagline} — ${item.text.summary}` : "(no summary yet)"}`;
+        if (!item.text) return `- ${label}: (no summary yet)`;
+        return `- ${label}: ${item.text.tagline} — ${oneLine ? joinParagraphs(item.text.summary) : item.text.summary}`;
     });
 
     const hidden = sorted.length - maxItems;

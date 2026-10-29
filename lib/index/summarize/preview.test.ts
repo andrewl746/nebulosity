@@ -247,7 +247,7 @@ describe("renderFolderPreview", () => {
         expect(markdown).toBe([
             "## 2026 10 12 Summary Review #3 — folder preview",
             "",
-            "- **Repo:** `C:/code/mini-repo` · **effort** low · **prompt version** 2 · the regular Messages API",
+            "- **Repo:** `C:/code/mini-repo` · **effort** low · **prompt version** 3 · the regular Messages API",
             "- **Sample:** 1 folder (below): 6 files went to claude-haiku-5-5, then 4 folders to claude-sonnet-5-5, bottom-up in 3 waves,"
                 + " with exactly the prompts a real run builds. 1 test file got the template, as in a real run. Nothing was written to the index.",
             "- **Failures (1):**",
