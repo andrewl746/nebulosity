@@ -10,6 +10,7 @@ import type { BoxNode } from "./MapBox";
 import { placePopover, usePlaceOnResize } from "./popover";
 import { pageNote } from "./portals";
 import type { RoutedEdgeType } from "./RoutedEdge";
+import { weakLinesHidden } from "./emphasis";
 import { useDismiss } from "./useDismiss";
 import { boundsOf, fitViewport, linesBounds } from "./viewport";
 import { arrowHead } from "./weights";
@@ -83,8 +84,15 @@ export default function MapToolbar({ level, strongOnly, onStrongOnly, busy, show
     const menuOnly = inHeader && narrow;
     const pageInBar = paged && canvasWidth >= 260 && !menuOnly;
     const finding = heaviestLink(level);
+    // on a page where every line carries 2% of the heaviest's imports (any page whose heaviest is under 50), Strong
+    // links only hides nothing, so it's greyed out with the reason in its title rather than a box that does nothing
+    // (the owner, 2026-10-29, on VS Code's build). Greyed, not gone, so the toolbar keeps its shape from page to page
+    const nothingWeak = weakLinesHidden(level.edges, null) === 0;
+    const strongTitle = nothingWeak
+        ? "Every line on this page carries at least 2% of the heaviest line's imports, so there's nothing to hide"
+        : "Draw only the lines with at least 2% of the heaviest line's imports, and every line of the box you select or hover";
 
-    const menu: { label: string; on?: boolean; disabled?: boolean; act: () => void }[] = [];
+    const menu: { label: string; on?: boolean; disabled?: boolean; title?: string; act: () => void }[] = [];
     if (searchInMenu) menu.push({ label: "Search files and concepts", act: onSearch });
     if (paged && !pageInBar){
         menu.push(
@@ -93,7 +101,7 @@ export default function MapToolbar({ level, strongOnly, onStrongOnly, busy, show
         );
     }
     if (menuOnly) menu.push({ label: "Show the whole level", act: fit });
-    if (!strongInBar) menu.push({ label: "Strong links only", on: strongOnly, act: () => onStrongOnly(!strongOnly) });
+    if (!strongInBar) menu.push({ label: "Strong links only", on: strongOnly, disabled: nothingWeak, title: strongTitle, act: () => onStrongOnly(!strongOnly) });
     if (busy && (inHeader || !findingShown)) menu.push({ label: "Show all lines", on: showAllLines, act: () => onShowAllLines(!showAllLines) });
     if (!zoomInBar) menu.push({ label: "Zoom in", act: () => void flow.zoomIn({ duration: 0 }) }, { label: "Zoom out", act: () => void flow.zoomOut({ duration: 0 }) });
     if (helpInMenu) menu.push({ label: "How to use the Map", act: onHelp });
@@ -102,8 +110,8 @@ export default function MapToolbar({ level, strongOnly, onStrongOnly, busy, show
         <div className="flex shrink-0 items-center gap-1.5">
             {pageInBar && <PageControl level={level} onTurn={onTurnPage} short={inHeader || canvasWidth < 400} />}
             {strongInBar && (
-                <label title="Draw only the lines with at least 2% of the heaviest line's imports, and every line of the box you select or hover" className="mr-1 flex cursor-pointer items-center gap-[7px] rounded-[4px] text-[13px] text-text-2 hover:text-text has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus">
-                    <input type="checkbox" data-testid="strong-only" checked={strongOnly} onChange={(e) => onStrongOnly(e.target.checked)} className="sr-only" />
+                <label title={strongTitle} className={`mr-1 flex items-center gap-[7px] rounded-[4px] text-[13px] text-text-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus ${nothingWeak ? "cursor-default opacity-40" : "cursor-pointer hover:text-text"}`}>
+                    <input type="checkbox" data-testid="strong-only" checked={strongOnly} disabled={nothingWeak} onChange={(e) => onStrongOnly(e.target.checked)} className="sr-only" />
                     <Check on={strongOnly} />
                     Strong links only
                 </label>
@@ -178,7 +186,7 @@ function PageControl({ level, onTurn, short }: { level: LevelResponse; onTurn: (
 }
 
 /** The … menu at the toolbar's end, holding whatever the bar has no room for, placed inside the window as it opens. */
-function MoreMenu({ items }: { items: { label: string; on?: boolean; disabled?: boolean; act: () => void }[] }){
+function MoreMenu({ items }: { items: { label: string; on?: boolean; disabled?: boolean; title?: string; act: () => void }[] }){
     const [open, setOpen] = useState(false);
     const [place, setPlace] = useState<CSSProperties>({ right: 0, width: MENU_WIDTH });
     const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
@@ -211,6 +219,7 @@ function MoreMenu({ items }: { items: { label: string; on?: boolean; disabled?: 
                             role={item.on === undefined ? "menuitem" : "menuitemcheckbox"}
                             aria-checked={item.on}
                             disabled={item.disabled}
+                            title={item.title}
                             onClick={() => {
                                 item.act();
                                 if (item.on === undefined) setOpen(false);
