@@ -4,10 +4,7 @@ import { childToward, lcaFolder } from "../aggregate";
 import { countLines } from "../languages/typescript";
 import { dirOf } from "../paths";
 
-/**
- * Part of every inputHash. Bump it to redo every summary on purpose (a better prompt, new settings).
- * Version 2, ADR-034. Version 3, plain short paragraphs with a length line (ADR-034, amended 2026-10-29).
- */
+/** Version 2, ADR-034. Version 3, plain short paragraphs with a length line (ADR-034, amended 2026-10-29). */
 export const PROMPT_VERSION = 3;
 
 /** The prompt that wrote a row whose prompt_version is null (P3). Version 1 never wrote a stored summary. */
