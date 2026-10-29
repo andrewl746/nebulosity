@@ -113,7 +113,7 @@ The server answers about the indexed repo that holds the folder Claude Code runs
 
 ## In VS Code
 
-The extension shows the Map in a panel beside your code. It follows the file you're in, opens a file you click on the Map, and can light up the files that import the one you're looking at. It needs the package above and works without an API key.
+The extension shows the Map in a panel beside your code. It follows the file you're in, opens a file you double-click on the Map (a click only selects it, so the editor keeps its file), and can light up the files that import the one you're looking at. It needs the package above and works without an API key.
 
 1. Install the `nebulosity` package and index your repo.
 2. Install `andrewl746.nebulosity-vscode` from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode) or [Open VSX](https://open-vsx.org/extension/andrewl746/nebulosity-vscode), or run `code --install-extension andrewl746.nebulosity-vscode`.

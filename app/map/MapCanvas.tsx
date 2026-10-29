@@ -15,6 +15,7 @@ import { runWords } from "./labels";
 import { BOX_HEIGHT, BOX_WIDTH, layoutLevel, looseDivider, perRowFor, type Divider, type Position } from "./levelLayout";
 import LineCard, { type CardAt, type CardPlace } from "./LineCard";
 import MapBox, { borderOf, shade, type BoxData, type BoxNode } from "./MapBox";
+import { openingOf } from "./opening";
 import { portalCaption, portalDirection, portalLinks, portalTitle } from "./portals";
 import type { Pulse } from "./pulses";
 import RoutedEdge, { type RoutedEdgeType } from "./RoutedEdge";
@@ -101,17 +102,20 @@ type MapCanvasProps = {
      */
     actionsFor: string | null;
     onDetails: (path: string) => void;
+    /** Inside VS Code's panel only: a file box double-clicked, or its Open beside it, opens it in the editor. */
+    onOpenFile?: (path: string) => void;
 };
 
 /**
  * The canvas (VISUAL_REFRESH.md §4): one level's boxes, laid out by dagre, and an arrow for every import line, routed
  * around the boxes (routes.ts). A click selects (where the panel would cover the canvas, the selected box shows its
- * actions beside it: BoxActions); a double click opens a folder, or turns to a portal's page. The selection's lines turn purple (what it uses) and gold (what uses it), and unrelated boxes fade;
+ * actions beside it: BoxActions); a double click opens a folder, turns to a portal's page, or inside VS Code's panel opens a
+ * file in the editor (opening.ts). The selection's lines turn purple (what it uses) and gold (what uses it), and unrelated boxes fade;
  * hovering a box previews its lines without selecting it, and hovering a line names every line on that run beside the
  * pointer, a click on it keeping the list (LineCard). React Flow stays controlled with the StrictMode workaround in
  * next.config.ts.
  */
-function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, strongOnly, direction, covered, actionsFor, onDetails }: MapCanvasProps){
+function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPage, onDrawn, quietLines, strongOnly, direction, covered, actionsFor, onDetails, onOpenFile }: MapCanvasProps){
     // a wide canvas wraps layers at 8 a row instead of 6, so dense levels fit larger (levelLayout.ts)
     const perRow = useStore((s) => perRowFor(s.width));
     // React Flow's own parts follow a light VS Code theme (theme.ts)
@@ -310,10 +314,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
 
     const onNodeClick: NodeMouseHandler<BoxNode> = (_, node) => onSelect(node.id);
     const onNodeDoubleClick: NodeMouseHandler<BoxNode> = (_, node) => {
-        const { box } = node.data;
-        if (box.kind === "folder") onOpen(node.id);
-        // a portal turns to its page; the merged one stands for several, so it stays selected for its panel to pick one
-        else if (box.kind === "portal" && box.page !== undefined) onTurnPage(box.page);
+        const opening = openingOf(node.data.box, onOpenFile !== undefined);
+        if (opening?.type === "folder") onOpen(opening.path);
+        else if (opening?.type === "page") onTurnPage(opening.page);
+        else if (opening?.type === "editor") onOpenFile?.(opening.path);
     };
     const onNodeMouseEnter: NodeMouseHandler<BoxNode> = (_, node) => setHoveredBox(node.id);
     const onNodeMouseLeave: NodeMouseHandler<BoxNode> = () => setHoveredBox(null);
@@ -438,6 +442,7 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
                     onOpen={onOpen}
                     onTurnPage={onTurnPage}
                     onDetails={onDetails}
+                    onOpenFile={onOpenFile}
                 />
             )}
             {card !== null && (

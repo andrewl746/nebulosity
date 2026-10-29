@@ -34,9 +34,10 @@ export class FollowGate {
     constructor(private readonly now: () => number){}
 
     /**
-     * The editor opened `path` for the Map (a file box or a declaration, or What depends' pick): its editor change is an
-     * echo for ECHO_MS. The Map shows `shows`: the path itself after a pick on the Map, the pick's target after What
-     * depends (its highlights select nothing). A pick on the Map is newer than any ask, so the ask is dropped.
+     * The editor opened `path` for the Map (its Open in VS Code or a double-clicked file box, or What depends' pick): its
+     * editor change is an echo for ECHO_MS. The Map shows `shows`: the path itself after an open from the Map, the pick's
+     * target after What depends (its highlights select nothing). An open from the Map is newer than any ask, so the ask
+     * is dropped.
      */
     opened(path: string, shows: string = path): void {
         this.shown = shows;

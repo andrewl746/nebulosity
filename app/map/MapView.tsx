@@ -328,19 +328,23 @@ function MapScreen(){
     // each `ready` it posts drawnNow(), for a hello that lands after the level was drawn.
     const editor = useEditorBridge(onEditorMessage, drawnNow);
 
-    /** A box clicked on the canvas. Inside VS Code's panel a file box also opens in the editor (design §4.4). */
+    /**
+     * A box clicked on the canvas or in the explorer. It only selects, inside VS Code's panel as in a browser tab, so you
+     * can look around the Map while the editor keeps its file (the owner, 2026-10-29, ADR-062 amended).
+     */
     const select = useCallback((target: string | null) => {
         if (target !== null) markStart("map:select");
         setSelected(target);
-        if (editor !== null && target !== null && level?.nodes.some((n) => n.path === target && n.kind === "file")){
-            editor.post({ type: "nebulosity.open", path: target });
-        }
-    }, [editor, level]);
+    }, []);
 
-    /** A declaration picked in the panel, inside VS Code's panel: it opens at its line in the editor (design §4.4). */
+    /**
+     * Inside VS Code's panel, the editor opens a file when it's asked to: Open in VS Code in the inspector or View source
+     * (at its line there), a double-click on the file's box, or the Open beside it in a narrow panel (API_CONTRACTS §20).
+     */
     const openInEditor = useCallback((path: string, line?: number) => {
         editor?.post({ type: "nebulosity.open", path, ...(line === undefined ? {} : { line }) });
     }, [editor]);
+    const onOpenFile = editor === null ? undefined : openInEditor;
 
 
     /** A tool call from Claude Code (PIVOT_SPEC.md §8): pulse the boxes it touched, and run its UI action. */
@@ -543,7 +547,7 @@ function MapScreen(){
             onOpen={open}
             onTurnPage={turnPage}
             onClose={covers ? closeDetails : closePanel}
-            onOpenInEditor={editor === null ? undefined : openInEditor}
+            onOpenInEditor={onOpenFile}
             placement={shell.inspector}
             onScreenFolder={shownSelected === null}
             alert={covered ? banner?.message : undefined}
@@ -590,6 +594,7 @@ function MapScreen(){
                                 covered={covered}
                                 actionsFor={actionsFor}
                                 onDetails={showDetails}
+                                onOpenFile={onOpenFile}
                             />
                         )}
                         {!level && !levelError && <p className="absolute inset-0 grid place-items-center px-4 text-center text-[13px] text-text-2">Loading the map…</p>}
@@ -620,7 +625,7 @@ function MapScreen(){
                 )}
             </div>
             {shell.status === "bar" && statusBar(false)}
-            {helpOpen && <HelpDialog onClose={closeHelp} />}
+            {helpOpen && <HelpDialog onClose={closeHelp} embedded={embedded} />}
             {paletteOpen && (
                 <SearchPalette
                     onPick={(hit) => {

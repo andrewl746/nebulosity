@@ -16,7 +16,8 @@ import {
 /**
  * The two-way sync between the editor and the Map in the panel (design §4.4–§4.5, V1.8 plan P4–P6, P10, P16, P17):
  * - the Map follows the active editor, through the follow gate, which keeps what the Map shows;
- * - a file box or a declaration picked on the Map opens in the editor beside the panel, when this workspace has it;
+ * - a file the Map asks to open (Open in VS Code, a double-clicked file box) opens in the editor beside the panel, when
+ *   this workspace has it, and a click on the Map only selects;
  * - "Show this file on the Map" and "What depends on this file?" with its QuickPick;
  * - the Follow editor toggle, for this window only.
  * Everything reaches the Map as a bridge message through the panel (API_CONTRACTS §20). The integration tests and the
@@ -139,7 +140,8 @@ export class EditorSync implements vscode.Disposable {
     /**
      * Nebulosity: What depends on this file? (design §4.5, P6): its direct importers in a QuickPick, up to 500, which
      * can re-ask with the indirect ones too when there are any. The Map shows the file with the listed importers lit,
-     * until the pick hides. Picking a file opens it as a pick on the Map would, and the pick stays open for the next one.
+     * until the pick hides. Picking a file opens it as an open from the Map would, and the pick stays open for the next
+     * one.
      * Resolves when the pick hides.
      */
     async whatDepends(arg?: unknown): Promise<void> {
@@ -245,8 +247,8 @@ export class EditorSync implements vscode.Disposable {
     }
 
     /**
-     * A file the Map picked (a file box or a declaration, P10), or What depends' pick, opens in the editor: in the most
-     * recent text editor's column, or beside the panel when that's the panel's own (never in the panel's column, which
+     * A file the Map asks to open (Open in VS Code, a double-clicked file box: API_CONTRACTS §20, amended 2026-10-29),
+     * or What depends' pick, opens in the editor: in the most recent text editor's column, or beside the panel when that's the panel's own (never in the panel's column, which
      * it would cover: syncRules' openColumn), as a preview, the focus left where it is. Only a repo-relative path is
      * taken, only while the Map still shows the repo the panel was shown for, and only a file this workspace has (P17):
      * the Map may show another repo, switched from its own menu or by another window (Review Focus 4). `shows` is what
