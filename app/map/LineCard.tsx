@@ -4,13 +4,11 @@ import { useLayoutEffect, useState, type RefObject } from "react";
 import { useStore } from "@xyflow/react";
 import { formatCount } from "./format";
 import type { RunWords } from "./labels";
-import { CARD_EDGE, CARD_FRAME, CARD_ROW, hoverCardPlace, hoverCardRoom, hoverCardRows, type CanvasRect, type CardCorner } from "./narrow";
+import { CARD_EDGE, CARD_FRAME, CARD_ROW, hoverCardPlace, hoverCardRoom, hoverCardRows, type CanvasRect } from "./narrow";
 import { useSize } from "./useSize";
 
 /** The card's widest, so a long name is cut short rather than stretching it across the canvas. */
 const CARD_WIDTH = 280;
-/** The corner of the pointer the card tries first (narrow.ts's hoverCardPlace). */
-const CARD_CORNER: CardCorner = "below-right";
 /** The rows a pinned card shows before its list scrolls, so it stays a small card beside the run. */
 const PINNED_ROWS = 10;
 
@@ -23,8 +21,8 @@ export type CardPlace = CanvasRect & { above: boolean };
  * What the lines under the pointer are, in words, at the pointer (the owner, 2026-10-29). Lines that share an end
  * merge, so one line's sentence on a shared run didn't say which line it meant, and drawn over the run it hid the lines
  * it was about. So the card names every line on the run, heaviest first, with its imports ("Into src", then "build
- * 16"), or one line's sentence where a line has the stretch to itself. It sits just beside the pointer, inside the
- * canvas and off the line (narrow.ts's hoverCardPlace), and goes with the pointer along the run (`followRef`: left
+ * 16"), or one line's sentence where a line has the stretch to itself. It sits just above and left of the pointer,
+ * inside the canvas and off the line (narrow.ts's hoverCardPlace), and goes with the pointer along the run (`followRef`: left
  * where the pointer first landed, it sat far down a long line from it, owner review). It takes no pointer: reaching for
  * something in it would mean leaving the line, which ends the hover. So it lists five lines and says how many more.
  *
@@ -61,7 +59,7 @@ export default function LineCard({ words, at: landed, pinned, held, cardRef, fol
     // a held card keeps its left and its edge nearest the pointer: one under the pointer grows down, one over it up
     const place = size === null ? null
         : hold !== null ? { left: hold.left, top: hold.above ? hold.top + hold.height - size.height : hold.top }
-        : hoverCardPlace(at.pointer, size, { width: canvasWidth, height: canvasHeight }, at.line, at.clear, CARD_CORNER);
+        : hoverCardPlace(at.pointer, size, { width: canvasWidth, height: canvasHeight }, at.line, at.clear);
     useLayoutEffect(() => {
         if (placedRef === undefined) return;
         placedRef.current = place === null || size === null ? null : { ...place, ...size, above: place.top + size.height <= at.pointer.y };

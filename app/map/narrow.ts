@@ -73,16 +73,14 @@ const CARD_LINE_GAP = 4;
  */
 const CARD_SPOT = 6;
 
-/** Which corner of the pointer the hover card tries first: the others follow round, the nearest sides first. */
-export type CardCorner = "above-left" | "below-right";
-
 const overlaps = (a: CanvasRect, b: CanvasRect): boolean =>
     a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
 
 /**
- * Where the hover card about the lines under the pointer goes (its top-left corner, canvas px). It's tried at each
- * corner of the pointer, `first` first: from above and left, then above and right, below and left, below and right;
- * from below and right, the other way round. The first place that's inside the canvas, CARD_EDGE in from its sides, and
+ * Where the hover card about the lines under the pointer goes (its top-left corner, canvas px). It's tried above and
+ * left of the pointer (the owner's pick of 2026-10-29, the closest to the tip, and the card clear of the box a line
+ * runs down into), then above and right, below and left, below and right. The first place that's inside the canvas,
+ * CARD_EDGE in from its sides, and
  * clear of `line` (the bit of line pointed at, as rectangles as wide as it's drawn) and of `clear` (what's over the
  * canvas: a drawer, a box's actions, the banner) wins. A place over the line is slid off it first, sideways off an
  * upright run and down or up off a level one, since the pointer can be a few px beside the line it's on. Where no place
@@ -96,18 +94,14 @@ export function hoverCardPlace(
     canvas: { width: number; height: number },
     line: readonly CanvasRect[],
     clear: readonly CanvasRect[],
-    first: CardCorner = "below-right",
 ): { left: number; top: number } {
     const { width, height } = card;
-    const corners = {
-        aboveLeft: { right: false, below: false, left: pointer.x - CARD_GAP - width, top: pointer.y - CARD_GAP - height },
-        aboveRight: { right: true, below: false, left: pointer.x + CARD_GAP, top: pointer.y - CARD_GAP - height },
-        belowLeft: { right: false, below: true, left: pointer.x - CARD_GAP - width, top: pointer.y + CARD_GAP },
-        belowRight: { right: true, below: true, left: pointer.x + CARD_RIGHT, top: pointer.y + CARD_BELOW },
-    };
-    const tries = first === "above-left"
-        ? [corners.aboveLeft, corners.aboveRight, corners.belowLeft, corners.belowRight]
-        : [corners.belowRight, corners.belowLeft, corners.aboveRight, corners.aboveLeft];
+    const tries = [
+        { right: false, below: false, left: pointer.x - CARD_GAP - width, top: pointer.y - CARD_GAP - height },
+        { right: true, below: false, left: pointer.x + CARD_GAP, top: pointer.y - CARD_GAP - height },
+        { right: false, below: true, left: pointer.x - CARD_GAP - width, top: pointer.y + CARD_GAP },
+        { right: true, below: true, left: pointer.x + CARD_RIGHT, top: pointer.y + CARD_BELOW },
+    ];
     const slid = tries.map((t) => {
         let at = { left: t.left, top: t.top };
         // a slide a rectangle at most: each moves the card on, away from the pointer, so none loops back

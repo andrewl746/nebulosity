@@ -107,55 +107,50 @@ describe("hoverCardPlace (the line's hover card at the pointer: the owner, 2026-
     const canvas = { width: 700, height: 600 };
     const card = { width: 160, height: 80 };
 
-    it("goes 12 px right of the pointer and 20 px below it, past the pointer's arrow", () => {
-        expect(hoverCardPlace({ x: 100, y: 100 }, card, canvas, [], [])).toEqual({ left: 112, top: 120 });
+    it("goes above and left of the pointer, 8 px off its tip, where nothing of the pointer is (the owner's pick)", () => {
+        // 300 - 8 - 160 = 132 and 300 - 8 - 80 = 212
+        expect(hoverCardPlace({ x: 300, y: 300 }, card, canvas, [], [])).toEqual({ left: 132, top: 212 });
     });
 
-    it("flips to the left near the right edge, above near the bottom, and both in the corner, 8 px inside", () => {
-        // 612 + 160 would pass 700 - 8, so it goes left, 600 - 8 - 160 = 432, and 8 px under the tip, left of the arrow
-        expect(hoverCardPlace({ x: 600, y: 100 }, card, canvas, [], [])).toEqual({ left: 432, top: 108 });
-        // 570 + 80 would pass 592, and left of the pointer is off the canvas: above and right, 8 px off the tip
-        expect(hoverCardPlace({ x: 100, y: 550 }, card, canvas, [], [])).toEqual({ left: 108, top: 462 });
-        expect(hoverCardPlace({ x: 600, y: 550 }, card, canvas, [], [])).toEqual({ left: 432, top: 462 });
+    it("flips right near the left edge, below near the top, and below and right in the top left corner", () => {
+        // left of the pointer would start at -68, so above and right, 100 + 8
+        expect(hoverCardPlace({ x: 100, y: 300 }, card, canvas, [], [])).toEqual({ left: 108, top: 212 });
+        // above would start at -38, so below and left, 50 + 8 under the tip, left of the pointer's arrow
+        expect(hoverCardPlace({ x: 300, y: 50 }, card, canvas, [], [])).toEqual({ left: 132, top: 58 });
+        // under the tip and right of it, past the pointer's arrow: 50 + 12 and 50 + 20
+        expect(hoverCardPlace({ x: 50, y: 50 }, card, canvas, [], [])).toEqual({ left: 62, top: 70 });
     });
 
-    it("from above and left first, 8 px off the tip, where nothing of the pointer is, then round the other corners", () => {
-        expect(hoverCardPlace({ x: 300, y: 300 }, card, canvas, [], [], "above-left")).toEqual({ left: 132, top: 212 });
-        // near the top, above is off the canvas, so below and left
-        expect(hoverCardPlace({ x: 300, y: 50 }, card, canvas, [], [], "above-left")).toEqual({ left: 132, top: 58 });
-        // in the top left corner, only below and right is left
-        expect(hoverCardPlace({ x: 50, y: 50 }, card, canvas, [], [], "above-left")).toEqual({ left: 62, top: 70 });
+    it("slides sideways off an upright line the pointer is a few px beside, and up off a heavy level one", () => {
+        // a 10 px line from x 290 to 300, the pointer 10 px right of its middle: the card would end at 297, so it ends 4 px
+        // short of 290, at 126 + 160
+        expect(hoverCardPlace({ x: 305, y: 300 }, card, canvas, [{ left: 290, top: 0, width: 10, height: 600 }], [])).toEqual({ left: 126, top: 212 });
+        // a 26 px line from y 287 to 313 through the pointer: the card would end at 292, so it ends 4 px over 287
+        expect(hoverCardPlace({ x: 300, y: 300 }, card, canvas, [{ left: 0, top: 287, width: 700, height: 26 }], [])).toEqual({ left: 132, top: 203 });
     });
 
-    it("slides sideways off an upright line the pointer is a few px beside, and down off a heavy level one", () => {
-        // a 10 px line from x 108 to 118, the pointer 8 px left of its middle: the card starts at 112, so it moves to 118 + 4
-        expect(hoverCardPlace({ x: 105, y: 100 }, card, canvas, [{ left: 108, top: 0, width: 10, height: 300 }], [])).toEqual({ left: 122, top: 120 });
-        // a 26 px line from y 102 to 128 and the pointer 15 px over its middle: 120 is on it, so 128 + 4
-        expect(hoverCardPlace({ x: 100, y: 100 }, card, canvas, [{ left: 0, top: 102, width: 400, height: 26 }], [])).toEqual({ left: 112, top: 132 });
-    });
-
-    it("keeps clear of a drawer over the canvas, as of its edge", () => {
-        // the drawer from x 380: 312 + 160 runs under it, so the card goes left, 300 - 8 - 160 = 132
-        expect(hoverCardPlace({ x: 300, y: 100 }, card, canvas, [], [{ left: 380, top: 0, width: 320, height: 600 }])).toEqual({ left: 132, top: 108 });
+    it("keeps clear of what's over the canvas, a box's actions here", () => {
+        // the actions from (100, 0) to (300, 100): above and left would run under them, above and right clears them
+        expect(hoverCardPlace({ x: 300, y: 150 }, card, canvas, [], [{ left: 100, top: 0, width: 200, height: 100 }])).toEqual({ left: 308, top: 62 });
     });
 
     it("where no side fits, takes the first that fits moved inside the canvas and still clear of the line", () => {
-        // a 200 × 150 canvas: right of the pointer runs past 192, left of it past 8, and above it past 8 (75 - 8 - 60 = 7).
-        // Moved in, below and right is at (92, 82), on the line from x 150; below and left is at (8, 82), clear of it
+        // a 200 × 150 canvas fits no side of a 100 × 60 card at (100, 75). Moved in, above and left is at (8, 8), clear
+        // of the line from x 150
         const small = { width: 200, height: 150 };
-        expect(hoverCardPlace({ x: 100, y: 75 }, { width: 100, height: 60 }, small, [{ left: 150, top: 0, width: 10, height: 150 }], [])).toEqual({ left: 8, top: 82 });
+        expect(hoverCardPlace({ x: 100, y: 75 }, { width: 100, height: 60 }, small, [{ left: 150, top: 0, width: 10, height: 150 }], [])).toEqual({ left: 8, top: 8 });
     });
 
     it("in a canvas too small to keep off the line, still keeps off the line right at the pointer", () => {
-        // the line runs down through the pointer at (100, 160). Moved in, below and right is at (92, 132) and below and
-        // left at (8, 132), both over the pointer's 6 px, while above and right, at (92, 92), ends at 152, under 154
+        // the line runs down through the pointer at (100, 40). Moved in, above and left is at (8, 8) and above and right at
+        // (92, 8), both over the pointer's 6 px, while below and left, at (8, 48), starts under 46
         const small = { width: 200, height: 200 };
-        expect(hoverCardPlace({ x: 100, y: 160 }, { width: 100, height: 60 }, small, [{ left: 95, top: 0, width: 10, height: 200 }], [])).toEqual({ left: 92, top: 92 });
+        expect(hoverCardPlace({ x: 100, y: 40 }, { width: 100, height: 60 }, small, [{ left: 95, top: 0, width: 10, height: 200 }], [])).toEqual({ left: 8, top: 48 });
     });
 
     it("and failing that, the first moved inside the canvas: it never leaves it", () => {
         // a 120 × 90 canvas leaves a 100 × 60 card nowhere off the pointer
-        expect(hoverCardPlace({ x: 60, y: 45 }, { width: 100, height: 60 }, { width: 120, height: 90 }, [{ left: 0, top: 0, width: 120, height: 90 }], [])).toEqual({ left: 12, top: 22 });
+        expect(hoverCardPlace({ x: 60, y: 45 }, { width: 100, height: 60 }, { width: 120, height: 90 }, [{ left: 0, top: 0, width: 120, height: 90 }], [])).toEqual({ left: 8, top: 8 });
     });
 });
 
