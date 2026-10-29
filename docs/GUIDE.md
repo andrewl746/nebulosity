@@ -43,7 +43,7 @@ Everything except summaries works without an API key, in every language, and wit
 
 ## Summaries
 
-With an Anthropic API key, `nebulosity summarize .` writes a short summary of every file and folder. The Map's panels, `overview` and `describe` then read like a guide, and search can match by meaning, not only by words.
+With an Anthropic API key, `nebulosity summarize .` writes a short summary of every file and folder. Each is a plain tagline, then a few short paragraphs, longer for bigger and more central files and folders. The Map's panels, `overview` and `describe` then read like a guide, and search can match by meaning, not only by words.
 
 - **Your code goes to Anthropic,** since each file's code is sent to write its summary.
 - **It costs about $1 per 1,000 files,** $10.30 for VS Code and $6.02 for AFFiNE.
@@ -52,6 +52,8 @@ With an Anthropic API key, `nebulosity summarize .` writes a short summary of ev
 - **The key** goes in your environment as `ANTHROPIC_API_KEY`, or in a `.env.local` file in the data folder (the checkout's folder in a checkout). Restart the Map after adding it.
 
 A big first run goes through Anthropic's Batch API at half price, so it can take a while. `--no-wait` returns at once, and running the command again picks up where it left off.
+
+Summaries an older version of Nebulosity wrote stay as they are, and count as up to date until their code changes, or until something inside them is rewritten. Opening one on the Map rewrites it in the new style. That includes the folder on screen, which the panel beside the Map describes when nothing is selected, so the repo is rewritten when the Map opens and each folder as you enter it. Rewriting something puts the folder above it out of date, so the folders you browsed through are redone once more, one request each, by the Map's automatic refreshes within about 10 minutes, or sooner as you go back up through them. `nebulosity summarize .` rewrites them all after its estimate, and on a repo that has already spent most of its $15 that run needs `--budget`, as in `--budget 25`. `--no-restyle` leaves them as they are and catches up only what changed. `--path <path>` summarizes just that file or folder, and only when its summary is missing, out of date or written by an older version, so `--no-restyle` changes nothing there.
 
 ## Summary models
 
@@ -67,7 +69,7 @@ By default Haiku 5.5 (`claude-haiku-5-5`) summarizes files, and Sonnet 5.5 (`cla
 
 - **Prices are required** for any model but the two defaults, in US dollars per million input and output tokens, so the estimate and the cap still work.
 - **The model has to support** structured output and the effort setting.
-- **Changing a model re-summarizes** everything that model writes, plus the folders above it. `nebulosity summarize` shows the estimate first. On a repo that has already spent much of its $15, raise the budget, as in `--budget 25`.
+- **Changing a model re-summarizes** everything that model writes, plus the folders above it. `nebulosity summarize` shows the estimate first. On a repo that has already spent much of its $15, raise the budget, as in `--budget 25`. The Map never rewrites a summary on its own just because another model wrote it, and the same goes for one an older version of Nebulosity wrote. Opening it on the Map does.
 - **`nebulosity doctor` checks the setting.** One it can't use, such as a JSON typo, turns summaries off until it's fixed, and doctor names the file and the problem. Nebulosity never writes over a broken file. It moves it aside to `config.json.invalid-<time>` first and says so.
 - **When a model is retired,** the run stops with one message naming the model and this file, and every summary already written is kept.
 

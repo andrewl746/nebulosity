@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { StoredSummary } from "../db/store/summaries";
 import { SummariesOffError } from "../engine/errors";
 import type { IndexResult } from "../index/pipeline";
+import { PROMPT_VERSION } from "../index/summarize/prompts";
 import { TargetNotReadyError } from "../index/summarize/run";
-import { handleParentMessage } from "./child";
+import { handleParentMessage, toSummarizeResponse } from "./child";
 import type { ChildMessage } from "./protocol";
 import type { BackgroundService } from "./service";
 
@@ -19,7 +20,8 @@ function fakeService(overrides: Partial<BackgroundService>): BackgroundService {
 }
 
 const row: StoredSummary = {
-    id: 4, kind: "file", path: "src/a.ts", tagline: "A thing", summary: "Does it.", model: "m", inputHash: "h", status: "fresh", batchId: null, error: null,
+    id: 4, kind: "file", path: "src/a.ts", tagline: "A thing", summary: "Does it.", model: "m", inputHash: "h", promptVersion: PROMPT_VERSION, status: "fresh",
+    batchId: null, error: null,
 };
 
 describe("handleParentMessage", () => {
@@ -30,6 +32,23 @@ describe("handleParentMessage", () => {
             type: "summarized", id: 7,
             outcome: { ok: true, summary: { path: "src/a.ts", kind: "file", tagline: "A thing", summary: "Does it.", summaryStatus: "fresh" } },
         }]);
+    });
+
+    it("carries the older-style mark in a summarize answer", async () => {
+        // a rewrite that failed keeps 1.0's text on show, and 1.0 recorded no prompt version, read as version 2 (P3)
+        const older: StoredSummary = { ...row, promptVersion: null, status: "failed", error: "overloaded" };
+        const sent: ChildMessage[] = [];
+        await handleParentMessage(fakeService({ summarizeNow: async () => older }), { type: "summarize", id: 8, path: "src/a.ts", root: "C:/r" }, (m) => sent.push(m));
+        expect(sent).toEqual([{
+            type: "summarized", id: 8,
+            outcome: {
+                ok: true,
+                summary: { path: "src/a.ts", kind: "file", tagline: "A thing", summary: "Does it.", summaryStatus: "failed", summaryError: "overloaded", summaryOlderStyle: true },
+            },
+        }]);
+        // the current prompt's and a template's carry no mark at all
+        expect(toSummarizeResponse(row)).not.toHaveProperty("summaryOlderStyle");
+        expect(toSummarizeResponse({ ...row, model: "template", promptVersion: null, status: "skipped" })).not.toHaveProperty("summaryOlderStyle");
     });
 
     it("answers a failed summarize request with the error's code, never by throwing", async () => {

@@ -28,6 +28,13 @@ describe("splitSummary (§5: about two lines, then 'Read full summary')", () => 
         expect(splitSummary("")).toEqual({ lead: "", rest: "" });
     });
 
+    it("leads with the first paragraph when there are two or more", () => {
+        expect(splitSummary("What it is. Why it matters.\n\nWhat's inside.\n\nWho uses it."))
+            .toEqual({ lead: "What it is. Why it matters.", rest: "What's inside.\n\nWho uses it." });
+        // a blank line with spaces on it is a blank line too
+        expect(splitSummary("One. Two.\n  \nThree.")).toEqual({ lead: "One. Two.", rest: "Three." });
+    });
+
     it("doesn't end a sentence inside code, at an abbreviation, or inside a number", () => {
         expect(splitSummary("Holds `main.ts` and `cli.ts`. Then more.")).toEqual({ lead: "Holds `main.ts` and `cli.ts`.", rest: "Then more." });
         expect(splitSummary("Uses helpers, e.g. `foo`, to log. Second.")).toEqual({ lead: "Uses helpers, e.g. `foo`, to log.", rest: "Second." });

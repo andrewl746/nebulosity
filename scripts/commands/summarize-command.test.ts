@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isolateDataFolder } from "../../test/helpers/data-folder";
 import { copyFixture } from "../../test/helpers/fixture";
 import { stubSummarizer } from "../../test/helpers/summarizer";
+import { rewriteAsWrittenBy10 } from "../../test/helpers/summaries-v2";
 import { getDb } from "../../lib/db/client";
+import { readStages } from "../../lib/db/store/stages";
 import { requireRepository } from "../../lib/db/store/structure";
-import { approvedBudgetUsd, summariesConfirmed } from "../../lib/db/store/summaries";
+import { approvedBudgetUsd, loadSummaries, summariesConfirmed } from "../../lib/db/store/summaries";
 import { dataDir } from "../../lib/home";
 import { repoKey } from "../../lib/index/paths";
 import { indexRepository } from "../../lib/index/pipeline";
@@ -23,6 +25,13 @@ vi.mock("../env", () => ({ loadLocalEnv: () => {}, hasAnthropicKey: () => summar
 vi.mock("../../lib/index/embed", () => ({ embedSummaries: async () => ({ embedded: 0, total: 0, remaining: 0 }) }));
 
 const printed = (spy: { mock: { calls: unknown[][] } }): string => spy.mock.calls.map((call) => String(call[0])).join("\n");
+
+/** The estimate's line among what was logged, or "" when there was none. */
+const estimateLine = (spy: { mock: { calls: unknown[][] } }): string =>
+    spy.mock.calls.map((call) => String(call[0])).find((line) => line.includes(" at list prices")) ?? "";
+
+/** `line`'s last `tail.length` characters, which a line ending with `tail` shows as `tail` itself. */
+const ending = (line: string, tail: string): string => line.slice(Math.max(0, line.length - tail.length));
 
 // Each test has a data folder of its own, so the config.json it reads (summaryModels) is only ever the one it writes
 const dataFolder = isolateDataFolder();
@@ -210,5 +219,108 @@ describe("nebulosity summarize: the models in summaryModels (ADR-066)", () => {
         expect(message).toContain("Summary models");
         expect(error).toHaveBeenCalledTimes(1);
         expect(sent).toHaveLength(4);   // the four already on their way at once; the other three files never go
+    });
+});
+
+/** The fixture indexed and summarized by a stub of its own, then its rows made what Nebulosity 1.0 stored for the same input (P1). */
+async function writtenBy10(): Promise<string> {
+    const root = copyFixture();
+    indexRepository(root);
+    await runSummaries(root, { summarizer: stubSummarizer().summarizer, transport: "direct" });
+    const db = getDb();
+    rewriteAsWrittenBy10(db, requireRepository(db, repoKey(root)));
+    return root;
+}
+
+describe("nebulosity summarize: summaries an older version wrote (P7)", () => {
+    it("says how many of the requests rewrite summaries an older version wrote", async () => {
+        const root = await writtenBy10();
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+        expect(await runSummarize([root, "--yes"])).toBe(0);
+
+        // a full run restyles by default: all 13 that 1.0 wrote, the 7 files, the 5 folders and the repo, each a rewrite
+        expect(estimateLine(log)).toContain("about 13 requests (7 files to claude-haiku-5-5, 5 folders and the repo to claude-sonnet-5-5)");
+        const tail = "Writing summaries sends each file's code to Anthropic. This includes rewriting 13 summaries an older version of Nebulosity wrote,"
+            + " in the new plain style. Add --no-restyle to leave them as they are.";
+        expect(ending(estimateLine(log), tail)).toBe(tail);
+        expect(stub.requests).toHaveLength(13);
+
+        // a first pass has nothing an older version wrote, so its estimate ends where it always has
+        log.mockClear();
+        stub.requests.length = 0;
+        const fresh = copyFixture();
+        indexRepository(fresh);
+        expect(await runSummarize([fresh, "--yes"])).toBe(0);
+        expect(estimateLine(log)).toContain("about 13 requests (7 files to claude-haiku-5-5, 5 folders and the repo to claude-sonnet-5-5)");
+        expect(ending(estimateLine(log), "Writing summaries sends each file's code to Anthropic.")).toBe("Writing summaries sends each file's code to Anthropic.");
+        expect(printed(log)).not.toContain("an older version");
+        expect(stub.requests).toHaveLength(13);
+    });
+
+    it("leaves summaries an older version wrote alone with --no-restyle", async () => {
+        const root = await writtenBy10();
+        fs.appendFileSync(path.join(root, "src/core/log.ts"), "export const extra = 1;\n");
+        indexRepository(root);
+        // texts of their own, so each rewrite reads differently from what 1.0 stored and puts the folder above it out of date
+        const edited = stubSummarizer({ texts: {
+            "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines." },
+            "src/core": { tagline: "The core", summary: "The log and what the core exports." },
+            "src": { tagline: "The source", summary: "The app, its core and its helpers." },
+        } });
+        summarizer = edited.summarizer;
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+        expect(await runSummarize([root, "--yes", "--no-restyle"])).toBe(0);
+
+        // the edited file, then each folder above it up to the repo (src/core, src and the repo): 4 requests, none a rewrite
+        expect(estimateLine(log)).toContain("about 4 requests (1 files to claude-haiku-5-5, 2 folders and the repo to claude-sonnet-5-5)");
+        expect(printed(log)).not.toContain("an older version");
+        expect(edited.subjects()).toEqual(["File: src/core/log.ts", "Folder: src/core", "Folder: src", `Repository: ${path.basename(root)}`]);
+        // the other 6 files and the 3 folders off that path are still what 1.0 wrote
+        const db = getDb();
+        expect(loadSummaries(db, requireRepository(db, repoKey(root))).filter((r) => r.promptVersion === 2).map((r) => `${r.kind} ${r.path}`).sort()).toEqual([
+            "file scripts/build.js", "file src/app/main.ts", "file src/app/view.tsx", "file src/core/index.ts", "file src/index.ts", "file src/util/strings.ts",
+            "folder scripts", "folder src/app", "folder src/util",
+        ]);
+    });
+
+    // the Task 5 review's Important 1: a run with no key sends nothing, so it plans as the stage refresh does (P1)
+    it("with no key, counts what an older version wrote as up to date and sends nothing", async () => {
+        const root = await writtenBy10();
+        summarizer = null;
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+        expect(await runSummarize([root])).toBe(0);
+
+        // 14 targets: the 7 files, the 5 folders and the repo 1.0 wrote, each current for the same input, and the test
+        // file's template. Nothing waits for a key, so the stage is ready with no note
+        expect(printed(log)).toContain("up to date 14/14 · summarized 0");
+        const db = getDb();
+        const stage = readStages(db, requireRepository(db, repoKey(root))).summaries;
+        expect(stage).toMatchObject({ state: "ready", done: 14, total: 14 });
+        expect(stage?.note).toBeUndefined();
+        expect(stub.requests).toHaveLength(0);
+        expect(loadSummaries(db, requireRepository(db, repoKey(root))).filter((r) => r.promptVersion === 2)).toHaveLength(13);
+    });
+});
+
+describe("nebulosity summarize --path", () => {
+    it("prints a one-path summary on one line", async () => {
+        const root = copyFixture();
+        indexRepository(root);
+        summarizer = stubSummarizer({ texts: {
+            "src/core/log.ts": { tagline: "Log lines", summary: "Writes the app's log lines.\n\nEach line starts with its level." },
+        } }).summarizer;
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+        expect(await runSummarize([root, "--path", "src/core/log.ts"])).toBe(0);
+
+        // its two paragraphs joined by a space, so the console line is one line
+        expect(printed(log).split("\n")).toContain("[summarize] Log lines — Writes the app's log lines. Each line starts with its level.");
     });
 });

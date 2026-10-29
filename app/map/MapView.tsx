@@ -542,6 +542,7 @@ function MapScreen(){
             path={inspectorPath}
             level={level}
             indexVersion={version ?? 0}
+            summariesOff={status?.stages.summaries.state === "off"}
             onFocus={focus}
             onOpen={open}
             onTurnPage={turnPage}

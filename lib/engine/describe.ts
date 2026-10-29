@@ -6,6 +6,7 @@ import { requireRepository } from "../db/store/structure";
 import { readIndexVersion } from "../db/store/version";
 import { DEFAULT_MAX_FILE_BYTES } from "../index/discover";
 import { repoKey } from "../index/paths";
+import { writtenInOlderStyle } from "../index/summarize/prompts";
 import { docsAbout, docsToReadFirst } from "./docs";
 import { stalePaths } from "./freshness";
 import { cachedAreaCounts, type TargetKind } from "./graph";
@@ -72,6 +73,7 @@ function describeUncached(db: Db, repo: string, repoId: number, version: number,
         ...(row?.tagline ? { tagline: row.tagline, summary: row.summary ?? "" } : {}),
         summaryStatus,
         ...(summaryStatus === "failed" && row?.error ? { summaryError: row.error } : {}),
+        ...(row && writtenInOlderStyle(row) ? { summaryOlderStyle: true as const } : {}),
         ...(docs.length > 0 ? { docs } : {}),
         stats: folder
             ? { fileCount: folder.fileCount, lineCount: sumLinesInside(db, repoId, targetPath) }

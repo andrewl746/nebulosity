@@ -132,6 +132,8 @@ export type DescribeResponse = {
   summaryStatus: SummaryStatus;
   /** Why the last attempt failed, when summaryStatus is "failed". */
   summaryError?: string;
+  /** A model wrote this summary with an older version of the prompt (ADR-034, amended 2026-10-29). It reads in the older style, one block that may count importers, until it's rewritten. */
+  summaryOlderStyle?: true;
   /** For a folder or file, the docs linked to it or the folders above it; for the repo, the docs to read first (ADR-054). Left out when none. */
   docs?: DocPointer[];
   stats: { fileCount: number; lineCount: number };
@@ -189,6 +191,8 @@ export type SummarizeResponse = {
   summaryStatus: SummaryStatus;
   /** Why it failed, when summaryStatus is "failed". */
   summaryError?: string;
+  /** A model wrote this summary with an older version of the prompt (ADR-034, amended 2026-10-29). It reads in the older style, one block that may count importers, until it's rewritten. */
+  summaryOlderStyle?: true;
 };
 
 /** Where a repo was cloned from: its origin remote's owner and name ("microsoft" / "vscode") — docs/API_CONTRACTS.md §15 */

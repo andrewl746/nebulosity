@@ -9,6 +9,7 @@ import { loadSummaries, writeResults } from "../db/store/summaries";
 import { readIndexVersion } from "../db/store/version";
 import { embedSummaries, type EmbedFn } from "../index/embed";
 import { indexRepository } from "../index/pipeline";
+import { PROMPT_VERSION } from "../index/summarize/prompts";
 import { runSummaries } from "../index/summarize/run";
 import { readIndexStatus } from "./status";
 
@@ -57,7 +58,7 @@ describe("readIndexStatus", () => {
 
         const db = getDb();
         const log = loadSummaries(db, repoId).find((s) => s.path === "src/core/log.ts")!;
-        writeResults(db, [{ id: log.id, batchId: null, inputHash: "new", outcome: { ok: true, text: { tagline: "New", summary: "S." }, model: "m" } }]);
+        writeResults(db, [{ id: log.id, batchId: null, inputHash: "new", outcome: { ok: true, text: { tagline: "New", summary: "S." }, model: "m", promptVersion: PROMPT_VERSION } }]);
         expect(readIndexStatus(root)?.stages.embeddings).toEqual({ state: "idle", done: 12, total: 13, note: "1 summary without a vector yet" });
         expect(readIndexStatus(root)?.indexVersion).toBe(readIndexVersion(db, repoId));
     });

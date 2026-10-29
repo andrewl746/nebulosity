@@ -16,6 +16,10 @@ export type SummaryState = {
     path: string;
     tagline: string | null;
     summary: string | null;
+    /** The model that wrote the text, or "template". */
+    model: string | null;
+    /** The prompt version that wrote the text, null for a template or for text from before v3 (ADR-034). */
+    promptVersion: number | null;
     status: StoredSummaryStatus;
     error: string | null;
 };
@@ -40,6 +44,8 @@ const summaryColumns = {
     path: summaries.targetPath,
     tagline: summaries.tagline,
     summary: summaries.summary,
+    model: summaries.model,
+    promptVersion: summaries.promptVersion,
     status: summaries.status,
     error: summaries.error,
 };

@@ -25,7 +25,7 @@ import { DEMO } from "./mode";
 import { nameOf, shortPath } from "./paths";
 import { measureAfterPaint } from "./perf";
 import { linkedFrom, portalCaption, portalLinks } from "./portals";
-import { failureFor, summaryLine, wantsSummary } from "./summaries";
+import { askKey, failureFor, summaryLine, summaryNotes, wantsSummary } from "./summaries";
 import SourceViewer from "./SourceViewer";
 import { inlineCode, splitSummary } from "./text";
 
@@ -35,6 +35,8 @@ type DetailPanelProps = {
     level: LevelResponse;
     /** Moves when the index changes; the panel then refetches. */
     indexVersion: number;
+    /** The summaries stage is off (no API key in the Map's process), so a summary an older prompt wrote isn't asked for (P11). */
+    summariesOff: boolean;
     /** Go to the level holding a path and select it there. */
     onFocus: (targetPath: string) => void;
     onOpen: (folder: string) => void;
@@ -85,10 +87,10 @@ const COLUMN_TWO = "@min-[720px]:min-h-0 @min-[720px]:overflow-y-auto @min-[720p
 /**
  * The inspector (the Workbench redesign, 2026-10-27; mockup3.html's .insp), top to bottom: the name in the code font
  * and its size, the tagline and a summary that expands, the actions that fit the target, then tabs for what it uses,
- * what uses it, and what's inside, each row a name, a count and a bar. A missing or out-of-date summary is asked for
- * once ("summarize now", PIVOT_SPEC.md §5.3), and the panel says so while it's refreshing. A portal gets its own panel
- * (PortalPanel). MapView places it (beside, under or over the canvas) and remounts it for each selection (key), so
- * nothing leaks from one target to the next.
+ * what uses it, and what's inside, each row a name, a count and a bar. A missing or out-of-date summary, or one an older
+ * prompt wrote, is asked for once ("summarize now", PIVOT_SPEC.md §5.3), and the panel says so while it's refreshing.
+ * A portal gets its own panel (PortalPanel). MapView places it (beside, under or over the canvas) and remounts it for
+ * each selection (key), so nothing leaks from one target to the next.
  */
 function DetailPanel(props: DetailPanelProps){
     const portal = props.level.nodes.find((n) => n.path === props.path && n.kind === "portal");
@@ -144,7 +146,7 @@ function PanelFrame({ path, placement, onScreenFolder = false, alert, name, titl
 }
 
 /** A file, a folder or the repo: described by the server (GET /api/describe). */
-function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOpenInEditor, placement, onScreenFolder, alert }: DetailPanelProps){
+function TargetPanel({ path, level, indexVersion, summariesOff, onFocus, onOpen, onClose, onOpenInEditor, placement, onScreenFolder, alert }: DetailPanelProps){
     const target = path;
     const [data, setData] = useState<DescribeResponse | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
@@ -153,7 +155,8 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
     const [refreshing, setRefreshing] = useState(false);
     // the tab on screen: picked from the first answer (defaultTab), then kept while this panel is open, refetches too
     const [tab, setTab] = useState<InspectorTab | null>(null);
-    // keys already asked for: "<path>@<index version>", or the bare path once the server answered NOT_READY
+    // keys already asked for (askKey): "<path>@<index version>" or "<path>@older", or the bare path once the server
+    // answered NOT_READY
     const asked = useRef(new Set<string>());
     // the demo's source links go to GitHub at the commit the index was built from (ADR-049)
     const [github, setGithub] = useState<GitHubSource | null>(null);
@@ -189,17 +192,18 @@ function TargetPanel({ path, level, indexVersion, onFocus, onOpen, onClose, onOp
         );
     };
 
-    // "summarize now", once per target and index version: the server joins a request already running (ADR-033).
-    // After a NOT_READY answer, once per target: the index moves with every child summary the worker writes, and each
-    // move would otherwise ask again for a folder that still isn't ready. Reselecting it asks afresh (a new panel).
-    // The static demo has no server to ask, so it never does (ADR-049).
+    // "summarize now" for a summary that's missing, out of date or in the older style (wantsSummary), once per target
+    // and index version, or once per panel for the older style alone (askKey): the server joins a request already
+    // running (ADR-033). After a NOT_READY answer, once per target: the index moves with every child summary the worker
+    // writes, and each move would otherwise ask again for a folder that still isn't ready. Reselecting it asks afresh
+    // (a new panel). The static demo has no server to ask, so it never does (ADR-049).
     useEffect(() => {
-        if (DEMO || data === null || !wantsSummary(data.summaryStatus)) return;
-        const key = `${data.path}@${data.indexVersion}`;
+        if (DEMO || data === null || !wantsSummary(data, summariesOff)) return;
+        const key = askKey(data);
         if (asked.current.has(data.path) || asked.current.has(key)) return;
         asked.current.add(key);
         summarize(data.path, () => asked.current.add(data.path));
-    }, [data]);
+    }, [data, summariesOff]);
 
     const retry = (): void => {
         if (data === null) return;
@@ -392,8 +396,10 @@ type SummaryProps = {
 };
 
 /**
- * The tagline and the first sentence. "Full summary" at the end of it shows the rest, and "Show less" at the end of the
- * last paragraph folds it back. Under them, quietly, whether it's refreshing, out of date, or failed (with Try again).
+ * The tagline and the summary's lead, its first paragraph, or its first sentence when it's one block (splitSummary).
+ * "Full summary" at the end of it shows the rest as paragraphs, and "Show less" at the end of the last one folds it
+ * back. However many paragraphs, they wrap in the panel's width and scroll with its body, with no height of their own.
+ * Under them, quietly, whether it's refreshing, out of date, or failed (with Try again).
  */
 function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProps){
     const [expanded, setExpanded] = useState(false);
@@ -403,12 +409,7 @@ function Summary({ data, fresh, refreshing, summaryError, onRetry }: SummaryProp
     const failure = failureFor(shown.summaryError, summaryError);
     const placeholder = shown.tagline ? "" : summaryLine(shown.summaryStatus, summaryError);
     const paragraphs = lead === "" ? [] : expanded ? [lead, ...rest.split(/\n\s*\n/)] : [lead];
-    const notes = [
-        refreshing && shown.tagline ? "Refreshing…" : "",
-        shown.summaryStatus === "stale" && !refreshing ? "Out of date, it changed since it was summarized." : "",
-    ].filter(Boolean);
-    // the summary was written from an "Imported by" line that counts tests apart; "Used by" counts them
-    const testsNote = Boolean(shown.summary) && data.kind === "file";
+    const { notes, testsNote } = summaryNotes(shown, data.kind, refreshing);
     const hasNotes = notes.length > 0 || testsNote || failure !== null;
 
     return (

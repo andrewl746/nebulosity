@@ -66,6 +66,37 @@ describe("migration 0010 (files.declares, ADR-065)", () => {
     });
 });
 
+describe("migration 0011 (summaries.prompt_version, ADR-034 amended)", () => {
+    it("gives every summary of a database at migration 0010 a null prompt_version", () => {
+        // a copy of the migrations up to 0010: the folder drizzle reads, its journal cut after 0010's entry
+        const upTo10 = makeTempDir("neb-migrations-");
+        fs.cpSync(path.resolve("lib/db/migrations"), upTo10, { recursive: true });
+        for (const name of fs.readdirSync(upTo10)) if (name.startsWith("0011_")) fs.rmSync(path.join(upTo10, name));
+        fs.rmSync(path.join(upTo10, "meta", "0011_snapshot.json"), { force: true });
+        const journalFile = path.join(upTo10, "meta", "_journal.json");
+        const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as { entries: { idx: number }[] };
+        journal.entries = journal.entries.filter((e) => e.idx <= 10);
+        fs.writeFileSync(journalFile, JSON.stringify(journal));
+
+        const file = tempDatabase();
+        const old = new Database(file);
+        migrate(drizzle(old), { migrationsFolder: upTo10 });
+        expect((old.prepare("select name from pragma_table_info('summaries')").all() as { name: string }[]).map((c) => c.name)).not.toContain("prompt_version");
+        const repoId = Number(old.prepare("insert into repositories (root_path) values ('/migrate/0010')").run().lastInsertRowid);
+        // one summary a model wrote, one still waiting for its first
+        old.prepare(`insert into summaries (repo_id, target_kind, target_path, tagline, summary, model, input_hash, status, updated_at) values
+            (?, 'file', 'a.ts', 'Writes log lines', 'Writes log lines to the console.', 'claude-haiku-5-5', 'h', 'fresh', 0),
+            (?, 'file', 'b.ts', null, null, null, null, 'pending', 0)`).run(repoId, repoId);
+        old.close();
+
+        const migrated = openDb(file);
+        withOpen([migrated], () => {
+            expect(migrated.all<{ target_path: string; prompt_version: number | null }>(sql`select target_path, prompt_version from summaries order by target_path`))
+                .toEqual([{ target_path: "a.ts", prompt_version: null }, { target_path: "b.ts", prompt_version: null }]);
+        });
+    });
+});
+
 describe("openDb, read-only (ADR-044)", () => {
     it("reads what a writer commits, even after it opened, and refuses to write", () => {
         const file = tempDatabase();

@@ -12,7 +12,7 @@ import { DEFAULT_SUMMARY_MODELS, type ResolvedSummaryModels } from "./models";
 import { planSummaries, writtenByModel, type PlannedTarget } from "./plan";
 import { formatUsd, pricePerMTok, type PriceTable } from "./pricing";
 import {
-    FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT,
+    FILE_SYSTEM_PROMPT, FOLDER_SYSTEM_PROMPT, importerLine, joinParagraphs, MAX_FOLDER_ITEMS, plural, PROMPT_VERSION, REPO_SYSTEM_PROMPT,
 } from "./prompts";
 import { buildFilePrompt, requireStructureReady } from "./run";
 import type { Summarizer, SummaryOutcome } from "./types";
@@ -95,10 +95,9 @@ export function nextWave(plan: readonly PlannedTarget[], scope: SampleScope, sen
 }
 
 /**
- * An answer as the row the real run would write for it (writeResults): its text and model, the planned inputHash, and
- * status "fresh". The planner reads only the hash, the batch id and the text, so it now calls the target current and
- * shows this text in its folder's prompt. A row the index already had keeps its id; a new one has none (0), since
- * it's never written. Pure.
+ * An answer as the row the real run would write for it (writeResults): its text and model, the current prompt version,
+ * the planned inputHash, and status "fresh". The planner then calls the target current and shows this text in its
+ * folder's prompt. A row the index already had keeps its id; a new one has none (0), since it's never written. Pure.
  */
 export function answeredRow(target: PlannedTarget, outcome: Extract<SummaryOutcome, { ok: true }>, previous: StoredSummary | undefined): StoredSummary {
     return {
@@ -109,6 +108,7 @@ export function answeredRow(target: PlannedTarget, outcome: Extract<SummaryOutco
         summary: outcome.text.summary,
         model: outcome.model,
         inputHash: target.inputHash,
+        promptVersion: PROMPT_VERSION,
         status: "fresh",
         batchId: null,
         error: null,
@@ -175,8 +175,11 @@ export async function runFolderPreview(input: PreviewInput): Promise<FolderPrevi
     };
 
     for (;;){
-        // refreshStaleFolders: true, as in a full run (npm run summarize): an out-of-date folder is redone, not left lazy
-        const plan = planSummaries(input.files, input.folders, [...rows.values()], { models: setting.models, refreshStaleFolders: true, failedThisRun });
+        // refreshStaleFolders: true and restyle: "all", as in a full run (npm run summarize): an out-of-date folder is
+        // redone, not left lazy, and so is a summary an older prompt version wrote
+        const plan = planSummaries(input.files, input.folders, [...rows.values()], {
+            models: setting.models, refreshStaleFolders: true, failedThisRun, restyle: "all",
+        });
         const wave = nextWave(plan, scope, sent);
 
         if (wave.length === 0){
@@ -433,10 +436,10 @@ function shown(preview: FolderPreview, kind: SummaryTargetKind, targetPath: stri
         if (!outcome.ok) return `failed: ${outcome.error}`;
         // a server-side fallback's answer isn't the summary the model asked would have written, and the reader should know
         const by = outcome.model === target?.model ? "" : ` (answered by ${outcome.model})`;
-        return `*${outcome.text.tagline}* — ${outcome.text.summary}${by}`;
+        return `*${outcome.text.tagline}* — ${joinParagraphs(outcome.text.summary)}${by}`;
     }
 
     const row = preview.rows.get(key);
-    if (target?.state === "current" && row?.tagline) return `*${row.tagline}* — ${row.summary} (already in the index, not sent again)`;
+    if (target?.state === "current" && row?.tagline) return `*${row.tagline}* — ${joinParagraphs(row.summary ?? "")} (already in the index, not sent again)`;
     return `not summarized (${target?.state ?? "not planned"})`;
 }

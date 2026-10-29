@@ -4,12 +4,14 @@ import { targetKey, type FileFacts, type FolderFacts, type StoredSummary, type S
 import { DEFAULT_MAX_FILE_BYTES } from "../discover";
 import { dirOf } from "../paths";
 import {
-    importsOnlyFileSummary, PROMPT_VERSION, renderFolderPrompt, renderRepoPrompt, testFileSummary, testFolderSummary, type FolderItem,
+    folderTier, importsOnlyFileSummary, MAX_FOLDER_ITEMS, PROMPT_VERSION, renderFolderPrompt, renderRepoPrompt, testFileSummary,
+    testFolderSummary, UNRECORDED_PROMPT_VERSION, withLengthLine, writtenInOlderStyle, type FolderItem,
 } from "./prompts";
 
 /**
- * current: the text matches the current input · template: a test file or test-only folder whose
- * template is missing or out of date, written right away · ready: needs a model and can go now ·
+ * current: the text matches the current input, or an older prompt wrote it for this same input (P1) ·
+ * template: a test file or test-only folder whose template is missing or out of date, written right away ·
+ * ready: needs a model and can go now ·
  * waiting: needs a model, but a child isn't done yet · lazy: an out-of-date folder left
  * for later (redone when someone opens it) · in-flight: a batch already carries it ·
  * failed: failed earlier in this run; the next run retries it
@@ -26,9 +28,14 @@ export type PlannedTarget = {
     /** The row's status from now on; null leaves it as it is. */
     status: StoredSummaryStatus | null;
     templateText?: SummaryText;
-    /** Folders and the repo. A file's prompt is built from disk when it's sent. */
+    /** Folders and the repo, ending with the length line. A file's prompt is built from disk when it's sent. */
     prompt?: string;
+    /** planned to be written only because an older prompt version wrote its text (P1) */
+    restyle?: true;
 };
+
+/** Which summaries an older prompt wrote a plan restyles (PlanOptions.restyle). */
+export type Restyle = "all" | "none" | { path: string };
 
 export type PlanOptions = {
     models: { readonly file: string; readonly folder: string; readonly repo: string };
@@ -41,6 +48,19 @@ export type PlanOptions = {
      * cap, DEFAULT_MAX_FILE_BYTES, the product's only one; tests pass another to match an index they built with it.
      */
     maxFileBytes?: number;
+    /**
+     * which summaries an older prompt version wrote, with their input otherwise unchanged, are redone in the current
+     * style: every one (a full run and its estimate), the one a panel opened (summarizeNow), or none (the automatic jobs
+     * and the stage refresh). Default: "none".
+     */
+    restyle?: Restyle;
+    /**
+     * true plans an out-of-date folder or the repo whose text an older prompt version wrote, and which this plan doesn't
+     * restyle, as lazy, so it counts as settled and its parent can go over its older text. Under Q2 B only opening it
+     * rewrites it, so without this its parent would wait for it for good (the Task 4 review's I1, ruled as option a).
+     * summarizeNow and the sweep pass it. A full run and the stage refresh don't. Default: false.
+     */
+    olderFoldersWaitToBeOpened?: boolean;
 };
 
 /**
@@ -82,6 +102,10 @@ export function planSummaries(
         return row?.tagline && row.summary !== null ? { tagline: row.tagline, summary: row.summary } : null;
     };
 
+    // whether this plan restyles the target at `path`: a file and a folder never share a path, and only the repo's is ""
+    const restyled = (path: string): boolean =>
+        options.restyle === "all" || (typeof options.restyle === "object" && options.restyle.path === path);
+
     // ---- files: independent of each other ---------------------------------------------
     for (const file of files){
         const key = targetKey("file", file.path);
@@ -99,9 +123,10 @@ export function planSummaries(
         }
 
         // A file's prompt is built from its bytes, so its content hash stands in for the prompt
-        // here: same bytes, same prompt. Planning then never has to read source files.
-        const hash = inputHash(options.models.file, PROMPT_VERSION, `file\n${file.path}\n${file.contentHash}`);
-        planned.set(key, decide("file", file.path, options.models.file, hash, row, true, options));
+        // here: same bytes, same prompt. Planning then never has to read source files. Older
+        // prompt versions hashed the same stand-in.
+        const input = `file\n${file.path}\n${file.contentHash}`;
+        planned.set(key, decide("file", file.path, options.models.file, { input, olderInput: () => input, restyled: restyled(file.path) }, row, true, options));
     }
 
     // ---- folders, deepest first, so every child is planned before its parent ------------
@@ -164,11 +189,21 @@ export function planSummaries(
         }
 
         const model = kind === "repo" ? options.models.repo : options.models.folder;
-        const prompt = kind === "repo"
-            ? renderRepoPrompt({ name: folder.name, fileCount: folder.fileCount, folderCount: folders.length }, items)
-            : renderFolderPrompt(folder, items);
+        const repo = { name: folder.name, fileCount: folder.fileCount, folderCount: folders.length };
+        // The body is hashed without the length line (P2): the line follows from the file count, which the body
+        // holds, and from the prompt version, which the hash holds. The prompt sent ends with it.
+        const body = kind === "repo" ? renderRepoPrompt(repo, items) : renderFolderPrompt(folder, items);
+        // the body as prompt v2 rendered it, each child's summary verbatim, for the older check (P2): v2 is the only
+        // older version that stored summaries
+        const olderInput = (): string => (kind === "repo"
+            ? renderRepoPrompt(repo, items, MAX_FOLDER_ITEMS, false)
+            : renderFolderPrompt(folder, items, MAX_FOLDER_ITEMS, false));
+        const prompt = withLengthLine(body, kind, kind === "repo" ? "large" : folderTier(folder.fileCount));
         const key = targetKey(kind, folder.path);
-        planned.set(key, { ...decide(kind, folder.path, model, inputHash(model, PROMPT_VERSION, prompt), storedByKey.get(key), settled, options), prompt });
+        planned.set(key, {
+            ...decide(kind, folder.path, model, { input: body, olderInput, restyled: restyled(folder.path) }, storedByKey.get(key), settled, options),
+            prompt,
+        });
     }
 
     // ---- queue order --------------------------------------------------------------------
@@ -216,28 +251,53 @@ export function foldersAbove(targets: readonly PlannedTarget[], below: readonly 
     return targets.filter((t) => above.has(targetKey(t.kind, t.path)));
 }
 
-/** The state of one model-written target, given its stored row and whether its children are settled. */
+/** What decide() hashes for one model-written target, and whether the plan restyles it. */
+type TargetInput = {
+    /** The input under the current prompt version: a file's stand-in, or a folder's or the repo's prompt body. */
+    input: string;
+    /** The input as an older prompt version rendered it (P2), rendered only when a row an older prompt wrote missed input's hash. */
+    olderInput: () => string;
+    /** Whether PlanOptions.restyle names this target. */
+    restyled: boolean;
+};
+
+/**
+ * The state of one model-written target, given its input, its stored row and whether its children are settled. A row
+ * an older prompt wrote for the same input is older style only (P1): current, unless the plan restyles it. One it wrote
+ * for another input is out of date, and with olderFoldersWaitToBeOpened a folder or the repo like that is lazy unless
+ * the plan restyles it.
+ */
 function decide(
     kind: SummaryTargetKind,
     path: string,
     model: string,
-    hash: string,
+    { input, olderInput, restyled }: TargetInput,
     row: StoredSummary | undefined,
     childrenSettled: boolean,
     options: PlanOptions
 ): PlannedTarget {
+    const hash = inputHash(model, PROMPT_VERSION, input);
     const base = { kind, path, model, inputHash: hash };
 
     if (row?.batchId) return { ...base, state: "in-flight", status: null };
     if (options.failedThisRun.has(targetKey(kind, path))) return { ...base, state: "failed", status: null };
     // the text on the row was written for exactly this input (an undone edit lands here too)
     if (row?.inputHash === hash) return { ...base, state: "current", status: row.status === "fresh" ? null : "fresh" };
+    // older style only (P1): a model wrote it with an older prompt, and its input hasn't changed since
+    if (row && writtenInOlderStyle(row) && row.inputHash === inputHash(model, row.promptVersion ?? UNRECORDED_PROMPT_VERSION, olderInput())){
+        const status = row.status === "fresh" ? null : "fresh";
+        if (!restyled) return { ...base, state: "current", status };
+        if (kind !== "file" && !options.refreshStaleFolders) return { ...base, state: "lazy", status, restyle: true };
+        return { ...base, state: childrenSettled ? "ready" : "waiting", status, restyle: true };
+    }
 
     const hasText = Boolean(row?.tagline);
     const status: StoredSummaryStatus = hasText ? "stale" : "pending";
     const keep = (state: TargetState): PlannedTarget => ({ ...base, state, status: row?.status === status ? null : status });
 
     if (kind !== "file" && hasText && !options.refreshStaleFolders) return keep("lazy");
+    // left to be opened (Q2 B, PlanOptions.olderFoldersWaitToBeOpened): only the target a plan restyles goes now
+    if (kind !== "file" && hasText && options.olderFoldersWaitToBeOpened && !restyled && row && writtenInOlderStyle(row)) return keep("lazy");
     return keep(childrenSettled ? "ready" : "waiting");
 }
 
