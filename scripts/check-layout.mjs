@@ -118,6 +118,10 @@ const STATES = [
     // every line in a list that scrolls (the owner, 2026-10-29): inside the canvas and off the line at every size
     { name: "line-hover", place: LINES, act: "line-hover", applies: LINE_SHOWN },
     { name: "line-pinned", place: LINES, act: "line-pinned", applies: LINE_SHOWN },
+    // the pinned card, then a jump with no click to a level drawn before (the editor following a file, Claude Code's
+    // show_on_map, Back) and back: the card closes with its level (the jump used to throw "This page couldn't load").
+    // Before line-zoomed, whose zoom stays on the level and can leave no line's end in reach
+    { name: "line-jump", place: LINES, act: "pinned-jump", applies: LINE_SHOWN },
     // the pinned card through a zoom with the wheel somewhere else, which takes it with the spot clicked: still inside
     { name: "line-zoomed", place: LINES, act: "line-zoomed", applies: LINE_SHOWN },
     { name: "busy", place: "src/vs/workbench/contrib" },
@@ -694,6 +698,16 @@ async function actStep(tab, step, base){
             tab.linePointer = { ...tab.linePointer, zoomed: true };
             break;
         }
+        case "pinned-jump": {
+            // the folder above drawn once first, so the jump to it doesn't wait on a load, which draws the canvas anew
+            const up = LINES.slice(0, LINES.lastIndexOf("/"));
+            await goTo(tab, up);
+            await goTo(tab, LINES);
+            await actStep(tab, "line-pinned", base);
+            await goTo(tab, up);
+            await goTo(tab, LINES);
+            break;
+        }
         case "activity":
             await postLive(base, ACTIVITY);
             await tab.waitFor(`[...document.querySelectorAll("[title]")].some((el) => el.title.includes(${JSON.stringify(ACTIVITY_LABEL)}))`, "Claude Code's newest call in the status bar");
@@ -724,6 +738,7 @@ const STEP_MARKERS = {
     "line-hover": `!!document.querySelector('[data-line-card="hover"]')`,
     "line-pinned": `!!document.querySelector('[data-line-card="pinned"]')`,
     "line-zoomed": `!!document.querySelector('[data-line-card="pinned"]')`,
+    "pinned-jump": `!document.querySelector('[data-line-card="pinned"]')`,
     activity: `[...document.querySelectorAll("[title]")].some((el) => el.title.includes(${JSON.stringify(ACTIVITY_LABEL)}))`,
 };
 
