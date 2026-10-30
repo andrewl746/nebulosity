@@ -144,7 +144,8 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
     // to reset state when a prop changes, during render rather than in an effect, so no frame shows the stale hover.
     // A pinned card goes with it.
     const [drawnLevel, setDrawnLevel] = useState(level);
-    if (drawnLevel !== level){
+    const levelChanged = drawnLevel !== level;
+    if (levelChanged){
         setDrawnLevel(level);
         setHoveredBox(null);
         setLineHover(null);
@@ -394,7 +395,10 @@ function MapCanvas({ level, selected, agent, pulses, onSelect, onOpen, onTurnPag
             document.removeEventListener("pointerdown", onPointer, true);
         };
     }, [pinned]);
-    const card = pinned ?? lineHover;
+    // React runs the rest of the render that clears the cards (above) with them still set, so on a jump with a card
+    // open (the editor following a file, Claude Code's show_on_map, Back) it named the old level's lines from the new
+    // one, which hasn't got them, and threw. That render draws no card.
+    const card = levelChanged ? null : pinned ?? lineHover;
 
     return (
         <ReactFlow
