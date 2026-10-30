@@ -57,7 +57,7 @@
 
     <figure class="shot">
       <div class="shot-head">
-        <p>VS Code with <code>editor.main.ts</code> open. The Map beside it shows the three files it imports and the folder that uses it.</p>
+        <p>VS Code with <code>editor.main.ts</code> open. The Map beside it shows what that file imports, heaviest first.</p>
         <div class="themes" role="group" aria-label="Theme of the screenshots" hidden>
           <button type="button" data-theme="dark" aria-pressed="true">Dark 2026</button>
           <button type="button" data-theme="light" aria-pressed="false">Light 2026</button>
@@ -69,8 +69,8 @@
           <img src="images/window-dark-2400.webp" srcset="images/window-dark-1200.webp 1200w, images/window-dark-2400.webp 2400w" sizes="(min-width: 1240px) 1144px, 100vw"
             data-src="images/window-{t}-2400.webp" data-srcset="images/window-{t}-1200.webp 1200w, images/window-{t}-2400.webp 2400w"
             width="2400" height="1500" fetchpriority="high"
-            alt="VS Code in its Dark 2026 theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to the three files it imports, editor.api.ts, editor.all.ts and the standalone folder, its summary, and build as the folder that uses it"
-            data-alt="VS Code in its {name} theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to the three files it imports, editor.api.ts, editor.all.ts and the standalone folder, its summary, and build as the folder that uses it">
+            alt="VS Code in its Dark 2026 theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to what it imports, the standalone folder, editor.api.ts and editor.all.ts. Its summary lists the same three under Uses, standalone first with 8 imports"
+            data-alt="VS Code in its {name} theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to what it imports, the standalone folder, editor.api.ts and editor.all.ts. Its summary lists the same three under Uses, standalone first with 8 imports">
         </picture>
       </a>
     </figure>
@@ -93,12 +93,12 @@
       </div>
       <div class="feature">
         <div>
-          <h3>Click a box to see what uses it</h3>
-          <p>Its summary, then the folders that use it, heaviest first. A line's weight is how many imports it carries.</p>
+          <h3>Click a box to see what it uses</h3>
+          <p>Its summary, then what it imports, heaviest first. A line's weight is how many imports it carries.</p>
         </div>
         <a class="frame" href="images/uses-dark.webp" data-href="images/uses-{t}.webp" title="Show the screenshot full size">
-          <img src="images/uses-dark.webp" data-src="images/uses-{t}.webp" width="1872" height="1320" loading="lazy"
-            alt="src selected at the root of VS Code's repository. extensions uses it through 665 imports, build through 16, and .eslint-plugin-local and .github through 2 each">
+          <img src="images/uses-dark.webp" data-src="images/uses-{t}.webp" width="1872" height="1400" loading="lazy"
+            alt="workbench selected inside src/vs, with lines to the six things it uses. base takes 20,648 of its imports, platform 19,171, editor 3,652, nls.ts 1,579, sessions 89 and amdX.ts 32">
         </a>
       </div>
       <div class="feature">
