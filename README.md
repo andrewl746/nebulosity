@@ -47,7 +47,10 @@ That's it. Here are some things to ask Claude Code.
 
 It'll use Nebulosity's tools when they help, and it can point things out on the Map while it explains. If something seems off, `nebulosity doctor` will tell you what's missing.
 
-![Claude Code in VS Code's terminal, asked which folders inside src/vs import terminal.ts. It answers that five do, and the Map above highlights those five (workbench, platform, sessions, server and code) while base and editor stay plain](docs/screenshots/claude-map.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/claude-map-light.png">
+  <img alt="Claude Code in VS Code's terminal, asked which folders inside src/vs import terminal.ts. It answers that five do, and the Map above highlights those five (workbench, platform, sessions, server and code) while base and editor stay plain" src="docs/screenshots/claude-map.png">
+</picture>
 
 ## Features
 
@@ -65,7 +68,10 @@ And it's **free**. Everything above works without an API key, and Nebulosity its
 
 The extension shows the Map beside your code. It follows whatever file you have open, opens a file when you double-click it on the Map or press Open in VS Code, and can light up the files that import the one you're looking at.
 
-![The Nebulosity extension in VS Code. editor.main.ts is open in the editor and selected on the Map beside it, with lines to the files it imports and its summary open](docs/screenshots/vscode-extension.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/vscode-extension-light.png">
+  <img alt="The Nebulosity extension in VS Code. findModel.ts is open in the editor and selected on the Map beside it, with lilac lines to the files it imports and gold lines from the four that import it. Below, Claude Code was asked which files in that folder import findModel.ts, and the Map rings those four in orange" src="docs/screenshots/vscode-extension.png">
+</picture>
 
 1. Install the `nebulosity` package and index your repo (see above).
 2. Install the **Nebulosity** extension from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode) or [Open VSX](https://open-vsx.org/extension/andrewl746/nebulosity-vscode), or run `code --install-extension andrewl746.nebulosity-vscode` in a terminal.
@@ -85,7 +91,10 @@ To add a key, [create one in the Claude Console](https://platform.claude.com/doc
 
 ## Architecture
 
-![Nebulosity's architecture diagram. nebulosity index reads your repo into the index, a SQLite database on your machine, and the Map keeps it current on every save. The MCP server and the Map both read the index. Claude Code asks the MCP server and gets its answer, often in one call, and each call shows up on the Map. The only thing that leaves your machine is the optional AI summaries](docs/screenshots/architecture.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/architecture-light.png">
+  <img alt="Nebulosity's architecture diagram. nebulosity index reads your repo into the index, a SQLite database on your machine, and the Map keeps it current on every save. The MCP server and the Map both read the index. Claude Code asks the MCP server and gets its answer, often in one call, and each call shows up on the Map. The only thing that leaves your machine is the optional AI summaries" src="docs/screenshots/architecture.png">
+</picture>
 
 `nebulosity index` reads your repo once and writes down every file, import and folder in a SQLite database on your machine. From then on, everything works from that index. When Claude Code asks a question, the MCP server answers from it, and the Map draws from the same data. While the Map is open, a background worker watches for saves and updates the index as you go, so neither one falls behind. And every time Claude Code uses one of Nebulosity's tools, the Map lights up what it's looking at.
 

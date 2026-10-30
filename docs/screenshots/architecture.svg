@@ -1,35 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
 <!--
-  The README's architecture diagram, drawn in the Map's own language (app/globals.css): its dot-grid canvas, its boxes,
-  its square import lines, and its colors, each meaning what it means on the Map. Orange is Claude Code at work, green is
-  indexing, purple is the selected box (the index) and its direct links.
-  architecture.png is this file at 2x: a headless Edge or Chrome screenshot at 800 by 800 with a device scale factor of 2,
-  allowed to read local files so that the IBM Plex fonts in site/fonts load.
+  The README's architecture diagram, in the Map's current look (app/globals.css, and the Map's own colors in VS Code's
+  Light 2026): the editor's background, the Map's boxes and chips, Archivo for words and JetBrains Mono for names, gray
+  for everything that doesn't mean anything, and each color meaning what it means on the Map. The index is the selected
+  box, and the two parts that read it are linked to it, in the selection's lilac. Orange is Claude Code at work, the
+  Map's agent color, and teal is keeping the index current, the Map's indexed dot.
+  One file, both themes. The light colors apply when the root has the class "light".
+  architecture.png and architecture-light.png are this file at 2x, a headless Edge screenshot at 800 by 800 with a
+  device scale factor of 2, allowed to read local files so that the fonts in site/fonts load (the light one with the
+  class added).
 -->
 <title>Nebulosity architecture diagram</title>
 <desc>nebulosity index reads your repo into the index, a SQLite database on your machine, and the Map keeps it current on every save. The MCP server and the Map both read the index. Claude Code asks the MCP server and gets its answer, often in one call, and each tool call shows up on the Map, which you look at in a browser or VS Code. The only thing that leaves your machine is the optional AI summaries, written by the Anthropic API with your key.</desc>
 <style>
-  @font-face { font-family: "IBM Plex Sans"; src: url("../../site/fonts/ibm-plex-sans-latin.woff2") format("woff2"); font-weight: 100 700; }
-  @font-face { font-family: "IBM Plex Mono"; src: url("../../site/fonts/ibm-plex-mono-400-latin.woff2") format("woff2"); font-weight: 400; }
-  text { font-family: "IBM Plex Sans", system-ui, sans-serif; }
-  .name { font-size: 16px; font-weight: 600; fill: #F1EEF8; }
-  .sub { font-size: 13px; fill: #B9A9DE; }
-  .label { font-size: 13px; fill: #B9A9DE; }
-  .code { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-size: 12.5px; fill: #D8CAFF; }
-  .box { fill: #22193F; stroke: #4B3B85; stroke-width: 1; }
-  .selected { fill: #3A2178; stroke: #B58AFF; stroke-width: 1.5; }
-  .chip { fill: #2A1B52; }
-  .icon { fill: none; stroke: #B9A9DE; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  @font-face { font-family: "Archivo"; src: url("../../site/fonts/archivo-latin.woff2") format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url("../../site/fonts/jetbrains-mono-latin.woff2") format("woff2"); font-weight: 100 800; }
+  svg {
+    --canvas: #121314; --region: #191A1B; --node: #222223; --node-sel: #2A1E38; --border: #464747; --linked: #8345BE;
+    --name: #E6E6E6; --sub: #BFBFBF; --label: #8C8C8C; --neutral: #767676;
+    --agent: #F08A4B; --ok: #5FC9D9; --lilac: #E9D5FF; --accent: #A855F7;
+  }
+  svg.light {
+    --canvas: #FFFFFF; --region: #FAFAFD; --node: #F4F4F4; --node-sel: #F4EBFD; --border: #C1C1C1; --linked: #AE66EF;
+    --name: #202020; --sub: #515151; --label: #606060; --neutral: #A6A6A6;
+    --agent: #C2410C; --ok: #0E7490; --lilac: #7E22CE; --accent: #9333EA;
+  }
+  text { font-family: "Archivo", system-ui, sans-serif; }
+  .name { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 15px; font-weight: 500; fill: var(--name); }
+  .sub { font-size: 13.5px; fill: var(--sub); }
+  .label { font-size: 13.5px; fill: var(--label); }
+  .code { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 12.5px; fill: var(--name); }
+  .box { fill: var(--node); stroke: var(--border); stroke-width: 1; }
+  .linked { stroke: var(--linked); }
+  .selected { fill: var(--node-sel); stroke: var(--accent); stroke-width: 1.5; }
+  .icon { fill: none; stroke: var(--label); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   .edge { fill: none; stroke-width: 1.5; }
+  .agent { stroke: var(--agent); } .ok { stroke: var(--ok); } .lilac { stroke: var(--lilac); } .neutral { stroke: var(--neutral); }
+  .head-agent { fill: var(--agent); } .head-ok { fill: var(--ok); } .head-lilac { fill: var(--lilac); } .head-neutral { fill: var(--neutral); }
 </style>
 <defs>
-  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-    <circle cx="12" cy="12" r="1.2" fill="#262039"/>
-  </pattern>
-  <marker id="green" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0.5 L7.5 4 L0 7.5z" fill="#4CC38A"/></marker>
-  <marker id="purple" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0.5 L7.5 4 L0 7.5z" fill="#B58AFF"/></marker>
-  <marker id="orange" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0.5 L7.5 4 L0 7.5z" fill="#F08A4B"/></marker>
-  <marker id="neutral" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0.5 L7.5 4 L0 7.5z" fill="#7262A6"/></marker>
+  <marker id="ok" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head-ok" d="M0 0.5 L7.5 4 L0 7.5z"/></marker>
+  <marker id="lilac" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head-lilac" d="M0 0.5 L7.5 4 L0 7.5z"/></marker>
+  <marker id="agent" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head-agent" d="M0 0.5 L7.5 4 L0 7.5z"/></marker>
+  <marker id="neutral" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head-neutral" d="M0 0.5 L7.5 4 L0 7.5z"/></marker>
   <!-- the logo's (site/icon.svg) -->
   <linearGradient id="logo-tile" x1="0%" y1="0%" x2="100%" y2="100%">
     <stop offset="0%" stop-color="#4c1d95"/><stop offset="55%" stop-color="#1e0a3c"/><stop offset="100%" stop-color="#0a0616"/>
@@ -39,8 +52,7 @@
   </radialGradient>
 </defs>
 
-<rect width="800" height="800" fill="#0E0A1C"/>
-<rect width="800" height="800" fill="url(#grid)"/>
+<rect width="800" height="800" style="fill: var(--canvas)"/>
 
 <!-- the brand, as the site's bar has it -->
 <g transform="translate(24 40) scale(0.03824)">
@@ -55,29 +67,29 @@
   <circle cx="340" cy="340" r="62" fill="#f0fdff"/>
   <circle cx="340" cy="340" r="62" fill="none" stroke="#a855f7" stroke-width="6"/>
 </g>
-<text x="60" y="59" style="font-size:17px;font-weight:500;fill:#F1EEF8">Nebulosity</text>
-<text class="label" x="60" y="82" style="font-size:14px">Architecture Diagram</text>
+<text x="60" y="59" style="font-size: 17px; font-weight: 600; fill: var(--name)">Nebulosity</text>
+<text class="label" x="60" y="82" style="font-size: 14px">Architecture Diagram</text>
 
 <!-- your machine: everything but the summaries' API -->
-<rect x="16" y="128" width="768" height="616" rx="6" fill="#140E28" fill-opacity="0.45" stroke="#4B3B85" stroke-dasharray="6 5"/>
+<rect x="16" y="128" width="768" height="616" rx="6" style="fill: var(--region); stroke: var(--border)" stroke-dasharray="6 5"/>
 <text class="label" x="34" y="156">your machine</text>
 
 <!-- the edges, under the boxes -->
-<path class="edge" d="M400 232 V329" stroke="#4CC38A" marker-end="url(#green)"/>
-<path class="edge" d="M540 352 H648 V109" stroke="#7262A6" stroke-dasharray="5 4" marker-start="url(#neutral)" marker-end="url(#neutral)"/>
-<path class="edge" d="M400 414 V452 H180 V489" stroke="#B58AFF" marker-end="url(#purple)"/>
-<path class="edge" d="M400 452 H620 V489" stroke="#B58AFF" marker-end="url(#purple)"/>
-<path class="edge" d="M300 532 H499" stroke="#F08A4B" marker-end="url(#orange)"/>
-<path class="edge" d="M166 644 V575" stroke="#F08A4B" marker-end="url(#orange)"/>
-<path class="edge" d="M194 574 V643" stroke="#F08A4B" marker-end="url(#orange)"/>
-<path class="edge" d="M620 574 V643" stroke="#7262A6" marker-end="url(#neutral)"/>
+<path class="edge ok" d="M400 232 V329" marker-end="url(#ok)"/>
+<path class="edge neutral" d="M540 352 H648 V109" stroke-dasharray="5 4" marker-start="url(#neutral)" marker-end="url(#neutral)"/>
+<path class="edge lilac" d="M400 414 V452 H180 V489" marker-end="url(#lilac)"/>
+<path class="edge lilac" d="M400 452 H620 V489" marker-end="url(#lilac)"/>
+<path class="edge agent" d="M300 532 H499" marker-end="url(#agent)"/>
+<path class="edge agent" d="M166 644 V575" marker-end="url(#agent)"/>
+<path class="edge agent" d="M194 574 V643" marker-end="url(#agent)"/>
+<path class="edge neutral" d="M620 574 V643" marker-end="url(#neutral)"/>
 
 <!-- the edges' words -->
-<rect class="chip" x="239" y="258" width="147" height="20"/>
+<rect class="box" x="239" y="258" width="147" height="20" rx="3"/>
 <text class="code" x="245" y="272.5">nebulosity index .</text>
 <text class="label" x="386" y="298" text-anchor="end">then on every save, while the Map is open</text>
 
-<rect class="chip" x="459" y="258" width="177" height="20"/>
+<rect class="box" x="459" y="258" width="177" height="20" rx="3"/>
 <text class="code" x="465" y="272.5">nebulosity summarize .</text>
 <text class="label" x="636" y="298" text-anchor="end">optional, with your API key</text>
 
@@ -91,47 +103,47 @@
 <!-- Anthropic API, outside your machine -->
 <rect class="box" x="528" y="24" width="240" height="84" rx="4"/>
 <path class="icon" transform="translate(544 42)" d="M4.5 12.5 H11.5 A3 3 0 0 0 12 6.54 A4 4 0 0 0 4.3 7.1 A2.75 2.75 0 0 0 4.5 12.5z"/>
-<text class="name" x="570" y="54">Anthropic API</text>
-<text class="sub" x="570" y="76">writes the AI summaries,</text>
-<text class="sub" x="570" y="94">only if you add a key</text>
+<text class="name" x="570" y="55">Anthropic API</text>
+<text class="sub" x="570" y="77">writes the AI summaries,</text>
+<text class="sub" x="570" y="95">only if you add a key</text>
 
 <!-- your repo -->
 <rect class="box" x="290" y="160" width="220" height="72" rx="4"/>
-<path class="icon" transform="translate(306 176)" style="stroke:#A98BEA" d="M1.5 4.5 A1 1 0 0 1 2.5 3.5 H6 L7.5 5 H13.5 A1 1 0 0 1 14.5 6 V12.5 A1 1 0 0 1 13.5 13.5 H2.5 A1 1 0 0 1 1.5 12.5z"/>
-<text class="name" x="332" y="189">your repo</text>
-<text class="sub" x="332" y="211">the code you're working on</text>
+<path class="icon" transform="translate(306 176)" d="M1.5 4.5 A1 1 0 0 1 2.5 3.5 H6 L7.5 5 H13.5 A1 1 0 0 1 14.5 6 V12.5 A1 1 0 0 1 13.5 13.5 H2.5 A1 1 0 0 1 1.5 12.5z"/>
+<text class="name" x="332" y="190">your repo</text>
+<text class="sub" x="332" y="212">the code you're working on</text>
 
 <!-- the index: the selected box -->
 <rect class="selected" x="260" y="330" width="280" height="84" rx="4"/>
-<g class="icon" transform="translate(276 348)" style="stroke:#D8CAFF">
+<g class="icon" transform="translate(276 348)" style="stroke: var(--lilac)">
   <ellipse cx="8" cy="3.5" rx="5.5" ry="2"/>
   <path d="M2.5 3.5 V12.5 A5.5 2 0 0 0 13.5 12.5 V3.5"/>
   <path d="M2.5 8 A5.5 2 0 0 0 13.5 8"/>
 </g>
-<text class="name" x="302" y="360">the index</text>
-<text class="sub" x="302" y="382" style="fill:#D3C7EE">every file, import and folder,</text>
-<text class="sub" x="302" y="400" style="fill:#D3C7EE">in SQLite on your machine</text>
+<text class="name" x="302" y="361">the index</text>
+<text class="sub" x="302" y="383">every file, import and folder,</text>
+<text class="sub" x="302" y="401">in SQLite on your machine</text>
 
-<!-- MCP server -->
-<rect class="box" x="60" y="490" width="240" height="84" rx="4"/>
+<!-- MCP server, linked to the index -->
+<rect class="box linked" x="60" y="490" width="240" height="84" rx="4"/>
 <g class="icon" transform="translate(76 508)">
   <rect x="1.5" y="2" width="13" height="5" rx="1"/>
   <rect x="1.5" y="9" width="13" height="5" rx="1"/>
   <path d="M4.5 4.5 H4.6 M4.5 11.5 H4.6"/>
 </g>
-<text class="name" x="102" y="520">MCP server</text>
-<text class="sub" x="102" y="542">seven tools for Claude Code,</text>
-<text class="sub" x="102" y="560">answering from the index</text>
+<text class="name" x="102" y="521">MCP server</text>
+<text class="sub" x="102" y="543">seven tools for Claude Code,</text>
+<text class="sub" x="102" y="561">answering from the index</text>
 
-<!-- the Map -->
-<rect class="box" x="500" y="490" width="240" height="84" rx="4"/>
+<!-- the Map, linked to the index -->
+<rect class="box linked" x="500" y="490" width="240" height="84" rx="4"/>
 <g class="icon" transform="translate(516 508)">
   <path d="M1.5 3.5 L5.5 2 L10.5 4 L14.5 2.5 V12.5 L10.5 14 L5.5 12 L1.5 13.5z"/>
   <path d="M5.5 2 V12 M10.5 4 V14"/>
 </g>
-<text class="name" x="542" y="520">the Map</text>
-<text class="sub" x="542" y="542">your repo, one folder at a time,</text>
-<text class="sub" x="542" y="560">updated as you save</text>
+<text class="name" x="542" y="521">the Map</text>
+<text class="sub" x="542" y="543">your repo, one folder at a time,</text>
+<text class="sub" x="542" y="561">updated as you save</text>
 
 <!-- Claude Code -->
 <rect class="box" x="60" y="644" width="240" height="72" rx="4"/>
@@ -139,8 +151,8 @@
   <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
   <path d="M4.5 6.25 L6.5 8 L4.5 9.75 M8 10.5 H11"/>
 </g>
-<text class="name" x="102" y="673">Claude Code</text>
-<text class="sub" x="102" y="695">asks how your code connects</text>
+<text class="name" x="102" y="674">Claude Code</text>
+<text class="sub" x="102" y="696">asks how your code connects</text>
 
 <!-- you -->
 <rect class="box" x="500" y="644" width="240" height="72" rx="4"/>
@@ -148,16 +160,16 @@
   <circle cx="8" cy="5.5" r="2.75"/>
   <path d="M2.5 14 A5.5 4.5 0 0 1 13.5 14"/>
 </g>
-<text class="name" x="542" y="673">you</text>
-<text class="sub" x="542" y="695">in a browser or VS Code</text>
+<text class="name" x="542" y="674">you</text>
+<text class="sub" x="542" y="696">in a browser or VS Code</text>
 
-<!-- the legend, like the Map's activity strip -->
-<circle cx="38" cy="776" r="4" fill="#F08A4B"/>
+<!-- the legend, like the Map's status bar -->
+<circle cx="38" cy="776" r="4" style="fill: var(--agent)"/>
 <text class="label" x="50" y="780.5">Claude Code at work</text>
-<circle cx="202" cy="776" r="4" fill="#4CC38A"/>
+<circle cx="202" cy="776" r="4" style="fill: var(--ok)"/>
 <text class="label" x="214" y="780.5">keeping the index current</text>
-<circle cx="394" cy="776" r="4" fill="#B58AFF"/>
+<circle cx="394" cy="776" r="4" style="fill: var(--lilac)"/>
 <text class="label" x="406" y="780.5">reading the index</text>
-<path d="M534 776 H556" stroke="#7262A6" stroke-width="1.5" stroke-dasharray="5 4"/>
+<path class="neutral" d="M534 776 H556" stroke-width="1.5" stroke-dasharray="5 4"/>
 <text class="label" x="564" y="780.5">optional, leaves your machine</text>
 </svg>
