@@ -105,8 +105,15 @@ h1 { font-size: clamp(2.25rem, 1.4rem + 2.6vw, 3.5rem); line-height: 1.04; lette
 .feature p { margin-top: 10px; }
 .feature .frame { border-radius: 8px; }
 @media (max-width: 860px) { .feature { grid-template-columns: minmax(0, 1fr); gap: 18px; } }
-/* on a phone the window above is already this crop, so it isn't shown twice */
+/* on a phone the window above is already the Map's panel at reading size, and the whole window would be too small */
 @media (max-width: 640px) { .feature.follows .frame { display: none; } }
+/* the follow clip in its still's place, and under the row's text the button that holds it, drawn like Copy */
+.clip video { display: block; width: 100%; height: auto; }
+.feature .pause {
+  margin-top: 16px; height: 30px; padding: 0 10px; border: 1px solid var(--divider); border-radius: 4px; background: var(--bg);
+  color: var(--muted); font-size: 13px; font-weight: 500; transition: color 120ms ease-out, border-color 120ms ease-out;
+}
+.feature .pause[hidden] { display: none; }
 
 /* the evaluation, one row per kind of question and a bar per codebase, longer is faster */
 .chart { display: grid; gap: 18px; margin-top: 40px; }
@@ -200,8 +207,8 @@ footer p { margin-top: 16px; max-width: 60em; }
   .nav a:hover, footer a:hover, .actions .demo:hover, .fine a:hover, .claim a:hover { color: var(--text); }
   .btn:hover { border-color: var(--muted); }
   .btn.primary:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
-  .themes button[aria-pressed="false"]:hover, .copy:hover { color: var(--text); }
-  .copy:hover, .lightbox .close:hover, a.frame:hover { border-color: var(--muted); }
+  .themes button[aria-pressed="false"]:hover, .copy:hover, .feature .pause:hover { color: var(--text); }
+  .copy:hover, .lightbox .close:hover, a.frame:hover, .feature .pause:hover { border-color: var(--muted); }
 }
 
 /* movement only for people who haven't asked for less, though a fade stays */

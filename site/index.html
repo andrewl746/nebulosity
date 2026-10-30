@@ -83,12 +83,13 @@
       <div class="feature follows">
         <div>
           <h3>It follows the file you have open</h3>
-          <p>Switch files and the Map moves to that file's folder, with lines to what it imports and everything else faded.</p>
+          <p>Switch files and the Map moves to that file's folder, with lines to what it imports and everything else faded. When Claude Code uses Nebulosity's tools, the boxes it touches ring in orange.</p>
+          <button class="pause" type="button" hidden>Pause the clip</button>
         </div>
-        <a class="frame" href="images/follows-dark.webp" data-href="images/follows-{t}.webp" title="Show the screenshot full size">
-          <img src="images/follows-dark.webp" data-src="images/follows-{t}.webp" width="1878" height="1112" loading="lazy"
-            alt="The Map's panel with editor.main.ts selected, lines to editor.api.ts, editor.all.ts and the standalone folder, and its summary, the standalone editor's entry point">
-        </a>
+        <div class="frame clip" data-clip="images/follows-clip-{t}">
+          <img src="images/follows-clip-dark.webp" data-src="images/follows-clip-{t}.webp" width="1700" height="1062" loading="lazy"
+            alt="VS Code with fileService.ts open and the Map beside it on src/vs/platform/files/common, where Claude Code's tool calls ring fileService.ts, watcher.ts and files.ts in orange. In the clip, Quick Open switches the editor from editor.main.ts to fileService.ts, the Map follows it to its folder, and Claude Code's search, describe and show_on_map calls light the three files">
+        </div>
       </div>
       <div class="feature">
         <div>
@@ -215,6 +216,67 @@
 </dialog>
 
 <script>
+  // The follow clip, muted and looping, takes its still's place (the still is its first frame) once it's near the
+  // screen, for people who haven't asked for less motion. It plays only while it's in view, and the button under the
+  // row's text holds it until pressed again. Without scripts, or with less motion asked for, the still stays and the
+  // clip never downloads. On a phone the row's frame is hidden, so it never comes near.
+  const calm = matchMedia("(prefers-reduced-motion: reduce)");
+  const clip = { frame: document.querySelector(".clip"), theme: "dark", video: null, near: false, playing: !calm.matches };
+  const clipButton = document.querySelector(".feature.follows .pause");
+  function clipSources(){
+    const base = clip.frame.dataset.clip.replaceAll("{t}", clip.theme);
+    clip.video.poster = base + ".webp";
+    clip.video.querySelector("[type='video/webm']").src = base + ".webm";
+    clip.video.querySelector("[type='video/mp4']").src = base + ".mp4";
+  }
+  function clipRun(){
+    if (clip.video === null) return;
+    if (clip.near && clip.playing) clip.video.play().catch(() => {});
+    else clip.video.pause();
+    clipButton.textContent = clip.playing ? "Pause the clip" : "Play the clip";
+  }
+  function clipShows(theme){
+    clip.theme = theme;
+    if (clip.video === null) return;
+    clipSources();
+    clip.video.load();
+    clipRun();
+  }
+  function clipStart(){
+    const still = clip.frame.querySelector("img");
+    const video = document.createElement("video");
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.width = 1700;
+    video.height = 1062;
+    video.setAttribute("aria-label", still.alt);
+    for (const type of ["video/webm", "video/mp4"]){
+      const source = document.createElement("source");
+      source.type = type;
+      video.append(source);
+    }
+    clip.video = video;
+    clipSources();
+    still.replaceWith(video);
+    clipButton.hidden = false;
+  }
+  new IntersectionObserver(([entry]) => {
+    clip.near = entry.isIntersecting;
+    if (clip.near && clip.video === null && clip.playing) clipStart();
+    clipRun();
+  }, { rootMargin: "200px 0px" }).observe(clip.frame);
+  clipButton.addEventListener("click", () => {
+    clip.playing = !clip.playing;
+    clipRun();
+  });
+  // asking for less motion partway through a visit stops the clip where it is
+  calm.addEventListener("change", () => {
+    if (calm.matches) clip.playing = false;
+    clipRun();
+  });
+
   // One switch for every screenshot on the page, Dark 2026 or Light 2026, starting from the visitor's own preference.
   // Each themed image names its files with {t} in data-src, data-srcset and data-href (and the theme in data-alt), so
   // without scripts the page shows the dark ones and no switch.
@@ -227,6 +289,7 @@
     for (const el of document.querySelectorAll("[data-srcset]")) el.srcset = fill(el.dataset.srcset);
     for (const el of document.querySelectorAll("[data-href]")) el.href = fill(el.dataset.href);
     for (const el of document.querySelectorAll("[data-alt]")) el.alt = el.dataset.alt.replace("{name}", NAMES[theme]);
+    clipShows(theme);
   }
   switcher.hidden = false;
   for (const button of switcher.querySelectorAll("button")) button.addEventListener("click", () => showTheme(button.dataset.theme));
