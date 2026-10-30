@@ -125,8 +125,8 @@ To build the extension from a checkout instead, run this.
 cd vscode-extension
 npm ci
 npm run build
-npx vsce package    # writes nebulosity-vscode-1.0.1.vsix
-code --install-extension nebulosity-vscode-1.0.1.vsix
+npx vsce package    # writes nebulosity-vscode-1.1.0.vsix
+code --install-extension nebulosity-vscode-1.1.0.vsix
 ```
 
 Its commands, settings and limits are in [vscode-extension/README.md](../vscode-extension/README.md).
