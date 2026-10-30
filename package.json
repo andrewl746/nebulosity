@@ -61,6 +61,7 @@
     "!.next/**/*.map",
     "!.next/**/*.nft.json",
     "!**/*.test.ts",
+    "!**/*.test.tsx",
     "LICENSE",
     "README.md"
   ],
