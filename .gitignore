@@ -48,6 +48,12 @@ CLAUDE.md
 # nebulosity generated data (derived, always rebuildable)
 .nebulosity/
 
+# Gradle's own output when the Java test fixture gets built (by hand or by an editor's Java tooling). The fixture's
+# tracked .gradle/8.10 is part of the test and stays.
+/test/fixtures/java-repo/tools/.gradle/*
+!/test/fixtures/java-repo/tools/.gradle/8.10/
+/test/fixtures/java-repo/tools/build/
+
 # the eval runner's half-written transcripts (a .gz is written as .tmp and renamed once its index line is in)
 eval/runs/*.tmp
 eval2/runs/*.tmp
