@@ -69,6 +69,9 @@ h1 { font-size: clamp(2.25rem, 1.4rem + 2.6vw, 3.5rem); line-height: 1.04; lette
 .claim a { color: var(--body); }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 28px; }
 .actions .demo { padding: 0 4px; color: var(--body); font-size: 15.5px; }
+/* the Live Demo and the demo video side by side, the video under it when the row runs out of room (no separator, which
+   dangled at a line's end when they wrapped) */
+.actions .alts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
 .facts { display: flex; flex-wrap: wrap; gap: 12px 40px; margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--divider); }
 .facts div { display: grid; gap: 2px; }
 .facts dt { color: var(--muted); font-size: 13px; }
