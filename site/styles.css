@@ -152,6 +152,10 @@ h1 { font-size: clamp(2.25rem, 1.4rem + 2.6vw, 3.5rem); line-height: 1.04; lette
 }
 .steps .title { color: var(--text); font-weight: 500; }
 .steps .title span { color: var(--muted); font-weight: 400; }
+/* the browser instead of step 3 and 4, unnumbered, its text in line with the steps' text past their numbers */
+.alt { display: grid; gap: 4px; margin-top: 22px; padding-left: 42px; }
+.alt .title { color: var(--text); font-weight: 500; }
+.alt .title span { color: var(--muted); font-weight: 400; }
 .asks { display: grid; gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }
 .asks li { padding: 12px 14px; border: 1px solid var(--divider); border-radius: 6px; color: var(--text); font-size: 15.5px; }
 .needs { margin-top: 20px; color: var(--muted); font-size: 14px; }
