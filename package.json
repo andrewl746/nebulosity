@@ -49,7 +49,6 @@
     "scripts/env.ts",
     "scripts/mcp-smoke.mjs",
     "app/",
-    "public/",
     "next.config.ts",
     "proxy.ts",
     "instrumentation.ts",

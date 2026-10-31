@@ -19,7 +19,7 @@
 // BUILD_ID (a build that didn't finish, or a dev server's) is refused, not passed as "no Map": it would ship as it is.
 //
 // Before any of that, in a git checkout, it refuses a file git doesn't track in a folder the package ships whole (bin,
-// lib, mcp, app, public, scripts/commands): npm packs what is on disk, so a work-in-progress file there would ship.
+// lib, mcp, app, scripts/commands): npm packs what is on disk, so a work-in-progress file there would ship.
 //
 // The spellings are lib/demo/privacy.ts's, the rules the demo export and the eval's transcripts are held to (ADR-049,
 // ADR-051): forward and back slashes, JSON's escapes, URL-encoded either way (Ann%20Lee), Git Bash's /c/…, Claude Code's
@@ -41,7 +41,7 @@ const SHIPPED_OUT = new Set(["cache", "dev"]);   // package.json's files leaves 
 const HASHED = /^(.+)-[0-9a-f]{16}$/;
 const checkOnly = process.argv.includes("--check");
 /** The folders package.json's `files` ships whole; its other entries are single files, which a stray file can't join. */
-const SHIPPED_FOLDERS = ["bin", "lib", "mcp", "app", "public", "scripts/commands"];
+const SHIPPED_FOLDERS = ["bin", "lib", "mcp", "app", "scripts/commands"];
 
 /**
  * The files git doesn't track in the folders the package ships whole (ignored ones left out, as npm leaves them out

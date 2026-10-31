@@ -179,7 +179,7 @@ describe("untracked files in the shipped folders (final review, C-M5)", () => {
         });
         const result = run(root, "--check");
         expect(result.status).toBe(1);
-        expect(result.stderr).toContain("prepare-package: lib/agent/wip.ts isn't tracked by git, so npm would ship it: commit it, or move it out of bin, lib, mcp, app, public, scripts/commands");
+        expect(result.stderr).toContain("prepare-package: lib/agent/wip.ts isn't tracked by git, so npm would ship it: commit it, or move it out of bin, lib, mcp, app, scripts/commands");
         expect(result.stderr).toContain("prepare-package: scripts/commands/new-command.ts isn't tracked by git");
         for (const name of ["scripts/notes.ts", "draft.md", "lib/ignored.ts", "lib/a.ts"]) expect(result.stderr).not.toContain(name);
 
