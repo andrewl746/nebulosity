@@ -2,7 +2,7 @@
 
 **A live map of how a big codebase fits together, for Claude Code and for you.**
 
-[nebulosity.ca](https://nebulosity.ca) · [Live Demo](https://demo.nebulosity.ca) (the Map on VS Code's own source, with nothing to install)
+[nebulosity.ca](https://nebulosity.ca) · [Demo video](https://youtu.be/pWwsganPLWE) · [Live Demo](https://demo.nebulosity.ca) (the Map on VS Code's own source, with nothing to install)
 
 In a large codebase, some questions take many steps to answer. To find out what a change to one file could affect, you need every file that imports it, then every file that imports those, and so on. Claude Code normally works this out with one search after another. The VS Code repository has 14,849 files and over 140,000 imports, so a question like this can take a lot of searches.
 
