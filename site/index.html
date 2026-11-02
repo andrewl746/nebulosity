@@ -22,12 +22,12 @@
 </head>
 <body id="top">
 <div class="nav-shell"><header class="wrap nav">
-  <a class="brand" href="#top" aria-label="Nebulosity, back to the top"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
+  <a class="brand" href="#top" aria-label="Nebulosity, back to the top"><img src="icon.svg" alt="" width="24" height="24"><span>Nebulosity</span></a>
   <nav aria-label="Main">
     <ul>
       <li><a href="https://demo.nebulosity.ca">Live Demo</a></li>
-      <li class="wide"><a href="#evaluation">Evaluation</a></li>
-      <li class="wide"><a href="#install">Install</a></li>
+      <li><a href="#evaluation">Evaluation</a></li>
+      <li><a href="#install">Install</a></li>
       <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
     </ul>
   </nav>
@@ -56,14 +56,11 @@
         </div>
       </div>
       <a class="frame" href="images/window-dark-2400.webp" data-href="images/window-{t}-2400.webp" title="Show the screenshot full size">
-        <picture>
-          <source media="(max-width: 640px)" srcset="images/follows-dark.webp" data-srcset="images/follows-{t}.webp">
-          <img src="images/window-dark-2400.webp" srcset="images/window-dark-1200.webp 1200w, images/window-dark-2400.webp 2400w" sizes="(min-width: 1240px) 1144px, 100vw"
-            data-src="images/window-{t}-2400.webp" data-srcset="images/window-{t}-1200.webp 1200w, images/window-{t}-2400.webp 2400w"
-            width="2400" height="1500" fetchpriority="high"
-            alt="VS Code in its Dark 2026 theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to what it imports, the standalone folder, editor.api.ts and editor.all.ts. Its summary lists the same three under Uses, standalone first with 8 imports"
-            data-alt="VS Code in its {name} theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to what it imports, the standalone folder, editor.api.ts and editor.all.ts. Its summary lists the same three under Uses, standalone first with 8 imports">
-        </picture>
+        <img src="images/window-dark-2400.webp" srcset="images/window-dark-1200.webp 1200w, images/window-dark-2400.webp 2400w" sizes="(min-width: 1240px) 1144px, 100vw"
+          data-src="images/window-{t}-2400.webp" data-srcset="images/window-{t}-1200.webp 1200w, images/window-{t}-2400.webp 2400w"
+          width="2400" height="1500" fetchpriority="high"
+          alt="VS Code in its Dark 2026 theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to what it imports, the standalone folder, editor.api.ts and editor.all.ts. Its summary lists the same three under Uses, standalone first with 8 imports"
+          data-alt="VS Code in its {name} theme. editor.main.ts is open on the left, and the Nebulosity Map on the right selects it, with lines to what it imports, the standalone folder, editor.api.ts and editor.all.ts. Its summary lists the same three under Uses, standalone first with 8 imports">
       </a>
     </figure>
   </section>
@@ -200,7 +197,7 @@
   <div class="wrap">
     <div class="row">
       <div class="about">
-        <a class="brand" href="./"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
+        <a class="brand" href="#top" aria-label="Nebulosity, back to the top"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
         <p>MIT License. Built by Andrew Li. The screenshots and the demo show VS Code's own repository at commit <code>cc3fec88</code> (MIT, © Microsoft Corporation).</p>
       </div>
       <ul>
@@ -223,7 +220,7 @@
   // The follow clip, muted and looping, takes its still's place (the still is its first frame) once it's near the
   // screen, for people who haven't asked for less motion. It plays only while it's in view, and the button under the
   // row's text holds it until pressed again. Without scripts, or with less motion asked for, the still stays and the
-  // clip never downloads. On a phone the row's frame is hidden, so it never comes near.
+  // clip never downloads.
   const calm = matchMedia("(prefers-reduced-motion: reduce)");
   const clip = { frame: document.querySelector(".clip"), theme: "dark", video: null, near: false, playing: !calm.matches };
   const clipButton = document.querySelector(".feature.follows .pause");
