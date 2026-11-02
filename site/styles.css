@@ -53,9 +53,15 @@ code { font-size: 0.88em; color: var(--text); }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-size: 17px; font-weight: 600; text-decoration: none; }
 .brand img { width: 24px; height: 24px; }
 .nav ul { display: flex; align-items: center; gap: 30px; margin: 0; padding: 0; list-style: none; font-size: 14.5px; }
-.nav a { color: var(--body); text-decoration: none; }
+.nav a { color: var(--body); text-decoration: none; white-space: nowrap; }
 .nav li:last-child a { padding: 6px 12px; border: 1px solid var(--hair-strong); border-radius: 2px; color: var(--text); }
-@media (max-width: 640px) { .nav .wide { display: none; } .nav ul { gap: 20px; } }
+/* a phone keeps all four links on the one bar: the name gives way to the logo first, then the gaps and the type close
+   up, and only on the very narrowest screens do the links take a second line */
+@media (max-width: 640px) { .nav ul { gap: 20px; } }
+@media (max-width: 520px) { .nav .brand span { display: none; } }
+@media (max-width: 400px) { .nav ul { gap: 12px; font-size: 14px; } }
+@media (max-width: 359px) { .nav { gap: 12px; } .nav ul { gap: 10px; font-size: 13.5px; } .nav li:last-child a { padding: 0; border: 0; } }
+@media (max-width: 309px) { .nav { height: auto; min-height: 60px; padding-block: 8px; } .nav ul { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; } }
 
 /* buttons */
 .btn {
@@ -116,8 +122,6 @@ h1 { font-size: clamp(2.75rem, 1.6rem + 4vw, 5rem); font-weight: 700; line-heigh
 .feature h3 { font-size: 1.3125rem; line-height: 1.25; letter-spacing: -0.01em; }
 .feature p { margin-top: 10px; font-size: 17.5px; }
 @media (max-width: 860px) { .feature { grid-template-columns: minmax(0, 1fr); gap: 18px; } }
-/* on a phone the window above is already the Map's panel at reading size, and the whole window would be too small */
-@media (max-width: 640px) { .feature.follows .frame { display: none; } }
 /* the follow clip in its still's place, and under the row's text the button that holds it, drawn like Copy */
 .clip video { display: block; width: 100%; height: auto; }
 .feature .pause {
@@ -174,7 +178,13 @@ figcaption { margin-top: 36px; }
 /* the chart's marker jumps to its note, which shows it was the one asked for */
 #later { margin-top: 10px; scroll-margin-top: 80px; transition: color 120ms ease-out; }
 #later:target { color: var(--text); }
-@media (max-width: 700px) { .speeds li { grid-template-columns: minmax(0, 1fr); } .speeds .q { font-size: 17px; } .scale { display: none; } }
+/* on a phone each question sits over its bars, and the scale drops its empty first column to stay under the tracks */
+@media (max-width: 700px) {
+  .speeds li { grid-template-columns: minmax(0, 1fr); }
+  .speeds .q { font-size: 17px; }
+  .scale { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .scale > span:first-child { display: none; }
+}
 
 /* install, the extension's steps and then Claude Code's */
 .install { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 72px; margin-top: 52px; }
@@ -202,10 +212,12 @@ figcaption { margin-top: 36px; }
   display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; min-height: 44px; padding: 0 4px 0 14px;
   border-radius: 2px; background: var(--well); color: var(--text); font: 400 14.5px/1.4 var(--mono);
 }
-.cmd pre { min-width: 0; margin: 0; overflow-x: auto; white-space: pre; scrollbar-width: none; }
+/* a command too long for a phone wraps, its later lines indented under the first, rather than running out of sight */
+.cmd pre { min-width: 0; margin: 0; padding: 11px 0 11px 2ch; text-indent: -2ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* where the command and where to run it don't fit side by side, the second goes under the first */
+.cmd.static { flex-wrap: wrap; row-gap: 2px; padding-block: 9px; }
 .cmd.static > span:first-child { white-space: nowrap; }
 .cmd .where { color: var(--muted); font: 400 13px "Archivo", system-ui, sans-serif; padding-right: 8px; }
-@media (max-width: 480px) { .cmd .where { display: none; } }
 /* Copy is quiet text inside the command's box, not a box of its own */
 .copy {
   flex: none; height: 32px; padding: 0 10px; border: 0; border-radius: 2px; background: transparent; color: var(--muted);
@@ -256,8 +268,10 @@ footer p { margin-top: 14px; }
   .copy:hover { background: rgb(255 255 255 / 0.06); }
 }
 
-/* movement only for people who haven't asked for less, though a fade stays */
+/* movement only for people who haven't asked for less, though a fade stays. The logos and the links within the page
+   glide there rather than jump */
 @media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
   .btn:active { scale: 0.97; }
   .lightbox img { transition: opacity 160ms ease-out, scale 160ms ease-out; }
 }
