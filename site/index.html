@@ -75,7 +75,7 @@
       <div class="feature follows">
         <div>
           <h3>It follows the file you have open</h3>
-          <p>Switch files and the Map moves to that file's folder, with lines to what it imports and everything else faded. When Claude Code uses Nebulosity's tools, the boxes it touches ring in orange.</p>
+          <p>When you switch files, the Map moves to the new file's folder. It draws lines to everything that file imports and fades the rest. When Claude Code uses Nebulosity's tools, every box it looks at is ringed in orange.</p>
           <button class="pause" type="button" hidden>Pause the clip</button>
         </div>
         <div class="frame clip" data-clip="images/follows-clip-{t}">
@@ -86,7 +86,7 @@
       <div class="feature">
         <div>
           <h3>Click a box to see what it uses</h3>
-          <p>Its summary, then what it imports, heaviest first. A line's weight is how many imports it carries.</p>
+          <p>You see its summary, then everything it imports, the biggest first. The thicker a line, the more imports it carries.</p>
         </div>
         <a class="frame" href="images/uses-dark.webp" data-href="images/uses-{t}.webp" title="Show the screenshot full size">
           <img src="images/uses-dark.webp" data-src="images/uses-{t}.webp" width="1872" height="1400" loading="lazy"
@@ -108,7 +108,7 @@
 
   <section class="wrap part" id="evaluation">
     <h2>Up to 4.4× faster on questions that span many files</h2>
-    <p class="sub">Claude Code with and without Nebulosity, on VS Code, AFFiNE and Theia. Every answer was scored against a reference that didn't come from Nebulosity.</p>
+    <p class="sub">Claude Code with and without Nebulosity, on VS Code, AFFiNE and Theia. Every answer was checked against a correct answer worked out separately, by tools that share no code with Nebulosity.</p>
     <div class="tally">
       <p><b>4.4×</b><span>faster</span><em>tracing how an entry point ends up loading a file</em></p>
       <p><b>2.6×</b><span>cheaper</span><em>on that same question, by Claude Code's own estimate</em></p>
@@ -159,8 +159,8 @@
       </ul>
       <div class="scale" aria-hidden="true"><span></span><span class="ticks"><span><i>0</i><i>1×</i><i>2×</i><i>3×</i><i>4×</i><i>5×</i></span><span></span></span></div>
       <figcaption>
-        <p class="fine">These five question types were 84 of the 378 runs, 42 with Nebulosity and 42 without. On the other 294 runs, simpler or different questions were asked and both setups did around the same. Each speedup compares medians, over 6 runs per setup on VS Code and AFFiNE together and 3 on Theia. The question types were grouped after the runs. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
-        <p class="fine" id="later">* Theia's 3.7×, for what a change could affect, was measured later (26 October 2026) with the same setup. 3 of 3 answers were fully right with Nebulosity, 0 of 3 alone.</p>
+        <p class="fine">These five question types were 84 of the 378 runs, 42 with Nebulosity and 42 without. On the other 294 runs, simpler or different questions were asked and both setups performed around the same. Each speedup compares the median of 6 runs per setup on VS Code and AFFiNE together, and of 3 on Theia. The question types were grouped after the runs. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
+        <p class="fine" id="later">* Theia's 3.7× metric was measured later (26 October 2026) with the same setup. 3 of 3 answers were fully right with Nebulosity, 0 of 3 alone.</p>
       </figcaption>
     </figure>
   </section>
@@ -180,7 +180,7 @@
           <p class="title">Or open it in a browser <span>after steps 1 and 2, at localhost:3000</span></p>
           <div class="cmd"><pre>nebulosity map</pre></div>
         </div>
-        <p class="needs">Node 24 or later and git. Without an API key, none of your code leaves your machine.</p>
+        <p class="needs">Needs Node 24 or later and git. Everything runs on your machine. Your code is only sent out if you add an API key for AI summaries.</p>
       </div>
       <div>
         <h3>Then connect Claude Code</h3>
@@ -190,7 +190,7 @@
           <li>How does <code>main.ts</code> end up loading <code>terminal.ts</code>?</li>
           <li>Are there import cycles in <code>src/vs/platform</code>?</li>
         </ul>
-        <p class="needs">Claude Code 2.1.300 or later, run in the same folder. It uses Nebulosity's tools when they help, and can point at its answer on the Map. If something seems off, <code>nebulosity doctor</code> says what's missing, and <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">the guide</a> has every command.</p>
+        <p class="needs">Needs Claude Code 2.1.300 or later, started in the same folder. Claude Code uses Nebulosity's tools when they help, and can show its answer on the Map. If something isn't working, run <code>nebulosity doctor</code> to see what's missing. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">The guide</a> lists every command.</p>
       </div>
     </div>
   </section>
@@ -199,7 +199,10 @@
 <footer>
   <div class="wrap">
     <div class="row">
-      <a class="brand" href="./"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
+      <div class="about">
+        <a class="brand" href="./"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
+        <p>MIT License. Built by Andrew Li. The screenshots and the demo show VS Code's own repository at commit <code>cc3fec88</code> (MIT, © Microsoft Corporation).</p>
+      </div>
       <ul>
         <li><a href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Marketplace</a></li>
         <li><a href="https://open-vsx.org/extension/andrewl746/nebulosity-vscode">Open VSX</a></li>
@@ -208,7 +211,6 @@
         <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
       </ul>
     </div>
-    <p>MIT License. Built by Andrew Li. The screenshots and the demo show VS Code's own repository at commit <code>cc3fec88</code> (MIT, © Microsoft Corporation).</p>
   </div>
 </footer>
 
