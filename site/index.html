@@ -21,7 +21,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header class="wrap nav">
+<div class="nav-shell"><header class="wrap nav">
   <a class="brand" href="./"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
   <nav aria-label="Main">
     <ul>
@@ -35,24 +35,16 @@
 
 <main>
   <section class="wrap hero">
-    <div class="listing">
-      <img class="tile" src="icon.svg" alt="" width="96" height="96">
-      <div>
-        <h1>Nebulosity for VS Code</h1>
-        <p class="lede">A live map of your codebase beside your code, for you and Claude Code. It follows the file you have open and shows what it imports and what imports it.</p>
-        <p class="claim">With it, Claude Code answered multi-file questions up to 4.4× faster in tests, and up to 3.7×<a href="#later" aria-label="measured later, see the note under the chart">*</a> faster on Theia, a codebase Nebulosity was never adjusted for. Every answer was right.</p>
-        <div class="actions">
-          <a class="btn primary" href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Install from the Marketplace</a>
-          <a class="btn" href="https://open-vsx.org/extension/andrewl746/nebulosity-vscode">Open VSX</a>
-          <span class="alts"><a class="demo" href="https://demo.nebulosity.ca">or try the Live Demo in a browser</a><a class="demo" href="https://youtu.be/pWwsganPLWE">or watch the Demo Video</a></span>
-        </div>
-        <dl class="facts">
-          <div><dt>Publisher</dt><dd>andrewl746</dd></div>
-          <div><dt>Needs</dt><dd><code>npm install -g nebulosity</code></dd></div>
-          <div><dt>Reads</dt><dd>TypeScript, JavaScript, Python, Go, Java, C# and Rust</dd></div>
-          <div><dt>License</dt><dd>MIT, free and open source</dd></div>
-        </dl>
+    <div class="intro">
+      <h1>Nebulosity for VS Code</h1>
+      <p class="lede">A live map of your codebase beside your code. It follows the file you have open, and Claude Code can read it too.</p>
+      <p class="claim">In tests, Claude Code answered multi-file questions <strong>up to 4.4× faster</strong> with it, and got all 42 right.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://marketplace.visualstudio.com/items?itemName=andrewl746.nebulosity-vscode">Install from the Marketplace</a>
+        <a class="btn" href="https://demo.nebulosity.ca">Try the Live Demo</a>
+        <a class="demo" href="https://youtu.be/pWwsganPLWE">Watch the Demo Video</a>
       </div>
+      <p class="meta">Free and open source. Reads TypeScript, JavaScript, Python, Go, Java, C# and Rust. Also on <a href="https://open-vsx.org/extension/andrewl746/nebulosity-vscode">Open VSX</a>.</p>
     </div>
 
     <figure class="shot">
@@ -115,54 +107,60 @@
   </section>
 
   <section class="wrap part" id="evaluation">
-    <h2>Tested against Claude Code on its own</h2>
-    <p class="sub">The same questions, with and without Nebulosity, on three large TypeScript codebases. 378 runs, each checked against a reference answer.</p>
+    <h2>Up to 4.4× faster on questions that span many files</h2>
+    <p class="sub">Claude Code with and without Nebulosity, on VS Code, AFFiNE and Theia. Every answer was scored against a reference that didn't come from Nebulosity.</p>
+    <div class="tally">
+      <p><b>4.4×</b><span>faster</span><em>tracing how an entry point ends up loading a file</em></p>
+      <p><b>2.6×</b><span>cheaper</span><em>on that same question, by Claude Code's own estimate</em></p>
+      <p><b>42<i>/42</i></b><span>fully right</span><em>against 29 of 42 without it</em></p>
+    </div>
     <figure class="chart">
+      <p class="axis-title">How many times faster Claude Code answered with Nebulosity</p>
       <ul class="legend" aria-hidden="true">
         <li><span class="key"></span>VS Code and AFFiNE</li>
         <li><span class="key b"></span>Theia, never adjusted for</li>
       </ul>
       <ul class="speeds" aria-label="How many times faster, by question">
         <li>
-          <span class="q">What could changing this file affect?</span>
+          <span class="q">What could changing this file affect?<small>2.1× cheaper on VS Code and AFFiNE</small></span>
           <span class="bars">
             <span class="bar a" style="--x: 4.3" title="VS Code and AFFiNE, 4.3× faster, 2.1× cheaper"><span class="sr-only">VS Code and AFFiNE</span><span class="track"><span class="fill"></span></span><span class="val">4.3×</span></span>
             <span class="bar b" style="--x: 3.7" title="Theia, 3.7× faster, 1.2× cheaper, measured later with the same setup"><span class="sr-only">Theia, measured later</span><span class="track"><span class="fill"></span></span><span class="val">3.7×*</span></span>
           </span>
         </li>
         <li>
-          <span class="q">How does this entry point end up loading that file?</span>
+          <span class="q">How does this entry point end up loading that file?<small>2.6× cheaper on VS Code and AFFiNE</small></span>
           <span class="bars">
             <span class="bar a" style="--x: 4.4" title="VS Code and AFFiNE, 4.4× faster, 2.6× cheaper"><span class="sr-only">VS Code and AFFiNE</span><span class="track"><span class="fill"></span></span><span class="val">4.4×</span></span>
             <span class="bar b" style="--x: 3.2" title="Theia, 3.2× faster, 1.2× cheaper"><span class="sr-only">Theia</span><span class="track"><span class="fill"></span></span><span class="val">3.2×</span></span>
           </span>
         </li>
         <li>
-          <span class="q">Which entry points end up loading this file?</span>
+          <span class="q">Which entry points end up loading this file?<small>1.6× cheaper on VS Code and AFFiNE</small></span>
           <span class="bars">
             <span class="bar a" style="--x: 4.2" title="VS Code and AFFiNE, 4.2× faster, 1.6× cheaper"><span class="sr-only">VS Code and AFFiNE</span><span class="track"><span class="fill"></span></span><span class="val">4.2×</span></span>
             <span class="bar b" style="--x: 2.8" title="Theia, 2.8× faster, about the same cost"><span class="sr-only">Theia</span><span class="track"><span class="fill"></span></span><span class="val">2.8×</span></span>
           </span>
         </li>
         <li>
-          <span class="q">Which files depend on this one, directly or not?</span>
+          <span class="q">Which files depend on this one, directly or not?<small>1.4× cheaper on VS Code and AFFiNE</small></span>
           <span class="bars">
             <span class="bar a" style="--x: 2.3" title="VS Code and AFFiNE, 2.3× faster, 1.4× cheaper"><span class="sr-only">VS Code and AFFiNE</span><span class="track"><span class="fill"></span></span><span class="val">2.3×</span></span>
             <span class="bar b" style="--x: 2.0" title="Theia, 2.0× faster, 1.3× cheaper"><span class="sr-only">Theia</span><span class="track"><span class="fill"></span></span><span class="val">2.0×</span></span>
           </span>
         </li>
         <li>
-          <span class="q">Is this file part of an import cycle?</span>
+          <span class="q">Is this file part of an import cycle?<small>1.5× cheaper on VS Code and AFFiNE</small></span>
           <span class="bars">
             <span class="bar a" style="--x: 2.3" title="VS Code and AFFiNE, 2.3× faster, 1.5× cheaper"><span class="sr-only">VS Code and AFFiNE</span><span class="track"><span class="fill"></span></span><span class="val">2.3×</span></span>
             <span class="bar b" style="--x: 1.5" title="Theia, 1.5× faster, 1.1× cheaper"><span class="sr-only">Theia</span><span class="track"><span class="fill"></span></span><span class="val">1.5×</span></span>
           </span>
         </li>
       </ul>
+      <div class="scale" aria-hidden="true"><span></span><span class="ticks"><span><i>0</i><i>1×</i><i>2×</i><i>3×</i><i>4×</i><i>5×</i></span><span></span></span></div>
       <figcaption>
-        <p class="score">In the main test, <strong>42 of 42</strong> answers to these questions were fully right with Nebulosity, and 29 of 42 alone.</p>
-        <p class="fine" style="margin-top: 14px">Medians of 6 runs per setup on VS Code and AFFiNE together, 3 on Theia. The question types were grouped after the runs, and simpler ones, like listing a file's direct importers, came out about even. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
-        <p class="fine" id="later" style="margin-top: 8px">* Theia's 3.7×, for what a change could affect, was measured later (26 October 2026) with the same setup. 3 of 3 answers were fully right with Nebulosity, 0 of 3 alone.</p>
+        <p class="fine">These five question types were 84 of the 378 runs, 42 with Nebulosity and 42 without. On the other 294 runs, simpler or different questions were asked and both setups did around the same. Each speedup compares medians, over 6 runs per setup on VS Code and AFFiNE together and 3 on Theia. The question types were grouped after the runs. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/EVALUATION.md">Read the full evaluation</a></p>
+        <p class="fine" id="later">* Theia's 3.7×, for what a change could affect, was measured later (26 October 2026) with the same setup. 3 of 3 answers were fully right with Nebulosity, 0 of 3 alone.</p>
       </figcaption>
     </figure>
   </section>
