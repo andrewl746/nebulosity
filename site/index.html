@@ -20,9 +20,9 @@
 <link rel="preload" href="fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body id="top">
 <div class="nav-shell"><header class="wrap nav">
-  <a class="brand" href="./"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
+  <a class="brand" href="#top" aria-label="Nebulosity, back to the top"><img src="icon.svg" alt="" width="24" height="24">Nebulosity</a>
   <nav aria-label="Main">
     <ul>
       <li><a href="https://demo.nebulosity.ca">Live Demo</a></li>
@@ -31,7 +31,7 @@
       <li><a href="https://github.com/andrewl746/Nebulosity">GitHub</a></li>
     </ul>
   </nav>
-</header>
+</header></div>
 
 <main>
   <section class="wrap hero">
@@ -49,7 +49,7 @@
 
     <figure class="shot">
       <div class="shot-head">
-        <p>VS Code with <code>editor.main.ts</code> open. The Map beside it shows what that file imports, heaviest first.</p>
+        <p>VS Code with <code>editor.main.ts</code> open. The Map beside it shows what that file imports, sorted from most imports to fewest.</p>
         <div class="themes" role="group" aria-label="Theme of the screenshots" hidden>
           <button type="button" data-theme="dark" aria-pressed="true">Dark 2026</button>
           <button type="button" data-theme="light" aria-pressed="false">Light 2026</button>
@@ -86,7 +86,7 @@
       <div class="feature">
         <div>
           <h3>Click a box to see what it uses</h3>
-          <p>You see its summary, then everything it imports, the biggest first. The thicker a line, the more imports it carries.</p>
+          <p>Clicking on a box displays its summary, then everything it imports, sorted from most imports to fewest. The thicker a line, the more imports it carries.</p>
         </div>
         <a class="frame" href="images/uses-dark.webp" data-href="images/uses-{t}.webp" title="Show the screenshot full size">
           <img src="images/uses-dark.webp" data-src="images/uses-{t}.webp" width="1872" height="1400" loading="lazy"
@@ -96,7 +96,7 @@
       <div class="feature">
         <div>
           <h3>Search by what code does</h3>
-          <p>Ctrl K finds files and folders by name, and by what they do once AI summaries are written.</p>
+          <p>Ctrl+K finds files and folders by name and by what they do once AI summaries are written.</p>
         </div>
         <a class="frame" href="images/search-dark.webp" data-href="images/search-{t}.webp" title="Show the screenshot full size">
           <img src="images/search-dark.webp" data-src="images/search-{t}.webp" width="1360" height="1080" loading="lazy"
@@ -180,7 +180,7 @@
           <p class="title">Or open it in a browser <span>after steps 1 and 2, at localhost:3000</span></p>
           <div class="cmd"><pre>nebulosity map</pre></div>
         </div>
-        <p class="needs">Needs Node 24 or later and git. Everything runs on your machine. Your code is only sent out if you add an API key for AI summaries.</p>
+        <p class="needs">Needs Node 24 or later and Git. Everything runs on your machine. Your code is only sent out if you add an API key for AI summaries.</p>
       </div>
       <div>
         <h3>Then connect Claude Code</h3>
@@ -190,7 +190,7 @@
           <li>How does <code>main.ts</code> end up loading <code>terminal.ts</code>?</li>
           <li>Are there import cycles in <code>src/vs/platform</code>?</li>
         </ul>
-        <p class="needs">Needs Claude Code 2.1.300 or later started in the same folder. Claude Code uses Nebulosity's tools when they help and can show its answer on the Map. If something isn't working, run <code>nebulosity doctor</code> to see what's missing. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">The guide</a> lists every command.</p>
+        <p class="needs">Needs Claude Code 2.1.300 or later started in the same folder. Claude Code uses Nebulosity's tools when needed and can show its answer on the Map. If something isn't working, run <code>nebulosity doctor</code> to see what's missing. <a href="https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md">The guide</a> lists every command.</p>
       </div>
     </div>
   </section>
