@@ -8,7 +8,7 @@ Everything here works in Nebulosity's free mode, with no API key. The extension 
 
 ## Getting started
 
-1. Install the package (`npm install -g nebulosity`, or from a checkout as [the guide](https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md#install) says).
+1. Install the package (`npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity`, or from a checkout as [the guide](https://github.com/andrewl746/Nebulosity/blob/main/docs/GUIDE.md#install) says).
 2. Open your repo in VS Code and run **Nebulosity: Show Map** from the Command Palette, or click the map button in an editor's title bar.
 3. If the repo isn't indexed yet, the panel offers **Index this repo (free)**, which runs `nebulosity index` in a terminal and then shows the Map.
 
@@ -39,7 +39,7 @@ The extension uses a Map that's already running, on the port `nebulosity map` la
 
 - **A click on the Map only selects a file,** so you can look around while the editor keeps yours. Double-click a file, or press **Open in VS Code** in its panel, to open it. In a narrow panel a selected file shows **Open** beside it. A declaration in a file's panel shows in View source, whose own Open in VS Code opens it at that line.
 - **One Map, one repo at a time.** Two windows on two repos share the Map, and the window you last focused shows its repo.
-- **When the panel can't show the Map,** it says "Nebulosity isn't installed" (with the install line), "The Map stopped" (with Start), "Update Nebulosity: `npm install -g nebulosity`" (a Map older than the extension), or that another app holds the port (set `nebulosity.port`). "Show log" opens the Nebulosity output.
+- **When the panel can't show the Map,** it says "Nebulosity isn't installed" (with the install line), "The Map stopped" (with Start), "Update Nebulosity: `npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity`" (a Map older than the extension), or that another app holds the port (set `nebulosity.port`). "Show log" opens the Nebulosity output.
 - **Only VS Code can frame the Map.** The Map's pages allow only themselves and VS Code's webviews as frames, so another web page can't put the Map in a frame.
 - **Checked on** desktop VS Code on Windows, macOS and Linux (VS Code 1.143), and on 1.105, the oldest version it supports, on Windows.
 

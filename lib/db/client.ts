@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import * as schema from "./schema";
-import { commandHint } from "../hints";
+import { commandHint, INSTALL_COMMAND } from "../hints";
 import { dataPath, nebulosityPath } from "../home";
 
 /** How a process opens the database. Everything writes except the MCP server, which only reads (ADR-030, ADR-044). */
@@ -30,6 +30,33 @@ export class DatabaseOutdatedError extends Error {
     }
 }
 
+/**
+ * better-sqlite3 is installed without its compiled engine, because npm skipped its install script, as npm 12 does for
+ * any dependency it isn't told to allow (ADR-058, amended 2026-11-07). The engine loads on the first open, so every
+ * command meets this before anything else, and the raw message (a list of paths) says nothing about the fix.
+ */
+export class DatabaseEngineMissingError extends Error {
+    constructor(){
+        super(`Nebulosity's database engine (better-sqlite3) isn't built, because npm skipped its install script, as npm 12 does for any package it isn't told to allow. Reinstall with ${INSTALL_COMMAND} (in a checkout: npm ci).`);
+        this.name = "DatabaseEngineMissingError";
+    }
+}
+
+/** An open's error as a user should read it: a missing engine names the fix, and anything else goes through unchanged. */
+export function explainOpenError(err: unknown): unknown {
+    const message = err instanceof Error ? err.message : String(err);
+    return message.startsWith("Could not locate the bindings file") ? new DatabaseEngineMissingError() : err;
+}
+
+/** `new Database`, where better-sqlite3 loads its engine, with a missing engine explained. */
+function openSqlite(file: string, options?: Database.Options): Database.Database {
+    try{
+        return new Database(file, options);
+    } catch (err){
+        throw explainOpenError(err);
+    }
+}
+
 const migrationsFolder = (): string => nebulosityPath("lib", "db", "migrations");
 
 const connect = (sqlite: Database.Database) => drizzle(sqlite, { schema });
@@ -50,7 +77,7 @@ export function openDb(file: string, mode: DbMode = "readwrite"): Db {
     if (mode === "readonly") return openReadOnly(file);
 
     if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
-    const sqlite = new Database(file);
+    const sqlite = openSqlite(file);
     sqlite.pragma("journal_mode = WAL");
     // NORMAL is SQLite's recommended pairing for WAL: still corruption-safe, but a
     // commit no longer waits for an fsync. Indexing VS Code commits ~30 batches, and
@@ -74,7 +101,7 @@ export function openDb(file: string, mode: DbMode = "readwrite"): Db {
 
 function openReadOnly(file: string): Db {
     if (!fs.existsSync(file)) throw new DatabaseMissingError(file);
-    const sqlite = new Database(file, { readonly: true, fileMustExist: true });
+    const sqlite = openSqlite(file, { readonly: true, fileMustExist: true });
     try{
         assertMigrated(sqlite);
     } catch (err){
