@@ -5,5 +5,5 @@
 import { boot } from "./boot.mjs";
 
 await boot();
-const { main } = await import("../scripts/cli.ts");
-process.exitCode = await main(process.argv.slice(2));
+const { run } = await import("../scripts/cli.ts");
+process.exitCode = await run(process.argv.slice(2));

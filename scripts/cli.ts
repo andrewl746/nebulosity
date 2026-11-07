@@ -140,6 +140,20 @@ export const SNIPPET = [
 ].join("\n");
 
 /** Runs one command. Returns the exit code. */
+/**
+ * main, as the bin runs it. A missing database engine (npm 12 skipped better-sqlite3's install script, ADR-058 amended
+ * 2026-11-07) is said in its one line, which names the fix, instead of under a stack trace. Any other error goes through.
+ */
+export async function run(argv: readonly string[]): Promise<number> {
+    try{
+        return await main(argv);
+    } catch (err){
+        if (!(err instanceof Error) || err.name !== "DatabaseEngineMissingError") throw err;
+        console.error(err.message);
+        return 1;
+    }
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
     const parsed = parseCli(argv);
     if ("error" in parsed){
