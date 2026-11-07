@@ -1,9 +1,9 @@
 {
   "name": "nebulosity-vscode",
   "displayName": "Nebulosity",
-  "description": "The Nebulosity Map beside your code, showing the repo's folders, files and imports and following the editor. Needs the nebulosity package (npm install -g nebulosity).",
+  "description": "The Nebulosity Map beside your code, showing the repo's folders, files and imports and following the editor. Needs the nebulosity package from npm, installed as the README says.",
   "publisher": "andrewl746",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "license": "MIT",
   "author": "Andrew Li",
   "private": true,

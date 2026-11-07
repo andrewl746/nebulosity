@@ -27,8 +27,10 @@ On simpler questions, like listing the files that import a given file directly, 
 You'll need Node 24 or later and git, plus Claude Code 2.1.300 or later if you want the tools.
 
 ```bash
-npm install -g nebulosity
+npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity
 ```
+
+The `--allow-scripts` part lets npm 12 finish setting up four of Nebulosity's packages, its database among them. Older versions of npm set them up anyway and only warn that they don't know the flag.
 
 Then run these from your repo's root folder.
 
