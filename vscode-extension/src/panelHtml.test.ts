@@ -70,12 +70,13 @@ describe("panelHtml: the copy (design §4.2, Global Constraints)", () => {
     it("not installed: the install line and the README", () => {
         const html = panelHtml({ kind: "notInstalled" }, opts);
         expect(html).toContain("Nebulosity isn't installed");
-        expect(html).toContain("npm install -g nebulosity");
+        expect(html).toContain("<code>npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity</code>");
         expect(html).toContain('href="https://github.com/andrewl746/Nebulosity#readme"');
     });
 
     it("an older Nebulosity: update the package", () => {
-        expect(panelHtml({ kind: "old" }, opts)).toContain("Update Nebulosity: <code>npm install -g nebulosity</code>");
+        expect(panelHtml({ kind: "old" }, opts))
+            .toContain("Update Nebulosity: <code>npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity</code>");
     });
 
     it("another bridge: the extension is the older side", () => {

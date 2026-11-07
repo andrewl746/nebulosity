@@ -4,12 +4,12 @@ import fs from "fs";
 import net from "net";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DatabaseMissingError, getDb, useReadOnlyDatabase } from "../lib/db/client";
+import { DatabaseEngineMissingError, DatabaseMissingError, getDb, useReadOnlyDatabase } from "../lib/db/client";
 import { indexRepository } from "../lib/index/pipeline";
 import { listenError } from "../lib/port";
 import { copyFixture } from "../test/helpers/fixture";
 import { makeTempDir } from "../test/helpers/temp";
-import { addCommand, main, mcpJson, parseCli, parseMapArgs, parseRegistration, runDoctor, runSetup, setupCommand, setupRegistration, SNIPPET } from "./cli";
+import { addCommand, main, mcpJson, parseCli, parseMapArgs, parseRegistration, run, runDoctor, runSetup, setupCommand, setupRegistration, SNIPPET } from "./cli";
 
 // No test starts claude, git or npm (the plan's global constraints): the CLI's child processes are stubbed. Everything
 // else in child_process stays real (the indexer's own git calls only run in a folder with a .git, which no copy here has).
@@ -221,7 +221,28 @@ describe("main", () => {
         expect(await main(["serve"])).toBe(1);
         expect(printed(errors)).toBe('nebulosity has no command "serve". Commands: index, summarize, map, mcp, setup, doctor.');
         expect(await main(["--version"])).toBe(0);
-        expect(printed(logs)).toBe("1.1.0");
+        expect(printed(logs)).toBe("1.1.1");
+    });
+});
+
+describe("run (the bin's entry, ADR-058 amended 2026-11-07)", () => {
+    it("says a missing database engine in one line, with exit code 1, instead of under a stack trace", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.mocked(getDb).mockImplementationOnce(() => { throw new DatabaseEngineMissingError(); });
+        expect(await run(["index", makeTempDir("neb-noengine-")])).toBe(1);
+        expect(printed(errors)).toBe(
+            "Nebulosity's database engine (better-sqlite3) isn't built, because npm skipped its install script, " +
+            "as npm 12 does for any package it isn't told to allow. Reinstall with " +
+            "npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity " +
+            "(in a checkout: npm ci)."
+        );
+    });
+
+    it("lets any other error through", async () => {
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.mocked(getDb).mockImplementationOnce(() => { throw new Error("disk I/O error"); });
+        await expect(run(["index", makeTempDir("neb-ioerror-")])).rejects.toThrow("disk I/O error");
     });
 });
 

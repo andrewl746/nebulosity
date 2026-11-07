@@ -7,10 +7,12 @@ The commands, settings and tools the [README](../README.md) only mentions. How N
 You need Node 24 or later and git, plus Claude Code 2.1.300 or later for the MCP server.
 
 ```bash
-npm install -g nebulosity
+npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity
 ```
 
-To work on Nebulosity itself, install it from a checkout instead.
+npm 12 skips every package's install script unless you allow it, and four of Nebulosity's packages need theirs. better-sqlite3's builds the database, so without it every command stops with "Nebulosity's database engine (better-sqlite3) isn't built". Older versions of npm run the scripts anyway and only warn that they don't know the flag. To allow the four for every global install, run `npm config set allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild --location=user` once.
+
+To work on Nebulosity itself, install it from a checkout instead. Its `package.json` already allows the install scripts it needs (`allowScripts`), so `npm install` there needs no flag.
 
 ```bash
 git clone https://github.com/andrewl746/Nebulosity

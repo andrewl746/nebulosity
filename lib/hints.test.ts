@@ -1,9 +1,13 @@
 import path from "path";
 import { describe, expect, it } from "vitest";
 import { dataDir } from "./home";
-import { commandHint, keyHint } from "./hints";
+import { commandHint, INSTALL_COMMAND, keyHint } from "./hints";
 
 describe("what a message tells a user to run, installed or in a checkout (ADR-058)", () => {
+    it("installs with the four install scripts npm 12 blocks allowed", () => {
+        expect(INSTALL_COMMAND).toBe("npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity");
+    });
+
     it("names the nebulosity command, and the npm script a checkout runs", () => {
         expect(commandHint("index", "<path-to-repo>")).toBe("nebulosity index <path-to-repo> (in a checkout: npm run index -- <path-to-repo>)");
         expect(commandHint("summarize", '"C:/repos/app" --release-batch b1'))

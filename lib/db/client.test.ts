@@ -6,8 +6,34 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../../test/helpers/temp";
-import { closeDb, DatabaseMissingError, DatabaseOutdatedError, getDb, openDb, type Db } from "./client";
+import { closeDb, DatabaseEngineMissingError, DatabaseMissingError, DatabaseOutdatedError, explainOpenError, getDb, openDb, type Db } from "./client";
 import { meta } from "./schema";
+
+describe("explainOpenError (npm 12 skips better-sqlite3's install script, ADR-058)", () => {
+    // what 1.1.0 printed from an install whose scripts were skipped, on 2026-11-07 (paths shortened)
+    const unbuilt = new Error(
+        "Could not locate the bindings file. Tried:\n" +
+        " → C:\\npm\\node_modules\\nebulosity\\node_modules\\better-sqlite3\\build\\better_sqlite3.node\n" +
+        " → C:\\npm\\node_modules\\nebulosity\\node_modules\\better-sqlite3\\build\\Release\\better_sqlite3.node"
+    );
+
+    it("turns a missing engine into the reinstall line, for the package and for a checkout", () => {
+        const err = explainOpenError(unbuilt);
+        expect(err).toBeInstanceOf(DatabaseEngineMissingError);
+        expect((err as Error).message).toBe(
+            "Nebulosity's database engine (better-sqlite3) isn't built, because npm skipped its install script, " +
+            "as npm 12 does for any package it isn't told to allow. Reinstall with " +
+            "npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity " +
+            "(in a checkout: npm ci)."
+        );
+    });
+
+    it("lets every other error through unchanged", () => {
+        const busy = new Error("SQLITE_CANTOPEN: unable to open database file");
+        expect(explainOpenError(busy)).toBe(busy);
+        expect(explainOpenError("not an Error")).toBe("not an Error");
+    });
+});
 
 describe("closeDb (E4's bench-languages: a fresh data folder per run, in one process)", () => {
     it("closes the process's database, and the next getDb opens another", () => {

@@ -18,7 +18,8 @@ export type PanelState =
     | { kind: "failed"; message: string };
 
 const README = "https://github.com/andrewl746/Nebulosity#readme";
-const INSTALL = "npm install -g nebulosity";
+// npm 12 blocks dependencies' install scripts unless they're allowed (lib/hints.ts's INSTALL_COMMAND, ADR-058)
+const INSTALL = "npm install -g --allow-scripts=better-sqlite3,onnxruntime-node,protobufjs,esbuild nebulosity";
 
 /** VS Code's theme kinds as the Map names them (lib/contracts.ts's ThemeKind). */
 export type FrameKind = "dark" | "light" | "hc" | "hc-light";
